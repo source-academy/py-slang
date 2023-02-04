@@ -1,16 +1,4 @@
-// import fs from "fs";
 //
-// import {Tokenizer, Token} from "./tokenizer";
-// // import {AstPrinter} from "./ast-printer";
-// import {ExprNS} from "./ast-types";
-// import {TokenType} from "./tokens";
-// import {Parser} from "./parser";
-// import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
-// import {Resolver} from "./resolver";
-// import BaseParserError = ParserErrors.BaseParserError;
-// import BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
-// import BaseResolverError = ResolverErrors.BaseResolverError;
-// import {Translator} from "./translator";
 //
 // let text;
 // // Basic syntax
@@ -169,34 +157,48 @@
 // //     pass
 // // `;
 //
-// try {
-//     if (process.argv.length > 2) {
-//         text = fs.readFileSync(process.argv[2], 'utf8');
-//     }
-//     text = text ?? "";
-//     text += '\n';
-//     const tokenizer = new Tokenizer(text);
-//     tokenizer.scanEverything();
-//     tokenizer.printTokens();
-//     const parser = new Parser(text, tokenizer.tokens);
-//     const ast = parser.parse();
-//     const resolver = new Resolver(text, ast);
-//     resolver.resolve(ast);
-//     console.log(ast);
-//     // const translator = new Translator(text, ast);
-//     // const estreeAst = translator.resolve(ast);
-//     // console.log(estreeAst);
-// } catch (e) {
-//     if (e instanceof BaseTokenizerError || e instanceof BaseParserError || e instanceof BaseResolverError) {
-//         console.error(e.message);
-//     } else {
-//         throw e;
-//     }
-// }
-//
+/* Use as a command line script */
+/* npm run start:dev -- test.py */
+import fs from "fs";
+import {Tokenizer} from "./tokenizer";
+import {Parser} from "./parser";
+import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
+import {Resolver} from "./resolver";
+import BaseParserError = ParserErrors.BaseParserError;
+import BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
+import BaseResolverError = ResolverErrors.BaseResolverError;
+import {Translator} from "./translator";
 
 export * from './errors';
 export {Tokenizer} from './tokenizer';
 export {Parser} from './parser';
 export {Resolver} from './resolver';
 export {Translator} from './translator';
+
+
+if (process.argv.length > 2) {
+    try {
+        let text = fs.readFileSync(process.argv[2], 'utf8');
+        // Add a new line just in case
+        text += '\n';
+        const tokenizer = new Tokenizer(text);
+        tokenizer.scanEverything();
+        tokenizer.printTokens();
+        const parser = new Parser(text, tokenizer.tokens);
+        const ast = parser.parse();
+        const resolver = new Resolver(text, ast);
+        resolver.resolve(ast);
+        console.log(ast);
+        const translator = new Translator(text, ast);
+        const estreeAst = translator.resolve(ast);
+        console.log(estreeAst);
+    } catch (e) {
+        if (e instanceof BaseTokenizerError
+            || e instanceof BaseParserError
+            || e instanceof BaseResolverError) {
+            console.error(e.message);
+        } else {
+            throw e;
+        }
+    }
+}

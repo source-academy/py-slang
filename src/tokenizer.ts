@@ -413,12 +413,13 @@ export class Tokenizer {
         }
     }
 
-    scanEverything() {
+    scanEverything(): Token[] {
         while (!this.isAtEnd()) {
             this.start = this.current;
             this.scanToken();
         }
         this.tokens.push(new Token(TokenType.ENDMARKER, "", this.line, this.col, this.current));
+        return this.tokens
     }
 
     printTokens() {
