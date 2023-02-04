@@ -224,6 +224,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitFromImportStmt(stmt: StmtNS.FromImport): void {
+        for (const name of stmt.names) {
+            this.environment?.declareName(name);
+        }
     }
 
     visitContinueStmt(stmt: StmtNS.Continue): void {
