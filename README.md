@@ -25,12 +25,12 @@ const text = `
 
 // Scan the text.
 const tokenizer = new Tokenizer(text);
-tokenizer.scanEverything();
+const tokens = tokenizer.scanEverything();
 // If you want to view the tokens, you can.
 // tokenizer.printTokens();
 
 // Parse the tokens.
-const parser = new Parser(text, tokenizer.tokens);
+const parser = new Parser(text, tokenizer);
 const ast = parser.parse();
 
 // Validate and resolve symbols in namespaces.

@@ -182,9 +182,9 @@ if (process.argv.length > 2) {
         // Add a new line just in case
         text += '\n';
         const tokenizer = new Tokenizer(text);
-        tokenizer.scanEverything();
+        const tokens = tokenizer.scanEverything();
         tokenizer.printTokens();
-        const parser = new Parser(text, tokenizer.tokens);
+        const parser = new Parser(text, tokens);
         const ast = parser.parse();
         const resolver = new Resolver(text, ast);
         resolver.resolve(ast);
