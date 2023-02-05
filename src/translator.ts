@@ -30,8 +30,8 @@ import {
 
 
 export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<BaseNode> {
-    source: string;
-    ast: Stmt;
+    private readonly source: string;
+    private ast: Stmt;
     constructor(source: string, ast: Stmt) {
         this.source = source;
         this.ast = ast;
@@ -85,31 +85,32 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
 
 
     // Converts our internal identifier to estree identifier.
-    rawStringToIdentifier(name: string): Identifier {
+    private rawStringToIdentifier(name: string): Identifier {
         return {
             type: 'Identifier',
             name: name,
         };
     }
-    convertToIdentifier(name: Token): Identifier {
+    // Token to estree identifier.
+    private convertToIdentifier(name: Token): Identifier {
         return {
             type: 'Identifier',
             name: name.lexeme
         };
     }
 
-    convertToIdentifiers(names: Token[]): Identifier[] {
+    private convertToIdentifiers(names: Token[]): Identifier[] {
         return names.map(name => this.convertToIdentifier(name));
     }
 
-    convertToExpressionStatement(expr: Expression): ExpressionStatement {
+    private convertToExpressionStatement(expr: Expression): ExpressionStatement {
         return {
             type: 'ExpressionStatement',
             expression: expr,
         }
     }
 
-    converTokenstoDecls(varDecls: Token[]): VariableDeclaration {
+    private converTokenstoDecls(varDecls: Token[]): VariableDeclaration {
         return {
             type: 'VariableDeclaration',
             declarations: varDecls?.map((token): VariableDeclarator => {
@@ -125,7 +126,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
     // Wraps an array of statements to a block.
     // WARNING: THIS CREATES A NEW BLOCK IN
     // JS AST. THIS ALSO MEANS A NEW NAMESPACE. BE CAREFUL!
-    wrapInBlock(stmts: StmtNS.Stmt[]): BlockStatement {
+    private wrapInBlock(stmts: StmtNS.Stmt[]): BlockStatement {
         return {
             type: 'BlockStatement',
             body: this.resolveManyStmt(stmts),
