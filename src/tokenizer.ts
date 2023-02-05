@@ -88,18 +88,18 @@ const specialIdentifiers = new Map([
 export const SPECIAL_IDENTIFIER_TOKENS = Array.from(specialIdentifiers.values());
 
 export class Tokenizer {
-    source: string;
-    tokens: Token[];
-    start: number;
-    current: number;
-    line: number;
-    col: number;
+    private readonly source: string;
+    private readonly tokens: Token[];
+    private start: number;
+    private current: number;
+    private line: number;
+    private col: number;
 
-    indents: number;
-    prevLineLeadingWhiteSpace: number;
-    currLineLeadingWhiteSpace: number;
-    specialIdentifiers: Map<string, TokenType>;
-    forbiddenIdentifiers: Map<string, TokenType>;
+    private indents: number;
+    private prevLineLeadingWhiteSpace: number;
+    private currLineLeadingWhiteSpace: number;
+    private specialIdentifiers: Map<string, TokenType>;
+    private forbiddenIdentifiers: Map<string, TokenType>;
     // forbiddenOperators: Set<TokenType>;
     constructor(source: string) {
         this.source = source;
@@ -144,11 +144,11 @@ export class Tokenizer {
         // ])
     }
 
-    isAtEnd() {
+    private isAtEnd() {
         return this.current >= this.source.length;
     }
 
-    advance() {
+    private advance() {
         const res = this.source[this.current];
         this.current += 1;
         this.col += 1;
@@ -156,27 +156,24 @@ export class Tokenizer {
     }
 
     /* Single character lookahead. */
-    peek(): string {
+    private peek(): string {
         return this.isAtEnd() ? '\0' : this.source[this.current];
     }
 
     /* Double character lookahead. */
-    peekNext(): string {
-        return this.isAtEnd() ? '\0' : this.source[this.current + 1];
-    }
 
-    overwriteToken(type: TokenType) {
+    private overwriteToken(type: TokenType) {
         const previousToken = this.tokens[this.tokens.length - 1];
         const lexeme = this.source.slice(previousToken.indexInSource, this.current);
         this.tokens[this.tokens.length - 1] = new Token(type, lexeme, this.line, this.col, previousToken.indexInSource);
     }
-    addToken(type: TokenType) {
+    private addToken(type: TokenType) {
         const lexeme = this.source.slice(this.start, this.current);
         this.tokens.push(new Token(type, lexeme, this.line, this.col, this.current - lexeme.length))
     }
 
     // Checks that the current character matches a pattern. If so the character is consumed, else nothing is consumed.
-    matches(pattern: string): boolean {
+    private matches(pattern: string): boolean {
         if (this.isAtEnd()) {
             return false;
         } else {
@@ -189,19 +186,19 @@ export class Tokenizer {
         }
     }
 
-    isAlpha(c: string): boolean {
+    private isAlpha(c: string): boolean {
         return /^[A-Za-z]$/i.test(c);
     }
 
-    isDigit(c: string): boolean {
+    private isDigit(c: string): boolean {
         return /^[0-9]/.test(c);
     }
 
-    isIdentifier(c: string): boolean {
+    private isIdentifier(c: string): boolean {
         return c == '_' || this.isAlpha(c) || this.isDigit(c);
     }
 
-    number() {
+    private number() {
         while (this.isDigit(this.peek())) {
             this.advance();
         }
@@ -215,7 +212,7 @@ export class Tokenizer {
         this.addToken(TokenType.NUMBER);
     }
 
-    name() {
+    private name() {
         while (this.isIdentifier(this.peek())) {
             this.advance();
         }
@@ -251,7 +248,7 @@ export class Tokenizer {
         }
     }
 
-    scanToken() {
+    private scanToken() {
         const c = this.advance();
         // KJ: I really hope the JS runtime optimizes this to a jump table...
         switch (c) {
@@ -398,7 +395,7 @@ export class Tokenizer {
         }
     }
 
-    matchForbiddenOperator(ch: string) {
+    private matchForbiddenOperator(ch: string) {
         switch(ch) {
             case '@':
             case '|':
@@ -428,7 +425,7 @@ export class Tokenizer {
             ${TokenType[token.type]}\t\t\t'${token.lexeme}'`);
         }
     }
-    raiseForbiddenOperator() {
+    private raiseForbiddenOperator() {
         throw new TokenizerErrors.ForbiddenOperatorError(this.line, this.col, this.source, this.start, this.current);
     }
 }

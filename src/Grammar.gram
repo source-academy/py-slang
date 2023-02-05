@@ -32,7 +32,7 @@ continue_stmt: 'continue'
 return_stmt: 'return' [test]
 import_stmt: import_from
 # note below: the ('.' | '...') is necessary because '...' is tokenized as ELLIPSIS
-import_from: 'from' NAME 'import' parameters
+import_from: 'from' NAME 'import' (NAME | parameters)
 
 global_stmt: 'global' NAME (',' NAME)*
 nonlocal_stmt: 'nonlocal' NAME (',' NAME)*

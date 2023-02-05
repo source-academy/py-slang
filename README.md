@@ -34,12 +34,20 @@ const parser = new Parser(text, tokenizer.tokens);
 const ast = parser.parse();
 
 // Validate and resolve symbols in namespaces.
-// This step may throw false errors. You can disable
-// this step as it's not required for translation.
+// This step may throw false errors.
+// This is when we detect variable declarations
+// and hoist them out of blocks.
 const resolver = new Resolver(text, ast);
 resolver.resolve(ast);
 
 // Finally, translate the AST to estree AST.
 const translator = new Translator(text, ast);
 const estreeAst = translator.resolve(ast);
+```
+
+### Regenerating the AST types
+The AST types need to be regenerated after changing
+the AST type definitions in `generate-ast.ts`.
+```shell
+npm run regen
 ```

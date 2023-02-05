@@ -12,12 +12,18 @@ class Environment {
     // The parent of this environment
     enclosing: Environment | null;
     names: Map<string, Token>;
+    // Function names in the environment.
     functions: Set<string>;
+    // Names that are from import bindings, like 'y' in `from x import y`.
+    // This only set at the top level environment. Child environments do not
+    // copy this field.
+    moduleBindings: Set<string>;
     constructor(source: string, enclosing: Environment | null, names: Map<string, Token>) {
         this.source = source;
         this.enclosing = enclosing;
         this.names = names;
         this.functions = new Set();
+        this.moduleBindings = new Set();
     }
 
     /*
@@ -144,6 +150,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
     }
 
+    varDeclNames(names: Map<string, Token>): Token[] | null {
+        const res = Array.from(names.values())
+            .filter(name => (
+                // Filter out functions and module bindings.
+                // Those will be handled separately, so they don't
+                // need to be hoisted.
+                !this.environment?.functions.has(name.lexeme)
+                && !this.environment?.moduleBindings.has(name.lexeme)
+            ));
+        return res.length === 0 ? null : res;
+    }
+
     //// STATEMENTS
     visitFileInputStmt(stmt: StmtNS.FileInput): void {
         // Create a new environment.
@@ -151,7 +169,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = new Environment(this.source, this.environment, new Map());
         this.resolve(stmt.statements);
         // Grab identifiers from that new environment. That are NOT functions.
-        stmt.varDecls = Array.from(this.environment.names.values()).filter(name => !this.environment?.functions.has(name.lexeme));
+        stmt.varDecls = this.varDeclNames(this.environment.names)
         this.environment = oldEnv;
     }
 
@@ -167,7 +185,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = new Environment(this.source, this.environment, newEnv);
         this.resolve(stmt.body);
         // Grab identifiers from that new environment. That are NOT functions.
-        stmt.varDecls = Array.from(this.environment.names.values()).filter(name => !this.environment?.functions.has(name.lexeme));
+        stmt.varDecls = this.varDeclNames(this.environment.names)
         // Restore old environment
         this.environment = oldEnv;
     }
@@ -226,6 +244,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitFromImportStmt(stmt: StmtNS.FromImport): void {
         for (const name of stmt.names) {
             this.environment?.declareName(name);
+            this.environment?.moduleBindings.add(name.lexeme);
         }
     }
 

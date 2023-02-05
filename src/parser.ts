@@ -48,10 +48,10 @@ import Stmt = StmtNS.Stmt;
 
 
 export class Parser {
-    source: string;
-    pass: StmtNS.Pass;
-    tokens: Token[];
-    current: number;
+    private readonly source: string;
+    private readonly pass: StmtNS.Pass;
+    private readonly tokens: Token[];
+    private current: number;
 
     constructor(source: string, tokens: Token[]) {
         this.source = source;
@@ -61,7 +61,7 @@ export class Parser {
     }
 
     // Consumes tokens while tokenTypes matches.
-    match(...tokenTypes: TokenType[]): boolean {
+    private match(...tokenTypes: TokenType[]): boolean {
         for (const tokenType of tokenTypes) {
             if (this.check(tokenType)) {
                 this.advance();
@@ -71,7 +71,7 @@ export class Parser {
         return false;
     }
 
-    check(...type: TokenType[]): boolean {
+    private check(...type: TokenType[]): boolean {
         if (this.isAtEnd()) {
             return false;
         }
@@ -83,33 +83,33 @@ export class Parser {
         return false;
     }
 
-    advance(): Token {
+    private advance(): Token {
         if (!this.isAtEnd()) {
             this.current += 1;
         }
         return this.previous();
     }
 
-    isAtEnd(): boolean {
+    private isAtEnd(): boolean {
         return this.peek().type == TokenType.ENDMARKER;
     }
 
 
-    peek(): Token {
+    private peek(): Token {
         return this.tokens[this.current];
     }
 
-    previous(): Token {
+    private previous(): Token {
         return this.tokens[this.current - 1];
     }
 
-    consume(type: TokenType, message: string): Token {
+    private consume(type: TokenType, message: string): Token {
         if (this.check(type)) return this.advance();
         const token = this.tokens[this.current];
         throw new ParserErrors.ExpectedTokenError(this.source, token, message);
     }
 
-    synchronize() {
+    private synchronize() {
         this.advance();
         while (!this.isAtEnd()) {
             if (this.match(TokenType.NEWLINE)) {
@@ -131,7 +131,7 @@ export class Parser {
 
     //// THE NAMES OF THE FOLLOWING FUNCTIONS FOLLOW THE PRODUCTION RULES IN THE GRAMMAR.
     //// HENCE THEIR NAMES MIGHT NOT BE COMPLIANT WITH CAMELCASE
-    file_input(): Stmt {
+    private file_input(): Stmt {
         const statements: Stmt[] = [];
         while (!this.isAtEnd()) {
             if (this.match(TokenType.NEWLINE)) {
@@ -142,7 +142,7 @@ export class Parser {
         return new StmtNS.FileInput(statements.length > 0 ? statements : null, null);
     }
 
-    stmt(): Stmt {
+    private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             console.log("Compound")
             console.log(this.tokens[this.current]);
@@ -165,7 +165,7 @@ export class Parser {
             startToken.indexInSource, endToken.indexInSource);
     }
 
-    compound_stmt(): Stmt {
+    private compound_stmt(): Stmt {
         if (this.match(TokenType.IF)) {
             return this.if_stmt();
         } else if (this.match(TokenType.WHILE)) {
@@ -178,7 +178,7 @@ export class Parser {
         throw new Error("Unreachable code path");
     }
 
-    if_stmt(): Stmt {
+    private if_stmt(): Stmt {
         let start = this.previous();
         let cond = this.test();
         this.consume(TokenType.COLON, "Expected ':' after if");
@@ -195,14 +195,14 @@ export class Parser {
         return new StmtNS.If(cond, block, elseStmt);
     }
 
-    while_stmt(): Stmt {
+    private while_stmt(): Stmt {
         let cond = this.test();
         this.consume(TokenType.COLON, "Expected ':' after while");
         let block = this.suite();
         return new StmtNS.While(cond, block);
     }
 
-    for_stmt(): Stmt {
+    private for_stmt(): Stmt {
         let target = this.advance();
         this.consume(TokenType.IN, "Expected in after for");
         let iter = this.test();
@@ -211,7 +211,7 @@ export class Parser {
         return new StmtNS.For(target, iter, block);
     }
 
-    funcdef(): Stmt {
+    private funcdef(): Stmt {
         let name = this.advance();
         let args = this.parameters();
         this.consume(TokenType.COLON, "Expected ':' after def");
@@ -219,7 +219,7 @@ export class Parser {
         return new StmtNS.FunctionDef(name, args, block, null);
     }
 
-    simple_stmt(): Stmt {
+    private simple_stmt(): Stmt {
         let res = null;
         if (this.match(TokenType.NAME)) {
             res = this.assign_stmt();
@@ -248,7 +248,7 @@ export class Parser {
         return res;
     }
 
-    assign_stmt(): Stmt {
+    private assign_stmt(): Stmt {
         const name = this.previous();
         if (this.check(TokenType.COLON)) {
             const ann = this.test();
@@ -263,21 +263,26 @@ export class Parser {
         }
     }
 
-    import_from(): Stmt {
+    private import_from(): Stmt {
         const module = this.advance();
         this.consume(TokenType.IMPORT, "Expected import keyword");
-        const params = this.parameters();
+        let params;
+        if (this.check(TokenType.NAME)) {
+            params = [this.advance()];
+        } else {
+            params = this.parameters();
+        }
         return new StmtNS.FromImport(module, params);
     }
 
-    parameters(): Token[] {
+    private parameters(): Token[] {
         this.consume(TokenType.LPAR, "Expected opening parentheses");
         let res = this.varparamslist();
         this.consume(TokenType.RPAR, "Expected closing parentheses");
         return res;
     }
 
-    test(): Expr {
+    private test(): Expr {
         if (this.match(TokenType.LAMBDA)) {
             return this.lambdef();
         } else {
@@ -292,7 +297,7 @@ export class Parser {
         }
     }
 
-    lambdef(): Expr {
+    private lambdef(): Expr {
         let args = this.varparamslist();
         if (this.match(TokenType.COLON)) {
             let test = this.test();
@@ -305,7 +310,7 @@ export class Parser {
         throw new Error("unreachable code path");
     }
 
-    suite(): Stmt[] {
+    private suite(): Stmt[] {
         let stmts = [];
         if (this.match(TokenType.NEWLINE)) {
             this.consume(TokenType.INDENT, "Expected indent");
@@ -316,7 +321,7 @@ export class Parser {
         return stmts;
     }
 
-    varparamslist(): Token[] {
+    private varparamslist(): Token[] {
         let params = [];
         while (!this.check(TokenType.COLON) && !this.check(TokenType.RPAR)) {
             let name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
@@ -328,7 +333,7 @@ export class Parser {
         return params;
     }
 
-    or_test(): Expr {
+    private or_test(): Expr {
         let expr = this.and_test();
         while (this.match(TokenType.OR)) {
             const operator = this.previous();
@@ -338,7 +343,7 @@ export class Parser {
         return expr;
     }
 
-    and_test(): Expr {
+    private and_test(): Expr {
         let expr = this.not_test();
         while (this.match(TokenType.AND)) {
             const operator = this.previous();
@@ -348,7 +353,7 @@ export class Parser {
         return expr;
     }
 
-    not_test(): Expr {
+    private not_test(): Expr {
         if (this.match(TokenType.NOT, TokenType.BANG)) {
             const operator = this.previous();
             return new ExprNS.Unary(operator, this.not_test());
@@ -356,7 +361,7 @@ export class Parser {
         return this.comparison();
     }
 
-    comparison(): Expr {
+    private comparison(): Expr {
         let expr = this.arith_expr();
         // @TODO: Add the rest of the comparisons
         while (this.match(
@@ -378,7 +383,7 @@ export class Parser {
         return expr;
     }
 
-    arith_expr(): Expr {
+    private arith_expr(): Expr {
         let expr = this.term();
         while (this.match(TokenType.PLUS, TokenType.MINUS)) {
             const token = this.previous();
@@ -388,7 +393,7 @@ export class Parser {
         return expr;
     }
 
-    term(): Expr {
+    private term(): Expr {
         let expr = this.factor();
         while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH)) {
             const token = this.previous();
@@ -398,14 +403,14 @@ export class Parser {
         return expr;
     }
 
-    factor(): Expr {
+    private factor(): Expr {
         if (this.match(TokenType.PLUS, TokenType.MINUS)) {
             return new ExprNS.Unary(this.previous(), this.factor());
         }
         return this.power();
     }
 
-    power(): Expr {
+    private power(): Expr {
         let expr = this.atom_expr();
         if (this.match(TokenType.DOUBLESTAR)) {
             const token = this.previous();
@@ -416,7 +421,7 @@ export class Parser {
     }
 
 
-    atom_expr(): Expr {
+    private atom_expr(): Expr {
         let ato = this.atom();
         if (this.check(TokenType.LPAR)) {
             this.advance();
@@ -426,7 +431,7 @@ export class Parser {
         return ato;
     }
 
-    arglist(): Expr[] {
+    private arglist(): Expr[] {
         let args = [];
         while (!this.check(TokenType.RPAR)) {
             let arg = this.test();
@@ -439,7 +444,7 @@ export class Parser {
         return args;
     }
 
-    atom(): Expr {
+    private atom(): Expr {
         if (this.match(TokenType.TRUE)) return new ExprNS.Literal(true);
         if (this.match(TokenType.FALSE)) return new ExprNS.Literal(false);
 
@@ -467,7 +472,7 @@ export class Parser {
     }
 
     //// INVALID RULES
-    parse_invalid(startToken: Token, endToken: Token) {
+    private parse_invalid(startToken: Token, endToken: Token) {
         // @TODO invalid rules
 
     }
