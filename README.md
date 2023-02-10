@@ -15,7 +15,7 @@ npm run start:dev # Add `-- <file.py>` to run a file
 ```
 
 ### Consuming the API and generating an estree AST
-```ecmascript 6
+```javascript
 import {Tokenizer, Parser, Resolver, Translator} from 'py-slang';
 
 // Sample Python code

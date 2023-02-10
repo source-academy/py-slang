@@ -76,7 +76,7 @@ export class Parser {
             return false;
         }
         for (const tokenType of type) {
-            if (this.peek().type == tokenType) {
+            if (this.peek().type === tokenType) {
                 return true;
             }
         }
@@ -91,7 +91,7 @@ export class Parser {
     }
 
     private isAtEnd(): boolean {
-        return this.peek().type == TokenType.ENDMARKER;
+        return this.peek().type === TokenType.ENDMARKER;
     }
 
 

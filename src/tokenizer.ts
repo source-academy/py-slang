@@ -177,7 +177,7 @@ export class Tokenizer {
         if (this.isAtEnd()) {
             return false;
         } else {
-            if (this.source[this.current] == pattern) {
+            if (this.source[this.current] === pattern) {
                 this.col += 1;
                 this.current += 1;
                 return true;
@@ -195,7 +195,7 @@ export class Tokenizer {
     }
 
     private isIdentifier(c: string): boolean {
-        return c == '_' || this.isAlpha(c) || this.isDigit(c);
+        return c === '_' || this.isAlpha(c) || this.isDigit(c);
     }
 
     private number() {
@@ -203,7 +203,7 @@ export class Tokenizer {
             this.advance();
         }
         // Fractional part
-        if (this.peek() == '.') {
+        if (this.peek() === '.') {
             this.advance();
             while (this.isDigit(this.peek())) {
                 this.advance();
@@ -227,14 +227,14 @@ export class Tokenizer {
             const previousToken = this.tokens[this.tokens.length-1];
             switch(specialIdent) {
                 case TokenType.NOT:
-                    if (previousToken.type == TokenType.IS) {
+                    if (previousToken.type === TokenType.IS) {
                         this.overwriteToken(TokenType.ISNOT);
                     } else {
                         this.addToken(specialIdent);
                     }
                     return;
                 case TokenType.IN:
-                    if (previousToken.type == TokenType.NOT) {
+                    if (previousToken.type === TokenType.NOT) {
                         this.overwriteToken(TokenType.NOTIN);
                     } else {
                         this.addToken(specialIdent);
@@ -276,18 +276,24 @@ export class Tokenizer {
                 this.addToken(TokenType.NEWLINE);
                 this.line += 1;
                 this.col = 0;
+                // @TODO fix me
+                // // Avoid lines that are completely empty.
+                // if (this.peek() === '\n' || this.peek() === '\r') {
+                //     this.advance();
+                //     if (this.peek() === '\n') {
+                //         this.advance();
+                //     }
+                //     this.addToken(TokenType.NEWLINE);
+                //     break;
+                // }
                 this.prevLineLeadingWhiteSpace = this.currLineLeadingWhiteSpace;
                 this.currLineLeadingWhiteSpace = 0;
                 // Detect significant whitespace
-                while (this.peek() == " " && !this.isAtEnd()) {
+                while (this.peek() === " " && !this.isAtEnd()) {
                     this.currLineLeadingWhiteSpace += 1;
                     // Consume the rest of the line's leading whitespace.
                     this.advance();
                 }
-                // // Avoid lines that are completely empty.
-                // if (this.peek() == '\n') {
-                //     break;
-                // }
                 if (this.currLineLeadingWhiteSpace > this.prevLineLeadingWhiteSpace) {
                     if (this.currLineLeadingWhiteSpace % 4 !== 0) {
                         throw new TokenizerErrors.NonFourIndentError(this.line, this.col, this.source, this.current);
@@ -311,7 +317,7 @@ export class Tokenizer {
                 while (this.peek() != '"' && this.peek() != '\n' && !this.isAtEnd()) {
                     this.advance();
                 }
-                if (this.peek() == '\n' || this.isAtEnd()) {
+                if (this.peek() === '\n' || this.isAtEnd()) {
                     throw new TokenizerErrors.UnterminatedStringError(this.line, this.col, this.source, this.start, this.current);
                 }
                 // Consume closing "
@@ -386,7 +392,7 @@ export class Tokenizer {
                 break;
             default:
                 // Identifier start
-                if (c == '_' || this.isAlpha(c)) {
+                if (c === '_' || this.isAlpha(c)) {
                     this.name();
                     break;
                 }

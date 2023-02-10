@@ -13,11 +13,45 @@ import Lambda = ExprNS.Lambda;
 import Binary = ExprNS.Binary;
 import FunctionDef = StmtNS.FunctionDef;
 import Pass = StmtNS.Pass;
+import If = StmtNS.If;
+import Return = StmtNS.Return;
+import Assign = StmtNS.Assign;
 
 //@TODO all the columns offsets for tokens are off. They should be the value
 // *before* the token, not *after*.
 
 describe('Tests for Python language constructs', () => {
+    describe('Script', () => {
+        test('An entire Python script',  () => {
+const text = `
+from x import (y)
+x = 1 if 2 else 3
+
+1 is not 2
+3 not in 4
+y = lambda a:a
+
+def z(a, b, c, d):
+    pass
+
+while x:
+    pass
+
+for _ in range(10):
+    pass
+
+if x:
+    pass
+elif y:
+    pass
+elif z:
+    pass
+else:
+    pass
+`;
+        toPythonAst(text);
+        })
+    })
     describe('Imports', () => {
         test('From imports: single binding', () => {
             const text = `from x import y\n`;
@@ -132,5 +166,80 @@ def y(a, b, c):
                     )], null)
             );
         });
+
+        test('Nested function definition', () => {
+            const text = `\
+def y(a, b, c):
+    def z(d):
+        x = 2
+        return a + b + c + d
+    return z
+`
+            expect(toPythonAst(text)).toMatchObject(
+                new FileInput([new FunctionDef(
+                    new Token(TokenType.NAME, 'y', 0, 5, 4),
+                    [new Token(TokenType.NAME, 'a', 0, 7, 6),
+                        new Token(TokenType.NAME, 'b', 0, 10, 9),
+                        new Token(TokenType.NAME, 'c', 0, 13, 12)],
+                    [new FunctionDef(new Token(TokenType.NAME, 'z', 1, 9, 24),
+                        [new Token(TokenType.NAME, 'd', 1, 11, 26)],
+                        [new Assign(new Token(TokenType.NAME, 'x', 2, 9, 38) ,
+                            // @ts-ignore
+                            new Literal(2)), new Return({})],
+                    //@ts-ignore
+                    null), new Return({})],
+                    null
+                )], null)
+            );
+        });
+        // @TODO fix me
+//         test('Function definition empty lines', () => {
+//             const text = `\
+// def y(a, b, c):
+//     pass
+//     pass
+//
+//     pass
+// `
+//             expect(toPythonAst(text)).toMatchObject(
+//                 new FileInput([new FunctionDef(
+//                     new Token(TokenType.NAME, 'y', 0, 5, 4),
+//                     [new Token(TokenType.NAME, 'a', 0, 7, 6),
+//                         new Token(TokenType.NAME, 'b', 0, 10, 9),
+//                         new Token(TokenType.NAME, 'c', 0, 13, 12)],
+//                     [new Pass(), new Pass()],
+//                     null
+//                 )], null)
+//             );
+//         });
     });
+
+    describe('Conditional statements', () => {
+        test('If-elif-else', () => {
+const text = `
+if x:
+    pass
+elif y:
+    pass
+elif z:
+    pass
+else:
+    pass
+`;
+            expect(toPythonAst(text)).toMatchObject(
+                new FileInput(
+                    //@ts-ignore
+                    [new If({}, [new Pass()],[
+                        //@ts-ignore
+                        new If({}, [new Pass()],[
+                            //@ts-ignore
+                                    new If({}, [new Pass()], [new Pass()])
+                                ]
+                            )
+                        ]
+                    )],
+                    null)
+            )
+        })
+    })
 });
