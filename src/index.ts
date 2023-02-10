@@ -1,35 +1,4 @@
 //
-//
-// let text;
-// // Basic syntax
-// text =
-// `
-// from x import (y)
-// x = 1 if 2 else 3
-//
-// 1 is not 2
-// 3 not in 4
-// y = lambda a:a
-//
-// def z(a, b, c, d):
-//     pass
-//
-// while x:
-//     pass
-//
-// for _ in range(10):
-//     pass
-//
-// if x:
-//     pass
-// elif y:
-//     pass
-// elif z:
-//     pass
-// else:
-//     pass
-// `;
-//
 // // // Forbidden identifier
 // // text =
 // // `
