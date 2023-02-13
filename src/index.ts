@@ -158,7 +158,7 @@ if (process.argv.length > 2) {
         const resolver = new Resolver(text, ast);
         resolver.resolve(ast);
         console.log(ast);
-        const translator = new Translator(text, ast);
+        const translator = new Translator();
         const estreeAst = translator.resolve(ast);
         console.log(estreeAst);
     } catch (e) {
