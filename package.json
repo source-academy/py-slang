@@ -2,7 +2,8 @@
   "name": "py-slang",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
   "scripts": {
     "regen": "npm run build && node build/generate.js",
     "start:dev": "npx nodemon",
