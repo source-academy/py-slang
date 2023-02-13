@@ -133,9 +133,9 @@ import {Tokenizer} from "./tokenizer";
 import {Parser} from "./parser";
 import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 import {Resolver} from "./resolver";
-import BaseParserError = ParserErrors.BaseParserError;
-import BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
-import BaseResolverError = ResolverErrors.BaseResolverError;
+const BaseParserError = ParserErrors.BaseParserError;
+const BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
+const BaseResolverError = ResolverErrors.BaseResolverError;
 import {Translator} from "./translator";
 
 export * from './errors';

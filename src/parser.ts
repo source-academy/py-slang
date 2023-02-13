@@ -43,8 +43,8 @@ import {SPECIAL_IDENTIFIER_TOKENS, Token} from "./tokenizer";
 import {TokenType} from "./tokens";
 import {ExprNS, StmtNS} from "./ast-types";
 import {ParserErrors} from "./errors";
-import Expr = ExprNS.Expr;
-import Stmt = StmtNS.Stmt;
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 
 
 export class Parser {

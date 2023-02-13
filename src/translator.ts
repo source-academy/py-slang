@@ -3,8 +3,8 @@
 * */
 
 import {StmtNS, ExprNS} from "./ast-types";
-import Expr = ExprNS.Expr;
-import Stmt = StmtNS.Stmt;
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 import {Token} from "./tokenizer";
 import {TokenType} from "./tokens";
 
