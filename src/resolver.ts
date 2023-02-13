@@ -86,7 +86,7 @@ class Environment {
         const name = identifier.lexeme;
         let minDistance = Infinity;
         let minName = null;
-        for (const [declName, declToken] of this.names) {
+        for (const declName of this.names.keys()) {
             const dist = levenshtein.get(name, declName);
             if (dist < minDistance) {
                 minDistance = dist;

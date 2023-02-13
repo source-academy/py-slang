@@ -123,6 +123,7 @@ export class Parser {
             }
             this.advance();
         }
+        return false;
     }
     parse(): Stmt {
         return this.file_input();

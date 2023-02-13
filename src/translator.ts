@@ -28,13 +28,8 @@ import {
     WhileStatement
 } from "estree";
 
-
 export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<BaseNode> {
-    private readonly source: string;
-    private ast: Stmt;
-    constructor(source: string, ast: Stmt) {
-        this.source = source;
-        this.ast = ast;
+    constructor() {
     }
     resolve(stmt: Stmt | Expr | null): Statement | Expression {
         if (stmt === null) {

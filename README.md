@@ -41,7 +41,7 @@ const resolver = new Resolver(text, ast);
 resolver.resolve(ast);
 
 // Finally, translate the AST to estree AST.
-const translator = new Translator(text, ast);
+const translator = new Translator();
 const estreeAst = translator.resolve(ast);
 ```
 

@@ -94,8 +94,6 @@ export class Tokenizer {
     private current: number;
     private line: number;
     private col: number;
-
-    private indents: number;
     private prevLineLeadingWhiteSpace: number;
     private currLineLeadingWhiteSpace: number;
     private specialIdentifiers: Map<string, TokenType>;
@@ -108,7 +106,6 @@ export class Tokenizer {
         this.current = 0;
         this.line = 0;
         this.col = 0;
-        this.indents = 0;
         this.prevLineLeadingWhiteSpace = 0;
         this.currLineLeadingWhiteSpace = 0;
         this.specialIdentifiers = specialIdentifiers;
