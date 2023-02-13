@@ -5,9 +5,11 @@ import {Token} from "./tokenizer";
 */
 const MAGIC_OFFSET = 1;
 
+const SPECIAL_CHARS = new RegExp("[\\\\$'\"]", "g");
+
 function escape(unsafe: string): string {
     // @TODO escape newlines
-    return unsafe.replace(/[\\$'"]/g, "\\$&");
+    return unsafe.replace(SPECIAL_CHARS, "\\$&");
 }
 
 
