@@ -30,7 +30,7 @@ const tokens = tokenizer.scanEverything();
 // tokenizer.printTokens();
 
 // Parse the tokens.
-const parser = new Parser(text, tokenizer);
+const parser = new Parser(text, tokens);
 const ast = parser.parse();
 
 // Validate and resolve symbols in namespaces.
