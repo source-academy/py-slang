@@ -16,14 +16,20 @@ export namespace ExprNS {
         visitCallExpr(expr: Call): T
     }
     export abstract class Expr {
+        startToken: Token;
+        endToken: Token;
+        protected constructor(startToken: Token, endToken: Token) {
+            this.startToken = startToken;
+            this.endToken = endToken;
+        }
         abstract accept(visitor: Visitor<any>): any;
     }
     export class Binary extends Expr {
         left: Expr;
         operator: Token;
         right: Expr;
-        constructor(left: Expr, operator: Token, right: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, left: Expr, operator: Token, right: Expr){
+            super(startToken, endToken)
             this.left = left;
             this.operator = operator;
             this.right = right;
@@ -36,8 +42,8 @@ export namespace ExprNS {
         left: Expr;
         operator: Token;
         right: Expr;
-        constructor(left: Expr, operator: Token, right: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, left: Expr, operator: Token, right: Expr){
+            super(startToken, endToken)
             this.left = left;
             this.operator = operator;
             this.right = right;
@@ -50,8 +56,8 @@ export namespace ExprNS {
         left: Expr;
         operator: Token;
         right: Expr;
-        constructor(left: Expr, operator: Token, right: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, left: Expr, operator: Token, right: Expr){
+            super(startToken, endToken)
             this.left = left;
             this.operator = operator;
             this.right = right;
@@ -62,8 +68,8 @@ export namespace ExprNS {
     }
     export class Grouping extends Expr {
         expression: Expr;
-        constructor(expression: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, expression: Expr){
+            super(startToken, endToken)
             this.expression = expression;
         }
         override accept(visitor: Visitor<any>): any {
@@ -72,8 +78,8 @@ export namespace ExprNS {
     }
     export class Literal extends Expr {
         value: true | false | number | string;
-        constructor(value: true | false | number | string){
-            super()
+        constructor(startToken: Token, endToken: Token, value: true | false | number | string){
+            super(startToken, endToken)
             this.value = value;
         }
         override accept(visitor: Visitor<any>): any {
@@ -83,8 +89,8 @@ export namespace ExprNS {
     export class Unary extends Expr {
         operator: Token;
         right: Expr;
-        constructor(operator: Token, right: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, operator: Token, right: Expr){
+            super(startToken, endToken)
             this.operator = operator;
             this.right = right;
         }
@@ -96,8 +102,8 @@ export namespace ExprNS {
         predicate: Expr;
         consequent: Expr;
         alternative: Expr;
-        constructor(predicate: Expr, consequent: Expr, alternative: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, predicate: Expr, consequent: Expr, alternative: Expr){
+            super(startToken, endToken)
             this.predicate = predicate;
             this.consequent = consequent;
             this.alternative = alternative;
@@ -109,8 +115,8 @@ export namespace ExprNS {
     export class Lambda extends Expr {
         parameters: Token[];
         body: Expr;
-        constructor(parameters: Token[], body: Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, parameters: Token[], body: Expr){
+            super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
         }
@@ -122,8 +128,8 @@ export namespace ExprNS {
         parameters: Token[];
         body: StmtNS.Stmt[];
         varDecls: Token[] | null;
-        constructor(parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[] | null){
-            super()
+        constructor(startToken: Token, endToken: Token, parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[] | null){
+            super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
             this.varDecls = varDecls;
@@ -134,8 +140,8 @@ export namespace ExprNS {
     }
     export class Variable extends Expr {
         name: Token;
-        constructor(name: Token){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token){
+            super(startToken, endToken)
             this.name = name;
         }
         override accept(visitor: Visitor<any>): any {
@@ -145,8 +151,8 @@ export namespace ExprNS {
     export class Call extends Expr {
         callee: Expr;
         args: Expr[] | null;
-        constructor(callee: Expr, args: Expr[] | null){
-            super()
+        constructor(startToken: Token, endToken: Token, callee: Expr, args: Expr[] | null){
+            super(startToken, endToken)
             this.callee = callee;
             this.args = args;
         }
@@ -177,11 +183,17 @@ export namespace StmtNS {
         visitFileInputStmt(stmt: FileInput): T
     }
     export abstract class Stmt {
+        startToken: Token;
+        endToken: Token;
+        protected constructor(startToken: Token, endToken: Token) {
+            this.startToken = startToken;
+            this.endToken = endToken;
+        }
         abstract accept(visitor: Visitor<any>): any;
     }
     export class Pass extends Stmt {
-        constructor(){
-            super()
+        constructor(startToken: Token, endToken: Token){
+            super(startToken, endToken)
         }
         override accept(visitor: Visitor<any>): any {
             return visitor.visitPassStmt(this)
@@ -190,8 +202,8 @@ export namespace StmtNS {
     export class Assign extends Stmt {
         name: Token;
         value: ExprNS.Expr;
-        constructor(name: Token, value: ExprNS.Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr){
+            super(startToken, endToken)
             this.name = name;
             this.value = value;
         }
@@ -203,8 +215,8 @@ export namespace StmtNS {
         name: Token;
         value: ExprNS.Expr;
         ann: ExprNS.Expr;
-        constructor(name: Token, value: ExprNS.Expr, ann: ExprNS.Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr, ann: ExprNS.Expr){
+            super(startToken, endToken)
             this.name = name;
             this.value = value;
             this.ann = ann;
@@ -214,16 +226,16 @@ export namespace StmtNS {
         }
     }
     export class Break extends Stmt {
-        constructor(){
-            super()
+        constructor(startToken: Token, endToken: Token){
+            super(startToken, endToken)
         }
         override accept(visitor: Visitor<any>): any {
             return visitor.visitBreakStmt(this)
         }
     }
     export class Continue extends Stmt {
-        constructor(){
-            super()
+        constructor(startToken: Token, endToken: Token){
+            super(startToken, endToken)
         }
         override accept(visitor: Visitor<any>): any {
             return visitor.visitContinueStmt(this)
@@ -231,8 +243,8 @@ export namespace StmtNS {
     }
     export class Return extends Stmt {
         value: ExprNS.Expr | null;
-        constructor(value: ExprNS.Expr | null){
-            super()
+        constructor(startToken: Token, endToken: Token, value: ExprNS.Expr | null){
+            super(startToken, endToken)
             this.value = value;
         }
         override accept(visitor: Visitor<any>): any {
@@ -242,8 +254,8 @@ export namespace StmtNS {
     export class FromImport extends Stmt {
         module: Token;
         names: Token[];
-        constructor(module: Token, names: Token[]){
-            super()
+        constructor(startToken: Token, endToken: Token, module: Token, names: Token[]){
+            super(startToken, endToken)
             this.module = module;
             this.names = names;
         }
@@ -253,8 +265,8 @@ export namespace StmtNS {
     }
     export class Global extends Stmt {
         name: Token;
-        constructor(name: Token){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token){
+            super(startToken, endToken)
             this.name = name;
         }
         override accept(visitor: Visitor<any>): any {
@@ -263,8 +275,8 @@ export namespace StmtNS {
     }
     export class NonLocal extends Stmt {
         name: Token;
-        constructor(name: Token){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token){
+            super(startToken, endToken)
             this.name = name;
         }
         override accept(visitor: Visitor<any>): any {
@@ -273,8 +285,8 @@ export namespace StmtNS {
     }
     export class Assert extends Stmt {
         value: ExprNS.Expr;
-        constructor(value: ExprNS.Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, value: ExprNS.Expr){
+            super(startToken, endToken)
             this.value = value;
         }
         override accept(visitor: Visitor<any>): any {
@@ -285,8 +297,8 @@ export namespace StmtNS {
         condition: ExprNS.Expr;
         body: Stmt[];
         elseBlock: Stmt[] | null;
-        constructor(condition: ExprNS.Expr, body: Stmt[], elseBlock: Stmt[] | null){
-            super()
+        constructor(startToken: Token, endToken: Token, condition: ExprNS.Expr, body: Stmt[], elseBlock: Stmt[] | null){
+            super(startToken, endToken)
             this.condition = condition;
             this.body = body;
             this.elseBlock = elseBlock;
@@ -298,8 +310,8 @@ export namespace StmtNS {
     export class While extends Stmt {
         condition: ExprNS.Expr;
         body: Stmt[];
-        constructor(condition: ExprNS.Expr, body: Stmt[]){
-            super()
+        constructor(startToken: Token, endToken: Token, condition: ExprNS.Expr, body: Stmt[]){
+            super(startToken, endToken)
             this.condition = condition;
             this.body = body;
         }
@@ -311,8 +323,8 @@ export namespace StmtNS {
         target: Token;
         iter: ExprNS.Expr;
         body: Stmt[];
-        constructor(target: Token, iter: ExprNS.Expr, body: Stmt[]){
-            super()
+        constructor(startToken: Token, endToken: Token, target: Token, iter: ExprNS.Expr, body: Stmt[]){
+            super(startToken, endToken)
             this.target = target;
             this.iter = iter;
             this.body = body;
@@ -326,8 +338,8 @@ export namespace StmtNS {
         parameters: Token[];
         body: Stmt[];
         varDecls: Token[] | null;
-        constructor(name: Token, parameters: Token[], body: Stmt[], varDecls: Token[] | null){
-            super()
+        constructor(startToken: Token, endToken: Token, name: Token, parameters: Token[], body: Stmt[], varDecls: Token[] | null){
+            super(startToken, endToken)
             this.name = name;
             this.parameters = parameters;
             this.body = body;
@@ -339,8 +351,8 @@ export namespace StmtNS {
     }
     export class SimpleExpr extends Stmt {
         expression: ExprNS.Expr;
-        constructor(expression: ExprNS.Expr){
-            super()
+        constructor(startToken: Token, endToken: Token, expression: ExprNS.Expr){
+            super(startToken, endToken)
             this.expression = expression;
         }
         override accept(visitor: Visitor<any>): any {
@@ -350,8 +362,8 @@ export namespace StmtNS {
     export class FileInput extends Stmt {
         statements: Stmt[] | null;
         varDecls: Token[] | null;
-        constructor(statements: Stmt[] | null, varDecls: Token[] | null){
-            super()
+        constructor(startToken: Token, endToken: Token, statements: Stmt[] | null, varDecls: Token[] | null){
+            super(startToken, endToken)
             this.statements = statements;
             this.varDecls = varDecls;
         }
