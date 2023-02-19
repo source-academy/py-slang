@@ -109,16 +109,29 @@ export class AstWriter {
         * ...
         * */
         return definitions.map(s => s.split('->'))
-            .map(pair => [pair[0].trim(), pair[1].split(",").map(s => s.split(':').map(s => s.trim()))])
+            .map(pair => [pair[0].trim(), pair[1]
+                .split(",")
+                .map(s => s.split(':')
+                    .map(s => s.trim()))])
     }
 
     private defineAst(baseClass: string, definitions: any) {
         definitions = this.convertToReadableForm(definitions);
         this.writeSingleLine(`export namespace ${baseClass}NS {`);
         this.defineVisitorInterface(baseClass, definitions);
+
+        // Base class
         this.writeSingleLine(`export abstract class ${baseClass} {`);
+        this.writeSingleLine('startToken: Token;')
+        this.writeSingleLine('endToken: Token;')
+        this.writeSingleLine('protected constructor(startToken: Token, endToken: Token) {')
+        this.writeSingleLine('this.startToken = startToken;')
+        this.writeSingleLine('this.endToken = endToken;')
+        this.writeSingleLine('}')
         this.writeSingleLine('abstract accept(visitor: Visitor<any>): any;');
         this.writeSingleLine('}');
+
+        // Classes
         for (const classDefinition of definitions) {
             const [className, attributes] = classDefinition;
             const isEmpty = attributes[0][0] === "()";
@@ -136,9 +149,10 @@ export class AstWriter {
                 this.writeSingleLine(`${name}: ${type};`);
             }
         }
-        const parameters = !isEmpty ? attributes.map(attribute => `${attribute[0]}: ${attribute[1]}`).join(', ') : '';
-        this.writeSingleLine(`constructor(${attributes.length > 0 ? parameters : ''}){`)
-        this.writeSingleLine('super()');
+        let parameters = !isEmpty ? ', ' + attributes.map(attribute => `${attribute[0]}: ${attribute[1]}`).join(', ') : '';
+        parameters = 'startToken: Token, endToken: Token' + parameters;
+        this.writeSingleLine(`constructor(${parameters}){`)
+        this.writeSingleLine('super(startToken, endToken)');
         if (!isEmpty) {
             for (const attribute of attributes) {
                 const name = attribute[0];

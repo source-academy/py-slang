@@ -49,13 +49,11 @@ type Stmt = StmtNS.Stmt;
 
 export class Parser {
     private readonly source: string;
-    private readonly pass: StmtNS.Pass;
     private readonly tokens: Token[];
     private current: number;
 
     constructor(source: string, tokens: Token[]) {
         this.source = source;
-        this.pass = new StmtNS.Pass();
         this.tokens = tokens;
         this.current = 0;
     }
@@ -133,6 +131,7 @@ export class Parser {
     //// THE NAMES OF THE FOLLOWING FUNCTIONS FOLLOW THE PRODUCTION RULES IN THE GRAMMAR.
     //// HENCE THEIR NAMES MIGHT NOT BE COMPLIANT WITH CAMELCASE
     private file_input(): Stmt {
+        const startToken = this.peek();
         const statements: Stmt[] = [];
         while (!this.isAtEnd()) {
             if (this.match(TokenType.NEWLINE)) {
@@ -140,13 +139,12 @@ export class Parser {
             }
             statements.push(this.stmt());
         }
-        return new StmtNS.FileInput(statements.length > 0 ? statements : null, null);
+        const endToken = this.previous();
+        return new StmtNS.FileInput(startToken, endToken,statements.length > 0 ? statements : null, null);
     }
 
     private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
-            console.log("Compound")
-            console.log(this.tokens[this.current]);
             return this.compound_stmt();
         } else if (this.check(TokenType.NAME, TokenType.NUMBER, TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
@@ -180,6 +178,7 @@ export class Parser {
     }
 
     private if_stmt(): Stmt {
+        const startToken = this.previous();
         let start = this.previous();
         let cond = this.test();
         this.consume(TokenType.COLON, "Expected ':' after if");
@@ -193,55 +192,63 @@ export class Parser {
         } else {
             throw new ParserErrors.NoElseBlockError(this.source, start);
         }
-        return new StmtNS.If(cond, block, elseStmt);
+        const endToken = this.previous();
+        return new StmtNS.If(startToken, endToken, cond, block, elseStmt);
     }
 
     private while_stmt(): Stmt {
+        const startToken = this.peek();
         let cond = this.test();
         this.consume(TokenType.COLON, "Expected ':' after while");
         let block = this.suite();
-        return new StmtNS.While(cond, block);
+        const endToken = this.previous();
+        return new StmtNS.While(startToken, endToken, cond, block);
     }
 
     private for_stmt(): Stmt {
+        const startToken = this.peek();
         let target = this.advance();
         this.consume(TokenType.IN, "Expected in after for");
         let iter = this.test();
         this.consume(TokenType.COLON, "Expected ':' after for");
         let block = this.suite();
-        return new StmtNS.For(target, iter, block);
+        const endToken = this.previous();
+        return new StmtNS.For(startToken, endToken, target, iter, block);
     }
 
     private funcdef(): Stmt {
+        const startToken = this.peek();
         let name = this.advance();
         let args = this.parameters();
         this.consume(TokenType.COLON, "Expected ':' after def");
         let block = this.suite();
-        return new StmtNS.FunctionDef(name, args, block, null);
+        const endToken = this.previous();
+        return new StmtNS.FunctionDef(startToken, endToken, name, args, block, null);
     }
 
     private simple_stmt(): Stmt {
+        const startToken = this.peek();
         let res = null;
         if (this.match(TokenType.NAME)) {
             res = this.assign_stmt();
         } else if (this.match(TokenType.PASS)) {
-            res = this.pass;
+            res = new StmtNS.Pass(startToken, startToken);
         } else if (this.match(TokenType.BREAK)) {
-            res = new StmtNS.Break();
+            res = new StmtNS.Break(startToken, startToken);
         } else if (this.match(TokenType.CONTINUE)) {
-            res = new StmtNS.Continue();
+            res = new StmtNS.Continue(startToken, startToken);
         } else if (this.match(TokenType.RETURN)) {
-            res = new StmtNS.Return(this.check(TokenType.NEWLINE) ? null : this.test());
+            res = new StmtNS.Return(startToken, startToken, this.check(TokenType.NEWLINE) ? null : this.test());
         } else if (this.match(TokenType.FROM)) {
             res = this.import_from();
         } else if (this.match(TokenType.GLOBAL)) {
-            res = new StmtNS.Global(this.advance());
+            res = new StmtNS.Global(startToken, startToken, this.advance());
         } else if (this.match(TokenType.NONLOCAL)) {
-            res = new StmtNS.NonLocal(this.advance());
+            res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
-            res = new StmtNS.Assert(this.test());
+            res = new StmtNS.Assert(startToken, startToken, this.test());
         } else if (this.check(TokenType.LPAR, TokenType.NUMBER, ...SPECIAL_IDENTIFIER_TOKENS)){
-            res = new StmtNS.SimpleExpr(this.test());
+            res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
         }
@@ -250,21 +257,26 @@ export class Parser {
     }
 
     private assign_stmt(): Stmt {
+        const startToken = this.previous();
         const name = this.previous();
         if (this.check(TokenType.COLON)) {
             const ann = this.test();
             this.consume(TokenType.EQUAL, "Expect equal in assignment");
-            return new StmtNS.AnnAssign(name,  this.test(), ann);
+            const expr = this.test();
+            return new StmtNS.AnnAssign(startToken, this.previous(), name, expr, ann);
         } else if (this.check(TokenType.EQUAL)) {
             this.advance();
-            return new StmtNS.Assign(name, this.test());
+            const expr = this.test();
+            return new StmtNS.Assign(startToken, this.previous(), name, expr);
         } else {
             this.current--;
-            return new StmtNS.SimpleExpr(this.test());
+            const expr = this.test();
+            return new StmtNS.SimpleExpr(startToken, this.previous(), expr);
         }
     }
 
     private import_from(): Stmt {
+        const startToken = this.previous();
         const module = this.advance();
         this.consume(TokenType.IMPORT, "Expected import keyword");
         let params;
@@ -273,7 +285,7 @@ export class Parser {
         } else {
             params = this.parameters();
         }
-        return new StmtNS.FromImport(module, params);
+        return new StmtNS.FromImport(startToken, this.previous(), module, params);
     }
 
     private parameters(): Token[] {
@@ -287,25 +299,27 @@ export class Parser {
         if (this.match(TokenType.LAMBDA)) {
             return this.lambdef();
         } else {
+            const startToken = this.peek();
             let consequent = this.or_test();
             if (this.match(TokenType.IF)) {
                 const predicate = this.or_test();
                 this.consume(TokenType.ELSE, "Expected else")
                 const alternative = this.test();
-                return new ExprNS.Ternary(predicate, consequent, alternative);
+                return new ExprNS.Ternary(startToken, this.previous(), predicate, consequent, alternative);
             }
             return consequent;
         }
     }
 
     private lambdef(): Expr {
+        const startToken = this.previous();
         let args = this.varparamslist();
         if (this.match(TokenType.COLON)) {
             let test = this.test();
-            return new ExprNS.Lambda(args, test);
+            return new ExprNS.Lambda(startToken, this.previous(), args, test);
         } else if (this.match(TokenType.DOUBLECOLON)) {
             let block = this.suite();
-            return new ExprNS.MultiLambda(args, block, null);
+            return new ExprNS.MultiLambda(startToken, this.previous(), args, block, null);
         }
         this.consume(TokenType.COLON, "Expected ':' after lambda");
         throw new Error("unreachable code path");
@@ -335,34 +349,38 @@ export class Parser {
     }
 
     private or_test(): Expr {
+        const startToken = this.peek();
         let expr = this.and_test();
         while (this.match(TokenType.OR)) {
             const operator = this.previous();
             const right = this.and_test();
-            expr = new ExprNS.BoolOp(expr, operator, right);
+            expr = new ExprNS.BoolOp(startToken, this.previous(), expr, operator, right);
         }
         return expr;
     }
 
     private and_test(): Expr {
+        const startToken = this.peek();
         let expr = this.not_test();
         while (this.match(TokenType.AND)) {
             const operator = this.previous();
             const right = this.not_test();
-            expr = new ExprNS.BoolOp(expr, operator, right);
+            expr = new ExprNS.BoolOp(startToken, this.previous(), expr, operator, right);
         }
         return expr;
     }
 
     private not_test(): Expr {
+        const startToken = this.peek();
         if (this.match(TokenType.NOT, TokenType.BANG)) {
             const operator = this.previous();
-            return new ExprNS.Unary(operator, this.not_test());
+            return new ExprNS.Unary(startToken, this.previous(), operator, this.not_test());
         }
         return this.comparison();
     }
 
     private comparison(): Expr {
+        const startToken = this.peek();
         let expr = this.arith_expr();
         // @TODO: Add the rest of the comparisons
         while (this.match(
@@ -379,55 +397,65 @@ export class Parser {
         )) {
             const operator = this.previous();
             const right = this.arith_expr();
-            expr = new ExprNS.Compare(expr, operator, right);
+            expr = new ExprNS.Compare(startToken, this.previous(), expr, operator, right);
         }
         return expr;
     }
 
     private arith_expr(): Expr {
+        const startToken = this.peek();
         let expr = this.term();
         while (this.match(TokenType.PLUS, TokenType.MINUS)) {
             const token = this.previous();
             const right = this.term();
-            expr = new ExprNS.Binary(expr, token, right);
+            expr = new ExprNS.Binary(startToken, this.previous(), expr, token, right);
         }
         return expr;
     }
 
     private term(): Expr {
+        const startToken = this.peek();
         let expr = this.factor();
         while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH)) {
             const token = this.previous();
             const right = this.factor();
-            expr = new ExprNS.Binary(expr, token, right);
+            expr = new ExprNS.Binary(startToken, this.previous(), expr, token, right);
         }
         return expr;
     }
 
     private factor(): Expr {
+        const startToken = this.peek();
         if (this.match(TokenType.PLUS, TokenType.MINUS)) {
-            return new ExprNS.Unary(this.previous(), this.factor());
+            const op = this.previous();
+            const factor = this.factor();
+            const endToken = this.previous();
+            return new ExprNS.Unary(startToken, endToken, op, factor);
         }
         return this.power();
     }
 
     private power(): Expr {
+        const startToken = this.peek();
         let expr = this.atom_expr();
         if (this.match(TokenType.DOUBLESTAR)) {
             const token = this.previous();
             const right = this.factor();
-            return new ExprNS.Binary(expr, token, right);
+            const endToken = this.previous();
+            return new ExprNS.Binary(startToken, endToken, expr, token, right);
         }
         return expr;
     }
 
 
     private atom_expr(): Expr {
+        const startToken = this.peek();
         let ato = this.atom();
         if (this.check(TokenType.LPAR)) {
             this.advance();
             let args = this.arglist();
-            return new ExprNS.Call(ato, args);
+            const endToken = this.previous();
+            return new ExprNS.Call(startToken, endToken, ato, args);
         }
         return ato;
     }
@@ -446,30 +474,31 @@ export class Parser {
     }
 
     private atom(): Expr {
-        if (this.match(TokenType.TRUE)) return new ExprNS.Literal(true);
-        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(false);
+        const startToken = this.previous();
+        if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, startToken, true);
+        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, startToken,false);
 
         if (this.match(TokenType.STRING)) {
-            return new ExprNS.Literal(this.previous().lexeme);
+            return new ExprNS.Literal(startToken, startToken, this.previous().lexeme);
         }
         if (this.match(TokenType.NUMBER)) {
-            return new ExprNS.Literal(Number(this.previous().lexeme));
+            return new ExprNS.Literal(startToken, startToken, Number(this.previous().lexeme));
         }
 
         if (this.match(TokenType.NAME)) {
-            return new ExprNS.Variable(this.previous());
+            return new ExprNS.Variable(startToken, startToken, this.previous());
         }
 
         if (this.match(TokenType.LPAR)) {
             let expr = this.test();
             this.consume(TokenType.RPAR, "Expected closing ')'");
-            return new ExprNS.Grouping(expr);
+            return new ExprNS.Grouping(startToken, this.previous(), expr);
         }
-        const startToken = this.peek();
+        const startTokenInvalid = this.peek();
         this.synchronize();
-        const endToken = this.peek();
+        const endTokenInvalid = this.peek();
         throw new ParserErrors.GenericUnexpectedSyntaxError(startToken.line, startToken.col, this.source,
-            startToken.indexInSource, endToken.indexInSource);
+            startTokenInvalid.indexInSource, endTokenInvalid.indexInSource);
     }
 
     //// INVALID RULES
