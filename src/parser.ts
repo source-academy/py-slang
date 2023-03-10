@@ -474,7 +474,7 @@ export class Parser {
     }
 
     private atom(): Expr {
-        const startToken = this.previous();
+        const startToken = this.peek();
         if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, startToken, true);
         if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, startToken,false);
 

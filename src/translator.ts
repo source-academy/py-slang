@@ -48,11 +48,11 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
     private tokenToEstreeLocation(token: Token): EstreeLocation {
         const start: EstreePosition = {
             line: token.line,
-            column: token.col - token.lexeme.length
+            column: token.col
         };
         const end: EstreePosition = {
             line: token.line,
-            column: token.col
+            column: token.col + token.lexeme.length
         }
         const source: string = token.lexeme;
         return {source, start, end};
@@ -112,7 +112,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'Identifier',
             name: name.lexeme,
-            // loc: this.toEstreeLocation(),
+            loc: this.tokenToEstreeLocation(name),
         };
     }
 
