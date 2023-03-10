@@ -451,8 +451,7 @@ export class Parser {
     private atom_expr(): Expr {
         const startToken = this.peek();
         let ato = this.atom();
-        if (this.check(TokenType.LPAR)) {
-            this.advance();
+        if (this.match(TokenType.LPAR)) {
             let args = this.arglist();
             const endToken = this.previous();
             return new ExprNS.Call(startToken, endToken, ato, args);
