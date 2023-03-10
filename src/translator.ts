@@ -11,20 +11,31 @@ import {TokenType} from "./tokens";
 import {
     ArrowFunctionExpression,
     AssignmentExpression,
-    BaseNode, BinaryExpression, BinaryOperator,
+    BaseNode,
+    BinaryExpression,
+    BinaryOperator,
     BlockStatement,
     BreakStatement,
-    CallExpression, ConditionalExpression,
+    CallExpression,
+    ConditionalExpression,
     ContinueStatement,
     EmptyStatement,
     Expression,
     ExpressionStatement,
     FunctionDeclaration,
     Identifier,
-    IfStatement, LogicalExpression, LogicalOperator,
+    IfStatement,
+    ImportDeclaration, ImportSpecifier,
+    LogicalExpression,
+    LogicalOperator,
     Program,
-    ReturnStatement, SimpleLiteral,
-    Statement, UnaryExpression, UnaryOperator, VariableDeclaration, VariableDeclarator,
+    ReturnStatement,
+    SimpleLiteral,
+    Statement,
+    UnaryExpression,
+    UnaryOperator,
+    VariableDeclaration,
+    VariableDeclarator,
     WhileStatement
 } from "estree";
 
@@ -294,10 +305,23 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         }
     }
     // @TODO
-    visitFromImportStmt(stmt: StmtNS.FromImport): EmptyStatement {
+    visitFromImportStmt(stmt: StmtNS.FromImport): ImportDeclaration {
+        const specifiers: ImportSpecifier[] = stmt.names.map(name => {
+            const ident = this.convertToIdentifier(name);
+            return {
+                type: 'ImportSpecifier',
+                imported: ident,
+                local: ident,
+            }
+        });
         return {
-            type: 'EmptyStatement',
-            loc: this.toEstreeLocation(stmt),
+            type: 'ImportDeclaration',
+            specifiers: specifiers,
+            source: {
+                type: 'Literal',
+                value: stmt.module.lexeme,
+                loc: this.tokenToEstreeLocation(stmt.module)
+            }
         }
     }
     visitContinueStmt(stmt: StmtNS.Continue): ContinueStatement {
