@@ -27,10 +27,10 @@ export function toPythonAstAndResolve(text: string): Stmt {
 
 export function toEstreeAST(text: string): Expression | Statement {
     const ast = toPythonAst(text);
-    return new Translator().resolve(ast);
+    return new Translator(text).resolve(ast);
 }
 
 export function toEstreeAstAndResolve(text: string): Expression | Statement {
     const ast = toPythonAst(text);
-    return new Translator().resolve(ast);
+    return new Translator(text).resolve(ast);
 }

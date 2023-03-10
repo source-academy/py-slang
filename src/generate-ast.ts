@@ -61,9 +61,9 @@ export class AstWriter {
             "Unary     -> operator: Token, right: Expr",
             "Ternary   -> predicate: Expr, consequent: Expr, alternative: Expr",
             "Lambda    -> parameters: Token[], body: Expr",
-            "MultiLambda -> parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[] | null",
+            "MultiLambda -> parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[]",
             "Variable  -> name: Token",
-            "Call      -> callee: Expr, args: Expr[] | null"
+            "Call      -> callee: Expr, args: Expr[]"
         ]);
         this.defineAst("Stmt", [
             "Pass       -> ()",
@@ -79,10 +79,10 @@ export class AstWriter {
             "If         -> condition: ExprNS.Expr, body: Stmt[], elseBlock: Stmt[] | null",
             "While      -> condition: ExprNS.Expr, body: Stmt[]",
             "For        -> target: Token, iter: ExprNS.Expr, body: Stmt[]",
-            "FunctionDef -> name: Token, parameters: Token[], body: Stmt[], varDecls: Token[] | null",
+            "FunctionDef -> name: Token, parameters: Token[], body: Stmt[], varDecls: Token[]",
             "SimpleExpr  -> expression: ExprNS.Expr",
             // Mainly two types of input - file and interactive (repl)
-            "FileInput   -> statements: Stmt[] | null, varDecls: Token[] | null"
+            "FileInput   -> statements: Stmt[], varDecls: Token[]"
         ]);
         this.tearDown();
     }

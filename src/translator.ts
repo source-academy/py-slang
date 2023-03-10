@@ -40,38 +40,46 @@ export interface EstreeLocation {
 }
 
 export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<BaseNode> {
-    constructor() {
+    private readonly source: string
+    constructor(source: string) {
+        this.source = source;
     }
 
-    // @TODO fix estree location
-
-    resolve(stmt: Stmt | Expr | null): Statement | Expression {
-        if (stmt === null) {
-            return {
-                type: 'EmptyStatement',
-                // loc: this.toEstreeLocation(),
-            };
+    private tokenToEstreeLocation(token: Token): EstreeLocation {
+        const start: EstreePosition = {
+            line: token.line,
+            column: token.col - token.lexeme.length
+        };
+        const end: EstreePosition = {
+            line: token.line,
+            column: token.col
         }
+        const source: string = token.lexeme;
+        return {source, start, end};
+    }
+    private toEstreeLocation(stmt: Stmt | Expr): EstreeLocation {
+        const start: EstreePosition = {
+            line: stmt.startToken.line,
+            column: stmt.startToken.col
+        };
+        const end: EstreePosition = {
+            line: stmt.endToken.line,
+            column: stmt.endToken.col
+        }
+        const source: string = this.source.slice(stmt.startToken.indexInSource,
+            stmt.endToken.indexInSource);
+        return {source, start, end};
+    }
+
+    resolve(stmt: Stmt | Expr): Statement | Expression {
         return stmt.accept(this);
     }
 
     // Ugly, but just to support proper typing
-    resolveStmt(stmt: Stmt | null) {
-        if (stmt === null) {
-            return {
-                type: 'EmptyStatement',
-                // loc: this.toEstreeLocation(),
-            };
-        }
+    resolveStmt(stmt: Stmt) {
         return stmt.accept(this);
     }
-    resolveManyStmt(stmts: Stmt[] | null): Statement[]{
-        if (stmts === null) {
-            return [{
-                type: 'EmptyStatement',
-                // loc: this.toEstreeLocation(),
-            }];
-        }
+    resolveManyStmt(stmts: Stmt[]): Statement[]{
         const res = [];
         for (const stmt of stmts) {
             res.push(this.resolveStmt(stmt))
@@ -82,13 +90,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return expr.accept(this);
     }
 
-    resolveManyExpr(exprs: Expr[] | null) {
-        if (exprs === null) {
-            return [{
-                type: 'EmptyStatement',
-                // loc: this.toEstreeLocation(),
-            }];
-        }
+    resolveManyExpr(exprs: Expr[]) {
         const res = [];
         for (const expr of exprs) {
             res.push(this.resolveExpr(expr))
@@ -98,11 +100,11 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
 
 
     // Converts our internal identifier to estree identifier.
-    private rawStringToIdentifier(name: string): Identifier {
+    private rawStringToIdentifier(name: string, stmtOrExpr: Stmt | Expr): Identifier {
         return {
             type: 'Identifier',
             name: name,
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmtOrExpr),
         };
     }
     // Token to estree identifier.
@@ -126,29 +128,29 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         }
     }
 
-    private converTokenstoDecls(varDecls: Token[]): VariableDeclaration {
-        return {
-            type: 'VariableDeclaration',
-            declarations: varDecls?.map((token): VariableDeclarator => {
-                return {
-                    type: 'VariableDeclarator',
-                    id: this.convertToIdentifier(token),
-                    // loc: this.toEstreeLocation(),
-                }
-            }),
-            kind: 'let',
-            // loc: this.toEstreeLocation(),
-        };
-    }
+    // private converTokenstoDecls(varDecls: Token[]): VariableDeclaration {
+    //     return {
+    //         type: 'VariableDeclaration',
+    //         declarations: varDecls?.map((token): VariableDeclarator => {
+    //             return {
+    //                 type: 'VariableDeclarator',
+    //                 id: this.convertToIdentifier(token),
+    //                 loc: this.tokenToEstreeLocation(token),
+    //             }
+    //         }),
+    //         kind: 'var',
+    //         loc: this.toEstreeLocation(),
+    //     };
+    // }
 
     // Wraps an array of statements to a block.
     // WARNING: THIS CREATES A NEW BLOCK IN
     // JS AST. THIS ALSO MEANS A NEW NAMESPACE. BE CAREFUL!
-    private wrapInBlock(stmts: StmtNS.Stmt[]): BlockStatement {
+    private wrapInBlock(stmt: Stmt, stmts: StmtNS.Stmt[]): BlockStatement {
         return {
             type: 'BlockStatement',
             body: this.resolveManyStmt(stmts),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
 
@@ -156,24 +158,24 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
 
     visitFileInputStmt(stmt: StmtNS.FileInput): Program {
         const newBody = this.resolveManyStmt(stmt.statements);
-        if (stmt.varDecls !== null && stmt.varDecls.length > 0) {
-            const decls = this.converTokenstoDecls(stmt.varDecls);
-            newBody.unshift(decls);
-        }
+        // if (stmt.varDecls !== null && stmt.varDecls.length > 0) {
+        //     const decls = this.converTokenstoDecls(stmt.varDecls);
+        //     newBody.unshift(decls);
+        // }
         return {
             type: 'Program',
             sourceType: 'module',
             body: newBody,
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
 
     visitFunctionDefStmt(stmt: StmtNS.FunctionDef): FunctionDeclaration {
         const newBody = this.resolveManyStmt(stmt.body);
-        if (stmt.varDecls !== null && stmt.varDecls.length > 0) {
-            const decls = this.converTokenstoDecls(stmt.varDecls);
-            newBody.unshift(decls);
-        }
+        // if (stmt.varDecls !== null && stmt.varDecls.length > 0) {
+        //     const decls = this.converTokenstoDecls(stmt.varDecls);
+        //     newBody.unshift(decls);
+        // }
         return {
             type: 'FunctionDeclaration',
             id: this.convertToIdentifier(stmt.name),
@@ -182,7 +184,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
                 type: 'BlockStatement',
                 body: newBody,
             },
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
 
@@ -193,20 +195,33 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             operator: '=',
             left: this.convertToIdentifier(stmt.name),
             right: this.resolveExpr(stmt.value),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
 
     // Note: assignments are expressions in JS.
-    visitAssignStmt(stmt: StmtNS.Assign): ExpressionStatement {
-        return this.convertToExpressionStatement({
-            type: 'AssignmentExpression',
-            // We only have one type of assignment in restricted Python.
-            operator: '=',
-            left: this.convertToIdentifier(stmt.name),
-            right: this.resolveExpr(stmt.value),
-            // loc: this.toEstreeLocation(),
-        })
+    visitAssignStmt(stmt: StmtNS.Assign): VariableDeclaration {
+        // return this.convertToExpressionStatement({
+        //     type: 'AssignmentExpression',
+        //     // We only have one type of assignment in restricted Python.
+        //     operator: '=',
+        //     left: this.convertToIdentifier(stmt.name),
+        //     right: this.resolveExpr(stmt.value),
+        //     loc: this.toEstreeLocation(stmt),
+        // })
+        const declaration: VariableDeclarator = {
+            type: 'VariableDeclarator',
+            id: this.convertToIdentifier(stmt.name),
+            loc: this.tokenToEstreeLocation(stmt.name),
+        }
+        return {
+            type: 'VariableDeclaration',
+            declarations: [declaration],
+            // Note: we abuse the fact that var is function and module scoped
+            // which is exactly the same as how Python assignments are scoped!
+            kind: 'var',
+            loc: this.toEstreeLocation(stmt),
+        };
     }
 
     // Convert to source's built-in assert function.
@@ -214,9 +229,10 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'CallExpression',
             optional: false,
-            callee: this.rawStringToIdentifier('assert'),
+            callee: this.rawStringToIdentifier('assert', stmt),
             arguments: [this.resolveExpr(stmt.value)],
-            // loc: this.toEstreeLocation(),
+            // @TODO, this needs to come after callee
+            loc: this.toEstreeLocation(stmt),
         }
     }
 
@@ -225,7 +241,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
     visitForStmt(stmt: StmtNS.For): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
 
@@ -233,69 +249,69 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'IfStatement',
             test: this.resolveExpr(stmt.condition),
-            consequent: this.wrapInBlock(stmt.body),
-            alternate: stmt.elseBlock !== null ? this.wrapInBlock(stmt.elseBlock) : null,
-            // loc: this.toEstreeLocation(),
+            consequent: this.wrapInBlock(stmt, stmt.body),
+            alternate: stmt.elseBlock !== null ? this.wrapInBlock(stmt, stmt.elseBlock) : null,
+            loc: this.toEstreeLocation(stmt),
         };
     }
     visitGlobalStmt(stmt: StmtNS.Global): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
     visitNonLocalStmt(stmt: StmtNS.NonLocal): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
     visitReturnStmt(stmt: StmtNS.Return): ReturnStatement {
         return {
             type: 'ReturnStatement',
             argument: stmt.value == null ? null : this.resolveExpr(stmt.value),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         };
     }
     visitWhileStmt(stmt: StmtNS.While): WhileStatement {
         return {
             type: 'WhileStatement',
             test: this.resolveExpr(stmt.condition),
-            body: this.wrapInBlock(stmt.body),
-            // loc: this.toEstreeLocation(),
+            body: this.wrapInBlock(stmt, stmt.body),
+            loc: this.toEstreeLocation(stmt),
         }
     }
     visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): ExpressionStatement {
         return {
             type: 'ExpressionStatement',
             expression: this.resolveExpr(stmt.expression),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         }
     }
     // @TODO
     visitFromImportStmt(stmt: StmtNS.FromImport): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         }
     }
     visitContinueStmt(stmt: StmtNS.Continue): ContinueStatement {
         return {
             type: 'ContinueStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         }
     }
     visitBreakStmt(stmt: StmtNS.Break): BreakStatement {
         return {
             type: 'BreakStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         }
     }
 
     visitPassStmt(stmt: StmtNS.Pass): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(stmt),
         }
     }
 
@@ -311,14 +327,14 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             expression: true,
             params: this.convertToIdentifiers(expr.parameters),
             body: this.resolveExpr(expr.body),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
     // disabled for now
     visitMultiLambdaExpr(expr: ExprNS.MultiLambda): EmptyStatement {
         return {
             type: 'EmptyStatement',
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
     visitUnaryExpr(expr: ExprNS.Unary): UnaryExpression {
@@ -343,7 +359,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             operator: res,
             prefix: true,
             argument: this.resolveExpr(expr.right),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
     visitGroupingExpr(expr: ExprNS.Grouping): Expression {
@@ -381,7 +397,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             operator: res,
             left: this.resolveExpr(expr.left),
             right: this.resolveExpr(expr.right),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
     visitCompareExpr(expr: ExprNS.Compare): BinaryExpression {
@@ -421,7 +437,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             operator: res,
             left: this.resolveExpr(expr.left),
             right: this.resolveExpr(expr.right),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
     visitBoolOpExpr(expr: ExprNS.BoolOp): LogicalExpression {
@@ -443,7 +459,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             operator: res,
             left: this.resolveExpr(expr.left),
             right: this.resolveExpr(expr.right),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
 
@@ -453,7 +469,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             optional: false,
             callee: this.resolveExpr(expr.callee),
             arguments: this.resolveManyExpr(expr.args),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
 
@@ -463,7 +479,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             test: this.resolveExpr(expr.predicate),
             alternate: this.resolveExpr(expr.alternative),
             consequent: this.resolveExpr(expr.consequent),
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
 
@@ -471,7 +487,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'Literal',
             value: expr.value,
-            // loc: this.toEstreeLocation(),
+            loc: this.toEstreeLocation(expr),
         }
     }
 }

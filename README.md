@@ -22,7 +22,8 @@ import {Tokenizer, Parser, Resolver, Translator} from 'py-slang';
 const text = `
 (lambda a:display(a))("Hello World!")
 `;
-
+// Add a new line because Python scripts need to end with a blank newline.
+text += '\n';
 // Scan the text.
 const tokenizer = new Tokenizer(text);
 const tokens = tokenizer.scanEverything();
@@ -41,7 +42,7 @@ const resolver = new Resolver(text, ast);
 resolver.resolve(ast);
 
 // Finally, translate the AST to estree AST.
-const translator = new Translator();
+const translator = new Translator(text);
 const estreeAst = translator.resolve(ast);
 ```
 

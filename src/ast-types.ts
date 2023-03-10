@@ -127,8 +127,8 @@ export namespace ExprNS {
     export class MultiLambda extends Expr {
         parameters: Token[];
         body: StmtNS.Stmt[];
-        varDecls: Token[] | null;
-        constructor(startToken: Token, endToken: Token, parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[] | null){
+        varDecls: Token[];
+        constructor(startToken: Token, endToken: Token, parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
@@ -150,8 +150,8 @@ export namespace ExprNS {
     }
     export class Call extends Expr {
         callee: Expr;
-        args: Expr[] | null;
-        constructor(startToken: Token, endToken: Token, callee: Expr, args: Expr[] | null){
+        args: Expr[];
+        constructor(startToken: Token, endToken: Token, callee: Expr, args: Expr[]){
             super(startToken, endToken)
             this.callee = callee;
             this.args = args;
@@ -337,8 +337,8 @@ export namespace StmtNS {
         name: Token;
         parameters: Token[];
         body: Stmt[];
-        varDecls: Token[] | null;
-        constructor(startToken: Token, endToken: Token, name: Token, parameters: Token[], body: Stmt[], varDecls: Token[] | null){
+        varDecls: Token[];
+        constructor(startToken: Token, endToken: Token, name: Token, parameters: Token[], body: Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.name = name;
             this.parameters = parameters;
@@ -360,9 +360,9 @@ export namespace StmtNS {
         }
     }
     export class FileInput extends Stmt {
-        statements: Stmt[] | null;
-        varDecls: Token[] | null;
-        constructor(startToken: Token, endToken: Token, statements: Stmt[] | null, varDecls: Token[] | null){
+        statements: Stmt[];
+        varDecls: Token[];
+        constructor(startToken: Token, endToken: Token, statements: Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.statements = statements;
             this.varDecls = varDecls;

@@ -169,7 +169,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = new Environment(this.source, this.environment, new Map());
         this.resolve(stmt.statements);
         // Grab identifiers from that new environment. That are NOT functions.
-        stmt.varDecls = this.varDeclNames(this.environment.names)
+        // stmt.varDecls = this.varDeclNames(this.environment.names)
         this.environment = oldEnv;
     }
 
@@ -185,7 +185,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = new Environment(this.source, this.environment, newEnv);
         this.resolve(stmt.body);
         // Grab identifiers from that new environment. That are NOT functions.
-        stmt.varDecls = this.varDeclNames(this.environment.names)
+        // stmt.varDecls = this.varDeclNames(this.environment.names)
         // Restore old environment
         this.environment = oldEnv;
     }
