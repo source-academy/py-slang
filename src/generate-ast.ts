@@ -170,7 +170,7 @@ export class AstWriter {
     private defineVisitorInterface(baseClass: string, definitions: any) {
         this.writeSingleLine(`export interface Visitor<T> {`);
         for (const classDefinition of definitions) {
-            const [className, attributes] = classDefinition;
+            const className = classDefinition[0];
             this.writeSingleLine(`visit${className}${baseClass}(${baseClass.toLowerCase()}: ${className}): T`);
         }
         this.writeSingleLine('}');
