@@ -449,14 +449,24 @@ export class Parser {
 
 
     private atom_expr(): Expr {
-        const startToken = this.peek();
+        let startToken = this.peek();
         let ato = this.atom();
+        let res;
         if (this.match(TokenType.LPAR)) {
             let args = this.arglist();
             const endToken = this.previous();
-            return new ExprNS.Call(startToken, endToken, ato, args);
+            res = new ExprNS.Call(startToken, endToken, ato, args);
+        } else {
+            return ato;
         }
-        return ato;
+        // To handle things like x()()()
+        startToken = this.peek();
+        while (this.match(TokenType.LPAR)) {
+            let args = this.arglist();
+            res = new ExprNS.Call(startToken, this.previous(), res, args);
+            startToken = this.peek();
+        }
+        return res;
     }
 
     private arglist(): Expr[] {
