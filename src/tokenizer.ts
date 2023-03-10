@@ -162,11 +162,13 @@ export class Tokenizer {
     private overwriteToken(type: TokenType) {
         const previousToken = this.tokens[this.tokens.length - 1];
         const lexeme = this.source.slice(previousToken.indexInSource, this.current);
-        this.tokens[this.tokens.length - 1] = new Token(type, lexeme, this.line, this.col, previousToken.indexInSource);
+        this.tokens[this.tokens.length - 1] = new Token(type, lexeme, previousToken.line, previousToken.col, previousToken.indexInSource);
     }
     private addToken(type: TokenType) {
+        const line = this.line
+        const col = this.col;
         const lexeme = this.source.slice(this.start, this.current);
-        this.tokens.push(new Token(type, lexeme, this.line, this.col, this.current - lexeme.length))
+        this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
 
     // Checks that the current character matches a pattern. If so the character is consumed, else nothing is consumed.
