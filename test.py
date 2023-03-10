@@ -1,2 +1,2 @@
 # import { heart, blue, red, stack } from "rune";
-from rune import (heart, blue, red, stack)
+test(1)(2)
