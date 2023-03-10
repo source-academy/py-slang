@@ -145,29 +145,29 @@ export {Resolver} from './resolver';
 export {Translator} from './translator';
 
 
-if (process.argv.length > 2) {
-    try {
-        let text = fs.readFileSync(process.argv[2], 'utf8');
-        // Add a new line just in case
-        text += '\n';
-        const tokenizer = new Tokenizer(text);
-        const tokens = tokenizer.scanEverything();
-        tokenizer.printTokens();
-        const parser = new Parser(text, tokens);
-        const ast = parser.parse();
-        const resolver = new Resolver(text, ast);
-        resolver.resolve(ast);
-        console.log(ast);
-        const translator = new Translator(text);
-        const estreeAst = translator.resolve(ast);
-        console.log(estreeAst);
-    } catch (e) {
-        if (e instanceof BaseTokenizerError
-            || e instanceof BaseParserError
-            || e instanceof BaseResolverError) {
-            console.error(e.message);
-        } else {
-            throw e;
-        }
-    }
-}
+// if (process.argv.length > 2) {
+//     try {
+//         let text = fs.readFileSync(process.argv[2], 'utf8');
+//         // Add a new line just in case
+//         text += '\n';
+//         const tokenizer = new Tokenizer(text);
+//         const tokens = tokenizer.scanEverything();
+//         tokenizer.printTokens();
+//         const parser = new Parser(text, tokens);
+//         const ast = parser.parse();
+//         const resolver = new Resolver(text, ast);
+//         resolver.resolve(ast);
+//         console.log(ast);
+//         const translator = new Translator(text);
+//         const estreeAst = translator.resolve(ast);
+//         console.log(estreeAst);
+//     } catch (e) {
+//         if (e instanceof BaseTokenizerError
+//             || e instanceof BaseParserError
+//             || e instanceof BaseResolverError) {
+//             console.error(e.message);
+//         } else {
+//             throw e;
+//         }
+//     }
+// }
