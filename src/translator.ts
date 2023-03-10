@@ -120,13 +120,13 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return names.map(name => this.convertToIdentifier(name));
     }
 
-    private convertToExpressionStatement(expr: Expression): ExpressionStatement {
-        return {
-            type: 'ExpressionStatement',
-            expression: expr,
-            // loc: this.toEstreeLocation(),
-        }
-    }
+    // private convertToExpressionStatement(expr: Expression): ExpressionStatement {
+    //     return {
+    //         type: 'ExpressionStatement',
+    //         expression: expr,
+    //         // loc: this.toEstreeLocation(),
+    //     }
+    // }
 
     // private converTokenstoDecls(varDecls: Token[]): VariableDeclaration {
     //     return {
