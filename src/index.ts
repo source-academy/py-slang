@@ -128,10 +128,6 @@
 //
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
-import {Tokenizer} from "./tokenizer";
-import {Parser} from "./parser";
-import {Resolver} from "./resolver";
-import {Translator} from "./translator";
 
 export * from './errors';
 export {Tokenizer} from './tokenizer';
@@ -139,6 +135,10 @@ export {Parser} from './parser';
 export {Resolver} from './resolver';
 export {Translator} from './translator';
 
+// import {Tokenizer} from "./tokenizer";
+// import {Parser} from "./parser";
+// import {Resolver} from "./resolver";
+// import {Translator} from "./translator";
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
 // const BaseParserError = ParserErrors.BaseParserError;
