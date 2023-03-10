@@ -217,6 +217,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             type: 'VariableDeclarator',
             id: this.convertToIdentifier(stmt.name),
             loc: this.tokenToEstreeLocation(stmt.name),
+            init: this.resolveExpr(stmt.value),
         }
         return {
             type: 'VariableDeclaration',

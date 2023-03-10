@@ -1,1 +1,1 @@
-display(1)
+x

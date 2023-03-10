@@ -86,6 +86,11 @@ else:
             const text = `lambda a: lambda b: b + a\n`;
             expect(toPythonAst(text)).toMatchObject({})
         });
+
+        test('Ultra nested lambda', () => {
+            const text = `increment_repeater = lambda repeater: lambda f: lambda x: f(repeater(f)(x))\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        })
     });
 
     describe('Function definitions', () => {
