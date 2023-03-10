@@ -128,14 +128,9 @@
 //
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
-import fs from "fs";
 import {Tokenizer} from "./tokenizer";
 import {Parser} from "./parser";
-import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 import {Resolver} from "./resolver";
-const BaseParserError = ParserErrors.BaseParserError;
-const BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
-const BaseResolverError = ResolverErrors.BaseResolverError;
 import {Translator} from "./translator";
 
 export * from './errors';
@@ -144,7 +139,11 @@ export {Parser} from './parser';
 export {Resolver} from './resolver';
 export {Translator} from './translator';
 
-
+// import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
+// import fs from "fs";
+// const BaseParserError = ParserErrors.BaseParserError;
+// const BaseTokenizerError = TokenizerErrors.BaseTokenizerError;
+// const BaseResolverError = ResolverErrors.BaseResolverError;
 // if (process.argv.length > 2) {
 //     try {
 //         let text = fs.readFileSync(process.argv[2], 'utf8');
