@@ -46,28 +46,32 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
     }
 
     private tokenToEstreeLocation(token: Token): EstreeLocation {
+        // Convert zero-based to one-based.
+        const line = token.line + 1;
         const start: EstreePosition = {
-            line: token.line,
-            column: token.col
+            line,
+            column: token.col - token.lexeme.length
         };
         const end: EstreePosition = {
-            line: token.line,
-            column: token.col + token.lexeme.length
+            line,
+            column: token.col
         }
         const source: string = token.lexeme;
         return {source, start, end};
     }
     private toEstreeLocation(stmt: Stmt | Expr): EstreeLocation {
         const start: EstreePosition = {
-            line: stmt.startToken.line,
-            column: stmt.startToken.col
+            // Convert zero-based to one-based.
+            line: stmt.startToken.line + 1,
+            column: stmt.startToken.col - stmt.startToken.lexeme.length
         };
         const end: EstreePosition = {
-            line: stmt.endToken.line,
+            // Convert zero-based to one-based.
+            line: stmt.endToken.line + 1,
             column: stmt.endToken.col
         }
         const source: string = this.source.slice(stmt.startToken.indexInSource,
-            stmt.endToken.indexInSource);
+            stmt.endToken.indexInSource + stmt.endToken.lexeme.length);
         return {source, start, end};
     }
 

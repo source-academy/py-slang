@@ -139,7 +139,7 @@ export class Parser {
             }
             statements.push(this.stmt());
         }
-        const endToken = this.previous();
+        const endToken = this.peek();
         return new StmtNS.FileInput(startToken, endToken,statements, []);
     }
 
@@ -475,18 +475,18 @@ export class Parser {
 
     private atom(): Expr {
         const startToken = this.peek();
-        if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, startToken, true);
-        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, startToken,false);
+        if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, this.previous(), true);
+        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, this.previous(),false);
 
         if (this.match(TokenType.STRING)) {
-            return new ExprNS.Literal(startToken, startToken, this.previous().lexeme);
+            return new ExprNS.Literal(startToken, this.previous(), this.previous().lexeme);
         }
         if (this.match(TokenType.NUMBER)) {
-            return new ExprNS.Literal(startToken, startToken, Number(this.previous().lexeme));
+            return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
         }
 
         if (this.match(TokenType.NAME)) {
-            return new ExprNS.Variable(startToken, startToken, this.previous());
+            return new ExprNS.Variable(startToken, this.previous(), this.previous());
         }
 
         if (this.match(TokenType.LPAR)) {

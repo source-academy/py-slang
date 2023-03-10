@@ -156,10 +156,10 @@ export {Translator} from './translator';
 //         const ast = parser.parse();
 //         const resolver = new Resolver(text, ast);
 //         resolver.resolve(ast);
-//         console.log(ast);
+//         console.dir(ast, { depth: null });
 //         const translator = new Translator(text);
 //         const estreeAst = translator.resolve(ast);
-//         console.log(estreeAst);
+//         console.dir(estreeAst, { depth: null });
 //     } catch (e) {
 //         if (e instanceof BaseTokenizerError
 //             || e instanceof BaseParserError
