@@ -140,7 +140,7 @@ export class Parser {
             statements.push(this.stmt());
         }
         const endToken = this.previous();
-        return new StmtNS.FileInput(startToken, endToken,statements.length > 0 ? statements : null, null);
+        return new StmtNS.FileInput(startToken, endToken,statements, []);
     }
 
     private stmt(): Stmt {
@@ -223,7 +223,7 @@ export class Parser {
         this.consume(TokenType.COLON, "Expected ':' after def");
         let block = this.suite();
         const endToken = this.previous();
-        return new StmtNS.FunctionDef(startToken, endToken, name, args, block, null);
+        return new StmtNS.FunctionDef(startToken, endToken, name, args, block, []);
     }
 
     private simple_stmt(): Stmt {
@@ -319,7 +319,7 @@ export class Parser {
             return new ExprNS.Lambda(startToken, this.previous(), args, test);
         } else if (this.match(TokenType.DOUBLECOLON)) {
             let block = this.suite();
-            return new ExprNS.MultiLambda(startToken, this.previous(), args, block, null);
+            return new ExprNS.MultiLambda(startToken, this.previous(), args, block, []);
         }
         this.consume(TokenType.COLON, "Expected ':' after lambda");
         throw new Error("unreachable code path");
