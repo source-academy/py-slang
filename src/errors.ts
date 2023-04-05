@@ -31,7 +31,7 @@ function getFullLine(source: string, current: number): string {
 }
 
 export namespace TokenizerErrors {
-    export class BaseTokenizerError extends Error {
+    export class BaseTokenizerError extends SyntaxError {
         line: number;
         col: number;
 
@@ -100,7 +100,7 @@ export namespace TokenizerErrors {
 }
 
 export namespace ParserErrors {
-    export class BaseParserError extends Error {
+    export class BaseParserError extends SyntaxError {
         line: number;
         col: number;
 
@@ -144,7 +144,7 @@ export namespace ParserErrors {
 }
 
 export namespace ResolverErrors {
-    export class BaseResolverError extends Error {
+    export class BaseResolverError extends SyntaxError {
         line: number;
         col: number;
 
@@ -189,7 +189,6 @@ export namespace ResolverErrors {
             hint += sugg;
             let oldNameLine = getFullLine(source, oldName.indexInSource);
             oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, " ");
-            oldNameLine = oldNameLine;
             hint += oldNameLine;
             super(msg + hint, line, col);
             this.name = "NameReassignmentError";
