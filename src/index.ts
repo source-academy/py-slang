@@ -129,11 +129,25 @@
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
 
+import {Tokenizer} from "./tokenizer";
+import {Parser} from "./parser";
+import {Translator} from "./translator";
+import {Program} from "estree";
+
+export function parsePythonToEstreeAst(code: string, doValidate: boolean) : Program {
+    const script = code + '\n'
+    const tokenizer = new Tokenizer(script)
+    const tokens = tokenizer.scanEverything()
+    const pyParser = new Parser(script, tokens)
+    const ast = pyParser.parse()
+    const translator = new Translator(script)
+    const estreeAst = translator.resolve(ast) as unknown as Program
+    return estreeAst
+}
+
 export * from './errors';
-export {Tokenizer} from './tokenizer';
-export {Parser} from './parser';
-export {Resolver} from './resolver';
-export {Translator} from './translator';
+export {Resolver} from "./resolver"
+
 
 // import {Tokenizer} from "./tokenizer";
 // import {Parser} from "./parser";
