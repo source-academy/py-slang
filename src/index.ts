@@ -135,7 +135,9 @@ import {Translator} from "./translator";
 import {Program} from "estree";
 import {Resolver} from "./resolver";
 
-export function parsePythonToEstreeAst(code: string, doValidate: boolean = false) : Program {
+export function parsePythonToEstreeAst(code: string,
+                                       variant: number = 1,
+                                       doValidate: boolean = false) : Program {
     const script = code + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
