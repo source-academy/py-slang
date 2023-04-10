@@ -1,4 +1,5 @@
 import {Token} from "./tokenizer";
+import {Position} from "estree";
 
 /*The offset is calculated as follows:
   Current position is one after real position of end of token: 1
@@ -30,10 +31,15 @@ function getFullLine(source: string, current: number): string {
     return '\n' + source.slice(back, forward);
 }
 
+function toEstreeLocation(line: number, column: number, offset: number) {
+    return {line, column, offset}
+}
+
 export namespace TokenizerErrors {
     export class BaseTokenizerError extends SyntaxError {
         line: number;
         col: number;
+        loc: Position;
 
         constructor(message: string, line: number, col: number) {
             super(`SyntaxError at line ${line} column ${col-1}
@@ -41,6 +47,7 @@ export namespace TokenizerErrors {
             this.line = line;
             this.col = col;
             this.name = "BaseTokenizerError";
+            this.loc = toEstreeLocation(line, col, 0);
         }
     }
 
@@ -103,6 +110,7 @@ export namespace ParserErrors {
     export class BaseParserError extends SyntaxError {
         line: number;
         col: number;
+        loc: Position;
 
         constructor(message: string, line: number, col: number) {
             super(`SyntaxError at line ${line} column ${col-1}
@@ -110,6 +118,7 @@ export namespace ParserErrors {
             this.line = line;
             this.col = col;
             this.name = "BaseParserError";
+            this.loc = toEstreeLocation(line, col, 0);
         }
     }
     export class ExpectedTokenError extends BaseParserError {
@@ -147,6 +156,7 @@ export namespace ResolverErrors {
     export class BaseResolverError extends SyntaxError {
         line: number;
         col: number;
+        loc: Position;
 
         constructor(message: string, line: number, col: number) {
             super(`ResolverError at line ${line} column ${col-1}
@@ -154,6 +164,7 @@ export namespace ResolverErrors {
             this.line = line;
             this.col = col;
             this.name = "BaseResolverError";
+            this.loc = toEstreeLocation(line, col, 0);
         }
     }
     export class NameNotFoundError extends BaseResolverError {
