@@ -98,6 +98,7 @@ export class Tokenizer {
     private readonly indentStack: number[];
     private specialIdentifiers: Map<string, TokenType>;
     private forbiddenIdentifiers: Map<string, TokenType>;
+
     // forbiddenOperators: Set<TokenType>;
     constructor(source: string) {
         this.source = source;
@@ -163,6 +164,7 @@ export class Tokenizer {
         const lexeme = this.source.slice(previousToken.indexInSource, this.current);
         this.tokens[this.tokens.length - 1] = new Token(type, lexeme, previousToken.line, previousToken.col, previousToken.indexInSource);
     }
+
     private addToken(type: TokenType) {
         const line = this.line
         const col = this.col;
@@ -217,13 +219,13 @@ export class Tokenizer {
         const identifier = this.source.slice(this.start, this.current);
         if (!!this.forbiddenIdentifiers.get(identifier)) {
             throw new TokenizerErrors.ForbiddenIdentifierError(this.line, this.col,
-                                                                this.source, this.start);
+                this.source, this.start);
         }
         const specialIdent = this.specialIdentifiers.get(identifier);
         if (specialIdent !== undefined) {
             /* Merge multi-token operators, like 'is not', 'not in' */
-            const previousToken = this.tokens[this.tokens.length-1];
-            switch(specialIdent) {
+            const previousToken = this.tokens[this.tokens.length - 1];
+            switch (specialIdent) {
                 case TokenType.NOT:
                     if (previousToken.type === TokenType.IS) {
                         this.overwriteToken(TokenType.ISNOT);
@@ -311,7 +313,7 @@ export class Tokenizer {
                 if (accLeadingWhiteSpace % 4 !== 0) {
                     throw new TokenizerErrors.NonFourIndentError(this.line, this.col, this.source, this.current);
                 }
-                const tos = this.indentStack[this.indentStack.length-1];
+                const tos = this.indentStack[this.indentStack.length - 1];
                 if (accLeadingWhiteSpace > tos) {
                     this.indentStack.push(accLeadingWhiteSpace);
                     const indents = Math.floor((accLeadingWhiteSpace - tos) / 4);
@@ -396,7 +398,7 @@ export class Tokenizer {
                 if (this.matches('=')) {
                     this.raiseForbiddenOperator();
                 }
-                this.addToken( TokenType.PERCENT);
+                this.addToken(TokenType.PERCENT);
                 break;
             case '!':
                 this.addToken(this.matches('=') ? TokenType.NOTEQUAL : TokenType.BANG);
@@ -422,7 +424,7 @@ export class Tokenizer {
     }
 
     private matchForbiddenOperator(ch: string) {
-        switch(ch) {
+        switch (ch) {
             case '@':
             case '|':
             case '&':
@@ -442,7 +444,7 @@ export class Tokenizer {
             this.scanToken();
         }
         // Unravel the indent stack
-        while(this.indentStack[this.indentStack.length-1] !== 0) {
+        while (this.indentStack[this.indentStack.length - 1] !== 0) {
             this.indentStack.pop();
             this.addToken(TokenType.DEDENT);
         }
@@ -456,6 +458,7 @@ export class Tokenizer {
             ${TokenType[token.type]}\t\t\t'${token.lexeme}'`);
         }
     }
+
     private raiseForbiddenOperator() {
         throw new TokenizerErrors.ForbiddenOperatorError(this.line, this.col, this.source, this.start, this.current);
     }

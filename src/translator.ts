@@ -3,6 +3,7 @@
 * */
 
 import {StmtNS, ExprNS} from "./ast-types";
+
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 import {Token} from "./tokenizer";
@@ -52,6 +53,7 @@ export interface EstreeLocation {
 
 export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<BaseNode> {
     private readonly source: string
+
     constructor(source: string) {
         this.source = source;
     }
@@ -70,6 +72,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         const source: string = token.lexeme;
         return {source, start, end};
     }
+
     private toEstreeLocation(stmt: Stmt | Expr): EstreeLocation {
         const start: EstreePosition = {
             // Convert zero-based to one-based.
@@ -94,13 +97,15 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
     resolveStmt(stmt: Stmt) {
         return stmt.accept(this);
     }
-    resolveManyStmt(stmts: Stmt[]): Statement[]{
+
+    resolveManyStmt(stmts: Stmt[]): Statement[] {
         const res = [];
         for (const stmt of stmts) {
             res.push(this.resolveStmt(stmt))
         }
         return res;
     }
+
     resolveExpr(expr: Expr) {
         return expr.accept(this);
     }
@@ -122,6 +127,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(stmtOrExpr),
         };
     }
+
     // Token to estree identifier.
     private convertToIdentifier(name: Token): Identifier {
         return {
@@ -270,18 +276,21 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(stmt),
         };
     }
+
     visitGlobalStmt(stmt: StmtNS.Global): EmptyStatement {
         return {
             type: 'EmptyStatement',
             loc: this.toEstreeLocation(stmt),
         };
     }
+
     visitNonLocalStmt(stmt: StmtNS.NonLocal): EmptyStatement {
         return {
             type: 'EmptyStatement',
             loc: this.toEstreeLocation(stmt),
         };
     }
+
     visitReturnStmt(stmt: StmtNS.Return): ReturnStatement {
         return {
             type: 'ReturnStatement',
@@ -289,6 +298,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(stmt),
         };
     }
+
     visitWhileStmt(stmt: StmtNS.While): WhileStatement {
         return {
             type: 'WhileStatement',
@@ -297,6 +307,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(stmt),
         }
     }
+
     visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): ExpressionStatement {
         return {
             type: 'ExpressionStatement',
@@ -304,6 +315,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(stmt),
         }
     }
+
     // @TODO
     visitFromImportStmt(stmt: StmtNS.FromImport): ImportDeclaration {
         const specifiers: ImportSpecifier[] = stmt.names.map(name => {
@@ -324,12 +336,14 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             }
         }
     }
+
     visitContinueStmt(stmt: StmtNS.Continue): ContinueStatement {
         return {
             type: 'ContinueStatement',
             loc: this.toEstreeLocation(stmt),
         }
     }
+
     visitBreakStmt(stmt: StmtNS.Break): BreakStatement {
         return {
             type: 'BreakStatement',
@@ -359,6 +373,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(expr),
         }
     }
+
     // disabled for now
     visitMultiLambdaExpr(expr: ExprNS.MultiLambda): EmptyStatement {
         return {
@@ -366,10 +381,11 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(expr),
         }
     }
+
     visitUnaryExpr(expr: ExprNS.Unary): UnaryExpression {
         const op = expr.operator.type;
         let res: UnaryOperator = '-';
-        switch(op) {
+        switch (op) {
             case TokenType.NOT:
                 res = '!'
                 break;
@@ -391,14 +407,16 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(expr),
         }
     }
+
     visitGroupingExpr(expr: ExprNS.Grouping): Expression {
         return this.resolveExpr(expr.expression);
     }
+
     visitBinaryExpr(expr: ExprNS.Binary): BinaryExpression {
         const op = expr.operator.type;
         let res: BinaryOperator = '+';
         // To make the type checker happy.
-        switch(op) {
+        switch (op) {
             case TokenType.PLUS:
                 res = '+';
                 break;
@@ -429,11 +447,12 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(expr),
         }
     }
+
     visitCompareExpr(expr: ExprNS.Compare): BinaryExpression {
         const op = expr.operator.type;
         let res: BinaryOperator = '+';
         // To make the type checker happy.
-        switch(op) {
+        switch (op) {
             case TokenType.LESS:
                 res = '<';
                 break;
@@ -469,11 +488,12 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             loc: this.toEstreeLocation(expr),
         }
     }
+
     visitBoolOpExpr(expr: ExprNS.BoolOp): LogicalExpression {
         const op = expr.operator.type;
         let res: LogicalOperator = '||';
         // To make the type checker happy.
-        switch(op) {
+        switch (op) {
             case TokenType.AND:
                 res = '&&';
                 break;
