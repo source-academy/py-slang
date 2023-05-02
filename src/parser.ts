@@ -43,6 +43,7 @@ import {SPECIAL_IDENTIFIER_TOKENS, Token} from "./tokenizer";
 import {TokenType} from "./tokens";
 import {ExprNS, StmtNS} from "./ast-types";
 import {ParserErrors} from "./errors";
+
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 
@@ -114,15 +115,16 @@ export class Parser {
                 return false;
             }
             if (this.match(TokenType.FOR,
-                            TokenType.WHILE, TokenType.DEF,
-                            TokenType.IF, TokenType.ELIF,
-                            TokenType.ELSE, TokenType.RETURN)) {
+                TokenType.WHILE, TokenType.DEF,
+                TokenType.IF, TokenType.ELIF,
+                TokenType.ELSE, TokenType.RETURN)) {
                 return true;
             }
             this.advance();
         }
         return false;
     }
+
     parse(): Stmt {
         return this.file_input();
         // return this.expression();
@@ -140,7 +142,7 @@ export class Parser {
             statements.push(this.stmt());
         }
         const endToken = this.peek();
-        return new StmtNS.FileInput(startToken, endToken,statements, []);
+        return new StmtNS.FileInput(startToken, endToken, statements, []);
     }
 
     private stmt(): Stmt {
@@ -247,7 +249,7 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, ...SPECIAL_IDENTIFIER_TOKENS)){
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
@@ -485,7 +487,7 @@ export class Parser {
     private atom(): Expr {
         const startToken = this.peek();
         if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, this.previous(), true);
-        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, this.previous(),false);
+        if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, this.previous(), false);
 
         if (this.match(TokenType.STRING)) {
             return new ExprNS.Literal(startToken, this.previous(), this.previous().lexeme);
