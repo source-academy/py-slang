@@ -39,6 +39,7 @@ import {
     VariableDeclarator,
     WhileStatement
 } from "estree";
+import {TranslatorErrors} from "./errors";
 
 export interface EstreePosition {
     line: number;
@@ -435,7 +436,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             // @TODO double slash and power needs to convert to math exponent/floor divide
             case TokenType.DOUBLESLASH:
             case TokenType.DOUBLESTAR:
-                throw new Error("This operator is not yet supported");
+                throw new TranslatorErrors.UnsupportedOperator(expr.operator.line, expr.operator.col, this.source, expr.operator.indexInSource);
             default:
                 throw new Error("Unreachable binary code path in translator");
         }
@@ -476,7 +477,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             case TokenType.ISNOT:
             case TokenType.IN:
             case TokenType.NOTIN:
-                throw new Error("This operator is not yet supported");
+                throw new TranslatorErrors.UnsupportedOperator(expr.operator.line, expr.operator.col, this.source, expr.operator.indexInSource);
             default:
                 throw new Error("Unreachable binary code path in translator");
         }
