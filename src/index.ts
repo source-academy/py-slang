@@ -153,10 +153,6 @@ export function parsePythonToEstreeAst(code: string,
 export * from './errors';
 
 
-// import {Tokenizer} from "./tokenizer";
-// import {Parser} from "./parser";
-// import {Resolver} from "./resolver";
-// import {Translator} from "./translator";
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
 // const BaseParserError = ParserErrors.BaseParserError;
@@ -172,8 +168,8 @@ export * from './errors';
 //         tokenizer.printTokens();
 //         const parser = new Parser(text, tokens);
 //         const ast = parser.parse();
-//         const resolver = new Resolver(text, ast);
-//         resolver.resolve(ast);
+//         // const resolver = new Resolver(text, ast);
+//         // resolver.resolve(ast);
 //         console.dir(ast, { depth: null });
 //         const translator = new Translator(text);
 //         const estreeAst = translator.resolve(ast);

@@ -84,6 +84,16 @@ export namespace TokenizerErrors {
             this.name = "NonFourIndentError";
         }
     }
+
+    export class InconsistentIndentError extends BaseTokenizerError {
+        constructor(line: number, col: number, source: string, start: number) {
+            let msg = getFullLine(source, start) + "\n";
+            let hint = `^ This indent/dedent is inconsistent with other indents/dedents. It's currently ${col} spaces.`;
+            hint = hint.padStart(hint.length + col - MAGIC_OFFSET, "-");
+            super(msg + hint, line, col);
+            this.name = "InconsistentIndentError";
+        }
+    }
     export class ForbiddenIdentifierError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
             let msg = getFullLine(source, start) + "\n";
