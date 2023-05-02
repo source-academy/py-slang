@@ -1,5 +1,5 @@
 import {
-    Expression, Program,
+    Expression,
     Statement,
 } from "estree";
 
