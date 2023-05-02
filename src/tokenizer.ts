@@ -85,6 +85,7 @@ const specialIdentifiers = new Map([
     ["else", TokenType.ELSE],
     ["in", TokenType.IN],
 ]);
+
 export const SPECIAL_IDENTIFIER_TOKENS = Array.from(specialIdentifiers.values());
 
 export class Tokenizer {
@@ -94,8 +95,7 @@ export class Tokenizer {
     private current: number;
     private line: number;
     private col: number;
-    private prevLineLeadingWhiteSpace: number;
-    private currLineLeadingWhiteSpace: number;
+    private readonly indentStack: number[];
     private specialIdentifiers: Map<string, TokenType>;
     private forbiddenIdentifiers: Map<string, TokenType>;
     // forbiddenOperators: Set<TokenType>;
@@ -106,8 +106,7 @@ export class Tokenizer {
         this.current = 0;
         this.line = 0;
         this.col = 0;
-        this.prevLineLeadingWhiteSpace = 0;
-        this.currLineLeadingWhiteSpace = 0;
+        this.indentStack = [0];
         this.specialIdentifiers = specialIdentifiers;
         // Not used by us, but should be kept reserved as per Python spec
         this.forbiddenIdentifiers = new Map([
@@ -254,7 +253,7 @@ export class Tokenizer {
             //// SPECIAL MARKERS
             // Comment -- advance to end of line.
             case '#':
-                while (this.peek() != '\n' && !this.isAtEnd()) {
+                while ((this.peek() != '\n' || this.peek() != '\r') && !this.isAtEnd()) {
                     this.advance();
                 }
                 break;
@@ -275,40 +274,62 @@ export class Tokenizer {
                 this.addToken(TokenType.NEWLINE);
                 this.line += 1;
                 this.col = 0;
-                // @TODO fix me
-                // // Avoid lines that are completely empty.
-                // if (this.peek() === '\n' || this.peek() === '\r') {
-                //     this.advance();
-                //     if (this.peek() === '\n') {
-                //         this.advance();
-                //     }
-                //     this.addToken(TokenType.NEWLINE);
-                //     break;
-                // }
-                this.prevLineLeadingWhiteSpace = this.currLineLeadingWhiteSpace;
-                this.currLineLeadingWhiteSpace = 0;
+                let accLeadingWhiteSpace = 0;
                 // Detect significant whitespace
                 while (this.peek() === " " && !this.isAtEnd()) {
-                    this.currLineLeadingWhiteSpace += 1;
+                    accLeadingWhiteSpace += 1;
                     // Consume the rest of the line's leading whitespace.
                     this.advance();
                 }
-                if (this.currLineLeadingWhiteSpace > this.prevLineLeadingWhiteSpace) {
-                    if (this.currLineLeadingWhiteSpace % 4 !== 0) {
-                        throw new TokenizerErrors.NonFourIndentError(this.line, this.col, this.source, this.current);
+                // The following block handles things like
+                /*
+                def foo():
+                    pass
+                             <---- this newline should be zapped
+                    pass     <---- this should be part of the block
+                 */
+                while ((this.peek() === "\n" || this.peek() === "\r") && !this.isAtEnd()) {
+                    // Handle \r\n on Windows
+                    if (this.peek() === "\r") {
+                        this.advance();
+                        if (this.peek() === "\n") {
+                            this.advance();
+                        }
+                    } else {
+                        this.advance();
                     }
-                    const indents = Math.floor((this.currLineLeadingWhiteSpace - this.prevLineLeadingWhiteSpace) / 4);
+                    this.line += 1;
+                    this.col = 0;
+                    accLeadingWhiteSpace = 0;
+                    // Detect significant whitespace
+                    while (this.peek() === " " && !this.isAtEnd()) {
+                        accLeadingWhiteSpace += 1;
+                        // Consume the rest of the line's leading whitespace.
+                        this.advance();
+                    }
+                }
+                if (accLeadingWhiteSpace % 4 !== 0) {
+                    throw new TokenizerErrors.NonFourIndentError(this.line, this.col, this.source, this.current);
+                }
+                const tos = this.indentStack[this.indentStack.length-1];
+                if (accLeadingWhiteSpace > tos) {
+                    this.indentStack.push(accLeadingWhiteSpace);
+                    const indents = Math.floor((accLeadingWhiteSpace - tos) / 4);
                     for (let i = 0; i < indents; ++i) {
                         this.addToken(TokenType.INDENT);
                     }
-                    break;
-                }
-                if (this.currLineLeadingWhiteSpace < this.prevLineLeadingWhiteSpace) {
-                    const indents = Math.floor((this.prevLineLeadingWhiteSpace - this.currLineLeadingWhiteSpace) / 4);
+                } else if (accLeadingWhiteSpace < tos) {
+                    if (this.indentStack.length == 0) {
+                        throw new TokenizerErrors.InconsistentIndentError(this.line, this.col, this.source, this.current);
+                    }
+                    const prev = this.indentStack.pop();
+                    if (prev === undefined || prev === null) {
+                        throw new TokenizerErrors.InconsistentIndentError(this.line, this.col, this.source, this.current);
+                    }
+                    const indents = Math.floor((prev - accLeadingWhiteSpace) / 4);
                     for (let i = 0; i < indents; ++i) {
                         this.addToken(TokenType.DEDENT);
                     }
-                    break;
                 }
                 break;
             // String
@@ -419,6 +440,11 @@ export class Tokenizer {
         while (!this.isAtEnd()) {
             this.start = this.current;
             this.scanToken();
+        }
+        // Unravel the indent stack
+        while(this.indentStack[this.indentStack.length-1] !== 0) {
+            this.indentStack.pop();
+            this.addToken(TokenType.DEDENT);
         }
         this.tokens.push(new Token(TokenType.ENDMARKER, "", this.line, this.col, this.current));
         return this.tokens

@@ -1,5 +1,5 @@
 import {
-    Expression,
+    Expression, Program,
     Statement,
 } from "estree";
 
@@ -11,11 +11,12 @@ import {StmtNS} from "../ast-types";
 import Stmt = StmtNS.Stmt;
 
 export function toPythonAst(text: string): Stmt {
-    const tok = new Tokenizer(text);
-    const tokens = tok.scanEverything();
-    // tok.printTokens();
-    const ast = (new Parser(text, tokens)).parse();
-    console.log(ast);
+    const script = text + '\n'
+    const tokenizer = new Tokenizer(script)
+    const tokens = tokenizer.scanEverything()
+    const pyParser = new Parser(script, tokens)
+    const ast = pyParser.parse()
+    // console.dir(ast);
     return ast;
 }
 
