@@ -216,3 +216,29 @@ export namespace ResolverErrors {
         }
     }
 }
+
+export namespace TranslatorErrors {
+    export class BaseTranslatorError extends SyntaxError {
+        line: number;
+        col: number;
+        loc: Position;
+
+        constructor(message: string, line: number, col: number) {
+            super(`BaseTranslatorError at line ${line} column ${col-1}
+                   ${message}`);
+            this.line = line;
+            this.col = col;
+            this.name = "BaseTranslatorError";
+            this.loc = toEstreeLocation(line, col, 0);
+        }
+    }
+    export class UnsupportedOperator extends BaseTranslatorError {
+        constructor(line: number, col: number, source: string, start: number) {
+            let msg = getFullLine(source, start) + "\n";
+            let hint = `^ This operator is not yet supported by us.`;
+            hint = hint.padStart(hint.length + col - MAGIC_OFFSET, " ");
+            super(msg + hint, line, col);
+            this.name = "UnsupportedOperator";
+        }
+    }
+}
