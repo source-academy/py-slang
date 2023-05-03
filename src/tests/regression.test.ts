@@ -18,4 +18,16 @@ print("world")
 `;
         toEstreeAST(text);
     })
+    test('Issue #3', () => {
+        const text = `
+def foo(
+    a,
+    b
+):
+    pass
+
+    pass
+`;
+        toEstreeAST(text);
+    })
 })

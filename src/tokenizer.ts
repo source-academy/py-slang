@@ -88,6 +88,7 @@ const specialIdentifiers = new Map([
 
 export const SPECIAL_IDENTIFIER_TOKENS = Array.from(specialIdentifiers.values());
 
+
 export class Tokenizer {
     private readonly source: string;
     private readonly tokens: Token[];
@@ -98,6 +99,7 @@ export class Tokenizer {
     private readonly indentStack: number[];
     private specialIdentifiers: Map<string, TokenType>;
     private forbiddenIdentifiers: Map<string, TokenType>;
+    private parenthesesLevel: number;
 
     // forbiddenOperators: Set<TokenType>;
     constructor(source: string) {
@@ -139,6 +141,7 @@ export class Tokenizer {
         //     TokenType.DOUBLESTAREQUAL,
         //     TokenType.DOUBLESLASHEQUAL,
         // ])
+        this.parenthesesLevel = 0;
     }
 
     private isAtEnd() {
@@ -273,6 +276,11 @@ export class Tokenizer {
                     break;
                 }
             case '\n':
+                if (this.parenthesesLevel > 0) {
+                    this.line += 1;
+                    this.col = 0;
+                    break;
+                }
                 this.addToken(TokenType.NEWLINE);
                 this.line += 1;
                 this.col = 0;
@@ -362,9 +370,14 @@ export class Tokenizer {
             //// Everything else
             case '(':
                 this.addToken(TokenType.LPAR);
+                this.parenthesesLevel++;
                 break;
             case ')':
                 this.addToken(TokenType.RPAR);
+                if (this.parenthesesLevel === 0) {
+                    throw new TokenizerErrors.NonMatchingParenthesesError(this.line, this.col, this.source, this.current);
+                }
+                this.parenthesesLevel--;
                 break;
             case ',':
                 this.addToken(TokenType.COMMA);

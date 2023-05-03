@@ -114,6 +114,17 @@ export namespace TokenizerErrors {
             this.name = "ForbiddenOperatorError";
         }
     }
+
+    export class NonMatchingParenthesesError extends BaseTokenizerError {
+        constructor(line: number, col: number, source: string, current: number) {
+            let msg = getFullLine(source, current-1) + "\n";
+            let hint = `${col > 1 ? '~' : ''}^~ Non-matching closing parentheses.`;
+            // The extra `~` character takes up some space.
+            hint = hint.padStart(hint.length + col - MAGIC_OFFSET - (col > 1 ? 1 : 0), " ");
+            super(msg + hint, line, col);
+            this.name = "NonMatchingParenthesesError";
+        }
+    }
 }
 
 export namespace ParserErrors {
