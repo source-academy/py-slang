@@ -16,34 +16,25 @@ npm run start:dev # Add `-- <file.py>` to run a file
 
 ### Consuming the API and generating an estree AST
 ```javascript
-import {Tokenizer, Parser, Resolver, Translator} from 'py-slang';
+import {parsePythonToEstreeAst} from 'py-slang';
 
 // Sample Python code
 const text = `
-(lambda a:display(a))("Hello World!")
+(lambda a: print(a))("Hello World!")
 `;
-// Add a new line because Python scripts need to end with a blank newline.
-text += '\n';
-// Scan the text.
-const tokenizer = new Tokenizer(text);
-const tokens = tokenizer.scanEverything();
-// If you want to view the tokens, you can.
-// tokenizer.printTokens();
+// Arguments:
+// Code to translate
+// SICPy chapter number
+// Whether to validate the code using a resolver.
+console.dir(parsePythonToEstreeAst(text, 1, false));
+```
 
-// Parse the tokens.
-const parser = new Parser(text, tokens);
-const ast = parser.parse();
+### Running the test suite
 
-// Validate and resolve symbols in namespaces.
-// This step may throw false errors.
-// This is when we detect variable declarations
-// and hoist them out of blocks.
-const resolver = new Resolver(text, ast);
-resolver.resolve(ast);
+Ensure that all tests pass before committing.
 
-// Finally, translate the AST to estree AST.
-const translator = new Translator(text);
-const estreeAst = translator.resolve(ast);
+```shell
+npm run test
 ```
 
 ### Regenerating the AST types
