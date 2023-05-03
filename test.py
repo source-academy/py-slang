@@ -1,4 +1,6 @@
-def foo():
+def foo(
+    a, b
+):
     pass
 
     pass
