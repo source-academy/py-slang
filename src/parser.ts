@@ -47,6 +47,11 @@ import {ParserErrors} from "./errors";
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 
+const PSEUD_NAMES = [
+    TokenType.TRUE,
+    TokenType.FALSE,
+    TokenType.NONE,
+]
 
 export class Parser {
     private readonly source: string;
@@ -148,7 +153,8 @@ export class Parser {
     private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             return this.compound_stmt();
-        } else if (this.check(TokenType.NAME, TokenType.NUMBER, TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
+        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
+            TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
             TokenType.ASSERT, TokenType.LPAR, ...SPECIAL_IDENTIFIER_TOKENS)) {
             return this.simple_stmt();
@@ -496,7 +502,7 @@ export class Parser {
             return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
         }
 
-        if (this.match(TokenType.NAME)) {
+        if (this.match(TokenType.NAME, ...PSEUD_NAMES)) {
             return new ExprNS.Variable(startToken, this.previous(), this.previous());
         }
 
