@@ -7,6 +7,8 @@
 a restricted subset of Python (enough to complete SICP), and outputs an
 `estree`-compatible AST. [The grammar](./src/Grammar.gram) is a reduced
 version of [Python 3.7's](https://docs.python.org/3.7/reference/grammar.html).
+This project does not aim to be a full Python to JS transpiler, but aims
+to transpile just a small enough subset of Python.
 
 ## Usage
 For local testing:
