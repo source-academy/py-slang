@@ -1,6 +1,1 @@
-def foo(
-    a, b
-):
-    pass
-
-    pass
+add_one = lambda : None
