@@ -196,54 +196,78 @@ export class Tokenizer {
     private isDigit(c: string): boolean {
         return /^[0-9]/.test(c);
     }
-	
-	private isHexa(c: string) : boolean {
-		return /^[0-9A-F]$/i.test(c);
-	}
-	
-	private isOcta(c: string) : boolean {
-		return /^[0-7]/.test(c);
-	}
-	
-	private isBinary(c: string) : boolean {
-		return /^[0-1]/.test(c);
-	}
-	
+    
+    private isHexa(c: string) : boolean {
+        return /^[0-9A-F]$/i.test(c);
+    }
+    
+    private isOcta(c: string) : boolean {
+        return /^[0-7]/.test(c);
+    }
+    
+    private isBinary(c: string) : boolean {
+        return /^[0-1]/.test(c);
+    }
+    
     private isIdentifier(c: string): boolean {
         return c === '_' || this.isAlpha(c) || this.isDigit(c);
     }
-	
-	private baseNumber() {
-		if (this.peek() === 'x') {
-			this.advance();
-			if (!this.isHexa(this.peek())) {
-                throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
-			}
-			while (this.isHexa(this.peek())) {
-				this.advance();
-			}
-			this.addToken(TokenType.NUMBER);
-		} else if (this.peek() === 'o') {
-			this.advance();
-			if (!this.isOcta(this.peek())) {
-                throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
-			}
-			while (this.isOcta(this.peek())) {
-				this.advance();
-			}
-			this.addToken(TokenType.NUMBER);
-		} else if (this.peek() === 'b') {
-			this.advance();
-			if (!this.isBinary(this.peek())) {
-                throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
-			}
-			while (this.isBinary(this.peek())) {
-				this.advance();
-			}
-			this.addToken(TokenType.NUMBER);
-		}
-	}
-	
+    
+    private baseNumber() {
+        switch(this.peek()) {
+            case 'x':
+                this.advance();
+                if (!this.isHexa(this.peek())) {
+                    throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
+                }
+                while (this.isHexa(this.peek())) {
+                    this.advance();
+                }
+                break;
+            case 'o':
+                this.advance();
+                if (!this.isOcta(this.peek())) {
+                    throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
+                }
+                while (this.isOcta(this.peek())) {
+                    this.advance();
+                }
+                break;
+            case 'b':
+                this.advance();
+                if (!this.isBinary(this.peek())) {
+                    throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
+                }
+                while (this.isBinary(this.peek())) {
+                    this.advance();
+                }
+                break;
+            default:
+                while (this.isDigit(this.peek())) {
+                    this.advance();
+                }
+                if (this.peek() === '.') {
+                    this.advance();
+                    while (this.isDigit(this.peek())) {
+                        this.advance();
+                    }
+                }
+                if (this.peek() === 'e') {
+                    this.advance();
+                    if (this.peek() === '-') {
+                        this.advance();
+                    }
+                    if (!this.isDigit(this.peek())) {
+                        throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
+                    }
+                    while (this.isDigit(this.peek())) {
+                        this.advance();
+                    }
+                }
+        }
+		this.addToken(TokenType.NUMBER);
+    }
+    
     private number() {
         while (this.isDigit(this.peek())) {
             this.advance();
@@ -255,20 +279,20 @@ export class Tokenizer {
                 this.advance();
             }
         }
-		// Exponent part
-		if (this.peek() === 'e') {
-			this.advance();
-			if (this.peek() === '-') {
-				this.advance();
-			}
-			if (!this.isDigit(this.peek())) {
+        // Exponent part
+        if (this.peek() === 'e') {
+            this.advance();
+            if (this.peek() === '-') {
+                this.advance();
+            }
+            if (!this.isDigit(this.peek())) {
                 throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
-			}
-			while (this.isDigit(this.peek())) {
-				this.advance();
-			}
-		}
-		
+            }
+            while (this.isDigit(this.peek())) {
+                this.advance();
+            }
+        }
+        
         this.addToken(TokenType.NUMBER);
     }
 
@@ -413,8 +437,8 @@ export class Tokenizer {
                 break;
             // Number... I wish JS had match statements :(
             case '0':
-				this.baseNumber();
-				break;
+                this.baseNumber();
+                break;
             case '1':
             case '2':
             case '3':
