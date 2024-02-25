@@ -40,8 +40,8 @@
     IN THE SOFTWARE.
 * */
 
-import {TokenType} from "./tokens";
-import {TokenizerErrors} from "./errors";
+import { TokenType } from "./tokens";
+import { TokenizerErrors } from "./errors";
 
 export class Token {
     type: TokenType;
@@ -175,6 +175,13 @@ export class Tokenizer {
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
 
+    private addStringToken(type: TokenType) {
+        const line = this.line
+        const col = this.col;
+        const lexeme = this.source.slice(this.start + 1, this.current - 1);
+        this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
+    }
+
     // Checks that the current character matches a pattern. If so the character is consumed, else nothing is consumed.
     private matches(pattern: string): boolean {
         if (this.isAtEnd()) {
@@ -196,25 +203,25 @@ export class Tokenizer {
     private isDigit(c: string): boolean {
         return /^[0-9]/.test(c);
     }
-    
-    private isHexa(c: string) : boolean {
+
+    private isHexa(c: string): boolean {
         return /^[0-9A-F]$/i.test(c);
     }
-    
-    private isOcta(c: string) : boolean {
+
+    private isOcta(c: string): boolean {
         return /^[0-7]/.test(c);
     }
-    
-    private isBinary(c: string) : boolean {
+
+    private isBinary(c: string): boolean {
         return /^[0-1]/.test(c);
     }
-    
+
     private isIdentifier(c: string): boolean {
         return c === '_' || this.isAlpha(c) || this.isDigit(c);
     }
-    
+
     private baseNumber() {
-        switch(this.peek()) {
+        switch (this.peek()) {
             case 'x':
                 this.advance();
                 if (!this.isHexa(this.peek())) {
@@ -265,9 +272,9 @@ export class Tokenizer {
                     }
                 }
         }
-		this.addToken(TokenType.NUMBER);
+        this.addToken(TokenType.NUMBER);
     }
-    
+
     private number() {
         while (this.isDigit(this.peek())) {
             this.advance();
@@ -292,7 +299,7 @@ export class Tokenizer {
                 this.advance();
             }
         }
-        
+
         this.addToken(TokenType.NUMBER);
     }
 
@@ -433,7 +440,18 @@ export class Tokenizer {
                 }
                 // Consume closing "
                 this.advance();
-                this.addToken(TokenType.STRING);
+                this.addStringToken(TokenType.STRING);
+                break;
+            case '\'':
+                while (this.peek() != '\'' && this.peek() != '\n' && !this.isAtEnd()) {
+                    this.advance();
+                }
+                if (this.peek() === '\n' || this.isAtEnd()) {
+                    throw new TokenizerErrors.UnterminatedStringError(this.line, this.col, this.source, this.start, this.current);
+                }
+                // Consume closing '
+                this.advance();
+                this.addStringToken(TokenType.STRING);
                 break;
             // Number... I wish JS had match statements :(
             case '0':
