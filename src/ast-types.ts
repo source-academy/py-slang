@@ -3,6 +3,7 @@ import {Token} from "./tokenizer";
 
 export namespace ExprNS {
     export interface Visitor<T> {
+        visitBigIntLiteralExpr(expr: BigIntLiteral): T
         visitBinaryExpr(expr: Binary): T
         visitCompareExpr(expr: Compare): T
         visitBoolOpExpr(expr: BoolOp): T
@@ -23,6 +24,16 @@ export namespace ExprNS {
             this.endToken = endToken;
         }
         abstract accept(visitor: Visitor<any>): any;
+    }
+    export class BigIntLiteral extends Expr {
+        value: string;
+        constructor(startToken: Token, endToken: Token, value: string){
+            super(startToken, endToken)
+            this.value = value;
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitBigIntLiteralExpr(this)
+        }
     }
     export class Binary extends Expr {
         left: Expr;

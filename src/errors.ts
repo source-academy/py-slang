@@ -74,7 +74,7 @@ export namespace TokenizerErrors {
             this.name = "UnterminatedStringError";
         }
     }
-
+	
     export class NonFourIndentError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
             let msg = getFullLine(source, start) + "\n";
@@ -82,6 +82,19 @@ export namespace TokenizerErrors {
             hint = hint.padStart(hint.length + col - MAGIC_OFFSET, "-");
             super(msg + hint, line, col);
             this.name = "NonFourIndentError";
+        }
+    }
+	
+	export class InvalidNumberError extends BaseTokenizerError {
+        constructor(line: number, col: number, source: string, start: number, current: number) {
+            let msg = getFullLine(source, start) + "\n";
+            let hint = `^ Invalid Number input.`;
+            const diff = (current - start);
+            // +1 because we want the arrow to point after the string (where we expect the closing ")
+            hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "~");
+            hint = hint.padStart(hint.length + col - diff, " ");
+            super(msg + hint, line, col);
+            this.name = "InvalidNumberError";
         }
     }
 

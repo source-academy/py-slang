@@ -129,15 +129,15 @@
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
 
-import {Tokenizer} from "./tokenizer";
-import {Parser} from "./parser";
-import {Translator} from "./translator";
-import {Program} from "estree";
-import {Resolver} from "./resolver";
+import { Tokenizer } from "./tokenizer";
+import { Parser } from "./parser";
+import { Translator } from "./translator";
+import { Program } from "estree";
+import { Resolver } from "./resolver";
 
 export function parsePythonToEstreeAst(code: string,
-                                       variant: number = 1,
-                                       doValidate: boolean = false) : Program {
+    variant: number = 1,
+    doValidate: boolean = false): Program {
     const script = code + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
@@ -152,7 +152,14 @@ export function parsePythonToEstreeAst(code: string,
 
 export * from './errors';
 
-
+const text = `
+1.1
+`;
+// Arguments:
+// Code to translate
+// SICPy chapter number
+// Whether to validate the code using a resolver.
+console.log(parsePythonToEstreeAst(text, 1, false));
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
 // const BaseParserError = ParserErrors.BaseParserError;

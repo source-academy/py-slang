@@ -1,9 +1,9 @@
-import {StmtNS, ExprNS} from "./ast-types";
+import { StmtNS, ExprNS } from "./ast-types";
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
-import {Token} from "./tokenizer";
-import {TokenType} from "./tokens";
-import {ResolverErrors} from "./errors";
+import { Token } from "./tokenizer";
+import { TokenType } from "./tokens";
+import { ResolverErrors } from "./errors";
 
 const levenshtein = require('fast-levenshtein');
 
@@ -35,7 +35,7 @@ class Environment {
         const name = identifier.lexeme;
         let distance = 0;
         let curr: Environment | null = this;
-        while(curr !== null) {
+        while (curr !== null) {
             if (curr.names.has(name)) {
                 break;
             }
@@ -49,7 +49,7 @@ class Environment {
     lookupNameCurrentEnv(identifier: Token): Token | undefined {
         return this.names.get(identifier.lexeme);
     }
-    lookupNameCurrentEnvWithError(identifier: Token){
+    lookupNameCurrentEnvWithError(identifier: Token) {
         if (this.lookupName(identifier) < 0) {
             throw new ResolverErrors.NameNotFoundError(identifier.line, identifier.col,
                 this.source,
@@ -104,7 +104,7 @@ class Environment {
         let minDistance = Infinity;
         let minName = null;
         let curr: Environment | null = this;
-        while(curr !== null) {
+        while (curr !== null) {
             for (const declName of curr.names.keys()) {
                 const dist = levenshtein.get(name, declName);
                 if (dist < minDistance) {
@@ -130,7 +130,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.source = source;
         this.ast = ast;
         // The global environment
-        this.environment = new Environment(source,null, new Map([
+        this.environment = new Environment(source, null, new Map([
             ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
             ["display", new Token(TokenType.NAME, "display", 0, 0, 0)],
             ["stringify", new Token(TokenType.NAME, "stringify", 0, 0, 0)],
@@ -318,6 +318,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.resolve(expr.alternative);
     }
     visitLiteralExpr(expr: ExprNS.Literal): void {
+    }
+
+    visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
     }
 
 

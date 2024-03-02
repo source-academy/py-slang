@@ -5,6 +5,7 @@
 export enum TokenType {
     //// Source S1
     ENDMARKER,
+    BIGINT,
     NAME,
     NUMBER,
     STRING,

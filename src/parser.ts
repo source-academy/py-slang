@@ -39,10 +39,10 @@
     IN THE SOFTWARE.
 **/
 
-import {SPECIAL_IDENTIFIER_TOKENS, Token} from "./tokenizer";
-import {TokenType} from "./tokens";
-import {ExprNS, StmtNS} from "./ast-types";
-import {ParserErrors} from "./errors";
+import { SPECIAL_IDENTIFIER_TOKENS, Token } from "./tokenizer";
+import { TokenType } from "./tokens";
+import { ExprNS, StmtNS } from "./ast-types";
+import { ParserErrors } from "./errors";
 
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
@@ -153,7 +153,7 @@ export class Parser {
     private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             return this.compound_stmt();
-        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
+        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER, TokenType.BIGINT,
             TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
             TokenType.ASSERT, TokenType.LPAR, ...SPECIAL_IDENTIFIER_TOKENS)) {
@@ -165,7 +165,7 @@ export class Parser {
             this.parse_invalid(startToken, endToken);
         } catch (e) {
             if (e instanceof ParserErrors.BaseParserError) {
-                throw(e)
+                throw (e)
             }
         }
         throw new ParserErrors.GenericUnexpectedSyntaxError(startToken.line, startToken.col, this.source,
@@ -255,7 +255,7 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, ...SPECIAL_IDENTIFIER_TOKENS)) {
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
@@ -500,6 +500,9 @@ export class Parser {
         }
         if (this.match(TokenType.NUMBER)) {
             return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
+        }
+        if (this.match(TokenType.BIGINT)) {
+            return new ExprNS.BigIntLiteral(startToken, this.previous(), this.previous().lexeme);
         }
 
         if (this.match(TokenType.NAME, ...PSEUD_NAMES)) {
