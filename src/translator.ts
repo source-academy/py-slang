@@ -2,17 +2,18 @@
 * Translate our AST to estree AST (Source's AST)
 * */
 
-import {StmtNS, ExprNS} from "./ast-types";
+import { StmtNS, ExprNS } from "./ast-types";
 
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
-import {Token} from "./tokenizer";
-import {TokenType} from "./tokens";
+import { Token } from "./tokenizer";
+import { TokenType } from "./tokens";
 
 import {
     ArrowFunctionExpression,
     AssignmentExpression,
     BaseNode,
+    BigIntLiteral,
     BinaryExpression,
     BinaryOperator,
     BlockStatement,
@@ -39,7 +40,7 @@ import {
     VariableDeclarator,
     WhileStatement
 } from "estree";
-import {TranslatorErrors} from "./errors";
+import { TranslatorErrors } from "./errors";
 
 export interface EstreePosition {
     line: number;
@@ -71,7 +72,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             column: token.col
         }
         const source: string = token.lexeme;
-        return {source, start, end};
+        return { source, start, end };
     }
 
     private toEstreeLocation(stmt: Stmt | Expr): EstreeLocation {
@@ -87,7 +88,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         }
         const source: string = this.source.slice(stmt.startToken.indexInSource,
             stmt.endToken.indexInSource + stmt.endToken.lexeme.length);
-        return {source, start, end};
+        return { source, start, end };
     }
 
     resolve(stmt: Stmt | Expr): Statement | Expression {
@@ -537,6 +538,14 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'Literal',
             value: expr.value,
+            loc: this.toEstreeLocation(expr),
+        }
+    }
+
+    visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): BigIntLiteral {
+        return {
+            type: 'Literal',
+            bigint: expr.value,
             loc: this.toEstreeLocation(expr),
         }
     }

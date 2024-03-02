@@ -291,28 +291,32 @@ export class Tokenizer {
         while (this.isDigit(this.peek())) {
             this.advance();
         }
-        // Fractional part
-        if (this.peek() === '.') {
-            this.advance();
-            while (this.isDigit(this.peek())) {
+        if (this.peek() !== '.' && this.peek() !== 'e') {
+            this.addToken(TokenType.BIGINT);
+        } else {
+            // Fractional part
+            if (this.peek() === '.') {
                 this.advance();
+                while (this.isDigit(this.peek())) {
+                    this.advance();
+                }
             }
-        }
-        // Exponent part
-        if (this.peek() === 'e') {
-            this.advance();
-            if (this.peek() === '-') {
+            // Exponent part
+            if (this.peek() === 'e') {
                 this.advance();
+                if (this.peek() === '-') {
+                    this.advance();
+                }
+                if (!this.isDigit(this.peek())) {
+                    throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
+                }
+                while (this.isDigit(this.peek())) {
+                    this.advance();
+                }
             }
-            if (!this.isDigit(this.peek())) {
-                throw new TokenizerErrors.InvalidNumberError(this.line, this.col, this.source, this.start, this.current);
-            }
-            while (this.isDigit(this.peek())) {
-                this.advance();
-            }
+            this.addToken(TokenType.NUMBER);
         }
 
-        this.addToken(TokenType.NUMBER);
     }
 
     private name() {

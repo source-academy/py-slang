@@ -153,7 +153,7 @@ export class Parser {
     private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             return this.compound_stmt();
-        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
+        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER, TokenType.BIGINT,
             TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
             TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
@@ -255,7 +255,8 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.BIGINT, 
+        TokenType.STRING, TokenType.MINUS, TokenType.PLUS,  ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
@@ -500,6 +501,9 @@ export class Parser {
         }
         if (this.match(TokenType.NUMBER)) {
             return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
+        }
+        if (this.match(TokenType.BIGINT)) {
+            return new ExprNS.BigIntLiteral(startToken, this.previous(), this.previous().lexeme);
         }
 
         if (this.match(TokenType.NAME, ...PSEUD_NAMES)) {
