@@ -85,7 +85,7 @@ export namespace TokenizerErrors {
         }
     }
 	
-	export class InvalidNumberError extends BaseTokenizerError {
+    export class InvalidNumberError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
             let msg = getFullLine(source, start) + "\n";
             let hint = `^ Invalid Number input.`;
