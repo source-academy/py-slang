@@ -8,7 +8,6 @@ export enum TokenType {
     NAME,
     NUMBER,
     STRING,
-    TEMPLATELITERAL,
     NEWLINE,
     INDENT,
     DEDENT,
