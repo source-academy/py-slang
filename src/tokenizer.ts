@@ -150,6 +150,9 @@ export class Tokenizer {
 
     private advance() {
         const res = this.source[this.current];
+        if (this.peek() == '\n') {
+            this.line += 1;
+        }
         this.current += 1;
         this.col += 1;
         return res;
@@ -182,6 +185,12 @@ export class Tokenizer {
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
 
+    private addMultiLineStringToken(type: TokenType) {
+        const line = this.line
+        const col = this.col;
+        const lexeme = this.source.slice(this.start + 3, this.current - 3);
+        this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
+    }
     // Checks that the current character matches a pattern. If so the character is consumed, else nothing is consumed.
     private matches(pattern: string): boolean {
         if (this.isAtEnd()) {
@@ -432,26 +441,47 @@ export class Tokenizer {
                 break;
             // String
             case '"':
-                while (this.peek() != '"' && this.peek() != '\n' && !this.isAtEnd()) {
+            case "'":
+                let quote = c;
+                if (this.peek() == quote) { // second quote found
+                    this.advance(); // second quote consumed
+                    if (this.peek() != quote) { // empty string ""
+                        this.addStringToken(TokenType.STRING);
+                    } else if (this.peek() == quote) { // triple quotes found
+                        this.advance(); // third quote consumed
+                        while (this.peek() != quote && !this.isAtEnd()) {
+                            this.advance(); // advance until ending quote found
+                        }
+                        if (this.isAtEnd()) {
+                            throw new TokenizerErrors.UnterminatedStringError(this.line,
+                                this.col, this.source, this.start, this.current);
+                        }
+                        this.advance(); // consume first ending quote
+                        if (this.peek() == quote) {
+                            this.advance(); // consume second ending quote
+                            if (this.peek() == quote) {
+                                this.advance(); // consume third ending quote
+                                this.addMultiLineStringToken(TokenType.STRING);
+                            } else {
+                                throw new TokenizerErrors.UnterminatedStringError(this.line,
+                                    this.col, this.source, this.start, this.current);
+                            }
+                        } else {
+                            throw new TokenizerErrors.UnterminatedStringError(this.line,
+                                this.col, this.source, this.start, this.current);
+                        }
+                    }
+                } else {
+                    while (this.peek() != quote && this.peek() != '\n' && !this.isAtEnd()) {
+                        this.advance();
+                    }
+                    if (this.peek() === '\n' || this.isAtEnd()) {
+                        throw new TokenizerErrors.UnterminatedStringError(this.line, this.col, this.source, this.start, this.current);
+                    }
+                    // Consume Closing "
                     this.advance();
+                    this.addStringToken(TokenType.STRING);
                 }
-                if (this.peek() === '\n' || this.isAtEnd()) {
-                    throw new TokenizerErrors.UnterminatedStringError(this.line, this.col, this.source, this.start, this.current);
-                }
-                // Consume closing "
-                this.advance();
-                this.addStringToken(TokenType.STRING);
-                break;
-            case '\'':
-                while (this.peek() != '\'' && this.peek() != '\n' && !this.isAtEnd()) {
-                    this.advance();
-                }
-                if (this.peek() === '\n' || this.isAtEnd()) {
-                    throw new TokenizerErrors.UnterminatedStringError(this.line, this.col, this.source, this.start, this.current);
-                }
-                // Consume closing '
-                this.advance();
-                this.addStringToken(TokenType.STRING);
                 break;
             // Number... I wish JS had match statements :(
             case '0':
