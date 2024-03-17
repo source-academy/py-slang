@@ -177,7 +177,11 @@ export class Tokenizer {
         const lexeme = this.source.slice(this.start, this.current);
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 32f3cb1331c16de903e732e936b77af3710418ef
     private addStringToken(type: TokenType) {
         const line = this.line
         const col = this.col;
@@ -186,7 +190,11 @@ export class Tokenizer {
         const lexeme = this.source.slice(this.start + 1, this.current - 1);
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> 32f3cb1331c16de903e732e936b77af3710418ef
     private addMultiLineStringToken(type: TokenType) {
         const line = this.line
         const col = this.col;
