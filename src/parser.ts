@@ -39,10 +39,10 @@
     IN THE SOFTWARE.
 **/
 
-import {SPECIAL_IDENTIFIER_TOKENS, Token} from "./tokenizer";
-import {TokenType} from "./tokens";
-import {ExprNS, StmtNS} from "./ast-types";
-import {ParserErrors} from "./errors";
+import { SPECIAL_IDENTIFIER_TOKENS, Token } from "./tokenizer";
+import { TokenType } from "./tokens";
+import { ExprNS, StmtNS } from "./ast-types";
+import { ParserErrors } from "./errors";
 
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
@@ -156,7 +156,7 @@ export class Parser {
         } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
             TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
-            TokenType.ASSERT, TokenType.LPAR, ...SPECIAL_IDENTIFIER_TOKENS)) {
+            TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
             return this.simple_stmt();
         }
         const startToken = this.peek();
@@ -165,7 +165,7 @@ export class Parser {
             this.parse_invalid(startToken, endToken);
         } catch (e) {
             if (e instanceof ParserErrors.BaseParserError) {
-                throw(e)
+                throw (e)
             }
         }
         throw new ParserErrors.GenericUnexpectedSyntaxError(startToken.line, startToken.col, this.source,
@@ -255,7 +255,7 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, ...SPECIAL_IDENTIFIER_TOKENS)) {
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
