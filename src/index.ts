@@ -129,11 +129,11 @@
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
 
-import {Tokenizer} from "./tokenizer";
-import {Parser} from "./parser";
-import {Translator} from "./translator";
-import {Program} from "estree";
-import {Resolver} from "./resolver";
+import { Tokenizer } from "./tokenizer";
+import { Parser } from "./parser";
+import { Translator } from "./translator";
+import { Program } from "estree";
+import { Resolver } from "./resolver";
 
 export function parsePythonToEstreeAst(code: string,
     variant: number = 1,
