@@ -177,17 +177,20 @@ export class Tokenizer {
         const lexeme = this.source.slice(this.start, this.current);
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
-    // Ensures that lexeme value is parsed correctly by removing starting and ending quotes.
+    
     private addStringToken(type: TokenType) {
         const line = this.line
         const col = this.col;
+        // Remove starting and ending quotes when slicing
+        // Ensures that string is parsed properly
         const lexeme = this.source.slice(this.start + 1, this.current - 1);
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
-    // Remove three starting and ending quotes
+    
     private addMultiLineStringToken(type: TokenType) {
         const line = this.line
         const col = this.col;
+        // Remove three starting and ending quotes when slicing
         const lexeme = this.source.slice(this.start + 3, this.current - 3);
         this.tokens.push(new Token(type, lexeme, line, col, this.current - lexeme.length))
     }
@@ -448,9 +451,8 @@ export class Tokenizer {
                     if (this.peek() != quote) { // empty string ""
                         this.addStringToken(TokenType.STRING);
                         break;
-                    } else {
-                        this.advance(); // third quote consumed
                     }
+                    this.advance(); // third quote consumed
                     while (this.peek() != quote && !this.isAtEnd()) {
                         this.advance(); // advance until ending quote found
                     }
@@ -459,19 +461,17 @@ export class Tokenizer {
                             this.col, this.source, this.start, this.current);
                     }
                     this.advance(); // consume first ending quote
-                    if (this.peek() == quote) {
-                        this.advance(); // consume second ending quote
-                    } else {
+                    if (this.peek() != quote) {
                         throw new TokenizerErrors.UnterminatedStringError(this.line,
                             this.col, this.source, this.start, this.current);
                     }
-                    if (this.peek() == quote) {
-                        this.advance(); // consume third ending quote
-                        this.addMultiLineStringToken(TokenType.STRING);
-                    } else {
+                    this.advance(); // consume second ending quote
+                    if (this.peek() != quote) {
                         throw new TokenizerErrors.UnterminatedStringError(this.line,
                             this.col, this.source, this.start, this.current);
                     }
+                    this.advance(); // consume third ending quote
+                    this.addMultiLineString(TokenType.STRING);
                 } else { // other case, single-line string
                     while (this.peek() != quote && this.peek() != '\n' && !this.isAtEnd()) {
                         this.advance();
