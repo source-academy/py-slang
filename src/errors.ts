@@ -74,7 +74,7 @@ export namespace TokenizerErrors {
             this.name = "UnterminatedStringError";
         }
     }
-	
+
     export class NonFourIndentError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
             let msg = getFullLine(source, start) + "\n";

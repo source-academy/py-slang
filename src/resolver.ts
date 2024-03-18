@@ -319,9 +319,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
     visitLiteralExpr(expr: ExprNS.Literal): void {
     }
-
     visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
     }
-
 
 }

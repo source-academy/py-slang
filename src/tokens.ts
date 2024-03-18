@@ -5,9 +5,9 @@
 export enum TokenType {
     //// Source S1
     ENDMARKER,
-    BIGINT,
     NAME,
     NUMBER,
+    BIGINT,
     STRING,
     NEWLINE,
     INDENT,

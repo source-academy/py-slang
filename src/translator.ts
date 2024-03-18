@@ -384,21 +384,36 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         }
     }
 
-    visitUnaryExpr(expr: ExprNS.Unary): UnaryExpression {
+    visitUnaryExpr(expr: ExprNS.Unary): UnaryExpression | CallExpression {
         const op = expr.operator.type;
         let res: UnaryOperator = '-';
+        let plus = false;
         switch (op) {
             case TokenType.NOT:
                 res = '!'
                 break;
             case TokenType.PLUS:
-                res = '+'
+                res = '+';
+                plus = true;
                 break;
             case TokenType.MINUS:
                 res = '-'
                 break;
             default:
                 throw new Error("Unreachable code path in translator");
+        }
+        if (plus) {
+            return {
+                type: 'CallExpression',
+                optional: false,
+                callee: {
+                    type: 'Identifier',
+                    name: '__py_unary_plus',
+                    loc: this.toEstreeLocation(expr),
+                },
+                arguments: [this.resolveExpr(expr.right)],
+                loc: this.toEstreeLocation(expr),
+            }
         }
         return {
             type: 'UnaryExpression',
@@ -414,38 +429,45 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return this.resolveExpr(expr.expression);
     }
 
-    visitBinaryExpr(expr: ExprNS.Binary): BinaryExpression {
+    visitBinaryExpr(expr: ExprNS.Binary): CallExpression {
         const op = expr.operator.type;
-        let res: BinaryOperator = '+';
+        let res = '';
         // To make the type checker happy.
         switch (op) {
             case TokenType.PLUS:
-                res = '+';
+                res = '__py_adder';
                 break;
             case TokenType.MINUS:
-                res = '-';
+                res = '__py_minuser';
                 break;
             case TokenType.STAR:
-                res = '*';
+                res = '__py_multiplier';
                 break;
             case TokenType.SLASH:
-                res = '/';
+                res = '__py_divider';
                 break;
             case TokenType.PERCENT:
-                res = '%';
+                res = '__py_modder';
                 break;
             // @TODO double slash and power needs to convert to math exponent/floor divide
             case TokenType.DOUBLESLASH:
+                res = '__py_floorer';
+                break;
             case TokenType.DOUBLESTAR:
-                throw new TranslatorErrors.UnsupportedOperator(expr.operator.line, expr.operator.col, this.source, expr.operator.indexInSource);
+                res = '__py_powerer';
+                break;
             default:
                 throw new Error("Unreachable binary code path in translator");
         }
         return {
-            type: 'BinaryExpression',
-            operator: res,
-            left: this.resolveExpr(expr.left),
-            right: this.resolveExpr(expr.right),
+            type: 'CallExpression',
+            optional: false,
+            callee: {
+                type: 'Identifier',
+                name: res,
+                loc: this.toEstreeLocation(expr),
+            },
+            arguments: [this.resolveExpr(expr.left), this.resolveExpr(expr.right)],
             loc: this.toEstreeLocation(expr),
         }
     }
