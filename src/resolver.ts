@@ -125,6 +125,7 @@ class Environment {
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     source: string;
     ast: Stmt;
+    // change the environment to be suite scope as in python
     environment: Environment | null;
     constructor(source: string, ast: Stmt) {
         this.source = source;
@@ -173,21 +174,40 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = oldEnv;
     }
 
+    visitIndentCreation(stmt: StmtNS.Indent): void {
+        // Create a new environment.
+        const oldEnv = this.environment;
+        this.environment = new Environment(this.source, this.environment, new Map());
+    }
+
+    visitDedentCreation(stmt: StmtNS.Dedent): void {
+        // Switch to the previous environment.
+        if (this.environment?.enclosing !== undefined) {
+            this.environment = this.environment.enclosing;
+        }
+    }
+
     visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
-        // Create a new environment.
-        const oldEnv = this.environment;
-        // Assign the parameters to the new environment.
-        const newEnv = new Map(
+        // // Create a new environment.
+        // const oldEnv = this.environment;
+        // // Assign the parameters to the new environment.
+        // const newEnv = new Map(
+        //     stmt.parameters.map(param => [param.lexeme, param])
+        // );
+        // this.environment = new Environment(this.source, this.environment, newEnv);
+        const params = new Map(
             stmt.parameters.map(param => [param.lexeme, param])
         );
-        this.environment = new Environment(this.source, this.environment, newEnv);
+        if (this.environment !== null) {
+            this.environment.names = params;
+        }
         this.resolve(stmt.body);
         // Grab identifiers from that new environment. That are NOT functions.
         // stmt.varDecls = this.varDeclNames(this.environment.names)
         // Restore old environment
-        this.environment = oldEnv;
+        // this.environment = oldEnv;
     }
 
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
