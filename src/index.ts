@@ -150,16 +150,12 @@ export function parsePythonToEstreeAst(code: string,
     return translator.resolve(ast) as unknown as Program
 }
 
+const text = `
+-1
+`
+console.dir(parsePythonToEstreeAst(text, 1, false));
 export * from './errors';
 
-const text = `
-1.1
-`;
-// Arguments:
-// Code to translate
-// SICPy chapter number
-// Whether to validate the code using a resolver.
-console.log(parsePythonToEstreeAst(text, 1, false));
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
 // const BaseParserError = ParserErrors.BaseParserError;

@@ -153,10 +153,10 @@ export class Parser {
     private stmt(): Stmt {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             return this.compound_stmt();
-        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER, TokenType.BIGINT,
-            TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
+        } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
+            TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE, TokenType.MINUS, TokenType.PLUS,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
-            TokenType.ASSERT, TokenType.LPAR, ...SPECIAL_IDENTIFIER_TOKENS)) {
+            TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
             return this.simple_stmt();
         }
         const startToken = this.peek();
@@ -255,7 +255,8 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING,
+            TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
