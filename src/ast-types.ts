@@ -176,6 +176,8 @@ export namespace ExprNS {
 }
 export namespace StmtNS {
     export interface Visitor<T> {
+        visitIndentCreation(stmt: Indent): T
+        visitDedentCreation(stmt: Dedent): T
         visitPassStmt(stmt: Pass): T
         visitAssignStmt(stmt: Assign): T
         visitAnnAssignStmt(stmt: AnnAssign): T
@@ -201,6 +203,22 @@ export namespace StmtNS {
             this.endToken = endToken;
         }
         abstract accept(visitor: Visitor<any>): any;
+    }
+    export class Indent extends Stmt {
+        constructor(startToken: Token, endToken: Token){
+            super(startToken, endToken)
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitIndentCreation(this)
+        }
+    }
+    export class Dedent extends Stmt {
+        constructor(startToken: Token, endToken: Token){
+            super(startToken, endToken)
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitDedentCreation(this)
+        }
     }
     export class Pass extends Stmt {
         constructor(startToken: Token, endToken: Token){
