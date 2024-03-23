@@ -150,6 +150,10 @@ export function parsePythonToEstreeAst(code: string,
     return translator.resolve(ast) as unknown as Program
 }
 
+const text = `
+-1
+`
+console.dir(parsePythonToEstreeAst(text, 1, false));
 export * from './errors';
 
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
