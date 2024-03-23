@@ -7,6 +7,7 @@ export enum TokenType {
     ENDMARKER,
     NAME,
     NUMBER,
+    BIGINT,
     STRING,
     NEWLINE,
     INDENT,

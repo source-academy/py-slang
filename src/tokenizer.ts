@@ -291,6 +291,11 @@ export class Tokenizer {
         while (this.isDigit(this.peek())) {
             this.advance();
         }
+
+        if (this.peek() !== '.' && this.peek() !== 'e') {
+            this.addToken(TokenType.BIGINT);
+            return;
+        }
         // Fractional part
         if (this.peek() === '.') {
             this.advance();

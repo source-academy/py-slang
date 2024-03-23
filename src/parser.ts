@@ -141,9 +141,9 @@ export class Parser {
         const startToken = this.peek();
         const statements: Stmt[] = [];
         while (!this.isAtEnd()) {
-            if (this.match(TokenType.NEWLINE)) {
-                continue;
-            }
+            // if (this.match(TokenType.NEWLINE)) {
+            //     continue;
+            // }
             statements.push(this.stmt());
         }
         const endToken = this.peek();
@@ -154,9 +154,9 @@ export class Parser {
         if (this.check(TokenType.DEF, TokenType.FOR, TokenType.IF, TokenType.WHILE)) {
             return this.compound_stmt();
         } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
-            TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE,
+            TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE, TokenType.MINUS, TokenType.PLUS, TokenType.INDENT, TokenType.DEDENT,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
-            TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
+            TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
             return this.simple_stmt();
         }
         const startToken = this.peek();
@@ -239,6 +239,10 @@ export class Parser {
         let res = null;
         if (this.match(TokenType.NAME)) {
             res = this.assign_stmt();
+        } else if (this.match(TokenType.INDENT)) {
+            res = new StmtNS.Indent(startToken, startToken);
+        } else if (this.match(TokenType.DEDENT)) {
+            res = new StmtNS.Dedent(startToken, startToken);
         } else if (this.match(TokenType.PASS)) {
             res = new StmtNS.Pass(startToken, startToken);
         } else if (this.match(TokenType.BREAK)) {
@@ -255,7 +259,8 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING, ...SPECIAL_IDENTIFIER_TOKENS)) {
+        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING,
+            TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
             throw new Error("Unreachable code path");
@@ -500,6 +505,9 @@ export class Parser {
         }
         if (this.match(TokenType.NUMBER)) {
             return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
+        }
+        if (this.match(TokenType.BIGINT)) {
+            return new ExprNS.BigIntLiteral(startToken, this.previous(), this.previous().lexeme);
         }
 
         if (this.match(TokenType.NAME, ...PSEUD_NAMES)) {

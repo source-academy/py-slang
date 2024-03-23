@@ -51,6 +51,7 @@ export class AstWriter {
     main() {
         this.setup();
         this.defineAst("Expr", [
+            "BigIntLiteral -> value: string",
             "Binary    -> left: Expr, operator: Token, right: Expr",
             // Semantically different from Binary - for logical comparisons.
             "Compare   -> left: Expr, operator: Token, right: Expr",
