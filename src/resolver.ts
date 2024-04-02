@@ -127,6 +127,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     ast: Stmt;
     // change the environment to be suite scope as in python
     environment: Environment | null;
+    functionScope: Environment | null;
     constructor(source: string, ast: Stmt) {
         this.source = source;
         this.ast = ast;
@@ -137,6 +138,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["stringify", new Token(TokenType.NAME, "stringify", 0, 0, 0)],
             // @TODO add all the source pre-declared names here
         ]));
+        this.functionScope = null;
     }
     resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
         if (stmt === null) {
@@ -163,6 +165,27 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         return res.length === 0 ? null : res;
     }
 
+    functionVarConstraint(identifier: Token): void {
+        if (this.functionScope == null) {
+            return;
+        }
+        let curr = this.environment;
+        while (curr !== this.functionScope) {
+            if (curr !== null && curr.names.has(identifier.lexeme)) {
+                const token = curr.names.get(identifier.lexeme);
+                if (token === undefined) {
+                    throw new Error("placeholder error")
+                }
+                throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
+                    this.source,
+                    identifier.indexInSource,
+                    identifier.indexInSource + identifier.lexeme.length,
+                    token);
+            }
+            curr = curr?.enclosing ?? null;
+        }
+    }
+    
     //// STATEMENTS
     visitFileInputStmt(stmt: StmtNS.FileInput): void {
         // Create a new environment.
@@ -175,8 +198,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitIndentCreation(stmt: StmtNS.Indent): void {
-        // Create a new environment.
-        const oldEnv = this.environment;
+        // Create a new environment
         this.environment = new Environment(this.source, this.environment, new Map());
     }
 
@@ -190,19 +212,20 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
-        // // Create a new environment.
+        // Create a new environment.
         // const oldEnv = this.environment;
-        // // Assign the parameters to the new environment.
-        // const newEnv = new Map(
-        //     stmt.parameters.map(param => [param.lexeme, param])
-        // );
-        // this.environment = new Environment(this.source, this.environment, newEnv);
-        const params = new Map(
+        // Assign the parameters to the new environment.
+        const newEnv = new Map(
             stmt.parameters.map(param => [param.lexeme, param])
         );
-        if (this.environment !== null) {
-            this.environment.names = params;
-        }
+        this.environment = new Environment(this.source, this.environment, newEnv);
+        // const params = new Map(
+        //     stmt.parameters.map(param => [param.lexeme, param])
+        // );
+        // if (this.environment !== null) {
+        //     this.environment.names = params;
+        // }
+        this.functionScope = this.environment;
         this.resolve(stmt.body);
         // Grab identifiers from that new environment. That are NOT functions.
         // stmt.varDecls = this.varDeclNames(this.environment.names)
@@ -213,11 +236,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
         this.resolve(stmt.ann);
         this.resolve(stmt.value);
+        this.functionVarConstraint(stmt.name);
         this.environment?.declareName(stmt.name);
     }
 
     visitAssignStmt(stmt: StmtNS.Assign): void {
         this.resolve(stmt.value);
+        this.functionVarConstraint(stmt.name);
         this.environment?.declareName(stmt.name);
     }
 

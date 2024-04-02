@@ -151,9 +151,9 @@ export function parsePythonToEstreeAst(code: string,
 }
 
 const text = `
--1
+x = 1
 `
-console.dir(parsePythonToEstreeAst(text, 1, false));
+console.dir(parsePythonToEstreeAst(text, 1, true));
 export * from './errors';
 
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
