@@ -141,9 +141,9 @@ export class Parser {
         const startToken = this.peek();
         const statements: Stmt[] = [];
         while (!this.isAtEnd()) {
-            // if (this.match(TokenType.NEWLINE)) {
-            //     continue;
-            // }
+            if (this.match(TokenType.NEWLINE)) {
+                continue;
+            }
             statements.push(this.stmt());
         }
         const endToken = this.peek();
