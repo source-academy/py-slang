@@ -134,7 +134,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         // The global environment
         this.environment = new Environment(source, null, new Map([
             ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
-            ["display", new Token(TokenType.NAME, "display", 0, 0, 0)],
+            ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
             ["stringify", new Token(TokenType.NAME, "stringify", 0, 0, 0)],
             // @TODO add all the source pre-declared names here
         ]));
@@ -185,7 +185,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             curr = curr?.enclosing ?? null;
         }
     }
-    
+
     //// STATEMENTS
     visitFileInputStmt(stmt: StmtNS.FileInput): void {
         // Create a new environment.
