@@ -41,6 +41,7 @@ import {
     WhileStatement
 } from "estree";
 import { TranslatorErrors } from "./errors";
+// import { isEmpty } from "lodash";
 
 export interface EstreePosition {
     line: number;
@@ -189,6 +190,20 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
             type: 'Program',
             sourceType: 'module',
             body: newBody,
+            loc: this.toEstreeLocation(stmt),
+        };
+    }
+
+    visitIndentCreation(stmt: StmtNS.Indent): EmptyStatement {
+        return {
+            type: 'EmptyStatement',
+            loc: this.toEstreeLocation(stmt),
+        };
+    }
+
+    visitDedentCreation(stmt: StmtNS.Dedent): EmptyStatement {
+        return {
+            type: 'EmptyStatement',
             loc: this.toEstreeLocation(stmt),
         };
     }
