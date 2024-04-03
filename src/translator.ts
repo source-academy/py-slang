@@ -124,18 +124,32 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
 
     // Converts our internal identifier to estree identifier.
     private rawStringToIdentifier(name: string, stmtOrExpr: Stmt | Expr): Identifier {
+        const keywords = new Set<String>(['abstract', 'arguments', 'await', 'boolean', 'byte',
+            'case', 'catch', 'char', 'const', 'debugger', 'default', 'delete', 'do', 'double', 'enum',
+            'eval', 'export', 'extends', 'false', 'final', 'float', 'function', 'goto', 'implements',
+            'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new', 'null', 'package',
+            'private', 'protected', 'public', 'short', 'static', 'super', 'switch', 'synchronized', 'this',
+            'throw', 'throws', 'transient', 'true', 'typeof', 'var', 'void', 'volatile'])
+
         return {
             type: 'Identifier',
-            name: name,
+            name: keywords.has(name) ? '$' + name : name,
             loc: this.toEstreeLocation(stmtOrExpr),
         };
     }
 
     // Token to estree identifier.
     private convertToIdentifier(name: Token): Identifier {
+        const keywords = new Set<String>(['abstract', 'arguments', 'await', 'boolean', 'byte',
+            'case', 'catch', 'char', 'const', 'debugger', 'default', 'delete', 'do', 'double', 'enum',
+            'eval', 'export', 'extends', 'false', 'final', 'float', 'function', 'goto', 'implements',
+            'instanceof', 'int', 'interface', 'let', 'long', 'native', 'new', 'null', 'package',
+            'private', 'protected', 'public', 'short', 'static', 'super', 'switch', 'synchronized', 'this',
+            'throw', 'throws', 'transient', 'true', 'typeof', 'var', 'void', 'volatile'])
+
         return {
             type: 'Identifier',
-            name: name.lexeme,
+            name: keywords.has(name.lexeme) ? '$' + name.lexeme : name.lexeme,
             loc: this.tokenToEstreeLocation(name),
         };
     }
