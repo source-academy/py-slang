@@ -140,8 +140,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
             ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
             ["prompt", new Token(TokenType.NAME, "prompt", 0, 0, 0)],
-            //TODO: add is_integer and is_float to pylib, update resolver and createContext
-            ["is_number", new Token(TokenType.NAME, "is_number", 0, 0, 0)],
+            ["is_float", new Token(TokenType.NAME, "is_float", 0, 0, 0)],
+            ["is_int", new Token(TokenType.NAME, "is_int", 0, 0, 0)],
             ["is_string", new Token(TokenType.NAME, "is_string", 0, 0, 0)],
             ["is_function", new Token(TokenType.NAME, "is_function", 0, 0, 0)],
             ["is_boolean", new Token(TokenType.NAME, "is_boolean", 0, 0, 0)],
