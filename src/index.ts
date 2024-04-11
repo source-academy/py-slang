@@ -141,10 +141,8 @@ export function parsePythonToEstreeAst(code: string,
     const script = code + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
-    console.log(tokens)
     const pyParser = new Parser(script, tokens)
     const ast = pyParser.parse()
-    console.log(ast)
     if (doValidate) {
         new Resolver(script, ast).resolve(ast);
     }
