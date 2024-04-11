@@ -141,8 +141,10 @@ export function parsePythonToEstreeAst(code: string,
     const script = code + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
+    console.log(tokens)
     const pyParser = new Parser(script, tokens)
     const ast = pyParser.parse()
+    console.log(ast)
     if (doValidate) {
         new Resolver(script, ast).resolve(ast);
     }
@@ -150,9 +152,14 @@ export function parsePythonToEstreeAst(code: string,
     return translator.resolve(ast) as unknown as Program
 }
 
-const text = `
-x = 1
-`
+const text = `def f(x):
+    if x == 0:
+        a = 3
+    else :
+        a = 4
+    print(a)
+
+f(0)`;
 console.dir(parsePythonToEstreeAst(text, 1, true));
 export * from './errors';
 

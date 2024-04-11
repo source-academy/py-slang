@@ -113,6 +113,22 @@ def y(a, b, c):
 `
             expect(toPythonAst(text)).toMatchObject({});
         });
+
+        test('Function with default arguments', () => {
+            const text = `
+def my_function(a, b=2, c=3):
+    return a + b + c
+`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Function with *args and **kwargs', () => {
+            const text = `
+def my_function(*args, **kwargs):
+    pass
+`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
         // @TODO fix me
 //         test('Function definition empty lines', () => {
 //             const text = `\
@@ -136,18 +152,159 @@ def y(a, b, c):
     });
 
     describe('Conditional statements', () => {
-        test('If-elif-else', () => {
+        test('If statement', () => {
             const text = `
-if x:
-    pass
-elif y:
-    pass
-elif z:
-    pass
-else:
-    pass
+if x > 10:
+    print("x is greater than 10")
 `;
             expect(toPythonAst(text)).toMatchObject({})
-        })
-    })
-})
+        });
+
+        test('If-else statement', () => {
+            const text = `
+if x > 10:
+    print("x is greater than 10")
+else:
+    print("x is less than or equal to 10")
+`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('If-elif-else statement', () => {
+            const text = `
+if x > 10:
+    print("x is greater than 10")
+elif x == 10:
+    print("x is equal to 10")
+else:
+    print("x is less than 10")
+`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
+    describe('Binary operators', () => {
+        test('Addition', () => {
+            const text = `a + b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Subtraction', () => {
+            const text = `a - b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Multiplication', () => {
+            const text = `a * b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Division', () => {
+            const text = `a / b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Modulus', () => {
+            const text = `a % b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Exponent', () => {
+            const text = `a ** b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Less than', () => {
+            const text = `a < b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Greater than', () => {
+            const text = `a > b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Less than or equal to', () => {
+            const text = `a <= b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Greater than or equal to', () => {
+            const text = `a >= b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Equality', () => {
+            const text = `a == b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Inequality', () => {
+            const text = `a != b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
+    describe('Unary operators', () => {
+        test('Negation', () => {
+            const text = `-a\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Logical NOT', () => {
+            const text = `not a\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
+    describe('Binary logical operators', () => {
+        test('Logical AND', () => {
+            const text = `a and b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Logical OR', () => {
+            const text = `a or b\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
+    describe('Complex expressions', () => {
+        test('Function call with arguments', () => {
+            const text = `function(a, b, c)\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Nested function call', () => {
+            const text = `function1(function2(a, b), c)\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Binary operation with parentheses', () => {
+            const text = `(a + b) * c\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
+    describe('Primitive expressions', () => {
+        test('Number literal', () => {
+            const text = `42\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Boolean literal True', () => {
+            const text = `True\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Boolean literal False', () => {
+            const text = `False\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('String literal', () => {
+            const text = `"Hello, World!"\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+});
