@@ -363,7 +363,7 @@ export class Tokenizer {
             //// SPECIAL MARKERS
             // Comment -- advance to end of line.
             case '#':
-                while ((this.peek() != '\n' || this.peek() != '\r') && !this.isAtEnd()) {
+                while ((this.peek() !== '\n' && this.peek() !== '\r') && !this.isAtEnd()) {
                     this.advance();
                 }
                 break;

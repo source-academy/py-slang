@@ -150,15 +150,7 @@ export function parsePythonToEstreeAst(code: string,
     return translator.resolve(ast) as unknown as Program
 }
 
-const text = `def f(x):
-    if x == 0:
-        a = 3
-    else :
-        a = 4
-    print(a)
 
-f(0)`;
-console.dir(parsePythonToEstreeAst(text, 1, true));
 export * from './errors';
 
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
