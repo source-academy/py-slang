@@ -403,6 +403,12 @@ export class Tokenizer {
                     // Consume the rest of the line's leading whitespace.
                     this.advance();
                 }
+                // Handles comments
+                if (this.peek() === "#") {
+                    while ((this.peek() !== '\n' && this.peek() !== '\r') && !this.isAtEnd()) {
+                        this.advance();
+                    }
+                }
                 // The following block handles things like
                 /*
                 def foo():
