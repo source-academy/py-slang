@@ -151,7 +151,16 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["None", new Token(TokenType.NAME, "None", 0, 0, 0)],
             ["NaN", new Token(TokenType.NAME, "NaN", 0, 0, 0)],
             ["Infinity", new Token(TokenType.NAME, "Infinity", 0, 0, 0)],
-
+            
+            // math constants
+            ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
+            ["math_e", new Token(TokenType.NAME, "math_e", 0, 0, 0)],
+            ["math_ln10", new Token(TokenType.NAME, "math_ln10", 0, 0, 0)],
+            ["math_ln2", new Token(TokenType.NAME, "math_ln2", 0, 0, 0)],
+            ["math_log10e", new Token(TokenType.NAME, "math_log10e", 0, 0, 0)],
+            ["math_sqrt1_2", new Token(TokenType.NAME, "math_sqrt1_2", 0, 0, 0)],
+            ["math_sqrt2", new Token(TokenType.NAME, "math_sqrt2", 0, 0, 0)],
+            
             // math library
             ["math_abs", new Token(TokenType.NAME, "math_abs", 0, 0, 0)],
             ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],
