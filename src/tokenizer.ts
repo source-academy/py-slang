@@ -265,12 +265,19 @@ export class Tokenizer {
                 while (this.isDigit(this.peek())) {
                     this.advance();
                 }
+                
+                if (this.peek() !== '.' && this.peek() !== 'e') {
+                    this.addToken(TokenType.BIGINT);
+                    return;
+                }
+                
                 if (this.peek() === '.') {
                     this.advance();
                     while (this.isDigit(this.peek())) {
                         this.advance();
                     }
                 }
+                
                 if (this.peek() === 'e') {
                     this.advance();
                     if (this.peek() === '-') {
