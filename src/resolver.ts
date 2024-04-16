@@ -140,8 +140,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
             ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
             ["prompt", new Token(TokenType.NAME, "prompt", 0, 0, 0)],
-            //TODO: add is_integer and is_float to pylib, update resolver and createContext
-            ["is_number", new Token(TokenType.NAME, "is_number", 0, 0, 0)],
+            ["is_float", new Token(TokenType.NAME, "is_float", 0, 0, 0)],
+            ["is_int", new Token(TokenType.NAME, "is_int", 0, 0, 0)],
             ["is_string", new Token(TokenType.NAME, "is_string", 0, 0, 0)],
             ["is_function", new Token(TokenType.NAME, "is_function", 0, 0, 0)],
             ["is_boolean", new Token(TokenType.NAME, "is_boolean", 0, 0, 0)],
@@ -151,7 +151,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["None", new Token(TokenType.NAME, "None", 0, 0, 0)],
             ["NaN", new Token(TokenType.NAME, "NaN", 0, 0, 0)],
             ["Infinity", new Token(TokenType.NAME, "Infinity", 0, 0, 0)],
-
+            
+            // math constants
+            ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
+            ["math_e", new Token(TokenType.NAME, "math_e", 0, 0, 0)],
+            ["math_inf", new Token(TokenType.NAME, "math_inf", 0, 0, 0)],
+            ["math_nan", new Token(TokenType.NAME, "math_nan", 0, 0, 0)],
+            ["math_tau", new Token(TokenType.NAME, "math_tau", 0, 0, 0)],
+            
             // math library
             ["math_abs", new Token(TokenType.NAME, "math_abs", 0, 0, 0)],
             ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],

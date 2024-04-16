@@ -265,12 +265,19 @@ export class Tokenizer {
                 while (this.isDigit(this.peek())) {
                     this.advance();
                 }
+                
+                if (this.peek() !== '.' && this.peek() !== 'e') {
+                    this.addToken(TokenType.BIGINT);
+                    return;
+                }
+                
                 if (this.peek() === '.') {
                     this.advance();
                     while (this.isDigit(this.peek())) {
                         this.advance();
                     }
                 }
+                
                 if (this.peek() === 'e') {
                     this.advance();
                     if (this.peek() === '-') {
@@ -363,7 +370,7 @@ export class Tokenizer {
             //// SPECIAL MARKERS
             // Comment -- advance to end of line.
             case '#':
-                while ((this.peek() != '\n' || this.peek() != '\r') && !this.isAtEnd()) {
+                while ((this.peek() !== '\n' && this.peek() !== '\r') && !this.isAtEnd()) {
                     this.advance();
                 }
                 break;
@@ -395,6 +402,12 @@ export class Tokenizer {
                     accLeadingWhiteSpace += 1;
                     // Consume the rest of the line's leading whitespace.
                     this.advance();
+                }
+                // Handles comments
+                if (this.peek() === "#") {
+                    while ((this.peek() !== '\n' && this.peek() !== '\r') && !this.isAtEnd()) {
+                        this.advance();
+                    }
                 }
                 // The following block handles things like
                 /*
