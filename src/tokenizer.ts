@@ -450,12 +450,13 @@ export class Tokenizer {
                     if (this.indentStack.length == 0) {
                         throw new TokenizerErrors.InconsistentIndentError(this.line, this.col, this.source, this.current);
                     }
-                    const prev = this.indentStack.pop();
+                    const prev = this.indentStack[this.indentStack.length - 1];
                     if (prev === undefined || prev === null) {
                         throw new TokenizerErrors.InconsistentIndentError(this.line, this.col, this.source, this.current);
                     }
                     const indents = Math.floor((prev - accLeadingWhiteSpace) / 4);
                     for (let i = 0; i < indents; ++i) {
+                        this.indentStack.pop();
                         this.addToken(TokenType.DEDENT);
                     }
                 }
