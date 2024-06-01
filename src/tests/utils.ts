@@ -33,5 +33,6 @@ export function toEstreeAST(text: string): Expression | Statement {
 
 export function toEstreeAstAndResolve(text: string): Expression | Statement {
     const ast = toPythonAst(text);
+    new Resolver(text, ast).resolve(ast);
     return new Translator(text).resolve(ast);
 }

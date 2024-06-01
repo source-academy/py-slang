@@ -1,4 +1,4 @@
-import {toEstreeAST} from "./utils";
+import { toEstreeAST, toEstreeAstAndResolve } from "./utils";
 
 describe('Regression tests for py-slang', () => {
     test('Issue #2', () => {
@@ -37,5 +37,16 @@ add_one = lambda : True
 add_one = lambda : False
 `;
         toEstreeAST(text);
+    })
+
+    test('Issue #35', () => {
+        const text = `
+def f():
+    return g()
+
+def g():
+    return 3
+`;
+        toEstreeAstAndResolve(text);
     })
 })

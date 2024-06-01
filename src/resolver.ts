@@ -7,6 +7,8 @@ import { ResolverErrors } from "./errors";
 
 const levenshtein = require('fast-levenshtein');
 
+const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
+
 class Environment {
     source: string;
     // The parent of this environment
@@ -72,7 +74,7 @@ class Environment {
     }
     declareName(identifier: Token) {
         const lookup = this.lookupNameCurrentEnv(identifier);
-        if (lookup !== undefined) {
+        if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
             throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
                 this.source,
                 identifier.indexInSource,
@@ -82,6 +84,19 @@ class Environment {
         }
         this.names.set(identifier.lexeme, identifier);
     }
+    // Same as declareName but allowed to re-declare later.
+    declarePlaceholderName(identifier: Token) {
+        const lookup = this.lookupNameCurrentEnv(identifier);
+        if (lookup !== undefined) {
+            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
+                this.source,
+                identifier.indexInSource,
+                identifier.indexInSource + identifier.lexeme.length,
+                lookup);
+
+        }
+        this.names.set(identifier.lexeme, RedefineableTokenSentinel);
+    }    
     suggestNameCurrentEnv(identifier: Token): string | null {
         const name = identifier.lexeme;
         let minDistance = Infinity;
@@ -203,6 +218,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             return;
         }
         if (stmt instanceof Array) {
+            // Resolve all top-level functions first. Python allows functions declared after
+            // another function to be used in that function.
+            for (const st of stmt) {
+                if (st instanceof StmtNS.FunctionDef) {
+                    this.environment?.declarePlaceholderName(st.name);
+                }
+            }
             for (const st of stmt) {
                 st.accept(this);
             }
