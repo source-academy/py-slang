@@ -41,6 +41,7 @@ import {
     WhileStatement
 } from "estree";
 import { TranslatorErrors } from "./errors";
+import { ComplexLiteral, None } from "./types";
 // import { isEmpty } from "lodash";
 
 export interface EstreePosition {
@@ -364,7 +365,8 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
                 type: 'Literal',
                 value: stmt.module.lexeme,
                 loc: this.tokenToEstreeLocation(stmt.module)
-            }
+            },
+            attributes: []
         }
     }
 
@@ -597,6 +599,26 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         return {
             type: 'Literal',
             bigint: expr.value,
+            loc: this.toEstreeLocation(expr),
+        }
+    }
+
+    visitNoneExpr(expr: ExprNS.None): None {
+        return {
+            type: 'NoneType',
+            loc: this.toEstreeLocation(expr)
+        }
+    }
+
+    visitComplexExpr(expr: ExprNS.Complex): ComplexLiteral {
+        return {
+            type: 'Literal',
+    
+            complex: {
+                real: expr.value.real,
+                imag: expr.value.imag
+            },
+    
             loc: this.toEstreeLocation(expr),
         }
     }

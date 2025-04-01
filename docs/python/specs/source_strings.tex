@@ -1,0 +1,35 @@
+\subsection*{\href{https://sourceacademy.org/sicpjs/2.3.1}{Strings}}
+
+Strings are of the form \texttt{"}$ \textit{double-quote-characters} $\texttt{"},
+where $\textit{double-quote-characters}$ is a possibly empty sequence of characters without
+the character \texttt{"} and without the newline character, 
+of the form
+\texttt{'}$ \textit{single-quote-characters} $\texttt{'},
+where $\textit{single-quote-characters}$ is a possibly empty sequence of characters without
+the character~\texttt{'} and without the newline character,
+and of the form
+\texttt{'}\texttt{'}\texttt{'}$ \textit{triple-single-quote-characters} $\texttt{'}\texttt{'}\texttt{'}, or 
+\texttt{"""}$ \textit{triple-double-quote-characters} $\texttt{"""}
+where $\textit{backquote-characters}$ is a possibly empty sequence of characters and 
+can span multiple lines and may contain both single and double quotes without escaping.
+
+The following characters can be represented in strings\footnote{
+In \href{https://docs.python.org/3/reference/lexical_analysis.html}{
+\color{DarkBlue} Python 3.13 Documentation},
+unless an 'r' or 'R' prefix is present, escape sequences in string and bytes literals are interpreted according to rules similar to those used by Standard C. \emph{identifiers}.
+} as given:
+\begin{itemize}
+    \item \verb|\<newline>|: Backslash followed by a newline is ignored.
+    \item \verb|\\|: Represents a backslash (i.e., \texttt{\textbackslash}).
+    \item \verb|\'|: Represents a single quote (').
+    \item \verb|\"|: Represents a double quote (").
+    \item \verb|\a|: Represents the ASCII Bell (BEL) character.
+    \item \verb|\b|: Represents the ASCII Backspace (BS) character.
+    \item \verb|\f|: Represents the ASCII Formfeed (FF) character.
+    \item \verb|\n|: Represents the ASCII Linefeed (LF) character.
+    \item \verb|\r|: Represents the ASCII Carriage Return (CR) character.
+    \item \verb|\t|: Represents the ASCII Horizontal Tab (TAB) character.
+    \item \verb|\v|: Represents the ASCII Vertical Tab (VT) character.
+    \item \verb|\ooo|: Represents the character with the octal value \texttt{ooo}.
+    \item \verb|\xhh|: Represents the character with the hexadecimal value \texttt{hh}.
+\end{itemize}
