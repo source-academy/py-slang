@@ -612,21 +612,14 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
 
     visitComplexExpr(expr: ExprNS.Complex): ComplexLiteral {
         return {
-            // 你可以复用 "Literal"，也可以用别的 type 标记
-            // 这里保持和 BigInt 的风格一致
             type: 'Literal',
     
-            // 和 visitBigIntLiteralExpr 类似，这里用一个字段来保存复数内容
-            // 比如把它叫做 "complex"
-            // expr.value 是一个 PyComplexNumber, 你可以用 toString(), 或者直接存 real/imag
             complex: {
                 real: expr.value.real,
                 imag: expr.value.imag
             },
     
-            // 和其它 literal 一样，加上位置信息
             loc: this.toEstreeLocation(expr),
         }
     }
-    
 }
