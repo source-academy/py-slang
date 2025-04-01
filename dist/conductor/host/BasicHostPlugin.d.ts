@@ -1,0 +1,30 @@
+import type { ConductorError } from "../../common/errors";
+import { IChannel, IConduit, IPlugin } from "../../conduit";
+import { PluginClass } from "../../conduit/types";
+import { InternalChannelName, InternalPluginName } from "../strings";
+import { Chunk, RunnerStatus } from "../types";
+import { IHostPlugin } from "./types";
+export declare abstract class BasicHostPlugin implements IHostPlugin {
+    name: InternalPluginName;
+    private readonly __conduit;
+    private readonly __chunkChannel;
+    private readonly __serviceChannel;
+    private readonly __ioChannel;
+    private readonly __status;
+    private __chunkCount;
+    private readonly __serviceHandlers;
+    abstract requestFile(fileName: string): Promise<string | undefined>;
+    abstract requestLoadPlugin(pluginName: string): void;
+    startEvaluator(entryPoint: string): void;
+    sendChunk(chunk: Chunk): void;
+    sendInput(message: string): void;
+    receiveOutput?(message: string): void;
+    receiveError?(message: ConductorError): void;
+    isStatusActive(status: RunnerStatus): boolean;
+    receiveStatusUpdate?(status: RunnerStatus, isActive: boolean): void;
+    registerPlugin<Arg extends any[], T extends IPlugin>(pluginClass: PluginClass<Arg, T>, ...arg: Arg): NoInfer<T>;
+    unregisterPlugin(plugin: IPlugin): void;
+    importAndRegisterExternalPlugin(location: string, ...arg: any[]): Promise<IPlugin>;
+    static readonly channelAttach: InternalChannelName[];
+    constructor(conduit: IConduit, [fileChannel, chunkChannel, serviceChannel, ioChannel, errorChannel, statusChannel]: IChannel<any>[]);
+}

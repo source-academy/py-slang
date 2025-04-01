@@ -1,0 +1,13 @@
+import { Environment } from "./environment";
+import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, Node, UnOpInstr } from "./types";
+import type * as es from 'estree';
+export declare const popInstr: (srcNode: Node) => Instr;
+export declare const assmtInstr: (symbol: string, constant: boolean, declaration: boolean, srcNode: Node) => AssmtInstr;
+export declare const appInstr: (numOfArgs: number, srcNode: es.CallExpression) => AppInstr;
+export declare const envInstr: (env: Environment, srcNode: Node) => EnvInstr;
+export declare const markerInstr: (srcNode: Node) => Instr;
+export declare const binOpInstr: (symbol: any, srcNode: Node) => BinOpInstr;
+export declare const resetInstr: (srcNode: Node) => Instr;
+export declare const branchInstr: (consequent: es.Expression | es.Statement, alternate: es.Expression | es.Statement | null | undefined, srcNode: Node) => BranchInstr;
+export declare const conditionalExpression: (test: es.Expression, consequent: es.Expression, alternate: es.Expression, loc?: es.SourceLocation | null) => es.ConditionalExpression;
+export declare const unOpInstr: (symbol: es.UnaryOperator, srcNode: Node) => UnOpInstr;

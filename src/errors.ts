@@ -1,8 +1,9 @@
 import {Token} from "./tokenizer";
 import {Position} from "estree";
 
-/*The offset is calculated as follows:
-  Current position is one after real position of end of token: 1
+/*
+    The offset is calculated as follows:    
+    Current position is one after real position of end of token: 1
 */
 const MAGIC_OFFSET = 1;
 
@@ -12,7 +13,6 @@ function escape(unsafe: string): string {
     // @TODO escape newlines
     return unsafe.replace(SPECIAL_CHARS, "\\$&");
 }
-
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): string {

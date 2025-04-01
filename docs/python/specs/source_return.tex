@@ -1,0 +1,21 @@
+\subsection*{Restrictions}
+
+\begin{itemize}
+\item Return statements are only allowed in bodies of functions.
+\item Line breaks within a statement must be explicitly continued using a backslash or be enclosed in parentheses, brackets, or braces. 
+Python does not perform implicit statement termination like automatic semicolon insertion; 
+each logical line—that is, each complete statement as interpreted by the interpreter, which may span multiple physical lines when properly continued—must be syntactically complete.
+\item Lambda expressions are limited to a single logical line.
+\item Re-declaration variables or functions is not allowed. Once a variable or function is defined, it cannot be redefined with the same name in the same scope
+\footnote{
+Scope refers to the region of a program in which a particular name (such as a variable, function, or class) is defined and can be accessed. In other words, 
+it determines the part of the program where you can use that name without causing a name error. 
+Scope is determined by the program's structure (usually its lexical or textual layout) and governs the visibility and lifetime of variables and other identifiers.
+
+In \href{https://docs.python.org/3/tutorial/classes.html\#python-scopes-and-namespaces}{\color{DarkBlue}Python}, the \emph{scope} of a declaration is determined lexically: a variable declared inside a function is local to that function; 
+if it is declared outside any function, it is global (i.e., module-level). Moreover, if a variable is declared in an enclosing function, 
+it is available to inner functions (the enclosing scope), and if not found in these scopes, Python looks into the built-in scope.
+}.
+\end{itemize}
+
+
