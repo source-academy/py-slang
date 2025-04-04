@@ -33,6 +33,7 @@ export enum TokenType {
     LESSEQUAL,
     GREATEREQUAL,
     DOUBLESTAR,
+    COMPLEX,    
     // Special identifiers
     AND,
     OR,

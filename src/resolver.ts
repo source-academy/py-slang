@@ -5,7 +5,8 @@ import { Token } from "./tokenizer";
 import { TokenType } from "./tokens";
 import { ResolverErrors } from "./errors";
 
-const levenshtein = require('fast-levenshtein');
+import levenshtein from 'fast-levenshtein';
+// const levenshtein = require('fast-levenshtein');
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
@@ -149,23 +150,20 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         // The global environment
         this.environment = new Environment(source, null, new Map([
             // misc library
-            ["get_time", new Token(TokenType.NAME, "get_time", 0, 0, 0)],
-            ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
-            ["raw_print", new Token(TokenType.NAME, "raw_print", 0, 0, 0)],
-            ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
-            ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
-            ["prompt", new Token(TokenType.NAME, "prompt", 0, 0, 0)],
-            ["is_float", new Token(TokenType.NAME, "is_float", 0, 0, 0)],
-            ["is_int", new Token(TokenType.NAME, "is_int", 0, 0, 0)],
-            ["is_string", new Token(TokenType.NAME, "is_string", 0, 0, 0)],
-            ["is_function", new Token(TokenType.NAME, "is_function", 0, 0, 0)],
-            ["is_boolean", new Token(TokenType.NAME, "is_boolean", 0, 0, 0)],
-            ["parse_int", new Token(TokenType.NAME, "parse_int", 0, 0, 0)],
+            ["_int", new Token(TokenType.NAME, "_int", 0, 0, 0)],
+            ["_int_from_string", new Token(TokenType.NAME, "_int_from_string", 0, 0, 0)],
+            ["abs", new Token(TokenType.NAME, "abs", 0, 0, 0)],
             ["char_at", new Token(TokenType.NAME, "char_at", 0, 0, 0)],
-            ["arity", new Token(TokenType.NAME, "arity", 0, 0, 0)],
-            ["None", new Token(TokenType.NAME, "None", 0, 0, 0)],
-            ["NaN", new Token(TokenType.NAME, "NaN", 0, 0, 0)],
-            ["Infinity", new Token(TokenType.NAME, "Infinity", 0, 0, 0)],
+            ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
+            ["input", new Token(TokenType.NAME, "input", 0, 0, 0)],
+            ["isinstance", new Token(TokenType.NAME, "isinstance", 0, 0, 0)],
+            ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
+            ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
+            ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
+            ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
+            ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
+            ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
+            ["time_time", new Token(TokenType.NAME, "time_time", 0, 0, 0)],            
             
             // math constants
             ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
@@ -175,7 +173,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["math_tau", new Token(TokenType.NAME, "math_tau", 0, 0, 0)],
             
             // math library
-            ["math_abs", new Token(TokenType.NAME, "math_abs", 0, 0, 0)],
             ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],
             ["math_acosh", new Token(TokenType.NAME, "math_acosh", 0, 0, 0)],
             ["math_asin", new Token(TokenType.NAME, "math_asin", 0, 0, 0)],
@@ -185,31 +182,46 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["math_atanh", new Token(TokenType.NAME, "math_atanh", 0, 0, 0)],
             ["math_cbrt", new Token(TokenType.NAME, "math_cbrt", 0, 0, 0)],
             ["math_ceil", new Token(TokenType.NAME, "math_ceil", 0, 0, 0)],
-            ["math_clz32", new Token(TokenType.NAME, "math_clz32", 0, 0, 0)],
+            ["math_comb", new Token(TokenType.NAME, "math_comb", 0, 0, 0)],
+            ["math_copysign", new Token(TokenType.NAME, "math_copysign", 0, 0, 0)],
             ["math_cos", new Token(TokenType.NAME, "math_cos", 0, 0, 0)],
             ["math_cosh", new Token(TokenType.NAME, "math_cosh", 0, 0, 0)],
+            ["math_degrees", new Token(TokenType.NAME, "math_degrees", 0, 0, 0)],
+            ["math_erf", new Token(TokenType.NAME, "math_erf", 0, 0, 0)],
+            ["math_erfc", new Token(TokenType.NAME, "math_erfc", 0, 0, 0)],
             ["math_exp", new Token(TokenType.NAME, "math_exp", 0, 0, 0)],
+            ["math_exp2", new Token(TokenType.NAME, "math_exp2", 0, 0, 0)],
             ["math_expm1", new Token(TokenType.NAME, "math_expm1", 0, 0, 0)],
+            ["math_fabs", new Token(TokenType.NAME, "math_fabs", 0, 0, 0)],
+            ["math_factorial", new Token(TokenType.NAME, "math_factorial", 0, 0, 0)],
             ["math_floor", new Token(TokenType.NAME, "math_floor", 0, 0, 0)],
-            ["math_fround", new Token(TokenType.NAME, "math_fround", 0, 0, 0)],
-            ["math_hypot", new Token(TokenType.NAME, "math_hypot", 0, 0, 0)],
-            ["math_imul", new Token(TokenType.NAME, "math_imul", 0, 0, 0)],
+            ["math_fma", new Token(TokenType.NAME, "math_fma", 0, 0, 0)],
+            ["math_fmod", new Token(TokenType.NAME, "math_fmod", 0, 0, 0)],
+            ["math_gamma", new Token(TokenType.NAME, "math_gamma", 0, 0, 0)],
+            ["math_gcd", new Token(TokenType.NAME, "math_gcd", 0, 0, 0)],
+            ["math_isfinite", new Token(TokenType.NAME, "math_isfinite", 0, 0, 0)],
+            ["math_isinf", new Token(TokenType.NAME, "math_isinf", 0, 0, 0)],
+            ["math_isnan", new Token(TokenType.NAME, "math_isnan", 0, 0, 0)],
+            ["math_isqrt", new Token(TokenType.NAME, "math_isqrt", 0, 0, 0)],
+            ["math_lcm", new Token(TokenType.NAME, "math_lcm", 0, 0, 0)],
+            ["math_ldexp", new Token(TokenType.NAME, "math_ldexp", 0, 0, 0)],
+            ["math_lgamma", new Token(TokenType.NAME, "math_lgamma", 0, 0, 0)],
             ["math_log", new Token(TokenType.NAME, "math_log", 0, 0, 0)],
+            ["math_log10", new Token(TokenType.NAME, "math_log10", 0, 0, 0)],
             ["math_log1p", new Token(TokenType.NAME, "math_log1p", 0, 0, 0)],
             ["math_log2", new Token(TokenType.NAME, "math_log2", 0, 0, 0)],
-            ["math_log10", new Token(TokenType.NAME, "math_log10", 0, 0, 0)],
-            ["math_max", new Token(TokenType.NAME, "math_max", 0, 0, 0)],
-            ["math_min", new Token(TokenType.NAME, "math_min", 0, 0, 0)],
+            ["math_nextafter", new Token(TokenType.NAME, "math_nextafter", 0, 0, 0)],
+            ["math_perm", new Token(TokenType.NAME, "math_perm", 0, 0, 0)],
             ["math_pow", new Token(TokenType.NAME, "math_pow", 0, 0, 0)],
-            ["math_random", new Token(TokenType.NAME, "math_random", 0, 0, 0)],
-            ["math_round", new Token(TokenType.NAME, "math_round", 0, 0, 0)],
-            ["math_sign", new Token(TokenType.NAME, "math_sign", 0, 0, 0)],
+            ["math_radians", new Token(TokenType.NAME, "math_radians", 0, 0, 0)],
+            ["math_remainder", new Token(TokenType.NAME, "math_remainder", 0, 0, 0)],
             ["math_sin", new Token(TokenType.NAME, "math_sin", 0, 0, 0)],
             ["math_sinh", new Token(TokenType.NAME, "math_sinh", 0, 0, 0)],
             ["math_sqrt", new Token(TokenType.NAME, "math_sqrt", 0, 0, 0)],
             ["math_tan", new Token(TokenType.NAME, "math_tan", 0, 0, 0)],
             ["math_tanh", new Token(TokenType.NAME, "math_tanh", 0, 0, 0)],
             ["math_trunc", new Token(TokenType.NAME, "math_trunc", 0, 0, 0)],
+            ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)]   
         ]));
         this.functionScope = null;
     }
@@ -442,9 +454,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.resolve(expr.consequent);
         this.resolve(expr.alternative);
     }
+    visitNoneExpr(expr: ExprNS.None): void {
+    }
     visitLiteralExpr(expr: ExprNS.Literal): void {
     }
     visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
+    }
+    visitComplexExpr(expr: ExprNS.Complex): void {
     }
 
 }
