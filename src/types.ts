@@ -203,6 +203,17 @@ export class PyComplexNumber {
         return `(${this.toPythonComplexFloat(this.real)}${sign}${this.toPythonComplexFloat(this.imag)}j)`;
     }
 
+    /*
+    * This function converts the real and imaginary parts of a complex number into strings.
+    * In Python, float values (used for the real and imaginary parts) are formatted using scientific
+    * notation when their absolute value is less than 1e-4 or at least 1e16. TypeScript's default
+    * formatting thresholds differ, so here we explicitly enforce Python's behavior.
+    *
+    * The chosen bounds (1e-4 and 1e16) are derived from Python's internal formatting logic 
+    * (refer to the `format_float_short` function in CPython's pystrtod.c 
+    * (https://github.com/python/cpython/blob/main/Python/pystrtod.c)). This ensures that the
+    * output of py-slang more closely matches that of native Python.
+    */
     private toPythonComplexFloat(num: number){
         if (num === Infinity) {
             return "inf";
@@ -211,6 +222,7 @@ export class PyComplexNumber {
             return "-inf";
         }
         
+        // Force scientific notation for values < 1e-4 or ≥ 1e16 to mimic Python's float formatting behavior.
         if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
             return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2');
         }
