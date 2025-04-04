@@ -499,15 +499,18 @@ export class Parser {
         const startToken = this.peek();
         if (this.match(TokenType.TRUE)) return new ExprNS.Literal(startToken, this.previous(), true);
         if (this.match(TokenType.FALSE)) return new ExprNS.Literal(startToken, this.previous(), false);
-
+        if (this.match(TokenType.NONE)) return new ExprNS.None(startToken, this.previous());
         if (this.match(TokenType.STRING)) {
             return new ExprNS.Literal(startToken, this.previous(), this.previous().lexeme);
         }
         if (this.match(TokenType.NUMBER)) {
-            return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme));
+            return new ExprNS.Literal(startToken, this.previous(), Number(this.previous().lexeme.replace(/_/g, "")));
         }
         if (this.match(TokenType.BIGINT)) {
             return new ExprNS.BigIntLiteral(startToken, this.previous(), this.previous().lexeme);
+        }
+        if (this.match(TokenType.COMPLEX)) {
+            return new ExprNS.Complex(startToken, this.previous(), this.previous().lexeme);
         }
 
         if (this.match(TokenType.NAME, ...PSEUD_NAMES)) {
