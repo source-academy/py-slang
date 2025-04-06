@@ -57,7 +57,7 @@ export class Context {
       previousProgramsIdentifiers: new Set<string>(),
       operators: new Map<string, (...operands: Value[]) => Value>(),
       maxExecTime: 1000,
-      evaller: null,
+      //evaller: null,
       loadedModules: {},
       loadedModuleTypes: {}
     }

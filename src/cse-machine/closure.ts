@@ -27,6 +27,7 @@ export class Closure {
     node: es.ArrowFunctionExpression,
     environment: Environment,
     context: Context,
+    // TODO: Consider implementing a mechanism that more closely mimics Python’s implicit return (i.e., automatically inserting "return None")
     dummyReturn: boolean = false,
     predefined: boolean = false
   ): Closure {

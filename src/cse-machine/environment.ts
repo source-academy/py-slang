@@ -68,7 +68,7 @@ export const createSimpleEnvironment = (
     tail,
     head: {},
     heap: new Heap(),
-    // callExpression 和 thisContext 可选，根据需要传递
+    // TODO: callExpression and thisContext are optional and can be provided as needed.
   };
 };
 

@@ -317,7 +317,7 @@ export interface NativeStorage {
     previousProgramsIdentifiers: Set<string>
     operators: Map<string, (...operands: Value[]) => Value>
     maxExecTime: number
-    evaller: null | ((program: string) => Value)
+    //evaller: null | ((program: string) => Value)
     /*
     the first time evaller is used, it must be used directly like `eval(code)` to inherit
     surrounding scope, so we cannot set evaller to `eval` directly. subsequent assignments to evaller will
