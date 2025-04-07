@@ -2,13 +2,7 @@
 
 ## What is py-slang?
 
-`py-slang` is a language frontend for the
-[js-slang](https://github.com/source-academy/js-slang) repository. It parses
-a restricted subset of Python (enough to complete SICP), and outputs an
-`estree`-compatible AST. [The grammar](./src/Grammar.gram) is a reduced
-version of [Python 3.7's](https://docs.python.org/3.7/reference/grammar.html).
-This project does not aim to be a full Python to JS transpiler, but aims
-to transpile just a small enough subset of Python.
+`py-slang` is a Python implementation developed specifically for the Source Academy online learning environment. Unlike previous versions where Python was treated as a subset within [js-slang](https://github.com/source-academy/js-slang), py-slang now stands as an independent language implementation. It features its own parser, csemachine, and runtime, designed to process a tailored subset of Python for educational purposes.
 
 ## Usage
 For local testing:
