@@ -311,6 +311,35 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
     }
 }
 
+/**
+ * pyCompare: Compares a Python-style big integer (int_num) with a float (float_num),
+ * returning -1, 0, or 1 for less-than, equal, or greater-than.
+ * 
+ * This logic follows CPython's approach in floatobject.c, ensuring Python-like semantics:
+ * 
+ * 1. Special Values:
+ *    - If float_num is inf, any finite int_num is smaller (returns -1).
+ *    - If float_num is -inf, any finite int_num is larger (returns 1).
+ * 
+ * 2. Compare by Sign:
+ *    - Determine each number’s sign (negative, zero, or positive). If they differ, return based on sign.
+ *    - If both are zero, treat them as equal.
+ * 
+ * 3. Safe Conversion:
+ *    - If |int_num| <= 2^53, safely convert it to a double and do a normal floating comparison.
+ * 
+ * 4. Handling Large Integers:
+ *    - For int_num beyond 2^53, approximate the magnitudes via exponent/bit length.
+ *    - Compare the integer’s digit count with float_num’s order of magnitude.
+ * 
+ * 5. Close Cases:
+ *    - If both integer and float have the same digit count, convert float_num to a “big-int-like” string
+ *      (approximateBigIntString) and compare lexicographically to int_num’s string.
+ * 
+ * By layering sign checks, safe numeric range checks, and approximate comparisons,
+ * we achieve a Python-like ordering of large integers vs floats.
+ */
+
 function pyCompare(int_num : any, float_num : any) {
     // int_num.value < float_num.value => -1
     // int_num.value = float_num.value => 0
@@ -349,8 +378,8 @@ function pyCompare(int_num : any, float_num : any) {
         return diff < 0 ? -1 : 1;
     }
 
-    // For large integers exceeding 2^53, we need to distinguish more carefully.
-    // General idea: Determine the order of magnitude of float_num.value (via log10) and compare it with
+    // For large integers exceeding 2^53, need to distinguish more carefully.
+    // Determine the order of magnitude of float_num.value (via log10) and compare it with
     // the number of digits of int_num.value. An approximate comparison can indicate whether
     // int_num.value is greater or less than float_num.value.
     
@@ -363,8 +392,7 @@ function pyCompare(int_num : any, float_num : any) {
     const absFlt = Math.abs(float_num.value);
     // Determine the order of magnitude.
     const exponent = Math.floor(Math.log10(absFlt)); 
-    // For example, if float_num.value = 3.333333e49, exponent = 49, indicating roughly 50 digits in its integer part.
-  
+
     // Get the decimal string representation of the absolute integer.
     const intStr = absInt.toString(); 
     const intDigits = intStr.length;
@@ -382,7 +410,7 @@ function pyCompare(int_num : any, float_num : any) {
         //                => all negative => int_num.value > float_num.value
         return (signInt > 0) ? -1 : 1;
     } else {
-        // (5.2) If the number of digits is the same, they may be extremely close.
+        // If the number of digits is the same, they may be extremely close.
         // Method: Convert float_num.value into an approximate BigInt string and perform a lexicographical comparison.
         const floatApproxStr = approximateBigIntString(absFlt, 30);
         
