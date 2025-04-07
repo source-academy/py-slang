@@ -184,3 +184,9 @@ export * from './errors';
 //         }
 //     }
 // }
+
+export interface IOptions {
+    isPrelude: boolean,
+    envSteps: number,
+    stepLimit: number
+};
