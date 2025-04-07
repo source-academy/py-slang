@@ -1,4 +1,8 @@
 import * as es from 'estree'
+import { toPythonString } from './stdlib'
+import { Value } from './cse-machine/stash'
+import { Context } from './cse-machine/context'
+import { ModuleFunctions } from './modules/moduleTypes'
 
 export class CSEBreak {}
 
@@ -246,4 +250,79 @@ export interface ComplexLiteral extends es.BaseNode {
         imag: number;
     }
     loc?: es.SourceLocation;
+}
+
+
+/**
+ * Helper type to recursively make properties that are also objects
+ * partial
+ *
+ * By default, `Partial<Array<T>>` is equivalent to `Array<T | undefined>`. For this type, `Array<T>` will be
+ * transformed to Array<Partial<T>> instead
+ */
+export type RecursivePartial<T> =
+  T extends Array<any>
+    ? Array<RecursivePartial<T[number]>>
+    : T extends Record<any, any>
+      ? Partial<{
+          [K in keyof T]: RecursivePartial<T[K]>
+        }>
+      : T
+
+export type Result = Finished | Error | SuspendedCseEval // | Suspended
+
+// TODO: should allow debug
+// export interface Suspended {
+//     status: 'suspended'
+//     it: IterableIterator<Value>
+//     scheduler: Scheduler
+//     context: Context
+// }
+  
+export interface SuspendedCseEval {
+    status: 'suspended-cse-eval'
+    context: Context
+}
+
+export interface Finished {
+    status: 'finished'
+    context: Context
+    value: Value
+    representation: Representation // if the returned value needs a unique representation,
+    // (for example if the language used is not JS),
+    // the display of the result will use the representation
+    // field instead
+}
+
+// export class Representation {
+//     constructor(public representation: string) {}
+//     toString() {
+//         return this.representation
+//     }
+// }
+
+export class Representation {
+    constructor(public representation: string) {}
+  
+    toString(value: any): string {
+        // call str(value) in stdlib
+        // TODO: mapping
+        const result = toPythonString(value);
+        return result;
+    }
+}
+
+export interface NativeStorage {
+    builtins: Map<string, Value>
+    previousProgramsIdentifiers: Set<string>
+    operators: Map<string, (...operands: Value[]) => Value>
+    maxExecTime: number
+    //evaller: null | ((program: string) => Value)
+    /*
+    the first time evaller is used, it must be used directly like `eval(code)` to inherit
+    surrounding scope, so we cannot set evaller to `eval` directly. subsequent assignments to evaller will
+    close in the surrounding values, so no problem
+     */
+    loadedModules: Record<string, ModuleFunctions>
+    loadedModuleTypes: Record<string, Record<string, string>>
 }
