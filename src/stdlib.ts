@@ -2,6 +2,17 @@ import { ArrowFunctionExpression } from "estree";
 import { Closure } from "./cse-machine/closure";
 import { Value } from "./cse-machine/stash";
 
+/*
+    Create a map to hold built-in constants.
+    Each constant is stored with a string key and its corresponding value object.
+*/
+export const builtInConstants = new Map<string, any>();
+/*
+    Create a map to hold built-in functions.
+    The keys are strings (function names) and the values are functions that can take any arguments.
+*/
+export const builtIns = new Map<string, (...args: any[]) => any>();
+
 /**
  * Converts a number to a string that mimics Python's float formatting behavior.
  * 
