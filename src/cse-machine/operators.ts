@@ -27,37 +27,6 @@ export type BinaryOperator =
     | "in"
     | "instanceof";
 
-
-
-// export function evaluateBinaryExpression(operator: BinaryOperator, left: any, right: any) {
-//     switch (operator) {
-//       case '+':
-//         return left + right
-//       case '-':
-//         return left - right
-//       case '*':
-//         return left * right
-//       case '/':
-//         return left / right
-//       case '%':
-//         return left % right
-//       case '===':
-//         return left === right
-//       case '!==':
-//         return left !== right
-//       case '<=':
-//         return left <= right
-//       case '<':
-//         return left < right
-//       case '>':
-//         return left > right
-//       case '>=':
-//         return left >= right
-//       default:
-//         return undefined
-//     }
-//   }
-
 export function evaluateUnaryExpression(operator: es.UnaryOperator, value: any) {
     if (operator === '!') {
         if (value.type === 'bool') {
@@ -312,6 +281,13 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
 }
 
 /**
+ * TEMPORARY IMPLEMENTATION
+ * This function is a simplified comparison between int and float
+ * to mimic Python-like ordering semantics.
+ *
+ * TODO: In future, replace this with proper method dispatch to
+ * __eq__, __lt__, __gt__, etc., according to Python's object model.
+ *
  * pyCompare: Compares a Python-style big integer (int_num) with a float (float_num),
  * returning -1, 0, or 1 for less-than, equal, or greater-than.
  * 
@@ -339,7 +315,6 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
  * By layering sign checks, safe numeric range checks, and approximate comparisons,
  * we achieve a Python-like ordering of large integers vs floats.
  */
-
 function pyCompare(int_num : any, float_num : any) {
     // int_num.value < float_num.value => -1
     // int_num.value = float_num.value => 0
@@ -470,4 +445,3 @@ function approximateBigIntString(num: number, precision: number): string {
     // Rounding could be applied if necessary, but truncation is sufficient for comparison.
     return mantissaStr.slice(0, integerLen);
 }
-  
