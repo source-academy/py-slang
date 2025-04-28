@@ -21,12 +21,14 @@ class Environment {
     // This only set at the top level environment. Child environments do not
     // copy this field.
     moduleBindings: Set<string>;
+    definedNames: Set<string>;
     constructor(source: string, enclosing: Environment | null, names: Map<string, Token>) {
         this.source = source;
         this.enclosing = enclosing;
         this.names = names;
         this.functions = new Set();
         this.moduleBindings = new Set();
+        this.definedNames = new Set();
     }
 
     /*
@@ -64,6 +66,7 @@ class Environment {
     lookupNameParentEnvWithError(identifier: Token) {
         const name = identifier.lexeme;
         let parent = this.enclosing;
+        
         if (parent === null || !parent.names.has(name)) {
             throw new ResolverErrors.NameNotFoundError(identifier.line, identifier.col,
                 this.source,
@@ -75,6 +78,13 @@ class Environment {
     }
     declareName(identifier: Token) {
         const lookup = this.lookupNameCurrentEnv(identifier);
+        if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) { 
+            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
+                this.source,
+                identifier.indexInSource,
+                identifier.indexInSource + identifier.lexeme.length,
+                lookup);
+        }
         if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
             throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
                 this.source,
@@ -84,6 +94,7 @@ class Environment {
 
         }
         this.names.set(identifier.lexeme, identifier);
+        this.definedNames.add(identifier.lexeme);
     }
     // Same as declareName but allowed to re-declare later.
     declarePlaceholderName(identifier: Token) {
@@ -304,8 +315,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
+
         // Create a new environment.
-        // const oldEnv = this.environment;
+        const oldEnv = this.environment;
         // Assign the parameters to the new environment.
         const newEnv = new Map(
             stmt.parameters.map(param => [param.lexeme, param])
@@ -322,7 +334,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         // Grab identifiers from that new environment. That are NOT functions.
         // stmt.varDecls = this.varDeclNames(this.environment.names)
         // Restore old environment
-        // this.environment = oldEnv;
+        this.functionScope = null;
+        this.environment = oldEnv;
     }
 
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
