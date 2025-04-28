@@ -1,7 +1,9 @@
 import * as es from "estree";
-import { handleRuntimeError, isIdentifier, pythonMod } from "./utils";
+import { handleRuntimeError, isIdentifier, operandTranslator, pythonMod, typeTranslator } from "./utils";
 import { Context } from "./context";
 import { PyComplexNumber } from "../types";
+import { TypeConcatenateError, UnsupportedOperandTypeError, ZeroDivisionError } from "../errors/errors";
+import { ControlItem } from "./control";
 
 export type BinaryOperator =
     | "=="
@@ -58,7 +60,6 @@ export function evaluateUnaryExpression(operator: es.UnaryOperator, value: any) 
         //     };
         // }
     } else if (operator === 'typeof') {
-        // todo
         return {
             type: String,
             value: typeof value.value
@@ -68,10 +69,19 @@ export function evaluateUnaryExpression(operator: es.UnaryOperator, value: any) 
     }
 }
 
-export function evaluateBinaryExpression(context: Context, identifier: any, left: any, right: any) {
+export function evaluateBinaryExpression(code: string, command: ControlItem, context: Context, identifier: any, left: any, right: any) {
     //if(isIdentifier(identifier)){
     //if(identifier.name === '__py_adder') {
-    if (left.type === 'string' && right.type === 'string' && identifier.name === '__py_adder') {
+    let operandName: any;
+    const originalLeftType = typeTranslator(left.type);
+    const originalRightType = typeTranslator(right.type);
+    if (isIdentifier(identifier)) {
+        operandName = identifier.name;
+    } else {
+        operandName = identifier;
+    }
+    const operand = operandTranslator(operandName);
+    if (left.type === 'string' && right.type === 'string') {
         if(isIdentifier(identifier) && identifier.name === '__py_adder') {
             return {
                 type: 'string',
@@ -93,7 +103,7 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
             } else if(identifier === '!==') {
                 ret_value = left.value !== right.value;
             } else {
-                // TODO: error
+                handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
             }
 
             return {
@@ -103,11 +113,9 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
         }
     } else {
         // numbers: only int and float, not bool
-        const numericTypes = ['number', 'bigint', 'complex'];  //, 'bool'
+        const numericTypes = ['number', 'bigint', 'complex'];
         if (!numericTypes.includes(left.type) || !numericTypes.includes(right.type)) {
-            // TODO: 
-            //throw new Error('Placeholder: invalid operand types for addition');
-            // console.info('not num or bigint', left.type, right.type);
+            handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
         }
 
         // if (left.type === 'bool') {
@@ -175,20 +183,22 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
                     const rightComplex = PyComplexNumber.fromValue(right.value);
                     ret_value = leftComplex.div(rightComplex);
                 } else {
-                    if(right.value !== 0) {
+                    if((right.type === 'bigint' && Number(right.value) !== 0) ||
+                        (right.type === 'number' && right.value !== 0)) {
                         ret_type = 'number';
                         ret_value = Number(left.value) / Number(right.value);
                     } else {
-                        // TODO: divide by 0 error
+                        handleRuntimeError(context, new ZeroDivisionError(code, command as es.Node, context));
                     }
                 }
             } else if(identifier.name === '__py_modder') {
                 if (left.type === 'complex') {
-                    // TODO: error
+                    handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));  
                 }
                 ret_value = pythonMod(left.value, right.value);
             } else if(identifier.name === '__py_floorer') {
                 // TODO: floorer not in python now
+                // see math_floor in stdlib.ts
                 ret_value = 0;
             } else if(identifier.name === '__py_powerer') {
                 if (left.type === 'complex') {
@@ -204,22 +214,22 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
                     }
                 }
             } else {
-                // TODO: throw an error
+                handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
             }
         } else {
             ret_type = 'bool';
-
             // one of them is complex, convert all to complex then compare
             // for complex, only '==' and '!=' valid
             if (left.type === 'complex') {
                 const leftComplex = PyComplexNumber.fromValue(left.value);
                 const rightComplex = PyComplexNumber.fromValue(right.value);
+
                 if (identifier === '===') {
                     ret_value = leftComplex.equals(rightComplex);
                 } else if (identifier === '!==') {
                     ret_value = !leftComplex.equals(rightComplex);
                 } else {
-                    // TODO: error
+                    handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
                 }
             } else if (originalLeft.type !== originalRight.type) {
                 let int_num : any;
@@ -248,10 +258,8 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
                 } else if(identifier === '!==') {
                     ret_value = compare_res !== 0;
                 } else {
-                    // TODO: error
-                }
-
-                
+                    handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
+                } 
             } else {
                 if (identifier === '>') {
                     ret_value = left.value > right.value;
@@ -266,11 +274,10 @@ export function evaluateBinaryExpression(context: Context, identifier: any, left
                 } else if(identifier === '!==') {
                     ret_value = left.value !== right.value;
                 } else {
-                    // TODO: error
+                    handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
                 }
             }
 
-            
         }
 
         return {
@@ -445,3 +452,4 @@ function approximateBigIntString(num: number, precision: number): string {
     // Rounding could be applied if necessary, but truncation is sufficient for comparison.
     return mantissaStr.slice(0, integerLen);
 }
+  

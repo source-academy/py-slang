@@ -1,5 +1,5 @@
 import type * as es from 'estree';
-import { isNode, isBlockStatement, hasDeclarations } from './ast-helper';
+import { isNode, isBlockStatement, hasDeclarations, identifier } from './ast-helper';
 import { currentEnvironment, Environment } from './environment';
 import { Control, ControlItem } from './control';
 import {
@@ -437,27 +437,29 @@ export const getVariable = (context: Context, name: string, node: es.Identifier)
 }
 
 export const checkStackOverFlow = (context: Context, control: Control) => {
-  // todo
+  // TODO
 }
 
 export const checkNumberOfArguments = (
+  source: string,
   command: ControlItem,
   context: Context,
   callee: Closure | Value,
   args: Value[],
   exp: es.CallExpression
 ) => {
+
   if (callee instanceof Closure) {
     // User-defined or Pre-defined functions
-    const params = callee.node.params
+    const params = callee.node.params;
     // console.info("params: ", params);
     // console.info("args: ", args);
     //const hasVarArgs = params[params.length - 1]?.type === 'RestElement'
 
     if (params.length > args.length) {
-      handleRuntimeError(context, new MissingRequiredPositionalError((command as es.Node), callee.declaredName!, params, args));
+      handleRuntimeError(context, new MissingRequiredPositionalError(source, (command as es.Node), (command as any).srcNode.callee.name, params, args, false));
     } else if (params.length !== args.length) {
-      handleRuntimeError(context, new TooManyPositionalArgumentsError((command as es.Node), callee.declaredName!, params, args));
+      handleRuntimeError(context, new TooManyPositionalArgumentsError(source, (command as es.Node), (command as any).srcNode.callee.name, params, args, false));
     }
     //}
 
@@ -512,12 +514,11 @@ export const reduceConditional = (
 }
 
 export const handleRuntimeError = (context: Context, error: RuntimeSourceError) => {
-  context.errors.push(error)
-
-  console.error(error.explain());
-  console.error(error.elaborate());
-  //console.log("Location:", `Line ${e.location.start.line}, Column ${e.location.start.column}`);
-  
+  // context.errors.push(error);
+  // console.error(error.explain());
+  // console.error(error.elaborate());
+  // console.log("Location:", `Line ${e.location.start.line}, Column ${e.location.start.column}`);
+  // console.info('testerr',error);
   throw error;
 }
 
@@ -570,5 +571,43 @@ export class AssertionError extends RuntimeSourceError {
 export default function assert(condition: boolean, message: string): asserts condition {
   if (!condition) {
     throw new AssertionError(message)
+  }
+}
+
+export function typeTranslator(type: string): string {
+  switch (type) {
+    case "bigint":
+      return "int";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "bool":
+      return "bool";
+    case "string":
+      return "string";
+    case "complex":
+      return "complex";
+    default:
+      return "unknown";
+  }
+}
+
+export function operandTranslator(type: string) {
+  switch (type) {
+    case "__py_adder":
+      return "+";
+    case "__py_minuser":
+      return "-";
+    case "__py_multiplier":
+      return "*";
+    case "__py_divider":
+      return "/";
+    case "__py_modder":
+      return "%";
+    case "__py_powerer":
+      return "**";
+    default:
+      return type;
   }
 }

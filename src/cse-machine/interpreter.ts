@@ -13,7 +13,7 @@ import { Stash, Value } from './stash';
 import { Environment, createBlockEnvironment, createEnvironment, createProgramEnvironment, currentEnvironment, popEnvironment, pushEnvironment } from './environment';
 import { Context } from './context';
 import { isNode, isBlockStatement, hasDeclarations, statementSequence, blockArrowFunction, constantDeclaration, pyVariableDeclaration, identifier, literal } from './ast-helper';
-import { envChanging,declareFunctionsAndVariables, handleSequence, defineVariable, getVariable, checkStackOverFlow, checkNumberOfArguments, isInstr, isSimpleFunction, isIdentifier, reduceConditional, valueProducing, handleRuntimeError, hasImportDeclarations, declareIdentifier } from './utils';
+import { envChanging,declareFunctionsAndVariables, handleSequence, defineVariable, getVariable, checkStackOverFlow, checkNumberOfArguments, isInstr, isSimpleFunction, isIdentifier, reduceConditional, valueProducing, handleRuntimeError, hasImportDeclarations, declareIdentifier, typeTranslator } from './utils';
 import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, InstrType, StatementSequence, UnOpInstr } from './types';
 import * as instr from './instrCreator'
 import { Closure } from './closure';
@@ -26,6 +26,7 @@ import { IOptions } from '..';
 import { CseError } from './error';
 import { filterImportDeclarations } from './dict';
 import { RuntimeSourceError } from '../errors/runtimeSourceError';
+// import { Identifier } from '../conductor/types';
 
 type CmdEvaluator = (
   command: ControlItem,
@@ -51,8 +52,11 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
   return new Promise((resolve, reject) => {
     if (value instanceof CSEBreak) {
       resolve({ status: 'suspended-cse-eval', context });
-    } else if (value instanceof CseError) {
-      resolve({ status: 'error' } as unknown as Result );
+    } else if (value.type === 'error') {  // value instanceof CseError
+      const msg = value.message;
+      //resolve({ status: 'error', msg } as unknown as Result );
+      const representation = new Representation(cseFinalPrint + msg);
+      resolve({ status: 'finished', context, value, representation })
     } else {
       //const rep: Value = { type: "string", value: cseFinalPrint };
       const representation = new Representation(value);
@@ -60,6 +64,8 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
     }
   })
 }
+
+let source = "";
 
 /**
  * Function to be called when a program is to be interpreted using
@@ -70,12 +76,13 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
-export function evaluate(program: es.Program, context: Context, options: RecursivePartial<IOptions> = {}): Value {
+export function evaluate(code: string, program: es.Program, context: Context, options: RecursivePartial<IOptions> = {}): Value {
+  source = code;
   try {
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error: any) {
-    context.errors.push(new CseError(error.message));
+    // context.errors.push(new CseError(error.message));
     return { type: 'error', message: error.message };
   }
   // TODO: should call transformer like in js-slang
@@ -87,6 +94,7 @@ export function evaluate(program: es.Program, context: Context, options: Recursi
     context.stash = new Stash();
     // Adaptation for new feature
     const result = runCSEMachine(
+      code,
       context,
       context.control,
       context.stash,
@@ -96,11 +104,12 @@ export function evaluate(program: es.Program, context: Context, options: Recursi
     );
     const rep: Value = { type: "string", value: cseFinalPrint };
     return rep;
+    // return result;
   } catch (error: any) {
-    context.errors.push(new CseError(error.message));
+    // context.errors.push(new CseError(error.message));
     return { type: 'error', message: error.message };
   } finally {
-    context.runtime.isRunning = false
+    context.runtime.isRunning = false;
   }
 }
 
@@ -156,6 +165,7 @@ function evaluateImports(program: es.Program, context: Context) {
  * @returns The top value of the stash after execution.
  */
 function runCSEMachine(
+  code: string,
   context: Context,
   control: Control,
   stash: Stash,
@@ -164,6 +174,7 @@ function runCSEMachine(
   isPrelude: boolean = false
 ): Value {
   const eceState = generateCSEMachineStateStream(
+    code,
     context,
     control,
     stash,
@@ -194,6 +205,7 @@ function runCSEMachine(
  * @yields The current state of the stash, control stack, and step count.
  */
 export function* generateCSEMachineStateStream(
+  code: string,
   context: Context,
   control: Control,
   stash: Stash,
@@ -212,20 +224,22 @@ export function* generateCSEMachineStateStream(
   if (command && isNode(command)) {
     context.runtime.nodes.unshift(command)
   }
-
+  
   while (command) {
     // For local debug only
     // console.info('next command to be evaluated');
     // console.info(command);
-
+    // console.info(steps);
+    // console.info(isPrelude);
+    // console.info(stepLimit);
     // Return to capture a snapshot of the control and stash after the target step count is reached
-    if (!isPrelude && steps === envSteps) {
-      yield { stash, control, steps }
-      return
-    }
+    // if (!isPrelude && steps === envSteps) {
+    //   yield { stash, control, steps }
+    //   return
+    // }
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
-      break
+      handleRuntimeError(context, new error.StepLimitExceededError(source, command as es.Node, context));
     }
 
     if (!isPrelude && envChanging(command)) {
@@ -540,22 +554,22 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     if (builtInConstants.has((command as es.Identifier).name)) {
       const builtinCons = builtInConstants.get((command as es.Identifier).name)!;
-      try {
-        stash.push(builtinCons);
-        return;
-      } catch (error) {
-        // Error
-        if (error instanceof Error) {
-          throw new Error(error.message);
-        } else {
-          throw new Error();
-        }
-        // if (error instanceof RuntimeSourceError) {
-        //   throw error;
-        // } else {
-        //   throw new RuntimeSourceError(`Error in builtin function ${funcName}: ${error}`);
-        // }
-      }
+      //try {
+      stash.push(builtinCons);
+      //   return;
+      // } catch (error) {
+      //   // Error
+      //   if (error instanceof Error) {
+      //     throw new Error(error.message);
+      //   } else {
+      //     throw new Error();
+      //   }
+      //   // if (error instanceof RuntimeSourceError) {
+      //   //   throw error;
+      //   // } else {
+      //   //   throw new RuntimeSourceError(`Error in builtin function ${funcName}: ${error}`);
+      //   // }
+      // }
     } else {
       stash.push(getVariable(context, (command as es.Identifier).name, (command as es.Identifier)));
     }
@@ -620,7 +634,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     context: Context,
     control: Control
   ) {
-    // add
     if (isIdentifier((command as es.CallExpression).callee)) {
       let name = ((command as es.CallExpression).callee as es.Identifier).name;
       if (name === '__py_adder' || name === '__py_minuser' || 
@@ -701,13 +714,14 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const right = stash.pop();
     const left = stash.pop();
 
-    if ((left.type === 'string' && right.type !== 'string') || 
-        (left.type !== 'string' && right.type === 'string')){
-      handleRuntimeError(context, new error.TypeConcatenateError(command as es.Node));
+    if (((left.type === 'string' && right.type !== 'string') || 
+        (left.type !== 'string' && right.type === 'string')) && (command as BinOpInstr).symbol.name === '__py_adder'){
+      const originalWrongType = (left.type === 'string') ? right.type : left.type;
+      let wrongType = typeTranslator(originalWrongType);
+      handleRuntimeError(context, new error.TypeConcatenateError(source, command as es.Node, wrongType));
     }
-  
 
-    stash.push(evaluateBinaryExpression(context, (command as BinOpInstr).symbol, left, right));
+    stash.push(evaluateBinaryExpression(source, command, context, (command as BinOpInstr).symbol, left, right));
   
   },
 
@@ -744,7 +758,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     // func instanceof Closure
     if (func instanceof Closure) {
       // Check for number of arguments mismatch error
-      checkNumberOfArguments(command, context, func, args, (command as AppInstr).srcNode)
+      checkNumberOfArguments(source, command, context, func, args, (command as AppInstr).srcNode)
 
       const next = control.peek()
 
@@ -793,17 +807,17 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (builtIns.has(function_name)) {
       const builtinFunc = builtIns.get(function_name)!;
 
-      try {
-        stash.push(builtinFunc(args));
-        return;
-      } catch (error) {
-        // Error
-        if (error instanceof Error) {
-          throw new Error(error.message);
-        } else {
-          throw new Error();
-        }
-      }
+      //try {
+      stash.push(builtinFunc(args, source, command, context));
+      return;
+      // } catch (error) {
+      //   // Error
+      //   if (error instanceof Error) {
+      //     throw new Error(error.message);
+      //   } else {
+      //     throw new Error();
+      //   }
+      // }
     }
   },
 
