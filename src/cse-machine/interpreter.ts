@@ -52,13 +52,11 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
   return new Promise((resolve, reject) => {
     if (value instanceof CSEBreak) {
       resolve({ status: 'suspended-cse-eval', context });
-    } else if (value.type === 'error') {  // value instanceof CseError
+    } else if (value.type === 'error') {
       const msg = value.message;
-      //resolve({ status: 'error', msg } as unknown as Result );
       const representation = new Representation(cseFinalPrint + msg);
       resolve({ status: 'finished', context, value, representation })
     } else {
-      //const rep: Value = { type: "string", value: cseFinalPrint };
       const representation = new Representation(value);
       resolve({ status: 'finished', context, value, representation })
     }
@@ -82,11 +80,8 @@ export function evaluate(code: string, program: es.Program, context: Context, op
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error: any) {
-    // context.errors.push(new CseError(error.message));
     return { type: 'error', message: error.message };
   }
-  // TODO: should call transformer like in js-slang
-  // seq.transform(program)
 
   try {
     context.runtime.isRunning = true
@@ -104,9 +99,7 @@ export function evaluate(code: string, program: es.Program, context: Context, op
     );
     const rep: Value = { type: "string", value: cseFinalPrint };
     return rep;
-    // return result;
   } catch (error: any) {
-    // context.errors.push(new CseError(error.message));
     return { type: 'error', message: error.message };
   } finally {
     context.runtime.isRunning = false;
@@ -131,7 +124,6 @@ function evaluateImports(program: es.Program, context: Context) {
               } else {
                 throw new Error(`Unexpected literal import: ${spec.imported.value}`);
               }
-              //obj = functions[(spec.imported).name]
               break
             }
             case 'ImportDefaultSpecifier': {
@@ -226,17 +218,13 @@ export function* generateCSEMachineStateStream(
   }
   
   while (command) {
-    // For local debug only
-    // console.info('next command to be evaluated');
-    // console.info(command);
-    // console.info(steps);
-    // console.info(isPrelude);
-    // console.info(stepLimit);
+    
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {
     //   yield { stash, control, steps }
     //   return
     // }
+
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
       handleRuntimeError(context, new error.StepLimitExceededError(source, command as es.Node, context));
@@ -252,7 +240,6 @@ export function* generateCSEMachineStateStream(
     if (isNode(command)) {
       context.runtime.nodes.shift()
       context.runtime.nodes.unshift(command)
-      //checkEditorBreakpoints(context, command)
       cmdEvaluators[command.type](command, context, control, stash, isPrelude)
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -267,10 +254,6 @@ export function* generateCSEMachineStateStream(
       cmdEvaluators[(command as Instr).instrType](command, context, control, stash, isPrelude)
     }
 
-    // Push undefined into the stack if both control and stash is empty
-    if (control.isEmpty() && stash.isEmpty()) {
-      //stash.push(undefined)
-    }
     command = control.peek()
     
     steps += 1
@@ -278,38 +261,8 @@ export function* generateCSEMachineStateStream(
       context.runtime.envStepsTotal = steps
     }
 
-    // printEnvironmentVariables(context.runtime.environments);
-
     yield { stash, control, steps }
   }
-}
-
-function printEnvironmentVariables(environments: Environment[]): void {
-  console.info('----------------------------------------');
-  environments.forEach(env => {
-    console.info(`Env: ${env.name} (ID: ${env.id})`);
-    
-    const variables = env.head;
-    const variableNames = Object.keys(variables);
-    
-    if (variableNames.length > 0) {
-      variableNames.forEach(varName => {
-        const descriptor = Object.getOwnPropertyDescriptor(env.head, varName);
-        if (descriptor) {
-          const value = descriptor.value.value;
-          console.info('value: ', value);
-          const valueStr = (typeof value === 'object' && value !== null) 
-            ? JSON.stringify(value, null, 2) 
-            : String(value);
-          console.info(`  ${varName}: ${valueStr}`);
-        } else {
-          console.info(`  ${varName}: None`);
-        }
-      });
-    } else {
-      console.info('  no defined variables');
-    }
-  });
 }
 
 const cmdEvaluators: { [type: string]: CmdEvaluator } = {
@@ -406,7 +359,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   IfStatement: function (
-    command: ControlItem, //es.IfStatement,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -415,7 +368,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   ExpressionStatement: function (
-    command: ControlItem,//es.ExpressionStatement,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash,
@@ -439,7 +392,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   FunctionDeclaration: function (
-    command: ControlItem, //es.FunctionDeclaration,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
@@ -457,7 +410,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   ReturnStatement: function (
-    command: ControlItem, //as es.ReturnStatement,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
@@ -478,7 +431,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
    * Expressions
    */
   Literal: function (
-    command: ControlItem, //es.Literal
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -495,7 +448,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
           value = { type: 'string', value: literalValue };
         } else if (typeof literalValue === 'boolean') {
           value = { type: 'bool', value: literalValue };
-          //value = literalValue;
         } else {
           //handleRuntimeError(context, new CseError('Unsupported literal type'));
           return;
@@ -522,14 +474,13 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         }
         stash.push(value);
       } else {
-        // TODO
-        // Error
+        // TODO: handle errors
       }
     
   },
 
   NoneType: function (
-    command: ControlItem, //es.Literal
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -538,7 +489,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   ConditionalExpression: function (
-    command: ControlItem, //es.ConditionalExpression,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -547,36 +498,21 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   Identifier: function (
-    command: ControlItem,//es.Identifier,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
   ) {
     if (builtInConstants.has((command as es.Identifier).name)) {
       const builtinCons = builtInConstants.get((command as es.Identifier).name)!;
-      //try {
       stash.push(builtinCons);
-      //   return;
-      // } catch (error) {
-      //   // Error
-      //   if (error instanceof Error) {
-      //     throw new Error(error.message);
-      //   } else {
-      //     throw new Error();
-      //   }
-      //   // if (error instanceof RuntimeSourceError) {
-      //   //   throw error;
-      //   // } else {
-      //   //   throw new RuntimeSourceError(`Error in builtin function ${funcName}: ${error}`);
-      //   // }
-      // }
     } else {
       stash.push(getVariable(context, (command as es.Identifier).name, (command as es.Identifier)));
     }
   },
 
   UnaryExpression: function (
-    command: ControlItem, //es.UnaryExpression,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
@@ -585,19 +521,17 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   BinaryExpression: function (
-    command: ControlItem, //es.BinaryExpression,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
-    // currently for if statement
-
     control.push(instr.binOpInstr((command as es.BinaryExpression).operator, command as es.Node));
     control.push((command as es.BinaryExpression).right);
     control.push((command as es.BinaryExpression).left);
   },
 
   LogicalExpression: function (
-    command: ControlItem, //es.LogicalExpression,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
@@ -613,7 +547,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   ArrowFunctionExpression: function (
-    command: ControlItem,//es.ArrowFunctionExpression,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash,
@@ -630,7 +564,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   CallExpression: function (
-    command: ControlItem,//es.CallExpression,
+    command: ControlItem,
     context: Context,
     control: Control
   ) {
@@ -658,7 +592,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   //  * Instructions
   //  */
   [InstrType.RESET]: function (
-    command: ControlItem, //Instr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -670,7 +604,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.ASSIGNMENT]: function (
-    command: ControlItem, //AssmtInstr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -696,7 +630,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.UNARY_OP]: function (
-    command: ControlItem, //UnOpInstr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -706,7 +640,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.BINARY_OP]: function (
-    command: ControlItem, //BinOpInstr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -726,7 +660,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.POP]: function (
-    command: ControlItem,//Instr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -735,7 +669,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.APPLICATION]: function (
-    command: ControlItem, //AppInstr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -749,13 +683,9 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const func: Closure = stash.pop();
 
     if (!(func instanceof Closure)) {
-      //error
-      //handleRuntimeError(context, new errors.CallingNonFunctionValue(func, command.srcNode))
+      // handleRuntimeError(context, new errors.CallingNonFunctionValue(func, command.srcNode))
     }
     
-    // continuation in python?
-
-    // func instanceof Closure
     if (func instanceof Closure) {
       // Check for number of arguments mismatch error
       checkNumberOfArguments(source, command, context, func, args, (command as AppInstr).srcNode)
@@ -791,11 +721,9 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       } else {
         if (control.peek()) {
           // push marker if control not empty
-          control.push(instr.markerInstr((command as AppInstr).srcNode))
+          control.push(instr.markerInstr((command as AppInstr).srcNode));
         }
-        control.push((func as Closure).node.body)
-
-        // console.info((func as Closure).node.body);
+        control.push((func as Closure).node.body);
       }
 
       return
@@ -807,22 +735,13 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (builtIns.has(function_name)) {
       const builtinFunc = builtIns.get(function_name)!;
 
-      //try {
       stash.push(builtinFunc(args, source, command, context));
       return;
-      // } catch (error) {
-      //   // Error
-      //   if (error instanceof Error) {
-      //     throw new Error(error.message);
-      //   } else {
-      //     throw new Error();
-      //   }
-      // }
     }
   },
 
   [InstrType.BRANCH]: function (
-    command: ControlItem,//BranchInstr,
+    command: ControlItem,
     context: Context,
     control: Control,
     stash: Stash
@@ -847,7 +766,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   [InstrType.ENVIRONMENT]: function (
-    command: ControlItem, //EnvInstr,
+    command: ControlItem,
     context: Context
   ) {
     while (currentEnvironment(context).id !== (command as EnvInstr).env.id) {

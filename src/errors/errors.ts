@@ -171,14 +171,6 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
 
       this.message += `\nRemove the extra argument(s) when calling '${this.functionName}', or check if the function definition accepts more arguments.`;
     }
-  
-    // public explain(): string {
-    //   return `TypeError: ${this.functionName}() takes ${this.expectedCount} positional arguments but ${this.givenCount} were given`;
-    // }
-  
-    // public elaborate(): string {
-    //   return `You called ${this.functionName}() with ${this.givenCount} positional arguments, but it only expects ${this.expectedCount}. Make sure to pass the correct number of arguments when calling ${this.functionName}.`;
-    // }
 }
 
 export class ZeroDivisionError extends RuntimeSourceError {

@@ -31,7 +31,6 @@ function getFullLine(source: string, current: number): {lineIndex: number; msg: 
     while (forward < source.length && source[forward] != '\n') {
         forward++;
     }
-    //return '\n' + source.slice(back, forward);
     const lineIndex = source.slice(0, back).split('\n').length;
     const msg = source.slice(back, forward);
 
@@ -176,7 +175,6 @@ export namespace ParserErrors {
             msg = '\n' + msg + '\n';
             let hint = `^ ${expected}. Found '${escape(current.lexeme)}'.`;
             hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
-            // super(msg + hint, current.line, current.col);
             super(msg + hint, lineIndex, current.col);
             this.name = "ExpectedTokenError";
         }
@@ -187,7 +185,6 @@ export namespace ParserErrors {
             msg = '\n' + msg + '\n';
             let hint = `^ Expected else block after this if block.`;
             hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
-            // super(msg + hint, current.line, current.col);
             super(msg + hint, lineIndex, current.col);
             this.name = "ExpectedTokenError";
         }
@@ -197,9 +194,6 @@ export namespace ParserErrors {
             let { lineIndex, msg } = getFullLine(source, start);
             msg = '\n' + msg + '\n';
             let hint = ` Detected invalid syntax.`;
-            // const diff = (current - start);
-            // hint = hint.padStart(hint.length + diff - MAGIC_OFFSET, "^");
-            // hint = hint.padStart(hint.length + col - diff, " ");
             const indicator = createErrorIndicator(msg, '@');
             super(msg + indicator + hint, lineIndex, col);
             this.name = "GenericUnexpectedSyntaxError";

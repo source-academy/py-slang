@@ -347,13 +347,8 @@ export function declareIdentifier(
 ) {
   if (environment.head.hasOwnProperty(name)) {
     const descriptors = Object.getOwnPropertyDescriptors(environment.head)
-
-    // return handleRuntimeError(
-    //   context,
-    //   new errors.VariableRedeclaration(node, name, descriptors[name].writable)
-    // )
+    // TODO: error
   }
-  //environment.head[name] = constant ? UNASSIGNED_CONST : UNASSIGNED_LET
   environment.head[name] = 'declaration'
   
   return environment
@@ -363,7 +358,6 @@ export const handleSequence = (seq: es.Statement[]): ControlItem[] => {
   const result: ControlItem[] = []
   let valueProduced = false
   for (const command of seq) {
-    //if (!isImportDeclaration(command)) {
       if (valueProducing(command)) {
         // Value producing statements have an extra pop instruction
         if (valueProduced) {
@@ -373,7 +367,6 @@ export const handleSequence = (seq: es.Statement[]): ControlItem[] => {
         }
       }
       result.push(command)
-    //}
   }
   // Push statements in reverse order
   return result.reverse()
@@ -401,8 +394,7 @@ export function defineVariable(
   const environment = currentEnvironment(context)
 
   if (environment.head[name] !== 'declaration') {
-    // error
-    //return handleRuntimeError(context, new errors.VariableRedeclaration(node, name, !constant))
+    // TODO: error
   }
 
   if (constant && value instanceof Closure) {
@@ -452,43 +444,18 @@ export const checkNumberOfArguments = (
   if (callee instanceof Closure) {
     // User-defined or Pre-defined functions
     const params = callee.node.params;
-    // console.info("params: ", params);
-    // console.info("args: ", args);
-    //const hasVarArgs = params[params.length - 1]?.type === 'RestElement'
 
     if (params.length > args.length) {
       handleRuntimeError(context, new MissingRequiredPositionalError(source, (command as es.Node), (command as any).srcNode.callee.name, params, args, false));
     } else if (params.length !== args.length) {
       handleRuntimeError(context, new TooManyPositionalArgumentsError(source, (command as es.Node), (command as any).srcNode.callee.name, params, args, false));
     }
-    //}
-
-    // if (hasVarArgs ? params.length - 1 > args.length : params.length !== args.length) {
-    //   // error
-    //   // return handleRuntimeError(
-    //   //   context,
-    //   //   new errors.InvalidNumberOfArguments(
-    //   //     exp,
-    //   //     hasVarArgs ? params.length - 1 : params.length,
-    //   //     args.length,
-    //   //     hasVarArgs
-    //   //   )
-    //   // )
-    // }
+    
   } else {
     // Pre-built functions
     const hasVarArgs = callee.minArgsNeeded != undefined
     if (hasVarArgs ? callee.minArgsNeeded > args.length : callee.length !== args.length) {
-      // error
-      // return handleRuntimeError(
-      //   context,
-      //   new errors.InvalidNumberOfArguments(
-      //     exp,
-      //     hasVarArgs ? callee.minArgsNeeded : callee.length,
-      //     args.length,
-      //     hasVarArgs
-      //   )
-      // )
+      // TODO: error
     }
   }
   return undefined
@@ -514,11 +481,6 @@ export const reduceConditional = (
 }
 
 export const handleRuntimeError = (context: Context, error: RuntimeSourceError) => {
-  // context.errors.push(error);
-  // console.error(error.explain());
-  // console.error(error.elaborate());
-  // console.log("Location:", `Line ${e.location.start.line}, Column ${e.location.start.column}`);
-  // console.info('testerr',error);
   throw error;
 }
 

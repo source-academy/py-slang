@@ -53,12 +53,6 @@ export function evaluateUnaryExpression(operator: es.UnaryOperator, value: any) 
         } else {
             // TODO: error
         }
-        // else if (value.type === 'bool') {
-        //     return {
-        //         type: 'bigint',
-        //         value: Boolean(value.value)?BigInt(-1):BigInt(0)
-        //     };
-        // }
     } else if (operator === 'typeof') {
         return {
             type: String,
@@ -70,8 +64,6 @@ export function evaluateUnaryExpression(operator: es.UnaryOperator, value: any) 
 }
 
 export function evaluateBinaryExpression(code: string, command: ControlItem, context: Context, identifier: any, left: any, right: any) {
-    //if(isIdentifier(identifier)){
-    //if(identifier.name === '__py_adder') {
     let operandName: any;
     const originalLeftType = typeTranslator(left.type);
     const originalRightType = typeTranslator(right.type);
@@ -118,24 +110,10 @@ export function evaluateBinaryExpression(code: string, command: ControlItem, con
             handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as es.Node, originalLeftType, originalRightType, operand));
         }
 
-        // if (left.type === 'bool') {
-        //     left.type = 'bigint';
-        //     left.value = left.value?BigInt(1):BigInt(0);
-        // }
-        // if (right.type === 'bool') {
-        //     right.type = 'bigint';
-        //     right.value = right.value?BigInt(1):BigInt(0);
-        // }
-
         let originalLeft = { type : left.type, value : left.value };
         let originalRight = { type : right.type, value : right.value };
 
         if (left.type !== right.type) {
-            // left.type = 'number';
-            // left.value = Number(left.value);
-            // right.type = 'number';
-            // right.value = Number(right.value);
-            
             if (left.type === 'complex' || right.type === 'complex') {
                 left.type = 'complex';
                 right.type = 'complex';
