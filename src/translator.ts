@@ -47,6 +47,7 @@ import { ComplexLiteral, None } from "./types";
 export interface EstreePosition {
     line: number;
     column: number;
+    index: number;
 }
 
 export interface EstreeLocation {
@@ -67,11 +68,13 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         const line = token.line + 1;
         const start: EstreePosition = {
             line,
-            column: token.col - token.lexeme.length
+            column: token.col - token.lexeme.length,
+            index: token.indexInSource
         };
         const end: EstreePosition = {
             line,
-            column: token.col
+            column: token.col,
+            index: token.indexInSource
         }
         const source: string = token.lexeme;
         return { source, start, end };
@@ -81,12 +84,14 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         const start: EstreePosition = {
             // Convert zero-based to one-based.
             line: stmt.startToken.line + 1,
-            column: stmt.startToken.col - stmt.startToken.lexeme.length
+            column: stmt.startToken.col - stmt.startToken.lexeme.length,
+            index: stmt.startToken.indexInSource
         };
         const end: EstreePosition = {
             // Convert zero-based to one-based.
             line: stmt.endToken.line + 1,
-            column: stmt.endToken.col
+            column: stmt.endToken.col,
+            index: stmt.startToken.indexInSource
         }
         const source: string = this.source.slice(stmt.startToken.indexInSource,
             stmt.endToken.indexInSource + stmt.endToken.lexeme.length);
@@ -618,6 +623,7 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
                 real: expr.value.real,
                 imag: expr.value.imag
             },
+    
             loc: this.toEstreeLocation(expr),
         }
     }
