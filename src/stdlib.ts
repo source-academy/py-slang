@@ -9,8 +9,6 @@ import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, ValueE
 import { ControlItem } from "./cse-machine/control";
 import { Context } from "./cse-machine/context";
 import * as es from 'estree';
-import { Instr } from "./cse-machine/types";
-import { Identifier } from "./conductor/types";
 
 /*
     Create a map to hold built-in constants.
