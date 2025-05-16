@@ -268,3 +268,34 @@ export class TypeError extends RuntimeSourceError {
     this.message = msg;
   }
 }
+
+export class SublanguageError extends RuntimeSourceError {
+  constructor (
+  source: string,
+  node: es.Node,
+  context: Context,
+  functionName: string,
+  chapter: string,
+  details?: string
+) {
+    super(node)
+    
+    this.type = ErrorType.TYPE
+    
+    const index = (node as any).loc?.start?.index
+                ?? (node as any).srcNode?.loc?.start?.index
+                ?? 0
+    const { line, fullLine } = getFullLine(source, index)
+    const snippet = (node as any).loc?.source
+                  ?? (node as any).srcNode?.loc?.source
+                  ?? '<unknown source>'
+    const offset = fullLine.indexOf(snippet)
+    const indicator = createErrorIndicator(snippet, '@')
+    
+    const name = 'SublanguageError'
+    const hint = 'Feature not supported in Python §' + chapter + '. '
+    const suggestion = `The call to '${functionName}()' relies on behaviour that is valid in full Python but outside the Python §1 sublanguage${details ? ': ' + details : ''}.`
+    
+    this.message = `${name} at line ${line}\n\n ${fullLine}\n ${' '.repeat(offset)}${indicator}\n${hint}${suggestion}`
+  }
+}
