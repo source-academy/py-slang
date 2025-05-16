@@ -26,7 +26,6 @@ import { IOptions } from '..';
 import { CseError } from './error';
 import { filterImportDeclarations } from './dict';
 import { RuntimeSourceError } from '../errors/runtimeSourceError';
-// import { Identifier } from '../conductor/types';
 
 type CmdEvaluator = (
   command: ControlItem,

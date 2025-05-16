@@ -39,3 +39,15 @@ the AST type definitions in `generate-ast.ts`.
 ```shell
 npm run regen
 ```
+
+## Acknowledgements
+
+This project adapts the `Conductor Interface` from [source-academy/conductor](https://github.com/source-academy/conductor), which is part of the Source Academy ecosystem.
+
+Specifically, all files under the following folders are derived from the conductor repository:
+
+- `src/conductor/`
+- `src/common/`
+- `src/conduit/`
+
+All credits go to the original authors of the Source Academy Conductor Interface.
