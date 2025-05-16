@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import { IChannel } from "../types";
 import { IRpcMessage, Remote, RpcCallMessage, RpcErrorMessage, RpcMessageType, RpcReturnMessage } from "./types";
 

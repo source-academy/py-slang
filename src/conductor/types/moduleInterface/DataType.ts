@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 export enum DataType {
     /** The return type of functions with no returned value. As a convention, the associated JS value is undefined. */
     VOID = 0,

@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import { DataType, ExternCallable, IFunctionSignature } from "../../types";
 
 export function moduleMethod<const Args extends DataType[], Ret extends DataType>(args: Args, returnType: Ret) {

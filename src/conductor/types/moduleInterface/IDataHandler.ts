@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import type { ArrayIdentifier, ClosureIdentifier, DataType, ExternCallable, Identifier, IFunctionSignature, List, OpaqueIdentifier, PairIdentifier, TypedValue } from ".";
 
 export interface IDataHandler {

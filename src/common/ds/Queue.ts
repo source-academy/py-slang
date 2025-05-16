@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 /**
  * A stack-based queue implementation.
  * `push` and `pop` run in amortized constant time.

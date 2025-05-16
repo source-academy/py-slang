@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import { runInContext } from "../../../";
 import { Context } from "../../../cse-machine/context";
 import { BasicEvaluator } from "../BasicEvaluator";

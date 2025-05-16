@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 export type { AbstractPluginClass } from "./AbstractPluginClass";
 export type { IChannel } from "./IChannel";
 export type { IChannelQueue } from "./IChannelQueue";

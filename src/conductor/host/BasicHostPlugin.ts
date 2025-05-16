@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import { Constant } from "../../common/Constant";
 import type { ConductorError } from "../../common/errors";
 import { importExternalPlugin } from "../../common/util";

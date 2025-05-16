@@ -1,3 +1,7 @@
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
+
 import type { ConductorError } from "../../../common/errors";
 import type { IPlugin } from "../../../conduit";
 import { PluginClass } from "../../../conduit/types";
