@@ -134,6 +134,13 @@ import { Parser } from "./parser";
 import { Translator } from "./translator";
 import { Program } from "estree";
 import { Resolver } from "./resolver";
+import { Context } from './cse-machine/context';
+export * from './errors';
+import { Finished, RecursivePartial, Result } from "./types";
+import { runCSEMachine } from "./runner/pyRunner";
+import { initialise } from "./conductor/runner/util/initialise";
+import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
+export * from './errors';
 
 export function parsePythonToEstreeAst(code: string,
     variant: number = 1,
@@ -149,9 +156,6 @@ export function parsePythonToEstreeAst(code: string,
     const translator = new Translator(script)
     return translator.resolve(ast) as unknown as Program
 }
-
-
-export * from './errors';
 
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
@@ -190,3 +194,15 @@ export interface IOptions {
     envSteps: number,
     stepLimit: number
 };
+
+export async function runInContext(
+    code: string,
+    context: Context,
+    options: RecursivePartial<IOptions> = {}
+): Promise<Result> {
+    const estreeAst = parsePythonToEstreeAst(code, 1, true);
+    const result = runCSEMachine(code, estreeAst, context, options);
+    return result;
+}
+
+const {runnerPlugin, conduit} = initialise(PyEvaluator);
