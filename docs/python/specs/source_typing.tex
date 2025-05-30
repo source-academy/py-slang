@@ -1,0 +1,69 @@
+
+\section{Dynamic Type Checking}
+
+Expressions evaluate to integers, floats, complex numbers, boolean values, strings or function values. 
+Implementations of Source generate error messages when unexpected values are used as follows.
+
+Only function values can be applied using the syntax:
+
+\begin{eqnarray*}
+ \textit{expression}    
+                                   & ::=   &  \textit{name}
+                                               \texttt{\textbf{(}}\  \textit{expressions} \
+                                               \texttt{\textbf{)}}\\ 
+\end{eqnarray*}
+
+For compound functions, implementations need to check that the number of \textit{expressions}
+matches the number of parameters.
+
+The following table specifies what arguments Source's operators
+take and what results they return. Implementations need to check the types of arguments and
+generate an error message when the types do not match.
+
+\begin{center}
+\begin{tabular}{c|c|c|c}
+operator & argument 1 & argument 2 & result\\ \hline
+\texttt{\textbf{+,-,*}} & int       & int       & int\\
+\texttt{\textbf{+,-,*}} & int       & float     & float\\
+\texttt{\textbf{+,-,*}} & int       & complex   & complex\\
+\texttt{\textbf{+,-,*}} & float     & int, float      & float\\
+\texttt{\textbf{+,-,*}} & float     & complex   & complex\\
+\texttt{\textbf{+,-,*}} & complex   & int, float, complex      & complex\\
+\texttt{\href{https://sourceacademy.org/sicpjs/3.3.4\#p24}{\textbf{+}}} & string   & string     & string\\
+\texttt{\textbf{/}} & int       & int, float      & float\\
+\texttt{\textbf{/}} & int       & complex   & complex\\
+\texttt{\textbf{/}} & float     & int, float      & float\\
+\texttt{\textbf{/}} & float     & complex   & complex\\
+\texttt{\textbf{/}} & complex   & int, float, complex       & complex\\
+\texttt{\textbf{**}} & int   & int \verb|>=| 0   & int\\
+\texttt{\textbf{**}} & int   & int \verb|<| 0    & float\\
+\texttt{\textbf{**}} & int       & float     & float\\
+\texttt{\textbf{**}} & int       & complex   & complex\\
+\texttt{\textbf{**}} & float     & int, float      & float\\
+\texttt{\textbf{**}} & float     & complex   & complex\\
+\texttt{\textbf{**}} & complex   & int, float, complex     & complex\\
+\texttt{\textbf{\%}} & int   & int   & int\\
+\texttt{\textbf{\%}} & int   & float   & float\\
+\texttt{\textbf{\%}} & float   & float   & float\\
+\texttt{\textbf{==}} & int,float,complex   & int,float,complex     & bool\\
+\texttt{\textbf{==}} & string   & string     & bool\\
+\texttt{\textbf{!=}} & int,float,complex   & int,float,complex     & bool\\
+\texttt{\textbf{!=}} & string   & string     & bool\\
+\texttt{\textbf{>}} & int,float   & int,float     & bool\\
+\texttt{\textbf{>}} & string   & string     & bool\\
+\texttt{\textbf{<}} & int,float   & int,float     & bool\\
+\texttt{\textbf{<}} & string   & string     & bool\\
+\texttt{\textbf{>=}} & int,float   & int,float     & bool\\
+\texttt{\textbf{>=}} & string   & string     & bool\\
+\texttt{\textbf{<=}}    & int,float   & int,float     & bool\\
+\texttt{\textbf{<=}} & string   & string     & bool\\
+\texttt{\textbf{and}} & bool & bool & bool\\
+\texttt{\textbf{or}}   & bool & bool & bool\\
+\texttt{\textbf{not}}    & bool &      & bool\\
+\texttt{\textbf{-}}    & int &    & int\\
+\texttt{\textbf{-}}    & float &    & float\\
+\texttt{\textbf{-}}    & complex &    & complex
+
+\end{tabular}
+\end{center}
+
