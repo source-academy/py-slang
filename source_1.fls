@@ -1,6 +1,0 @@
-PWD /Users/wangdahai/Downloads/cse-machine-resolver/py-slang
-INPUT /usr/local/texlive/2024/texmf.cnf
-INPUT /usr/local/texlive/2024/texmf-dist/web2c/texmf.cnf
-INPUT /usr/local/texlive/2024/texmf-var/web2c/pdftex/pdflatex.fmt
-INPUT docs/python/specs/source_1.tex
-OUTPUT source_1.log
