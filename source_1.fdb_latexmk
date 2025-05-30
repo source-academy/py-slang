@@ -1,0 +1,9 @@
+# Fdb version 4
+["pdflatex"] 0 "docs/python/specs/source_1.tex" "source_1.pdf" "source_1" 0 -1
+  "docs/python/specs/source_1.tex" 0 -1 0 ""
+  "source_1.aux" 0 -1 0 "pdflatex"
+  (generated)
+  "source_1.aux"
+  "source_1.log"
+  "source_1.pdf"
+  (rewritten before read)
