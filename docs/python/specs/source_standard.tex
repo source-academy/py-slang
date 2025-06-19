@@ -1,0 +1,21 @@
+\section{Standard Library}
+
+The standard library contains constants and functions that are 
+always available in this language. 
+
+In py-slang, the standard library functions are not implemented 
+using a conventional split between primitive and predeclared 
+functions. Unlike in Source, where predeclared functions are 
+defined using built-in primitives, all standard library functions 
+in py-slang are written directly in TypeScript and embedded into 
+the runtime of the CSE Machine. These functions are treated as 
+part of the host environment rather than as user-level definitions, 
+and they interact directly with the evaluator's internal control 
+stack and environment. This design simplifies the interpreter 
+architecture and allows for tighter integration with the execution 
+model, enabling better support for visualization, error handling, 
+and platform-specific extensions within the Source Academy learning 
+environment.
+
+The standard library for Python \S $x$ is documented in online 
+documentation of Python \S $x$.
