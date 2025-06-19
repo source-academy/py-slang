@@ -1,0 +1,47 @@
+\section*{Deviations from native Python}
+
+We intend the Python \S $x$ to be a conservative extension of 
+native Python: Every correct Python \S $x$ program should behave 
+\emph{exactly} the same using a Python \S $x$ implementation, as it does 
+using a native Python implementation. We assume, of course, that 
+suitable libraries are used by the TypeScript implementation, to 
+account for the predefined names of Python \S $x$. 
+This section lists some exceptions where we think a Python \S $x$ 
+implementation should be allowed to deviate from the native Python 
+specification, for the sake of internal consistency and esthetics.
+
+\begin{description}
+\item[{Output Behavior Differences Between py-slang and Standard Python REPL:}]
+  Python provides an interactive mode, where users can type and immediately 
+  evaluate Python expressions line by line. This mode is entered when you 
+  simply type python in a terminal without specifying a file. This is commonly 
+  referred to as the Python REPL. 
+  In the standard Python REPL, any evaluated expression automatically has its 
+  result printed to the console, even if the user does not explicitly call 
+  \texttt{print()}. For example:
+
+  \begin{lstlisting}
+>>> 1 + 2
+3
+>>> "hello"
+'hello'
+  \end{lstlisting}
+
+  This is because Python's REPL implicitly displays the return value of each 
+  expression, unless it is None.
+
+  In contrast, py-slang adopts a more controlled and minimalistic REPL behavior:
+  Only expressions explicitly passed to \texttt{print()} produce output. If the 
+  expression is evaluated without a print call, no output will appear, even 
+  though a value is computed.
+
+  For example, in py-slang:
+
+  \begin{lstlisting}
+print(1 + 2)  	# Outputs: 3
+  \end{lstlisting}
+
+  This design aligns with the pedagogical goals of Source Academy, reinforcing 
+  the idea that output should be intentional and explicit, helping students 
+  better understand the role of side effects and output operations.
+\end{description}
