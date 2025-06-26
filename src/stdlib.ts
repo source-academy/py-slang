@@ -1519,11 +1519,60 @@ export class BuiltInFunctions {
         const result = toPythonString(obj);
         return { type: 'string', value: result };
     }
+
+    /**
+     * SICP-style pair constructor: returns a pair object with head and tail.
+     */
+    static pair(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        if (args.length !== 2) {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, 'pair', 'pair expects exactly 2 arguments'));
+        }
+        return { type: 'pair', value: { head: args[0], tail: args[1] } };
+    }
+
+    /**
+     * SICP-style is_pair: returns true if x is a pair, false otherwise.
+     */
+    static is_pair(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        if (args.length !== 1) {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, 'is_pair', 'is_pair expects exactly 1 argument'));
+        }
+        const x = args[0];
+        return { type: 'bool', value: x.type === 'pair' };
+    }
+
+    /**
+     * SICP-style head: returns the head of a pair.
+     */
+    static head(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        if (args.length !== 1) {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, 'head', 'head expects exactly 1 argument'));
+        }
+        const p = args[0];
+        if (!p || p.type !== 'pair') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, p?.type ?? typeof p, 'pair'));
+        }
+        return p.value.head;
+    }
+
+    /**
+     * SICP-style tail: returns the tail of a pair.
+     */
+    static tail(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        if (args.length !== 1) {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, 'tail', 'tail expects exactly 1 argument'));
+        }
+        const p = args[0];
+        if (!p || p.type !== 'pair') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, p?.type ?? typeof p, 'pair'));
+        }
+        return p.value.tail;
+    }
 }
 
 import py_s1_constants from './stdlib/py_s1_constants.json';
 
-// NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
+// NOTE: If we ever switch to another Python "chapter" (e.g. py_s2_constants),
 //       just change the variable below to switch to the set.
 const constants = py_s1_constants;
 
@@ -1574,7 +1623,7 @@ for (const name of constants.builtInFuncs as string[]) {
  * https://github.com/python/cpython/blob/main/Python/pystrtod.c
  * 
  * Special cases such as -0, Infinity, and NaN are also handled to ensure that 
- * output matches Python’s display conventions.
+ * output matches Python's display conventions.
  */
 export function toPythonFloat(num: number): string {
     if (Object.is(num, -0)) {

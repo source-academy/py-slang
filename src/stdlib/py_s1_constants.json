@@ -62,7 +62,11 @@
     "time_time",
     "str",
     "print",
-    "input"
+    "input",
+    "pair",
+    "is_pair",
+    "head",
+    "tail"
     ], 
     "constants": [
     "math_e",

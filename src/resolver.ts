@@ -166,14 +166,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["abs", new Token(TokenType.NAME, "abs", 0, 0, 0)],
             ["char_at", new Token(TokenType.NAME, "char_at", 0, 0, 0)],
             ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
+            ["head", new Token(TokenType.NAME, "head", 0, 0, 0)],
             ["input", new Token(TokenType.NAME, "input", 0, 0, 0)],
             ["isinstance", new Token(TokenType.NAME, "isinstance", 0, 0, 0)],
+            ["is_pair", new Token(TokenType.NAME, "is_pair", 0, 0, 0)],
             ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
             ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
+            ["pair", new Token(TokenType.NAME, "pair", 0, 0, 0)],
             ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
             ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
             ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
             ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
+            ["tail", new Token(TokenType.NAME, "tail", 0, 0, 0)],
             ["time_time", new Token(TokenType.NAME, "time_time", 0, 0, 0)],            
             
             // math constants
