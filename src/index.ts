@@ -140,6 +140,9 @@ import { Finished, RecursivePartial, Result } from "./types";
 import { runCSEMachine } from "./runner/pyRunner";
 import { initialise } from "./conductor/runner/util/initialise";
 import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
+import { createContext, Chapter } from './createContext';
+import * as fs from 'fs';
+import * as path from 'path';
 export * from './errors';
 
 export function parsePythonToEstreeAst(code: string,
@@ -200,9 +203,71 @@ export async function runInContext(
     context: Context,
     options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
+    // Load and run the Python prelude first
+    const preludeCode = loadPythonPrelude();
+    if (preludeCode) {
+        const preludeAst = parsePythonToEstreeAst(preludeCode, 1, true);
+        await runCSEMachine(preludeCode, preludeAst, context, { ...options, isPrelude: true });
+    }
+    
+    // Now run the main code
     const estreeAst = parsePythonToEstreeAst(code, 1, true);
     const result = runCSEMachine(code, estreeAst, context, options);
     return result;
 }
 
-const {runnerPlugin, conduit} = initialise(PyEvaluator);
+/**
+ * Runs Python code in a context with a specific chapter
+ * @param code The Python code to run
+ * @param chapter The chapter to use (1-4 or 'LIBRARY_PARSER')
+ * @param options Additional options
+ * @returns The result of running the code
+ */
+export async function runInChapter(
+    code: string,
+    chapter: Chapter = 2,
+    options: RecursivePartial<IOptions> = {}
+): Promise<Result> {
+    const context = createContext(chapter);
+    return runInContext(code, context, options);
+}
+
+/**
+ * Loads and runs the Python prelude file containing list processing functions
+ */
+function loadPythonPrelude(): string {
+    try {
+        const preludePath = path.join(__dirname, 'conductor', 'stdlib', 'list', 'list.prelude.py');
+        return fs.readFileSync(preludePath, 'utf8');
+    } catch (error) {
+        console.warn('Could not load Python prelude:', error);
+        return '';
+    }
+}
+
+if (require.main === module) {
+    (async () => {
+      if (process.argv.length < 3) {
+        console.error("Usage: npm run start:dev -- <python-file>");
+        process.exit(1);
+      }
+  
+      const filePath = process.argv[2];
+  
+      try {
+        const context = new Context();
+        const options = {};
+        const code = fs.readFileSync(filePath, "utf8") + "\n";
+        console.log(`Parsing Python file: ${filePath}`);
+  
+        const result = await runInContext(code, context, options);
+        console.info(result);
+        console.info((result as Finished).value);
+        console.info((result as Finished).representation.toString((result as Finished).value));
+  
+      } catch (e) {
+        console.error("Error:", e);
+      }
+
+    })();
+}

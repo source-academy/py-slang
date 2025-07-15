@@ -21,6 +21,7 @@ export class Context {
   public stash: Stash;
   //public environment: Environment;
   public errors: CseError[] = [];
+  public prelude: string | null = null;
 
   runtime: {
     break: boolean

@@ -1519,13 +1519,544 @@ export class BuiltInFunctions {
         const result = toPythonString(obj);
         return { type: 'string', value: result };
     }
+
+    // ===== LIST FUNCTIONS FOR SOURCE 2 =====
+
+    @Validate(2, 2, 'pair', false)
+    static pair(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const head = args[0];
+        const tail = args[1];
+        return {
+            type: 'pair',
+            head: head,
+            tail: tail
+        };
+    }
+
+    @Validate(1, 1, 'head', false)
+    static head(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const pair = args[0];
+        if (pair.type !== 'pair') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, pair.type, "pair"));
+        }
+        return (pair as any).head;
+    }
+
+    @Validate(1, 1, 'tail', false)
+    static tail(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const pair = args[0];
+        if (pair.type !== 'pair') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, pair.type, "pair"));
+        }
+        return (pair as any).tail;
+    }
+
+    @Validate(1, 1, 'is_null', false)
+    static is_null(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const value = args[0];
+        return { type: 'bool', value: value.type === 'null' || value.type === 'undefined' };
+    }
+
+    @Validate(1, 1, 'is_pair', false)
+    static is_pair(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const value = args[0];
+        return { type: 'bool', value: value.type === 'pair' };
+    }
+
+    static list(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        let result: Value = { type: 'null', value: null };
+        
+        // Build list from right to left
+        for (let i = args.length - 1; i >= 0; i--) {
+            result = {
+                type: 'pair',
+                head: args[i],
+                tail: result
+            };
+        }
+        
+        return result;
+    }
+
+    @Validate(1, 1, 'length', false)
+    static length(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const list = args[0];
+        let count = 0;
+        let current = list;
+        
+        while (current.type === 'pair') {
+            count++;
+            current = (current as any).tail;
+        }
+        
+        if (current.type !== 'null' && current.type !== 'undefined') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+        }
+        
+        return { type: 'bigint', value: BigInt(count) };
+    }
+
+    @Validate(2, 2, 'map', false)
+    static map(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const func = args[0];
+        const list = args[1];
+        
+        if (func.type !== 'closure') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, func.type, "function"));
+        }
+        
+        // Helper function to map over list
+        const mapHelper = (current: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return { type: 'null', value: null };
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            // Apply function to head
+            const mappedHead = (func as any).apply(context, [head]);
+            
+            // Recursively map tail
+            const mappedTail = mapHelper(tail);
+            
+            return {
+                type: 'pair',
+                head: mappedHead,
+                tail: mappedTail
+            };
+        };
+        
+        return mapHelper(list);
+    }
+
+    @Validate(2, 2, 'filter', false)
+    static filter(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const predicate = args[0];
+        const list = args[1];
+        
+        if (predicate.type !== 'closure') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, predicate.type, "function"));
+        }
+        
+        const filterHelper = (current: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return { type: 'null', value: null };
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            // Apply predicate to head
+            const shouldInclude = (predicate as any).apply(context, [head]);
+            
+            // Recursively filter tail
+            const filteredTail = filterHelper(tail);
+            
+            // Include head if predicate returns true
+            if (shouldInclude.type === 'bool' && shouldInclude.value === true) {
+                return {
+                    type: 'pair',
+                    head: head,
+                    tail: filteredTail
+                };
+            } else {
+                return filteredTail;
+            }
+        };
+        
+        return filterHelper(list);
+    }
+
+    @Validate(3, 3, 'accumulate', false)
+    static accumulate(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const func = args[0];
+        const initial = args[1];
+        const list = args[2];
+        
+        if (func.type !== 'closure') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, func.type, "function"));
+        }
+        
+        const accumulateHelper = (current: Value, acc: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return acc;
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            // Recursively accumulate tail first (right-to-left)
+            const tailResult = accumulateHelper(tail, acc);
+            
+            // Apply function to head and tail result
+            return (func as any).apply(context, [head, tailResult]);
+        };
+        
+        return accumulateHelper(list, initial);
+    }
+
+    @Validate(2, 2, 'append', false)
+    static append(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const list1 = args[0];
+        const list2 = args[1];
+        
+        const appendHelper = (current: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return list2;
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            return {
+                type: 'pair',
+                head: head,
+                tail: appendHelper(tail)
+            };
+        };
+        
+        return appendHelper(list1);
+    }
+
+    @Validate(1, 1, 'reverse', false)
+    static reverse(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const list = args[0];
+        
+        const reverseHelper = (current: Value, acc: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return acc;
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            const newAcc = {
+                type: 'pair',
+                head: head,
+                tail: acc
+            };
+            
+            return reverseHelper(tail, newAcc);
+        };
+        
+        return reverseHelper(list, { type: 'null', value: null });
+    }
+
+    @Validate(2, 2, 'list_ref', false)
+    static list_ref(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const list = args[0];
+        const index = args[1];
+        
+        if (index.type !== 'bigint') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, index.type, "int"));
+        }
+        
+        const n = Number(index.value);
+        if (n < 0) {
+            handleRuntimeError(context, new ValueError(source, command as es.Node, context, "list_ref: negative index"));
+        }
+        
+        let current = list;
+        for (let i = 0; i < n; i++) {
+            if (current.type === 'null' || current.type === 'undefined') {
+                handleRuntimeError(context, new ValueError(source, command as es.Node, context, "list_ref: index out of bounds"));
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            current = (current as any).tail;
+        }
+        
+        if (current.type === 'null' || current.type === 'undefined') {
+            handleRuntimeError(context, new ValueError(source, command as es.Node, context, "list_ref: index out of bounds"));
+        }
+        
+        if (current.type !== 'pair') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+        }
+        
+        return (current as any).head;
+    }
+
+    @Validate(2, 2, 'member', false)
+    static member(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const value = args[0];
+        const list = args[1];
+        
+        let current = list;
+        while (current.type === 'pair') {
+            const head = (current as any).head;
+            
+            // Check for equality (using === semantics)
+            if (BuiltInFunctions.valuesEqual(value, head)) {
+                return current;
+            }
+            
+            current = (current as any).tail;
+        }
+        
+        if (current.type !== 'null' && current.type !== 'undefined') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+        }
+        
+        return { type: 'null', value: null };
+    }
+
+    @Validate(2, 2, 'remove', false)
+    static remove(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const value = args[0];
+        const list = args[1];
+        
+        const removeHelper = (current: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return current;
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            if (BuiltInFunctions.valuesEqual(value, head)) {
+                // Found the value, return the tail (removing this element)
+                return tail;
+            } else {
+                // Keep this element, continue searching in tail
+                return {
+                    type: 'pair',
+                    head: head,
+                    tail: removeHelper(tail)
+                };
+            }
+        };
+        
+        return removeHelper(list);
+    }
+
+    @Validate(2, 2, 'remove_all', false)
+    static remove_all(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const value = args[0];
+        const list = args[1];
+        
+        const removeAllHelper = (current: Value): Value => {
+            if (current.type === 'null' || current.type === 'undefined') {
+                return current;
+            }
+            
+            if (current.type !== 'pair') {
+                handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+            }
+            
+            const head = (current as any).head;
+            const tail = (current as any).tail;
+            
+            const filteredTail = removeAllHelper(tail);
+            
+            if (BuiltInFunctions.valuesEqual(value, head)) {
+                // Remove this element
+                return filteredTail;
+            } else {
+                // Keep this element
+                return {
+                    type: 'pair',
+                    head: head,
+                    tail: filteredTail
+                };
+            }
+        };
+        
+        return removeAllHelper(list);
+    }
+
+    @Validate(2, 2, 'equal', false)
+    static equal(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const val1 = args[0];
+        const val2 = args[1];
+        
+        const result = BuiltInFunctions.deepEqual(val1, val2);
+        return { type: 'bool', value: result };
+    }
+
+    @Validate(2, 2, 'build_list', false)
+    static build_list(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const func = args[0];
+        const n = args[1];
+        
+        if (func.type !== 'closure') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, func.type, "function"));
+        }
+        
+        if (n.type !== 'bigint') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, n.type, "int"));
+        }
+        
+        const count = Number(n.value);
+        if (count < 0) {
+            handleRuntimeError(context, new ValueError(source, command as es.Node, context, "build_list: negative count"));
+        }
+        
+        let result: Value = { type: 'null', value: null };
+        
+        // Build list from right to left (n-1 down to 0)
+        for (let i = count - 1; i >= 0; i--) {
+            const indexValue = { type: 'bigint', value: BigInt(i) };
+            const element = (func as any).apply(context, [indexValue]);
+            
+            result = {
+                type: 'pair',
+                head: element,
+                tail: result
+            };
+        }
+        
+        return result;
+    }
+
+    @Validate(2, 2, 'for_each', false)
+    static for_each(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const func = args[0];
+        const list = args[1];
+        
+        if (func.type !== 'closure') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, func.type, "function"));
+        }
+        
+        let current = list;
+        while (current.type === 'pair') {
+            const head = (current as any).head;
+            
+            // Apply function to head (for side effects)
+            (func as any).apply(context, [head]);
+            
+            current = (current as any).tail;
+        }
+        
+        if (current.type !== 'null' && current.type !== 'undefined') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, "argument", "proper list"));
+        }
+        
+        return { type: 'bool', value: true };
+    }
+
+    @Validate(2, 2, 'enum_list', false)
+    static enum_list(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const start = args[0];
+        const end = args[1];
+        
+        if (start.type !== 'bigint') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, start.type, "int"));
+        }
+        
+        if (end.type !== 'bigint') {
+            handleRuntimeError(context, new TypeError(source, command as es.Node, context, end.type, "int"));
+        }
+        
+        const startNum = Number(start.value);
+        const endNum = Number(end.value);
+        
+        let result: Value = { type: 'null', value: null };
+        
+        // Build list from right to left (end down to start)
+        for (let i = endNum; i >= startNum; i--) {
+            const element = { type: 'bigint', value: BigInt(i) };
+            
+            result = {
+                type: 'pair',
+                head: element,
+                tail: result
+            };
+        }
+        
+        return result;
+    }
+
+    // Helper function to check if two values are equal (for === semantics)
+    private static valuesEqual(val1: Value, val2: Value): boolean {
+        if (val1.type !== val2.type) {
+            return false;
+        }
+        
+        switch (val1.type) {
+            case 'null':
+            case 'undefined':
+                return true;
+            case 'bool':
+            case 'string':
+            case 'number':
+            case 'bigint':
+                return val1.value === val2.value;
+            case 'complex':
+                return val1.value.real === val2.value.real && val1.value.imag === val2.value.imag;
+            default:
+                return val1 === val2; // Reference equality for functions, etc.
+        }
+    }
+
+    // Helper function for deep structural equality (for equal function)
+    private static deepEqual(val1: Value, val2: Value): boolean {
+        if (val1.type !== val2.type) {
+            return false;
+        }
+        
+        switch (val1.type) {
+            case 'pair':
+                const head1 = (val1 as any).head;
+                const tail1 = (val1 as any).tail;
+                const head2 = (val2 as any).head;
+                const tail2 = (val2 as any).tail;
+                
+                return BuiltInFunctions.deepEqual(head1, head2) && BuiltInFunctions.deepEqual(tail1, tail2);
+                
+            case 'null':
+            case 'undefined':
+                return true;
+                
+            case 'bool':
+            case 'string':
+            case 'number':
+            case 'bigint':
+                return val1.value === val2.value;
+                
+            case 'complex':
+                return val1.value.real === val2.value.real && val1.value.imag === val2.value.imag;
+                
+            default:
+                return val1 === val2; // Reference equality for functions, etc.
+        }
+    }
 }
 
 import py_s1_constants from './stdlib/py_s1_constants.json';
+import py_s2_constants from './stdlib/py_s2_constants.json';
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
 //       just change the variable below to switch to the set.
-const constants = py_s1_constants;
+const constants = py_s2_constants;
 
 /*
     Create a map to hold built-in constants.
