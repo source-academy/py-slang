@@ -141,6 +141,10 @@ import { runCSEMachine } from "./runner/pyRunner";
 import { initialise } from "./conductor/runner/util/initialise";
 import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
 export * from './errors';
+import { PyRunCSEMachine } from "./runner/pyRunner";
+import { StmtNS } from "./ast-types";
+
+type Stmt = StmtNS.Stmt;
 
 export function parsePythonToEstreeAst(code: string,
     variant: number = 1,
@@ -204,5 +208,21 @@ export async function runInContext(
     const result = runCSEMachine(code, estreeAst, context, options);
     return result;
 }
+
+
+
+export async function runPyAST(
+    code: string,
+    context: Context,
+    options: RecursivePartial<IOptions> = {}
+): Promise<Result> {
+    const script = code + "\n";
+    const tokenizer = new Tokenizer(script);
+    const tokens = tokenizer.scanEverything();
+    const pyParser = new Parser(script, tokens);
+    const ast = pyParser.parse();
+    const result = PyRunCSEMachine(code, ast, context, options);
+    return result;
+};
 
 const {runnerPlugin, conduit} = initialise(PyEvaluator);
