@@ -2,12 +2,12 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { runInContext } from "../../../";
-import { Context } from "../../../cse-machine/context";
-import { BasicEvaluator } from "../BasicEvaluator";
-import { IRunnerPlugin } from "./IRunnerPlugin";
-import { IOptions } from "../../../";
-import { Finished } from "../../../types";
+import { runInContext } from "..";
+import { Context } from "../cse-machine/context";
+import { BasicEvaluator } from "@sourceacademy/conductor";
+import { IRunnerPlugin } from "@sourceacademy/conductor";
+import { IOptions } from "..";
+import { Finished } from "../types";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {

@@ -138,8 +138,8 @@ import { Context } from './cse-machine/context';
 export * from './errors';
 import { Finished, RecursivePartial, Result } from "./types";
 import { runCSEMachine } from "./runner/pyRunner";
-import { initialise } from "./conductor/runner/util/initialise";
-import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
+import { initialise } from "@sourceacademy/conductor";
+import { PyEvaluator } from "./conductor/PyEvaluator";
 export * from './errors';
 
 export function parsePythonToEstreeAst(code: string,
