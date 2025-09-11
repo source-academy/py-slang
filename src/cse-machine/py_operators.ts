@@ -1,3 +1,4 @@
+import { Value } from "./stash";
 import { Context } from "./context";
 import { PyComplexNumber } from "../types";
 import { TypeConcatenateError, UnsupportedOperandTypeError, ZeroDivisionError } from "../errors/errors";
@@ -29,250 +30,6 @@ export type BinaryOperator =
     | "&"
     | "in"
     | "instanceof";
-
-// Changed operator from es.UnaryOperator to TokenType
-// Added parameters command and context for error handling
-// no changes to logic
-export function evaluateUnaryExpression(operator: TokenType, value: any, command: ExprNS.Expr, context: Context) {
-    if (operator === TokenType.NOT) {
-        if (value.type === 'bool') {
-            return {
-                type: 'bool',
-                value: !(Boolean(value.value))
-            };
-        } else {
-            // TODO: error handling for unsupported type
-            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
-            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
-        }
-    } else if (operator === TokenType.MINUS) {
-        if (value.type === 'bigint') {
-            return {
-                type: 'bigint',
-                value: -value.value
-            };
-        } else if (value.type === 'number') {
-            return {
-                type: 'number',
-                value: -Number(value.value)
-            };
-        } else {
-            // TODO: error handling for unsupported type
-            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
-            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
-        }
-    } else if (operator === TokenType.PLUS) {
-        if (value.type === 'complex' || value.type === 'number' || value.type === 'bigint') {
-            return value
-        } else {
-            // TODO: error handling for unsupported type
-            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
-            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
-        }
-    } else {
-        // Fallback for other unary operators if they exist in the future
-        return value;
-    }
-}
-
-// Change command from "ControlItem" to "ExprNS.Expr", "identifier" to "operator" for type safety
-export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: Context, operator: TokenType | string, left: any, right: any) {
-    
-    const operand = operandTranslator(operator);
-    const originalLeftType = typeTranslator(left.type);
-    const originalRightType = typeTranslator(right.type);
-
-    if (left.type === 'string' && right.type === 'string') {
-        if(operator === '__py_adder') {
-            return {
-                type: 'string',
-                value: left.value + right.value
-            };
-        } else {
-            let ret_type : any;
-            let ret_value : any;
-            if (operator === '>') {
-                ret_value = left.value > right.value;
-            } else if(operator === '>=') {
-                ret_value = left.value >= right.value;
-            } else if(operator === '<') {
-                ret_value = left.value < right.value;
-            } else if(operator === '<=') {
-                ret_value = left.value <= right.value;
-            } else if(operator === '===') {
-                ret_value = left.value === right.value;
-            } else if(operator === '!==') {
-                ret_value = left.value !== right.value;
-            } else {
-                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-            }
-
-            return {
-                type: 'bool',
-                value: ret_value
-            };
-        }
-    } else {
-        // numbers: only int and float, not bool
-        const numericTypes = ['number', 'bigint', 'complex'];
-        if (!numericTypes.includes(left.type) || !numericTypes.includes(right.type)) {
-            // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-        }
-
-        let originalLeft = { type : left.type, value : left.value };
-        let originalRight = { type : right.type, value : right.value };
-
-        if (left.type !== right.type) {
-            if (left.type === 'complex' || right.type === 'complex') {
-                left.type = 'complex';
-                right.type = 'complex';
-                left.value = PyComplexNumber.fromValue(left.value);
-                right.value = PyComplexNumber.fromValue(right.value);
-            } else if (left.type === 'number' || right.type === 'number') {
-                left.type = 'number';
-                right.type = 'number';
-                left.value = Number(left.value);
-                right.value = Number(right.value);
-            }
-        }
-
-        let ret_value : any;
-        let ret_type : any = left.type;
-
-        if(typeof operator === 'string') {
-            if(operator === '__py_adder') {
-                if (left.type === 'complex' || right.type === 'complex') {
-                    const leftComplex = PyComplexNumber.fromValue(left.value);
-                    const rightComplex = PyComplexNumber.fromValue(right.value);
-                    ret_value = leftComplex.add(rightComplex);
-                } else {
-                    ret_value = left.value + right.value;
-                }
-            } else if(operator === '__py_minuser') {
-                if (left.type === 'complex' || right.type === 'complex') {
-                    const leftComplex = PyComplexNumber.fromValue(left.value);
-                    const rightComplex = PyComplexNumber.fromValue(right.value);
-                    ret_value = leftComplex.sub(rightComplex);
-                } else {
-                    ret_value = left.value - right.value;
-                }
-            } else if(operator === '__py_multiplier') {
-                if (left.type === 'complex' || right.type === 'complex') {
-                    const leftComplex = PyComplexNumber.fromValue(left.value);
-                    const rightComplex = PyComplexNumber.fromValue(right.value);
-                    ret_value = leftComplex.mul(rightComplex);
-                } else {
-                    ret_value = left.value * right.value;
-                }
-            } else if(operator === '__py_divider') {
-                if (left.type === 'complex' || right.type === 'complex') {
-                    const leftComplex = PyComplexNumber.fromValue(left.value);
-                    const rightComplex = PyComplexNumber.fromValue(right.value);
-                    ret_value = leftComplex.div(rightComplex);
-                } else {
-                    if((right.type === 'bigint' && Number(right.value) !== 0) ||
-                        (right.type === 'number' && right.value !== 0)) {
-                        ret_type = 'number';
-                        ret_value = Number(left.value) / Number(right.value);
-                    } else {
-                        // handleRuntimeError(context, new ZeroDivisionError(code, command as any, context));
-                    }
-                }
-            } else if(operator === '__py_modder') {
-                if (left.type === 'complex') {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));  
-                }
-                ret_value = pythonMod(left.value, right.value);
-            } else if(operator === '__py_floorer') {
-                // TODO: floorer not in python now
-                // see math_floor in stdlib.ts
-                ret_value = 0;
-            } else if(operator === '__py_powerer') {
-                if (left.type === 'complex') {
-                    const leftComplex = PyComplexNumber.fromValue(left.value);
-                    const rightComplex = PyComplexNumber.fromValue(right.value);
-                    ret_value = leftComplex.pow(rightComplex);
-                } else {
-                    if (left.type === 'bigint' && right.value < 0) {
-                        ret_value = Number(left.value) ** Number(right.value);
-                        ret_type = 'number';
-                    } else {
-                        ret_value = left.value ** right.value;
-                    }
-                }
-            } else {
-                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-            }
-        } else {
-            ret_type = 'bool';
-            // one of them is complex, convert all to complex then compare
-            // for complex, only '==' and '!=' valid
-            if (left.type === 'complex') {
-                const leftComplex = PyComplexNumber.fromValue(left.value);
-                const rightComplex = PyComplexNumber.fromValue(right.value);
-
-                if (operator === TokenType.DOUBLEEQUAL) {
-                    ret_value = leftComplex.equals(rightComplex);
-                } else if (operator === TokenType.NOTEQUAL) {
-                    ret_value = !leftComplex.equals(rightComplex);
-                } else {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-                }
-            } else if (originalLeft.type !== originalRight.type) {
-                let int_num : any;
-                let floatNum : any;
-                let compare_res;
-                if (originalLeft.type === 'bigint') {
-                    int_num = originalLeft;
-                    floatNum = originalRight;
-                    compare_res = pyCompare(int_num, floatNum);
-                } else {
-                    int_num = originalRight;
-                    floatNum = originalLeft;
-                    compare_res = -pyCompare(int_num, floatNum);
-                }
-
-                if (operator === TokenType.GREATER) {
-                    ret_value = compare_res > 0;
-                } else if(operator === TokenType.GREATEREQUAL) {
-                    ret_value = compare_res >= 0;
-                } else if(operator === TokenType.LESS) {
-                    ret_value = compare_res < 0;
-                } else if(operator === TokenType.LESSEQUAL) {
-                    ret_value = compare_res <= 0;
-                } else if(operator === TokenType.DOUBLEEQUAL) {
-                    ret_value = compare_res === 0;
-                } else if(operator === TokenType.NOTEQUAL) {
-                    ret_value = compare_res !== 0;
-                } else {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-                } 
-            } else {
-                if (operator === TokenType.GREATER) {
-                    ret_value = left.value > right.value;
-                } else if(operator === TokenType.GREATEREQUAL) {
-                    ret_value = left.value >= right.value;
-                } else if(operator === TokenType.LESS) {
-                    ret_value = left.value < right.value;
-                } else if(operator === TokenType.LESSEQUAL) {
-                    ret_value = left.value <= right.value;
-                } else if(operator === TokenType.DOUBLEEQUAL) {
-                    ret_value = left.value === right.value;
-                } else if(operator === TokenType.NOTEQUAL) {
-                    ret_value = left.value !== right.value;
-                } else {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-                }
-            }
-
-        }
-
-        return {
-            type: ret_type,
-            value: ret_value
-        };
-    }
-}
 
 /**
  * TEMPORARY IMPLEMENTATION
@@ -309,21 +66,36 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
  * By layering sign checks, safe numeric range checks, and approximate comparisons,
  * we achieve a Python-like ordering of large integers vs floats.
  */
-function pyCompare(int_num : any, float_num : any) {
+
+function pyCompare(val1 : Value, val2 : Value): number {
     // int_num.value < float_num.value => -1
     // int_num.value = float_num.value => 0
     // int_num.value > float_num.value => 1
+    let int_val: bigint;
+    let float_val: number;
+
+    if (val1.type === 'bigint' && val2.type === 'number') {
+        int_val = val1.value;
+        float_val = val2.value;
+    } else if (val1.type === 'number' && val2.type === 'bigint') {
+        int_val = val2.value;
+        float_val = val1.value;
+        // for swapped order, swap the result of comparison here
+        return -pyCompare(val2, val1);
+    } else {
+        return 0;
+    }
 
     // If float_num is positive Infinity, then int_num is considered smaller.
-    if (float_num.value === Infinity) {
+    if (float_val === Infinity) {
         return -1;
     }
-    if (float_num.value === -Infinity) {
+    if (float_val === -Infinity) {
         return 1;
     }
 
-    const signInt = (int_num.value < 0) ? -1 : (int_num.value > 0 ? 1 : 0);
-    const signFlt = Math.sign(float_num.value);  // -1, 0, or 1
+    const signInt = (int_val < 0n) ? -1 : (int_val > 0n ? 1 : 0);
+    const signFlt = Math.sign(float_val);  // -1, 0, or 1
 
     if (signInt < signFlt) return -1;  // e.g. int<0, float>=0 => int < float
     if (signInt > signFlt) return 1;   // e.g. int>=0, float<0 => int > float
@@ -336,13 +108,13 @@ function pyCompare(int_num : any, float_num : any) {
 
     // Both are either positive or negative.
     // If |int_num.value| is within 2^53, it can be safely converted to a JS number for an exact comparison.
-    const absInt = int_num.value < 0 ? -int_num.value : int_num.value;
+    const absInt = int_val < 0n ? -int_val : int_val;
     const MAX_SAFE = 9007199254740991; // 2^53 - 1
 
     if (absInt <= MAX_SAFE) {
         // Safe conversion to double.
-        const intAsNum = Number(int_num.value); 
-        const diff = intAsNum - float_num.value;
+        const intAsNum = Number(int_val); 
+        const diff = intAsNum - float_val;
         if (diff === 0) return 0;
         return diff < 0 ? -1 : 1;
     }
@@ -353,12 +125,12 @@ function pyCompare(int_num : any, float_num : any) {
     // int_num.value is greater or less than float_num.value.
     
     // First, check if float_num.value is nearly zero (but not zero).
-    if (float_num.value === 0) {
+    if (float_val === 0) {
         // Although signFlt would be 0 and handled above, just to be safe:
         return signInt; 
     }
 
-    const absFlt = Math.abs(float_num.value);
+    const absFlt = Math.abs(float_val);
     // Determine the order of magnitude.
     const exponent = Math.floor(Math.log10(absFlt)); 
 
@@ -439,4 +211,223 @@ function approximateBigIntString(num: number, precision: number): string {
     // Rounding could be applied if necessary, but truncation is sufficient for comparison.
     return mantissaStr.slice(0, integerLen);
 }
-  
+
+// Changed operator from es.UnaryOperator to TokenType
+// Added parameters command and context for error handling
+// updated logics for TokenType.NOT [3]
+export function evaluateUnaryExpression(operator: TokenType, value: any, command: ExprNS.Expr, context: Context): Value {
+    if (operator === TokenType.NOT) {
+        let isFalsy: boolean;
+        switch (value.type) {
+            case 'bigint':
+                isFalsy = value.value === 0n;
+                break;
+            case 'number':
+                isFalsy = value.value === 0;
+                break;
+            case 'bool':
+                isFalsy = !value.value;
+                break;
+            case 'string':
+                isFalsy = value.value === '';
+                break;
+            case 'undefined':
+                isFalsy = true;
+                break;
+            default:
+                // TODO: consider strings, list as truthy if exists
+                // Implement falsy for empty strings..etc
+                isFalsy = false;
+        }return {type: 'bool', value: isFalsy}
+
+    } else if (operator === TokenType.MINUS) {
+        if (value.type === 'bigint') {
+            return {
+                type: 'bigint',
+                value: -1n * value.value 
+            };
+        } else if (value.type === 'number') {
+            return {
+                type: 'number',
+                value: -value.value
+            };
+        } else {
+            // TODO: error handling for unsupported type
+            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
+            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
+        }
+    } else if (operator === TokenType.PLUS) {
+        if (value.type === 'complex' || value.type === 'number' || value.type === 'bigint') {
+            return value;
+        } else {
+            // TODO: error handling for unsupported type
+            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
+            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
+        }
+    }
+    // final fallback
+    // handleRuntimeError
+    return { type: "error", message: 'unreachable' };
+}
+
+// Change command from "ControlItem" to "ExprNS.Expr", "identifier" to "operator" for type safety
+export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: Context, operator: TokenType | string, left: Value, right: Value): Value {
+    
+    const operand = operandTranslator(operator);
+    const originalLeftType = typeTranslator(left.type);
+    const originalRightType = typeTranslator(right.type);
+
+    // String Operations
+    if (left.type === 'string' && right.type === 'string') {
+        if(operator === '__py_adder') {
+            return { type: 'string', value: left.value + right.value };
+        } else if (operator === TokenType.GREATER) {
+            return { type: 'bool', value: left.value > right.value };
+        } else if (operator === TokenType.GREATEREQUAL) {
+            return { type: 'bool', value: left.value >= right.value };
+        } else if (operator === TokenType.LESS) {
+            return { type: 'bool', value: left.value < right.value };
+        } else if (operator === TokenType.LESSEQUAL) {
+            return { type: 'bool', value: left.value <= right.value };
+        } else if (operator === TokenType.DOUBLEEQUAL) {
+            return { type: 'bool', value: left.value === right.value };
+        } else if (operator === TokenType.NOTEQUAL) {
+            return { type: 'bool', value: left.value !== right.value };
+        } else {
+            // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
+            return { type: 'error', message: 'Unsupported string operation' }
+        }
+    }
+    // Complex Operations
+    else if (left.type === 'complex' || right.type ==='complex'){
+        let leftForComplex: number | bigint | string | PyComplexNumber;
+        let rightForComplex: number | bigint | string | PyComplexNumber;
+
+        if (left.type === 'complex' || left.type === 'number' || left.type === 'bigint' || left.type === 'string') {
+            leftForComplex = left.value;
+        } else {
+            // handleRuntimeError
+            return { type: 'error', message: 'Invalid operand for complex operation' };
+        }
+
+        if (right.type === 'complex' || right.type === 'number' || right.type === 'bigint' || right.type === 'string') {
+            rightForComplex = right.value;
+        } else {
+            // handleRuntimeError
+            return { type: 'error', message: 'Invalid operand for complex operation' };
+        }
+        
+        const leftComplex = PyComplexNumber.fromValue(leftForComplex);
+        const rightComplex = PyComplexNumber.fromValue(rightForComplex);
+        let result: PyComplexNumber;
+
+        if (operator === '__py_adder') {
+            result = leftComplex.add(rightComplex);
+        } else if (operator === '__py_minuser') {
+            result = leftComplex.sub(rightComplex);
+        } else if (operator === '__py_multiplier') {
+            result = leftComplex.mul(rightComplex);
+        } else if (operator === '__py_divider') {
+            result = leftComplex.div(rightComplex);
+        } else if (operator === '__py_powerer') {
+            result = leftComplex.pow(rightComplex);
+        } else if (operator === TokenType.DOUBLEEQUAL) {
+            return { type: 'bool', value: leftComplex.equals(rightComplex)};
+        } else if (operator === TokenType.NOTEQUAL) {
+            return { type: 'bool', value: !leftComplex.equals(rightComplex)};
+        } else {
+            // handleRuntimeError
+            return {type: 'error', message: 'Unsupported complex operation'};
+        } return {type: 'complex', value: result};
+    }
+    // Float and or Int Operations
+    else if ((left.type === 'number' || left.type === 'bigint') && (right.type === 'number' || right.type === 'bigint')) {
+        if (left.type === 'number' || right.type === 'number' || operator === '__py_divider') {
+            const leftFloat = Number(left.value);
+            const rightFloat = Number(right.value);
+                let result: number | boolean;
+
+            // Arithmetic
+            if (typeof operator === 'string') {
+                if (operator === '__py_adder') result = leftFloat + rightFloat;
+                else if (operator === '__py_minuser') result = leftFloat - rightFloat;
+                else if (operator === '__py_multiplier') result = leftFloat * rightFloat;
+                else if (operator === '__py_divider') {
+                    if (rightFloat === 0) {
+                        // handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+                    return { type: 'error', message: 'Division by zero' };
+                    }
+                    result = leftFloat / rightFloat;
+                }
+                else if (operator === '__py_powerer') result = leftFloat ** rightFloat;
+                else if (operator === '__py_modder') result = pythonMod(leftFloat, rightFloat);
+                else {
+                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
+                    return { type: 'error', message: 'Unsupported float operation' };
+                }
+                return { type: 'number', value: result };
+            }
+            // Comparisons
+            else {
+                const compare_res = pyCompare(left, right);
+                if (operator === TokenType.GREATER) result = compare_res > 0;
+                else if (operator === TokenType.GREATEREQUAL) result = compare_res >= 0;
+                else if (operator === TokenType.LESS) result = compare_res < 0;
+                else if (operator === TokenType.LESSEQUAL) result = compare_res <= 0;
+                else if (operator === TokenType.DOUBLEEQUAL) result = compare_res === 0;
+                else if (operator === TokenType.NOTEQUAL) result = compare_res !== 0;
+                else {
+                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
+                    return { type: 'error', message: 'Unsupported float comparison' };
+                    }
+                return { type: 'bool', value: result };
+        }
+    } 
+    // Same type Integer Operations
+    else {    
+        const leftBigInt = left.value as bigint;
+        const rightBigInt = right.value as bigint;
+        let result: bigint | boolean;
+
+        if (operator === '__py_adder') {
+            return { type: 'bigint', value: leftBigInt + rightBigInt };
+        } else if (operator === '__py_minuser') {
+            return { type: 'bigint', value: leftBigInt - rightBigInt };
+        } else if (operator === '__py_multiplier') {
+            return { type: 'bigint', value: leftBigInt * rightBigInt };
+        } else if (operator === '__py_divider') {
+            if (rightBigInt === 0n) {
+                // handleRunTimeError - ZeroDivisionError
+                return { type: 'error', message: 'Division by zero' } ;
+            }
+            return { type: 'number', value: Number(leftBigInt) / Number(rightBigInt) };
+        } else if (operator === '__py_powerer') {
+            if (leftBigInt === 0n && rightBigInt < 0) {
+                // handleRunTimeError, zerodivision error
+                return { type: 'error', message: '0.0 cannot be raised to a negative pwoer'}
+            }
+            if (rightBigInt < 0) {
+                return {type: 'number', value: Number(leftBigInt) ** Number(rightBigInt) };
+            }
+            return { type: 'bigint', value: leftBigInt ** rightBigInt };
+        } else if (operator === '__py_modder') {
+            return { type: 'bigint', value: pythonMod(leftBigInt, rightBigInt) }; 
+        } else if (operator === TokenType.GREATER) {
+            return { type: 'bool', value: leftBigInt > rightBigInt };
+        } else if (operator === TokenType.GREATEREQUAL) {
+            return { type: 'bool', value: leftBigInt >= rightBigInt };
+        } else if (operator === TokenType.LESS) {
+            return { type: 'bool', value: leftBigInt < rightBigInt };
+        } else if (operator === TokenType.LESSEQUAL) {
+            return { type: 'bool', value: leftBigInt <= rightBigInt };
+        } else if (operator === TokenType.DOUBLEEQUAL) {
+            return { type: 'bool', value: leftBigInt === rightBigInt };
+        } else if (operator === TokenType.NOTEQUAL) {
+            return { type: 'bool', value: leftBigInt !== rightBigInt };
+        } else {
+            // handleRuntimeError
+            return { type: 'error', message: 'Unsupported integer operation' };
+        }    
+    }
+    }
+}

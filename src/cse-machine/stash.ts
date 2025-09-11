@@ -3,22 +3,23 @@ import { ExprNS, StmtNS } from '../ast-types';
 import { Closure } from './closure';
 import { Environment } from './environment';
 import { Stack } from './stack';
+import { PyComplexNumber } from "../types";
 
 /**
  * Value represents various runtime values in Python.
  */
-export type Value = any
-//   | NumberValue
-//   | BoolValue
-//   | StringValue
-//   | FunctionValue
-//   | LambdaValue
-//   | MultiLambdaValue
-//   | ErrorValue
-//   | UndefinedValue
-//   | string
-//   | BigIntValue
-//   | pyClosureValue;
+export type Value = any 
+  // | NumberValue
+  // | BoolValue
+  // | StringValue
+  // | ComplexValue
+  // | FunctionValue
+  // | LambdaValue
+  // | MultiLambdaValue
+  // | ErrorValue
+  // | UndefinedValue
+  // | BigIntValue
+  // | pyClosureValue;
 
 export interface pyClosureValue {
   type: "closure";
@@ -43,6 +44,11 @@ export interface BoolValue {
 export interface StringValue {
   type: 'string';
   value: string;
+}
+
+export interface ComplexValue {
+  type: 'complex';
+  value: PyComplexNumber;
 }
 
 export interface FunctionValue {

@@ -4,12 +4,14 @@ import { Context } from "./context";
 import { evaluateBinaryExpression, evaluateUnaryExpression } from "./py_operators";
 import { TokenType } from "../tokens";
 import { Token } from "../tokenizer";
+import { Value } from "./stash";
+import { PyComplexNumber } from "../types";
 
 type Stmt = StmtNS.Stmt;
 type Expr = ExprNS.Expr;
 
 // TODO: type 'any' to be changed to node type for replacement of es.Node
-export class PyVisitor implements ExprNS.Visitor<any>, StmtNS.Visitor<any> {
+export class PyVisitor implements ExprNS.Visitor<Value>, StmtNS.Visitor<Value> {
     private code: string;
     private context: Context;
     
@@ -55,11 +57,17 @@ export class PyVisitor implements ExprNS.Visitor<any>, StmtNS.Visitor<any> {
     }
 
     // Expression Visitors
-    visitLiteralExpr(expr: ExprNS.Literal): any {
-        return {
-            type: typeof expr.value,
-            value: expr.value,
-        };
+    visitLiteralExpr(expr: ExprNS.Literal): Value {
+        const value = expr.value;
+        if (typeof value == 'number') {
+            return { type: 'number', value: value };
+        } else if (typeof value == 'boolean') {
+            return { type: 'bool', value: value};
+        } else if (typeof value == 'string') {
+            return { type: 'string', value: value};
+        }
+        // TODO to handle null, representing null as UndefinedValue
+        return { type: 'undefined'};
     }
 
     visitUnaryExpr(expr: ExprNS.Unary): any {
@@ -98,7 +106,12 @@ export class PyVisitor implements ExprNS.Visitor<any>, StmtNS.Visitor<any> {
     visitMultiLambdaExpr(expr: ExprNS.MultiLambda): any { /* TODO */ }
     visitVariableExpr(expr: ExprNS.Variable): any { /* TODO */ }
     visitCallExpr(expr: ExprNS.Call): any { /* TODO */ }
-    visitComplexExpr(expr: ExprNS.Complex): any { /* TODO */ }
+    visitComplexExpr(expr: ExprNS.Complex): Value { 
+        return {
+            type: 'complex',
+            value: new PyComplexNumber(expr.value.real, expr.value.imag)
+        };
+    }
     visitNoneExpr(expr: ExprNS.None): any { /* TODO */ }
 
     // Statement Visitors
