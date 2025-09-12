@@ -339,6 +339,50 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
             // handleRuntimeError
             return {type: 'error', message: 'Unsupported complex operation'};
         } return {type: 'complex', value: result};
+    } 
+    // bool and numeric operations
+    else if ((left.type === 'bool' && (right.type === 'number' || right.type === 'bigint' || right.type === 'bool')) ||
+            (right.type === 'bool' && (left.type === 'number' || left.type === 'bigint' || left.type === 'bool'))) {
+    
+        const leftNum = left.type === 'bool' ? (left.value ? 1 : 0) : Number(left.value);
+        const rightNum = right.type === 'bool' ? (right.value ? 1 : 0) : Number(right.value);
+        let result: number | boolean;
+        
+        // Arithmetic
+        if (typeof operator === 'string') { 
+            if (operator === '__py_adder') result = leftNum + rightNum;
+            else if (operator === '__py_minuser') result = leftNum - rightNum;
+            else if (operator === '__py_multiplier') result = leftNum * rightNum;
+            else if (operator === '__py_divider') {
+                if (rightNum === 0) {
+                    // handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+                    return { type: 'error', message: 'Division by zero' };
+                }
+                result = leftNum / rightNum;
+            }
+            else if (operator === '__py_powerer') result = leftNum ** rightNum;
+            else if (operator === '__py_modder') result = pythonMod(leftNum, rightNum);
+            else {
+                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
+                return { type: 'error', message: 'Unsupported boolean/numeric operation' };
+            }
+            const resultType = (left.type === 'number' || right.type === 'number') ? 'number' : 'bigint';
+            return { type: resultType, value: resultType === 'bigint' ? BigInt(result) : result };
+        }
+        // Comparisons
+        else { 
+            if (operator === TokenType.GREATER) result = leftNum > rightNum;
+            else if (operator === TokenType.GREATEREQUAL) result = leftNum >= rightNum;
+            else if (operator === TokenType.LESS) result = leftNum < rightNum;
+            else if (operator === TokenType.LESSEQUAL) result = leftNum <= rightNum;
+            else if (operator === TokenType.DOUBLEEQUAL) result = leftNum === rightNum;
+            else if (operator === TokenType.NOTEQUAL) result = leftNum !== rightNum;
+            else {
+                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
+                return { type: 'error', message: 'Unsupported boolean/numeric comparison' };
+            }
+            return { type: 'bool', value: result };
+        }
     }
     // Float and or Int Operations
     else if ((left.type === 'number' || left.type === 'bigint') && (right.type === 'number' || right.type === 'bigint')) {
@@ -360,10 +404,15 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
                     result = leftFloat / rightFloat;
                 }
                 else if (operator === '__py_powerer') result = leftFloat ** rightFloat;
-                else if (operator === '__py_modder') result = pythonMod(leftFloat, rightFloat);
-                else {
+                else if (operator === '__py_modder') {
+                    if (rightFloat === 0) {
+                        // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
+                        return { type: 'error', message: 'Division by zero' };
+                    }
+                    result = pythonMod(leftFloat, rightFloat);
+                } else {
                     // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                    return { type: 'error', message: 'Unsupported float operation' };
+                    return { type: 'error', message: 'Unsupported float comparison' };
                 }
                 return { type: 'number', value: result };
             }
@@ -381,10 +430,10 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
                     return { type: 'error', message: 'Unsupported float comparison' };
                     }
                 return { type: 'bool', value: result };
-        }
+            }
     } 
     // Same type Integer Operations
-    else {    
+    else if (left.type === 'bigint' && right.type ==='bigint') {    
         const leftBigInt = left.value as bigint;
         const rightBigInt = right.value as bigint;
         let result: bigint | boolean;
@@ -404,13 +453,17 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
         } else if (operator === '__py_powerer') {
             if (leftBigInt === 0n && rightBigInt < 0) {
                 // handleRunTimeError, zerodivision error
-                return { type: 'error', message: '0.0 cannot be raised to a negative pwoer'}
+                return { type: 'error', message: '0.0 cannot be raised to a negative power'}
             }
             if (rightBigInt < 0) {
                 return {type: 'number', value: Number(leftBigInt) ** Number(rightBigInt) };
             }
             return { type: 'bigint', value: leftBigInt ** rightBigInt };
         } else if (operator === '__py_modder') {
+            if (rightBigInt === 0n) {
+                // handleRunTimeError - ZeroDivisionError
+                return { type: 'error', message: 'integer modulo by zero' } ;
+            }
             return { type: 'bigint', value: pythonMod(leftBigInt, rightBigInt) }; 
         } else if (operator === TokenType.GREATER) {
             return { type: 'bool', value: leftBigInt > rightBigInt };
@@ -424,10 +477,9 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
             return { type: 'bool', value: leftBigInt === rightBigInt };
         } else if (operator === TokenType.NOTEQUAL) {
             return { type: 'bool', value: leftBigInt !== rightBigInt };
-        } else {
-            // handleRuntimeError
-            return { type: 'error', message: 'Unsupported integer operation' };
+        }
+        // handleRuntimeError
+        return { type: 'error', message: 'Unsupported operation' };
         }    
-    }
     }
 }

@@ -70,12 +70,12 @@ export class PyVisitor implements ExprNS.Visitor<Value>, StmtNS.Visitor<Value> {
         return { type: 'undefined'};
     }
 
-    visitUnaryExpr(expr: ExprNS.Unary): any {
+    visitUnaryExpr(expr: ExprNS.Unary): Value {
         const argumentValue = this.visit(expr.right);
         return evaluateUnaryExpression(expr.operator.type, argumentValue, expr, this.context);
     }
 
-    visitBinaryExpr(expr: ExprNS.Binary): any {
+    visitBinaryExpr(expr: ExprNS.Binary): Value {
         const leftValue = this.visit(expr.left);
         const rightValue = this.visit(expr.right);
         const operatorForPyOperators = this.mapOperatorToPyOperator(expr.operator);
@@ -90,7 +90,7 @@ export class PyVisitor implements ExprNS.Visitor<Value>, StmtNS.Visitor<Value> {
         )
     }
 
-    visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): any {
+    visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): Value {
         return {
             type: 'bigint',
             value: BigInt(expr.value)
@@ -98,25 +98,96 @@ export class PyVisitor implements ExprNS.Visitor<Value>, StmtNS.Visitor<Value> {
     }
 
     // Placeholder for TODO expr visitors
-    visitCompareExpr(expr: ExprNS.Compare): any { /* TODO */ }
-    visitBoolOpExpr(expr: ExprNS.BoolOp): any { /* TODO */ }
-    visitGroupingExpr(expr: ExprNS.Grouping): any { return this.visit(expr.expression);}
+    // To test on multiple comparisons, eg, a < b < c
+    visitCompareExpr(expr: ExprNS.Compare): Value { 
+        const leftValue = this.visit(expr.left);
+        const rightValue = this.visit(expr.right);
+        const operatorToken = expr.operator;
+        
+        const operatorForEval = this.mapOperatorToPyOperator(operatorToken);
+
+        return evaluateBinaryExpression(
+            this.code,
+            expr,
+            this.context,
+            operatorForEval,
+            leftValue,
+            rightValue,
+        );
+    }
+
+    visitBoolOpExpr(expr: ExprNS.BoolOp): Value { 
+        const leftValue = this.visit(expr.left);
+            // Handle 'or' short-circuiting
+        if (expr.operator.type === TokenType.OR) {
+            let isTruthy = true;
+            if (leftValue.type === 'bool' && !leftValue.value) isTruthy = false;
+            if (leftValue.type === 'bigint' && leftValue.value === 0n) isTruthy = false;
+            if (leftValue.type === 'number' && leftValue.value === 0) isTruthy = false;
+            if (leftValue.type === 'string' && leftValue.value === '') isTruthy = false;
+            if (leftValue.type === 'undefined') isTruthy = false;
+
+            if (isTruthy) {
+                return leftValue;
+            } else {
+                return this.visit(expr.right);
+            }
+        }
+        // Handle 'and' short-circuiting
+        if (expr.operator.type === TokenType.AND) {
+            let isFalsy = false;
+            if (leftValue.type === 'bool' && !leftValue.value) isFalsy = true;
+            if (leftValue.type === 'bigint' && leftValue.value === 0n) isFalsy = true;
+            if (leftValue.type === 'number' && leftValue.value === 0) isFalsy = true;
+            if (leftValue.type === 'string' && leftValue.value === '') isFalsy = true;
+            if (leftValue.type === 'undefined') isFalsy = true;
+
+            if (isFalsy) {
+                return leftValue;
+            } else {
+                return this.visit(expr.right);
+            }
+        }
+        return { type: 'error', message: 'Unsupported boolean operator' };
+    }
+
+    visitGroupingExpr(expr: ExprNS.Grouping): any { 
+        return this.visit(expr.expression);
+    }
+
     visitTernaryExpr(expr: ExprNS.Ternary): any { /* TODO */ }
     visitLambdaExpr(expr: ExprNS.Lambda): any { /* TODO */ }
     visitMultiLambdaExpr(expr: ExprNS.MultiLambda): any { /* TODO */ }
-    visitVariableExpr(expr: ExprNS.Variable): any { /* TODO */ }
+
+    visitVariableExpr(expr: ExprNS.Variable): Value { 
+        const name = expr.name.lexeme;
+        if (name === 'True') {
+            return { type: 'bool', value: true };
+        } else if (name === 'False') {
+            return { type: 'bool', value: false };
+        } else if (name === 'None') {
+            return { type: 'undefined' };
+        }
+        // TODO: add user defined variables, for now all variables are caught as error
+        return { type: 'error', message: `name '${name}' is not defined` };
+    }
+
     visitCallExpr(expr: ExprNS.Call): any { /* TODO */ }
+
     visitComplexExpr(expr: ExprNS.Complex): Value { 
         return {
             type: 'complex',
             value: new PyComplexNumber(expr.value.real, expr.value.imag)
         };
     }
-    visitNoneExpr(expr: ExprNS.None): any { /* TODO */ }
+
+    visitNoneExpr(expr: ExprNS.None): Value { 
+        return { type: 'undefined' };
+    }
 
     // Statement Visitors
-    visitFileInputStmt(stmt: StmtNS.FileInput): any {
-        let lastValue: any;
+    visitFileInputStmt(stmt: StmtNS.FileInput): Value {
+        let lastValue: Value = { type: 'undefined' };
         for (const statement of stmt.statements) {
             lastValue = this.visit(statement);
         }
