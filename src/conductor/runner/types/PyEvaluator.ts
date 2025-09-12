@@ -2,12 +2,11 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { runInContext } from "../../../";
+import { PyRunInContext } from "../../../";
 import { Context } from "../../../cse-machine/context";
 import { BasicEvaluator } from "../BasicEvaluator";
 import { IRunnerPlugin } from "./IRunnerPlugin";
 import { IOptions } from "../../../";
-import { Finished } from "../../../types";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {
@@ -28,12 +27,14 @@ export class PyEvaluator extends BasicEvaluator {
   
     async evaluateChunk(chunk: string): Promise<void> {
         try {
-            const result = await runInContext(
+            const result = await PyRunInContext(
                 chunk,       // Code
                 this.context,
                 this.options
             );
-            this.conductor.sendOutput(`${(result as Finished).representation.toString((result as Finished).value)}`);
+            if ('status' in result && result.status === 'finished') {
+                this.conductor.sendOutput(`${result.representation.toString(result.value)}`);
+            }
         } catch (error) {
             this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
         }

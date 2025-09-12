@@ -215,20 +215,27 @@ export async function runPyAST(
     code: string,
     context: Context,
     options: RecursivePartial<IOptions> = {}
-): Promise<Result> {
+): Promise<Stmt> {
     const script = code + "\n";
     const tokenizer = new Tokenizer(script);
     const tokens = tokenizer.scanEverything();
     const pyParser = new Parser(script, tokens);
     const ast = pyParser.parse();
-    const result = PyRunCSEMachine(code, ast, context, options);
-    return result;
+    return ast;
 };
 
-// const {runnerPlugin, conduit} = initialise(PyEvaluator);
+export async function PyRunInContext(
+    code: string,
+    context: Context,
+    options: RecursivePartial<IOptions> = {}
+): Promise<Result> {
+    const ast = await runPyAST(code, context, options);
+    const result = PyRunCSEMachine(code, ast, context, options);
+    return result;
+}
+
 export * from "./errors";
 import * as fs from "fs";
-
 
 if (require.main === module) {
     (async () => {
@@ -258,3 +265,4 @@ if (require.main === module) {
 
     })();
 }
+// const {runnerPlugin, conduit} = initialise(PyEvaluator);
