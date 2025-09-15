@@ -72,6 +72,10 @@ export interface BinOpInstr extends BaseInstr {
   symbol: string | TokenType
 }
 
+export interface BoolOpInstr extends BaseInstr {
+  symbol: TokenType;
+}
+
 export interface AppInstr extends BaseInstr {
   numOfArgs: number
   srcNode: PyNode
@@ -101,3 +105,4 @@ export type Instr =
   | ArrLitInstr
   | UnOpInstr
   | BinOpInstr
+  | BoolOpInstr

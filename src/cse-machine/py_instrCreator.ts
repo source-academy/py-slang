@@ -1,5 +1,5 @@
 import { Environment } from "./environment";
-import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, InstrType, PyNode, UnOpInstr } from "./py_types";
+import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, InstrType, PyNode, UnOpInstr, BoolOpInstr } from "./py_types";
 import { TokenType } from "../tokens";
 
 export const popInstr = (srcNode: PyNode): Instr => ({ 
@@ -64,3 +64,9 @@ export const unOpInstr = (symbol: TokenType, srcNode: PyNode): UnOpInstr => ({
   symbol,
   srcNode
 })
+
+export const boolOpInstr = (symbol: TokenType, srcNode: PyNode): BoolOpInstr => ({
+  instrType: InstrType.BOOL_OP,
+  symbol,
+  srcNode
+});

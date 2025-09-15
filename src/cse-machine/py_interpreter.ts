@@ -1,7 +1,7 @@
 import { StmtNS, ExprNS } from '../ast-types';
 import { PyContext } from './py_context';
 import { PyControl, PyControlItem } from './py_control';
-import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr } from './py_types';
+import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr } from './py_types';
 import { Stash, Value, ErrorValue } from './stash';
 import { IOptions } from '..';
 import * as instr from './py_instrCreator';
@@ -137,6 +137,32 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(binary.left);
     },
 
+    'BoolOp': (command, context, control, stash, isPrelude) => {
+        const boolOp = command as ExprNS.BoolOp;
+        control.push(instr.boolOpInstr(boolOp.operator.type, boolOp));
+        control.push(boolOp.right);
+        control.push(boolOp.left);
+    },
+
+    'None': (command, context, control, stash, isPrelude) => {
+        stash.push({ type: 'undefined' });
+    },
+
+    'Variable': (command, context, control, stash, isPrelude) => {
+        const variable = command as ExprNS.Variable;
+        const name = variable.name.lexeme;
+        // For now, we only handle built in constants.
+        // In a future commit, we will look up variables in the environment.
+        if (name === 'True') {
+            stash.push({ type: 'bool', value: true });
+        } else if (name === 'False') {
+            stash.push({ type: 'bool', value: false });
+        } else {
+            // Throw an error for undefined variables for now
+            throw new Error(`NameError: name '${name}' is not defined`);
+        }
+    },
+
     /**
      * Instruction Handlers
      */
@@ -168,6 +194,52 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
                 right
             );
             stash.push(result);
+        }
+    },
+
+    [InstrType.BOOL_OP]: function (command: PyControlItem, context: PyContext, control: PyControl, stash: Stash, isPrelude: 
+      boolean) {
+        const instr = command as BoolOpInstr;
+        const rightValue = stash.pop();
+        const leftValue = stash.pop();
+
+        if (!leftValue || !rightValue) {
+            throw new Error("RuntimeError: Boolean operation requires two operands.");
+        }
+
+        // Implement Python's short-circuiting logic
+        if (instr.symbol === TokenType.OR) {
+            // If left is truthy, return left. Otherwise, return right.
+            let isLeftTruthy = false;
+            if (leftValue.type === 'bool') isLeftTruthy = leftValue.value;
+            else if (leftValue.type === 'bigint') isLeftTruthy = leftValue.value !== 0n;
+            else if (leftValue.type === 'number') isLeftTruthy = leftValue.value !== 0;
+            else if (leftValue.type === 'string') isLeftTruthy = leftValue.value !== '';
+            else if (leftValue.type === 'undefined') isLeftTruthy = false;
+            else isLeftTruthy = true; // Other types are generally truthy
+
+            if (isLeftTruthy) {
+                stash.push(leftValue);
+            } else {
+                stash.push(rightValue);
+            }
+        } else if (instr.symbol === TokenType.AND) {
+            // If left is falsy, return left. Otherwise, return right.
+            let isLeftFalsy = false;
+            if (leftValue.type === 'bool') isLeftFalsy = !leftValue.value;
+            else if (leftValue.type === 'bigint') isLeftFalsy = leftValue.value === 0n;
+            else if (leftValue.type === 'number') isLeftFalsy = leftValue.value === 0;
+            else if (leftValue.type === 'string') isLeftFalsy = leftValue.value === '';
+            else if (leftValue.type === 'undefined') isLeftFalsy = true;
+            else isLeftFalsy = false; // Other types are generally truthy
+
+            if (isLeftFalsy) {
+                stash.push(leftValue);
+            } else {
+                stash.push(rightValue);
+            }
+        } else {
+            throw new Error(`Unsupported boolean operator: ${instr.symbol}`);
         }
     },
 };
