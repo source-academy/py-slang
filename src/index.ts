@@ -143,6 +143,7 @@ import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
 export * from './errors';
 import { PyRunCSEMachine } from "./runner/pyRunner";
 import { StmtNS } from "./ast-types";
+import { PyContext } from "./cse-machine/py_context";
 
 type Stmt = StmtNS.Stmt;
 
@@ -213,7 +214,7 @@ export async function runInContext(
 
 export async function runPyAST(
     code: string,
-    context: Context,
+    context: PyContext,
     options: RecursivePartial<IOptions> = {}
 ): Promise<Stmt> {
     const script = code + "\n";
@@ -226,7 +227,7 @@ export async function runPyAST(
 
 export async function PyRunInContext(
     code: string,
-    context: Context,
+    context: PyContext,
     options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
     const ast = await runPyAST(code, context, options);

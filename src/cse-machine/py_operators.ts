@@ -1,5 +1,5 @@
 import { Value } from "./stash";
-import { Context } from "./context";
+import { PyContext } from "./py_context";
 import { PyComplexNumber } from "../types";
 import { TypeConcatenateError, UnsupportedOperandTypeError, ZeroDivisionError } from "../errors/errors";
 import { ExprNS } from "../ast-types";
@@ -215,7 +215,7 @@ function approximateBigIntString(num: number, precision: number): string {
 // Changed operator from es.UnaryOperator to TokenType
 // Added parameters command and context for error handling
 // updated logics for TokenType.NOT [3]
-export function evaluateUnaryExpression(operator: TokenType, value: any, command: ExprNS.Expr, context: Context): Value {
+export function evaluateUnaryExpression(operator: TokenType, value: Value, command: ExprNS.Expr, context: PyContext): Value {
     if (operator === TokenType.NOT) {
         let isFalsy: boolean;
         switch (value.type) {
@@ -271,7 +271,7 @@ export function evaluateUnaryExpression(operator: TokenType, value: any, command
 }
 
 // Change command from "ControlItem" to "ExprNS.Expr", "identifier" to "operator" for type safety
-export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: Context, operator: TokenType | string, left: Value, right: Value): Value {
+export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: PyContext, operator: TokenType | string, left: Value, right: Value): Value {
     
     const operand = operandTranslator(operator);
     const originalLeftType = typeTranslator(left.type);
