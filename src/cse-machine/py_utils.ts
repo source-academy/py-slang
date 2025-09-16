@@ -1,9 +1,15 @@
-import { Context } from "./context";
-import { ExprNS } from "../ast-types";
+import { PyContext } from "./py_context";
+import { Value } from "./stash";
+import { PyNode } from "./py_types";
 import { TokenType } from "../tokens";
-import { UnsupportedOperandTypeError } from "../errors/errors";
+import { RuntimeSourceError } from "../errors/runtimeSourceError";
+import { currentEnvironment, Environment } from "./py_environment";
+import { TypeError } from "../errors/errors";
 
-export function handleRuntimeError (context: Context, error: any) {
+
+
+export function handleRuntimeError (context: PyContext, error: RuntimeSourceError) {
+  context.errors.push(error);
   throw error;
 }
 
@@ -29,23 +35,21 @@ export function typeTranslator(type: string): string {
 // TODO: properly adapt for the rest, string is passed in to cater for __py_adder etc...
 export function operandTranslator(operand: TokenType | string) {
   if (typeof operand === 'string') {
-    return operand;
+    switch (operand) {
+      case "__py_adder": return "+";
+      case "__py_minuser": return "-";
+      case "__py_multiplier": return "*";
+      case "__py_divider": return "/";
+      case "__py_modder": return "%";
+      case "__py_powerer": return "**";
+      default: return operand;
+    }
   }
   switch (operand) {
-    case TokenType.PLUS:
-      return '+';
-    case TokenType.MINUS:
-      return '-';
-    case TokenType.STAR:
-      return '*';
-    case TokenType.SLASH:
-      return '/';
     case TokenType.LESS:
       return '<';
     case TokenType.GREATER:
       return '>';
-    case TokenType.PERCENT:
-      return '%';
     case TokenType.DOUBLEEQUAL:
       return '==';
     case TokenType.NOTEQUAL:
@@ -54,12 +58,8 @@ export function operandTranslator(operand: TokenType | string) {
       return '<=';
     case TokenType.GREATEREQUAL:
       return '>=';
-    case TokenType.DOUBLESTAR:
-      return '**';
     case TokenType.NOT:
       return 'not';
-    case TokenType.DOUBLESLASH:
-      return '//';
     default:
         return String(operand);
   }
@@ -72,4 +72,27 @@ export function pythonMod(a: any, b: any): any {
   } else {
     return mod + b;
   }
+}
+
+export function pyDefineVariable(context: PyContext, name: string, value: Value) {
+    const environment = currentEnvironment(context);
+    Object.defineProperty(environment.head, name, {
+        value: value,
+        writable: true,
+        enumerable: true
+    });
+}
+
+export function pyGetVariable(context: PyContext, name: string, node: PyNode): Value {
+    let environment: Environment | null = currentEnvironment(context);
+    while (environment) {
+        if (Object.prototype.hasOwnProperty.call(environment.head, name)) {
+            return environment.head[name];
+        } else {
+            environment = environment.tail;
+        }
+    }
+    // For now, we throw an error. We can change this to return undefined if needed.
+    handleRuntimeError(context, new TypeError(`name '${name} is not defined`, node as any, context as any, '', ''));
+    return { type: 'error', message: 'unreachable' }; 
 }

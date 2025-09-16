@@ -433,7 +433,7 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
             }
     } 
     // Same type Integer Operations
-    else if (left.type === 'bigint' && right.type ==='bigint') {    
+    else {    
         const leftBigInt = left.value as bigint;
         const rightBigInt = right.value as bigint;
         let result: bigint | boolean;

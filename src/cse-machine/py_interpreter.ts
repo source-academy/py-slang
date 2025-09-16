@@ -1,7 +1,7 @@
 import { StmtNS, ExprNS } from '../ast-types';
 import { PyContext } from './py_context';
 import { PyControl, PyControlItem } from './py_control';
-import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr } from './py_types';
+import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr } from './py_types';
 import { Stash, Value, ErrorValue } from './stash';
 import { IOptions } from '..';
 import * as instr from './py_instrCreator';
@@ -10,6 +10,7 @@ import { TokenType } from '../tokens';
 import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
 import { toPythonString } from '../stdlib'
+import { pyGetVariable, pyDefineVariable } from './py_utils';
 
 type CmdEvaluator = (
   command: PyControlItem,
@@ -149,18 +150,42 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     },
 
     'Variable': (command, context, control, stash, isPrelude) => {
-        const variable = command as ExprNS.Variable;
-        const name = variable.name.lexeme;
-        // For now, we only handle built in constants.
-        // In a future commit, we will look up variables in the environment.
+        const variableNode = command as ExprNS.Variable;
+        const name = variableNode.name.lexeme;
+        
         if (name === 'True') {
             stash.push({ type: 'bool', value: true });
         } else if (name === 'False') {
             stash.push({ type: 'bool', value: false });
         } else {
-            // Throw an error for undefined variables for now
-            throw new Error(`NameError: name '${name}' is not defined`);
+            // if not built in, look up in environment
+            const value = pyGetVariable(context, name, variableNode)
+            stash.push(value);
         }
+    },
+
+    'Compare': (command, context, control, stash, isPrelude) => {
+        const compareNode = command as ExprNS.Compare;
+        // For now, we only handle simple, single comparisons.
+        const opStr = mapOperatorToPyOperator(compareNode.operator);
+        const op_instr = instr.binOpInstr(opStr, compareNode);
+        control.push(op_instr);
+        control.push(compareNode.right);
+        control.push(compareNode.left);
+    },
+    
+    'Assign': (command, context, control, stash, isPrelude) => {
+        const assignNode = command as StmtNS.Assign;
+
+        const assmtInstr = instr.assmtInstr(
+            assignNode.name.lexeme, 
+            false,
+            true,
+            assignNode
+        );
+
+        control.push(assmtInstr);
+        control.push(assignNode.value);
     },
 
     /**
@@ -240,6 +265,15 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
             }
         } else {
             throw new Error(`Unsupported boolean operator: ${instr.symbol}`);
+        }
+    },
+
+    [InstrType.ASSIGNMENT]: (command, context, control, stash, isPrelude) => {
+        const instr = command as AssmtInstr;
+        const value = stash.pop(); // Get the evaluated value from the stash
+
+        if (value) {
+            pyDefineVariable(context, instr.symbol, value);
         }
     },
 };

@@ -1,6 +1,6 @@
 import { Stash, Value } from './stash';
 import { PyControl, PyControlItem } from './py_control';
-import { createSimpleEnvironment, createProgramEnvironment, Environment } from './environment';
+import { createSimpleEnvironment, createProgramEnvironment, Environment } from './py_environment';
 import { CseError } from './error';
 import { Heap } from './heap';
 import { PyNode } from './py_types';
