@@ -4,8 +4,8 @@
 
 import { runInContext } from "..";
 import { Context } from "../cse-machine/context";
-import { BasicEvaluator } from "@sourceacademy/conductor";
-import { IRunnerPlugin } from "@sourceacademy/conductor";
+import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { IOptions } from "..";
 import { Finished } from "../types";
 
