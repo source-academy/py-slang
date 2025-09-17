@@ -131,6 +131,16 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(boolOp.left);
     },
 
+    'Grouping': (command, context, control) => {
+        const groupingNode = command as ExprNS.Grouping;
+        control.push(groupingNode.expression);
+    },
+
+    'Complex': (command, context, control, stash) => {
+        const complexNode = command as ExprNS.Complex;
+        stash.push({ type: 'complex', value: complexNode.value });
+    },
+
     'None': (command, context, control, stash, isPrelude) => {
         stash.push({ type: 'undefined' });
     },

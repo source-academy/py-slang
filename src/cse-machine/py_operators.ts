@@ -265,7 +265,7 @@ export function evaluateUnaryExpression(operator: TokenType, value: Value, comma
                     }
                 default:
                     // handleRuntimeError(context, new UnsupportedOperandTypeError(...));
-                    return { type: 'error', message: `Unsupported operand for -: '${value.type}'` };
+                    return { type: 'error', message: `TypeError: Unsupported operand for -: '${value.type}'` };
             }
 
         case TokenType.PLUS:
@@ -278,7 +278,7 @@ export function evaluateUnaryExpression(operator: TokenType, value: Value, comma
                     return { type: 'bigint', value: value.value ? 1n : 0n };
                 default:
                     // handleRuntimeError(context, new UnsupportedOperandTypeError(...));
-                    return { type: 'error', message: `Unsupported operand for +: '${value.type}'` };
+                    return { type: 'error', message: `TypeError: Unsupported operand for +: '${value.type}'` };
             }
     }
     return { type: 'error', message: 'Unreachable unary operator' };
@@ -399,7 +399,7 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
                         return { type: 'number', value: Number(l) / Number(r) };
                     case TokenType.DOUBLESLASH:
                         if (r === 0n) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
-                        return { type: 'bigint', value: l / r };
+                        return { type: 'bigint', value: (l - (pythonMod(l, r) as bigint)) / r };
                     case TokenType.PERCENT:
                         if (r === 0n) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
                         return { type: 'bigint', value: pythonMod(l, r) };
