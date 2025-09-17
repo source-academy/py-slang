@@ -69,7 +69,7 @@ export interface UnOpInstr extends BaseInstr {
 }
 
 export interface BinOpInstr extends BaseInstr {
-  symbol: string | TokenType
+  symbol: TokenType
 }
 
 export interface BoolOpInstr extends BaseInstr {

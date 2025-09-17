@@ -35,19 +35,6 @@ export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Re
     });
 }
 
-function mapOperatorToPyOperator(operatorToken: Token): TokenType | string {
-    switch (operatorToken.type) {
-        case TokenType.PLUS: return '__py_adder';
-        case TokenType.MINUS: return '__py_minuser';
-        case TokenType.STAR: return '__py_multiplier';
-        case TokenType.SLASH: return '__py_divider';
-        case TokenType.PERCENT: return '__py_modder';
-        case TokenType.DOUBLESTAR: return '__py_powerer';
-        // Add other arithmetic operators as needed
-        default: return operatorToken.type; // For comparison and unary operators
-    }
-}
-
 export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContext, options: IOptions): Value {
     context.control = new PyControl(program);
     context.runtime.isRunning = true;
@@ -131,8 +118,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     'Binary': (command, context, control) => {
         const binary = command as ExprNS.Binary;
-        const opStr = mapOperatorToPyOperator(binary.operator);
-        const op_instr = instr.binOpInstr(opStr, binary);
+        const op_instr = instr.binOpInstr(binary.operator.type, binary);
         control.push(op_instr);
         control.push(binary.right);
         control.push(binary.left);
@@ -167,8 +153,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     'Compare': (command, context, control, stash, isPrelude) => {
         const compareNode = command as ExprNS.Compare;
         // For now, we only handle simple, single comparisons.
-        const opStr = mapOperatorToPyOperator(compareNode.operator);
-        const op_instr = instr.binOpInstr(opStr, compareNode);
+        const op_instr = instr.binOpInstr(compareNode.operator.type, compareNode);
         control.push(op_instr);
         control.push(compareNode.right);
         control.push(compareNode.left);

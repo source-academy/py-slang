@@ -68,6 +68,18 @@ export type BinaryOperator =
  */
 
 function pyCompare(val1 : Value, val2 : Value): number {
+    // Handle same type comparisons first
+    if (val1.type === 'bigint' && val2.type === 'bigint') {
+        if (val1.value < val2.value) return -1;
+        if (val1.value > val2.value) return 1;
+        return 0;
+    }
+    if (val1.type === 'number' && val2.type === 'number') {
+        if (val1.value < val2.value) return -1;
+        if (val1.value > val2.value) return 1;
+        return 0;
+    }
+
     // int_num.value < float_num.value => -1
     // int_num.value = float_num.value => 0
     // int_num.value > float_num.value => 1
@@ -212,274 +224,215 @@ function approximateBigIntString(num: number, precision: number): string {
     return mantissaStr.slice(0, integerLen);
 }
 
-// Changed operator from es.UnaryOperator to TokenType
-// Added parameters command and context for error handling
-// updated logics for TokenType.NOT [3]
-export function evaluateUnaryExpression(operator: TokenType, value: Value, command: ExprNS.Expr, context: PyContext): Value {
-    if (operator === TokenType.NOT) {
-        let isFalsy: boolean;
-        switch (value.type) {
-            case 'bigint':
-                isFalsy = value.value === 0n;
-                break;
-            case 'number':
-                isFalsy = value.value === 0;
-                break;
-            case 'bool':
-                isFalsy = !value.value;
-                break;
-            case 'string':
-                isFalsy = value.value === '';
-                break;
-            case 'undefined':
-                isFalsy = true;
-                break;
-            default:
-                // TODO: consider strings, list as truthy if exists
-                // Implement falsy for empty strings..etc
-                isFalsy = false;
-        }return {type: 'bool', value: isFalsy}
-
-    } else if (operator === TokenType.MINUS) {
-        if (value.type === 'bigint') {
-            return {
-                type: 'bigint',
-                value: -1n * value.value 
-            };
-        } else if (value.type === 'number') {
-            return {
-                type: 'number',
-                value: -value.value
-            };
-        } else {
-            // TODO: error handling for unsupported type
-            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
-            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
-        }
-    } else if (operator === TokenType.PLUS) {
-        if (value.type === 'complex' || value.type === 'number' || value.type === 'bigint') {
-            return value;
-        } else {
-            // TODO: error handling for unsupported type
-            // TODO: command is currently passed as "any", to be adjusted in future commits[from #2]
-            // handleRuntimeError(context, new UnsupportedOperandTypeError("", command as any, typeTranslator(value.type), "", operandTranslator(operator)))
-        }
+// Helper function for truthiness based on Python rules
+function isFalsy(value: Value): boolean {
+    switch (value.type) {
+        case 'bigint':
+            return value.value === 0n;
+        case 'number':
+            return value.value === 0;
+        case 'bool':
+            return !value.value;
+        case 'string':
+            return value.value === '';
+        case 'complex':
+            return value.value.real === 0 && value.value.imag == 0;
+        case 'undefined': // Represents None
+            return true;
+        default:
+            // All other objects are considered truthy
+            return false;
     }
-    // final fallback
-    // handleRuntimeError
-    return { type: "error", message: 'unreachable' };
 }
 
-// Change command from "ControlItem" to "ExprNS.Expr", "identifier" to "operator" for type safety
-export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: PyContext, operator: TokenType | string, left: Value, right: Value): Value {
-    
-    const operand = operandTranslator(operator);
-    const originalLeftType = typeTranslator(left.type);
-    const originalRightType = typeTranslator(right.type);
+export function evaluateUnaryExpression(operator: TokenType, value: Value, command: ExprNS.Expr, context: PyContext): Value {
+    switch (operator) {
+        case TokenType.NOT:
+            return { type: 'bool', value: isFalsy(value) };
 
-    // String Operations
-    if (left.type === 'string' && right.type === 'string') {
-        if(operator === '__py_adder') {
-            return { type: 'string', value: left.value + right.value };
-        } else if (operator === TokenType.GREATER) {
-            return { type: 'bool', value: left.value > right.value };
-        } else if (operator === TokenType.GREATEREQUAL) {
-            return { type: 'bool', value: left.value >= right.value };
-        } else if (operator === TokenType.LESS) {
-            return { type: 'bool', value: left.value < right.value };
-        } else if (operator === TokenType.LESSEQUAL) {
-            return { type: 'bool', value: left.value <= right.value };
-        } else if (operator === TokenType.DOUBLEEQUAL) {
-            return { type: 'bool', value: left.value === right.value };
-        } else if (operator === TokenType.NOTEQUAL) {
-            return { type: 'bool', value: left.value !== right.value };
-        } else {
-            // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command as any, originalLeftType, originalRightType, operand));
-            return { type: 'error', message: 'Unsupported string operation' }
-        }
+        case TokenType.MINUS:
+            switch (value.type) {
+                case 'number':
+                    return { type: 'number', value: -value.value };
+                case 'bigint':
+                    return { type: 'bigint', value: -value.value };
+                case 'bool':
+                    return { type: 'bigint', value: value.value ? -1n : 0n };
+                case 'complex':
+                    return {
+                        type: 'complex',
+                        value: new PyComplexNumber(-value.value.real, -value.value.imag)
+                    }
+                default:
+                    // handleRuntimeError(context, new UnsupportedOperandTypeError(...));
+                    return { type: 'error', message: `Unsupported operand for -: '${value.type}'` };
+            }
+
+        case TokenType.PLUS:
+             switch (value.type) {
+                case 'number':
+                case 'bigint':
+                case 'complex':
+                    return value;
+                case 'bool':
+                    return { type: 'bigint', value: value.value ? 1n : 0n };
+                default:
+                    // handleRuntimeError(context, new UnsupportedOperandTypeError(...));
+                    return { type: 'error', message: `Unsupported operand for +: '${value.type}'` };
+            }
     }
-    // Complex Operations
-    else if (left.type === 'complex' || right.type ==='complex'){
-        let leftForComplex: number | bigint | string | PyComplexNumber;
-        let rightForComplex: number | bigint | string | PyComplexNumber;
+    return { type: 'error', message: 'Unreachable unary operator' };
+}
 
-        if (left.type === 'complex' || left.type === 'number' || left.type === 'bigint' || left.type === 'string') {
-            leftForComplex = left.value;
-        } else {
-            // handleRuntimeError
-            return { type: 'error', message: 'Invalid operand for complex operation' };
-        }
+// Remove __py_{operators} translation stage and switch case for readability
+export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, context: PyContext, operator: TokenType, left: Value, right: Value): Value {
+    // Helper to generate a specific TypeError message string
+    // TODO: remove for proper error message after ../errors/error.ts is migrated
+    function unsupportedOperandsMessage(): string {
+        const leftTypeStr = typeTranslator(left.type);
+        const rightTypeStr = typeTranslator(right.type);
+        const opStr = operandTranslator(operator);
+        return `TypeError: unsupported operand type(s) for ${opStr}: '${leftTypeStr}' and '${rightTypeStr}'`;
+    }
 
-        if (right.type === 'complex' || right.type === 'number' || right.type === 'bigint' || right.type === 'string') {
-            rightForComplex = right.value;
-        } else {
-            // handleRuntimeError
-            return { type: 'error', message: 'Invalid operand for complex operation' };
+    // Handle Complex numbers
+    if (left.type === 'complex' || right.type === 'complex') {
+        if (right.type !== 'complex' && right.type !== 'number' && right.type !== 'bigint' && right.type !== 'bool') {
+            return { type: 'error', message: unsupportedOperandsMessage() };
         }
-        
-        const leftComplex = PyComplexNumber.fromValue(leftForComplex);
-        const rightComplex = PyComplexNumber.fromValue(rightForComplex);
+        const leftComplex = PyComplexNumber.fromValue(left.value);
+        const rightComplex = PyComplexNumber.fromValue(right.value);
         let result: PyComplexNumber;
 
-        if (operator === '__py_adder') {
-            result = leftComplex.add(rightComplex);
-        } else if (operator === '__py_minuser') {
-            result = leftComplex.sub(rightComplex);
-        } else if (operator === '__py_multiplier') {
-            result = leftComplex.mul(rightComplex);
-        } else if (operator === '__py_divider') {
-            result = leftComplex.div(rightComplex);
-        } else if (operator === '__py_powerer') {
-            result = leftComplex.pow(rightComplex);
-        } else if (operator === TokenType.DOUBLEEQUAL) {
-            return { type: 'bool', value: leftComplex.equals(rightComplex)};
-        } else if (operator === TokenType.NOTEQUAL) {
-            return { type: 'bool', value: !leftComplex.equals(rightComplex)};
-        } else {
-            // handleRuntimeError
-            return {type: 'error', message: 'Unsupported complex operation'};
-        } return {type: 'complex', value: result};
-    } 
-    // bool and numeric operations
-    else if ((left.type === 'bool' && (right.type === 'number' || right.type === 'bigint' || right.type === 'bool')) ||
-            (right.type === 'bool' && (left.type === 'number' || left.type === 'bigint' || left.type === 'bool'))) {
-    
-        const leftNum = left.type === 'bool' ? (left.value ? 1 : 0) : Number(left.value);
-        const rightNum = right.type === 'bool' ? (right.value ? 1 : 0) : Number(right.value);
-        let result: number | boolean;
-        
-        // Arithmetic
-        if (typeof operator === 'string') { 
-            if (operator === '__py_adder') result = leftNum + rightNum;
-            else if (operator === '__py_minuser') result = leftNum - rightNum;
-            else if (operator === '__py_multiplier') result = leftNum * rightNum;
-            else if (operator === '__py_divider') {
-                if (rightNum === 0) {
-                    // handleRuntimeError(context, new ZeroDivisionError(code, command, context));
-                    return { type: 'error', message: 'Division by zero' };
-                }
-                result = leftNum / rightNum;
-            }
-            else if (operator === '__py_powerer') result = leftNum ** rightNum;
-            else if (operator === '__py_modder') result = pythonMod(leftNum, rightNum);
-            else {
-                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                return { type: 'error', message: 'Unsupported boolean/numeric operation' };
-            }
-            const resultType = (left.type === 'number' || right.type === 'number') ? 'number' : 'bigint';
-            return { type: resultType, value: resultType === 'bigint' ? BigInt(result) : result };
+        switch (operator) {
+            case TokenType.PLUS: result = leftComplex.add(rightComplex); break;
+            case TokenType.MINUS: result = leftComplex.sub(rightComplex); break;
+            case TokenType.STAR: result = leftComplex.mul(rightComplex); break;
+            case TokenType.SLASH: result = leftComplex.div(rightComplex); break;
+            case TokenType.DOUBLESTAR: result = leftComplex.pow(rightComplex); break;
+            case TokenType.DOUBLEEQUAL: return { type: 'bool', value: leftComplex.equals(rightComplex) };
+            case TokenType.NOTEQUAL: return { type: 'bool', value: !leftComplex.equals(rightComplex) };
+            default: return { type: 'error', message: `TypeError: unsupported operator for complex numbers: ${operator}` };
         }
-        // Comparisons
-        else { 
-            if (operator === TokenType.GREATER) result = leftNum > rightNum;
-            else if (operator === TokenType.GREATEREQUAL) result = leftNum >= rightNum;
-            else if (operator === TokenType.LESS) result = leftNum < rightNum;
-            else if (operator === TokenType.LESSEQUAL) result = leftNum <= rightNum;
-            else if (operator === TokenType.DOUBLEEQUAL) result = leftNum === rightNum;
-            else if (operator === TokenType.NOTEQUAL) result = leftNum !== rightNum;
-            else {
-                // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                return { type: 'error', message: 'Unsupported boolean/numeric comparison' };
+        return { type: 'complex', value: result };
+    }
+
+    // Handle comparisons with None (represented as 'undefined' type)
+    if (left.type === 'undefined' || right.type === 'undefined') {
+        switch (operator) {
+            case TokenType.DOUBLEEQUAL:
+                // True only if both are None
+                return { type: 'bool', value: left.type === right.type }; 
+            case TokenType.NOTEQUAL:
+                return { type: 'bool', value: left.type !== right.type };
+            default:
+                return { type: 'error', message: unsupportedOperandsMessage() };
+        }
+    }
+    
+    // Handle string operations
+    if (left.type === 'string' || right.type === 'string') {
+        if (left.type === 'string' && right.type === 'string') {
+            switch (operator) {
+                case TokenType.PLUS:
+                    return { type: 'string', value: left.value + right.value };
+                case TokenType.DOUBLEEQUAL:
+                    return { type: 'bool', value: left.value === right.value };
+                case TokenType.NOTEQUAL:
+                    return { type: 'bool', value: left.value !== right.value };
+                case TokenType.LESS:
+                    return { type: 'bool', value: left.value < right.value };
+                case TokenType.LESSEQUAL:
+                    return { type: 'bool', value: left.value <= right.value };
+                case TokenType.GREATER:
+                    return { type: 'bool', value: left.value > right.value };
+                case TokenType.GREATEREQUAL:
+                    return { type: 'bool', value: left.value >= right.value };
+            }
+        }
+        return { type: 'error', message: unsupportedOperandsMessage() };
+    }
+
+    // Coerce boolean to a numeric value for all other arithmetic
+    const leftNum = left.type === 'bool' ? (left.value ? 1 : 0) : left.value;
+    const rightNum = right.type === 'bool' ? (right.value ? 1 : 0) : right.value;
+    const leftType = left.type === 'bool' ? 'number' : left.type;
+    const rightType = right.type === 'bool' ? 'number' : right.type;
+
+    // Numeric Operations (number or bigint)
+    switch (operator) {
+        case TokenType.PLUS:
+        case TokenType.MINUS:
+        case TokenType.STAR:
+        case TokenType.SLASH:
+        case TokenType.DOUBLESLASH:
+        case TokenType.PERCENT:
+        case TokenType.DOUBLESTAR:
+            if (leftType === 'number' || rightType === 'number') {
+                const l = Number(leftNum);
+                const r = Number(rightNum);
+                switch (operator) {
+                    case TokenType.PLUS: return { type: 'number', value: l + r };
+                    case TokenType.MINUS: return { type: 'number', value: l - r };
+                    case TokenType.STAR: return { type: 'number', value: l * r };
+                    case TokenType.SLASH: 
+                        if (r === 0) return { type: 'error', message: 'ZeroDivisionError: division by zero' };
+                        return { type: 'number', value: l / r };
+                    case TokenType.DOUBLESLASH:
+                        if (r === 0) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
+                        return { type: 'number', value: Math.floor(l / r) };
+                    case TokenType.PERCENT:
+                         if (r === 0) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
+                        return { type: 'number', value: pythonMod(l, r) };
+                    case TokenType.DOUBLESTAR: return { type: 'number', value: l ** r };
+                }
+            }
+            if (leftType === 'bigint' && rightType === 'bigint') {
+                const l = leftNum as bigint;
+                const r = rightNum as bigint;
+                 switch (operator) {
+                    case TokenType.PLUS: return { type: 'bigint', value: l + r };
+                    case TokenType.MINUS: return { type: 'bigint', value: l - r };
+                    case TokenType.STAR: return { type: 'bigint', value: l * r };
+                    case TokenType.SLASH:
+                        if (r === 0n) return { type: 'error', message: 'ZeroDivisionError: division by zero' };
+                        return { type: 'number', value: Number(l) / Number(r) };
+                    case TokenType.DOUBLESLASH:
+                        if (r === 0n) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
+                        return { type: 'bigint', value: l / r };
+                    case TokenType.PERCENT:
+                        if (r === 0n) return { type: 'error', message: 'ZeroDivisionError: integer division or modulo by zero' };
+                        return { type: 'bigint', value: pythonMod(l, r) };
+                    case TokenType.DOUBLESTAR: 
+                        if (l === 0n && r < 0n) {
+                            return { type: 'error', message: 'ZeroDivisionError: 0.0 cannot be raised to a negative power' };
+                        }
+                        if (r < 0n) return { type: 'number', value: Number(l) ** Number(r)}
+                        return { type: 'bigint', value: l ** r };
+                }
+            }
+            break;
+
+        // Comparison Operators
+        case TokenType.DOUBLEEQUAL:
+        case TokenType.NOTEQUAL:
+        case TokenType.LESS:
+        case TokenType.LESSEQUAL:
+        case TokenType.GREATER:
+        case TokenType.GREATEREQUAL: {
+            const cmp = pyCompare(left, right);
+            let result: boolean;
+            switch (operator) {
+                case TokenType.DOUBLEEQUAL: result = cmp === 0; break;
+                case TokenType.NOTEQUAL:    result = cmp !== 0; break;
+                case TokenType.LESS:        result = cmp < 0;  break;
+                case TokenType.LESSEQUAL:   result = cmp <= 0; break;
+                case TokenType.GREATER:     result = cmp > 0;  break;
+                case TokenType.GREATEREQUAL:result = cmp >= 0; break;
+                default: return { type: 'error', message: 'Unreachable code path in comparison' };
             }
             return { type: 'bool', value: result };
         }
     }
-    // Float and or Int Operations
-    else if ((left.type === 'number' || left.type === 'bigint') && (right.type === 'number' || right.type === 'bigint')) {
-        if (left.type === 'number' || right.type === 'number' || operator === '__py_divider') {
-            const leftFloat = Number(left.value);
-            const rightFloat = Number(right.value);
-                let result: number | boolean;
-
-            // Arithmetic
-            if (typeof operator === 'string') {
-                if (operator === '__py_adder') result = leftFloat + rightFloat;
-                else if (operator === '__py_minuser') result = leftFloat - rightFloat;
-                else if (operator === '__py_multiplier') result = leftFloat * rightFloat;
-                else if (operator === '__py_divider') {
-                    if (rightFloat === 0) {
-                        // handleRuntimeError(context, new ZeroDivisionError(code, command, context));
-                    return { type: 'error', message: 'Division by zero' };
-                    }
-                    result = leftFloat / rightFloat;
-                }
-                else if (operator === '__py_powerer') result = leftFloat ** rightFloat;
-                else if (operator === '__py_modder') {
-                    if (rightFloat === 0) {
-                        // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                        return { type: 'error', message: 'Division by zero' };
-                    }
-                    result = pythonMod(leftFloat, rightFloat);
-                } else {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                    return { type: 'error', message: 'Unsupported float comparison' };
-                }
-                return { type: 'number', value: result };
-            }
-            // Comparisons
-            else {
-                const compare_res = pyCompare(left, right);
-                if (operator === TokenType.GREATER) result = compare_res > 0;
-                else if (operator === TokenType.GREATEREQUAL) result = compare_res >= 0;
-                else if (operator === TokenType.LESS) result = compare_res < 0;
-                else if (operator === TokenType.LESSEQUAL) result = compare_res <= 0;
-                else if (operator === TokenType.DOUBLEEQUAL) result = compare_res === 0;
-                else if (operator === TokenType.NOTEQUAL) result = compare_res !== 0;
-                else {
-                    // handleRuntimeError(context, new UnsupportedOperandTypeError(code, command, originalLeftType, originalRightType, operand));
-                    return { type: 'error', message: 'Unsupported float comparison' };
-                    }
-                return { type: 'bool', value: result };
-            }
-    } 
-    // Same type Integer Operations
-    else {    
-        const leftBigInt = left.value as bigint;
-        const rightBigInt = right.value as bigint;
-        let result: bigint | boolean;
-
-        if (operator === '__py_adder') {
-            return { type: 'bigint', value: leftBigInt + rightBigInt };
-        } else if (operator === '__py_minuser') {
-            return { type: 'bigint', value: leftBigInt - rightBigInt };
-        } else if (operator === '__py_multiplier') {
-            return { type: 'bigint', value: leftBigInt * rightBigInt };
-        } else if (operator === '__py_divider') {
-            if (rightBigInt === 0n) {
-                // handleRunTimeError - ZeroDivisionError
-                return { type: 'error', message: 'Division by zero' } ;
-            }
-            return { type: 'number', value: Number(leftBigInt) / Number(rightBigInt) };
-        } else if (operator === '__py_powerer') {
-            if (leftBigInt === 0n && rightBigInt < 0) {
-                // handleRunTimeError, zerodivision error
-                return { type: 'error', message: '0.0 cannot be raised to a negative power'}
-            }
-            if (rightBigInt < 0) {
-                return {type: 'number', value: Number(leftBigInt) ** Number(rightBigInt) };
-            }
-            return { type: 'bigint', value: leftBigInt ** rightBigInt };
-        } else if (operator === '__py_modder') {
-            if (rightBigInt === 0n) {
-                // handleRunTimeError - ZeroDivisionError
-                return { type: 'error', message: 'integer modulo by zero' } ;
-            }
-            return { type: 'bigint', value: pythonMod(leftBigInt, rightBigInt) }; 
-        } else if (operator === TokenType.GREATER) {
-            return { type: 'bool', value: leftBigInt > rightBigInt };
-        } else if (operator === TokenType.GREATEREQUAL) {
-            return { type: 'bool', value: leftBigInt >= rightBigInt };
-        } else if (operator === TokenType.LESS) {
-            return { type: 'bool', value: leftBigInt < rightBigInt };
-        } else if (operator === TokenType.LESSEQUAL) {
-            return { type: 'bool', value: leftBigInt <= rightBigInt };
-        } else if (operator === TokenType.DOUBLEEQUAL) {
-            return { type: 'bool', value: leftBigInt === rightBigInt };
-        } else if (operator === TokenType.NOTEQUAL) {
-            return { type: 'bool', value: leftBigInt !== rightBigInt };
-        }
-        // handleRuntimeError
-        return { type: 'error', message: 'Unsupported operation' };
-        }    
-    }
+    return { type: 'error', message: unsupportedOperandsMessage() };
 }
