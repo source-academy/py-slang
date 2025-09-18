@@ -11,7 +11,8 @@
     "build": "rollup -c --bundleConfigAsCjs",
     "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
-    "test": "jest"
+    "test": "jest",
+    "wasm": "ts-node src/wasm-compiler/index.ts"
   },
   "keywords": [
     "Python",
@@ -48,6 +49,7 @@
   "dependencies": {
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
-    "mathjs": "^14.4.0"
+    "mathjs": "^14.4.0",
+    "wabt": "^1.0.37"
   }
 }
