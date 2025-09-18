@@ -5,7 +5,6 @@ import {
   ADD_FX,
   DIV_FX,
   EQ_FX,
-  GLOBALS,
   HEAP_PTR,
   LOG_FUNCS,
   MAKE_BOOL_FX,
@@ -48,7 +47,6 @@ export class Generator extends BaseGenerator<string> {
   (import "js" "memory" (memory 1))
   ${LOG_FUNCS.join("\n  ")}
 
-  ${GLOBALS.join("\n  ")}
   (global ${HEAP_PTR} (mut i32) (i32.const ${this.heapPointer}))
 
   ${this.strings
