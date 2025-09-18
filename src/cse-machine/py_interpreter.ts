@@ -1,3 +1,11 @@
+/**
+ * This interpreter implements an explicit-control evaluator.
+ *
+ * Heavily adapted from https://github.com/source-academy/JSpike/
+ */
+
+/* tslint:disable:max-classes-per-file */
+
 import { StmtNS, ExprNS } from '../ast-types';
 import { PyContext } from './py_context';
 import { PyControl, PyControlItem } from './py_control';
@@ -5,14 +13,15 @@ import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInst
 import { Stash, Value, ErrorValue } from './stash';
 import { IOptions } from '..';
 import * as instr from './py_instrCreator';
-import { evaluateUnaryExpression, evaluateBinaryExpression } from './py_operators';
+import { evaluateUnaryExpression, evaluateBinaryExpression, evaluateBoolExpression } from './py_operators';
 import { TokenType } from '../tokens';
 import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
-import { toPythonString } from '../stdlib'
+import { toPythonString } from '../py_stdlib'
 import { pyGetVariable, pyDefineVariable } from './py_utils';
 
 type CmdEvaluator = (
+  code: string,
   command: PyControlItem,
   context: PyContext,
   control: PyControl,
@@ -20,6 +29,13 @@ type CmdEvaluator = (
   isPrelude: boolean
 ) => void
 
+/**
+ * Function that returns the appropriate Promise<Result> given the output of CSE machine evaluating, depending
+ * on whether the program is finished evaluating, ran into a breakpoint or ran into an error.
+ * @param context The context of the program.
+ * @param value The value of CSE machine evaluating the program.
+ * @returns The corresponding promise.
+ */
 export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Result> {
     return new Promise((resolve, reject) => {
         if (value instanceof CSEBreak) {
@@ -35,44 +51,175 @@ export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Re
     });
 }
 
+/**
+ * Function to be called when a program is to be interpreted using
+ * the explicit control evaluator.
+ *
+ * @param code For error message reference.
+ * @param program The program to evaluate.
+ * @param context The context to evaluate the program in.
+ * @param options Evaluation options.
+ * @returns The result of running the CSE machine.
+ */
 export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContext, options: IOptions): Value {
-    context.control = new PyControl(program);
-    context.runtime.isRunning = true;
+    try {
+        context.control = new PyControl(program);
+        context.runtime.isRunning = true;
 
-    const result = pyRunCSEMachine(code, context, context.control, context.stash, options.isPrelude || false);
-
-    context.runtime.isRunning = false;
-    return result;
+        const result = pyRunCSEMachine(
+            code, 
+            context, 
+            context.control, 
+            context.stash, 
+            options.envSteps,
+            options.stepLimit,
+            options.isPrelude || false,
+        );
+        return result;
+    } catch(error: any) {
+        return { type: 'error', message: error.message};
+    } finally {
+        context.runtime.isRunning = false;
+    }
 }
 
-function pyRunCSEMachine(code: string, context: PyContext, control: PyControl, stash: Stash, isPrelude: boolean): Value {
-    let command = control.peek();
-
-    while (command) {
-        control.pop();
-
-        if ('instrType' in command) {
-            const instr = command as Instr;
-            if (pyCmdEvaluators[instr.instrType]) {
-                pyCmdEvaluators[instr.instrType](instr, context, control, stash, isPrelude);
-            } else {
-                throw new Error(`Unknown instruction type: ${instr.instrType}`);
-            }
-        } else {
-            const node = command as PyNode;
-            const nodeType = node.constructor.name;
-            if (pyCmdEvaluators[nodeType]) {
-                pyCmdEvaluators[nodeType](node, context, control, stash, isPrelude);
-            } else {
-                throw new Error(`Unknown Python AST node type: ${nodeType}`);
-            }
-        }
-
-        command = control.peek();
+/**
+ * The primary runner/loop of the explicit control evaluator.
+ *
+ * @param code For error check reference.
+ * @param context The context to evaluate the program in.
+ * @param control Points to the current Control stack.
+ * @param stash Points to the current Stash.
+ * @param envSteps Number of environment steps to run.
+ * @param stepLimit Maximum number of steps to execute.
+ * @param isPrelude Whether the program is the prelude.
+ * @returns The top value of the stash after execution.
+ */
+function pyRunCSEMachine(
+    code: string, 
+    context: PyContext, 
+    control: PyControl, 
+    stash: Stash, 
+    envSteps: number,
+    stepLimit: number,
+    isPrelude: boolean = false
+    ): Value {
+    const eceState = pyGenerateCSEMachineStateStream(
+        code,
+        context,
+        control,
+        stash,
+        envSteps,
+        stepLimit,
+        isPrelude
+      );
+    
+      // Execute the generator until it completes
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for (const _ of eceState) {
+      }
+      
+      // Return the value at the top of the storage as the result
+      const result = stash.peek();
+      return result !== undefined ? result : { type: 'undefined' };
     }
 
-    const result = stash.peek();
-    return result !== undefined ? result : { type: 'undefined' };
+/**
+ * Generator function that yields the state of the CSE Machine at each step.
+ *
+ * @param code For error check reference.
+ * @param context The context of the program.
+ * @param control The control stack.
+ * @param stash The stash storage.
+ * @param envSteps Number of environment steps to run.
+ * @param stepLimit Maximum number of steps to execute.
+ * @param isPrelude Whether the program is the prelude.
+ * @yields The current state of the stash, control stack, and step count.
+ */
+export function* pyGenerateCSEMachineStateStream(
+  code: string,
+  context: PyContext,
+  control: PyControl,
+  stash: Stash,
+  envSteps: number,
+  stepLimit: number,
+  isPrelude: boolean = false
+) {
+
+  // steps: number of steps completed
+  let steps = 0
+
+  let command = control.peek()
+
+  // Push first node to be evaluated into context.
+  // The typeguard is there to guarantee that we are pushing a node (which should always be the case)
+  if (command && !('instrType' in command)) {
+    context.runtime.nodes.unshift(command)
+  }
+  
+  while (command) {
+    
+    // Return to capture a snapshot of the control and stash after the target step count is reached
+    // if (!isPrelude && steps === envSteps) {
+    //   yield { stash, control, steps }
+    //   return
+    // }
+
+    // Step limit reached, stop further evaluation
+    // TODO: error
+    if (!isPrelude && steps === stepLimit) {
+    //   handleRuntimeError(context, new error.StepLimitExceededError(source, command as es.Node, context));
+    }
+
+    // TODO: until envChanging is implemented
+    // if (!isPrelude && envChanging(command)) {
+    //   // command is evaluated on the next step
+    //   // Hence, next step will change the environment
+    //   context.runtime.changepointSteps.push(steps + 1)
+    // }
+
+    control.pop()
+    if (!('instrType' in command)) {
+    // Command is an AST node
+      const node = command as PyNode
+
+      context.runtime.nodes.shift();
+      context.runtime.nodes.unshift(node);
+
+      const nodeType = node.constructor.name;
+      if (pyCmdEvaluators[nodeType]) {
+        pyCmdEvaluators[nodeType](code, command, context, control, stash, isPrelude)
+      } else {
+        throw new Error(`Unknown Python AST node type: ${nodeType}`);
+      }
+      
+      if (context.runtime.break && context.runtime.debuggerOn) {
+        // TODO
+        // We can put this under isNode since context.runtime.break
+        // will only be updated after a debugger statement and so we will
+        // run into a node immediately after.
+        // With the new evaluator, we don't return a break
+        // return new CSEBreak()
+      }
+    } else {
+      // Command is an instruction
+      const instr = command as Instr;
+      if (pyCmdEvaluators[instr.instrType]) {
+      pyCmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
+      } else {
+        throw new Error(`Unknown instruction type: ${instr.instrType}`);
+      }
+    }
+
+    command = control.peek()
+    
+    steps += 1
+    if (!isPrelude) {
+      context.runtime.envStepsTotal = steps
+    }
+
+    yield { stash, control, steps }
+  }
 }
 
 const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
@@ -80,18 +227,18 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
      * AST Node Handlers
      */
 
-    'FileInput': (command, context, control) => {
+    'FileInput': (code, command, context, control, stash, isPrelude) => {
         const fileInput = command as StmtNS.FileInput;
         const statements = fileInput.statements.slice().reverse();
         control.push(...statements);
     },
 
-    'SimpleExpr': (command, context, control) => {
+    'SimpleExpr': (code, command, context, control, stash, isPrelude) => {
         const simpleExpr = command as StmtNS.SimpleExpr;
         control.push(simpleExpr.expression);
     },
 
-    'Literal': (command, context, control, stash) => {
+    'Literal': (code, command, context, control, stash, isPrelude) => {
         const literal = command as ExprNS.Literal;
         if (typeof literal.value === 'number') {
             stash.push({ type: 'number', value: literal.value });
@@ -104,19 +251,19 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         }
     },
 
-    'BigIntLiteral': (command, context, control, stash) => {
+    'BigIntLiteral': (code, command, context, control, stash, isPrelude) => {
         const literal = command as ExprNS.BigIntLiteral;
         stash.push({ type: 'bigint', value: BigInt(literal.value) });
     },
 
-    'Unary': (command, context, control) => {
+    'Unary': (code, command, context, control, stash, isPrelude) => {
         const unary = command as ExprNS.Unary;
         const op_instr = instr.unOpInstr(unary.operator.type, unary);
         control.push(op_instr);
         control.push(unary.right);
     },
 
-    'Binary': (command, context, control) => {
+    'Binary': (code, command, context, control, stash, isPrelude) => {
         const binary = command as ExprNS.Binary;
         const op_instr = instr.binOpInstr(binary.operator.type, binary);
         control.push(op_instr);
@@ -124,43 +271,37 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(binary.left);
     },
 
-    'BoolOp': (command, context, control, stash, isPrelude) => {
+    'BoolOp': (code, command, context, control, stash, isPrelude) => {
         const boolOp = command as ExprNS.BoolOp;
         control.push(instr.boolOpInstr(boolOp.operator.type, boolOp));
         control.push(boolOp.right);
         control.push(boolOp.left);
     },
 
-    'Grouping': (command, context, control) => {
+    'Grouping': (code, command, context, control, stash, isPrelude) => {
         const groupingNode = command as ExprNS.Grouping;
         control.push(groupingNode.expression);
     },
 
-    'Complex': (command, context, control, stash) => {
+    'Complex': (code, command, context, control, stash, isPrelude) => {
         const complexNode = command as ExprNS.Complex;
         stash.push({ type: 'complex', value: complexNode.value });
     },
 
-    'None': (command, context, control, stash, isPrelude) => {
+    'None': (code, command, context, control, stash, isPrelude) => {
         stash.push({ type: 'undefined' });
     },
 
-    'Variable': (command, context, control, stash, isPrelude) => {
+    'Variable': (code, command, context, control, stash, isPrelude) => {
         const variableNode = command as ExprNS.Variable;
         const name = variableNode.name.lexeme;
         
-        if (name === 'True') {
-            stash.push({ type: 'bool', value: true });
-        } else if (name === 'False') {
-            stash.push({ type: 'bool', value: false });
-        } else {
-            // if not built in, look up in environment
-            const value = pyGetVariable(context, name, variableNode)
-            stash.push(value);
-        }
+        // if not built in, look up in environment
+        const value = pyGetVariable(context, name, variableNode)
+        stash.push(value);
     },
 
-    'Compare': (command, context, control, stash, isPrelude) => {
+    'Compare': (code, command, context, control, stash, isPrelude) => {
         const compareNode = command as ExprNS.Compare;
         // For now, we only handle simple, single comparisons.
         const op_instr = instr.binOpInstr(compareNode.operator.type, compareNode);
@@ -169,7 +310,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(compareNode.left);
     },
     
-    'Assign': (command, context, control, stash, isPrelude) => {
+    'Assign': (code, command, context, control, stash, isPrelude) => {
         const assignNode = command as StmtNS.Assign;
 
         const assmtInstr = instr.assmtInstr(
@@ -186,27 +327,29 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     /**
      * Instruction Handlers
      */
-    [InstrType.UNARY_OP]: function (command: PyControlItem, context: PyContext, control: PyControl, stash: Stash, isPrelude: boolean) {
+    [InstrType.UNARY_OP]: function (code, command, context, control, stash, isPrelude) {
         const instr = command as UnOpInstr;
         const argument = stash.pop();
         if (argument) {
             const result = evaluateUnaryExpression(
-                instr.symbol,
-                argument,
+                code,
                 instr.srcNode as ExprNS.Expr,
-                context
+                context,
+                instr.symbol,
+                argument
+                
             );
             stash.push(result);
         }
     },
 
-    [InstrType.BINARY_OP]: function (command: PyControlItem, context: PyContext, control: PyControl, stash: Stash, isPrelude: boolean) {
+    [InstrType.BINARY_OP]: function (code, command, context, control, stash, isPrelude) {
         const instr = command as BinOpInstr;
         const right = stash.pop();
         const left = stash.pop();
         if (left && right) {
             const result = evaluateBinaryExpression(
-                "", // source string code
+                code, 
                 instr.srcNode as ExprNS.Expr,
                 context,
                 instr.symbol,
@@ -217,53 +360,25 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         }
     },
 
-    [InstrType.BOOL_OP]: function (command: PyControlItem, context: PyContext, control: PyControl, stash: Stash, isPrelude: 
-      boolean) {
+    [InstrType.BOOL_OP]: function (code, command, context, control, stash, isPrelude) {
         const instr = command as BoolOpInstr;
-        const rightValue = stash.pop();
-        const leftValue = stash.pop();
+        const right = stash.pop();
+        const left = stash.pop();
 
-        if (!leftValue || !rightValue) {
-            throw new Error("RuntimeError: Boolean operation requires two operands.");
-        }
-
-        // Implement Python's short-circuiting logic
-        if (instr.symbol === TokenType.OR) {
-            // If left is truthy, return left. Otherwise, return right.
-            let isLeftTruthy = false;
-            if (leftValue.type === 'bool') isLeftTruthy = leftValue.value;
-            else if (leftValue.type === 'bigint') isLeftTruthy = leftValue.value !== 0n;
-            else if (leftValue.type === 'number') isLeftTruthy = leftValue.value !== 0;
-            else if (leftValue.type === 'string') isLeftTruthy = leftValue.value !== '';
-            else if (leftValue.type === 'undefined') isLeftTruthy = false;
-            else isLeftTruthy = true; // Other types are generally truthy
-
-            if (isLeftTruthy) {
-                stash.push(leftValue);
-            } else {
-                stash.push(rightValue);
-            }
-        } else if (instr.symbol === TokenType.AND) {
-            // If left is falsy, return left. Otherwise, return right.
-            let isLeftFalsy = false;
-            if (leftValue.type === 'bool') isLeftFalsy = !leftValue.value;
-            else if (leftValue.type === 'bigint') isLeftFalsy = leftValue.value === 0n;
-            else if (leftValue.type === 'number') isLeftFalsy = leftValue.value === 0;
-            else if (leftValue.type === 'string') isLeftFalsy = leftValue.value === '';
-            else if (leftValue.type === 'undefined') isLeftFalsy = true;
-            else isLeftFalsy = false; // Other types are generally truthy
-
-            if (isLeftFalsy) {
-                stash.push(leftValue);
-            } else {
-                stash.push(rightValue);
-            }
-        } else {
-            throw new Error(`Unsupported boolean operator: ${instr.symbol}`);
+        if (left && right) {
+            const result = evaluateBoolExpression(
+                code,
+                instr.srcNode as ExprNS.Expr,
+                context,
+                instr.symbol,
+                left,
+                right
+            )
+            stash.push(result);
         }
     },
 
-    [InstrType.ASSIGNMENT]: (command, context, control, stash, isPrelude) => {
+    [InstrType.ASSIGNMENT]: (code, command, context, control, stash, isPrelude) => {
         const instr = command as AssmtInstr;
         const value = stash.pop(); // Get the evaluated value from the stash
 

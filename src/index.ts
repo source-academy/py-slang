@@ -137,7 +137,7 @@ import { Resolver } from "./resolver";
 import { Context } from './cse-machine/context';
 export * from './errors';
 import { Finished, RecursivePartial, Result } from "./types";
-import { runCSEMachine } from "./runner/pyRunner";
+// import { runCSEMachine } from "./runner/pyRunner";
 import { initialise } from "./conductor/runner/util/initialise";
 import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
 export * from './errors';

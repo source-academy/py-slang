@@ -2,13 +2,11 @@ import { PyContext } from "./py_context";
 import { Value } from "./stash";
 import { PyNode } from "./py_types";
 import { TokenType } from "../tokens";
-import { RuntimeSourceError } from "../errors/runtimeSourceError";
+import { PyRuntimeSourceError } from "../errors/py_runtimeSourceError";
 import { currentEnvironment, Environment } from "./py_environment";
-import { TypeError } from "../errors/errors";
 
 
-
-export function handleRuntimeError (context: PyContext, error: RuntimeSourceError) {
+export function pyHandleRuntimeError (context: PyContext, error: PyRuntimeSourceError) {
   context.errors.push(error);
   throw error;
 }
@@ -24,28 +22,33 @@ export function typeTranslator(type: string): string {
     case "bool":
       return "bool";
     case "string":
-      return "string";
+      return "str";
     case "complex":
       return "complex";
+    case "undefined":
+      return "NoneType";
     default:
       return "unknown";
   }
 }
 
 // TODO: properly adapt for the rest, string is passed in to cater for __py_adder etc...
-export function operandTranslator(operand: TokenType | string) {
-  if (typeof operand === 'string') {
-    switch (operand) {
-      case "__py_adder": return "+";
-      case "__py_minuser": return "-";
-      case "__py_multiplier": return "*";
-      case "__py_divider": return "/";
-      case "__py_modder": return "%";
-      case "__py_powerer": return "**";
-      default: return operand;
-    }
-  }
-  switch (operand) {
+export function operatorTranslator(operator: TokenType | string) {
+  switch (operator) {
+    case TokenType.PLUS:
+      return '+';
+    case TokenType.MINUS:
+      return '-';
+    case TokenType.STAR:
+      return '*';
+    case TokenType.SLASH:
+      return '/';
+    case TokenType.DOUBLESLASH:
+      return '//';
+    case TokenType.PERCENT:
+      return '%';
+    case TokenType.DOUBLESTAR:
+      return '**';  
     case TokenType.LESS:
       return '<';
     case TokenType.GREATER:
@@ -60,8 +63,12 @@ export function operandTranslator(operand: TokenType | string) {
       return '>=';
     case TokenType.NOT:
       return 'not';
+    case TokenType.AND:
+      return 'and';
+    case TokenType.OR:
+      return 'or';
     default:
-        return String(operand);
+        return String(operator);
   }
 }
 
