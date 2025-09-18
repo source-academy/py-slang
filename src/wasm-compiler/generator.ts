@@ -22,6 +22,7 @@ import {
   nameToFunctionMap,
   NEG_FUNC_NAME,
   NEQ_TAG,
+  STRING_COMPARE_FX,
   SUB_TAG,
 } from "./constants";
 
@@ -105,6 +106,7 @@ export class Generator extends BaseGenerator<string> {
     const right = this.visit(expr.right);
 
     this.functions.add(MAKE_BOOL_FX);
+    this.functions.add(STRING_COMPARE_FX);
     this.functions.add(COMPARISON_OP_FX);
     const operator = (() => {
       switch (expr.operator.type) {

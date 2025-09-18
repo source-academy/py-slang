@@ -75,11 +75,11 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
       (i32.eq (local.get $y_tag) (i32.const ${STRING_TAG}))
     )
   ) (if (then
-      (global.get ${HEAP_PTR}) 
-      (global.get ${HEAP_PTR}) (local.get $x_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $x_val) (i32.wrap_i64) (memory.copy) 
-      (global.get ${HEAP_PTR}) (local.get $x_val) (i32.wrap_i64) (i32.add) (global.set ${HEAP_PTR}) 
-      (global.get ${HEAP_PTR}) (local.get $y_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $y_val) (i32.wrap_i64) (memory.copy) 
-      (global.get ${HEAP_PTR}) (local.get $y_val) (i32.wrap_i64) (i32.add) (global.set ${HEAP_PTR}) 
+      (global.get ${HEAP_PTR}) ${/* starting address of new string */ ""}
+        (global.get ${HEAP_PTR}) (local.get $x_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $x_val) (i32.wrap_i64) (memory.copy) 
+        (global.get ${HEAP_PTR}) (local.get $x_val) (i32.wrap_i64) (i32.add) (global.set ${HEAP_PTR}) 
+        (global.get ${HEAP_PTR}) (local.get $y_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $y_val) (i32.wrap_i64) (memory.copy) 
+        (global.get ${HEAP_PTR}) (local.get $y_val) (i32.wrap_i64) (i32.add) (global.set ${HEAP_PTR}) 
       (local.get $x_val) (i32.wrap_i64) (local.get $y_val) (i32.wrap_i64) (i32.add) (call ${MAKE_STRING_FX}) (return)
   ))
 
@@ -176,6 +176,7 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
   unreachable
 )`;
 
+export const STRING_COMPARE_FX = "$_py_string_cmp";
 export const COMPARISON_OP_FX = "$_py_compare_op";
 export const EQ_TAG = 0;
 export const NEQ_TAG = 1;
@@ -184,8 +185,56 @@ export const LTE_TAG = 3;
 export const GT_TAG = 4;
 export const GTE_TAG = 5;
 
+const stringCmpFunc = `(func ${STRING_COMPARE_FX} (param $x_ptr i32) (param $x_len i32) (param $y_ptr i32) (param $y_len i32) (result i32)
+  (local $i i32) (local $min_len i32) (local $x_char i32) (local $y_char i32) (local $result i32)
+
+  (local.get $x_len) (local.get $y_len) (i32.lt_s (local.get $x_len) (local.get $y_len))
+  (select) (local.set $min_len)
+
+  (loop $loop
+    (i32.lt_s (local.get $i) (local.get $min_len)) (if (then
+      (local.get $x_ptr) (local.get $i) (i32.add) (i32.load8_u) (local.set $x_char)
+      (local.get $y_ptr) (local.get $i) (i32.add) (i32.load8_u) (local.set $y_char)
+
+      (local.get $x_char) (local.get $y_char) (i32.sub)
+      (local.tee $result) (i32.const 0) (i32.ne) (if (then (local.get $result) (return)))
+
+      (local.get $i) (i32.const 1) (i32.add) (local.set $i)
+      (br $loop)
+    ))
+  )
+
+  (local.get $x_len) (local.get $y_len) (i32.sub) (return)
+)
+`;
+
 const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x_val i64) (param $y_tag i32) (param $y_val i64) (param $op i32) (result i32 i64)
   (local $a f64) (local $b f64) (local $c f64) (local $d f64)
+
+  ${/* if both are strings */ ""}
+  (i32.and
+    (i32.eq (local.get $x_tag) (i32.const ${STRING_TAG}))
+    (i32.eq (local.get $y_tag) (i32.const ${STRING_TAG}))
+  ) (if (then
+      (local.get $x_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $x_val) (i32.wrap_i64)
+      (local.get $y_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $y_val) (i32.wrap_i64)
+      (call ${STRING_COMPARE_FX})
+      (local.tee $x_tag) ${/* reuse x_tag for comparison result */ ""}
+      (block $eq
+        (block $neq
+          (block $lt
+            (block $lte
+              (block $gt
+                (block $gte
+                  (local.get $op) (br_table $eq $neq $lt $lte $gt $gte))
+                (local.get $x_tag) (i32.const 0) (i32.ge_s) (call ${MAKE_BOOL_FX}) (return))
+              (local.get $x_tag) (i32.const 0) (i32.gt_s) (call ${MAKE_BOOL_FX}) (return))
+            (local.get $x_tag) (i32.const 0) (i32.le_s) (call ${MAKE_BOOL_FX}) (return))
+          (local.get $x_tag) (i32.const 0) (i32.lt_s) (call ${MAKE_BOOL_FX}) (return))
+        (local.get $x_tag) (i32.const 0) (i32.ne) (call ${MAKE_BOOL_FX}) (return))
+      (local.get $x_tag) (i32.eqz) (call ${MAKE_BOOL_FX}) (return)
+    ))
+
 
   ${/* if either are bool, convert to int */ ""}
   (i32.eq (local.get $x_tag) (i32.const ${BOOL_TAG})) (if (then (i32.const ${INT_TAG}) (local.set $x_tag)))
@@ -207,8 +256,8 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
               (local.get $x_val) (local.get $y_val) (i64.gt_s) (call ${MAKE_BOOL_FX}) (return))
             (local.get $x_val) (local.get $y_val) (i64.le_s) (call ${MAKE_BOOL_FX}) (return))
           (local.get $x_val) (local.get $y_val) (i64.lt_s) (call ${MAKE_BOOL_FX}) (return))
-        (local.get $x_val) (local.get $y_val) (i64.ne) (call ${MAKE_BOOL_FX}) (return)
-      (local.get $x_val) (local.get $y_val) (i64.eq) (call ${MAKE_BOOL_FX}) (return))
+        (local.get $x_val) (local.get $y_val) (i64.ne) (call ${MAKE_BOOL_FX}) (return))
+      (local.get $x_val) (local.get $y_val) (i64.eq) (call ${MAKE_BOOL_FX}) (return)
     ))
 
   ${/* else, if either are int, convert to float and set float locals */ ""}
@@ -239,8 +288,8 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
               (local.get $a) (local.get $c) (f64.gt) (call ${MAKE_BOOL_FX}) (return))
             (local.get $a) (local.get $c) (f64.le) (call ${MAKE_BOOL_FX}) (return))
           (local.get $a) (local.get $c) (f64.lt) (call ${MAKE_BOOL_FX}) (return))
-        (local.get $a) (local.get $c) (f64.ne) (call ${MAKE_BOOL_FX}) (return)
-      (local.get $a) (local.get $c) (f64.eq) (call ${MAKE_BOOL_FX}) (return))
+        (local.get $a) (local.get $c) (f64.ne) (call ${MAKE_BOOL_FX}) (return))
+      (local.get $a) (local.get $c) (f64.eq) (call ${MAKE_BOOL_FX}) (return)
     ))
 
   ${
@@ -283,5 +332,6 @@ export const nameToFunctionMap = {
   [MAKE_STRING_FX]: makeStringFunc,
   [ARITHMETIC_OP_FX]: arithmeticOpFunc,
   [COMPARISON_OP_FX]: comparisonOpFunc,
+  [STRING_COMPARE_FX]: stringCmpFunc,
   [NEG_FUNC_NAME]: negFunc,
 };
