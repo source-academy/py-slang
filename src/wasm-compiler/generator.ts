@@ -2,21 +2,27 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import { BaseGenerator } from "./baseGenerator";
 import {
-  ADD_FX,
-  DIV_FX,
-  EQ_FX,
+  ADD_TAG,
+  ARITHMETIC_OP_FX,
+  COMPARISON_OP_FX,
+  DIV_TAG,
+  EQ_TAG,
+  GT_TAG,
+  GTE_TAG,
   HEAP_PTR,
   LOG_FUNCS,
+  LT_TAG,
+  LTE_TAG,
   MAKE_BOOL_FX,
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
   MAKE_STRING_FX,
-  MUL_FX,
+  MUL_TAG,
   nameToFunctionMap,
   NEG_FUNC_NAME,
-  NEQ_FX,
-  SUB_FX,
+  NEQ_TAG,
+  SUB_TAG,
 } from "./constants";
 
 export class Generator extends BaseGenerator<string> {
@@ -24,6 +30,7 @@ export class Generator extends BaseGenerator<string> {
     MAKE_INT_FX,
     MAKE_FLOAT_FX,
     MAKE_COMPLEX_FX,
+    MAKE_STRING_FX,
   ]);
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -52,7 +59,6 @@ export class Generator extends BaseGenerator<string> {
   ${this.strings
     .map(([str, add]) => `(data (i32.const ${add}) "${str}")`)
     .join("\n  ")}
-
   ${functionString}
   
   (func $main ${body} call $log)
@@ -75,19 +81,17 @@ export class Generator extends BaseGenerator<string> {
     const operator = (() => {
       switch (expr.operator.type) {
         case TokenType.PLUS:
-          this.functions.add(MAKE_STRING_FX);
-          this.functions.add(ADD_FX);
-          return `(call ${ADD_FX})`;
+          this.functions.add(ARITHMETIC_OP_FX);
+          return `(i32.const ${ADD_TAG}) (call ${ARITHMETIC_OP_FX})`;
         case TokenType.MINUS:
-          this.functions.add(SUB_FX);
-          return `(call ${SUB_FX})`;
+          this.functions.add(ARITHMETIC_OP_FX);
+          return `(i32.const ${SUB_TAG}) (call ${ARITHMETIC_OP_FX})`;
         case TokenType.STAR:
-          this.functions.add(MUL_FX);
-          return `(call ${MUL_FX})`;
+          this.functions.add(ARITHMETIC_OP_FX);
+          return `(i32.const ${MUL_TAG}) (call ${ARITHMETIC_OP_FX})`;
         case TokenType.SLASH:
-          this.functions.add(DIV_FX);
-          this.functions.add(MAKE_FLOAT_FX);
-          return `(call ${DIV_FX})`;
+          this.functions.add(ARITHMETIC_OP_FX);
+          return `(i32.const ${DIV_TAG}) (call ${ARITHMETIC_OP_FX})`;
         default:
           throw new Error(`Unsupported binary operator: ${expr.operator.type}`);
       }
@@ -99,17 +103,23 @@ export class Generator extends BaseGenerator<string> {
   visitCompareExpr(expr: ExprNS.Compare): string {
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
+
+    this.functions.add(MAKE_BOOL_FX);
+    this.functions.add(COMPARISON_OP_FX);
     const operator = (() => {
       switch (expr.operator.type) {
         case TokenType.DOUBLEEQUAL:
-          this.functions.add(MAKE_BOOL_FX);
-          this.functions.add(EQ_FX);
-          return `(call ${EQ_FX})`;
+          return `(i32.const ${EQ_TAG}) (call ${COMPARISON_OP_FX})`;
         case TokenType.NOTEQUAL:
-          this.functions.add(MAKE_BOOL_FX);
-          this.functions.add(EQ_FX);
-          this.functions.add(NEQ_FX);
-          return `(call ${NEQ_FX})`;
+          return `(i32.const ${NEQ_TAG}) (call ${COMPARISON_OP_FX})`;
+        case TokenType.LESS:
+          return `(i32.const ${LT_TAG}) (call ${COMPARISON_OP_FX})`;
+        case TokenType.LESSEQUAL:
+          return `(i32.const ${LTE_TAG}) (call ${COMPARISON_OP_FX})`;
+        case TokenType.GREATER:
+          return `(i32.const ${GT_TAG}) (call ${COMPARISON_OP_FX})`;
+        case TokenType.GREATEREQUAL:
+          return `(i32.const ${GTE_TAG}) (call ${COMPARISON_OP_FX})`;
         default:
           throw new Error(
             `Unsupported comparison operator: ${expr.operator.type}`
