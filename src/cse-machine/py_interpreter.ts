@@ -355,6 +355,19 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         pyDefineVariable(context, functionDefNode.name.lexeme, closure);
     },
 
+    'Lambda': (code, command, context, control, stash, isPrelude) => {
+        const lambdaNode = command as ExprNS.Lambda;
+
+        //create closure, capturing current environment
+        const closure = PyClosure.makeFromLambda(
+            lambdaNode,
+            currentEnvironment(context),
+            context
+        );
+        // lambda is expression, just push value onto stash
+        stash.push(closure);
+    },
+
     /** 
      * Only handles explicit return for now
      * To handle implicit return None next
@@ -463,7 +476,11 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
         // push reset and implicit return for cleanup at end of function
         control.push(instrCreator.resetInstr(instr.srcNode));
-        control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
+
+        // Only push endOfFunctionBodyInstr for functionDef
+        if (closure.node.constructor.name === 'FunctionDef') {
+            control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
+        }
 
         // create new function environment
         const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call);
