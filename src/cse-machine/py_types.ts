@@ -2,9 +2,19 @@ import { Environment } from './environment';
 import { StmtNS, ExprNS } from '../ast-types';
 import { TokenType } from '../tokens';
 
-export type PyNode = StmtNS.Stmt | ExprNS.Expr;
+export type PyNode = StmtNS.Stmt | ExprNS.Expr | StatementSequence;
+
+export interface StatementSequence {
+       type: 'StatementSequence';
+       body: StmtNS.Stmt[];
+       loc?: {
+           start: { line: number; column: number };
+           end: { line: number; column: number };
+       };
+   }
 
 export enum InstrType {
+    END_OF_FUNCTION_BODY = "EndOfFunctionBody",
     RESET = 'Reset',
     WHILE = 'While',
     FOR = 'For',
@@ -59,26 +69,39 @@ export interface ForInstr extends BaseInstr {
 }
 
 export interface AssmtInstr extends BaseInstr {
-  symbol: string
-  constant: boolean
-  declaration: boolean
+  instrType: InstrType.ASSIGNMENT;
+  symbol: string;
+  constant: boolean;
+  declaration: boolean;
 }
 
 export interface UnOpInstr extends BaseInstr {
-  symbol: TokenType
+  instrType: InstrType.UNARY_OP;
+  symbol: TokenType;
 }
 
 export interface BinOpInstr extends BaseInstr {
-  symbol: TokenType
+  instrType: InstrType.BINARY_OP;
+  symbol: TokenType;
 }
 
 export interface BoolOpInstr extends BaseInstr {
+  instrType: InstrType.BOOL_OP;
   symbol: TokenType;
 }
 
 export interface AppInstr extends BaseInstr {
-  numOfArgs: number
-  srcNode: PyNode
+  instrType: InstrType.APPLICATION;
+  numOfArgs: number;
+  srcNode: PyNode;
+}
+
+export interface EndOfFunctionBodyInstr extends BaseInstr {
+  instrType: InstrType.END_OF_FUNCTION_BODY;
+}
+
+export interface ResetInstr extends BaseInstr {
+  instrType: InstrType.RESET;
 }
 
 export interface BranchInstr extends BaseInstr {
@@ -100,6 +123,8 @@ export type Instr =
   | ForInstr
   | AssmtInstr
   | AppInstr
+  | EndOfFunctionBodyInstr
+  | ResetInstr
   | BranchInstr
   | EnvInstr
   | ArrLitInstr

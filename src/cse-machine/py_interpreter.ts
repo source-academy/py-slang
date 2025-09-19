@@ -7,18 +7,21 @@
 /* tslint:disable:max-classes-per-file */
 
 import { StmtNS, ExprNS } from '../ast-types';
+import { PyClosure } from './py_closure';
 import { PyContext } from './py_context';
 import { PyControl, PyControlItem } from './py_control';
-import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr } from './py_types';
+import { createEnvironment, currentEnvironment, pushEnvironment, popEnvironment } from './py_environment';
+import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr, AppInstr } from './py_types';
 import { Stash, Value, ErrorValue } from './stash';
 import { IOptions } from '..';
-import * as instr from './py_instrCreator';
+import * as instrCreator from './py_instrCreator';
 import { evaluateUnaryExpression, evaluateBinaryExpression, evaluateBoolExpression } from './py_operators';
 import { TokenType } from '../tokens';
 import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
 import { toPythonString } from '../py_stdlib'
 import { pyGetVariable, pyDefineVariable } from './py_utils';
+
 
 type CmdEvaluator = (
   code: string,
@@ -258,14 +261,14 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     'Unary': (code, command, context, control, stash, isPrelude) => {
         const unary = command as ExprNS.Unary;
-        const op_instr = instr.unOpInstr(unary.operator.type, unary);
+        const op_instr = instrCreator.unOpInstr(unary.operator.type, unary);
         control.push(op_instr);
         control.push(unary.right);
     },
 
     'Binary': (code, command, context, control, stash, isPrelude) => {
         const binary = command as ExprNS.Binary;
-        const op_instr = instr.binOpInstr(binary.operator.type, binary);
+        const op_instr = instrCreator.binOpInstr(binary.operator.type, binary);
         control.push(op_instr);
         control.push(binary.right);
         control.push(binary.left);
@@ -273,7 +276,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     'BoolOp': (code, command, context, control, stash, isPrelude) => {
         const boolOp = command as ExprNS.BoolOp;
-        control.push(instr.boolOpInstr(boolOp.operator.type, boolOp));
+        control.push(instrCreator.boolOpInstr(boolOp.operator.type, boolOp));
         control.push(boolOp.right);
         control.push(boolOp.left);
     },
@@ -304,7 +307,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     'Compare': (code, command, context, control, stash, isPrelude) => {
         const compareNode = command as ExprNS.Compare;
         // For now, we only handle simple, single comparisons.
-        const op_instr = instr.binOpInstr(compareNode.operator.type, compareNode);
+        const op_instr = instrCreator.binOpInstr(compareNode.operator.type, compareNode);
         control.push(op_instr);
         control.push(compareNode.right);
         control.push(compareNode.left);
@@ -313,7 +316,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     'Assign': (code, command, context, control, stash, isPrelude) => {
         const assignNode = command as StmtNS.Assign;
 
-        const assmtInstr = instr.assmtInstr(
+        const assmtInstr = instrCreator.assmtInstr(
             assignNode.name.lexeme, 
             false,
             true,
@@ -322,6 +325,63 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
         control.push(assmtInstr);
         control.push(assignNode.value);
+    },
+
+    'Call': (code, command, context, control, stash, isPrelude) => {
+        const callNode = command as ExprNS.Call;
+        
+        // push application instruction, track number of arguments
+        control.push(instrCreator.appInstr(callNode.args.length, callNode));
+
+        // push arguments onto stacks in reverse order
+        for (let i = callNode.args.length - 1; i >= 0; i--) {
+            control.push(callNode.args[i]);
+        }
+
+        // push function expression itself
+        control.push(callNode.callee);
+    },
+
+    'FunctionDef': (code, command, context, control, stash, isPrelude) => {
+        const functionDefNode = command as StmtNS.FunctionDef;
+
+        // create closure, capture function code and environment
+        const closure = PyClosure.makeFromFunctionDef(
+            functionDefNode,
+            currentEnvironment(context),
+            context
+        );
+        // define function name in current environment and bind to new closure
+        pyDefineVariable(context, functionDefNode.name.lexeme, closure);
+    },
+
+    /** 
+     * Only handles explicit return for now
+     * To handle implicit return None next
+     */
+    'Return': (code, command, context, control, stash, isPrelude) => { 
+        const returnNode = command as StmtNS.Return;
+
+        let head;
+
+        while (true) {
+            head = control.pop();
+
+            // if stack is empty before RESET, break
+            if (!head || (('instrType' in head) && head.instrType === InstrType.RESET)) {
+                break;
+            }
+        }
+        if (head) {
+            control.push(head);
+        }
+        // explicit return 
+        if (returnNode.value) {
+            control.push(returnNode.value);
+        } else {
+            // if just return, returns None like implicit return
+            stash.push({ type: 'undefined' });
+        }
     },
 
     /**
@@ -380,10 +440,55 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     [InstrType.ASSIGNMENT]: (code, command, context, control, stash, isPrelude) => {
         const instr = command as AssmtInstr;
-        const value = stash.pop(); // Get the evaluated value from the stash
+        // Get the evaluated value from the stash
+        const value = stash.pop(); 
 
         if (value) {
             pyDefineVariable(context, instr.symbol, value);
         }
     },
+
+    [InstrType.APPLICATION]: (code, command, context, control, stash, isPrelude) => {
+        const instr = command as AppInstr;
+        const numOfArgs = instr.numOfArgs;
+
+        // pop evaluated arguments from stash
+        const args = [];
+        for (let i = 0; i < numOfArgs; i++) {
+            args.unshift(stash.pop());
+        }
+
+        // pop closure from stash
+        const closure = stash.pop() as PyClosure;
+
+        // push reset and implicit return for cleanup at end of function
+        control.push(instrCreator.resetInstr(instr.srcNode));
+        control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
+
+        // create new function environment
+        const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call);
+        pushEnvironment(context, newEnv);
+
+        // push function body onto control stack
+        const closureNode = closure.node;
+        if (closureNode.constructor.name === 'FunctionDef') {
+           // 'def' has a body of statements (an array)
+            const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
+            control.push(...bodyStmts);
+        } else {
+           // 'lambda' has a body with a single expression
+           const bodyExpr = (closureNode as ExprNS.Lambda).body;
+           control.push(bodyExpr);
+        }
+    },
+
+    [InstrType.RESET]: (code, command, context, control, stash, isPrelude) => {
+        popEnvironment(context);
+    },
+
+    [InstrType.END_OF_FUNCTION_BODY]: (code, command, context, control, stash, isPrelude) => {
+        // this is only reached if function runs to completion without explicit return 
+        stash.push({ type: 'undefined' });
+    },
+
 };

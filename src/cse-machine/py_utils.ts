@@ -3,7 +3,7 @@ import { Value } from "./stash";
 import { PyNode } from "./py_types";
 import { TokenType } from "../tokens";
 import { PyRuntimeSourceError } from "../errors/py_runtimeSourceError";
-import { currentEnvironment, Environment } from "./py_environment";
+import { currentEnvironment, PyEnvironment } from "./py_environment";
 
 
 export function pyHandleRuntimeError (context: PyContext, error: PyRuntimeSourceError) {
@@ -103,7 +103,7 @@ export function pyDefineVariable(context: PyContext, name: string, value: Value)
 }
 
 export function pyGetVariable(context: PyContext, name: string, node: PyNode): Value {
-    let environment: Environment | null = currentEnvironment(context);
+    let environment: PyEnvironment | null = currentEnvironment(context);
     while (environment) {
         if (Object.prototype.hasOwnProperty.call(environment.head, name)) {
             return environment.head[name];

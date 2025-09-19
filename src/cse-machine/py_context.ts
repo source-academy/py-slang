@@ -1,6 +1,6 @@
 import { Stash, Value } from './stash';
 import { PyControl, PyControlItem } from './py_control';
-import { createSimpleEnvironment, createProgramEnvironment, Environment } from './py_environment';
+import { createSimpleEnvironment, createProgramEnvironment, PyEnvironment } from './py_environment';
 import { CseError } from './error';
 import { Heap } from './heap';
 import { PyNode } from './py_types';
@@ -18,7 +18,7 @@ export class PyContext {
     debuggerOn: boolean
     isRunning: boolean
     environmentTree: EnvTree
-    environments: Environment[]
+    environments: PyEnvironment[]
     nodes: PyNode[]
     control: PyControl | null
     stash: Stash | null
@@ -54,7 +54,7 @@ export class PyContext {
     }
   }
 
-  createGlobalEnvironment = (): Environment => ({
+  createGlobalEnvironment = (): PyEnvironment => ({
     tail: null,
     name: 'global',
     head: {},
@@ -94,9 +94,9 @@ export class PyContext {
     return newContext;
   }
 
-  private copyEnvironment(env: Environment): Environment {
+  private copyEnvironment(env: PyEnvironment): PyEnvironment {
     const newTail = env.tail ? this.copyEnvironment(env.tail) : null;
-    const newEnv: Environment = {
+    const newEnv: PyEnvironment = {
       id: env.id, 
       name: env.name,
       tail: newTail,
@@ -111,13 +111,13 @@ export class PyContext {
 
 export class EnvTree {
   private _root: EnvTreeNode | null = null
-  private map = new Map<Environment, EnvTreeNode>()
+  private map = new Map<PyEnvironment, EnvTreeNode>()
 
   get root(): EnvTreeNode | null {
     return this._root
   }
 
-  public insert(environment: Environment): void {
+  public insert(environment: PyEnvironment): void {
     const tailEnvironment = environment.tail
     if (tailEnvironment === null) {
       if (this._root === null) {
@@ -134,7 +134,7 @@ export class EnvTree {
     }
   }
 
-  public getTreeNode(environment: Environment): EnvTreeNode | undefined {
+  public getTreeNode(environment: PyEnvironment): EnvTreeNode | undefined {
     return this.map.get(environment)
   }
 }
@@ -142,7 +142,7 @@ export class EnvTree {
 export class EnvTreeNode {
   private _children: EnvTreeNode[] = []
 
-  constructor(readonly environment: Environment, public parent: EnvTreeNode | null) {}
+  constructor(readonly environment: PyEnvironment, public parent: EnvTreeNode | null) {}
 
   get children(): EnvTreeNode[] {
     return this._children

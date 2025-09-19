@@ -2,6 +2,7 @@ import { Stack } from "./stack";
 import { PyNode, Instr } from "./py_types";
 import { StmtNS } from "../ast-types";
 import { isEnvDependent } from './utils'; // TODO
+import { StatementSequence } from "./py_types";
 
 export type PyControlItem = (PyNode | Instr) & {
   isEnvDependent?: boolean;
