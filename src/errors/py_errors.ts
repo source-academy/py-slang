@@ -34,26 +34,24 @@ export function createErrorIndicator(snippet: string, errorPos: number): string 
   return indicator;
 }
 
-export class TypeConcatenateError extends PyRuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, wrongType: string) {
-        super(node);
-        this.type = ErrorType.TYPE;
+// export class TypeConcatenateError extends PyRuntimeSourceError {
+//     constructor(source: string, node: ExprNS.Expr, wrongType: string) {
+//         super(node);
+//         this.type = ErrorType.TYPE;
 
-        const { line, fullLine } = getFullLine(source, node.startToken.indexInSource);
-
-        const snippet = source.substring(node.startToken.indexInSource, node.endToken.indexInSource + node.endToken.lexeme.length);
-        const offset = fullLine.indexOf(snippet);
-        const adjustedOffset = offset >= 0 ? offset : 0;
-
-        const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
-        const indicator = createErrorIndicator(snippet, errorPos);
-        const name = "TypeError";
-        let hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
-        const suggestion = "You are trying to concatenate a string with an " + wrongType + ". To fix this, convert the " + wrongType + " to a string using str(), or ensure both operands are of the same type.";
-        const msg = `${name} at line ${line}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
-        this.message = msg;
-    }
-}
+//         let index = (node as any).symbol?.loc?.start?.index;
+//         const { line, fullLine } = getFullLine(source, index);
+//         const snippet = (node as any).symbol?.loc?.source ?? '<unknown source>';
+        
+//         let hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
+//         const offset = fullLine.indexOf(snippet);
+//         const indicator = createErrorIndicator(snippet, '+');
+//         const name = "TypeError";
+//         const suggestion = "You are trying to concatenate a string with an " + wrongType + ". To fix this, convert the " + wrongType + " to a string using str(), or ensure both operands are of the same type.";
+//         const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(offset) + indicator + "\n" + hint + "\n" + suggestion;
+//         this.message = msg;
+//     }
+// }
 
 export class UnsupportedOperandTypeError extends PyRuntimeSourceError {
     constructor(source: string, node: ExprNS.Expr, wrongType1: string, wrongType2: string, operand: string) {

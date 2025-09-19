@@ -11,11 +11,11 @@ import { PyClosure } from './py_closure';
 import { PyContext } from './py_context';
 import { PyControl, PyControlItem } from './py_control';
 import { createEnvironment, currentEnvironment, pushEnvironment, popEnvironment } from './py_environment';
-import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr, AppInstr } from './py_types';
+import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr, AppInstr, BranchInstr } from './py_types';
 import { Stash, Value, ErrorValue } from './stash';
 import { IOptions } from '..';
 import * as instrCreator from './py_instrCreator';
-import { evaluateUnaryExpression, evaluateBinaryExpression, evaluateBoolExpression } from './py_operators';
+import { evaluateUnaryExpression, evaluateBinaryExpression, evaluateBoolExpression, isFalsy } from './py_operators';
 import { TokenType } from '../tokens';
 import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
@@ -66,9 +66,9 @@ export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Re
  */
 export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContext, options: IOptions): Value {
     try {
-        context.control = new PyControl(program);
         context.runtime.isRunning = true;
-
+        context.control = new PyControl(program);
+        
         const result = pyRunCSEMachine(
             code, 
             context, 
@@ -78,7 +78,7 @@ export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContex
             options.stepLimit,
             options.isPrelude || false,
         );
-        return result;
+        return context.output ? { type: "string", value: context.output} : { type: 'undefined' };
     } catch(error: any) {
         return { type: 'error', message: error.message};
     } finally {
@@ -98,7 +98,7 @@ export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContex
  * @param isPrelude Whether the program is the prelude.
  * @returns The top value of the stash after execution.
  */
-function pyRunCSEMachine(
+export function pyRunCSEMachine(
     code: string, 
     context: PyContext, 
     control: PyControl, 
@@ -397,6 +397,37 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         }
     },
 
+    'If': (code, command, context, control, stash, isPrelude) => {
+        const ifNode = command as StmtNS.If;
+
+        // create branch instruction, wrap statement arrays in 'StatementSequence' objects
+        const branch = instrCreator.branchInstr(
+            { type: 'StatementSequence', body: ifNode.body },
+            ifNode.elseBlock
+                ? (Array.isArray(ifNode.elseBlock)
+                    // 'else' block
+                    ? {type: 'StatementSequence', body: ifNode.elseBlock }            
+                    // 'elif' block
+                    : ifNode.elseBlock)
+                // 'else' block dont exist
+                : null,
+            ifNode
+        );
+        control.push(branch);
+        control.push(ifNode.condition);
+    },
+
+    'Ternary': (code, command, context, control, stash, isPrelude) => {
+        const ternaryNode = command as ExprNS.Ternary;
+            const branch = instrCreator.branchInstr(
+                ternaryNode.consequent,
+                ternaryNode.alternative,
+                ternaryNode
+            );
+        control.push(branch);
+        control.push(ternaryNode.predicate);
+    },
+
     /**
      * Instruction Handlers
      */
@@ -471,31 +502,39 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
             args.unshift(stash.pop());
         }
 
-        // pop closure from stash
-        const closure = stash.pop() as PyClosure;
+        // pop callable from stash
+        const callable = stash.pop();
 
-        // push reset and implicit return for cleanup at end of function
-        control.push(instrCreator.resetInstr(instr.srcNode));
+        if (callable instanceof PyClosure) {
+            // User-defined function
+            const closure = callable as PyClosure;
+            // push reset and implicit return for cleanup at end of function
+            control.push(instrCreator.resetInstr(instr.srcNode));
 
-        // Only push endOfFunctionBodyInstr for functionDef
-        if (closure.node.constructor.name === 'FunctionDef') {
-            control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
-        }
+            // Only push endOfFunctionBodyInstr for functionDef
+            if (closure.node.constructor.name === 'FunctionDef') {
+                control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
+            }
 
-        // create new function environment
-        const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call);
-        pushEnvironment(context, newEnv);
+            // create new function environment
+            const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call);
+            pushEnvironment(context, newEnv);
 
-        // push function body onto control stack
-        const closureNode = closure.node;
-        if (closureNode.constructor.name === 'FunctionDef') {
-           // 'def' has a body of statements (an array)
-            const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
-            control.push(...bodyStmts);
+            // push function body onto control stack
+            const closureNode = closure.node;
+            if (closureNode.constructor.name === 'FunctionDef') {
+               // 'def' has a body of statements (an array)
+                const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
+                control.push(...bodyStmts);
+            } else {
+               // 'lambda' has a body with a single expression
+               const bodyExpr = (closureNode as ExprNS.Lambda).body;
+               control.push(bodyExpr);
+            }
         } else {
-           // 'lambda' has a body with a single expression
-           const bodyExpr = (closureNode as ExprNS.Lambda).body;
-           control.push(bodyExpr);
+            // Built-in function from stdlib / constants
+            const result = (callable as any)(context, ...args);
+            stash.push(result);
         }
     },
 
@@ -506,6 +545,37 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     [InstrType.END_OF_FUNCTION_BODY]: (code, command, context, control, stash, isPrelude) => {
         // this is only reached if function runs to completion without explicit return 
         stash.push({ type: 'undefined' });
+    },
+
+    [InstrType.BRANCH]: (code, command, context, control, stash, isPrelude) => {
+        const instr = command as BranchInstr;
+        const condition = stash.pop();
+
+        if (!isFalsy(condition)) {
+            // Condition is truthy, execute the consequent
+            const consequent = instr.consequent;
+            if (consequent && 'type' in consequent && consequent.type === 'StatementSequence') {
+                control.push(...(consequent as any).body.slice().reverse());
+            } else if (consequent) {
+                // consequent of ternary or single statement
+                control.push(consequent);
+            }
+        } else if (instr.alternate) {
+            // Condition is falsy, execute the alternate
+            const alternate = instr.alternate;
+            if (alternate && 'type' in alternate && alternate.type === 'StatementSequence') {
+                // 'else' block
+                control.push(...(alternate as any).body.slice().reverse());
+            } else if (alternate) {
+                // 'elif' or ternary alternative
+                control.push(alternate);
+            }
+        }
+        // If condition is falsy and there's no alternate, do nothing
+    },
+
+    [InstrType.POP]: (code, command, context, control, stash, isPrelude) => {
+        stash.pop();
     },
 
 };

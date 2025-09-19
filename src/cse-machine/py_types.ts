@@ -109,6 +109,10 @@ export interface BranchInstr extends BaseInstr {
   alternate: PyNode | null | undefined
 }
 
+export interface PopInstr extends BaseInstr {
+  instrType: InstrType.POP;
+}
+
 export interface EnvInstr extends BaseInstr {
   env: Environment
 }
@@ -126,6 +130,7 @@ export type Instr =
   | EndOfFunctionBodyInstr
   | ResetInstr
   | BranchInstr
+  | PopInstr
   | EnvInstr
   | ArrLitInstr
   | UnOpInstr

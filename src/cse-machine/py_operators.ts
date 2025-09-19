@@ -1,7 +1,7 @@
 import { Value } from "./stash";
 import { PyContext } from "./py_context";
 import { PyComplexNumber} from "../types";
-import { UnsupportedOperandTypeError, ZeroDivisionError, TypeConcatenateError } from "../errors/py_errors";
+import { UnsupportedOperandTypeError, ZeroDivisionError } from "../errors/py_errors";
 import { ExprNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import { pyHandleRuntimeError, operatorTranslator, pythonMod, typeTranslator } from "./py_utils";
@@ -33,7 +33,7 @@ export type BinaryOperator =
     | "instanceof";
 
 // Helper function for truthiness based on Python rules
-function isFalsy(value: Value): boolean {
+export function isFalsy(value: Value): boolean {
     switch (value.type) {
         case 'bigint':
             return value.value === 0n;
@@ -179,11 +179,12 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
             if (left.type === 'string' && right.type === 'string') {
                 return { type: 'string', value: left.value + right.value };
             } else {
-                const wrongType = left.type === 'string' ? right.type : left.type;
-                pyHandleRuntimeError(context, new TypeConcatenateError(
+                pyHandleRuntimeError(context, new UnsupportedOperandTypeError(
                     code,
                     command,
-                    typeTranslator(wrongType)
+                    left.type,
+                    right.type,
+                    operatorTranslator(operator)
                 ));
             }
         }
@@ -257,7 +258,7 @@ export function evaluateBinaryExpression(code: string, command: ExprNS.Expr, con
                          }
                         return { type: 'number', value: pythonMod(l, r) };
                     case TokenType.DOUBLESTAR: 
-                         if (r === 0) {
+                         if (l === 0 && r < 0) {
                             pyHandleRuntimeError(context, new ZeroDivisionError(code, command, context));
                          }
                     return { type: 'number', value: l ** r };

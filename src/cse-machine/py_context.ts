@@ -10,6 +10,7 @@ import { StmtNS } from '../ast-types';
 export class PyContext {
   public control: PyControl;
   public stash: Stash;
+  public output: string = '';
   //public environment: Environment;
   public errors: CseError[] = [];
 

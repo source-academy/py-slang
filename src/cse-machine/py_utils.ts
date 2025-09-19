@@ -4,6 +4,7 @@ import { PyNode } from "./py_types";
 import { TokenType } from "../tokens";
 import { PyRuntimeSourceError } from "../errors/py_runtimeSourceError";
 import { currentEnvironment, PyEnvironment } from "./py_environment";
+import { builtIns } from "../py_stdlib";
 
 
 export function pyHandleRuntimeError (context: PyContext, error: PyRuntimeSourceError) {
@@ -110,6 +111,9 @@ export function pyGetVariable(context: PyContext, name: string, node: PyNode): V
         } else {
             environment = environment.tail;
         }
+    }
+    if (builtIns.has(name)) {
+        return builtIns.get(name)!;
     }
     // For now, we throw an error. We can change this to return undefined if needed.
     // handleRuntimeError(context, new TypeError(`name '${name} is not defined`, node as any, context as any, '', ''));
