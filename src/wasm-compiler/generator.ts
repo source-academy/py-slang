@@ -79,26 +79,18 @@ export class Generator extends BaseGenerator<string> {
   visitBinaryExpr(expr: ExprNS.Binary): string {
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
-    const operator = (() => {
-      switch (expr.operator.type) {
-        case TokenType.PLUS:
-          this.functions.add(ARITHMETIC_OP_FX);
-          return `(i32.const ${ADD_TAG}) (call ${ARITHMETIC_OP_FX})`;
-        case TokenType.MINUS:
-          this.functions.add(ARITHMETIC_OP_FX);
-          return `(i32.const ${SUB_TAG}) (call ${ARITHMETIC_OP_FX})`;
-        case TokenType.STAR:
-          this.functions.add(ARITHMETIC_OP_FX);
-          return `(i32.const ${MUL_TAG}) (call ${ARITHMETIC_OP_FX})`;
-        case TokenType.SLASH:
-          this.functions.add(ARITHMETIC_OP_FX);
-          return `(i32.const ${DIV_TAG}) (call ${ARITHMETIC_OP_FX})`;
-        default:
-          throw new Error(`Unsupported binary operator: ${expr.operator.type}`);
-      }
-    })();
 
-    return `${left} ${right} ${operator}`;
+    this.functions.add(ARITHMETIC_OP_FX);
+
+    const type = expr.operator.type;
+    let opTag: number;
+    if (type === TokenType.PLUS) opTag = ADD_TAG;
+    else if (type === TokenType.MINUS) opTag = SUB_TAG;
+    else if (type === TokenType.STAR) opTag = MUL_TAG;
+    else if (type === TokenType.SLASH) opTag = DIV_TAG;
+    else throw new Error(`Unsupported binary operator: ${type}`);
+
+    return `${left} ${right} (i32.const ${opTag}) (call ${ARITHMETIC_OP_FX})`;
   }
 
   visitCompareExpr(expr: ExprNS.Compare): string {
@@ -108,28 +100,18 @@ export class Generator extends BaseGenerator<string> {
     this.functions.add(MAKE_BOOL_FX);
     this.functions.add(STRING_COMPARE_FX);
     this.functions.add(COMPARISON_OP_FX);
-    const operator = (() => {
-      switch (expr.operator.type) {
-        case TokenType.DOUBLEEQUAL:
-          return `(i32.const ${EQ_TAG}) (call ${COMPARISON_OP_FX})`;
-        case TokenType.NOTEQUAL:
-          return `(i32.const ${NEQ_TAG}) (call ${COMPARISON_OP_FX})`;
-        case TokenType.LESS:
-          return `(i32.const ${LT_TAG}) (call ${COMPARISON_OP_FX})`;
-        case TokenType.LESSEQUAL:
-          return `(i32.const ${LTE_TAG}) (call ${COMPARISON_OP_FX})`;
-        case TokenType.GREATER:
-          return `(i32.const ${GT_TAG}) (call ${COMPARISON_OP_FX})`;
-        case TokenType.GREATEREQUAL:
-          return `(i32.const ${GTE_TAG}) (call ${COMPARISON_OP_FX})`;
-        default:
-          throw new Error(
-            `Unsupported comparison operator: ${expr.operator.type}`
-          );
-      }
-    })();
 
-    return `${left} ${right} ${operator}`;
+    const type = expr.operator.type;
+    let opTag: number;
+    if (type === TokenType.DOUBLEEQUAL) opTag = EQ_TAG;
+    else if (type === TokenType.NOTEQUAL) opTag = NEQ_TAG;
+    else if (type === TokenType.LESS) opTag = LT_TAG;
+    else if (type === TokenType.LESSEQUAL) opTag = LTE_TAG;
+    else if (type === TokenType.GREATER) opTag = GT_TAG;
+    else if (type === TokenType.GREATEREQUAL) opTag = GTE_TAG;
+    else throw new Error(`Unsupported comparison operator: ${type}`);
+
+    return `${left} ${right} (i32.const ${opTag}) (call ${COMPARISON_OP_FX})`;
   }
 
   visitUnaryExpr(expr: ExprNS.Unary): string {
