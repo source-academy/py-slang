@@ -138,7 +138,7 @@ import { Context } from './cse-machine/context';
 export * from './errors';
 import { Finished, RecursivePartial, Result } from "./types";
 import { runCSEMachine } from "./runner/pyRunner";
-import { initialise } from "@sourceacademy/conductor";
+import { initialise } from "@sourceacademy/conductor/runner";
 import { PyEvaluator } from "./conductor/PyEvaluator";
 export * from './errors';
 

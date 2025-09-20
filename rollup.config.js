@@ -10,7 +10,7 @@ const config = [{
   input: 'src/conductor/PyEvaluator.ts',
   output: {
     file: 'dist/python-evaluator.cjs',
-    format: 'es',
+    format: 'cjs',
     name: 'PySlangEvaluator',
     sourcemap: true
   },
