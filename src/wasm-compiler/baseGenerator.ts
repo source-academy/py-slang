@@ -4,22 +4,23 @@ export abstract class BaseGenerator<T>
   implements StmtNS.Visitor<T>, ExprNS.Visitor<T>
 {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): T {
+    console.log("Visiting:", stmt);
     return stmt.accept(this);
   }
 
   abstract visitFileInputStmt(stmt: StmtNS.FileInput): T;
   abstract visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): T;
+  abstract visitGroupingExpr(expr: ExprNS.Grouping): T;
   abstract visitBinaryExpr(expr: ExprNS.Binary): T;
+  abstract visitCompareExpr(expr: ExprNS.Compare): T;
   abstract visitUnaryExpr(expr: ExprNS.Unary): T;
   abstract visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): T;
+  abstract visitLiteralExpr(expr: ExprNS.Literal): T;
   abstract visitComplexExpr(expr: ExprNS.Complex): T;
-  abstract visitGroupingExpr(expr: ExprNS.Grouping): T;
-  abstract visitCompareExpr(expr: ExprNS.Compare): T;
+  abstract visitAssignStmt(stmt: StmtNS.Assign): T;
+  abstract visitVariableExpr(expr: ExprNS.Variable): T;
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): T {
-    throw new Error("Method not implemented.");
-  }
-  visitLiteralExpr(expr: ExprNS.Literal): T {
     throw new Error("Method not implemented.");
   }
   visitTernaryExpr(expr: ExprNS.Ternary): T {
@@ -29,9 +30,6 @@ export abstract class BaseGenerator<T>
     throw new Error("Method not implemented.");
   }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): T {
-    throw new Error("Method not implemented.");
-  }
-  visitVariableExpr(expr: ExprNS.Variable): T {
     throw new Error("Method not implemented.");
   }
   visitCallExpr(expr: ExprNS.Call): T {
@@ -47,9 +45,6 @@ export abstract class BaseGenerator<T>
     throw new Error("Method not implemented.");
   }
   visitPassStmt(stmt: StmtNS.Pass): T {
-    throw new Error("Method not implemented.");
-  }
-  visitAssignStmt(stmt: StmtNS.Assign): T {
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): T {

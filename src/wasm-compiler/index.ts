@@ -5,7 +5,9 @@ import { Generator } from "./generator";
 
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
-  const code = `"Apple" <= "apple"`;
+  const code = `x = 2 + 3
+y = x == 5
+y`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
@@ -14,6 +16,7 @@ import { Generator } from "./generator";
   const ast = pyParser.parse();
 
   const generator = new Generator();
+  console.dir(ast, { depth: null });
   const wat = generator.visit(ast);
 
   console.log(wat);

@@ -36,18 +36,30 @@ export class Generator extends BaseGenerator<string> {
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
+  private environment = new Map<string, [string, string]>();
+
   visitFileInputStmt(stmt: StmtNS.FileInput): string {
-    const firstStatement = stmt.statements[0];
-    if (!firstStatement) {
+    if (stmt.statements.length <= 0) {
       console.log("No statements found");
       throw new Error("No statements found");
     }
 
-    const body = this.visit(firstStatement);
+    const body = stmt.statements.map((s) => this.visit(s)).join("\n  ");
 
-    const functionString = [...this.functions]
+    const functions = [...this.functions]
       .map((name) => nameToFunctionMap[name])
       .map((fx) => fx.replace(/\s{2,}/g, ""))
+      .join("\n  ");
+
+    const globals = [...this.environment.values()]
+      .flatMap(([nameTag, namePayload]) => [
+        `(global ${nameTag} (mut i32) (i32.const 0))`,
+        `(global ${namePayload} (mut i64) (i64.const 0))`,
+      ])
+      .join("\n  ");
+
+    const strings = this.strings
+      .map(([str, add]) => `(data (i32.const ${add}) "${str}")`)
       .join("\n  ");
 
     return `
@@ -56,13 +68,13 @@ export class Generator extends BaseGenerator<string> {
   ${LOG_FUNCS.join("\n  ")}
 
   (global ${HEAP_PTR} (mut i32) (i32.const ${this.heapPointer}))
+  ${globals}
 
-  ${this.strings
-    .map(([str, add]) => `(data (i32.const ${add}) "${str}")`)
-    .join("\n  ")}
-  ${functionString}
+  ${strings}
+
+  ${functions}
   
-  (func $main ${body} call $log)
+  (func $main \n ${body} call $log)
 
   (start $main)
 )`;
@@ -162,5 +174,24 @@ export class Generator extends BaseGenerator<string> {
 
   visitComplexExpr(expr: ExprNS.Complex): string {
     return `(f64.const ${expr.value.real}) (f64.const ${expr.value.imag}) (call ${MAKE_COMPLEX_FX})`;
+  }
+
+  visitAssignStmt(stmt: StmtNS.Assign): string {
+    const expression = this.visit(stmt.value);
+    const name = stmt.name.lexeme;
+    const nameTag = `$_${stmt.name.lexeme}_tag`;
+    const namePayload = `$_${stmt.name.lexeme}_payload`;
+
+    this.environment.set(name, [nameTag, namePayload]);
+
+    return `${expression} (global.set ${namePayload}) (global.set ${nameTag})`;
+  }
+
+  visitVariableExpr(expr: ExprNS.Variable): string {
+    const tagPayload = this.environment.get(expr.name.lexeme);
+    if (!tagPayload) {
+      throw new Error(`Variable not found: ${expr.name.lexeme}`);
+    }
+    return `(global.get ${tagPayload[0]}) (global.get ${tagPayload[1]})`;
   }
 }
