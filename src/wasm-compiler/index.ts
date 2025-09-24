@@ -7,8 +7,8 @@ import { Generator } from "./generator";
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
 def x():
-    2
-x`;
+    return
+x()`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);

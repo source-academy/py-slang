@@ -224,4 +224,15 @@ export class Generator extends BaseGenerator<string> {
 
     return `${callee} ${args} (call $_apply_${arity})`;
   }
+
+  visitReturnStmt(stmt: StmtNS.Return): string {
+    const value = stmt.value;
+    if (!value) {
+      this.functions.add(MAKE_NONE_FX);
+      return `(call ${MAKE_NONE_FX}) (return)`;
+    }
+
+    const expr = this.visit(value);
+    return `${expr} (return)`;
+  }
 }
