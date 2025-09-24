@@ -24,7 +24,7 @@ const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img 
 const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${TYPE_TAG.BOOL}) (local.get $value) (i64.extend_i32_u))`;
 // upper 32: pointer; lower 32: length
 const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${TYPE_TAG.STRING}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
-// upper 32: tag; lower 32: number of arguments
+// upper 32: tag; lower 32: arity
 const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
 
 // unary operation functions
@@ -350,6 +350,35 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
   ${/* else, unreachable */ ""}
   unreachable
 )`;
+
+// one applyFunc per arity
+export const applyFuncFactory = (arity: number, bodies: string[]) => {
+  let params = "";
+
+  for (let i = 0; i < arity; i++) {
+    params += [...Array(arity).keys()].map(
+      (i) => `(param $${i}_tag i32) (param $${i}_val i64) `
+    );
+  }
+
+  const brTableJumps = [...Array(bodies.length).keys()]
+    .map((i) => i.toString())
+    .join(" ");
+
+  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64)
+  (i32.eq (local.get $tag) (global.get ${TYPE_TAG.CLOSURE})) (if (then
+    (local.get $val) (i32.wrap_i64) (i32.const ${arity}) (i32.eq) (if (then
+      ${"(block".repeat(bodies.length)}
+
+      (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
+
+      ${bodies.map((body) => `) ${body}`).join("  \n")}
+    )
+    (else unreachable)) ${/* arity wrong */ ""}
+  )
+  (else unreachable)) ${/* not a function */ ""}
+)`;
+};
 
 export const nameToFunctionMap = {
   [MAKE_INT_FX]: makeIntFunc,

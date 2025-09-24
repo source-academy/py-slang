@@ -2,6 +2,7 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import { BaseGenerator } from "./baseGenerator";
 import {
+  applyFuncFactory,
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
   COMPARISON_OP_FX,
@@ -29,11 +30,12 @@ export class Generator extends BaseGenerator<string> {
     MAKE_COMPLEX_FX,
     MAKE_STRING_FX,
   ]);
+  private applyArities = new Set<number>();
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
   private environment = new Set<string>();
-  private userFunctions = new Map<string, string[]>();
+  private functionBodies: string[] = [];
 
   visitFileInputStmt(stmt: StmtNS.FileInput): string {
     if (stmt.statements.length <= 0) {
@@ -59,6 +61,10 @@ export class Generator extends BaseGenerator<string> {
       .map(([str, add]) => `(data (i32.const ${add}) "${str}")`)
       .join("\n  ");
 
+    const applyFunctions = [...this.applyArities]
+      .map((arity) => applyFuncFactory(arity, this.functionBodies))
+      .join("\n  ");
+
     return `
 (module
   (import "js" "memory" (memory 1))
@@ -70,6 +76,8 @@ export class Generator extends BaseGenerator<string> {
   ${strings}
 
   ${functions}
+
+  ${applyFunctions}
   
   (func $main \n ${body} call $log)
 
@@ -186,7 +194,7 @@ export class Generator extends BaseGenerator<string> {
   visitVariableExpr(expr: ExprNS.Variable): string {
     const name = expr.name.lexeme;
     if (!this.environment.has(name)) {
-      throw new Error(`Variable not found: ${name}`);
+      throw new Error(`Name ${name} not defined!`);
     }
     return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
   }
@@ -195,14 +203,23 @@ export class Generator extends BaseGenerator<string> {
     this.functions.add(MAKE_CLOSURE_FX);
 
     const name = stmt.name.lexeme;
-    const params = stmt.parameters.map((p) => p.lexeme);
+    const arity = stmt.parameters.length;
+    const wasm = `(i32.const ${this.functionBodies.length}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
 
-    this.userFunctions.set(name, params);
     this.environment.add(name);
+    this.functionBodies.push(
+      stmt.body.map((stmt) => this.visit(stmt)).join("\n  ")
+    );
+    return wasm;
+  }
 
-    const functionIndex = this.userFunctions.size - 1;
-    const arity = params.length;
+  visitCallExpr(expr: ExprNS.Call): string {
+    const callee = this.visit(expr.callee);
+    const args = expr.args.map((arg) => this.visit(arg));
+    const arity = args.length;
 
-    return `(i32.const ${functionIndex}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
+    this.applyArities.add(arity);
+
+    return `${callee} ${args} (call $_apply_${arity})`;
   }
 }

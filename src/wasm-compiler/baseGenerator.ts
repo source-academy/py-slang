@@ -20,6 +20,7 @@ export abstract class BaseGenerator<T>
   abstract visitAssignStmt(stmt: StmtNS.Assign): T;
   abstract visitVariableExpr(expr: ExprNS.Variable): T;
   abstract visitFunctionDefStmt(stmt: StmtNS.FunctionDef): T;
+  abstract visitCallExpr(expr: ExprNS.Call): T;
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): T {
     throw new Error("Method not implemented.");
@@ -31,9 +32,6 @@ export abstract class BaseGenerator<T>
     throw new Error("Method not implemented.");
   }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): T {
-    throw new Error("Method not implemented.");
-  }
-  visitCallExpr(expr: ExprNS.Call): T {
     throw new Error("Method not implemented.");
   }
   visitNoneExpr(expr: ExprNS.None): T {
