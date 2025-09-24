@@ -8,7 +8,7 @@ import { Generator } from "./generator";
   const code = `
 def x():
     2
-x()`;
+x`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
@@ -40,6 +40,9 @@ x()`;
             new Uint8Array(memory.buffer, offset, length)
           )
         ),
+      log_closure: (tag: number, arity: number) =>
+        console.log(`Closure (tag: ${tag}, arity: ${arity})`),
+      log_none: () => console.log("None"),
     },
     js: { memory },
   });

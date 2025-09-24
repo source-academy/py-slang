@@ -6,6 +6,7 @@ const TYPE_TAG = {
   BOOL: 3,
   STRING: 4,
   CLOSURE: 5,
+  NONE: 6,
 } as const;
 
 export const HEAP_PTR = "$_heap_pointer";
@@ -17,6 +18,7 @@ export const MAKE_COMPLEX_FX = "$_make_complex";
 export const MAKE_BOOL_FX = "$_make_bool";
 export const MAKE_STRING_FX = "$_make_string";
 export const MAKE_CLOSURE_FX = "$_make_closure";
+export const MAKE_NONE_FX = "$_make_none";
 
 const makeIntFunc = `(func ${MAKE_INT_FX} (param $value i64) (result i32 i64) (i32.const ${TYPE_TAG.INT}) (local.get $value))`;
 const makeFloatFunc = `(func ${MAKE_FLOAT_FX} (param $value f64) (result i32 i64) (i32.const ${TYPE_TAG.FLOAT}) (local.get $value) (i64.reinterpret_f64))`;
@@ -26,6 +28,7 @@ const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) 
 const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${TYPE_TAG.STRING}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
 // upper 32: tag; lower 32: arity
 const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
+const makeNoneFunc = `(func ${MAKE_NONE_FX} (result i32 i64) (i32.const ${TYPE_TAG.NONE}) (i64.const 0))`;
 
 // unary operation functions
 export const NEG_FUNC_NAME = "$_py_neg";
@@ -48,6 +51,8 @@ export const LOG_FUNCS = [
   '(import "console" "log_complex" (func $_log_complex (param f64) (param f64)))',
   '(import "console" "log_bool" (func $_log_bool (param i64)))',
   '(import "console" "log_string" (func $_log_string (param i32) (param i32)))',
+  '(import "console" "log_closure" (func $_log_closure (param i32) (param i32)))',
+  '(import "console" "log_none" (func $_log_none))',
   `(func $log (param $tag i32) (param $value i64)
     (local.get $tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if
       (then (local.get $value) (call $_log_int) (return)))
@@ -59,6 +64,10 @@ export const LOG_FUNCS = [
       (then (local.get $value) (call $_log_bool) (return)))
     (local.get $tag) (i32.const ${TYPE_TAG.STRING}) i32.eq (if
       (then (local.get $value) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $value) (i32.wrap_i64) (call $_log_string) (return)))
+    (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}) i32.eq (if
+      (then (local.get $value) (i32.wrap_i64) (i32.const 32) (i32.shr_u) (local.get $value) (i32.wrap_i64) (call $_log_closure) (return)))
+    (local.get $tag) (i32.const ${TYPE_TAG.NONE}) i32.eq (if
+      (then (call $_log_none) (return)))
 
     unreachable
   )`,
@@ -375,7 +384,9 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
       ${"(block".repeat(bodies.length)}
         (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
         unreachable ${/* exhausted tags */ ""}
-      ${bodies.map((body) => `) ${body} (return)`).join("  \n")}
+      ${bodies
+        .map((body) => `) ${body} (call ${MAKE_NONE_FX}) (return)`)
+        .join("  \n")}
     ))
     
   unreachable
@@ -389,6 +400,7 @@ export const nameToFunctionMap = {
   [MAKE_BOOL_FX]: makeBoolFunc,
   [MAKE_STRING_FX]: makeStringFunc,
   [MAKE_CLOSURE_FX]: makeClosureFunc,
+  [MAKE_NONE_FX]: makeNoneFunc,
   [ARITHMETIC_OP_FX]: arithmeticOpFunc,
   [COMPARISON_OP_FX]: comparisonOpFunc,
   [STRING_COMPARE_FX]: stringCmpFunc,

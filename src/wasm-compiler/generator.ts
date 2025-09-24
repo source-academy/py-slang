@@ -14,6 +14,7 @@ import {
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
+  MAKE_NONE_FX,
   MAKE_STRING_FX,
   nameToFunctionMap,
   NEG_FUNC_NAME,
@@ -29,6 +30,7 @@ export class Generator extends BaseGenerator<string> {
     MAKE_FLOAT_FX,
     MAKE_COMPLEX_FX,
     MAKE_STRING_FX,
+    MAKE_NONE_FX,
   ]);
   private applyArities = new Set<number>();
   private strings: [string, number][] = [];
