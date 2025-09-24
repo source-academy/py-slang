@@ -5,7 +5,8 @@ import { Generator } from "./generator";
 
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
-  const code = `def x():
+  const code = `
+def x():
     2
 x()`;
 

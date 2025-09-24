@@ -366,17 +366,19 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
     .join(" ");
 
   return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64)
-  (i32.eq (local.get $tag) (global.get ${TYPE_TAG.CLOSURE})) (if (then
-    (local.get $val) (i32.wrap_i64) (i32.const ${arity}) (i32.eq) (if (then
+  (i32.and
+    ${/* not a function */ ""}
+    (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
+    ${/* arity wrong */ ""}
+    (local.get $val) (i32.wrap_i64) (i32.const ${arity}) (i32.eq)
+  ) (if (then
       ${"(block".repeat(bodies.length)}
-
-      (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
-
-      ${bodies.map((body) => `) ${body}`).join("  \n")}
-    )
-    (else unreachable)) ${/* arity wrong */ ""}
-  )
-  (else unreachable)) ${/* not a function */ ""}
+        (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
+        unreachable ${/* exhausted tags */ ""}
+      ${bodies.map((body) => `) ${body} (return)`).join("  \n")}
+    ))
+    
+  unreachable
 )`;
 };
 

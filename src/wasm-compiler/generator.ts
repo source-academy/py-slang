@@ -79,7 +79,7 @@ export class Generator extends BaseGenerator<string> {
 
   ${applyFunctions}
   
-  (func $main \n ${body} call $log)
+  (func $main \n ${body} (call $log))
 
   (start $main)
 )`;
@@ -204,7 +204,7 @@ export class Generator extends BaseGenerator<string> {
 
     const name = stmt.name.lexeme;
     const arity = stmt.parameters.length;
-    const wasm = `(i32.const ${this.functionBodies.length}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
+    const wasm = `(i32.const ${this.functionBodies.length}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
 
     this.environment.add(name);
     this.functionBodies.push(
