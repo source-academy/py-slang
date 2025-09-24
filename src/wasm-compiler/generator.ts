@@ -14,6 +14,7 @@ import {
   LT_TAG,
   LTE_TAG,
   MAKE_BOOL_FX,
+  MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
@@ -26,6 +27,9 @@ import {
   SUB_TAG,
 } from "./constants";
 
+const TAG_SUFFIX = "_tag";
+const PAYLOAD_SUFFIX = "_payload";
+
 export class Generator extends BaseGenerator<string> {
   private functions = new Set<keyof typeof nameToFunctionMap>([
     MAKE_INT_FX,
@@ -36,7 +40,8 @@ export class Generator extends BaseGenerator<string> {
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
-  private environment = new Map<string, [string, string]>();
+  private environment = new Set<string>();
+  private userFunctions = new Map<string, string[]>();
 
   visitFileInputStmt(stmt: StmtNS.FileInput): string {
     if (stmt.statements.length <= 0) {
@@ -51,10 +56,10 @@ export class Generator extends BaseGenerator<string> {
       .map((fx) => fx.replace(/\s{2,}/g, ""))
       .join("\n  ");
 
-    const globals = [...this.environment.values()]
-      .flatMap(([nameTag, namePayload]) => [
-        `(global ${nameTag} (mut i32) (i32.const 0))`,
-        `(global ${namePayload} (mut i64) (i64.const 0))`,
+    const globals = [...this.environment]
+      .flatMap((name) => [
+        `(global $${name}${TAG_SUFFIX} (mut i32) (i32.const 0))`,
+        `(global $${name}${PAYLOAD_SUFFIX} (mut i64) (i64.const 0))`,
       ])
       .join("\n  ");
 
@@ -89,10 +94,10 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitBinaryExpr(expr: ExprNS.Binary): string {
+    this.functions.add(ARITHMETIC_OP_FX);
+
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
-
-    this.functions.add(ARITHMETIC_OP_FX);
 
     const type = expr.operator.type;
     let opTag: number;
@@ -106,12 +111,12 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitCompareExpr(expr: ExprNS.Compare): string {
-    const left = this.visit(expr.left);
-    const right = this.visit(expr.right);
-
     this.functions.add(MAKE_BOOL_FX);
     this.functions.add(STRING_COMPARE_FX);
     this.functions.add(COMPARISON_OP_FX);
+
+    const left = this.visit(expr.left);
+    const right = this.visit(expr.right);
 
     const type = expr.operator.type;
     let opTag: number;
@@ -158,11 +163,12 @@ export class Generator extends BaseGenerator<string> {
         this.functions.add(MAKE_BOOL_FX);
         return `(i32.const ${expr.value ? 1 : 0}) (call ${MAKE_BOOL_FX})`;
       case "string": {
+        this.functions.add(MAKE_STRING_FX);
+
         const str = expr.value;
         const len = str.length;
         const wasm = `(i32.const ${this.heapPointer}) (i32.const ${len}) (call ${MAKE_STRING_FX})`;
 
-        this.functions.add(MAKE_STRING_FX);
         this.strings.push([str, this.heapPointer]);
         this.heapPointer += len;
         return wasm;
@@ -179,19 +185,32 @@ export class Generator extends BaseGenerator<string> {
   visitAssignStmt(stmt: StmtNS.Assign): string {
     const expression = this.visit(stmt.value);
     const name = stmt.name.lexeme;
-    const nameTag = `$_${stmt.name.lexeme}_tag`;
-    const namePayload = `$_${stmt.name.lexeme}_payload`;
 
-    this.environment.set(name, [nameTag, namePayload]);
+    this.environment.add(name);
 
-    return `${expression} (global.set ${namePayload}) (global.set ${nameTag})`;
+    return `${expression} (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
   }
 
   visitVariableExpr(expr: ExprNS.Variable): string {
-    const tagPayload = this.environment.get(expr.name.lexeme);
-    if (!tagPayload) {
-      throw new Error(`Variable not found: ${expr.name.lexeme}`);
+    const name = expr.name.lexeme;
+    if (!this.environment.has(name)) {
+      throw new Error(`Variable not found: ${name}`);
     }
-    return `(global.get ${tagPayload[0]}) (global.get ${tagPayload[1]})`;
+    return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
+  }
+
+  visitFunctionDefStmt(stmt: StmtNS.FunctionDef): string {
+    this.functions.add(MAKE_CLOSURE_FX);
+
+    const name = stmt.name.lexeme;
+    const params = stmt.parameters.map((p) => p.lexeme);
+
+    this.userFunctions.set(name, params);
+    this.environment.add(name);
+
+    const functionIndex = this.userFunctions.size - 1;
+    const arity = params.length;
+
+    return `(i32.const ${functionIndex}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
   }
 }

@@ -5,9 +5,8 @@ import { Generator } from "./generator";
 
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
-  const code = `x = 2 + 3
-y = x == 5
-y`;
+  const code = `def x():
+    pass`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);

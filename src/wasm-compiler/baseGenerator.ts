@@ -19,6 +19,7 @@ export abstract class BaseGenerator<T>
   abstract visitComplexExpr(expr: ExprNS.Complex): T;
   abstract visitAssignStmt(stmt: StmtNS.Assign): T;
   abstract visitVariableExpr(expr: ExprNS.Variable): T;
+  abstract visitFunctionDefStmt(stmt: StmtNS.FunctionDef): T;
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): T {
     throw new Error("Method not implemented.");
@@ -78,9 +79,6 @@ export abstract class BaseGenerator<T>
     throw new Error("Method not implemented.");
   }
   visitForStmt(stmt: StmtNS.For): T {
-    throw new Error("Method not implemented.");
-  }
-  visitFunctionDefStmt(stmt: StmtNS.FunctionDef): T {
     throw new Error("Method not implemented.");
   }
 }

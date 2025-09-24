@@ -4,6 +4,7 @@ const FLOAT_TAG = 1;
 const COMPLEX_TAG = 2;
 const BOOL_TAG = 3;
 const STRING_TAG = 4;
+const CLOSURE_TAG = 5;
 
 export const HEAP_PTR = "$_heap_pointer";
 
@@ -13,12 +14,16 @@ export const MAKE_FLOAT_FX = "$_make_float";
 export const MAKE_COMPLEX_FX = "$_make_complex";
 export const MAKE_BOOL_FX = "$_make_bool";
 export const MAKE_STRING_FX = "$_make_string";
+export const MAKE_CLOSURE_FX = "$_make_closure";
 
 const makeIntFunc = `(func ${MAKE_INT_FX} (param $value i64) (result i32 i64) (i32.const ${INT_TAG}) (local.get $value))`;
 const makeFloatFunc = `(func ${MAKE_FLOAT_FX} (param $value f64) (result i32 i64) (i32.const ${FLOAT_TAG}) (local.get $value) (i64.reinterpret_f64))`;
 const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img f64) (result i32 i64) (global.get ${HEAP_PTR}) (local.get $real) (f64.store) (global.get ${HEAP_PTR}) (i32.const 8) (i32.add) (local.get $img) (f64.store) (i32.const ${COMPLEX_TAG}) (global.get ${HEAP_PTR}) (i64.extend_i32_u) (global.get ${HEAP_PTR}) (i32.const 16) (i32.add) (global.set ${HEAP_PTR}))`;
 const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${BOOL_TAG}) (local.get $value) (i64.extend_i32_u))`;
+// upper 32: pointer; lower 32: length
 const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${STRING_TAG}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
+// upper 32: tag; lower 32: number of arguments
+const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${CLOSURE_TAG}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
 
 // unary operation functions
 export const NEG_FUNC_NAME = "$_py_neg";
@@ -330,6 +335,7 @@ export const nameToFunctionMap = {
   [MAKE_COMPLEX_FX]: makeComplexFunc,
   [MAKE_BOOL_FX]: makeBoolFunc,
   [MAKE_STRING_FX]: makeStringFunc,
+  [MAKE_CLOSURE_FX]: makeClosureFunc,
   [ARITHMETIC_OP_FX]: arithmeticOpFunc,
   [COMPARISON_OP_FX]: comparisonOpFunc,
   [STRING_COMPARE_FX]: stringCmpFunc,
