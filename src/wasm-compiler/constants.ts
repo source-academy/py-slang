@@ -1,10 +1,12 @@
 // tags
-const INT_TAG = 0;
-const FLOAT_TAG = 1;
-const COMPLEX_TAG = 2;
-const BOOL_TAG = 3;
-const STRING_TAG = 4;
-const CLOSURE_TAG = 5;
+const TYPE_TAG = {
+  INT: 0,
+  FLOAT: 1,
+  COMPLEX: 2,
+  BOOL: 3,
+  STRING: 4,
+  CLOSURE: 5,
+} as const;
 
 export const HEAP_PTR = "$_heap_pointer";
 
@@ -16,24 +18,24 @@ export const MAKE_BOOL_FX = "$_make_bool";
 export const MAKE_STRING_FX = "$_make_string";
 export const MAKE_CLOSURE_FX = "$_make_closure";
 
-const makeIntFunc = `(func ${MAKE_INT_FX} (param $value i64) (result i32 i64) (i32.const ${INT_TAG}) (local.get $value))`;
-const makeFloatFunc = `(func ${MAKE_FLOAT_FX} (param $value f64) (result i32 i64) (i32.const ${FLOAT_TAG}) (local.get $value) (i64.reinterpret_f64))`;
-const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img f64) (result i32 i64) (global.get ${HEAP_PTR}) (local.get $real) (f64.store) (global.get ${HEAP_PTR}) (i32.const 8) (i32.add) (local.get $img) (f64.store) (i32.const ${COMPLEX_TAG}) (global.get ${HEAP_PTR}) (i64.extend_i32_u) (global.get ${HEAP_PTR}) (i32.const 16) (i32.add) (global.set ${HEAP_PTR}))`;
-const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${BOOL_TAG}) (local.get $value) (i64.extend_i32_u))`;
+const makeIntFunc = `(func ${MAKE_INT_FX} (param $value i64) (result i32 i64) (i32.const ${TYPE_TAG.INT}) (local.get $value))`;
+const makeFloatFunc = `(func ${MAKE_FLOAT_FX} (param $value f64) (result i32 i64) (i32.const ${TYPE_TAG.FLOAT}) (local.get $value) (i64.reinterpret_f64))`;
+const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img f64) (result i32 i64) (global.get ${HEAP_PTR}) (local.get $real) (f64.store) (global.get ${HEAP_PTR}) (i32.const 8) (i32.add) (local.get $img) (f64.store) (i32.const ${TYPE_TAG.COMPLEX}) (global.get ${HEAP_PTR}) (i64.extend_i32_u) (global.get ${HEAP_PTR}) (i32.const 16) (i32.add) (global.set ${HEAP_PTR}))`;
+const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${TYPE_TAG.BOOL}) (local.get $value) (i64.extend_i32_u))`;
 // upper 32: pointer; lower 32: length
-const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${STRING_TAG}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
+const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${TYPE_TAG.STRING}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
 // upper 32: tag; lower 32: number of arguments
-const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${CLOSURE_TAG}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
+const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
 
 // unary operation functions
 export const NEG_FUNC_NAME = "$_py_neg";
 
 const negFunc = `(func ${NEG_FUNC_NAME} (param $x_tag i32) (param $x_val i64) (result i32 i64)
-  (local.get $x_tag) (i32.const ${INT_TAG}) i32.eq (if 
+  (local.get $x_tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if 
     (then (local.get $x_val) (i64.const -1) (i64.xor) (i64.const 1) (i64.add) (call ${MAKE_INT_FX}) (return)))
-  (local.get $x_tag) (i32.const ${FLOAT_TAG}) i32.eq (if
+  (local.get $x_tag) (i32.const ${TYPE_TAG.FLOAT}) i32.eq (if
     (then (local.get $x_val) (f64.reinterpret_i64) (f64.neg) (call ${MAKE_FLOAT_FX}) (return)))
-  (local.get $x_tag) (i32.const ${COMPLEX_TAG}) i32.eq (if
+  (local.get $x_tag) (i32.const ${TYPE_TAG.COMPLEX}) i32.eq (if
     (then (local.get $x_val) (i32.wrap_i64) (f64.load) (f64.neg) (local.get $x_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (f64.neg) (call ${MAKE_COMPLEX_FX}) (return)))
     
   unreachable
@@ -47,15 +49,15 @@ export const LOG_FUNCS = [
   '(import "console" "log_bool" (func $_log_bool (param i64)))',
   '(import "console" "log_string" (func $_log_string (param i32) (param i32)))',
   `(func $log (param $tag i32) (param $value i64)
-    (local.get $tag) (i32.const ${INT_TAG}) i32.eq (if
+    (local.get $tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if
       (then (local.get $value) (call $_log_int) (return)))
-    (local.get $tag) (i32.const ${FLOAT_TAG}) i32.eq (if
+    (local.get $tag) (i32.const ${TYPE_TAG.FLOAT}) i32.eq (if
       (then (local.get $value) (f64.reinterpret_i64) (call $_log_float) (return)))
-    (local.get $tag) (i32.const ${COMPLEX_TAG}) i32.eq (if
+    (local.get $tag) (i32.const ${TYPE_TAG.COMPLEX}) i32.eq (if
       (then (local.get $value) (i32.wrap_i64) (f64.load) (local.get $value) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (call $_log_complex) (return)))
-    (local.get $tag) (i32.const ${BOOL_TAG}) i32.eq (if
+    (local.get $tag) (i32.const ${TYPE_TAG.BOOL}) i32.eq (if
       (then (local.get $value) (call $_log_bool) (return)))
-    (local.get $tag) (i32.const ${STRING_TAG}) i32.eq (if
+    (local.get $tag) (i32.const ${TYPE_TAG.STRING}) i32.eq (if
       (then (local.get $value) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $value) (i32.wrap_i64) (call $_log_string) (return)))
 
     unreachable
@@ -64,20 +66,22 @@ export const LOG_FUNCS = [
 
 // binary operation function
 export const ARITHMETIC_OP_FX = "$_py_arith_op";
-export const ADD_TAG = 0;
-export const SUB_TAG = 1;
-export const MUL_TAG = 2;
-export const DIV_TAG = 3;
+export const ARITHMETIC_OP_TAG = {
+  ADD: 0,
+  SUB: 1,
+  MUL: 2,
+  DIV: 3,
+} as const;
 
 const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x_val i64) (param $y_tag i32) (param $y_val i64) (param $op i32) (result i32 i64)
   (local $a f64) (local $b f64) (local $c f64) (local $d f64) (local $denom f64)
 
   ${/* if adding, check if both are strings */ ""}
   (i32.and 
-    (i32.eq (local.get $op) (i32.const ${ADD_TAG}))
+    (i32.eq (local.get $op) (i32.const ${ARITHMETIC_OP_TAG.ADD}))
     (i32.and
-      (i32.eq (local.get $x_tag) (i32.const ${STRING_TAG}))
-      (i32.eq (local.get $y_tag) (i32.const ${STRING_TAG}))
+      (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.STRING}))
+      (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.STRING}))
     )
   ) (if (then
       (global.get ${HEAP_PTR}) ${/* starting address of new string */ ""}
@@ -89,13 +93,17 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
   ))
 
   ${/* if either's bool, convert to int */ ""}
-  (i32.eq (local.get $x_tag) (i32.const ${BOOL_TAG})) (if (then (i32.const ${INT_TAG}) (local.set $x_tag)))
-  (i32.eq (local.get $y_tag) (i32.const ${BOOL_TAG})) (if (then (i32.const ${INT_TAG}) (local.set $y_tag)))
+  (i32.eq (local.get $x_tag) (i32.const ${
+    TYPE_TAG.BOOL
+  })) (if (then (i32.const ${TYPE_TAG.INT}) (local.set $x_tag)))
+  (i32.eq (local.get $y_tag) (i32.const ${
+    TYPE_TAG.BOOL
+  })) (if (then (i32.const ${TYPE_TAG.INT}) (local.set $y_tag)))
 
   ${/* if both int, use int instr (except for division: use float) */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${INT_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${INT_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.INT}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.INT}))
   ) (if (then
       (block $div
         (block $mul
@@ -109,21 +117,25 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
     ))
 
   ${/* else, if either's int, convert to float and set float locals */ ""}
-  (i32.eq (local.get $x_tag) (i32.const ${INT_TAG})) (if (result f64)
-    (then (local.get $x_val) (f64.convert_i64_s) (i32.const ${FLOAT_TAG}) (local.set $x_tag))
+  (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.INT})) (if (result f64)
+    (then (local.get $x_val) (f64.convert_i64_s) (i32.const ${
+      TYPE_TAG.FLOAT
+    }) (local.set $x_tag))
     (else (local.get $x_val) (f64.reinterpret_i64))
   )
   (local.set $a)
-  (i32.eq (local.get $y_tag) (i32.const ${INT_TAG})) (if (result f64)
-    (then (local.get $y_val) (f64.convert_i64_s) (i32.const ${FLOAT_TAG}) (local.set $y_tag))
+  (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.INT})) (if (result f64)
+    (then (local.get $y_val) (f64.convert_i64_s) (i32.const ${
+      TYPE_TAG.FLOAT
+    }) (local.set $y_tag))
     (else (local.get $y_val) (f64.reinterpret_i64))
   )
   (local.set $c)
 
   ${/* if both float, use float instr */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${FLOAT_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${FLOAT_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.FLOAT}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.FLOAT}))
   ) (if (then
       (block $div
         (block $mul
@@ -137,19 +149,19 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
     ))
 
   ${/* else, if either's complex, load from mem, set locals (default 0) */ ""}
-  (i32.eq (local.get $x_tag) (i32.const ${FLOAT_TAG})) (if
-    (then (i32.const ${COMPLEX_TAG}) (local.set $x_tag))
+  (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.FLOAT})) (if
+    (then (i32.const ${TYPE_TAG.COMPLEX}) (local.set $x_tag))
     (else (local.get $x_val) (i32.wrap_i64) (f64.load) (local.set $a) (local.get $x_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (local.set $b))
   )
-  (i32.eq (local.get $y_tag) (i32.const ${FLOAT_TAG})) (if
-    (then (i32.const ${COMPLEX_TAG}) (local.set $y_tag))
+  (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.FLOAT})) (if
+    (then (i32.const ${TYPE_TAG.COMPLEX}) (local.set $y_tag))
     (else (local.get $y_val) (i32.wrap_i64) (f64.load) (local.set $c) (local.get $y_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (local.set $d))
   )
 
   ${/* if both complex, perform complex operations */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${COMPLEX_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${COMPLEX_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.COMPLEX}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.COMPLEX}))
   ) (if (then
       (block $div
         (block $mul
@@ -183,12 +195,14 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
 
 export const STRING_COMPARE_FX = "$_py_string_cmp";
 export const COMPARISON_OP_FX = "$_py_compare_op";
-export const EQ_TAG = 0;
-export const NEQ_TAG = 1;
-export const LT_TAG = 2;
-export const LTE_TAG = 3;
-export const GT_TAG = 4;
-export const GTE_TAG = 5;
+export const COMPARISON_OP_TAG = {
+  EQ: 0,
+  NEQ: 1,
+  LT: 2,
+  LTE: 3,
+  GT: 4,
+  GTE: 5,
+} as const;
 
 const stringCmpFunc = `(func ${STRING_COMPARE_FX} (param $x_ptr i32) (param $x_len i32) (param $y_ptr i32) (param $y_len i32) (result i32)
   (local $i i32) (local $min_len i32) (local $x_char i32) (local $y_char i32) (local $result i32)
@@ -218,8 +232,8 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
 
   ${/* if both are strings */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${STRING_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${STRING_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.STRING}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.STRING}))
   ) (if (then
       (local.get $x_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $x_val) (i32.wrap_i64)
       (local.get $y_val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $y_val) (i32.wrap_i64)
@@ -242,13 +256,17 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
 
 
   ${/* if either are bool, convert to int */ ""}
-  (i32.eq (local.get $x_tag) (i32.const ${BOOL_TAG})) (if (then (i32.const ${INT_TAG}) (local.set $x_tag)))
-  (i32.eq (local.get $y_tag) (i32.const ${BOOL_TAG})) (if (then (i32.const ${INT_TAG}) (local.set $y_tag)))
+  (i32.eq (local.get $x_tag) (i32.const ${
+    TYPE_TAG.BOOL
+  })) (if (then (i32.const ${TYPE_TAG.INT}) (local.set $x_tag)))
+  (i32.eq (local.get $y_tag) (i32.const ${
+    TYPE_TAG.BOOL
+  })) (if (then (i32.const ${TYPE_TAG.INT}) (local.set $y_tag)))
 
   ${/* if both int, use int comparison */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${INT_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${INT_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.INT}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.INT}))
   ) (if (then
       (block $eq
         (block $neq
@@ -266,21 +284,25 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
     ))
 
   ${/* else, if either are int, convert to float and set float locals */ ""}
-  (i32.eq (local.get $x_tag) (i32.const ${INT_TAG})) (if (result f64)
-    (then (local.get $x_val) (f64.convert_i64_s) (i32.const ${FLOAT_TAG}) (local.set $x_tag))
+  (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.INT})) (if (result f64)
+    (then (local.get $x_val) (f64.convert_i64_s) (i32.const ${
+      TYPE_TAG.FLOAT
+    }) (local.set $x_tag))
     (else (local.get $x_val) (f64.reinterpret_i64))
   )
   (local.set $a)
-  (i32.eq (local.get $y_tag) (i32.const ${INT_TAG})) (if (result f64)
-    (then (local.get $y_val) (f64.convert_i64_s) (i32.const ${FLOAT_TAG}) (local.set $y_tag))
+  (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.INT})) (if (result f64)
+    (then (local.get $y_val) (f64.convert_i64_s) (i32.const ${
+      TYPE_TAG.FLOAT
+    }) (local.set $y_tag))
     (else (local.get $y_val) (f64.reinterpret_i64))
   )
   (local.set $c)
 
   ${/* if both float, use float comparison */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${FLOAT_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${FLOAT_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.FLOAT}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.FLOAT}))
   ) (if (then
       (block $eq
         (block $neq
@@ -300,24 +322,24 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
   ${
     /* else, if either are complex, load complex from memory and set float locals (default 0) */ ""
   }
-  (i32.eq (local.get $x_tag) (i32.const ${FLOAT_TAG})) (if
-    (then (i32.const ${COMPLEX_TAG}) (local.set $x_tag))
+  (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.FLOAT})) (if
+    (then (i32.const ${TYPE_TAG.COMPLEX}) (local.set $x_tag))
     (else (local.get $x_val) (i32.wrap_i64) (f64.load) (local.set $a) (local.get $x_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (local.set $b))
   )
-  (i32.eq (local.get $y_tag) (i32.const ${FLOAT_TAG})) (if
-    (then (i32.const ${COMPLEX_TAG}) (local.set $y_tag))
+  (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.FLOAT})) (if
+    (then (i32.const ${TYPE_TAG.COMPLEX}) (local.set $y_tag))
     (else (local.get $y_val) (i32.wrap_i64) (f64.load) (local.set $c) (local.get $y_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (local.set $d))
   )
 
   ${/* if both complex, compare real and imaginary parts. only ==, != */ ""}
   (i32.and
-    (i32.eq (local.get $x_tag) (i32.const ${COMPLEX_TAG}))
-    (i32.eq (local.get $y_tag) (i32.const ${COMPLEX_TAG}))
+    (i32.eq (local.get $x_tag) (i32.const ${TYPE_TAG.COMPLEX}))
+    (i32.eq (local.get $y_tag) (i32.const ${TYPE_TAG.COMPLEX}))
   ) (if (then
-      (i32.eq (local.get $op) (i32.const ${EQ_TAG})) (if
+      (i32.eq (local.get $op) (i32.const ${COMPARISON_OP_TAG.EQ})) (if
         (then (local.get $a) (local.get $c) (f64.eq) (local.get $b) (local.get $d) (f64.eq) (i32.and) (call ${MAKE_BOOL_FX}) (return))
         (else
-          (i32.eq (local.get $op) (i32.const ${NEQ_TAG})) (if
+          (i32.eq (local.get $op) (i32.const ${COMPARISON_OP_TAG.NEQ})) (if
             (then (local.get $a) (local.get $c) (f64.ne) (local.get $b) (local.get $d) (f64.ne) (i32.or) (call ${MAKE_BOOL_FX}) (return))
             (else unreachable)
           )

@@ -2,29 +2,21 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import { BaseGenerator } from "./baseGenerator";
 import {
-  ADD_TAG,
   ARITHMETIC_OP_FX,
+  ARITHMETIC_OP_TAG,
   COMPARISON_OP_FX,
-  DIV_TAG,
-  EQ_TAG,
-  GT_TAG,
-  GTE_TAG,
+  COMPARISON_OP_TAG,
   HEAP_PTR,
   LOG_FUNCS,
-  LT_TAG,
-  LTE_TAG,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
   MAKE_STRING_FX,
-  MUL_TAG,
   nameToFunctionMap,
   NEG_FUNC_NAME,
-  NEQ_TAG,
   STRING_COMPARE_FX,
-  SUB_TAG,
 } from "./constants";
 
 const TAG_SUFFIX = "_tag";
@@ -101,10 +93,10 @@ export class Generator extends BaseGenerator<string> {
 
     const type = expr.operator.type;
     let opTag: number;
-    if (type === TokenType.PLUS) opTag = ADD_TAG;
-    else if (type === TokenType.MINUS) opTag = SUB_TAG;
-    else if (type === TokenType.STAR) opTag = MUL_TAG;
-    else if (type === TokenType.SLASH) opTag = DIV_TAG;
+    if (type === TokenType.PLUS) opTag = ARITHMETIC_OP_TAG.ADD;
+    else if (type === TokenType.MINUS) opTag = ARITHMETIC_OP_TAG.SUB;
+    else if (type === TokenType.STAR) opTag = ARITHMETIC_OP_TAG.MUL;
+    else if (type === TokenType.SLASH) opTag = ARITHMETIC_OP_TAG.DIV;
     else throw new Error(`Unsupported binary operator: ${type}`);
 
     return `${left} ${right} (i32.const ${opTag}) (call ${ARITHMETIC_OP_FX})`;
@@ -120,12 +112,12 @@ export class Generator extends BaseGenerator<string> {
 
     const type = expr.operator.type;
     let opTag: number;
-    if (type === TokenType.DOUBLEEQUAL) opTag = EQ_TAG;
-    else if (type === TokenType.NOTEQUAL) opTag = NEQ_TAG;
-    else if (type === TokenType.LESS) opTag = LT_TAG;
-    else if (type === TokenType.LESSEQUAL) opTag = LTE_TAG;
-    else if (type === TokenType.GREATER) opTag = GT_TAG;
-    else if (type === TokenType.GREATEREQUAL) opTag = GTE_TAG;
+    if (type === TokenType.DOUBLEEQUAL) opTag = COMPARISON_OP_TAG.EQ;
+    else if (type === TokenType.NOTEQUAL) opTag = COMPARISON_OP_TAG.NEQ;
+    else if (type === TokenType.LESS) opTag = COMPARISON_OP_TAG.LT;
+    else if (type === TokenType.LESSEQUAL) opTag = COMPARISON_OP_TAG.LTE;
+    else if (type === TokenType.GREATER) opTag = COMPARISON_OP_TAG.GT;
+    else if (type === TokenType.GREATEREQUAL) opTag = COMPARISON_OP_TAG.GTE;
     else throw new Error(`Unsupported comparison operator: ${type}`);
 
     return `${left} ${right} (i32.const ${opTag}) (call ${COMPARISON_OP_FX})`;
