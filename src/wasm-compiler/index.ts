@@ -6,9 +6,13 @@ import { Generator } from "./generator";
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
-def x():
-    return
-x()`;
+def f():
+    return 2
+
+def g(x, y):
+    return x + y
+
+print(f() + g(1, 2))`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);

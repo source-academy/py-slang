@@ -4,7 +4,6 @@ export abstract class BaseGenerator<T>
   implements StmtNS.Visitor<T>, ExprNS.Visitor<T>
 {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): T {
-    console.log("Visiting:", stmt);
     return stmt.accept(this);
   }
 

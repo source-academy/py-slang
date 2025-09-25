@@ -24,20 +24,56 @@ import {
 const TAG_SUFFIX = "_tag";
 const PAYLOAD_SUFFIX = "_payload";
 
+const builtInFunctions: { name: string; arity: number; body: string }[] = [
+  {
+    name: "print",
+    arity: 1,
+    body: `(local.get $0_tag) (local.get $0_val) (call $log)`,
+  },
+];
+
 export class Generator extends BaseGenerator<string> {
-  private functions = new Set<keyof typeof nameToFunctionMap>([
+  private nativeFunctions = new Set<keyof typeof nameToFunctionMap>([
     MAKE_INT_FX,
     MAKE_FLOAT_FX,
     MAKE_COMPLEX_FX,
     MAKE_STRING_FX,
     MAKE_NONE_FX,
   ]);
-  private applyArities = new Set<number>();
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
-  private environment = new Set<string>();
-  private functionBodies: string[] = [];
+  // TODO: only globals and params, no locals for now
+  private environments: string[][] = [[]];
+  private userFunctionBodies: { [arity: number]: string[] | undefined } = {};
+
+  private getNearestEnvironment(): string[] {
+    const nearest = this.environments.at(-1);
+    if (!nearest) {
+      throw new Error("Environment stack is empty; this should never happen.");
+    }
+    return nearest;
+  }
+
+  private findInEnvironments(name: string): number {
+    for (let i = this.environments.length - 1; i >= 0; i--) {
+      if (this.environments[i].includes(name)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private addFunctionBody(arity: number, body: string) {
+    if (!this.userFunctionBodies[arity]) {
+      this.userFunctionBodies[arity] = [];
+    }
+    this.userFunctionBodies[arity].push(body);
+  }
+
+  constructor() {
+    super();
+  }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): string {
     if (stmt.statements.length <= 0) {
@@ -45,14 +81,23 @@ export class Generator extends BaseGenerator<string> {
       throw new Error("No statements found");
     }
 
-    const body = stmt.statements.map((s) => this.visit(s)).join("\n  ");
+    // declare built-in functions in the global environment before user code
+    const builtInFuncsDeclarations = builtInFunctions
+      .map(({ name, arity, body }) => {
+        this.environments[0].push(name);
+        const tag = this.userFunctionBodies[arity]?.length ?? 0;
+        this.addFunctionBody(arity, body);
 
-    const functions = [...this.functions]
-      .map((name) => nameToFunctionMap[name])
-      .map((fx) => fx.replace(/\s{2,}/g, ""))
+        return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+      })
       .join("\n  ");
 
-    const globals = [...this.environment]
+    const body = stmt.statements.map((s) => this.visit(s)).join("\n  ");
+
+    // collect all globals, strings, native functions used and user functions
+
+    // global environment is the first in the stack
+    const globals = [...this.environments[0]]
       .flatMap((name) => [
         `(global $${name}${TAG_SUFFIX} (mut i32) (i32.const 0))`,
         `(global $${name}${PAYLOAD_SUFFIX} (mut i64) (i64.const 0))`,
@@ -63,8 +108,16 @@ export class Generator extends BaseGenerator<string> {
       .map(([str, add]) => `(data (i32.const ${add}) "${str}")`)
       .join("\n  ");
 
-    const applyFunctions = [...this.applyArities]
-      .map((arity) => applyFuncFactory(arity, this.functionBodies))
+    const nativeFunctions = [...this.nativeFunctions]
+      .map((name) => nameToFunctionMap[name])
+      .map((fx) => fx.replace(/\s{2,}/g, ""))
+      .join("\n  ");
+
+    const applyFunctions = Object.entries(this.userFunctionBodies)
+      .map(
+        ([arity, bodies]) => bodies && applyFuncFactory(Number(arity), bodies)
+      )
+      .filter((x) => x != null)
       .join("\n  ");
 
     return `
@@ -77,18 +130,19 @@ export class Generator extends BaseGenerator<string> {
 
   ${strings}
 
-  ${functions}
+  ${nativeFunctions}
 
   ${applyFunctions}
   
-  (func $main \n ${body} (call $log))
+  (func $main \n ${builtInFuncsDeclarations} \n ${body})
 
   (start $main)
 )`;
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): string {
-    return this.visit(stmt.expression);
+    const expr = this.visit(stmt.expression);
+    return `${expr} (drop) (drop)`; // drop tag and payload
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): string {
@@ -96,7 +150,7 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitBinaryExpr(expr: ExprNS.Binary): string {
-    this.functions.add(ARITHMETIC_OP_FX);
+    this.nativeFunctions.add(ARITHMETIC_OP_FX);
 
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
@@ -113,9 +167,9 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitCompareExpr(expr: ExprNS.Compare): string {
-    this.functions.add(MAKE_BOOL_FX);
-    this.functions.add(STRING_COMPARE_FX);
-    this.functions.add(COMPARISON_OP_FX);
+    this.nativeFunctions.add(MAKE_BOOL_FX);
+    this.nativeFunctions.add(STRING_COMPARE_FX);
+    this.nativeFunctions.add(COMPARISON_OP_FX);
 
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
@@ -140,7 +194,7 @@ export class Generator extends BaseGenerator<string> {
       throw new Error(`Unsupported unary operator: ${expr.operator.type}`);
     }
 
-    this.functions.add(NEG_FUNC_NAME);
+    this.nativeFunctions.add(NEG_FUNC_NAME);
     const operator = `(call ${NEG_FUNC_NAME})`;
 
     return `${right} ${operator}`;
@@ -162,10 +216,10 @@ export class Generator extends BaseGenerator<string> {
       case "number":
         return `(f64.const ${expr.value}) (call ${MAKE_FLOAT_FX})`;
       case "boolean":
-        this.functions.add(MAKE_BOOL_FX);
+        this.nativeFunctions.add(MAKE_BOOL_FX);
         return `(i32.const ${expr.value ? 1 : 0}) (call ${MAKE_BOOL_FX})`;
       case "string": {
-        this.functions.add(MAKE_STRING_FX);
+        this.nativeFunctions.add(MAKE_STRING_FX);
 
         const str = expr.value;
         const len = str.length;
@@ -188,30 +242,44 @@ export class Generator extends BaseGenerator<string> {
     const expression = this.visit(stmt.value);
     const name = stmt.name.lexeme;
 
-    this.environment.add(name);
+    this.getNearestEnvironment().push(name);
 
     return `${expression} (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
   }
 
   visitVariableExpr(expr: ExprNS.Variable): string {
     const name = expr.name.lexeme;
-    if (!this.environment.has(name)) {
+    const environmentIndex = this.findInEnvironments(name);
+    if (environmentIndex < 0) {
       throw new Error(`Name ${name} not defined!`);
+    } else if (environmentIndex === 0) {
+      return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
+    } else {
+      const index = this.environments[environmentIndex].indexOf(name);
+      return `(local.get $${index}_tag) (local.get $${index}_val)`;
     }
-    return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): string {
-    this.functions.add(MAKE_CLOSURE_FX);
+    this.nativeFunctions.add(MAKE_CLOSURE_FX);
 
     const name = stmt.name.lexeme;
     const arity = stmt.parameters.length;
-    const wasm = `(i32.const ${this.functionBodies.length}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+    const tag = this.userFunctionBodies[arity]?.length ?? 0;
+    const wasm = `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
 
-    this.environment.add(name);
-    this.functionBodies.push(
-      stmt.body.map((stmt) => this.visit(stmt)).join("\n  ")
+    this.getNearestEnvironment().push(name);
+
+    this.environments.push([]);
+    stmt.parameters.forEach((param) =>
+      this.getNearestEnvironment().push(param.lexeme)
     );
+    this.addFunctionBody(
+      arity,
+      stmt.body.map((stmt) => this.visit(stmt)).join(" ")
+    );
+    this.environments.pop();
+
     return wasm;
   }
 
@@ -220,15 +288,13 @@ export class Generator extends BaseGenerator<string> {
     const args = expr.args.map((arg) => this.visit(arg));
     const arity = args.length;
 
-    this.applyArities.add(arity);
-
-    return `${callee} ${args} (call $_apply_${arity})`;
+    return `${callee} ${args.join(" ")} (call $_apply_${arity})`;
   }
 
   visitReturnStmt(stmt: StmtNS.Return): string {
     const value = stmt.value;
     if (!value) {
-      this.functions.add(MAKE_NONE_FX);
+      this.nativeFunctions.add(MAKE_NONE_FX);
       return `(call ${MAKE_NONE_FX}) (return)`;
     }
 

@@ -362,13 +362,9 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
 
 // one applyFunc per arity
 export const applyFuncFactory = (arity: number, bodies: string[]) => {
-  let params = "";
-
-  for (let i = 0; i < arity; i++) {
-    params += [...Array(arity).keys()].map(
-      (i) => `(param $${i}_tag i32) (param $${i}_val i64) `
-    );
-  }
+  const params = [...Array(arity).keys()]
+    .map((i) => `(param $${i}_tag i32) (param $${i}_val i64) `)
+    .join(" ");
 
   const brTableJumps = [...Array(bodies.length).keys()]
     .map((i) => i.toString())
@@ -388,7 +384,7 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
         .map((body) => `) ${body} (call ${MAKE_NONE_FX}) (return)`)
         .join("  \n")}
     ))
-    
+
   unreachable
 )`;
 };
