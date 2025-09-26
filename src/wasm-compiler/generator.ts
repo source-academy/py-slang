@@ -18,19 +18,27 @@ import {
   MAKE_STRING_FX,
   nameToFunctionMap,
   NEG_FUNC_NAME,
+  PAYLOAD_SUFFIX,
   STRING_COMPARE_FX,
+  TAG_SUFFIX,
 } from "./constants";
-
-const TAG_SUFFIX = "_tag";
-const PAYLOAD_SUFFIX = "_payload";
 
 const builtInFunctions: { name: string; arity: number; body: string }[] = [
   {
     name: "print",
     arity: 1,
-    body: `(local.get $0_tag) (local.get $0_val) (call $log)`,
+    body: `(local.get $p_0${TAG_SUFFIX}) (local.get $p_0${PAYLOAD_SUFFIX}) (call $log)`,
   },
 ];
+
+type GlobalEnvironment = { type: "global"; env: string[] };
+type LocalEnvironment = {
+  type: "function";
+  env: string[];
+  paramEnv: string[];
+  arity: number;
+};
+type Environment = GlobalEnvironment | LocalEnvironment;
 
 export class Generator extends BaseGenerator<string> {
   private nativeFunctions = new Set<keyof typeof nameToFunctionMap>([
@@ -43,11 +51,14 @@ export class Generator extends BaseGenerator<string> {
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
-  // TODO: only globals and params, no locals for now
-  private environments: string[][] = [[]];
-  private userFunctionBodies: { [arity: number]: string[] | undefined } = {};
+  private environments: [GlobalEnvironment, ...LocalEnvironment[]] = [
+    { type: "global", env: [] },
+  ];
+  private userFunctionBodies: {
+    [arity: number]: { maxLocalCount: number; bodies: string[] } | undefined;
+  } = {};
 
-  private getNearestEnvironment(): string[] {
+  private getNearestEnvironment(): Environment {
     const nearest = this.environments.at(-1);
     if (!nearest) {
       throw new Error("Environment stack is empty; this should never happen.");
@@ -55,20 +66,11 @@ export class Generator extends BaseGenerator<string> {
     return nearest;
   }
 
-  private findInEnvironments(name: string): number {
-    for (let i = this.environments.length - 1; i >= 0; i--) {
-      if (this.environments[i].includes(name)) {
-        return i;
-      }
-    }
-    return -1;
-  }
-
   private addFunctionBody(arity: number, body: string) {
     if (!this.userFunctionBodies[arity]) {
-      this.userFunctionBodies[arity] = [];
+      this.userFunctionBodies[arity] = { maxLocalCount: 0, bodies: [] };
     }
-    this.userFunctionBodies[arity].push(body);
+    this.userFunctionBodies[arity].bodies.push(body);
   }
 
   constructor() {
@@ -84,8 +86,8 @@ export class Generator extends BaseGenerator<string> {
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = builtInFunctions
       .map(({ name, arity, body }) => {
-        this.environments[0].push(name);
-        const tag = this.userFunctionBodies[arity]?.length ?? 0;
+        this.environments[0].env.push(name);
+        const tag = this.userFunctionBodies[arity]?.bodies?.length ?? 0;
         this.addFunctionBody(arity, body);
 
         return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
@@ -97,7 +99,7 @@ export class Generator extends BaseGenerator<string> {
     // collect all globals, strings, native functions used and user functions
 
     // global environment is the first in the stack
-    const globals = [...this.environments[0]]
+    const globals = [...this.environments[0].env]
       .flatMap((name) => [
         `(global $${name}${TAG_SUFFIX} (mut i32) (i32.const 0))`,
         `(global $${name}${PAYLOAD_SUFFIX} (mut i64) (i64.const 0))`,
@@ -115,7 +117,9 @@ export class Generator extends BaseGenerator<string> {
 
     const applyFunctions = Object.entries(this.userFunctionBodies)
       .map(
-        ([arity, bodies]) => bodies && applyFuncFactory(Number(arity), bodies)
+        ([arity, bodies]) =>
+          bodies &&
+          applyFuncFactory(Number(arity), bodies.maxLocalCount, bodies.bodies)
       )
       .filter((x) => x != null)
       .join("\n  ");
@@ -242,22 +246,36 @@ export class Generator extends BaseGenerator<string> {
     const expression = this.visit(stmt.value);
     const name = stmt.name.lexeme;
 
-    this.getNearestEnvironment().push(name);
+    const currentEnv = this.getNearestEnvironment();
+    currentEnv.env.push(name);
 
-    return `${expression} (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+    if (currentEnv.type === "global") {
+      return `${expression} (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+    } else {
+      const index = currentEnv.env.length - 1;
+      const arity = currentEnv.arity;
+
+      this.userFunctionBodies[arity]!.maxLocalCount++;
+
+      return `${expression} (local.set $l_${index}${PAYLOAD_SUFFIX}) (local.set $l_${index}${TAG_SUFFIX})`;
+    }
   }
 
   visitVariableExpr(expr: ExprNS.Variable): string {
     const name = expr.name.lexeme;
-    const environmentIndex = this.findInEnvironments(name);
-    if (environmentIndex < 0) {
-      throw new Error(`Name ${name} not defined!`);
-    } else if (environmentIndex === 0) {
-      return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
-    } else {
-      const index = this.environments[environmentIndex].indexOf(name);
-      return `(local.get $${index}_tag) (local.get $${index}_val)`;
+    for (let i = this.environments.length - 1; i >= 0; i--) {
+      const curr = this.environments[i];
+      if (curr.type === "global" && curr.env.includes(name)) {
+        return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
+      } else if (curr.type === "function" && curr.env.includes(name)) {
+        const index = curr.env.indexOf(name);
+        return `(local.get $l_${index}${TAG_SUFFIX}) (local.get $l_${index}${PAYLOAD_SUFFIX})`;
+      } else if (curr.type === "function" && curr.paramEnv.includes(name)) {
+        const index = curr.paramEnv.indexOf(name);
+        return `(local.get $p_${index}${TAG_SUFFIX}) (local.get $p_${index}${PAYLOAD_SUFFIX})`;
+      }
     }
+    throw new Error(`Name ${name} not defined!`);
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): string {
@@ -265,22 +283,37 @@ export class Generator extends BaseGenerator<string> {
 
     const name = stmt.name.lexeme;
     const arity = stmt.parameters.length;
-    const tag = this.userFunctionBodies[arity]?.length ?? 0;
-    const wasm = `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
 
-    this.getNearestEnvironment().push(name);
+    const currentEnv = this.getNearestEnvironment();
+    currentEnv.env.push(name);
 
-    this.environments.push([]);
-    stmt.parameters.forEach((param) =>
-      this.getNearestEnvironment().push(param.lexeme)
-    );
-    this.addFunctionBody(
+    this.environments.push({
+      type: "function",
+      env: [],
+      paramEnv: [...stmt.parameters.map((param) => param.lexeme)],
       arity,
-      stmt.body.map((stmt) => this.visit(stmt)).join(" ")
-    );
+    });
+
+    // add a placeholder body first to set the tag number correctly
+    const tag = this.userFunctionBodies[arity]?.bodies?.length ?? 0;
+    if (!this.userFunctionBodies[arity]) {
+      this.userFunctionBodies[arity] = { maxLocalCount: 0, bodies: [] };
+    }
+    this.userFunctionBodies[arity].bodies.push("");
+    const body = stmt.body.map((stmt) => this.visit(stmt)).join(" ");
+    this.userFunctionBodies[arity].bodies[tag] = body;
+
     this.environments.pop();
 
-    return wasm;
+    if (currentEnv.type === "global") {
+      return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+    } else {
+      const index = currentEnv.env.length - 1;
+      const arity = currentEnv.arity;
+      this.userFunctionBodies[arity]!.maxLocalCount++;
+
+      return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (local.set $l_${index}${PAYLOAD_SUFFIX}) (local.set $l_${index}${TAG_SUFFIX})`;
+    }
   }
 
   visitCallExpr(expr: ExprNS.Call): string {

@@ -9,6 +9,9 @@ const TYPE_TAG = {
   NONE: 6,
 } as const;
 
+export const TAG_SUFFIX = "_tag";
+export const PAYLOAD_SUFFIX = "_payload";
+
 export const HEAP_PTR = "$_heap_pointer";
 
 // boxing functions
@@ -361,27 +364,41 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
 )`;
 
 // one applyFunc per arity
-export const applyFuncFactory = (arity: number, bodies: string[]) => {
+export const applyFuncFactory = (
+  arity: number,
+  maxLocalCount: number,
+  bodies: string[]
+) => {
   const params = [...Array(arity).keys()]
-    .map((i) => `(param $${i}_tag i32) (param $${i}_val i64) `)
+    .map(
+      (i) =>
+        `(param $p_${i}${TAG_SUFFIX} i32) (param $p_${i}${PAYLOAD_SUFFIX} i64) `
+    )
+    .join(" ");
+
+  const locals = [...Array(maxLocalCount).keys()]
+    .map(
+      (i) =>
+        `(local $l_${i}${TAG_SUFFIX} i32) (local $l_${i}${PAYLOAD_SUFFIX} i64) `
+    )
     .join(" ");
 
   const brTableJumps = [...Array(bodies.length).keys()]
     .map((i) => i.toString())
     .join(" ");
 
-  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64)
+  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) ${locals}
   (i32.and
     ${/* not a function */ ""}
     (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
     ${/* arity wrong */ ""}
     (local.get $val) (i32.wrap_i64) (i32.const ${arity}) (i32.eq)
   ) (if (then
-      ${"(block".repeat(bodies.length)}
+      ${"(block ".repeat(bodies.length)}
         (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
         unreachable ${/* exhausted tags */ ""}
       ${bodies
-        .map((body) => `) ${body} (call ${MAKE_NONE_FX}) (return)`)
+        .map((body) => `\n) ${body} (call ${MAKE_NONE_FX}) (return)`)
         .join("  \n")}
     ))
 
