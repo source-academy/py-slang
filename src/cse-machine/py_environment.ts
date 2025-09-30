@@ -18,6 +18,7 @@ export interface PyEnvironment {
   head: Frame
   heap: Heap
   thisContext?: Value
+  closure?: PyClosure
 }
 
 export const uniqueId = (context: PyContext): string => {
@@ -37,6 +38,7 @@ export const createEnvironment = (
     heap: new Heap(),
     id: uniqueId(context),
     callExpression: callExpression,
+    closure: closure
   }
   
   closure.node.parameters.forEach((paramToken, index) => {

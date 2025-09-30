@@ -226,6 +226,48 @@ export class ZeroDivisionError extends PyRuntimeSourceError {
   }
 }
 
+export class UnboundLocalError extends PyRuntimeSourceError {
+  constructor(source: string, name: string, node: ExprNS.Expr) {
+    super(node);
+    this.type = ErrorType.TYPE;
+
+    const { line, fullLine } = getFullLine(source, node.startToken.indexInSource);
+    const snippet = source.substring(node.startToken.indexInSource, node.endToken.indexInSource + node.endToken.lexeme.length);
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+
+    const hint = `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`
+    const suggestion = `The variable '${name}' is used in the current function, so it's considered a local variable. However, you tried to access it before a value was assigned to it in the local scope. Assign a value to '${name}' before you use it.`;
+    const msg = `UnboundLocalError at line ${line}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
+    this.message = msg;
+  }
+}
+
+export class NameError extends PyRuntimeSourceError {
+  constructor(source: string, name: string, node: ExprNS.Variable) {
+    super(node);
+    this.type = ErrorType.TYPE;
+
+    const { line, fullLine } = getFullLine(source, node.startToken.indexInSource);
+
+    const snippet = source.substring(node.startToken.indexInSource, node.endToken.indexInSource + node.endToken.lexeme.length);
+
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+    
+    const hint = `NameError: name '${name}' is not defined`;
+    const suggestion = `The name '${name}' is not defined in the current scope. Check for typos or make sure the variable is assigned a value before being used.`;
+
+    this.message = `NameError at line ${line}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+  }
+}
+
 // export class StepLimitExceededError extends PyRuntimeSourceError {
 //   constructor(source: string, node: ExprNS.Expr, context: PyContext) {
 //     super(node);

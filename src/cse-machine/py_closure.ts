@@ -18,12 +18,15 @@ export class PyClosure {
   public context: PyContext;
   public readonly predefined: boolean;
   public originalNode?: StmtNS.FunctionDef | ExprNS.Lambda;
+  /** Stores local variables for scope check */
+  public localVariables: Set<string>;
 
   constructor(
     node: StmtNS.FunctionDef | ExprNS.Lambda,
     environment: PyEnvironment,
     context: PyContext,
-    predefined: boolean = false
+    predefined: boolean = false,
+    localVariables: Set<string> = new Set()
 ) {
       this.id = uniqueId(context);
       this.node = node;
@@ -31,6 +34,7 @@ export class PyClosure {
       this.context = context;
       this.predefined = predefined;
       this.originalNode = node;
+      this.localVariables = localVariables;
   }
 
   /** 
@@ -39,9 +43,10 @@ export class PyClosure {
   static makeFromFunctionDef (
     node: StmtNS.FunctionDef,
     environment: PyEnvironment,
-    context: PyContext
+    context: PyContext,
+    localVariables: Set<string>
   ): PyClosure {
-    const closure = new PyClosure(node, environment, context);
+    const closure = new PyClosure(node, environment, context, false, localVariables);
     return closure;
   }
 
@@ -51,9 +56,10 @@ export class PyClosure {
   static makeFromLambda(
        node: ExprNS.Lambda,
        environment: PyEnvironment,
-       context: PyContext
+       context: PyContext,
+       localVariables: Set<string>
      ): PyClosure {
-       const closure = new PyClosure(node, environment, context);
+       const closure = new PyClosure(node, environment, context, false, localVariables);
        return closure;
      }
    }

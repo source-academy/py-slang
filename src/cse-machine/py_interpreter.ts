@@ -20,7 +20,7 @@ import { TokenType } from '../tokens';
 import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
 import { toPythonString } from '../py_stdlib'
-import { pyGetVariable, pyDefineVariable } from './py_utils';
+import { pyGetVariable, pyDefineVariable, scanForAssignments } from './py_utils';
 
 
 type CmdEvaluator = (
@@ -78,7 +78,7 @@ export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContex
             options.stepLimit,
             options.isPrelude || false,
         );
-        return context.output ? { type: "string", value: context.output} : { type: 'undefined' };
+        return context.output ? { type: "string", value: context.output} : { type: 'string', value: '' };
     } catch(error: any) {
         return { type: 'error', message: error.message};
     } finally {
@@ -300,7 +300,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         const name = variableNode.name.lexeme;
         
         // if not built in, look up in environment
-        const value = pyGetVariable(context, name, variableNode)
+        const value = pyGetVariable(code, context, name, variableNode)
         stash.push(value);
     },
 
@@ -345,11 +345,14 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     'FunctionDef': (code, command, context, control, stash, isPrelude) => {
         const functionDefNode = command as StmtNS.FunctionDef;
 
+        // find all local variables defined in function body
+        const localVariables = scanForAssignments(functionDefNode.body);
         // create closure, capture function code and environment
         const closure = PyClosure.makeFromFunctionDef(
             functionDefNode,
             currentEnvironment(context),
-            context
+            context,
+            localVariables
         );
         // define function name in current environment and bind to new closure
         pyDefineVariable(context, functionDefNode.name.lexeme, closure);
@@ -358,11 +361,14 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     'Lambda': (code, command, context, control, stash, isPrelude) => {
         const lambdaNode = command as ExprNS.Lambda;
 
+        // find all local variables defined in function body
+        const localVariables = scanForAssignments(lambdaNode.body);
         //create closure, capturing current environment
         const closure = PyClosure.makeFromLambda(
             lambdaNode,
             currentEnvironment(context),
-            context
+            context,
+            localVariables
         );
         // lambda is expression, just push value onto stash
         stash.push(closure);
