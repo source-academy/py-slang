@@ -261,10 +261,11 @@ export class TypeError extends RuntimeSourceError {
                   ?? '<unknown source>';
     let hint = "TypeError: '" + originalType + "' cannot be interpreted as an '" + targetType + "'.";
     const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
     const indicator = createErrorIndicator(snippet, '@');
     const name = "TypeError";
     const suggestion = ' Make sure the value you are passing is compatible with the expected type.';
-    const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(offset) + indicator + "\n" + hint + suggestion;
+    const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(adjustedOffset) + indicator + "\n" + hint + suggestion;
     this.message = msg;
   }
 }

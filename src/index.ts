@@ -129,33 +129,40 @@
 /* Use as a command line script */
 /* npm run start:dev -- test.py */
 
+// import { Translator } from "./translator";
+// import { Program } from "estree";
+// import { Resolver } from "./resolver";
+// import { Context } from './cse-machine/context';
+// import { runCSEMachine } from "./runner/pyRunner";
+
 import { Tokenizer } from "./tokenizer";
 import { Parser } from "./parser";
-import { Translator } from "./translator";
-import { Program } from "estree";
-import { Resolver } from "./resolver";
-import { Context } from './cse-machine/context';
+
 export * from './errors';
 import { Finished, RecursivePartial, Result } from "./types";
-import { runCSEMachine } from "./runner/pyRunner";
 import { initialise } from "./conductor/runner/util/initialise";
 import { PyEvaluator } from "./conductor/runner/types/PyEvaluator";
 export * from './errors';
+import { PyRunCSEMachine } from "./runner/pyRunner";
+import { StmtNS } from "./ast-types";
+import { PyContext } from "./cse-machine/py_context";
 
-export function parsePythonToEstreeAst(code: string,
-    variant: number = 1,
-    doValidate: boolean = false): Program {
-    const script = code + '\n'
-    const tokenizer = new Tokenizer(script)
-    const tokens = tokenizer.scanEverything()
-    const pyParser = new Parser(script, tokens)
-    const ast = pyParser.parse()
-    if (doValidate) {
-        new Resolver(script, ast).resolve(ast);
-    }
-    const translator = new Translator(script)
-    return translator.resolve(ast) as unknown as Program
-}
+type Stmt = StmtNS.Stmt;
+
+// export function parsePythonToEstreeAst(code: string,
+//     variant: number = 1,
+//     doValidate: boolean = false): Program {
+//     const script = code + '\n'
+//     const tokenizer = new Tokenizer(script)
+//     const tokens = tokenizer.scanEverything()
+//     const pyParser = new Parser(script, tokens)
+//     const ast = pyParser.parse()
+//     if (doValidate) {
+//         new Resolver(script, ast).resolve(ast);
+//     }
+//     const translator = new Translator(script)
+//     return translator.resolve(ast) as unknown as Program
+// }
 
 // import {ParserErrors, ResolverErrors, TokenizerErrors} from "./errors";
 // import fs from "fs";
@@ -195,14 +202,70 @@ export interface IOptions {
     stepLimit: number
 };
 
-export async function runInContext(
+// export async function runInContext(
+//     code: string,
+//     context: Context,
+//     options: RecursivePartial<IOptions> = {}
+// ): Promise<Result> {
+//     const estreeAst = parsePythonToEstreeAst(code, 1, true);
+//     const result = runCSEMachine(code, estreeAst, context, options);
+//     return result;
+// }
+
+
+
+export async function runPyAST(
     code: string,
-    context: Context,
+    context: PyContext,
+    options: RecursivePartial<IOptions> = {}
+): Promise<Stmt> {
+    const script = code + "\n";
+    const tokenizer = new Tokenizer(script);
+    const tokens = tokenizer.scanEverything();
+    const pyParser = new Parser(script, tokens);
+    const ast = pyParser.parse();
+    return ast;
+};
+
+export async function PyRunInContext(
+    code: string,
+    context: PyContext,
     options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-    const estreeAst = parsePythonToEstreeAst(code, 1, true);
-    const result = runCSEMachine(code, estreeAst, context, options);
+    const ast = await runPyAST(code, context, options);
+    const result = PyRunCSEMachine(code, ast, context, options);
     return result;
 }
 
-const {runnerPlugin, conduit} = initialise(PyEvaluator);
+export * from "./errors";
+import * as fs from "fs";
+
+if (require.main === module) {
+    (async () => {
+      if (process.argv.length < 3) {
+        console.error("Usage: npm run start:dev -- <python-file>");
+        process.exit(1);
+      }
+      const options = {};
+      const context = new PyContext();
+
+      const filePath = process.argv[2];
+  
+      try {
+        //await loadModulesFromServer(context, "http://localhost:8022");
+
+        const code = fs.readFileSync(filePath, "utf8") + "\n";
+        console.log(`Parsing Python file: ${filePath}`);
+  
+        const result = await PyRunInContext(code, context, options);
+        console.info(result);
+        console.info((result as Finished).value);
+        console.info((result as Finished).representation.toString());
+  
+      } catch (e) {
+        console.error("Error:", e);
+      }
+
+    })();
+}
+// const {runnerPlugin, conduit} = initialise(PyEvaluator);

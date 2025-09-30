@@ -108,3 +108,6 @@ dist
 
 # TypeScript build files
 build/
+
+# Ignore personal test files
+*.local.test.ts

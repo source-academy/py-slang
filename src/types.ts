@@ -1,14 +1,34 @@
-import * as es from 'estree'
 import { toPythonString } from './stdlib'
 import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
+import { PyContext } from './cse-machine/py_context'
+import { PyControl } from './cse-machine/py_control'
 
 export class CSEBreak {}
 
 // export class CseError {
 //     constructor(public readonly error: any) {}
 // }
+
+/**
+ * Represents a specific position in source code
+ * Line is 1-based, Column is 0-based
+ */
+export interface SourcePosition {
+    line: number;
+    column: number;
+}
+
+/**
+ * Represents the span of code within source code from start to end
+ * Can be null if source code is not available
+ */
+export interface SourceLocation {
+    source?: string | null;
+    start: SourcePosition;
+    end: SourcePosition;
+}
 
 export enum ErrorType {
     IMPORT = 'Import',
@@ -26,7 +46,7 @@ export enum ErrorSeverity {
 export interface SourceError {
     type: ErrorType
     severity: ErrorSeverity
-    location: es.SourceLocation
+    location: SourceLocation
     explain(): string
     elaborate(): string
 }
@@ -238,18 +258,15 @@ export class PyComplexNumber {
     }
 }
 
-export interface None extends es.BaseNode {
+export interface None{
     type: 'NoneType';
-    loc?: es.SourceLocation;
+    loc?: SourceLocation | null;
 }
 
-export interface ComplexLiteral extends es.BaseNode {
+export interface ComplexLiteral{
     type: 'Literal';
-    complex: {
-        real: number;
-        imag: number;
-    }
-    loc?: es.SourceLocation;
+    complex?: PyComplexNumber;
+    loc?: SourceLocation | null;
 }
 
 
@@ -281,12 +298,12 @@ export type Result = Finished | Error | SuspendedCseEval // | Suspended
   
 export interface SuspendedCseEval {
     status: 'suspended-cse-eval'
-    context: Context
+    context: Context | PyContext
 }
 
 export interface Finished {
     status: 'finished'
-    context: Context
+    context: Context | PyContext
     value: Value
     representation: Representation // if the returned value needs a unique representation,
     // (for example if the language used is not JS),
@@ -304,11 +321,10 @@ export interface Finished {
 export class Representation {
     constructor(public representation: string) {}
   
-    toString(value: any): string {
+    toString(): string {
         // call str(value) in stdlib
         // TODO: mapping
-        const result = toPythonString(value);
-        return result;
+        return this.representation;
     }
 }
 
