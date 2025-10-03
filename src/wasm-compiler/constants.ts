@@ -29,8 +29,8 @@ const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img 
 const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${TYPE_TAG.BOOL}) (local.get $value) (i64.extend_i32_u))`;
 // upper 32: pointer; lower 32: length
 const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${TYPE_TAG.STRING}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
-// upper 32: tag; lower 32: arity
-const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.or))`;
+// upper 16: tag; middle 16: arity; lower 32: env
+const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (param $env i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 48) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.const 32) (i64.shl) (i64.or) (local.get $env) (i64.extend_i32_u) (i64.or))`;
 const makeNoneFunc = `(func ${MAKE_NONE_FX} (result i32 i64) (i32.const ${TYPE_TAG.NONE}) (i64.const 0))`;
 
 // unary operation functions
@@ -387,14 +387,15 @@ export const applyFuncFactory = (
     .map((i) => i.toString())
     .join(" ");
 
-  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) ${locals}
+  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) (local $env i32) ${locals}
   (i32.and
     ${/* not a function */ ""}
     (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
-    ${/* arity wrong */ ""}
-    (local.get $val) (i32.wrap_i64) (i32.const ${arity}) (i32.eq)
+    ${/* arity wrong, zero first 16 bits */ ""}
+    (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 65535) (i32.and) (i32.const ${arity}) (i32.eq)
   ) (if (then
       ${"(block ".repeat(bodies.length)}
+        (local.get $val) (i32.wrap_i64) (local.set $env)
         (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
         unreachable ${/* exhausted tags */ ""}
       ${bodies

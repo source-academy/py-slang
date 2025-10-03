@@ -37,6 +37,7 @@ type LocalEnvironment = {
   env: string[];
   paramEnv: string[];
   arity: number;
+  captures: number[];
 };
 type Environment = GlobalEnvironment | LocalEnvironment;
 
@@ -47,6 +48,7 @@ export class Generator extends BaseGenerator<string> {
     MAKE_COMPLEX_FX,
     MAKE_STRING_FX,
     MAKE_NONE_FX,
+    MAKE_CLOSURE_FX,
   ]);
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -90,7 +92,7 @@ export class Generator extends BaseGenerator<string> {
         const tag = this.userFunctionBodies[arity]?.bodies?.length ?? 0;
         this.addFunctionBody(arity, body);
 
-        return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+        return `(i32.const ${tag}) (i32.const ${arity}) (i32.const 0) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
       })
       .join("\n  ");
 
@@ -247,16 +249,12 @@ export class Generator extends BaseGenerator<string> {
     const name = stmt.name.lexeme;
 
     const currentEnv = this.getNearestEnvironment();
-    currentEnv.env.push(name);
+    if (!currentEnv.env.includes(name)) currentEnv.env.push(name);
 
     if (currentEnv.type === "global") {
       return `${expression} (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
     } else {
-      const index = currentEnv.env.length - 1;
-      const arity = currentEnv.arity;
-
-      this.userFunctionBodies[arity]!.maxLocalCount++;
-
+      const index = currentEnv.env.indexOf(name);
       return `${expression} (local.set $l_${index}${PAYLOAD_SUFFIX}) (local.set $l_${index}${TAG_SUFFIX})`;
     }
   }
@@ -269,6 +267,16 @@ export class Generator extends BaseGenerator<string> {
         return `(global.get $${name}${TAG_SUFFIX}) (global.get $${name}${PAYLOAD_SUFFIX})`;
       } else if (curr.type === "function" && curr.env.includes(name)) {
         const index = curr.env.indexOf(name);
+        const newEnv = this.getNearestEnvironment();
+
+        if (i !== this.environments.length - 1 && newEnv.type === "function") {
+          newEnv.captures.push(index);
+          const indexInCapture = newEnv.captures.indexOf(index);
+          const tagAdd = indexInCapture * 12;
+          const payloadAdd = tagAdd + 4;
+          return `(local.get $env) (i32.const ${tagAdd}) (i32.add) (i32.load) (local.get $env) (i32.const ${payloadAdd}) (i32.add) (i64.load)`;
+        }
+
         return `(local.get $l_${index}${TAG_SUFFIX}) (local.get $l_${index}${PAYLOAD_SUFFIX})`;
       } else if (curr.type === "function" && curr.paramEnv.includes(name)) {
         const index = curr.paramEnv.indexOf(name);
@@ -279,8 +287,6 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): string {
-    this.nativeFunctions.add(MAKE_CLOSURE_FX);
-
     const name = stmt.name.lexeme;
     const arity = stmt.parameters.length;
 
@@ -292,10 +298,16 @@ export class Generator extends BaseGenerator<string> {
       env: [],
       paramEnv: [...stmt.parameters.map((param) => param.lexeme)],
       arity,
+      captures: [],
     });
 
     // add a placeholder body first to set the tag number correctly
     const tag = this.userFunctionBodies[arity]?.bodies?.length ?? 0;
+
+    if (tag >= 1 << 16 || arity >= 1 << 16) {
+      throw new Error("Tag or arity cannot be above 16-bit integer limit");
+    }
+
     if (!this.userFunctionBodies[arity]) {
       this.userFunctionBodies[arity] = { maxLocalCount: 0, bodies: [] };
     }
@@ -303,16 +315,38 @@ export class Generator extends BaseGenerator<string> {
     const body = stmt.body.map((stmt) => this.visit(stmt)).join(" ");
     this.userFunctionBodies[arity].bodies[tag] = body;
 
+    let envWasm = "(i32.const 0)";
+    const newEnv = this.getNearestEnvironment();
+    this.userFunctionBodies[arity].maxLocalCount = Math.max(
+      this.userFunctionBodies[arity].maxLocalCount,
+      newEnv.env.length
+    );
+    if (newEnv.type === "function" && newEnv.captures.length !== 0) {
+      envWasm = newEnv.captures
+        .map(
+          (index) =>
+            `(global.get ${HEAP_PTR}) (local.get $l_${index}${TAG_SUFFIX}) (i32.store) (global.get ${HEAP_PTR}) (i32.const 4) (i32.add) (local.get $l_${index}${PAYLOAD_SUFFIX}) (i64.store) (global.get ${HEAP_PTR}) (i32.const 12) (i32.add) (global.set ${HEAP_PTR})`
+        )
+        .join(" ");
+
+      envWasm = `(global.get ${HEAP_PTR}) ${envWasm}`;
+    }
+
     this.environments.pop();
 
     if (currentEnv.type === "global") {
-      return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
+      return `(i32.const ${tag}) (i32.const ${arity}) ${envWasm} (call ${MAKE_CLOSURE_FX}) (global.set $${name}${PAYLOAD_SUFFIX}) (global.set $${name}${TAG_SUFFIX})`;
     } else {
       const index = currentEnv.env.length - 1;
       const arity = currentEnv.arity;
-      this.userFunctionBodies[arity]!.maxLocalCount++;
+      // this.userFunctionBodies[arity]!.maxLocalCount++;
 
-      return `(i32.const ${tag}) (i32.const ${arity}) (call ${MAKE_CLOSURE_FX}) (local.set $l_${index}${PAYLOAD_SUFFIX}) (local.set $l_${index}${TAG_SUFFIX})`;
+      this.userFunctionBodies[arity]!.maxLocalCount = Math.max(
+        this.userFunctionBodies[arity]!.maxLocalCount,
+        newEnv.env.length
+      );
+
+      return `(i32.const ${tag}) (i32.const ${arity}) ${envWasm} (call ${MAKE_CLOSURE_FX}) (local.set $l_${index}${PAYLOAD_SUFFIX}) (local.set $l_${index}${TAG_SUFFIX})`;
     }
   }
 
