@@ -7,16 +7,11 @@ import { Generator } from "./generator";
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
 def f():
-    capture = "test"
+    capture = 42
+    return capture
 
-    def g():
-        return capture
-
-    capture = "test2"
-
-    return g
-
-print(f()())`;
+print(f())
+`;
 
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);

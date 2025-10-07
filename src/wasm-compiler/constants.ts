@@ -13,6 +13,13 @@ export const TAG_SUFFIX = "_tag";
 export const PAYLOAD_SUFFIX = "_payload";
 
 export const HEAP_PTR = "$_heap_pointer";
+export const CURR_ENV = "$_current_env";
+
+export const ALLOC_FUNC = "$_alloc";
+const allocFunc = `(func ${ALLOC_FUNC} (param $words i32) (result i32)
+  (global.get ${HEAP_PTR})
+  (global.get ${HEAP_PTR}) (local.get $words) (i32.const 4) (i32.mul) (i32.add) (global.set ${HEAP_PTR})
+)`;
 
 // boxing functions
 export const MAKE_INT_FX = "$_make_int";
@@ -29,8 +36,8 @@ const makeComplexFunc = `(func ${MAKE_COMPLEX_FX} (param $real f64) (param $img 
 const makeBoolFunc = `(func ${MAKE_BOOL_FX} (param $value i32) (result i32 i64) (i32.const ${TYPE_TAG.BOOL}) (local.get $value) (i64.extend_i32_u))`;
 // upper 32: pointer; lower 32: length
 const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32) (result i32 i64) (i32.const ${TYPE_TAG.STRING}) (local.get $ptr) (i64.extend_i32_u) (i64.const 32) (i64.shl) (local.get $len) (i64.extend_i32_u) (i64.or))`;
-// upper 16: tag; middle 16: arity; lower 32: env
-const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (param $env i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 48) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.const 32) (i64.shl) (i64.or) (local.get $env) (i64.extend_i32_u) (i64.or))`;
+// upper 16: tag; upperMid 8: arity; lowerMid 8: envSize; lower 32: parentEnv
+const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (param $env_size i32) (param $parent_env i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 48) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.const 40) (i64.shl) (i64.or) (local.get $env_size) (i64.extend_i32_u) (i64.const 32) (i64.shl) (i64.or) (local.get $parent_env) (i64.extend_i32_u) (i64.or))`;
 const makeNoneFunc = `(func ${MAKE_NONE_FX} (result i32 i64) (i32.const ${TYPE_TAG.NONE}) (i64.const 0))`;
 
 // unary operation functions
@@ -363,43 +370,37 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
   unreachable
 )`;
 
+export const APPLY_FUNC = "$_apply_";
 // one applyFunc per arity
-export const applyFuncFactory = (
-  arity: number,
-  maxLocalCount: number,
-  bodies: string[]
-) => {
-  const params = [...Array(arity).keys()]
-    .map(
-      (i) =>
-        `(param $p_${i}${TAG_SUFFIX} i32) (param $p_${i}${PAYLOAD_SUFFIX} i64) `
-    )
-    .join(" ");
+export const applyFuncFactory = (arity: number, bodies: string[]) => {
+  let params = "";
+  for (let i = 0; i < arity; i++)
+    params += `(param $p_${i}${TAG_SUFFIX} i32) (param $p_${i}${PAYLOAD_SUFFIX} i64) `;
 
-  const locals = [...Array(maxLocalCount).keys()]
-    .map(
-      (i) =>
-        `(local $l_${i}${TAG_SUFFIX} i32) (local $l_${i}${PAYLOAD_SUFFIX} i64) `
-    )
-    .join(" ");
+  let setParams = "";
+  for (let i = 0; i < arity; i++)
+    setParams += `(i32.const 0) (i32.const ${i}) (local.get $p_${i}${TAG_SUFFIX}) (local.get $p_${i}${PAYLOAD_SUFFIX}) (call ${SET_LEX_ADDR_FUNC})`;
 
-  const brTableJumps = [...Array(bodies.length).keys()]
-    .map((i) => i.toString())
-    .join(" ");
+  let brTableJumps = "";
+  for (let i = 0; i < bodies.length; i++) brTableJumps += `${i} `;
 
-  return `(func $_apply_${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) (local $env i32) ${locals}
+  return `(func ${APPLY_FUNC}${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64)
   (i32.and
     ${/* not a function */ ""}
     (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
-    ${/* arity wrong, zero first 16 bits */ ""}
-    (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 65535) (i32.and) (i32.const ${arity}) (i32.eq)
+    ${/* arity wrong, zero first 56 bits */ ""}
+    (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const ${arity}) (i32.eq)
   ) (if (then
       ${"(block ".repeat(bodies.length)}
-        (local.get $val) (i32.wrap_i64) (local.set $env)
-        (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
+        (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const 3) (i32.mul) (i32.const 1) (i32.add) (call ${ALLOC_FUNC}) (global.set ${CURR_ENV})
+        (global.get ${CURR_ENV}) (local.get $val) (i32.wrap_i64) (i32.store)
+        (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
         unreachable ${/* exhausted tags */ ""}
       ${bodies
-        .map((body) => `\n) ${body} (call ${MAKE_NONE_FX}) (return)`)
+        .map(
+          (body) =>
+            `\n) ${setParams} ${body} (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (call ${MAKE_NONE_FX}) (return)`
+        )
         .join("  \n")}
     ))
 
@@ -407,7 +408,49 @@ export const applyFuncFactory = (
 )`;
 };
 
+// env in i32s: parentEnv | var0_tag | var0_payload1 | var0_payload2 | var1_tag | var1_payload1 | ...
+
+export const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
+export const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
+
+const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (result i32 i64) (local $env i32)
+  (local.set $env (global.get ${CURR_ENV}))
+
+  (loop $loop
+    (i32.eq (local.get $depth) (i32.const 0)) (if (then
+      (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load)
+      (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
+      (return)
+    ))
+
+    (local.get $env) (i32.load) (local.set $env)
+    (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+    (br $loop)
+  )
+
+  unreachable
+)`;
+
+const setLexAddressFunction = `(func ${SET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (param $tag i32) (param $payload i64) (local $env i32)
+  (local.set $env (global.get ${CURR_ENV}))
+
+  (loop $loop
+    (i32.eq (local.get $depth) (i32.const 0)) (if (then
+      (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $tag) (i32.store)
+      (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $payload) (i64.store)
+      (return)
+    ))
+
+    (local.get $env) (i32.load) (local.set $env)
+    (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+    (br $loop)
+  )
+
+  unreachable
+)`;
+
 export const nameToFunctionMap = {
+  [ALLOC_FUNC]: allocFunc,
   [MAKE_INT_FX]: makeIntFunc,
   [MAKE_FLOAT_FX]: makeFloatFunc,
   [MAKE_COMPLEX_FX]: makeComplexFunc,
@@ -419,4 +462,6 @@ export const nameToFunctionMap = {
   [COMPARISON_OP_FX]: comparisonOpFunc,
   [STRING_COMPARE_FX]: stringCmpFunc,
   [NEG_FUNC_NAME]: negFunc,
+  [GET_LEX_ADDR_FUNC]: getLexAddressFunction,
+  [SET_LEX_ADDR_FUNC]: setLexAddressFunction,
 };
