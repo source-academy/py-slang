@@ -254,6 +254,9 @@ export class Generator extends BaseGenerator<string> {
     const arity = stmt.parameters.length;
     const tag = this.userFunctions[arity]?.length ?? 0;
 
+    this.userFunctions[arity] ??= [];
+    this.userFunctions[arity][tag] = "PLACEHOLDER";
+
     const newFrame = [
       ...stmt.parameters.map((p) => p.lexeme),
       ...this.collectDeclarations(stmt.body),
@@ -270,7 +273,6 @@ export class Generator extends BaseGenerator<string> {
     const body = stmt.body.map((s) => this.visit(s)).join(" ");
     this.environment.pop();
 
-    this.userFunctions[arity] ??= [];
     this.userFunctions[arity][tag] = body;
 
     return `(i32.const ${depth}) (i32.const ${index}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${newFrame.length}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
@@ -287,10 +289,10 @@ export class Generator extends BaseGenerator<string> {
     const value = stmt.value;
     if (!value) {
       this.nativeFunctions.add(MAKE_NONE_FX);
-      return `(global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (call ${MAKE_NONE_FX}) (return)`;
+      return `(call ${MAKE_NONE_FX}) (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`;
     }
 
     const expr = this.visit(value);
-    return `(global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) ${expr} (return)`;
+    return `${expr} (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`;
   }
 }

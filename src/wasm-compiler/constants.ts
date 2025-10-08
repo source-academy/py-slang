@@ -61,7 +61,7 @@ export const LOG_FUNCS = [
   '(import "console" "log_complex" (func $_log_complex (param f64) (param f64)))',
   '(import "console" "log_bool" (func $_log_bool (param i64)))',
   '(import "console" "log_string" (func $_log_string (param i32) (param i32)))',
-  '(import "console" "log_closure" (func $_log_closure (param i32) (param i32)))',
+  '(import "console" "log_closure" (func $_log_closure (param i32) (param i32) (param i32) (param i32)))',
   '(import "console" "log_none" (func $_log_none))',
   `(func $log (param $tag i32) (param $value i64)
     (local.get $tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if
@@ -75,7 +75,7 @@ export const LOG_FUNCS = [
     (local.get $tag) (i32.const ${TYPE_TAG.STRING}) i32.eq (if
       (then (local.get $value) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (local.get $value) (i32.wrap_i64) (call $_log_string) (return)))
     (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}) i32.eq (if
-      (then (local.get $value) (i32.wrap_i64) (i32.const 32) (i32.shr_u) (local.get $value) (i32.wrap_i64) (call $_log_closure) (return)))
+      (then (local.get $value) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (i32.const 65535) (i32.and) (local.get $value) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $value) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $value) (i32.wrap_i64) (call $_log_closure) (return)))
     (local.get $tag) (i32.const ${TYPE_TAG.NONE}) i32.eq (if
       (then (call $_log_none) (return)))
 
@@ -399,7 +399,7 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
       ${bodies
         .map(
           (body) =>
-            `\n) ${setParams} ${body} (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (call ${MAKE_NONE_FX}) (return)`
+            `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`
         )
         .join("  \n")}
     ))
