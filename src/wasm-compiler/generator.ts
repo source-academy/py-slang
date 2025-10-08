@@ -2,7 +2,7 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import { BaseGenerator } from "./baseGenerator";
 import {
-  ALLOC_FUNC,
+  ALLOC_ENV_FUNC,
   APPLY_FUNC,
   applyFuncFactory,
   ARITHMETIC_OP_FX,
@@ -36,7 +36,7 @@ const builtInFunctions: { name: string; arity: number; body: string }[] = [
 
 export class Generator extends BaseGenerator<string> {
   private nativeFunctions = new Set<keyof typeof nameToFunctionMap>([
-    ALLOC_FUNC,
+    ALLOC_ENV_FUNC,
     MAKE_INT_FX,
     MAKE_FLOAT_FX,
     MAKE_COMPLEX_FX,
@@ -111,8 +111,8 @@ export class Generator extends BaseGenerator<string> {
       .filter((x) => x != null)
       .join("\n  ");
 
-    // because each variable has a tag and payload = 3 words; +1 because parentEnv is stored at start of env
-    const globalEnvLength = this.environment[0].length * 3 + 1;
+    // because each variable has a tag and payload = 3 words
+    const globalEnvLength = this.environment[0].length;
 
     return `
 (module
@@ -129,7 +129,7 @@ export class Generator extends BaseGenerator<string> {
   ${applyFunctions}
   
   (func $main
-    (i32.const ${globalEnvLength}) (call ${ALLOC_FUNC}) (global.set ${CURR_ENV})
+    (i32.const ${globalEnvLength}) (i32.const 0) (call ${ALLOC_ENV_FUNC})
     ${builtInFuncsDeclarations}
     ${body}
   )
