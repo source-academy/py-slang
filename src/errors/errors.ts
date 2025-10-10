@@ -1,6 +1,26 @@
 import * as es from 'estree'
-import { ErrorSeverity, ErrorType, SourceError } from '../types'
 import { Context } from '../cse-machine/context'
+
+export enum ErrorType {
+  IMPORT = 'Import',
+  RUNTIME = 'Runtime',
+  SYNTAX = 'Syntax',
+  TYPE = 'Type'
+}
+
+export enum ErrorSeverity {
+  WARNING = 'Warning',
+  ERROR = 'Error'
+}
+
+// any and all errors ultimately implement this interface. as such, changes to this will affect every type of error.
+export interface SourceError {
+  type: ErrorType
+  severity: ErrorSeverity
+  location: es.SourceLocation
+  explain(): string
+  elaborate(): string
+}
 
 // Base error and shared helpers
 export const UNKNOWN_LOCATION: es.SourceLocation = {
