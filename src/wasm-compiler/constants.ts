@@ -430,7 +430,7 @@ const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (pa
   (loop $loop
     (i32.eqz (local.get $depth)) (if (then
       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load) (local.set $tag)
-      (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND}) (if (then unreachable))
+      (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then unreachable))
       (local.get $tag)
       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
       (return)

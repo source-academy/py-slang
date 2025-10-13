@@ -21,6 +21,7 @@ export abstract class BaseGenerator<T>
   abstract visitFunctionDefStmt(stmt: StmtNS.FunctionDef): T;
   abstract visitCallExpr(expr: ExprNS.Call): T;
   abstract visitReturnStmt(stmt: StmtNS.Return): T;
+  abstract visitNonLocalStmt(stmt: StmtNS.NonLocal): T;
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): T {
     throw new Error("Method not implemented.");
@@ -59,9 +60,6 @@ export abstract class BaseGenerator<T>
     throw new Error("Method not implemented.");
   }
   visitGlobalStmt(stmt: StmtNS.Global): T {
-    throw new Error("Method not implemented.");
-  }
-  visitNonLocalStmt(stmt: StmtNS.NonLocal): T {
     throw new Error("Method not implemented.");
   }
   visitAssertStmt(stmt: StmtNS.Assert): T {

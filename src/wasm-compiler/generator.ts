@@ -295,4 +295,8 @@ export class Generator extends BaseGenerator<string> {
     const expr = this.visit(value);
     return `${expr} (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`;
   }
+
+  visitNonLocalStmt(stmt: StmtNS.NonLocal): string {
+    return "";
+  }
 }
