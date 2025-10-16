@@ -396,7 +396,7 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
   let brTableJumps = "";
   for (let i = 0; i < bodies.length; i++) brTableJumps += `${i} `;
 
-  return `(func ${APPLY_FUNC}${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64)
+  return `(func ${APPLY_FUNC}${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) (local $return_env i32)
   (i32.and
     ${/* not a function */ ""}
     (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
@@ -404,13 +404,14 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
     (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const ${arity}) (i32.eq)
   ) (if (then
       ${"(block ".repeat(bodies.length)}
+        (global.get ${CURR_ENV}) (local.set $return_env)
         (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
         (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
         unreachable ${/* exhausted tags */ ""}
       ${bodies
         .map(
           (body) =>
-            `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`
+            `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)`
         )
         .join("  \n")}
     ))
