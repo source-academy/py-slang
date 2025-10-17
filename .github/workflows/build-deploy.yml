@@ -1,0 +1,55 @@
+name: Build and deploy runner
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build runner
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+
+      - name: npm install
+        run: npm install
+
+      - name: npm run build
+        run: npm run build
+
+      - name: Upload artifacts
+        id: deployment
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+  deploy:
+    needs: build
+
+    name: Deploy runner
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

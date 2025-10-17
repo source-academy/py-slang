@@ -10,27 +10,6 @@ export class CSEBreak {}
 //     constructor(public readonly error: any) {}
 // }
 
-export enum ErrorType {
-    IMPORT = 'Import',
-    RUNTIME = 'Runtime',
-    SYNTAX = 'Syntax',
-    TYPE = 'Type'
-}
-
-export enum ErrorSeverity {
-    WARNING = 'Warning',
-    ERROR = 'Error'
-}
-
-// any and all errors ultimately implement this interface. as such, changes to this will affect every type of error.
-export interface SourceError {
-    type: ErrorType
-    severity: ErrorSeverity
-    location: es.SourceLocation
-    explain(): string
-    elaborate(): string
-}
-
 export class PyComplexNumber {
     public real: number;
     public imag: number;

@@ -22,10 +22,10 @@ import { conditionalExpression } from './instrCreator';
 import * as error from "../errors/errors"
 import { ComplexLiteral, CSEBreak, None, PyComplexNumber, RecursivePartial, Representation, Result } from '../types';
 import { builtIns, builtInConstants } from '../stdlib';
-import { IOptions } from '..';
+import { IOptions } from '../runner/pyRunner';
 import { CseError } from './error';
 import { filterImportDeclarations } from './dict';
-import { RuntimeSourceError } from '../errors/runtimeSourceError';
+import { RuntimeSourceError } from '../errors/errors';
 
 type CmdEvaluator = (
   command: ControlItem,
