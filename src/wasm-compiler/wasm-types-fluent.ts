@@ -227,121 +227,177 @@ type WasmNumeric =
   | WasmNumericFor<"f32">
   | WasmNumericFor<"f64">;
 
-type WasmInstruction = WasmNumeric;
+type WasmBlockType = {
+  paramTypes: WasmNumericType[];
+  resultTypes: WasmNumericType[];
+  localTypes?: WasmNumericType[];
+};
+
+type WasmBlockBase = { label?: string; blockType: WasmBlockType };
+type WasmBlock = WasmBlockBase &
+  (
+    | { instr: "block"; body: WasmInstruction[] }
+    | { instr: "loop"; body: WasmInstruction[] }
+    | {
+        instr: "if";
+        predicate: WasmNumeric;
+        then: WasmInstruction[];
+        else?: WasmInstruction[];
+      }
+  );
+
+type WasmInstruction = WasmNumeric | WasmBlock;
 
 type WasmNumericFluent<T extends WasmNumericType> = {
-  [op in WasmNumericFor<T>["instr"] extends infer Instr
-    ? Instr extends `${T}.${infer Suffix}`
-      ? Suffix
-      : never
-    : never]: (
-    ...args: op extends "const"
+  [op in WasmNumericFor<T>["instr"] extends `${T}.${infer S}`
+    ? S
+    : never]: Extract<
+    WasmNumericFor<T>,
+    { instr: `${T}.${op}` }
+  > extends infer I
+    ? (
+        ...args: op extends "const"
+          ? T extends WasmIntNumericType
+            ? [value: number | bigint]
+            : [value: number]
+          : I extends { left: infer L; right: infer R }
+          ? [left: L, right: R]
+          : I extends { right: infer R }
+          ? [right: R]
+          : never
+      ) => I
+    : never;
+};
+
+// type WasmFluent = {
+//   [op in WasmInstruction["instr"] extends infer I
+//     ? I extends `${WasmNumericType}.${infer S}`
+//       ? S
+//       : I
+//     : never]: op
+// };
+
+// type WasmFluent<T extends WasmNumericType | "wasm"> = {
+//   [op in WasmInstruction as op["instr"] extends `${WasmNumericType}.${infer S}`
+//     ? S
+//     : op["instr"]]: op["instr"] extends `${WasmNumericType}.${infer S}`
+//     ? S
+//     : op["instr"];
+// };
+
+type WasmFluent<T extends WasmNumericType | "wasm"> = {
+  [I in T extends WasmNumericType
+    ? WasmNumericFor<T>
+    : WasmBlock as I["instr"] extends `${WasmNumericType}.${infer S}`
+    ? S
+    : I["instr"]]: (
+    ...args: I["instr"] extends `${T}.const`
       ? T extends WasmIntNumericType
         ? [value: number | bigint]
         : [value: number]
-      : op extends FloatUnaryOp
-      ? [right: WasmNumericFor<T>]
-      : op extends
-          | IntBinaryOp
-          | FloatBinaryOp
-          | IntComparisonOp
-          | FloatComparisonOp
-      ? [left: WasmNumericFor<T>, right: WasmNumericFor<T>]
-      : op extends IntTestOp
-      ? [right: WasmNumericFor<T>]
-      : op extends
-          | I32ConversionOp
-          | I64ConversionOp
-          | F32ConversionOp
-          | F64ConversionOp
-          | IntConversionOp
-          | FloatConversionOp
-      ? [right: WasmNumericFor<ExtractConversion<op>>]
+      : I extends { left: infer L; right: infer R }
+      ? [left: L, right: R]
+      : I extends { right: infer R }
+      ? [right: R]
+      : I extends { blockType: WasmBlockType; body: infer B }
+      ? [blockType: WasmBlockTypeHelper, body: B]
+      : I extends {
+          blockType: WasmBlockType;
+          predicate: infer P;
+          then: infer T;
+          else?: infer E;
+        }
+      ? [blockType: WasmBlockTypeHelper, predicate: P, then: T, wasmElse?: T]
       : never
-  ) => Extract<WasmNumericFor<T>, { instr: `${T}.${op}` }>;
+  ) => I;
 };
-
-// type WasmNumericFluent<T extends WasmNumericType> = {
-//   [I in WasmNumericFor<T> as I["instr"] extends `${T}.${infer S}`
-//     ? S
-//     : never]: I extends { instr: string }
-//     ? (
-//         ...args: I extends { value: infer V }
-//           ? [value: V]
-//           : I extends { left: infer L; right: infer R }
-//           ? [left: L, right: R]
-//           : I extends { right: infer R }
-//           ? [right: R]
-//           : never
-//       ) => I
-//     : never;
-// };
 
 const typedFromEntries = <const T extends readonly [PropertyKey, unknown][]>(
   entries: T
 ) => Object.fromEntries(entries) as { [K in T[number] as K[0]]: K[1] };
 
-const fluentHelper = <
-  Type extends WasmNumericType,
-  const Ops extends readonly (keyof WasmNumericFluent<Type>)[],
-  Params extends Parameters<WasmNumericFluent<Type>[Ops[number]]>,
-  Fn extends (
-    ...args: Params
-  ) => Omit<ReturnType<WasmNumericFluent<Type>[Ops[number]]>, "instr">
+type AnyFn = (...args: never[]) => unknown;
+const numericFluent = <
+  T extends WasmNumericType,
+  const Ops extends readonly (keyof WasmFluent<T>)[],
+  Params extends WasmFluent<T>[Ops[number]] extends AnyFn
+    ? Parameters<WasmFluent<T>[Ops[number]]>
+    : never,
+  Fn extends WasmFluent<T>[Ops[number]] extends AnyFn
+    ? (...args: Params) => Omit<ReturnType<WasmFluent<T>[Ops[number]]>, "instr">
+    : never
 >(
-  type: Type,
+  type: T,
   ops: Ops,
   fn: Fn
 ) =>
   typedFromEntries(
     ops.map((op) => [
       op,
-      (...args: Params) => ({ instr: `${type}.${op}`, ...fn(...args) }),
+      (...args: Params) => ({ instr: `${type}.${String(op)}`, ...fn(...args) }),
     ]) as {
-      [Index in keyof Ops]: [
-        Ops[Index],
+      [I in keyof Ops]: [
+        Ops[I],
         (
-          ...args: Parameters<WasmNumericFluent<Type>[Ops[Index]]>
-        ) => ReturnType<WasmNumericFluent<Type>[Ops[Index]]>
+          ...args: WasmFluent<T>[Ops[I]] extends AnyFn
+            ? Parameters<WasmFluent<T>[Ops[I]]>
+            : never
+        ) => WasmFluent<T>[Ops[I]] extends AnyFn
+          ? ReturnType<WasmFluent<T>[Ops[I]]>
+          : never
       ];
     }
   );
 
-const i32: WasmNumericFluent<"i32"> = {
-  ...fluentHelper("i32", ["const"], (value) => ({ value: BigInt(value) })),
-  ...fluentHelper(
+const i32: WasmFluent<"i32"> = {
+  ...numericFluent("i32", ["const"], (value) => ({ value: BigInt(value) })),
+  ...numericFluent(
     "i32",
     [...intBinaryOp, ...intComparisonOp],
-    (left, right) => ({ left, right })
+    (left, right) => ({
+      left,
+      right,
+    })
   ),
-  ...fluentHelper("i32", intTestOp, (right) => ({ right })),
-  ...fluentHelper("i32", [...i32ConversionOp, ...intConversionOp], (right) => ({
-    right,
-  })),
+  ...numericFluent("i32", intTestOp, (right) => ({ right })),
+  ...numericFluent(
+    "i32",
+    [...i32ConversionOp, ...intConversionOp],
+    (right) => ({
+      right,
+    })
+  ),
 };
 
-const i64: WasmNumericFluent<"i64"> = {
-  ...fluentHelper("i64", ["const"], (value) => ({ value: BigInt(value) })),
-  ...fluentHelper(
+const i64: WasmFluent<"i64"> = {
+  ...numericFluent("i64", ["const"], (value) => ({ value: BigInt(value) })),
+  ...numericFluent(
     "i64",
     [...intBinaryOp, ...intComparisonOp],
-    (left, right) => ({ left, right })
+    (left, right) => ({
+      left,
+      right,
+    })
   ),
-  ...fluentHelper("i64", intTestOp, (right) => ({ right })),
-  ...fluentHelper("i64", [...i64ConversionOp, ...intConversionOp], (right) => ({
-    right,
-  })),
+  ...numericFluent("i64", intTestOp, (right) => ({ right })),
+  ...numericFluent(
+    "i64",
+    [...i64ConversionOp, ...intConversionOp],
+    (right) => ({
+      right,
+    })
+  ),
 };
 
-const f32: WasmNumericFluent<"f32"> = {
-  ...fluentHelper("f32", ["const"], (value) => ({ value })),
-  ...fluentHelper(
+const f32: WasmFluent<"f32"> = {
+  ...numericFluent("f32", ["const"], (value) => ({ value })),
+  ...numericFluent(
     "f32",
     [...floatBinaryOp, ...floatComparisonOp],
     (left, right) => ({ left, right })
   ),
-  ...fluentHelper("f32", floatUnaryOp, (right) => ({ right })),
-  ...fluentHelper(
+  ...numericFluent("f32", floatUnaryOp, (right) => ({ right })),
+  ...numericFluent(
     "f32",
     [...f32ConversionOp, ...floatConversionOp],
     (right) => ({
@@ -350,15 +406,15 @@ const f32: WasmNumericFluent<"f32"> = {
   ),
 };
 
-const f64: WasmNumericFluent<"f64"> = {
-  ...fluentHelper("f64", ["const"], (value) => ({ value })),
-  ...fluentHelper(
+const f64: WasmFluent<"f64"> = {
+  ...numericFluent("f64", ["const"], (value) => ({ value })),
+  ...numericFluent(
     "f64",
     [...floatBinaryOp, ...floatComparisonOp],
     (left, right) => ({ left, right })
   ),
-  ...fluentHelper("f64", floatUnaryOp, (right) => ({ right })),
-  ...fluentHelper(
+  ...numericFluent("f64", floatUnaryOp, (right) => ({ right })),
+  ...numericFluent(
     "f64",
     [...f64ConversionOp, ...floatConversionOp],
     (right) => ({
@@ -366,6 +422,57 @@ const f64: WasmNumericFluent<"f64"> = {
     })
   ),
 };
+
+type WasmBlockTypeHelper = {
+  product: Required<WasmBlockType>;
+  params(...params: WasmNumericType[]): WasmBlockTypeHelper;
+  results(...results: WasmNumericType[]): WasmBlockTypeHelper;
+  locals(...locals: WasmNumericType[]): WasmBlockTypeHelper;
+};
+
+const blockType: WasmBlockTypeHelper = {
+  product: {
+    paramTypes: [],
+    resultTypes: [],
+    localTypes: [],
+  },
+  params(...params: WasmNumericType[]) {
+    this.product.paramTypes.push(...params);
+    return this;
+  },
+  results(...results: WasmNumericType[]) {
+    this.product.paramTypes.push(...results);
+    return this;
+  },
+  locals(...locals: WasmNumericType[]) {
+    this.product.localTypes.push(...locals);
+    return this;
+  },
+};
+
+blockType.params("i32");
+
+const wasm: WasmFluent<"wasm"> = {
+  block: (helper, body) => ({
+    instr: "block",
+    blockType: helper.product,
+    body,
+  }),
+  loop: (helper, body) => ({
+    instr: "loop",
+    blockType: helper.product,
+    body,
+  }),
+  if: (helper, predicate, then, wasmElse) => ({
+    instr: "if",
+    blockType: helper.product,
+    predicate,
+    then,
+    wasmElse,
+  }),
+};
+
+wasm.if(blockType.params("i32"), i32.const(0), [i32.const(0)]);
 
 console.dir(
   i32.mul(
