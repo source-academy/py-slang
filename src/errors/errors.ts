@@ -1,10 +1,77 @@
 import * as es from 'estree'
-import { ErrorType, SourceError } from '../types'
-import { RuntimeSourceError } from './runtimeSourceError';
-import { Context } from '../cse-machine/context';
-import { Control, ControlItem } from '../cse-machine/control';
-import { column } from 'mathjs';
-import { typeTranslator } from '../cse-machine/utils';
+import { Context } from '../cse-machine/context'
+
+export enum ErrorType {
+  IMPORT = 'Import',
+  RUNTIME = 'Runtime',
+  SYNTAX = 'Syntax',
+  TYPE = 'Type'
+}
+
+export enum ErrorSeverity {
+  WARNING = 'Warning',
+  ERROR = 'Error'
+}
+
+// any and all errors ultimately implement this interface. as such, changes to this will affect every type of error.
+export interface SourceError {
+  type: ErrorType
+  severity: ErrorSeverity
+  location: es.SourceLocation
+  explain(): string
+  elaborate(): string
+}
+
+// Base error and shared helpers
+export const UNKNOWN_LOCATION: es.SourceLocation = {
+  start: {
+    line: -1,
+    column: -1
+  },
+  end: {
+    line: -1,
+    column: -1
+  }
+}
+
+export class RuntimeSourceError implements SourceError {
+  public type = ErrorType.RUNTIME
+  public severity = ErrorSeverity.ERROR
+  public location: es.SourceLocation
+  public message = 'Error'
+
+  constructor(node?: es.Node) {
+    this.location = node?.loc ?? UNKNOWN_LOCATION
+  }
+
+  public explain() {
+    return ''
+  }
+
+  public elaborate() {
+    return this.explain()
+  }
+}
+
+// Local copy to avoid circular import from utils
+function typeTranslator(type: string): string {
+  switch (type) {
+    case 'bigint':
+      return 'int'
+    case 'number':
+      return 'float'
+    case 'boolean':
+      return 'bool'
+    case 'bool':
+      return 'bool'
+    case 'string':
+      return 'string'
+    case 'complex':
+      return 'complex'
+    default:
+      return 'unknown'
+  }
+}
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): { line: number; fullLine: string } {
