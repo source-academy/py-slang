@@ -10,6 +10,26 @@ const TYPE_TAG = {
   UNBOUND: 7,
 } as const;
 
+export const ERROR_MAP = {
+  NEG_NOT_SUPPORT: [0, "Unary minus operator used on unsupported operand."],
+  LOG_UNKNOWN_TYPE: [1, "Calling log on an unknown runtime type."],
+  ARITH_OP_UNKNOWN_TYPE: [
+    2,
+    "Calling an arithmetic operation on an unsupported runtime type.",
+  ],
+  COMPLEX_COMPARISON: [
+    3,
+    "Using an unsupported comparison operator on complex type.",
+  ],
+  COMPARE_OP_UNKNOWN_TYPE: [
+    4,
+    "Calling a comparison operation on an unsupported runtime type.",
+  ],
+  CALL_NOT_FUNC: [5, "Calling a non-function value."],
+  FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
+  UNBOUND: [7, "Accessing an unbound value."],
+} as const;
+
 export const TAG_SUFFIX = "_tag";
 export const PAYLOAD_SUFFIX = "_payload";
 
@@ -46,6 +66,7 @@ const negFunc = `(func ${NEG_FUNC_NAME} (param $x_tag i32) (param $x_val i64) (r
   (local.get $x_tag) (i32.const ${TYPE_TAG.COMPLEX}) i32.eq (if
     (then (local.get $x_val) (i32.wrap_i64) (f64.load) (f64.neg) (local.get $x_val) (i32.wrap_i64) (i32.const 8) (i32.add) (f64.load) (f64.neg) (call ${MAKE_COMPLEX_FX}) (return)))
     
+  (call $_log_error (i32.const ${ERROR_MAP.NEG_NOT_SUPPORT[0]}))
   unreachable
 )`;
 
@@ -58,6 +79,7 @@ export const LOG_FUNCS = [
   '(import "console" "log_string" (func $_log_string (param i32) (param i32)))',
   '(import "console" "log_closure" (func $_log_closure (param i32) (param i32) (param i32) (param i32)))',
   '(import "console" "log_none" (func $_log_none))',
+  '(import "console" "log_error" (func $_log_error (param i32)))',
   `(func $log (param $tag i32) (param $value i64)
     (local.get $tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if
       (then (local.get $value) (call $_log_int) (return)))
@@ -74,6 +96,7 @@ export const LOG_FUNCS = [
     (local.get $tag) (i32.const ${TYPE_TAG.NONE}) i32.eq (if
       (then (call $_log_none) (return)))
 
+    (call $_log_error (i32.const ${ERROR_MAP.LOG_UNKNOWN_TYPE[0]}))
     unreachable
   )`,
 ];
@@ -204,6 +227,7 @@ const arithmeticOpFunc = `(func ${ARITHMETIC_OP_FX} (param $x_tag i32) (param $x
     ))
 
   ${/* else, unreachable */ ""}
+  (call $_log_error (i32.const ${ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0]}))
   unreachable
 )`;
 
@@ -355,13 +379,16 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
         (else
           (i32.eq (local.get $op) (i32.const ${COMPARISON_OP_TAG.NEQ})) (if
             (then (local.get $a) (local.get $c) (f64.ne) (local.get $b) (local.get $d) (f64.ne) (i32.or) (call ${MAKE_BOOL_FX}) (return))
-            (else unreachable)
+            (else (call $_log_error (i32.const ${
+              ERROR_MAP.COMPLEX_COMPARISON[0]
+            })) unreachable)
           )
         )
       )
     ))
 
   ${/* else, unreachable */ ""}
+  (call $_log_error (i32.const ${ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE[0]}))
   unreachable
 )`;
 
@@ -397,26 +424,26 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
   for (let i = 0; i < bodies.length; i++) brTableJumps += `${i} `;
 
   return `(func ${APPLY_FUNC}${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) (local $return_env i32)
-  (i32.and
-    ${/* not a function */ ""}
-    (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE}))
-    ${/* arity wrong, zero first 56 bits */ ""}
-    (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const ${arity}) (i32.eq)
-  ) (if (then
-      ${"(block ".repeat(bodies.length)}
-        (global.get ${CURR_ENV}) (local.set $return_env)
-        (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
-        (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
-        unreachable ${/* exhausted tags */ ""}
-      ${bodies
-        .map(
-          (body) =>
-            `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)`
-        )
-        .join("  \n")}
-    ))
+  (i32.ne (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE})) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.CALL_NOT_FUNC[0]})) unreachable
+  ))
 
-  unreachable
+  (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const ${arity}) (i32.ne) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.FUNC_WRONG_ARITY[0]})) unreachable
+  ))
+
+  ${"(block ".repeat(bodies.length)}
+    (global.get ${CURR_ENV}) (local.set $return_env)
+    (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
+    (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
+
+    (call $_log_error (i32.const ${ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0]}))
+  ${bodies
+    .map(
+      (body) =>
+        `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)`
+    )
+    .join("  \n")}
 )`;
 };
 
@@ -431,7 +458,7 @@ const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (pa
   (loop $loop
     (i32.eqz (local.get $depth)) (if (then
       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load) (local.set $tag)
-      (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then unreachable))
+      (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then (call $_log_error (i32.const ${ERROR_MAP.UNBOUND[0]})) unreachable))
       (local.get $tag)
       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
       (return)
