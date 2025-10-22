@@ -11,6 +11,8 @@ import {
   COMPARISON_OP_TAG,
   CURR_ENV,
   GET_LEX_ADDR_FUNC,
+  GET_PAIR_HEAD_FX,
+  GET_PAIR_TAIL_FX,
   HEAP_PTR,
   LOG_FUNCS,
   MAKE_BOOL_FX,
@@ -19,6 +21,7 @@ import {
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
   MAKE_NONE_FX,
+  MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nameToFunctionMap,
   NEG_FUNC_NAME,
@@ -31,6 +34,21 @@ const builtInFunctions: { name: string; arity: number; body: string }[] = [
     name: "print",
     arity: 1,
     body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call $log)`,
+  },
+  {
+    name: "pair",
+    arity: 2,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${MAKE_PAIR_FX}) (return)`,
+  },
+  {
+    name: "head",
+    arity: 1,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_HEAD_FX}) (return)`,
+  },
+  {
+    name: "tail",
+    arity: 1,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_TAIL_FX}) (return)`,
   },
 ];
 
@@ -46,6 +64,9 @@ export class Generator extends BaseGenerator<string> {
     MAKE_CLOSURE_FX,
     GET_LEX_ADDR_FUNC,
     SET_LEX_ADDR_FUNC,
+    MAKE_PAIR_FX,
+    GET_PAIR_HEAD_FX,
+    GET_PAIR_TAIL_FX,
   ]);
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -126,13 +147,13 @@ export class Generator extends BaseGenerator<string> {
 
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = builtInFunctions
-      .map(({ name, arity, body }) => {
+      .map(({ name, arity, body }, i) => {
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions[arity]?.length ?? 0;
         this.userFunctions[arity] ??= [];
         this.userFunctions[arity][tag] = body;
 
-        return `(i32.const 0) (i32.const ${tag}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
+        return `(i32.const 0) (i32.const ${i}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
       })
       .join("\n  ");
 
@@ -360,5 +381,10 @@ export class Generator extends BaseGenerator<string> {
     }
 
     return "";
+  }
+
+  visitNoneExpr(expr: ExprNS.None): string {
+    this.nativeFunctions.add(MAKE_NONE_FX);
+    return `(call ${MAKE_NONE_FX})`;
   }
 }

@@ -1,16 +1,12 @@
 import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
+import { ERROR_MAP } from "./constants";
 import { Generator } from "./generator";
 
 (async () => {
-  // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
-def f():
-    capture = 42
-    return capture
-
-print(f())
+print(head(tail(tail(pair(1, pair(2, pair(3, None)))))))
 `;
 
   const script = code + "\n";
@@ -18,9 +14,9 @@ print(f())
   const tokens = tokenizer.scanEverything();
   const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
+  // console.dir(ast, { depth: null });
 
   const generator = new Generator();
-  console.dir(ast, { depth: null });
   const wat = generator.visit(ast);
 
   console.log(wat);
@@ -43,11 +39,21 @@ print(f())
             new Uint8Array(memory.buffer, offset, length)
           )
         ),
-      log_closure: (tag: number, arity: number) =>
-        console.log(`Closure (tag: ${tag}, arity: ${arity})`),
+      log_closure: (
+        tag: number,
+        arity: number,
+        envSize: number,
+        parentEnv: number
+      ) =>
+        console.log(
+          `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`
+        ),
       log_none: () => console.log("None"),
+      log_error: (tag: number) =>
+        console.error(Object.values(ERROR_MAP).find(([i]) => i === tag)?.[1]),
+      log_pair: () => console.log(),
     },
     js: { memory },
   });
-  console.log(eval(code));
+  // console.log(eval(code));
 })();

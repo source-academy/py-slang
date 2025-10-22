@@ -8,6 +8,7 @@ const TYPE_TAG = {
   CLOSURE: 5,
   NONE: 6,
   UNBOUND: 7,
+  PAIR: 8,
 } as const;
 
 export const ERROR_MAP = {
@@ -28,6 +29,8 @@ export const ERROR_MAP = {
   CALL_NOT_FUNC: [5, "Calling a non-function value."],
   FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
   UNBOUND: [7, "Accessing an unbound value."],
+  HEAD_NOT_PAIR: [8, "Accessing the head of a non-pair value."],
+  TAIL_NOT_PAIR: [9, "Accessing the tail of a non-pair value."],
 } as const;
 
 export const TAG_SUFFIX = "_tag";
@@ -55,6 +58,37 @@ const makeStringFunc = `(func ${MAKE_STRING_FX} (param $ptr i32) (param $len i32
 const makeClosureFunc = `(func ${MAKE_CLOSURE_FX} (param $tag i32) (param $arity i32) (param $env_size i32) (param $parent_env i32) (result i32 i64) (i32.const ${TYPE_TAG.CLOSURE}) (local.get $tag) (i64.extend_i32_u) (i64.const 48) (i64.shl) (local.get $arity) (i64.extend_i32_u) (i64.const 40) (i64.shl) (i64.or) (local.get $env_size) (i64.extend_i32_u) (i64.const 32) (i64.shl) (i64.or) (local.get $parent_env) (i64.extend_i32_u) (i64.or))`;
 const makeNoneFunc = `(func ${MAKE_NONE_FX} (result i32 i64) (i32.const ${TYPE_TAG.NONE}) (i64.const 0))`;
 
+// pair-related functions
+export const MAKE_PAIR_FX = "$_make_pair";
+export const GET_PAIR_HEAD_FX = "$_get_pair_head";
+export const GET_PAIR_TAIL_FX = "$_get_pair_tail";
+
+const makePairFunc = `(func ${MAKE_PAIR_FX} (param $tag1 i32) (param $val1 i64) (param $tag2 i32) (param $val2 i64) (result i32 i64)
+  (global.get ${HEAP_PTR}) (local.get $tag1) (i32.store)
+  (global.get ${HEAP_PTR}) (i32.const 4) (i32.add) (local.get $val1) (i64.store)
+  (global.get ${HEAP_PTR}) (i32.const 12) (i32.add) (local.get $tag2) (i32.store)
+  (global.get ${HEAP_PTR}) (i32.const 16) (i32.add) (local.get $val2) (i64.store)
+  (i32.const ${TYPE_TAG.PAIR}) (global.get ${HEAP_PTR}) (i64.extend_i32_u) (global.get ${HEAP_PTR}) (i32.const 24) (i32.add) (global.set ${HEAP_PTR})
+)`;
+const getPairHeadFunc = `(func ${GET_PAIR_HEAD_FX} (param $tag i32) (param $val i64) (result i32 i64)
+  (i32.ne (local.get $tag) (i32.const ${TYPE_TAG.PAIR})) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.HEAD_NOT_PAIR[0]}))
+    unreachable
+  ))
+
+  (local.get $val) (i32.wrap_i64) (i32.load)
+  (local.get $val) (i32.wrap_i64) (i32.const 4) (i32.add) (i64.load)
+)`;
+const getPairTailFunc = `(func ${GET_PAIR_TAIL_FX} (param $tag i32) (param $val i64) (result i32 i64)
+  (i32.ne (local.get $tag) (i32.const ${TYPE_TAG.PAIR})) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.TAIL_NOT_PAIR[0]}))
+    unreachable
+  ))
+
+  (local.get $val) (i32.wrap_i64) (i32.const 12) (i32.add) (i32.load)
+  (local.get $val) (i32.wrap_i64) (i32.const 16) (i32.add) (i64.load)
+)`;
+
 // unary operation functions
 export const NEG_FUNC_NAME = "$_py_neg";
 
@@ -79,6 +113,7 @@ export const LOG_FUNCS = [
   '(import "console" "log_string" (func $_log_string (param i32) (param i32)))',
   '(import "console" "log_closure" (func $_log_closure (param i32) (param i32) (param i32) (param i32)))',
   '(import "console" "log_none" (func $_log_none))',
+  '(import "console" "log_pair" (func $_log_pair))',
   '(import "console" "log_error" (func $_log_error (param i32)))',
   `(func $log (param $tag i32) (param $value i64)
     (local.get $tag) (i32.const ${TYPE_TAG.INT}) i32.eq (if
@@ -95,6 +130,8 @@ export const LOG_FUNCS = [
       (then (local.get $value) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (i32.const 65535) (i32.and) (local.get $value) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $value) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $value) (i32.wrap_i64) (call $_log_closure) (return)))
     (local.get $tag) (i32.const ${TYPE_TAG.NONE}) i32.eq (if
       (then (call $_log_none) (return)))
+    (local.get $tag) (i32.const ${TYPE_TAG.PAIR}) i32.eq (if
+      (then (local.get $tag) (local.get $value) (call ${GET_PAIR_HEAD_FX}) (call $log) (local.get $tag) (local.get $value) (call ${GET_PAIR_TAIL_FX}) (call $log) (return)))
 
     (call $_log_error (i32.const ${ERROR_MAP.LOG_UNKNOWN_TYPE[0]}))
     unreachable
@@ -436,8 +473,6 @@ export const applyFuncFactory = (arity: number, bodies: string[]) => {
     (global.get ${CURR_ENV}) (local.set $return_env)
     (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
     (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
-
-    (call $_log_error (i32.const ${ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0]}))
   ${bodies
     .map(
       (body) =>
@@ -505,4 +540,7 @@ export const nameToFunctionMap = {
   [NEG_FUNC_NAME]: negFunc,
   [GET_LEX_ADDR_FUNC]: getLexAddressFunction,
   [SET_LEX_ADDR_FUNC]: setLexAddressFunction,
+  [MAKE_PAIR_FX]: makePairFunc,
+  [GET_PAIR_HEAD_FX]: getPairHeadFunc,
+  [GET_PAIR_TAIL_FX]: getPairTailFunc,
 };
