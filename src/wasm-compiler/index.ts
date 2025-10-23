@@ -6,11 +6,13 @@ import { Generator } from "./generator";
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
-def f():
-    capture = 42
-    return capture
+def make_number(n):
+    def get():
+        return n
+    return get
 
-print(f())
+a = make_number(3)
+a()
 `;
 
   const script = code + "\n";
@@ -30,7 +32,7 @@ print(f())
 
   const memory = new WebAssembly.Memory({ initial: 1 });
 
-  await WebAssembly.instantiate(wasm, {
+  const result = await WebAssembly.instantiate(wasm, {
     console: {
       log: console.log,
       log_complex: (real: number, imag: number) =>
@@ -43,11 +45,19 @@ print(f())
             new Uint8Array(memory.buffer, offset, length)
           )
         ),
-      log_closure: (tag: number, arity: number) =>
-        console.log(`Closure (tag: ${tag}, arity: ${arity})`),
+      log_closure: (
+        tag: number,
+        arity: number,
+        envSize: number,
+        parentEnv: number
+      ) =>
+        console.log(
+          `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`
+        ),
       log_none: () => console.log("None"),
     },
     js: { memory },
   });
-  console.log(eval(code));
+
+  console.log((result as any).instance.exports.main());
 })();
