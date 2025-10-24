@@ -15,7 +15,6 @@ import {
   makeStringFunc,
 } from "./constants";
 import {
-  blockType,
   i32,
   i64,
   wasm,
@@ -32,7 +31,7 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
       .module()
       .imports(
         wasm.import("js", "memory").memory(1),
-        wasm.import("console", "log").func("$_log_int", blockType.params("i64"))
+        wasm.import("console", "log").func("$_log_int").params("i64")
       )
       .globals(wasm.global(HEAP_PTR, "mut i32").init(i32.const(0)))
       .funcs(

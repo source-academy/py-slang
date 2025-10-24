@@ -601,31 +601,22 @@ const memory = {
   }),
 };
 
-type WasmBlockTypeHelper = {
-  product: Required<WasmBlockType>;
-  params(...params: WasmNumericType[]): WasmBlockTypeHelper;
-  results(...results: WasmNumericType[]): WasmBlockTypeHelper;
-  locals(...locals: WasmNumericType[]): WasmBlockTypeHelper;
+type WasmBlockTypeHelper<T extends WasmBlock | WasmLoop> = {
+  params(...params: WasmNumericType[]): WasmBlockTypeHelper<T>;
+  results(...results: WasmNumericType[]): WasmBlockTypeHelper<T>;
+  locals(...locals: WasmNumericType[]): WasmBlockTypeHelper<T>;
+
+  body: (...instrs: WasmInstruction[]) => T;
 };
 
-const blockType: WasmBlockTypeHelper = {
-  product: {
-    paramTypes: [],
-    resultTypes: [],
-    localTypes: [],
-  },
-  params(...params) {
-    this.product.paramTypes.push(...params);
-    return this;
-  },
-  results(...results) {
-    this.product.resultTypes.push(...results);
-    return this;
-  },
-  locals(...locals) {
-    this.product.localTypes.push(...locals);
-    return this;
-  },
+type WasmIfBlockTypeHelper = {
+  params(...params: WasmNumericType[]): WasmIfBlockTypeHelper;
+  results(...results: WasmNumericType[]): WasmIfBlockTypeHelper;
+  locals(...locals: WasmNumericType[]): WasmIfBlockTypeHelper;
+
+  then: (...thenInstrs: WasmInstruction[]) => WasmIf & {
+    else: (...elseInstrs: WasmInstruction[]) => WasmIf;
+  };
 };
 
 type WasmFuncTypeHelper = {
@@ -633,7 +624,7 @@ type WasmFuncTypeHelper = {
   locals: (locals: WasmLocals) => WasmFuncTypeHelper;
   results: (...results: WasmNumericType[]) => WasmFuncTypeHelper;
 
-  body: (...instrs: WasmFunction["body"]) => WasmFunction;
+  body: (...instrs: Exclude<WasmInstruction, WasmFunction>[]) => WasmFunction;
 };
 
 type WasmModuleHelper = {
@@ -648,53 +639,101 @@ type WasmModuleHelper = {
 };
 
 const wasm = {
-  block: (label?: string, blockType?: WasmBlockTypeHelper) => ({
-    body: (...instrs: WasmInstruction[]): WasmBlock => ({
+  block: (
+    label?: string,
+    blockType: WasmBlockType = {
+      paramTypes: [],
+      resultTypes: [],
+      localTypes: [],
+    }
+  ): WasmBlockTypeHelper<WasmBlock> => ({
+    params: (...params) =>
+      wasm.block(label, {
+        ...blockType,
+        paramTypes: [...blockType.paramTypes, ...params],
+      }),
+    locals: (...locals) =>
+      wasm.block(label, {
+        ...blockType,
+        localTypes: [...(blockType.localTypes ?? []), ...locals],
+      }),
+    results: (...results) =>
+      wasm.block(label, {
+        ...blockType,
+        resultTypes: [...blockType.resultTypes, ...results],
+      }),
+
+    body: (...instrs) => ({
       instr: "block",
-      label,
-      blockType: blockType
-        ? blockType.product
-        : { paramTypes: [], resultTypes: [] },
+      blockType,
       body: instrs,
     }),
   }),
-  loop: (label?: string, blockType?: WasmBlockTypeHelper) => ({
-    body: (...instrs: WasmInstruction[]): WasmLoop => ({
+  loop: (
+    label?: string,
+    blockType: WasmBlockType = {
+      paramTypes: [],
+      resultTypes: [],
+      localTypes: [],
+    }
+  ): WasmBlockTypeHelper<WasmLoop> => ({
+    params: (...params) =>
+      wasm.loop(label, {
+        ...blockType,
+        paramTypes: [...blockType.paramTypes, ...params],
+      }),
+    locals: (...locals) =>
+      wasm.loop(label, {
+        ...blockType,
+        localTypes: [...(blockType.localTypes ?? []), ...locals],
+      }),
+    results: (...results) =>
+      wasm.loop(label, {
+        ...blockType,
+        resultTypes: [...blockType.resultTypes, ...results],
+      }),
+
+    body: (...instrs) => ({
       instr: "loop",
-      label,
-      blockType: blockType
-        ? blockType.product
-        : { paramTypes: [], resultTypes: [] },
+      blockType,
       body: instrs,
     }),
   }),
   if: (
     predicate: WasmNumeric,
     label?: string,
-    blockType?: WasmBlockTypeHelper
-  ) => ({
-    then: (
-      ...thenInstrs: WasmInstruction[]
-    ): WasmIf & {
-      else: (...elseInstrs: WasmInstruction[]) => WasmIf;
-    } => ({
-      instr: "if",
-      label,
-      blockType: blockType
-        ? blockType.product
-        : { paramTypes: [], resultTypes: [] },
-      predicate,
-      thenBody: thenInstrs,
-      else: (...elseInstrs) => ({
-        instr: "if",
-        label,
-        blockType: blockType
-          ? blockType.product
-          : { paramTypes: [], resultTypes: [] },
-        predicate,
-        thenBody: thenInstrs,
-        elseBody: elseInstrs,
+    blockType: WasmBlockType = {
+      paramTypes: [],
+      resultTypes: [],
+      localTypes: [],
+    }
+  ): WasmIfBlockTypeHelper => ({
+    params: (...params) =>
+      wasm.if(predicate, label, {
+        ...blockType,
+        paramTypes: [...blockType.paramTypes, ...params],
       }),
+    locals: (...locals) =>
+      wasm.if(predicate, label, {
+        ...blockType,
+        localTypes: [...(blockType.localTypes ?? []), ...locals],
+      }),
+    results: (...results) =>
+      wasm.if(predicate, label, {
+        ...blockType,
+        resultTypes: [...blockType.resultTypes, ...results],
+      }),
+
+    then: (...thenInstrs) => ({
+      instr: "if",
+      predicate,
+      label,
+      blockType,
+      thenBody: thenInstrs,
+
+      else(...elseInstrs) {
+        return { ...this, elseBody: elseInstrs };
+      },
     }),
   }),
   drop: (value?: WasmInstruction): WasmDrop => ({ instr: "drop", value }),
@@ -725,12 +764,49 @@ const wasm = {
       externType: { type: "memory", limits: { initial, maximum } },
     }),
 
-    func: (name: string, funcType: WasmBlockTypeHelper): WasmImport => ({
-      instr: "import",
-      moduleName,
-      itemName,
-      externType: { type: "func", name, funcType: funcType.product },
-    }),
+    func(
+      name: string,
+      funcType: WasmBlockType = {
+        paramTypes: [],
+        resultTypes: [],
+        localTypes: [],
+      }
+    ) {
+      const importInstr: WasmImport = {
+        instr: "import",
+        moduleName,
+        itemName,
+        externType: { type: "func", name, funcType },
+      };
+
+      return {
+        ...importInstr,
+
+        params: (...params: WasmNumericType[]) => ({
+          ...importInstr,
+          ...this.func(name, {
+            ...funcType,
+            paramTypes: [...funcType.paramTypes, ...params],
+          }),
+        }),
+
+        locals: (...locals: WasmNumericType[]) => ({
+          ...importInstr,
+          ...this.func(name, {
+            ...funcType,
+            localTypes: [...(funcType.localTypes ?? []), ...locals],
+          }),
+        }),
+
+        results: (...results: WasmNumericType[]) => ({
+          ...importInstr,
+          ...this.func(name, {
+            ...funcType,
+            resultTypes: [...funcType.resultTypes, ...results],
+          }),
+        }),
+      };
+    },
   }),
 
   global: <T extends WasmNumericType>(
@@ -946,7 +1022,6 @@ type WatVisitor = {
 };
 
 export {
-  blockType,
   f32,
   f64,
   global,
@@ -987,77 +1062,3 @@ export {
   WasmUnreachable,
   WatVisitor,
 };
-
-const test = wasm
-  .func("$_get_lex_addr")
-  .params({ $depth: "i32", $index: "i32" })
-  .results("i32", "i64")
-  .locals({ $env: "i32", $tag: "i32" })
-  .body(
-    wasm.loop("$loop").body(
-      wasm.if(i32.eqz(i32.const(0))).then(
-        local.set(
-          "$tag",
-          i32.load(
-            i32.add(
-              i32.add(local.get("$env"), i32.const(4)),
-              i32.mul(local.get("$index"), i32.const(12))
-            )
-          )
-        ),
-
-        wasm
-          .if(i32.eq(local.get("$tag"), i32.const(7)))
-          .then(wasm.unreachable()),
-
-        wasm.return(
-          local.get("$tag"),
-          i64.load(
-            i32.add(
-              i32.add(local.get("$env"), i32.const(8)),
-              i32.mul(local.get("$index"), i32.const(12))
-            )
-          )
-        )
-      ),
-
-      local.set("$env", i32.load(local.get("env"))),
-      local.set("$depth", i32.sub(local.get("$depth"), i32.const(1))),
-
-      local.tee("$tag", i32.load(local.get("$tag"))),
-
-      wasm.br("$loop")
-    )
-  );
-
-// (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
-// (f64.add (f64.mul (local.get $a) (local.get $c))
-//           (f64.mul (local.get $b) (local.get $d)))
-// (f64.add (f64.mul (local.get $c) (local.get $c))
-//           (f64.mul (local.get $d) (local.get $d)))
-// (local.tee $denom) (f64.div)
-// (f64.sub (f64.mul (local.get $b) (local.get $c))
-//           (f64.mul (local.get $a) (local.get $d)))
-// (local.get $denom) (f64.div)
-
-f64.div(
-  f64.add(
-    f64.mul(local.get("$a"), local.get("$c")),
-    f64.mul(local.get("$b"), local.get("$d"))
-  ),
-  local.tee(
-    "$denom",
-    f64.add(
-      f64.mul(local.get("$c"), local.get("$c")),
-      f64.mul(local.get("$d"), local.get("$d"))
-    )
-  )
-);
-
-f64.div(
-  f64.sub(
-    f64.mul(local.get("$b"), local.get("$c")),
-    f64.mul(local.get("$a"), local.get("$d"))
-  ),
-  local.get("$denom")
-);
