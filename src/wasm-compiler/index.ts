@@ -2,7 +2,7 @@ import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
 import { ERROR_MAP } from "./constants";
-import { Generator } from "./generator";
+import { Generator } from "./rawWatGenerator";
 
 (async () => {
   const code = `

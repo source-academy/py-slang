@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
-import { BaseGenerator } from "./baseGenerator";
+import { BaseGenerator } from "./baseGeneratorForPy";
 import {
   ALLOC_ENV_FUNC,
   APPLY_FUNC,

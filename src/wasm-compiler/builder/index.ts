@@ -1,13 +1,13 @@
 import wabt from "wabt";
 import { Parser } from "../../parser";
 import { Tokenizer } from "../../tokenizer";
-import { FluentGenerator } from "./fluentGenerator";
+import { BuilderGenerator } from "./builderGenerator";
 import { WatGenerator } from "./watGenerator";
 
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
-2 * 3
+(2 + 3j) / (3 + 2j)
 `;
 
   const script = code + "\n";
@@ -16,8 +16,8 @@ import { WatGenerator } from "./watGenerator";
   const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
 
-  const fluentGenerator = new FluentGenerator();
-  const wasmInstr = fluentGenerator.visit(ast);
+  const builderGenerator = new BuilderGenerator();
+  const wasmInstr = builderGenerator.visit(ast);
 
   const watGenerator = new WatGenerator();
   const wat = watGenerator.visit(wasmInstr);
@@ -27,7 +27,9 @@ import { WatGenerator } from "./watGenerator";
   const w = await wabt();
   const wasm: Uint8Array = w.parseWat("a", wat).toBinary({}).buffer;
 
+  const memory = new WebAssembly.Memory({ initial: 1 });
   await WebAssembly.instantiate(wasm, {
+    js: { memory },
     console: {
       log: console.log,
     },

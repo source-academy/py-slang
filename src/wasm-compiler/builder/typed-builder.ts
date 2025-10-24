@@ -190,11 +190,14 @@ type WasmNumericFor<T extends WasmNumericType> =
   | (T extends WasmIntNumericType ? WasmIntTestOp<T> : never)
   | WasmComparisonOp<T>
   | WasmConversionOp<T>
+
+  // below are not numeric instructions, but the results of these are numeric
   | WasmLoadOp
   | WasmStoreOp
   | WasmLocalGet
   | WasmGlobalGet
-  | WasmLocalTee;
+  | WasmLocalTee
+  | WasmCall; // call generates numeric[], but for type simplicity we assume just 1
 
 type WasmNumeric =
   | WasmNumericFor<"i32">
@@ -280,6 +283,7 @@ type WasmBr = {
 type WasmBrTable = {
   instr: "br_table";
   labels: string[];
+  value: WasmNumeric;
 };
 type WasmCall = {
   instr: "call";
@@ -329,8 +333,7 @@ type WasmImport = {
 type WasmGlobalFor<T extends WasmNumericType> = {
   instr: "global";
   name: string;
-  mutable: boolean;
-  valueType: T;
+  valueType: T | `mut ${T}`;
   initialValue: WasmNumericFor<T>;
 };
 type WasmGlobal =
@@ -645,7 +648,7 @@ type WasmModuleHelper = {
 };
 
 const wasm = {
-  block: (label: string, blockType?: WasmBlockTypeHelper) => ({
+  block: (label?: string, blockType?: WasmBlockTypeHelper) => ({
     body: (...instrs: WasmInstruction[]): WasmBlock => ({
       instr: "block",
       label,
@@ -655,7 +658,7 @@ const wasm = {
       body: instrs,
     }),
   }),
-  loop: (label: string, blockType?: WasmBlockTypeHelper) => ({
+  loop: (label?: string, blockType?: WasmBlockTypeHelper) => ({
     body: (...instrs: WasmInstruction[]): WasmLoop => ({
       instr: "loop",
       label,
@@ -666,8 +669,8 @@ const wasm = {
     }),
   }),
   if: (
-    label: string,
     predicate: WasmNumeric,
+    label?: string,
     blockType?: WasmBlockTypeHelper
   ) => ({
     then: (
@@ -697,9 +700,10 @@ const wasm = {
   drop: (value?: WasmInstruction): WasmDrop => ({ instr: "drop", value }),
   unreachable: (): WasmUnreachable => ({ instr: "unreachable" }),
   br: (label: string): WasmBr => ({ instr: "br", label }),
-  br_table: (...labels: string[]): WasmBrTable => ({
+  br_table: (value: WasmNumeric, ...labels: string[]): WasmBrTable => ({
     instr: "br_table",
     labels,
+    value,
   }),
   call: (functionName: string) => ({
     args: (...args: WasmNumeric[]): WasmCall => ({
@@ -714,23 +718,31 @@ const wasm = {
   }),
 
   import: (moduleName: string, itemName: string) => ({
-    memory(initial: number, maximum?: number): WasmImport {
-      return {
-        instr: "import",
-        moduleName,
-        itemName,
-        externType: { type: "memory", limits: { initial, maximum } },
-      };
-    },
+    memory: (initial: number, maximum?: number): WasmImport => ({
+      instr: "import",
+      moduleName,
+      itemName,
+      externType: { type: "memory", limits: { initial, maximum } },
+    }),
 
-    func(name: string, funcType: WasmBlockTypeHelper): WasmImport {
-      return {
-        instr: "import",
-        moduleName,
-        itemName,
-        externType: { type: "func", name, funcType: funcType.product },
-      };
-    },
+    func: (name: string, funcType: WasmBlockTypeHelper): WasmImport => ({
+      instr: "import",
+      moduleName,
+      itemName,
+      externType: { type: "func", name, funcType: funcType.product },
+    }),
+  }),
+
+  global: <T extends WasmNumericType>(
+    name: string,
+    valueType: T | `mut ${T}`
+  ) => ({
+    init: (initialValue: WasmNumericFor<T>): WasmGlobalFor<T> => ({
+      instr: "global",
+      name,
+      valueType,
+      initialValue,
+    }),
   }),
 
   func(
@@ -820,6 +832,9 @@ const wasm = {
   },
 };
 
+// This maps all WASM instructions to a visitor method name that will
+// be used in the interface for the watGenerator
+
 const instrToMethodMap = {
   // numerics
   "i64.const": "visitConstOp",
@@ -870,14 +885,17 @@ const instrToMethodMap = {
     )
   ),
 
-  ...typedFromEntries(
-    wasmNumericType.map((type) => [`${type}.load`, "visitLoadOp"] as const)
-  ),
-  ...typedFromEntries(
-    wasmNumericType.map((type) => [`${type}.store`, "visitStoreOp"] as const)
-  ),
-
   // memory
+  "i32.load": "visitLoadOp",
+  "i64.load": "visitLoadOp",
+  "f32.load": "visitLoadOp",
+  "f64.load": "visitLoadOp",
+
+  "i32.store": "visitStoreOp",
+  "i64.store": "visitStoreOp",
+  "f32.store": "visitStoreOp",
+  "f64.store": "visitStoreOp",
+
   "memory.copy": "visitMemoryCopyOp",
 
   // control
@@ -909,6 +927,13 @@ const instrToMethodMap = {
 } as const satisfies Record<WasmInstruction["instr"], string>;
 
 // ------------------------ WASM Visitor Interface ----------------------------
+
+// This collects all the visitor method names (the values in the above object)
+// and maps it to an actual method which takes as argument the specific
+// WasmInstruction type corresponding to the instructino string, and returns
+// the WAT string.
+// Expection: For WasmNumeric unary and binary operations, since there are
+// so many specific WasmInstruction types, we generalise them.
 
 type WatVisitor = {
   [K in keyof typeof instrToMethodMap as (typeof instrToMethodMap)[K]]: (
@@ -970,7 +995,7 @@ const test = wasm
   .locals({ $env: "i32", $tag: "i32" })
   .body(
     wasm.loop("$loop").body(
-      wasm.if("", i32.eqz(i32.const(0))).then(
+      wasm.if(i32.eqz(i32.const(0))).then(
         local.set(
           "$tag",
           i32.load(
@@ -982,7 +1007,7 @@ const test = wasm
         ),
 
         wasm
-          .if("", i32.eq(local.get("$tag"), i32.const(7)))
+          .if(i32.eq(local.get("$tag"), i32.const(7)))
           .then(wasm.unreachable()),
 
         wasm.return(
