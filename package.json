@@ -13,7 +13,7 @@
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest",
     "wasm": "ts-node src/wasm-compiler/index.ts",
-    "fluent": "ts-node src/wasm-compiler/builder/index.ts"
+    "builder": "ts-node src/wasm-compiler/builder/index.ts"
   },
   "keywords": [
     "Python",

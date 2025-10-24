@@ -1,10 +1,10 @@
 import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
-import { Generator } from "./generator";
+import { ERROR_MAP } from "./constants";
+import { Generator } from "./rawWatGenerator";
 
 (async () => {
-  // const code = "(12 + 42.5j) / -(42 + 1.5j)";
   const code = `
 def make_number(n):
     def get():
@@ -20,9 +20,9 @@ a()
   const tokens = tokenizer.scanEverything();
   const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
+  // console.dir(ast, { depth: null });
 
   const generator = new Generator();
-  console.dir(ast, { depth: null });
   const wat = generator.visit(ast);
 
   console.log(wat);
@@ -55,6 +55,9 @@ a()
           `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`
         ),
       log_none: () => console.log("None"),
+      log_error: (tag: number) =>
+        console.error(Object.values(ERROR_MAP).find(([i]) => i === tag)?.[1]),
+      log_pair: () => console.log(),
     },
     js: { memory },
   });

@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
-import { BaseGenerator } from "./baseGenerator";
+import { BaseGenerator } from "./baseGeneratorForPy";
 import {
   ALLOC_ENV_FUNC,
   APPLY_FUNC,
@@ -11,6 +11,8 @@ import {
   COMPARISON_OP_TAG,
   CURR_ENV,
   GET_LEX_ADDR_FUNC,
+  GET_PAIR_HEAD_FX,
+  GET_PAIR_TAIL_FX,
   HEAP_PTR,
   LOG_FUNCS,
   MAKE_BOOL_FX,
@@ -19,6 +21,7 @@ import {
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
   MAKE_NONE_FX,
+  MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nameToFunctionMap,
   NEG_FUNC_NAME,
@@ -32,8 +35,24 @@ const builtInFunctions: { name: string; arity: number; body: string }[] = [
     arity: 1,
     body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call $log)`,
   },
+  {
+    name: "pair",
+    arity: 2,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${MAKE_PAIR_FX}) (return)`,
+  },
+  {
+    name: "head",
+    arity: 1,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_HEAD_FX}) (return)`,
+  },
+  {
+    name: "tail",
+    arity: 1,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_TAIL_FX}) (return)`,
+  },
 ];
 
+type Binding = { name: string; tag: "local" | "nonlocal" };
 export class Generator extends BaseGenerator<string> {
   private nativeFunctions = new Set<keyof typeof nameToFunctionMap>([
     ALLOC_ENV_FUNC,
@@ -45,30 +64,79 @@ export class Generator extends BaseGenerator<string> {
     MAKE_CLOSURE_FX,
     GET_LEX_ADDR_FUNC,
     SET_LEX_ADDR_FUNC,
+    MAKE_PAIR_FX,
+    GET_PAIR_HEAD_FX,
+    GET_PAIR_TAIL_FX,
   ]);
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
-  private environment: string[][] = [[]];
+  private environment: Binding[][] = [[]];
   private userFunctions: { [arity: number]: string[] | undefined } = {};
 
   private getLexAddress(name: string): [number, number] {
-    for (let i = 0; i < this.environment.length; i++) {
-      const curr = this.environment[this.environment.length - 1 - i];
-      const index = curr.indexOf(name);
+    for (let i = this.environment.length - 1; i >= 0; i--) {
+      const curr = this.environment[i];
+      const index = curr.findIndex((b) => b.name === name);
+
       if (index !== -1) {
-        return [i, index];
+        // check if variable is used before nonlocal declaration
+        if (curr[index].tag === "nonlocal") {
+          throw new Error(
+            `Name ${curr[index].name} is used prior to nonlocal declaration`
+          );
+        }
+
+        return [this.environment.length - 1 - i, index];
       }
     }
     throw new Error(`Name ${name} not defined!`);
   }
 
-  private collectDeclarations(statements: StmtNS.Stmt[]) {
-    return statements
+  private collectDeclarations(
+    statements: StmtNS.Stmt[],
+    parameters?: StmtNS.FunctionDef["parameters"]
+  ): Binding[] {
+    const bindings = statements
       .filter(
         (s) => s instanceof StmtNS.Assign || s instanceof StmtNS.FunctionDef
       )
-      .map((s) => s.name.lexeme);
+      .map<Binding>((s) => ({ name: s.name.lexeme, tag: "local" }));
+
+    statements
+      .filter((s) => s instanceof StmtNS.NonLocal)
+      .map((s) => s.name.lexeme)
+      .forEach((name) => {
+        // nonlocal declaration must exist in a nonlocal scope
+        if (
+          !this.environment.find(
+            (frame, i) =>
+              i !== 0 && frame.find((binding) => binding.name === name)
+          )
+        )
+          throw new Error(`No binding for nonlocal ${name} found!`);
+
+        // cannot declare parameter name as nonlocal
+        if (parameters && parameters.map((p) => p.lexeme).includes(name)) {
+          throw new Error(`${name} is parameter and nonlocal`);
+        }
+
+        for (let i = 0; i < bindings.length; i++) {
+          const binding = bindings[i];
+          if (binding.name === name) {
+            // tag this binding as nonlocal so
+            // if it's accessed before its nonlocal statement,
+            // throw error
+            bindings[i].tag = "nonlocal";
+          }
+        }
+      });
+
+    return [
+      ...bindings,
+      ...(parameters?.map<Binding>((p) => ({ name: p.lexeme, tag: "local" })) ??
+        []),
+    ];
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): string {
@@ -79,13 +147,13 @@ export class Generator extends BaseGenerator<string> {
 
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = builtInFunctions
-      .map(({ name, arity, body }) => {
-        this.environment[0].push(name);
+      .map(({ name, arity, body }, i) => {
+        this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions[arity]?.length ?? 0;
         this.userFunctions[arity] ??= [];
         this.userFunctions[arity][tag] = body;
 
-        return `(i32.const 0) (i32.const ${tag}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
+        return `(i32.const 0) (i32.const ${i}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
       })
       .join("\n  ");
 
@@ -258,10 +326,7 @@ export class Generator extends BaseGenerator<string> {
     this.userFunctions[arity] ??= [];
     this.userFunctions[arity][tag] = "PLACEHOLDER";
 
-    const newFrame = [
-      ...stmt.parameters.map((p) => p.lexeme),
-      ...this.collectDeclarations(stmt.body),
-    ];
+    const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
     if (tag >= 1 << 16)
       throw new Error("Tag cannot be above 16-bit integer limit");
@@ -298,6 +363,29 @@ export class Generator extends BaseGenerator<string> {
   }
 
   visitNonLocalStmt(stmt: StmtNS.NonLocal): string {
+    // because of this.collectDeclarations, this nonlocal declaration
+    // is guaranteed to have a nonlocal (and not global) binding.
+    // because of this.getLexAddress, it's also guaranteed to not have been
+    // used illegally before this statement.
+    // all that's left to do is remove the binding from the compile time environment
+    // from here onwards (from the local frame).
+    // if it doesn't exist in the local frame, do nothing as the statement has
+    // no effect
+
+    const currFrame = this.environment.at(-1);
+    const bindingIndex = currFrame?.findIndex(
+      (binding) => binding.name === stmt.name.lexeme
+    );
+
+    if (bindingIndex != null) {
+      currFrame?.splice(bindingIndex, 1);
+    }
+
     return "";
+  }
+
+  visitNoneExpr(expr: ExprNS.None): string {
+    this.nativeFunctions.add(MAKE_NONE_FX);
+    return `(call ${MAKE_NONE_FX})`;
   }
 }

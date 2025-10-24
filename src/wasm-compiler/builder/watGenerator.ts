@@ -165,8 +165,7 @@ export class WatGenerator implements WatVisitor {
   }
   visitGlobalOp(instruction: WasmGlobal): string {
     const init = this.visit(instruction.initialValue);
-    const mutable = instruction.mutable ? "mut" : "";
-    return `(${instruction.instr} ${instruction.name} (${mutable} ${instruction.valueType}) ${init})`;
+    return `(${instruction.instr} ${instruction.name} (${instruction.valueType}) ${init})`;
   }
   visitDataOp(instruction: WasmData): string {
     const offset = this.visit(instruction.offset);
@@ -177,9 +176,7 @@ export class WatGenerator implements WatVisitor {
       .map(([name, type]) => `(param ${name} ${type})`)
       .join(" ");
 
-    const results = instruction.funcType.resultTypes
-      .map((type) => `(result ${type})`)
-      .join(" ");
+    const results = `(result ${instruction.funcType.resultTypes.join(" ")})`;
 
     const locals = Object.entries(instruction.funcType.localTypes)
       .map(([name, type]) => `(local ${name} ${type})`)
