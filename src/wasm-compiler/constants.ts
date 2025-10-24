@@ -1,5 +1,5 @@
 // tags
-const TYPE_TAG = {
+export const TYPE_TAG = {
   INT: 0,
   FLOAT: 1,
   COMPLEX: 2,

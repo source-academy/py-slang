@@ -6,7 +6,13 @@ import { Generator } from "./generator";
 
 (async () => {
   const code = `
-print(head(tail(tail(pair(1, pair(2, pair(3, None)))))))
+def make_number(n):
+    def get():
+        return n
+    return get
+
+a = make_number(3)
+a()
 `;
 
   const script = code + "\n";
@@ -26,7 +32,7 @@ print(head(tail(tail(pair(1, pair(2, pair(3, None)))))))
 
   const memory = new WebAssembly.Memory({ initial: 1 });
 
-  await WebAssembly.instantiate(wasm, {
+  const result = await WebAssembly.instantiate(wasm, {
     console: {
       log: console.log,
       log_complex: (real: number, imag: number) =>
@@ -55,5 +61,6 @@ print(head(tail(tail(pair(1, pair(2, pair(3, None)))))))
     },
     js: { memory },
   });
-  // console.log(eval(code));
+
+  console.log((result as any).instance.exports.main());
 })();

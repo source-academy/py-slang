@@ -160,6 +160,7 @@ export class Generator extends BaseGenerator<string> {
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
     const body = stmt.statements.map((s) => this.visit(s)).join("\n  ");
+    const implicitReturn = body.endsWith("(drop) (drop)");
 
     // collect all globals, strings, native functions used and user functions
 
@@ -196,13 +197,13 @@ export class Generator extends BaseGenerator<string> {
 
   ${applyFunctions}
   
-  (func $main
+  (func $main ${implicitReturn ? "(result i32 i64)" : ""}
     (i32.const ${globalEnvLength}) (i32.const 0) (call ${ALLOC_ENV_FUNC})
     ${builtInFuncsDeclarations}
-    ${body}
+    ${implicitReturn ? body.slice(0, -14) : body}
   )
 
-  (start $main)
+  (export "main" (func $main))
 )`;
   }
 
@@ -354,11 +355,11 @@ export class Generator extends BaseGenerator<string> {
     const value = stmt.value;
     if (!value) {
       this.nativeFunctions.add(MAKE_NONE_FX);
-      return `(call ${MAKE_NONE_FX}) (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`;
+      return `(call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)`;
     }
 
     const expr = this.visit(value);
-    return `${expr} (global.get ${CURR_ENV}) (i32.load) (global.set ${CURR_ENV}) (return)`;
+    return `${expr} (local.get $return_env) (global.set ${CURR_ENV}) (return)`;
   }
 
   visitNonLocalStmt(stmt: StmtNS.NonLocal): string {
