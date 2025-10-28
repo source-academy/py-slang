@@ -3,6 +3,7 @@ import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
 import { RecursivePartial, Result } from "../types";
 import { Tokenizer } from "../tokenizer";
 import { Parser } from "../parser";
+import { parse } from '../nearley/parser-adapter';
 import { Resolver } from "../resolver";
 import { Program } from "estree";
 import { Translator } from "../translator";
@@ -20,10 +21,11 @@ function parsePythonToEstreeAst(
   doValidate: boolean = false
 ): Program {
   const script = code + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
-  const ast = pyParser.parse();
+  // const tokenizer = new Tokenizer(script);
+  // const tokens = tokenizer.scanEverything();
+  // const pyParser = new Parser(script, tokens);
+  // const ast = pyParser.parse();
+  const ast = parse(script);
   if (doValidate) {
     new Resolver(script, ast).resolve(ast);
   }
