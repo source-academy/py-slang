@@ -2,12 +2,12 @@
 * Translate our AST to estree AST (Source's AST)
 * */
 
-import { StmtNS, ExprNS } from "./ast-types";
+import { StmtNS, ExprNS } from "../ast-types";
 
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
-import { Token } from "./tokenizer";
-import { TokenType } from "./tokens";
+import { Token } from "../tokenizer";
+import { TokenType } from "../tokens";
 
 import {
     ArrowFunctionExpression,
@@ -41,7 +41,7 @@ import {
     WhileStatement
 } from "estree";
 import { TranslatorErrors } from "./errors";
-import { ComplexLiteral, None } from "./types";
+import { ComplexLiteral, None } from "../types";
 // import { isEmpty } from "lodash";
 
 export interface EstreePosition {
