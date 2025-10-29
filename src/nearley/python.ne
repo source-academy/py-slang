@@ -11,7 +11,6 @@ import { TokenType } from '../tokens';
 
 const tokenTypeMap: { [key: string]: TokenType } = {
   'identifier': TokenType.NAME,
-  'integer': TokenType.NUMBER,
   'float': TokenType.NUMBER,
   'bigint': TokenType.BIGINT,
   'complex': TokenType.COMPLEX,
@@ -88,7 +87,7 @@ function toAstToken(token: any): AstToken {
   return new AstToken(
     type,
     token.value,
-    token.line || 0,
+    token.line - 1 || 0,
     token.col || 0,
     token.offset || 0
   );
@@ -551,12 +550,6 @@ atom ->
         return new ExprNS.Variable(token, token, token);
       }
     %}
-  | %integer {%
-      (d) => {
-        const token = toAstToken(d[0]);
-        return new ExprNS.Literal(token, token, parseInt(token.lexeme));
-      }
-    %}
   | %float {%
       (d) => {
         const token = toAstToken(d[0]);
@@ -566,7 +559,7 @@ atom ->
   | %bigint {%
       (d) => {
         const token = toAstToken(d[0]);
-        return new ExprNS.BigIntLiteral(token, token, token.lexeme.slice(0, -1));
+        return new ExprNS.BigIntLiteral(token, token, token.lexeme);
       }
     %}
   | %complex {%

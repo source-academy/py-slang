@@ -18,9 +18,8 @@ export const lexer = moo.compile({
   
   // Numbers
   complex: /(?:\d+\.?\d*|\.\d+)[jJ]/,
-  bigint: /\d+[nN]/,
+  bigint: /\d+/,
   float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
-  integer: /\d+/,
   
   // Strings (simplified - doesn't handle all edge cases yet)
   stringTripleDouble: /"""(?:[^"\\]|\\["\\/bfnrt]|\\u[a-fA-F0-9]{4})*?"""/,
