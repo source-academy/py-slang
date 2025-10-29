@@ -40,24 +40,8 @@
     IN THE SOFTWARE.
 * */
 
-import { TokenType } from "./tokens";
+import { TokenType } from "../tokens";
 import { TokenizerErrors } from "./errors";
-
-export class Token {
-    type: TokenType;
-    lexeme: string;
-    line: number;
-    col: number;
-    indexInSource: number;
-
-    constructor(type: TokenType, lexeme: string, line: number, col: number, indexInSource: number) {
-        this.type = type;
-        this.lexeme = lexeme;
-        this.line = line;
-        this.col = col;
-        this.indexInSource = indexInSource
-    }
-}
 
 const specialIdentifiers = new Map([
     ["and", TokenType.AND],
@@ -88,6 +72,21 @@ const specialIdentifiers = new Map([
 
 export const SPECIAL_IDENTIFIER_TOKENS = Array.from(specialIdentifiers.values());
 
+export class Token {
+    type: TokenType;
+    lexeme: string;
+    line: number;
+    col: number;
+    indexInSource: number;
+
+    constructor(type: TokenType, lexeme: string, line: number, col: number, indexInSource: number) {
+        this.type = type;
+        this.lexeme = lexeme;
+        this.line = line;
+        this.col = col;
+        this.indexInSource = indexInSource
+    }
+}
 
 export class Tokenizer {
     private readonly source: string;

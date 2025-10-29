@@ -1,8 +1,8 @@
-import { StmtNS, ExprNS } from "./ast-types";
+import { StmtNS, ExprNS } from "../ast-types";
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
-import { Token } from "./tokenizer";
-import { TokenType } from "./tokens";
+import { Token } from "../tokenizer/tokenizer";
+import { TokenType } from "../tokens";
 import { ResolverErrors } from "./errors";
 
 import levenshtein from 'fast-levenshtein';
