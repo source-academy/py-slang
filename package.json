@@ -4,13 +4,10 @@
   "description": "",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "type": "module",
   "scripts": {
     "regen": "npm run build && node dist/generate.js",
     "compile-grammar": "nearleyc src/nearley/python.ne -o src/nearley/python-grammar.ts",
-    "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
-    "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest"
   },
