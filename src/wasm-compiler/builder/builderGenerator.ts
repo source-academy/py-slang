@@ -18,9 +18,9 @@ import {
   i32,
   i64,
   wasm,
-  WasmCall,
-  WasmFunction,
-  WasmInstruction,
+  type WasmCall,
+  type WasmFunction,
+  type WasmInstruction,
 } from "./typed-builder";
 
 // all expressions compile to a call to a makeX function, so expressions return
