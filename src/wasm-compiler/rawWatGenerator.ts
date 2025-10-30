@@ -26,29 +26,52 @@ import {
   nameToFunctionMap,
   NEG_FUNC_NAME,
   SET_LEX_ADDR_FUNC,
+  SET_PAIR_HEAD_FX,
+  SET_PAIR_TAIL_FX,
   STRING_COMPARE_FX,
 } from "./constants";
 
-const builtInFunctions: { name: string; arity: number; body: string }[] = [
+const builtInFunctions: {
+  name: string;
+  arity: number;
+  body: string;
+  isVoid: boolean;
+}[] = [
   {
     name: "print",
     arity: 1,
     body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call $log)`,
+    isVoid: true,
   },
   {
     name: "pair",
     arity: 2,
-    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${MAKE_PAIR_FX}) (return)`,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${MAKE_PAIR_FX})`,
+    isVoid: false,
   },
   {
     name: "head",
     arity: 1,
-    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_HEAD_FX}) (return)`,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_HEAD_FX})`,
+    isVoid: false,
   },
   {
     name: "tail",
     arity: 1,
-    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_TAIL_FX}) (return)`,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (call ${GET_PAIR_TAIL_FX})`,
+    isVoid: false,
+  },
+  {
+    name: "set_head",
+    arity: 2,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${SET_PAIR_HEAD_FX})`,
+    isVoid: true,
+  },
+  {
+    name: "set_tail",
+    arity: 2,
+    body: `(i32.const 0) (i32.const 0) (call ${GET_LEX_ADDR_FUNC}) (i32.const 0) (i32.const 1) (call ${GET_LEX_ADDR_FUNC}) (call ${SET_PAIR_TAIL_FX})`,
+    isVoid: true,
   },
 ];
 
@@ -67,6 +90,8 @@ export class Generator extends BaseGenerator<string> {
     MAKE_PAIR_FX,
     GET_PAIR_HEAD_FX,
     GET_PAIR_TAIL_FX,
+    SET_PAIR_HEAD_FX,
+    SET_PAIR_TAIL_FX,
   ]);
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -147,11 +172,15 @@ export class Generator extends BaseGenerator<string> {
 
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = builtInFunctions
-      .map(({ name, arity, body }, i) => {
+      .map(({ name, arity, body, isVoid }, i) => {
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions[arity]?.length ?? 0;
         this.userFunctions[arity] ??= [];
-        this.userFunctions[arity][tag] = body;
+
+        const newBody = `${body}${
+          isVoid ? `(call ${MAKE_NONE_FX})` : ""
+        } (local.get $return_env) (global.set ${CURR_ENV}) (return)`;
+        this.userFunctions[arity][tag] = newBody;
 
         return `(i32.const 0) (i32.const ${i}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
       })

@@ -62,6 +62,8 @@ const makeNoneFunc = `(func ${MAKE_NONE_FX} (result i32 i64) (i32.const ${TYPE_T
 export const MAKE_PAIR_FX = "$_make_pair";
 export const GET_PAIR_HEAD_FX = "$_get_pair_head";
 export const GET_PAIR_TAIL_FX = "$_get_pair_tail";
+export const SET_PAIR_HEAD_FX = "$_set_pair_head";
+export const SET_PAIR_TAIL_FX = "$_set_pair_tail";
 
 const makePairFunc = `(func ${MAKE_PAIR_FX} (param $tag1 i32) (param $val1 i64) (param $tag2 i32) (param $val2 i64) (result i32 i64)
   (global.get ${HEAP_PTR}) (local.get $tag1) (i32.store)
@@ -87,6 +89,24 @@ const getPairTailFunc = `(func ${GET_PAIR_TAIL_FX} (param $tag i32) (param $val 
 
   (local.get $val) (i32.wrap_i64) (i32.const 12) (i32.add) (i32.load)
   (local.get $val) (i32.wrap_i64) (i32.const 16) (i32.add) (i64.load)
+)`;
+const setPairHeadFunc = `(func ${SET_PAIR_HEAD_FX} (param $pair_tag i32) (param $pair_val i64) (param $tag i32) (param $val i64)
+  (i32.ne (local.get $pair_tag) (i32.const ${TYPE_TAG.PAIR})) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.HEAD_NOT_PAIR[0]}))
+    unreachable
+  ))
+
+  (local.get $pair_val) (i32.wrap_i64) (local.get $tag) (i32.store)
+  (local.get $pair_val) (i32.wrap_i64) (i32.const 4) (i32.add) (local.get $val) (i64.store)
+)`;
+const setPairTailFunc = `(func ${SET_PAIR_TAIL_FX} (param $pair_tag i32) (param $pair_val i64) (param $tag i32) (param $val i64)
+  (i32.ne (local.get $pair_tag) (i32.const ${TYPE_TAG.PAIR})) (if (then
+    (call $_log_error (i32.const ${ERROR_MAP.TAIL_NOT_PAIR[0]}))
+    unreachable
+  ))
+
+  (local.get $pair_val) (i32.wrap_i64) (i32.const 12) (i32.add) (local.get $tag) (i32.store)
+  (local.get $pair_val) (i32.wrap_i64) (i32.const 16) (i32.add) (local.get $val) (i64.store)
 )`;
 
 // unary operation functions
@@ -543,4 +563,6 @@ export const nameToFunctionMap = {
   [MAKE_PAIR_FX]: makePairFunc,
   [GET_PAIR_HEAD_FX]: getPairHeadFunc,
   [GET_PAIR_TAIL_FX]: getPairTailFunc,
+  [SET_PAIR_HEAD_FX]: setPairHeadFunc,
+  [SET_PAIR_TAIL_FX]: setPairTailFunc,
 };
