@@ -122,11 +122,11 @@ export class Generator extends BaseGenerator<string> {
     statements: StmtNS.Stmt[],
     parameters?: StmtNS.FunctionDef["parameters"]
   ): Binding[] {
-    const bindings = statements
+    const bindings: Binding[] = statements
       .filter(
         (s) => s instanceof StmtNS.Assign || s instanceof StmtNS.FunctionDef
       )
-      .map<Binding>((s) => ({ name: s.name.lexeme, tag: "local" }));
+      .map((s) => ({ name: s.name.lexeme, tag: "local" }));
 
     statements
       .filter((s) => s instanceof StmtNS.NonLocal)
@@ -158,9 +158,9 @@ export class Generator extends BaseGenerator<string> {
       });
 
     return [
-      ...bindings,
-      ...(parameters?.map<Binding>((p) => ({ name: p.lexeme, tag: "local" })) ??
+      ...(parameters?.map((p) => ({ name: p.lexeme, tag: "local" as const })) ??
         []),
+      ...bindings,
     ];
   }
 
