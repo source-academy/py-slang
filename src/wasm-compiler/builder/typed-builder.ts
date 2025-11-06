@@ -78,13 +78,13 @@ type F64ConversionOp = (typeof f64ConversionOp)[number];
 // ------------------------ WASM Numeric Instructions ----------------------------
 
 type WasmNumericConst<T extends WasmNumericType> = {
-  instr: `${T}.const`;
+  op: `${T}.const`;
   value: T extends WasmIntNumericType ? bigint : number;
 };
 
 type WasmUnaryOp<T extends WasmFloatNumericType> = {
   [Op in FloatUnaryOp]: {
-    instr: `${T}.${Op}`;
+    op: `${T}.${Op}`;
     right: WasmNumericFor<T>;
   };
 }[FloatUnaryOp];
@@ -92,7 +92,7 @@ type WasmUnaryOp<T extends WasmFloatNumericType> = {
 type WasmBinaryOp<T extends WasmNumericType> = T extends WasmIntNumericType
   ? {
       [Op in IntBinaryOp]: {
-        instr: `${T}.${Op}`;
+        op: `${T}.${Op}`;
         left: WasmNumericFor<T>;
         right: WasmNumericFor<T>;
       };
@@ -100,7 +100,7 @@ type WasmBinaryOp<T extends WasmNumericType> = T extends WasmIntNumericType
   : T extends WasmFloatNumericType
   ? {
       [Op in FloatBinaryOp]: {
-        instr: `${T}.${Op}`;
+        op: `${T}.${Op}`;
         left: WasmNumericFor<T>;
         right: WasmNumericFor<T>;
       };
@@ -109,7 +109,7 @@ type WasmBinaryOp<T extends WasmNumericType> = T extends WasmIntNumericType
 
 type WasmIntTestOp<T extends WasmIntNumericType> = {
   [Op in IntTestOp]: {
-    instr: `${T}.${Op}`;
+    op: `${T}.${Op}`;
     right: WasmNumericFor<T>;
   };
 }[IntTestOp];
@@ -117,7 +117,7 @@ type WasmIntTestOp<T extends WasmIntNumericType> = {
 type WasmComparisonOp<T extends WasmNumericType> = T extends WasmIntNumericType
   ? {
       [Op in IntComparisonOp]: {
-        instr: `${T}.${Op}`;
+        op: `${T}.${Op}`;
         left: WasmNumericFor<T>;
         right: WasmNumericFor<T>;
       };
@@ -125,7 +125,7 @@ type WasmComparisonOp<T extends WasmNumericType> = T extends WasmIntNumericType
   : T extends WasmFloatNumericType
   ? {
       [Op in FloatComparisonOp]: {
-        instr: `${T}.${Op}`;
+        op: `${T}.${Op}`;
         left: WasmNumericFor<T>;
         right: WasmNumericFor<T>;
       };
@@ -146,7 +146,7 @@ type WasmConversionOpHelper<I> = I extends
   | `f32.${F32ConversionOp | FloatConversionOp}`
   | `f64.${F64ConversionOp | FloatConversionOp}`
   ? {
-      instr: I;
+      op: I;
       right: WasmNumericFor<ExtractConversion<I>>;
     }
   : never;
@@ -161,21 +161,21 @@ type WasmConversionOp<T extends WasmNumericType> =
     : F64ConversionOp | FloatConversionOp}`>;
 
 type WasmLoadOpFor<T extends WasmNumericType> = {
-  instr: `${T}.load`;
+  op: `${T}.load`;
   address: WasmNumericFor<"i32">;
 };
-type WasmLoadOp =
+type WasmLoad =
   | WasmLoadOpFor<"i32">
   | WasmLoadOpFor<"i64">
   | WasmLoadOpFor<"f32">
   | WasmLoadOpFor<"f64">;
 
 type WasmStoreOpFor<T extends WasmNumericType> = {
-  instr: `${T}.store`;
+  op: `${T}.store`;
   address: WasmNumericFor<"i32">;
   value: WasmNumericFor<T>;
 };
-type WasmStoreOp =
+type WasmStore =
   | WasmStoreOpFor<"i32">
   | WasmStoreOpFor<"i64">
   | WasmStoreOpFor<"f32">
@@ -190,8 +190,8 @@ type WasmNumericFor<T extends WasmNumericType> =
   | WasmConversionOp<T>
 
   // below are not numeric instructions, but the results of these are numeric
-  | WasmLoadOp
-  | WasmStoreOp
+  | WasmLoad
+  | WasmStore
   | WasmLocalGet
   | WasmGlobalGet
   | WasmLocalTee
@@ -206,22 +206,22 @@ type WasmNumeric =
 // ------------------------ WASM Variable Instructions ----------------------------
 
 type WasmLocalSet = {
-  instr: "local.set";
+  op: "local.set";
   label: string;
   right: WasmNumeric;
 };
-type WasmLocalGet = { instr: "local.get"; label: string };
+type WasmLocalGet = { op: "local.get"; label: string };
 type WasmLocalTee = {
-  instr: "local.tee";
+  op: "local.tee";
   label: string;
   right: WasmNumeric;
 };
 type WasmGlobalSet = {
-  instr: "global.set";
+  op: "global.set";
   label: string;
   right: WasmNumeric;
 };
-type WasmGlobalGet = { instr: "global.get"; label: string };
+type WasmGlobalGet = { op: "global.get"; label: string };
 
 type WasmVariable =
   | WasmLocalSet
@@ -235,7 +235,7 @@ type WasmVariable =
 // together with numerics for typing.
 
 type WasmMemoryCopy = {
-  instr: "memory.copy";
+  op: "memory.copy";
   destination: WasmNumericFor<"i32">;
   source: WasmNumericFor<"i32">;
   size: WasmNumericFor<"i32">;
@@ -245,11 +245,9 @@ type WasmMemory = WasmMemoryCopy;
 
 // ------------------------ WASM Control Instructions ----------------------------
 
-type WasmUnreachable = {
-  instr: "unreachable";
-};
+type WasmUnreachable = { op: "unreachable" };
 type WasmDrop = {
-  instr: "drop";
+  op: "drop";
   value?: WasmInstruction;
 };
 
@@ -261,35 +259,35 @@ type WasmBlockType = {
 
 type WasmBlockBase = { label?: string; blockType: WasmBlockType };
 type WasmBlock = WasmBlockBase & {
-  instr: "block";
+  op: "block";
   body: WasmInstruction[];
 };
 type WasmLoop = WasmBlockBase & {
-  instr: "loop";
+  op: "loop";
   body: WasmInstruction[];
 };
 type WasmIf = WasmBlockBase & {
-  instr: "if";
+  op: "if";
   predicate: WasmNumeric;
   thenBody: WasmInstruction[];
   elseBody?: WasmInstruction[];
 };
 type WasmBr = {
-  instr: "br";
+  op: "br";
   label: string;
 };
 type WasmBrTable = {
-  instr: "br_table";
+  op: "br_table";
   labels: string[];
   value: WasmNumeric;
 };
 type WasmCall = {
-  instr: "call";
+  op: "call";
   function: string;
   arguments: WasmNumeric[];
 };
 type WasmReturn = {
-  instr: "return";
+  op: "return";
   values: WasmNumeric[];
 };
 
@@ -323,13 +321,13 @@ type WasmExternType =
       funcType: WasmBlockType;
     };
 type WasmImport = {
-  instr: "import";
+  op: "import";
   moduleName: string;
   itemName: string;
   externType: WasmExternType;
 };
 type WasmGlobalFor<T extends WasmNumericType> = {
-  instr: "global";
+  op: "global";
   name: string;
   valueType: T | `mut ${T}`;
   initialValue: WasmNumericFor<T>;
@@ -340,21 +338,21 @@ type WasmGlobal =
   | WasmGlobalFor<"f32">
   | WasmGlobalFor<"f64">;
 type WasmData = {
-  instr: "data";
+  op: "data";
   offset: WasmNumericFor<"i32">;
   data: string;
 };
 type WasmStart = {
-  instr: "start";
+  op: "start";
   functionName: string;
 };
 type WasmExport = {
-  instr: "export";
+  op: "export";
   name: string;
   externType: WasmExternType;
 };
 type WasmModule = {
-  instr: "module";
+  op: "module";
   imports: WasmImport[];
   globals: WasmGlobal[];
   datas: WasmData[];
@@ -364,7 +362,7 @@ type WasmModule = {
 };
 
 type WasmFunction = {
-  instr: "func";
+  op: "func";
   name: string;
   funcType: WasmFuncType;
   body: Exclude<WasmInstruction, WasmFunction>[];
@@ -394,122 +392,113 @@ const typedFromEntries = <const T extends readonly [PropertyKey, unknown][]>(
 
 const binaryOp = <
   T extends WasmNumericType,
-  const I extends ((
+  const Op extends ((
     | WasmBinaryOp<T>
     | WasmComparisonOp<T>
-  )["instr"] extends `${T}.${infer S}`
+  )["op"] extends `${T}.${infer S}`
     ? S
     : never)[]
 >(
   type: T,
-  instrs: I
+  ops: Op
 ) =>
   typedFromEntries(
-    instrs.map((instr) => {
+    ops.map((op) => {
       const fn = (left: WasmNumericFor<T>, right: WasmNumericFor<T>) => ({
-        instr: `${type}.${instr}`,
+        op: `${type}.${op}`,
         left,
         right,
       });
-      return [instr, fn];
+      return [op, fn];
     }) as {
-      [K in keyof I]: [
-        I[K],
+      [K in keyof Op]: [
+        Op[K],
         (
-          ...args: Extract<
-            WasmNumericFor<T>,
-            { instr: `${T}.${I[K]}` }
-          > extends { left: infer L; right: infer R }
+          ...args: Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }> extends {
+            left: infer L;
+            right: infer R;
+          }
             ? [left: L, right: R]
             : never
-        ) => Extract<WasmNumericFor<T>, { instr: `${T}.${I[K]}` }>
+        ) => Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }>
       ];
     }
   );
 
 const unaryOp = <
   T extends WasmNumericType,
-  const I extends ((
+  const Op extends ((
     | WasmConversionOp<T>
     | (T extends WasmIntNumericType
         ? WasmIntTestOp<T>
         : T extends WasmFloatNumericType
         ? WasmUnaryOp<T>
         : never)
-  )["instr"] extends `${T}.${infer S}`
+  )["op"] extends `${T}.${infer S}`
     ? S
     : never)[]
 >(
   type: T,
-  instrs: I
+  ops: Op
 ) =>
   typedFromEntries(
-    instrs.map((instr) => {
+    ops.map((op) => {
       const fn = (right: WasmNumericFor<T>) => ({
-        instr: `${type}.${instr}`,
+        op: `${type}.${op}`,
         right,
       });
-      return [instr, fn];
+      return [op, fn];
     }) as {
-      [K in keyof I]: [
-        I[K],
+      [K in keyof Op]: [
+        Op[K],
         (
-          ...args: Extract<
-            WasmNumericFor<T>,
-            { instr: `${T}.${I[K]}` }
-          > extends { right: infer R }
+          ...args: Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }> extends {
+            right: infer R;
+          }
             ? [right: R]
             : never
-        ) => Extract<WasmNumericFor<T>, { instr: `${T}.${I[K]}` }>
+        ) => Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }>
       ];
     }
   );
 
 const i32 = {
   const: (value: number | bigint): WasmNumericConst<"i32"> => ({
-    instr: "i32.const",
+    op: "i32.const",
     value: BigInt(value),
   }),
   ...binaryOp("i32", [...intBinaryOp, ...intComparisonOp]),
   ...unaryOp("i32", [...i32ConversionOp, ...intConversionOp, ...intTestOp]),
   load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i32"> => ({
-    instr: "i32.load",
+    op: "i32.load",
     address,
   }),
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"i32">
-  ): WasmStoreOpFor<"i32"> => ({
-    instr: "i32.store",
-    address,
-    value,
-  }),
+  ): WasmStoreOpFor<"i32"> => ({ op: "i32.store", address, value }),
 };
 
 const i64 = {
   const: (value: number | bigint): WasmNumericConst<"i64"> => ({
-    instr: "i64.const",
+    op: "i64.const",
     value: BigInt(value),
   }),
   ...binaryOp("i64", [...intBinaryOp, ...intComparisonOp]),
   ...unaryOp("i64", [...i64ConversionOp, ...intConversionOp, ...intTestOp]),
   load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i64"> => ({
-    instr: "i64.load",
+    op: "i64.load",
     address,
   }),
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"i64">
-  ): WasmStoreOpFor<"i64"> => ({
-    instr: "i64.store",
-    address,
-    value,
-  }),
+  ): WasmStoreOpFor<"i64"> => ({ op: "i64.store", address, value }),
 };
 
 const f32 = {
   const: (value: number): WasmNumericConst<"f32"> => ({
-    instr: "f32.const",
+    op: "f32.const",
     value,
   }),
   ...binaryOp("f32", [...floatBinaryOp, ...floatComparisonOp]),
@@ -519,22 +508,18 @@ const f32 = {
     ...floatUnaryOp,
   ]),
   load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"f32"> => ({
-    instr: "f32.load",
+    op: "f32.load",
     address,
   }),
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"f32">
-  ): WasmStoreOpFor<"f32"> => ({
-    instr: "f32.store",
-    address,
-    value,
-  }),
+  ): WasmStoreOpFor<"f32"> => ({ op: "f32.store", address, value }),
 };
 
 const f64 = {
   const: (value: number): WasmNumericConst<"f64"> => ({
-    instr: "f64.const",
+    op: "f64.const",
     value,
   }),
   ...binaryOp("f64", [...floatBinaryOp, ...floatComparisonOp]),
@@ -544,43 +529,33 @@ const f64 = {
     ...floatUnaryOp,
   ]),
   load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"f64"> => ({
-    instr: "f64.load",
+    op: "f64.load",
     address,
   }),
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"f64">
-  ): WasmStoreOpFor<"f64"> => ({
-    instr: "f64.store",
-    address,
-    value,
-  }),
+  ): WasmStoreOpFor<"f64"> => ({ op: "f64.store", address, value }),
 };
 
 const local = {
-  get: (label: string): WasmLocalGet => ({
-    instr: "local.get",
-    label,
-  }),
+  get: (label: string): WasmLocalGet => ({ op: "local.get", label }),
   set: (label: string, right: WasmNumeric): WasmLocalSet => ({
-    instr: "local.set",
+    op: "local.set",
     label,
     right,
   }),
   tee: (label: string, right: WasmNumeric): WasmLocalTee => ({
-    instr: "local.tee",
+    op: "local.tee",
     label,
     right,
   }),
 };
 
 const global = {
-  get: (label: string): WasmGlobalGet => ({
-    instr: "global.get",
-    label,
-  }),
+  get: (label: string): WasmGlobalGet => ({ op: "global.get", label }),
   set: (label: string, right: WasmNumeric): WasmGlobalSet => ({
-    instr: "global.set",
+    op: "global.set",
     label,
     right,
   }),
@@ -591,12 +566,7 @@ const memory = {
     destination: WasmNumericFor<"i32">,
     source: WasmNumericFor<"i32">,
     size: WasmNumericFor<"i32">
-  ): WasmMemoryCopy => ({
-    instr: "memory.copy",
-    destination,
-    source,
-    size,
-  }),
+  ): WasmMemoryCopy => ({ op: "memory.copy", destination, source, size }),
 };
 
 type WasmBlockTypeHelper<T extends WasmBlock | WasmLoop> = {
@@ -662,7 +632,7 @@ const wasm = {
       }),
 
     body: (...instrs) => ({
-      instr: "block",
+      op: "block",
       blockType,
       body: instrs,
     }),
@@ -692,7 +662,7 @@ const wasm = {
       }),
 
     body: (...instrs) => ({
-      instr: "loop",
+      op: "loop",
       blockType,
       body: instrs,
     }),
@@ -723,7 +693,7 @@ const wasm = {
       }),
 
     then: (...thenInstrs) => ({
-      instr: "if",
+      op: "if",
       predicate,
       label,
       blockType,
@@ -734,29 +704,29 @@ const wasm = {
       },
     }),
   }),
-  drop: (value?: WasmInstruction): WasmDrop => ({ instr: "drop", value }),
-  unreachable: (): WasmUnreachable => ({ instr: "unreachable" }),
-  br: (label: string): WasmBr => ({ instr: "br", label }),
+  drop: (value?: WasmInstruction): WasmDrop => ({ op: "drop", value }),
+  unreachable: (): WasmUnreachable => ({ op: "unreachable" }),
+  br: (label: string): WasmBr => ({ op: "br", label }),
   br_table: (value: WasmNumeric, ...labels: string[]): WasmBrTable => ({
-    instr: "br_table",
+    op: "br_table",
     labels,
     value,
   }),
   call: (functionName: string) => ({
     args: (...args: WasmNumeric[]): WasmCall => ({
-      instr: "call",
+      op: "call",
       function: functionName,
       arguments: args,
     }),
   }),
   return: (...values: WasmNumeric[]): WasmReturn => ({
-    instr: "return",
+    op: "return",
     values,
   }),
 
   import: (moduleName: string, itemName: string) => ({
     memory: (initial: number, maximum?: number): WasmImport => ({
-      instr: "import",
+      op: "import",
       moduleName,
       itemName,
       externType: { type: "memory", limits: { initial, maximum } },
@@ -771,7 +741,7 @@ const wasm = {
       }
     ) {
       const importInstr: WasmImport = {
-        instr: "import",
+        op: "import",
         moduleName,
         itemName,
         externType: { type: "func", name, funcType },
@@ -812,7 +782,7 @@ const wasm = {
     valueType: T | `mut ${T}`
   ) => ({
     init: (initialValue: WasmNumericFor<T>): WasmGlobalFor<T> => ({
-      instr: "global",
+      op: "global",
       name,
       valueType,
       initialValue,
@@ -845,7 +815,7 @@ const wasm = {
         }),
 
       body: (...instrs) => ({
-        instr: "func",
+        op: "func",
         name,
         funcType,
         body: instrs,
@@ -854,7 +824,7 @@ const wasm = {
   },
 
   module(
-    definitions: Omit<WasmModule, "instr"> = {
+    definitions: Omit<WasmModule, "op"> = {
       imports: [],
       globals: [],
       datas: [],
@@ -888,7 +858,7 @@ const wasm = {
         this.module({
           ...definitions,
           startFunc: {
-            instr: "start",
+            op: "start",
             functionName: startFunc,
           },
         }),
@@ -899,7 +869,7 @@ const wasm = {
         }),
 
       build: () => ({
-        instr: "module",
+        op: "module",
         ...definitions,
       }),
     };
@@ -998,7 +968,7 @@ const instrToMethodMap = {
   export: "visitExportOp",
   start: "visitStartOp",
   module: "visitModuleOp",
-} as const satisfies Record<WasmInstruction["instr"], string>;
+} as const satisfies Record<WasmInstruction["op"], string>;
 
 // ------------------------ WASM Visitor Interface ----------------------------
 
@@ -1012,10 +982,10 @@ const instrToMethodMap = {
 type WatVisitor = {
   [K in keyof typeof instrToMethodMap as (typeof instrToMethodMap)[K]]: (
     instruction: (typeof instrToMethodMap)[K] extends "visitUnaryOp"
-      ? { instr: string; right: WasmInstruction }
+      ? { op: string; right: WasmInstruction }
       : (typeof instrToMethodMap)[K] extends "visitBinaryOp"
-      ? { instr: string; left: WasmInstruction; right: WasmInstruction }
-      : Extract<WasmInstruction, { instr: K }>
+      ? { op: string; left: WasmInstruction; right: WasmInstruction }
+      : Extract<WasmInstruction, { op: K }>
   ) => string;
 };
 
@@ -1044,7 +1014,7 @@ export {
   type WasmIf,
   type WasmImport,
   type WasmInstruction,
-  type WasmLoadOp,
+  type WasmLoad as WasmLoadOp,
   type WasmLocalGet,
   type WasmLocalSet,
   type WasmLocalTee,
@@ -1056,7 +1026,7 @@ export {
   type WasmNumericType,
   type WasmReturn,
   type WasmStart,
-  type WasmStoreOp,
+  type WasmStore as WasmStoreOp,
   type WasmUnreachable,
   type WatVisitor,
 };

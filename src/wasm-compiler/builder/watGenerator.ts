@@ -34,53 +34,53 @@ import {
 export class WatGenerator implements WatVisitor {
   // Dispatch method
   visit(instruction: WasmInstruction): string {
-    return this[instrToMethodMap[instruction.instr]](instruction as any);
+    return this[instrToMethodMap[instruction.op]](instruction as any);
   }
   // Numeric visitor methods
   visitConstOp(instruction: WasmNumericConst<WasmNumericType>): string {
-    return `(${instruction.instr} ${instruction.value})`;
+    return `(${instruction.op} ${instruction.value})`;
   }
-  visitUnaryOp(instruction: { instr: string; right: WasmInstruction }): string {
+  visitUnaryOp(instruction: { op: string; right: WasmInstruction }): string {
     const right = this.visit(instruction.right);
-    return `(${instruction.instr} ${right})`;
+    return `(${instruction.op} ${right})`;
   }
   visitBinaryOp(instruction: {
-    instr: string;
+    op: string;
     left: WasmInstruction;
     right: WasmInstruction;
   }): string {
     const left = this.visit(instruction.left);
     const right = this.visit(instruction.right);
-    return `(${instruction.instr} ${left} ${right})`;
+    return `(${instruction.op} ${left} ${right})`;
   }
 
   // Memory visitor methods
   visitStoreOp(instruction: WasmStoreOp): string {
     const address = this.visit(instruction.address);
     const value = this.visit(instruction.value);
-    return `(${instruction.instr} ${address} ${value})`;
+    return `(${instruction.op} ${address} ${value})`;
   }
   visitLoadOp(instruction: WasmLoadOp): string {
     const address = this.visit(instruction.address);
-    return `(${instruction.instr} ${address})`;
+    return `(${instruction.op} ${address})`;
   }
   visitMemoryCopyOp(instruction: WasmMemoryCopy): string {
     const dest = this.visit(instruction.destination);
     const src = this.visit(instruction.source);
     const size = this.visit(instruction.size);
-    return `(${instruction.instr} ${dest} ${src} ${size})`;
+    return `(${instruction.op} ${dest} ${src} ${size})`;
   }
 
   // Control visitor methods
   visitBlockOp(instruction: WasmBlock): string {
     const label = instruction.label ?? "";
     const body = instruction.body.map((instr) => this.visit(instr)).join(" ");
-    return `(${instruction.instr} ${label} ${body})`;
+    return `(${instruction.op} ${label} ${body})`;
   }
   visitLoopOp(instruction: WasmLoop): string {
     const label = instruction.label ?? "";
     const body = instruction.body.map((instr) => this.visit(instr)).join(" ");
-    return `(${instruction.instr} ${label} ${body})`;
+    return `(${instruction.op} ${label} ${body})`;
   }
   visitIfOp(instruction: WasmIf): string {
     const label = instruction.label ?? "";
@@ -99,39 +99,39 @@ export class WatGenerator implements WatVisitor {
     }
   }
   visitUnreachableOp(instruction: WasmUnreachable): string {
-    return `(${instruction.instr})`;
+    return `(${instruction.op})`;
   }
   visitDropOp(instruction: WasmDrop): string {
     const value = instruction.value ? this.visit(instruction.value) : "";
-    return `(${instruction.instr} ${value})`;
+    return `(${instruction.op} ${value})`;
   }
   visitBrOp(instruction: WasmBr): string {
-    return `(${instruction.instr} ${instruction.label})`;
+    return `(${instruction.op} ${instruction.label})`;
   }
   visitBrTableOp(instruction: WasmBrTable): string {
     const labels = instruction.labels.join(" ");
-    return `(${instruction.instr} ${labels})`;
+    return `(${instruction.op} ${labels})`;
   }
   visitCallOp(instruction: WasmCall): string {
     const args = instruction.arguments.map((arg) => this.visit(arg)).join(" ");
-    return `(${instruction.instr} ${instruction.function} ${args})`;
+    return `(${instruction.op} ${instruction.function} ${args})`;
   }
   visitReturnOp(instruction: WasmReturn): string {
     const values = instruction.values
       .map((value) => this.visit(value))
       .join(" ");
-    return `(${instruction.instr} ${values})`;
+    return `(${instruction.op} ${values})`;
   }
 
   // Variable visitor methods
   visitVariableGetOp(instruction: WasmLocalGet | WasmGlobalGet): string {
-    return `(${instruction.instr} ${instruction.label})`;
+    return `(${instruction.op} ${instruction.label})`;
   }
   visitVariableSetOp(
     instruction: WasmLocalSet | WasmLocalTee | WasmGlobalSet
   ): string {
     const right = this.visit(instruction.right);
-    return `(${instruction.instr} ${instruction.label} ${right})`;
+    return `(${instruction.op} ${instruction.label} ${right})`;
   }
 
   // Module visitor methods
@@ -161,15 +161,15 @@ export class WatGenerator implements WatVisitor {
   }
   visitImportOp(instruction: WasmImport): string {
     const externType = this.externTypeToString(instruction.externType);
-    return `(${instruction.instr} "${instruction.moduleName}" "${instruction.itemName}" ${externType})`;
+    return `(${instruction.op} "${instruction.moduleName}" "${instruction.itemName}" ${externType})`;
   }
   visitGlobalOp(instruction: WasmGlobal): string {
     const init = this.visit(instruction.initialValue);
-    return `(${instruction.instr} ${instruction.name} (${instruction.valueType}) ${init})`;
+    return `(${instruction.op} ${instruction.name} (${instruction.valueType}) ${init})`;
   }
   visitDataOp(instruction: WasmData): string {
     const offset = this.visit(instruction.offset);
-    return `(${instruction.instr} ${offset} "${instruction.data}")`;
+    return `(${instruction.op} ${offset} "${instruction.data}")`;
   }
   visitFuncOp(instruction: WasmFunction): string {
     const params = Object.entries(instruction.funcType.paramTypes)
@@ -184,14 +184,14 @@ export class WatGenerator implements WatVisitor {
 
     const body = instruction.body.map((instr) => this.visit(instr)).join(" ");
 
-    return `(${instruction.instr} ${instruction.name} ${params} ${results} ${locals} ${body})`;
+    return `(${instruction.op} ${instruction.name} ${params} ${results} ${locals} ${body})`;
   }
   visitExportOp(instruction: WasmExport): string {
     const externTypeStr = this.externTypeToString(instruction.externType);
-    return `(${instruction.instr} ${instruction.name} ${externTypeStr})`;
+    return `(${instruction.op} ${instruction.name} ${externTypeStr})`;
   }
   visitStartOp(instruction: WasmStart): string {
-    return `(${instruction.instr} ${instruction.functionName})`;
+    return `(${instruction.op} ${instruction.functionName})`;
   }
 
   visitModuleOp(instruction: WasmModule): string {
@@ -215,6 +215,6 @@ export class WatGenerator implements WatVisitor {
       ? this.visit(instruction.startFunc)
       : "";
 
-    return `(${instruction.instr} ${imports} ${globals} ${datas} ${funcs} ${startFunc})`;
+    return `(${instruction.op} ${imports} ${globals} ${datas} ${funcs} ${startFunc})`;
   }
 }
