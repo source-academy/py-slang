@@ -2,30 +2,17 @@ import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
 import { ERROR_MAP } from "./constants";
-import { Generator } from "./rawWatGenerator";
+import { RawWatGenerator } from "./rawWatGenerator";
 
-(async () => {
-  const code = `
-def make_number(n):
-    def get():
-        return n
-    return get
-
-a = make_number(3)
-a()
-`;
-
+export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
   const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
-  // console.dir(ast, { depth: null });
 
-  const generator = new Generator();
+  const generator = new RawWatGenerator();
   const wat = generator.visit(ast);
-
-  console.log(wat);
 
   const w = await wabt();
   const wasm: Uint8Array = w.parseWat("a", wat).toBinary({}).buffer;
@@ -62,5 +49,6 @@ a()
     js: { memory },
   });
 
-  console.log((result as any).instance.exports.main());
-})();
+  // run the exported main function
+  return (result as any).instance.exports.main();
+}

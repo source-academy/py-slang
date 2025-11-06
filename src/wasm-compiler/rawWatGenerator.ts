@@ -1,6 +1,5 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
-import { BaseGenerator } from "./baseGeneratorForPy";
 import {
   ALLOC_ENV_FUNC,
   APPLY_FUNC,
@@ -30,6 +29,7 @@ import {
   SET_PAIR_TAIL_FX,
   STRING_COMPARE_FX,
 } from "./constants";
+import { BaseGenerator } from "./pyBaseGenerator";
 
 const builtInFunctions: {
   name: string;
@@ -76,7 +76,7 @@ const builtInFunctions: {
 ];
 
 type Binding = { name: string; tag: "local" | "nonlocal" };
-export class Generator extends BaseGenerator<string> {
+export class RawWatGenerator extends BaseGenerator<string> {
   private nativeFunctions = new Set<keyof typeof nameToFunctionMap>([
     ALLOC_ENV_FUNC,
     MAKE_INT_FX,

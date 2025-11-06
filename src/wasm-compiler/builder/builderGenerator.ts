@@ -1,12 +1,12 @@
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
-import { BaseGenerator } from "../baseGeneratorForPy";
 import {
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
   HEAP_PTR,
   MAKE_INT_FX,
 } from "../constants";
+import { BaseGenerator } from "../pyBaseGenerator";
 import {
   arithmeticOpFunc,
   makeComplexFunc,
