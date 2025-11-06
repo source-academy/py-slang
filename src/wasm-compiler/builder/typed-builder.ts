@@ -157,11 +157,23 @@ type WasmLoadOpFor<T extends WasmNumericType> = {
   op: `${T}.load`;
   address: WasmNumericFor<"i32">;
 };
+type WasmLoadNarrowFor<T extends WasmIntNumericType> = {
+  op: `${T}.load${
+    | "8_s"
+    | "8_u"
+    | "16_s"
+    | "16_u"
+    | (T extends "i64" ? "32_s" | "32_u" : never)}`;
+  address: WasmNumericFor<"i32">;
+};
+
 type WasmLoad =
   | WasmLoadOpFor<"i32">
   | WasmLoadOpFor<"i64">
   | WasmLoadOpFor<"f32">
-  | WasmLoadOpFor<"f64">;
+  | WasmLoadOpFor<"f64">
+  | WasmLoadNarrowFor<"i32">
+  | WasmLoadNarrowFor<"i64">;
 
 type WasmStoreOpFor<T extends WasmNumericType> = {
   op: `${T}.store`;
@@ -412,6 +424,10 @@ const unaryOp = <
     }
   );
 
+const i32Load = (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i32"> => ({
+  op: "i32.load",
+  address,
+});
 const i32 = {
   const: (value: number | bigint): WasmNumericConst<"i32"> => ({
     op: "i32.const",
@@ -419,16 +435,21 @@ const i32 = {
   }),
   ...binaryOp("i32", [...intBinaryOp, ...intComparisonOp]),
   ...unaryOp("i32", [...i32ConversionOp, ...intConversionOp, ...intTestOp]),
-  load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i32"> => ({
-    op: "i32.load",
-    address,
-  }),
+  load: i32Load,
+  load8_s: i32Load,
+  load8_u: i32Load,
+  load16_s: i32Load,
+  load16_u: i32Load,
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"i32">
   ): WasmStoreOpFor<"i32"> => ({ op: "i32.store", address, value }),
 };
 
+const i64Load = (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i64"> => ({
+  op: "i64.load",
+  address,
+});
 const i64 = {
   const: (value: number | bigint): WasmNumericConst<"i64"> => ({
     op: "i64.const",
@@ -436,10 +457,13 @@ const i64 = {
   }),
   ...binaryOp("i64", [...intBinaryOp, ...intComparisonOp]),
   ...unaryOp("i64", [...i64ConversionOp, ...intConversionOp, ...intTestOp]),
-  load: (address: WasmNumericFor<"i32">): WasmLoadOpFor<"i64"> => ({
-    op: "i64.load",
-    address,
-  }),
+  load: i64Load,
+  load8_s: i64Load,
+  load8_u: i64Load,
+  load16_s: i64Load,
+  load16_u: i64Load,
+  load32_s: i64Load,
+  load32_u: i64Load,
   store: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"i64">
@@ -878,6 +902,16 @@ const instrToMethodMap = {
   "i64.load": "visitLoadOp",
   "f32.load": "visitLoadOp",
   "f64.load": "visitLoadOp",
+  "i32.load8_s": "visitLoadOp",
+  "i32.load8_u": "visitLoadOp",
+  "i32.load16_s": "visitLoadOp",
+  "i32.load16_u": "visitLoadOp",
+  "i64.load8_s": "visitLoadOp",
+  "i64.load8_u": "visitLoadOp",
+  "i64.load16_s": "visitLoadOp",
+  "i64.load16_u": "visitLoadOp",
+  "i64.load32_s": "visitLoadOp",
+  "i64.load32_u": "visitLoadOp",
 
   "i32.store": "visitStoreOp",
   "i64.store": "visitStoreOp",
