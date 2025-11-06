@@ -16,7 +16,7 @@ import { Context } from './context'
 import * as instr from './instrCreator'
 import { Value } from './stash';
 import { Closure } from './closure';
-import { RuntimeSourceError } from '../errors/runtimeSourceError';
+import { RuntimeSourceError } from '../errors/errors';
 import { CseError } from './error';
 import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from '../errors/errors';
 

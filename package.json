@@ -1,6 +1,5 @@
 {
   "name": "py-slang",
-  "packageManager": "yarn@1.22.22",
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
@@ -27,6 +26,7 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.3",
+    "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-terser": "^0.4.4",
     "@rollup/plugin-typescript": "^12.1.2",
@@ -37,7 +37,7 @@
     "glob": "^11.0.1",
     "jest": "^29.7.0",
     "jsdoc": "^4.0.4",
-    "nodemon": "^2.0.20",
+    "nodemon": "^3.1.10",
     "rimraf": "^3.0.2",
     "rollup": "^4.38.0",
     "rollup-plugin-modify": "^3.0.0",
@@ -48,6 +48,7 @@
     "typescript": "^5.5.3"
   },
   "dependencies": {
+    "@sourceacademy/conductor": "^0.2.3",
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.4.0",
