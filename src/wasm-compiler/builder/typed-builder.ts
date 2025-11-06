@@ -1,5 +1,7 @@
 // ------------------------ WASM Numeric Types & Constants ----------------------------
 
+type WasmLabel = `$${string}`;
+
 type WasmIntNumericType = "i32" | "i64";
 type WasmFloatNumericType = "f32" | "f64";
 type WasmNumericType = WasmIntNumericType | WasmFloatNumericType;
@@ -83,10 +85,7 @@ type WasmNumericConst<T extends WasmNumericType> = {
 };
 
 type WasmUnaryOp<T extends WasmFloatNumericType> = {
-  [Op in FloatUnaryOp]: {
-    op: `${T}.${Op}`;
-    right: WasmNumericFor<T>;
-  };
+  [Op in FloatUnaryOp]: { op: `${T}.${Op}`; right: WasmNumericFor<T> };
 }[FloatUnaryOp];
 
 type WasmBinaryOp<T extends WasmNumericType> = T extends WasmIntNumericType
@@ -108,10 +107,7 @@ type WasmBinaryOp<T extends WasmNumericType> = T extends WasmIntNumericType
   : never;
 
 type WasmIntTestOp<T extends WasmIntNumericType> = {
-  [Op in IntTestOp]: {
-    op: `${T}.${Op}`;
-    right: WasmNumericFor<T>;
-  };
+  [Op in IntTestOp]: { op: `${T}.${Op}`; right: WasmNumericFor<T> };
 }[IntTestOp];
 
 type WasmComparisonOp<T extends WasmNumericType> = T extends WasmIntNumericType
@@ -145,10 +141,7 @@ type WasmConversionOpHelper<I> = I extends
   | `i64.${I64ConversionOp | IntConversionOp}`
   | `f32.${F32ConversionOp | FloatConversionOp}`
   | `f64.${F64ConversionOp | FloatConversionOp}`
-  ? {
-      op: I;
-      right: WasmNumericFor<ExtractConversion<I>>;
-    }
+  ? { op: I; right: WasmNumericFor<ExtractConversion<I>> }
   : never;
 
 type WasmConversionOp<T extends WasmNumericType> =
@@ -205,23 +198,11 @@ type WasmNumeric =
 
 // ------------------------ WASM Variable Instructions ----------------------------
 
-type WasmLocalSet = {
-  op: "local.set";
-  label: string;
-  right: WasmNumeric;
-};
-type WasmLocalGet = { op: "local.get"; label: string };
-type WasmLocalTee = {
-  op: "local.tee";
-  label: string;
-  right: WasmNumeric;
-};
-type WasmGlobalSet = {
-  op: "global.set";
-  label: string;
-  right: WasmNumeric;
-};
-type WasmGlobalGet = { op: "global.get"; label: string };
+type WasmLocalSet = { op: "local.set"; label: WasmLabel; right: WasmNumeric };
+type WasmLocalGet = { op: "local.get"; label: WasmLabel };
+type WasmLocalTee = { op: "local.tee"; label: WasmLabel; right: WasmNumeric };
+type WasmGlobalSet = { op: "global.set"; label: WasmLabel; right: WasmNumeric };
+type WasmGlobalGet = { op: "global.get"; label: WasmLabel };
 
 type WasmVariable =
   | WasmLocalSet
@@ -246,10 +227,7 @@ type WasmMemory = WasmMemoryCopy;
 // ------------------------ WASM Control Instructions ----------------------------
 
 type WasmUnreachable = { op: "unreachable" };
-type WasmDrop = {
-  op: "drop";
-  value?: WasmInstruction;
-};
+type WasmDrop = { op: "drop"; value?: WasmInstruction };
 
 type WasmBlockType = {
   paramTypes: WasmNumericType[];
@@ -257,39 +235,19 @@ type WasmBlockType = {
   localTypes?: WasmNumericType[];
 };
 
-type WasmBlockBase = { label?: string; blockType: WasmBlockType };
-type WasmBlock = WasmBlockBase & {
-  op: "block";
-  body: WasmInstruction[];
-};
-type WasmLoop = WasmBlockBase & {
-  op: "loop";
-  body: WasmInstruction[];
-};
+type WasmBlockBase = { label?: WasmLabel; blockType: WasmBlockType };
+type WasmBlock = WasmBlockBase & { op: "block"; body: WasmInstruction[] };
+type WasmLoop = WasmBlockBase & { op: "loop"; body: WasmInstruction[] };
 type WasmIf = WasmBlockBase & {
   op: "if";
   predicate: WasmNumeric;
   thenBody: WasmInstruction[];
   elseBody?: WasmInstruction[];
 };
-type WasmBr = {
-  op: "br";
-  label: string;
-};
-type WasmBrTable = {
-  op: "br_table";
-  labels: string[];
-  value: WasmNumeric;
-};
-type WasmCall = {
-  op: "call";
-  function: string;
-  arguments: WasmNumeric[];
-};
-type WasmReturn = {
-  op: "return";
-  values: WasmNumeric[];
-};
+type WasmBr = { op: "br"; label: WasmLabel };
+type WasmBrTable = { op: "br_table"; labels: WasmLabel[]; value: WasmNumeric };
+type WasmCall = { op: "call"; function: WasmLabel; arguments: WasmNumeric[] };
+type WasmReturn = { op: "return"; values: WasmNumeric[] };
 
 type WasmControl =
   | WasmBlock
@@ -304,31 +262,25 @@ type WasmControl =
 
 // ------------------------ WASM Module Instructions ----------------------------
 
-type WasmLocals = Record<string, WasmNumericType>;
+type WasmLocals = Record<WasmLabel, WasmNumericType>;
 type WasmFuncType = {
   paramTypes: WasmLocals;
   resultTypes: WasmNumericType[];
   localTypes: WasmLocals;
 };
 type WasmExternType =
-  | {
-      type: "memory";
-      limits: { initial: number; maximum?: number };
-    }
-  | {
-      type: "func";
-      name: string;
-      funcType: WasmBlockType;
-    };
+  | { type: "memory"; limits: { initial: number; maximum?: number } }
+  | { type: "func"; name: WasmLabel; funcType: WasmBlockType };
 type WasmImport = {
   op: "import";
   moduleName: string;
   itemName: string;
   externType: WasmExternType;
 };
+
 type WasmGlobalFor<T extends WasmNumericType> = {
   op: "global";
-  name: string;
+  name: WasmLabel;
   valueType: T | `mut ${T}`;
   initialValue: WasmNumericFor<T>;
 };
@@ -337,20 +289,17 @@ type WasmGlobal =
   | WasmGlobalFor<"i64">
   | WasmGlobalFor<"f32">
   | WasmGlobalFor<"f64">;
-type WasmData = {
-  op: "data";
-  offset: WasmNumericFor<"i32">;
-  data: string;
+
+type WasmData = { op: "data"; offset: WasmNumericFor<"i32">; data: string };
+type WasmFunction = {
+  op: "func";
+  name: WasmLabel;
+  funcType: WasmFuncType;
+  body: Exclude<WasmInstruction, WasmFunction>[];
 };
-type WasmStart = {
-  op: "start";
-  functionName: string;
-};
-type WasmExport = {
-  op: "export";
-  name: string;
-  externType: WasmExternType;
-};
+type WasmStart = { op: "start"; functionName: WasmLabel };
+type WasmExport = { op: "export"; name: string; externType: WasmExternType };
+
 type WasmModule = {
   op: "module";
   imports: WasmImport[];
@@ -359,13 +308,6 @@ type WasmModule = {
   funcs: WasmFunction[];
   startFunc?: WasmStart;
   exports: WasmExport[];
-};
-
-type WasmFunction = {
-  op: "func";
-  name: string;
-  funcType: WasmFuncType;
-  body: Exclude<WasmInstruction, WasmFunction>[];
 };
 
 type WasmModuleInstruction =
@@ -539,13 +481,13 @@ const f64 = {
 };
 
 const local = {
-  get: (label: string): WasmLocalGet => ({ op: "local.get", label }),
-  set: (label: string, right: WasmNumeric): WasmLocalSet => ({
+  get: (label: WasmLabel): WasmLocalGet => ({ op: "local.get", label }),
+  set: (label: WasmLabel, right: WasmNumeric): WasmLocalSet => ({
     op: "local.set",
     label,
     right,
   }),
-  tee: (label: string, right: WasmNumeric): WasmLocalTee => ({
+  tee: (label: WasmLabel, right: WasmNumeric): WasmLocalTee => ({
     op: "local.tee",
     label,
     right,
@@ -553,8 +495,8 @@ const local = {
 };
 
 const global = {
-  get: (label: string): WasmGlobalGet => ({ op: "global.get", label }),
-  set: (label: string, right: WasmNumeric): WasmGlobalSet => ({
+  get: (label: WasmLabel): WasmGlobalGet => ({ op: "global.get", label }),
+  set: (label: WasmLabel, right: WasmNumeric): WasmGlobalSet => ({
     op: "global.set",
     label,
     right,
@@ -600,7 +542,7 @@ type WasmModuleHelper = {
   globals: (...globals: WasmGlobal[]) => WasmModuleHelper;
   datas: (...datas: WasmData[]) => WasmModuleHelper;
   funcs: (...funcs: WasmFunction[]) => WasmModuleHelper;
-  startFunc: (startFunc: string) => Omit<WasmModuleHelper, "startFunc">;
+  startFunc: (startFunc: WasmLabel) => Omit<WasmModuleHelper, "startFunc">;
   exports: (...exports: WasmExport[]) => WasmModuleHelper;
 
   build: () => WasmModule;
@@ -608,7 +550,7 @@ type WasmModuleHelper = {
 
 const wasm = {
   block: (
-    label?: string,
+    label?: WasmLabel,
     blockType: WasmBlockType = {
       paramTypes: [],
       resultTypes: [],
@@ -638,7 +580,7 @@ const wasm = {
     }),
   }),
   loop: (
-    label?: string,
+    label?: WasmLabel,
     blockType: WasmBlockType = {
       paramTypes: [],
       resultTypes: [],
@@ -669,7 +611,7 @@ const wasm = {
   }),
   if: (
     predicate: WasmNumeric,
-    label?: string,
+    label?: WasmLabel,
     blockType: WasmBlockType = {
       paramTypes: [],
       resultTypes: [],
@@ -706,23 +648,20 @@ const wasm = {
   }),
   drop: (value?: WasmInstruction): WasmDrop => ({ op: "drop", value }),
   unreachable: (): WasmUnreachable => ({ op: "unreachable" }),
-  br: (label: string): WasmBr => ({ op: "br", label }),
-  br_table: (value: WasmNumeric, ...labels: string[]): WasmBrTable => ({
+  br: (label: WasmLabel): WasmBr => ({ op: "br", label }),
+  br_table: (value: WasmNumeric, ...labels: WasmLabel[]): WasmBrTable => ({
     op: "br_table",
     labels,
     value,
   }),
-  call: (functionName: string) => ({
+  call: (functionName: WasmLabel) => ({
     args: (...args: WasmNumeric[]): WasmCall => ({
       op: "call",
       function: functionName,
       arguments: args,
     }),
   }),
-  return: (...values: WasmNumeric[]): WasmReturn => ({
-    op: "return",
-    values,
-  }),
+  return: (...values: WasmNumeric[]): WasmReturn => ({ op: "return", values }),
 
   import: (moduleName: string, itemName: string) => ({
     memory: (initial: number, maximum?: number): WasmImport => ({
@@ -733,7 +672,7 @@ const wasm = {
     }),
 
     func(
-      name: string,
+      name: WasmLabel,
       funcType: WasmBlockType = {
         paramTypes: [],
         resultTypes: [],
@@ -778,7 +717,7 @@ const wasm = {
   }),
 
   global: <T extends WasmNumericType>(
-    name: string,
+    name: WasmLabel,
     valueType: T | `mut ${T}`
   ) => ({
     init: (initialValue: WasmNumericFor<T>): WasmGlobalFor<T> => ({
@@ -790,7 +729,7 @@ const wasm = {
   }),
 
   func(
-    name: string,
+    name: WasmLabel,
     funcType: WasmFuncType = {
       paramTypes: {},
       resultTypes: [],
@@ -814,12 +753,7 @@ const wasm = {
           resultTypes: [...funcType.resultTypes, ...results],
         }),
 
-      body: (...instrs) => ({
-        op: "func",
-        name,
-        funcType,
-        body: instrs,
-      }),
+      body: (...instrs) => ({ op: "func", name, funcType, body: instrs }),
     };
   },
 
@@ -868,10 +802,7 @@ const wasm = {
           exports: [...definitions.exports, ...exports],
         }),
 
-      build: () => ({
-        op: "module",
-        ...definitions,
-      }),
+      build: () => ({ op: "module", ...definitions }),
     };
   },
 };
@@ -1014,7 +945,7 @@ export {
   type WasmIf,
   type WasmImport,
   type WasmInstruction,
-  type WasmLoad as WasmLoadOp,
+  type WasmLoad,
   type WasmLocalGet,
   type WasmLocalSet,
   type WasmLocalTee,
@@ -1026,7 +957,7 @@ export {
   type WasmNumericType,
   type WasmReturn,
   type WasmStart,
-  type WasmStore as WasmStoreOp,
+  type WasmStore,
   type WasmUnreachable,
   type WatVisitor,
 };

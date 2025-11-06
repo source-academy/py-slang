@@ -15,7 +15,7 @@ import {
   WasmIf,
   WasmImport,
   WasmInstruction,
-  WasmLoadOp,
+  WasmLoad,
   WasmLocalGet,
   WasmLocalSet,
   WasmLocalTee,
@@ -26,7 +26,7 @@ import {
   WasmNumericType,
   WasmReturn,
   WasmStart,
-  WasmStoreOp,
+  WasmStore,
   WasmUnreachable,
   WatVisitor,
 } from "./typed-builder";
@@ -55,12 +55,12 @@ export class WatGenerator implements WatVisitor {
   }
 
   // Memory visitor methods
-  visitStoreOp(instruction: WasmStoreOp): string {
+  visitStoreOp(instruction: WasmStore): string {
     const address = this.visit(instruction.address);
     const value = this.visit(instruction.value);
     return `(${instruction.op} ${address} ${value})`;
   }
-  visitLoadOp(instruction: WasmLoadOp): string {
+  visitLoadOp(instruction: WasmLoad): string {
     const address = this.visit(instruction.address);
     return `(${instruction.op} ${address})`;
   }
