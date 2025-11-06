@@ -188,7 +188,8 @@ type WasmNumericFor<T extends WasmNumericType> =
   | WasmLocalGet
   | WasmGlobalGet
   | WasmLocalTee
-  | WasmCall; // call generates numeric[], but for type simplicity we assume just 1
+  | WasmCall // call generates numeric[], but for type simplicity we assume just 1
+  | WasmSelect;
 
 type WasmNumeric =
   | WasmNumericFor<"i32">
@@ -248,6 +249,12 @@ type WasmBr = { op: "br"; label: WasmLabel };
 type WasmBrTable = { op: "br_table"; labels: WasmLabel[]; value: WasmNumeric };
 type WasmCall = { op: "call"; function: WasmLabel; arguments: WasmNumeric[] };
 type WasmReturn = { op: "return"; values: WasmNumeric[] };
+type WasmSelect = {
+  op: "select";
+  first: WasmNumeric;
+  second: WasmNumeric;
+  condition: WasmNumeric;
+};
 
 type WasmControl =
   | WasmBlock
@@ -258,7 +265,8 @@ type WasmControl =
   | WasmBr
   | WasmBrTable
   | WasmCall
-  | WasmReturn;
+  | WasmReturn
+  | WasmSelect;
 
 // ------------------------ WASM Module Instructions ----------------------------
 
@@ -662,6 +670,11 @@ const wasm = {
     }),
   }),
   return: (...values: WasmNumeric[]): WasmReturn => ({ op: "return", values }),
+  select: (
+    first: WasmNumeric,
+    second: WasmNumeric,
+    condition: WasmNumeric
+  ): WasmSelect => ({ op: "select", first, second, condition }),
 
   import: (moduleName: string, itemName: string) => ({
     memory: (initial: number, maximum?: number): WasmImport => ({
@@ -883,6 +896,7 @@ const instrToMethodMap = {
   br_table: "visitBrTableOp",
   call: "visitCallOp",
   return: "visitReturnOp",
+  select: "visitSelectOp",
 
   // variables
   "local.get": "visitVariableGetOp",
@@ -956,6 +970,7 @@ export {
   type WasmNumericConst,
   type WasmNumericType,
   type WasmReturn,
+  type WasmSelect,
   type WasmStart,
   type WasmStore,
   type WasmUnreachable,

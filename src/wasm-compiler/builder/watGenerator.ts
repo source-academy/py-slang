@@ -25,6 +25,7 @@ import {
   WasmNumericConst,
   WasmNumericType,
   WasmReturn,
+  WasmSelect,
   WasmStart,
   WasmStore,
   WasmUnreachable,
@@ -121,6 +122,12 @@ export class WatGenerator implements WatVisitor {
       .map((value) => this.visit(value))
       .join(" ");
     return `(${instruction.op} ${values})`;
+  }
+  visitSelectOp(instruction: WasmSelect): string {
+    const first = this.visit(instruction.first);
+    const second = this.visit(instruction.second);
+    const condition = this.visit(instruction.condition);
+    return `(${instruction.op} ${first} ${second} ${condition})`;
   }
 
   // Variable visitor methods
