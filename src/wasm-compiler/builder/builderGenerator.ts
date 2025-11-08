@@ -9,13 +9,7 @@ import {
   MAKE_INT_FX,
 } from "../constants";
 import { BaseGenerator } from "../pyBaseGenerator";
-import {
-  arithmeticOpFunc,
-  makeComplexFunc,
-  makeFloatFunc,
-  makeIntFunc,
-  makeStringFunc,
-} from "./constants";
+import { NATIVE_FUNCTIONS } from "./constants";
 
 // all expressions compile to a call to a makeX function, so expressions return
 // WasmCalls. (every expression results in i32 i64)
@@ -29,11 +23,7 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
       )
       .globals(wasm.global(HEAP_PTR, "mut i32").init(i32.const(0)))
       .funcs(
-        arithmeticOpFunc,
-        makeIntFunc,
-        makeFloatFunc,
-        makeComplexFunc,
-        makeStringFunc,
+        ...NATIVE_FUNCTIONS,
         wasm
           .func("$main")
           .body(
