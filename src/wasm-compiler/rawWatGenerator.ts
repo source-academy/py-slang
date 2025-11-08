@@ -24,6 +24,7 @@ import {
   MAKE_STRING_FX,
   nameToFunctionMap,
   NEG_FUNC_NAME,
+  PRE_APPLY_FUNC,
   SET_LEX_ADDR_FUNC,
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
@@ -87,6 +88,7 @@ export class RawWatGenerator extends BaseGenerator<string> {
     MAKE_CLOSURE_FX,
     GET_LEX_ADDR_FUNC,
     SET_LEX_ADDR_FUNC,
+    PRE_APPLY_FUNC,
     MAKE_PAIR_FX,
     GET_PAIR_HEAD_FX,
     GET_PAIR_TAIL_FX,
@@ -97,7 +99,7 @@ export class RawWatGenerator extends BaseGenerator<string> {
   private heapPointer = 0;
 
   private environment: Binding[][] = [[]];
-  private userFunctions: { [arity: number]: string[] | undefined } = {};
+  private userFunctions: string[] = [];
 
   private getLexAddress(name: string): [number, number] {
     for (let i = this.environment.length - 1; i >= 0; i--) {
@@ -174,13 +176,11 @@ export class RawWatGenerator extends BaseGenerator<string> {
     const builtInFuncsDeclarations = builtInFunctions
       .map(({ name, arity, body, isVoid }, i) => {
         this.environment[0].push({ name, tag: "local" });
-        const tag = this.userFunctions[arity]?.length ?? 0;
-        this.userFunctions[arity] ??= [];
-
+        const tag = this.userFunctions.length;
         const newBody = `${body}${
           isVoid ? `(call ${MAKE_NONE_FX})` : ""
         } (local.get $return_env) (global.set ${CURR_ENV}) (return)`;
-        this.userFunctions[arity][tag] = newBody;
+        this.userFunctions.push(newBody);
 
         return `(i32.const 0) (i32.const ${i}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${arity}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
       })
@@ -202,12 +202,7 @@ export class RawWatGenerator extends BaseGenerator<string> {
       .map((fx) => fx.replace(/\s{2,}/g, ""))
       .join("\n  ");
 
-    const applyFunctions = Object.entries(this.userFunctions)
-      .map(
-        ([arity, bodies]) => bodies && applyFuncFactory(Number(arity), bodies)
-      )
-      .filter((x) => x != null)
-      .join("\n  ");
+    const applyFunction = applyFuncFactory(this.userFunctions);
 
     // because each variable has a tag and payload = 3 words
     const globalEnvLength = this.environment[0].length;
@@ -224,7 +219,7 @@ export class RawWatGenerator extends BaseGenerator<string> {
 
   ${nativeFunctions}
 
-  ${applyFunctions}
+  ${applyFunction}
   
   (func $main ${implicitReturn ? "(result i32 i64)" : ""}
     (i32.const ${globalEnvLength}) (i32.const 0) (call ${ALLOC_ENV_FUNC})
@@ -350,10 +345,8 @@ export class RawWatGenerator extends BaseGenerator<string> {
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): string {
     const [depth, index] = this.getLexAddress(stmt.name.lexeme);
     const arity = stmt.parameters.length;
-    const tag = this.userFunctions[arity]?.length ?? 0;
-
-    this.userFunctions[arity] ??= [];
-    this.userFunctions[arity][tag] = "PLACEHOLDER";
+    const tag = this.userFunctions.length;
+    this.userFunctions.push("PLACEHOLDER");
 
     const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
@@ -368,7 +361,7 @@ export class RawWatGenerator extends BaseGenerator<string> {
     const body = stmt.body.map((s) => this.visit(s)).join(" ");
     this.environment.pop();
 
-    this.userFunctions[arity][tag] = body;
+    this.userFunctions[tag] = body;
 
     return `(i32.const ${depth}) (i32.const ${index}) (i32.const ${tag}) (i32.const ${arity}) (i32.const ${newFrame.length}) (global.get ${CURR_ENV}) (call ${MAKE_CLOSURE_FX}) (call ${SET_LEX_ADDR_FUNC})`;
   }
@@ -376,8 +369,11 @@ export class RawWatGenerator extends BaseGenerator<string> {
   visitCallExpr(expr: ExprNS.Call): string {
     const callee = this.visit(expr.callee);
     const args = expr.args.map((arg) => this.visit(arg));
+    let setParams = "";
+    for (let i = 0; i < args.length; i++)
+      setParams += `(i32.const 0) (i32.const ${i}) ${args[i]} (call ${SET_LEX_ADDR_FUNC})`;
 
-    return `${callee} ${args.join(" ")} (call ${APPLY_FUNC}${args.length})`;
+    return `(global.get ${CURR_ENV}) ${callee} (i32.const ${args.length}) (call ${PRE_APPLY_FUNC}) ${setParams} (call ${APPLY_FUNC})`;
   }
 
   visitReturnStmt(stmt: StmtNS.Return): string {

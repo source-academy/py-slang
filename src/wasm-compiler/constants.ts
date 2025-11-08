@@ -450,6 +450,7 @@ const comparisonOpFunc = `(func ${COMPARISON_OP_FX} (param $x_tag i32) (param $x
 )`;
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
+// TODO: memory.fill with unbound tag instead of loop
 export const ALLOC_ENV_FUNC = "$_alloc_env";
 const allocEnvFunc = `(func ${ALLOC_ENV_FUNC} (param $size i32) (param $parent i32)
   (global.get ${HEAP_PTR}) (global.set ${CURR_ENV})
@@ -466,39 +467,34 @@ const allocEnvFunc = `(func ${ALLOC_ENV_FUNC} (param $size i32) (param $parent i
   )
 )`;
 
-export const APPLY_FUNC = "$_apply_";
-// one applyFunc per arity
-export const applyFuncFactory = (arity: number, bodies: string[]) => {
-  let params = "";
-  for (let i = 0; i < arity; i++)
-    params += `(param $p_${i}${TAG_SUFFIX} i32) (param $p_${i}${PAYLOAD_SUFFIX} i64) `;
-
-  let setParams = "";
-  for (let i = 0; i < arity; i++)
-    setParams += `(i32.const 0) (i32.const ${i}) (local.get $p_${i}${TAG_SUFFIX}) (local.get $p_${i}${PAYLOAD_SUFFIX}) (call ${SET_LEX_ADDR_FUNC})`;
-
-  let brTableJumps = "";
-  for (let i = 0; i < bodies.length; i++) brTableJumps += `${i} `;
-
-  return `(func ${APPLY_FUNC}${arity} (param $tag i32) (param $val i64) ${params}(result i32 i64) (local $return_env i32)
+export const PRE_APPLY_FUNC = "$_pre_apply";
+const preApplyFunc = `(func ${PRE_APPLY_FUNC} (param $tag i32) (param $val i64) (param $arity i32) (result i32 i64)
   (i32.ne (local.get $tag) (i32.const ${TYPE_TAG.CLOSURE})) (if (then
     (call $_log_error (i32.const ${ERROR_MAP.CALL_NOT_FUNC[0]})) unreachable
   ))
 
-  (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (i32.const ${arity}) (i32.ne) (if (then
+  (local.get $val) (i64.const 40) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $arity) (i32.ne) (if (then
     (call $_log_error (i32.const ${ERROR_MAP.FUNC_WRONG_ARITY[0]})) unreachable
   ))
 
+  (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
+  (local.get $tag) (local.get $val)
+)`;
+
+export const APPLY_FUNC = "$_apply";
+export const applyFuncFactory = (bodies: string[]) => {
+  let brTableJumps = "";
+  for (let i = 0; i < bodies.length; i++) brTableJumps += `${i} `;
+
+  return `(func ${APPLY_FUNC} (param $return_env i32) (param $tag i32) (param $val i64) (result i32 i64)
   ${"(block ".repeat(bodies.length)}
-    (global.get ${CURR_ENV}) (local.set $return_env)
-    (local.get $val) (i64.const 32) (i64.shr_u) (i32.wrap_i64) (i32.const 255) (i32.and) (local.get $val) (i32.wrap_i64) (call ${ALLOC_ENV_FUNC})
     (local.get $val) (i64.const 48) (i64.shr_u) (i32.wrap_i64) (br_table ${brTableJumps})
-  ${bodies
-    .map(
-      (body) =>
-        `\n) ${setParams} ${body} (call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)`
-    )
-    .join("  \n")}
+${bodies
+  .map(
+    (body) =>
+      `\n    ) ${body} (call ${MAKE_NONE_FX}) (local.get $return_env) (global.set ${CURR_ENV}) (return)\n`
+  )
+  .join("")}
 )`;
 };
 
@@ -560,6 +556,7 @@ export const nameToFunctionMap = {
   [NEG_FUNC_NAME]: negFunc,
   [GET_LEX_ADDR_FUNC]: getLexAddressFunction,
   [SET_LEX_ADDR_FUNC]: setLexAddressFunction,
+  [PRE_APPLY_FUNC]: preApplyFunc,
   [MAKE_PAIR_FX]: makePairFunc,
   [GET_PAIR_HEAD_FX]: getPairHeadFunc,
   [GET_PAIR_TAIL_FX]: getPairTailFunc,
