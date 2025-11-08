@@ -1,3 +1,5 @@
+import { i32, i64, wasm } from "wasm-util";
+import { WasmCall, WasmFunction, WasmInstruction } from "wasm-util/src/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
 import {
@@ -14,14 +16,6 @@ import {
   makeIntFunc,
   makeStringFunc,
 } from "./constants";
-import {
-  i32,
-  i64,
-  wasm,
-  type WasmCall,
-  type WasmFunction,
-  type WasmInstruction,
-} from "./typed-builder";
 
 // all expressions compile to a call to a makeX function, so expressions return
 // WasmCalls. (every expression results in i32 i64)

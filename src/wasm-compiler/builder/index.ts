@@ -1,8 +1,8 @@
 import wabt from "wabt";
+import { WatGenerator } from "wasm-util";
 import { Parser } from "../../parser";
 import { Tokenizer } from "../../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
-import { WatGenerator } from "./watGenerator";
 
 (async () => {
   // const code = "(12 + 42.5j) / -(42 + 1.5j)";
