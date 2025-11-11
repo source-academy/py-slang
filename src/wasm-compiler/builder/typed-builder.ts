@@ -465,6 +465,15 @@ const unaryOp = <
     }
   );
 
+type BuilderAsType<T extends WasmNumericType = WasmNumericType> = {
+  "~type": T;
+};
+type NumericBuilder<T extends WasmNumericType> = {
+  [K in WasmNumericFor<T>["instr"] as K extends `${T}.${infer S}`
+    ? S
+    : never]: (...args: never[]) => Extract<WasmNumericFor<T>, { instr: K }>;
+} & BuilderAsType<T>;
+
 const i32 = {
   const: (value: number | bigint): WasmNumericConst<"i32"> => ({
     instr: "i32.const",
@@ -484,7 +493,8 @@ const i32 = {
     address,
     value,
   }),
-};
+  "~type": "i32",
+} satisfies NumericBuilder<"i32">;
 
 const i64 = {
   const: (value: number | bigint): WasmNumericConst<"i64"> => ({
@@ -505,7 +515,8 @@ const i64 = {
     address,
     value,
   }),
-};
+  "~type": "i64",
+} satisfies NumericBuilder<"i64">;
 
 const f32 = {
   const: (value: number): WasmNumericConst<"f32"> => ({
@@ -530,7 +541,8 @@ const f32 = {
     address,
     value,
   }),
-};
+  "~type": "f32",
+} satisfies NumericBuilder<"f32">;
 
 const f64 = {
   const: (value: number): WasmNumericConst<"f64"> => ({
@@ -555,7 +567,8 @@ const f64 = {
     address,
     value,
   }),
-};
+  "~type": "f64",
+} satisfies NumericBuilder<"f64">;
 
 const local = {
   get: (label: string): WasmLocalGet => ({
@@ -600,140 +613,116 @@ const memory = {
 };
 
 type WasmBlockTypeHelper<T extends WasmBlock | WasmLoop> = {
-  params(...params: WasmNumericType[]): WasmBlockTypeHelper<T>;
-  results(...results: WasmNumericType[]): WasmBlockTypeHelper<T>;
-  locals(...locals: WasmNumericType[]): WasmBlockTypeHelper<T>;
+  params(...params: BuilderAsType[]): WasmBlockTypeHelper<T>;
+  results(...results: BuilderAsType[]): WasmBlockTypeHelper<T>;
+  locals(...locals: BuilderAsType[]): WasmBlockTypeHelper<T>;
 
   body: (...instrs: WasmInstruction[]) => T;
 };
 
 type WasmIfBlockTypeHelper = {
-  params(...params: WasmNumericType[]): WasmIfBlockTypeHelper;
-  results(...results: WasmNumericType[]): WasmIfBlockTypeHelper;
-  locals(...locals: WasmNumericType[]): WasmIfBlockTypeHelper;
+  params(...params: BuilderAsType[]): WasmIfBlockTypeHelper;
+  results(...results: BuilderAsType[]): WasmIfBlockTypeHelper;
+  locals(...locals: BuilderAsType[]): WasmIfBlockTypeHelper;
 
-  then: (...thenInstrs: WasmInstruction[]) => WasmIf & {
-    else: (...elseInstrs: WasmInstruction[]) => WasmIf;
+  then(...thenInstrs: WasmInstruction[]): WasmIf & {
+    else(...elseInstrs: WasmInstruction[]): WasmIf;
   };
 };
 
 type WasmFuncTypeHelper = {
-  params: (params: WasmLocals) => WasmFuncTypeHelper;
-  locals: (locals: WasmLocals) => WasmFuncTypeHelper;
-  results: (...results: WasmNumericType[]) => WasmFuncTypeHelper;
+  params(params: Record<string, BuilderAsType>): WasmFuncTypeHelper;
+  locals(locals: Record<string, BuilderAsType>): WasmFuncTypeHelper;
+  results(...results: BuilderAsType[]): WasmFuncTypeHelper;
 
-  body: (...instrs: Exclude<WasmInstruction, WasmFunction>[]) => WasmFunction;
+  body(...instrs: Exclude<WasmInstruction, WasmFunction>[]): WasmFunction;
 };
 
 type WasmModuleHelper = {
-  imports: (...imports: WasmImport[]) => WasmModuleHelper;
-  globals: (...globals: WasmGlobal[]) => WasmModuleHelper;
-  datas: (...datas: WasmData[]) => WasmModuleHelper;
-  funcs: (...funcs: WasmFunction[]) => WasmModuleHelper;
-  startFunc: (startFunc: string) => Omit<WasmModuleHelper, "startFunc">;
-  exports: (...exports: WasmExport[]) => WasmModuleHelper;
+  imports(...imports: WasmImport[]): WasmModuleHelper;
+  globals(...globals: WasmGlobal[]): WasmModuleHelper;
+  datas(...datas: WasmData[]): WasmModuleHelper;
+  funcs(...funcs: WasmFunction[]): WasmModuleHelper;
+  startFunc(startFunc: string): Omit<WasmModuleHelper, "startFunc">;
+  exports(...exports: WasmExport[]): WasmModuleHelper;
 
-  build: () => WasmModule;
+  build(): WasmModule;
 };
 
-const wasm = {
-  block: (
-    label?: string,
-    blockType: WasmBlockType = {
+const wasmBlockLoop =
+  <T extends "block" | "loop">(type: T) =>
+  (
+    label?: string
+  ): WasmBlockTypeHelper<T extends "block" ? WasmBlock : WasmLoop> => {
+    const blockType: Required<WasmBlockType> = {
       paramTypes: [],
       resultTypes: [],
       localTypes: [],
-    }
-  ): WasmBlockTypeHelper<WasmBlock> => ({
-    params: (...params) =>
-      wasm.block(label, {
-        ...blockType,
-        paramTypes: [...blockType.paramTypes, ...params],
-      }),
-    locals: (...locals) =>
-      wasm.block(label, {
-        ...blockType,
-        localTypes: [...(blockType.localTypes ?? []), ...locals],
-      }),
-    results: (...results) =>
-      wasm.block(label, {
-        ...blockType,
-        resultTypes: [...blockType.resultTypes, ...results],
-      }),
+    };
 
-    body: (...instrs) => ({
-      instr: "block",
-      blockType,
-      body: instrs,
-    }),
-  }),
-  loop: (
-    label?: string,
-    blockType: WasmBlockType = {
-      paramTypes: [],
-      resultTypes: [],
-      localTypes: [],
-    }
-  ): WasmBlockTypeHelper<WasmLoop> => ({
-    params: (...params) =>
-      wasm.loop(label, {
-        ...blockType,
-        paramTypes: [...blockType.paramTypes, ...params],
-      }),
-    locals: (...locals) =>
-      wasm.loop(label, {
-        ...blockType,
-        localTypes: [...(blockType.localTypes ?? []), ...locals],
-      }),
-    results: (...results) =>
-      wasm.loop(label, {
-        ...blockType,
-        resultTypes: [...blockType.resultTypes, ...results],
-      }),
-
-    body: (...instrs) => ({
-      instr: "loop",
-      blockType,
-      body: instrs,
-    }),
-  }),
-  if: (
-    predicate: WasmNumeric,
-    label?: string,
-    blockType: WasmBlockType = {
-      paramTypes: [],
-      resultTypes: [],
-      localTypes: [],
-    }
-  ): WasmIfBlockTypeHelper => ({
-    params: (...params) =>
-      wasm.if(predicate, label, {
-        ...blockType,
-        paramTypes: [...blockType.paramTypes, ...params],
-      }),
-    locals: (...locals) =>
-      wasm.if(predicate, label, {
-        ...blockType,
-        localTypes: [...(blockType.localTypes ?? []), ...locals],
-      }),
-    results: (...results) =>
-      wasm.if(predicate, label, {
-        ...blockType,
-        resultTypes: [...blockType.resultTypes, ...results],
-      }),
-
-    then: (...thenInstrs) => ({
-      instr: "if",
-      predicate,
-      label,
-      blockType,
-      thenBody: thenInstrs,
-
-      else(...elseInstrs) {
-        return { ...this, elseBody: elseInstrs };
+    return {
+      params(...params) {
+        blockType.paramTypes.push(...params.map((p) => p["~type"]));
+        return this;
       },
-    }),
-  }),
+      results(...results) {
+        blockType.resultTypes.push(...results.map((r) => r["~type"]));
+        return this;
+      },
+      locals(...locals) {
+        blockType.localTypes.push(...locals.map((l) => l["~type"]));
+        return this;
+      },
+
+      body(...instrs) {
+        return {
+          instr: type,
+          label,
+          blockType,
+          body: instrs,
+        } as T extends "block" ? WasmBlock : WasmLoop;
+      },
+    };
+  };
+
+const wasm = {
+  block: wasmBlockLoop("block"),
+  loop: wasmBlockLoop("loop"),
+  if: (predicate: WasmNumeric, label?: string): WasmIfBlockTypeHelper => {
+    const blockType: Required<WasmBlockType> = {
+      paramTypes: [],
+      resultTypes: [],
+      localTypes: [],
+    };
+
+    return {
+      params(...params) {
+        blockType.paramTypes.push(...params.map((p) => p["~type"]));
+        return this;
+      },
+      locals(...locals) {
+        blockType.localTypes.push(...locals.map((l) => l["~type"]));
+        return this;
+      },
+      results(...results) {
+        blockType.resultTypes.push(...results.map((r) => r["~type"]));
+        return this;
+      },
+      then(...thenInstrs) {
+        return {
+          instr: "if",
+          predicate,
+          label,
+          blockType,
+          thenBody: thenInstrs,
+
+          else(...elseInstrs) {
+            return { ...this, elseBody: elseInstrs };
+          },
+        };
+      },
+    };
+  },
   drop: (value?: WasmInstruction): WasmDrop => ({ instr: "drop", value }),
   unreachable: (): WasmUnreachable => ({ instr: "unreachable" }),
   br: (label: string): WasmBr => ({ instr: "br", label }),
@@ -762,14 +751,12 @@ const wasm = {
       externType: { type: "memory", limits: { initial, maximum } },
     }),
 
-    func(
-      name: string,
-      funcType: WasmBlockType = {
+    func(name: string) {
+      const funcType: Required<WasmBlockType> = {
         paramTypes: [],
         resultTypes: [],
         localTypes: [],
-      }
-    ) {
+      };
       const importInstr: WasmImport = {
         instr: "import",
         moduleName,
@@ -780,29 +767,18 @@ const wasm = {
       return {
         ...importInstr,
 
-        params: (...params: WasmNumericType[]) => ({
-          ...importInstr,
-          ...this.func(name, {
-            ...funcType,
-            paramTypes: [...funcType.paramTypes, ...params],
-          }),
-        }),
-
-        locals: (...locals: WasmNumericType[]) => ({
-          ...importInstr,
-          ...this.func(name, {
-            ...funcType,
-            localTypes: [...(funcType.localTypes ?? []), ...locals],
-          }),
-        }),
-
-        results: (...results: WasmNumericType[]) => ({
-          ...importInstr,
-          ...this.func(name, {
-            ...funcType,
-            resultTypes: [...funcType.resultTypes, ...results],
-          }),
-        }),
+        params(...params: BuilderAsType[]) {
+          funcType.paramTypes.push(...params.map((p) => p["~type"]));
+          return importInstr;
+        },
+        locals(...locals: BuilderAsType[]) {
+          funcType.localTypes.push(...locals.map((l) => l["~type"]));
+          return importInstr;
+        },
+        results(...results: BuilderAsType[]) {
+          funcType.resultTypes.push(...results.map((r) => r["~type"]));
+          return importInstr;
+        },
       };
     },
   }),
@@ -819,89 +795,68 @@ const wasm = {
     }),
   }),
 
-  func(
-    name: string,
-    funcType: WasmFuncType = {
+  func(name: string): WasmFuncTypeHelper {
+    const funcType: WasmFuncType = {
       paramTypes: {},
       resultTypes: [],
       localTypes: {},
-    }
-  ): WasmFuncTypeHelper {
+    };
     return {
-      params: (params) =>
-        this.func(name, {
-          ...funcType,
-          paramTypes: { ...funcType.paramTypes, ...params },
-        }),
-      locals: (locals) =>
-        this.func(name, {
-          ...funcType,
-          localTypes: { ...funcType.localTypes, ...locals },
-        }),
-      results: (...results) =>
-        this.func(name, {
-          ...funcType,
-          resultTypes: [...funcType.resultTypes, ...results],
-        }),
+      params(params) {
+        for (const p in params) funcType.paramTypes[p] = params[p]["~type"];
+        return this;
+      },
+      locals(locals) {
+        for (const l in locals) funcType.localTypes[l] = locals[l]["~type"];
+        return this;
+      },
+      results(...results) {
+        funcType.resultTypes.push(...results.map((r) => r["~type"]));
+        return this;
+      },
 
-      body: (...instrs) => ({
-        instr: "func",
-        name,
-        funcType,
-        body: instrs,
-      }),
+      body: (...instrs) => ({ instr: "func", name, funcType, body: instrs }),
     };
   },
 
-  module(
-    definitions: Omit<WasmModule, "instr"> = {
+  module(): WasmModuleHelper {
+    const definitions: Omit<WasmModule, "instr"> = {
       imports: [],
       globals: [],
       datas: [],
       funcs: [],
       startFunc: undefined,
       exports: [],
-    }
-  ): WasmModuleHelper {
+    };
     return {
-      imports: (...imports) =>
-        this.module({
-          ...definitions,
-          imports: [...definitions.imports, ...imports],
-        }),
-      globals: (...globals) =>
-        this.module({
-          ...definitions,
-          globals: [...definitions.globals, ...globals],
-        }),
-      datas: (...datas) =>
-        this.module({
-          ...definitions,
-          datas: [...definitions.datas, ...datas],
-        }),
-      funcs: (...funcs) =>
-        this.module({
-          ...definitions,
-          funcs: [...definitions.funcs, ...funcs],
-        }),
-      startFunc: (startFunc) =>
-        this.module({
-          ...definitions,
-          startFunc: {
-            instr: "start",
-            functionName: startFunc,
-          },
-        }),
-      exports: (...exports) =>
-        this.module({
-          ...definitions,
-          exports: [...definitions.exports, ...exports],
-        }),
+      imports(...imports) {
+        definitions.imports.push(...imports);
+        return this;
+      },
+      globals(...globals) {
+        definitions.globals.push(...globals);
+        return this;
+      },
+      datas(...datas) {
+        definitions.datas.push(...datas);
+        return this;
+      },
+      funcs(...funcs) {
+        definitions.funcs.push(...funcs);
+        return this;
+      },
+      startFunc(startFunc) {
+        definitions.startFunc = { instr: "start", functionName: startFunc };
+        return this;
+      },
+      exports(...exports) {
+        definitions.exports.push(...exports);
+        return this;
+      },
 
-      build: () => ({
-        instr: "module",
-        ...definitions,
-      }),
+      build() {
+        return { instr: "module", ...definitions };
+      },
     };
   },
 };

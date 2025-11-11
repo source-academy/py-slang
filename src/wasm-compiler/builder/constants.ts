@@ -12,23 +12,23 @@ import { f64, global, i32, i64, local, memory, wasm } from "./typed-builder";
 
 export const makeIntFunc = wasm
   .func(MAKE_INT_FX)
-  .params({ $value: "i64" })
-  .results("i32", "i64")
+  .params({ $value: i64 })
+  .results(i32, i64)
   .body(i32.const(TYPE_TAG.INT), local.get("$value"));
 
 export const makeFloatFunc = wasm
   .func(MAKE_FLOAT_FX)
-  .params({ $value: "f64" })
-  .results("i32", "i64")
+  .params({ $value: f64 })
+  .results(i32, i64)
   .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get("$value")));
 
 export const makeComplexFunc = wasm
   .func(MAKE_COMPLEX_FX)
   .params({
-    $real: "f64",
-    $img: "f64",
+    $real: f64,
+    $img: f64,
   })
-  .results("i32", "i64")
+  .results(i32, i64)
   .body(
     f64.store(global.get(HEAP_PTR), local.get("$real")),
     f64.store(i32.add(global.get(HEAP_PTR), i32.const(8)), local.get("$img")),
@@ -41,29 +41,31 @@ export const makeComplexFunc = wasm
 
 export const makeStringFunc = wasm
   .func(MAKE_STRING_FX)
-  .params({ $ptr: "i32", $len: "i32" })
-  .results("i32", "i64")
+  .params({ $ptr: i32, $len: i32 })
+  .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.STRING),
     i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len")))
   );
 
+wasm.if().locals().results().then().else();
+
 export const arithmeticOpFunc = wasm
   .func(ARITHMETIC_OP_FX)
   .params({
-    $x_tag: "i32",
-    $x_val: "i64",
-    $y_tag: "i32",
-    $y_val: "i64",
-    $op: "i32",
+    $x_tag: i32,
+    $x_val: i64,
+    $y_tag: i32,
+    $y_val: i64,
+    $op: i32,
   })
-  .results("i32", "i64")
+  .results(i32, i64)
   .locals({
-    $a: "f64",
-    $b: "f64",
-    $c: "f64",
-    $d: "f64",
-    $denom: "f64",
+    $a: f64,
+    $b: f64,
+    $c: f64,
+    $d: f64,
+    $denom: f64,
   })
   .body(
     wasm
@@ -246,3 +248,50 @@ export const arithmeticOpFunc = wasm
 
     wasm.unreachable()
   );
+
+const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
+const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
+
+const getLexAddressFunction = wasm
+  .func(GET_LEX_ADDR_FUNC)
+  .params({ $depth: i32, $index: i32 })
+  .results(i32, i64)
+  .locals({ $env: i32, $tag: i32 });
+
+// const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (result i32 i64) (local $env i32) (local $tag i32)
+//   (local.set $env (global.get ${CURR_ENV}))
+
+//   (loop $loop
+//     (i32.eqz (local.get $depth)) (if (then
+//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load) (local.set $tag)
+//       (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then (call $_log_error (i32.const ${ERROR_MAP.UNBOUND[0]})) unreachable))
+//       (local.get $tag)
+//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
+//       (return)
+//     ))
+
+//     (local.get $env) (i32.load) (local.set $env)
+//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+//     (br $loop)
+//   )
+
+//   unreachable
+// )`;
+
+// const setLexAddressFunction = `(func ${SET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (param $tag i32) (param $payload i64) (local $env i32)
+//   (local.set $env (global.get ${CURR_ENV}))
+
+//   (loop $loop
+//     (i32.eqz (local.get $depth)) (if (then
+//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $tag) (i32.store)
+//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $payload) (i64.store)
+//       (return)
+//     ))
+
+//     (local.get $env) (i32.load) (local.set $env)
+//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+//     (br $loop)
+//   )
+
+//   unreachable
+// )`;
