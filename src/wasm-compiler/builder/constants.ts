@@ -27,34 +27,27 @@ const ERROR_MAP = {
   TAIL_NOT_PAIR: [9, "Accessing the tail of a non-pair value."],
 } as const;
 
-const MAKE_INT_FX = "$_make_int";
-const MAKE_FLOAT_FX = "$_make_float";
-const MAKE_COMPLEX_FX = "$_make_complex";
-const MAKE_BOOL_FX = "$_make_bool";
-const MAKE_STRING_FX = "$_make_string";
-const MAKE_CLOSURE_FX = "$_make_closure";
-const MAKE_NONE_FX = "$_make_none";
-
 const TAG_SUFFIX = "_tag";
 const PAYLOAD_SUFFIX = "_payload";
 
-const HEAP_PTR = "$_heap_pointer";
-const CURR_ENV = "$_current_env";
+export const HEAP_PTR = "$_heap_pointer";
+export const CURR_ENV = "$_current_env";
 
-const makeIntFunc = wasm
-  .func(MAKE_INT_FX)
+// boxing functions
+export const MAKE_INT_FX = wasm
+  .func("$_make_int")
   .params({ $value: i64 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.INT), local.get("$value"));
 
-const makeFloatFunc = wasm
-  .func(MAKE_FLOAT_FX)
+export const MAKE_FLOAT_FX = wasm
+  .func("$_make_float")
   .params({ $value: f64 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get("$value")));
 
-const makeComplexFunc = wasm
-  .func(MAKE_COMPLEX_FX)
+export const MAKE_COMPLEX_FX = wasm
+  .func("$_make_complex")
   .params({ $real: f64, $img: f64 })
   .results(i32, i64)
   .body(
@@ -67,15 +60,15 @@ const makeComplexFunc = wasm
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16)))
   );
 
-const makeBoolFunc = wasm
-  .func(MAKE_BOOL_FX)
+export const MAKE_BOOL_FX = wasm
+  .func("$_make_bool")
   .params({ $value: i32 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.BOOL), i64.extend_i32_u(local.get("$value")));
 
 // upper 32: pointer; lower 32: length
-const makeStringFunc = wasm
-  .func(MAKE_STRING_FX)
+export const MAKE_STRING_FX = wasm
+  .func("$_make_string")
   .params({ $ptr: i32, $len: i32 })
   .results(i32, i64)
   .body(
@@ -84,8 +77,8 @@ const makeStringFunc = wasm
   );
 
 // upper 16: tag; upperMid 8: arity; lowerMid 8: envSize; lower 32: parentEnv
-const makeClosureFunc = wasm
-  .func(MAKE_CLOSURE_FX)
+export const MAKE_CLOSURE_FX = wasm
+  .func("$_make_closure")
   .params({ $tag: i32, $arity: i32, $env_size: i32, $parent_env: i32 })
   .results(i32, i64)
   .body(
@@ -103,17 +96,11 @@ const makeClosureFunc = wasm
     )
   );
 
-const makeNoneFunc = wasm.func(MAKE_NONE_FX).results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
+export const MAKE_NONE_FX = wasm.func("$_make_none").results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
 
 // pair-related functions
-const MAKE_PAIR_FX = "$_make_pair";
-const GET_PAIR_HEAD_FX = "$_get_pair_head";
-const GET_PAIR_TAIL_FX = "$_get_pair_tail";
-const SET_PAIR_HEAD_FX = "$_set_pair_head";
-const SET_PAIR_TAIL_FX = "$_set_pair_tail";
-
-const makePairFunc = wasm
-  .func(MAKE_PAIR_FX)
+export const MAKE_PAIR_FX = wasm
+  .func("$_make_pair")
   .params({ $tag1: i32, $val1: i64, $tag2: i32, $val2: i64 })
   .results(i32, i64)
   .body(
@@ -128,8 +115,8 @@ const makePairFunc = wasm
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24)))
   );
 
-const getPairHeadFunc = wasm
-  .func(GET_PAIR_HEAD_FX)
+export const GET_PAIR_HEAD_FX = wasm
+  .func("$_get_pair_head")
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
   .body(
@@ -141,8 +128,8 @@ const getPairHeadFunc = wasm
     i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(4)))
   );
 
-const getPairTailFunc = wasm
-  .func(GET_PAIR_TAIL_FX)
+export const GET_PAIR_TAIL_FX = wasm
+  .func("$_get_pair_tail")
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
   .body(
@@ -154,8 +141,8 @@ const getPairTailFunc = wasm
     i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(16)))
   );
 
-const setPairHeadFunc = wasm
-  .func(SET_PAIR_HEAD_FX)
+export const SET_PAIR_HEAD_FX = wasm
+  .func("$_set_pair_head")
   .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
   .body(
     wasm
@@ -166,8 +153,8 @@ const setPairHeadFunc = wasm
     i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(4)), local.get("$val"))
   );
 
-const setPairTailFunc = wasm
-  .func(SET_PAIR_TAIL_FX)
+export const SET_PAIR_TAIL_FX = wasm
+  .func("$_set_pair_tail")
   .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
   .body(
     wasm
@@ -179,9 +166,8 @@ const setPairTailFunc = wasm
   );
 
 // unary operation functions
-const NEG_FUNC_NAME = "$_py_neg";
-const negFunc = wasm
-  .func(NEG_FUNC_NAME)
+export const NEG_FUNC = wasm
+  .func("$_py_neg")
   .params({ $x_tag: i32, $x_val: i64 })
   .results(i32, i64)
   .body(
@@ -212,12 +198,10 @@ const negFunc = wasm
     wasm.unreachable()
   );
 
+export const ARITHMETIC_OP_TAG = { ADD: 0, SUB: 1, MUL: 2, DIV: 3 } as const;
 // binary operation function
-const ARITHMETIC_OP_FX = "$_py_arith_op";
-const ARITHMETIC_OP_TAG = { ADD: 0, SUB: 1, MUL: 2, DIV: 3 } as const;
-
-const arithmeticOpFunc = wasm
-  .func(ARITHMETIC_OP_FX)
+export const ARITHMETIC_OP_FX = wasm
+  .func("$_py_arith_op")
   .params({ $x_tag: i32, $x_val: i64, $y_tag: i32, $y_val: i64, $op: i32 })
   .results(i32, i64)
   .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $denom: f64 })
@@ -400,9 +384,7 @@ const arithmeticOpFunc = wasm
     wasm.unreachable()
   );
 
-const STRING_COMPARE_FX = "$_py_string_cmp";
-const COMPARISON_OP_FX = "$_py_compare_op";
-const COMPARISON_OP_TAG = {
+export const COMPARISON_OP_TAG = {
   EQ: 0,
   NEQ: 1,
   LT: 2,
@@ -410,9 +392,9 @@ const COMPARISON_OP_TAG = {
   GT: 4,
   GTE: 5,
 } as const;
-
-const stringCmpFunc = wasm
-  .func(STRING_COMPARE_FX)
+// comparison function
+export const STRING_COMPARE_FX = wasm
+  .func("$_py_string_cmp")
   .params({ $x_ptr: i32, $x_len: i32, $y_ptr: i32, $y_len: i32 })
   .results(i32)
   .locals({ $i: i32, $min_len: i32, $x_char: i32, $y_char: i32, $result: i32 })
@@ -440,8 +422,8 @@ const stringCmpFunc = wasm
     wasm.return(i32.sub(local.get("$y_len"), local.get("$x_len")))
   );
 
-const comparisonOpFunc = wasm
-  .func(COMPARISON_OP_FX)
+export const COMPARISON_OP_FX = wasm
+  .func("$_py_compare_op")
   .params({ $x_tag: i32, $x_val: i64, $y_tag: i32, $y_val: i64, $op: i32 })
   .results(i32, i64)
   .locals({ $a: f64, $b: f64, $c: f64, $d: f64 })
@@ -648,9 +630,8 @@ const comparisonOpFunc = wasm
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
 // TODO: memory.fill with unbound tag instead of loop
-const ALLOC_ENV_FUNC = "$_alloc_env";
-const allocEnvFunc = wasm
-  .func(ALLOC_ENV_FUNC)
+export const ALLOC_ENV_FUNC = wasm
+  .func("$_alloc_env")
   .params({ $size: i32, $parent: i32 })
   .body(
     global.set(CURR_ENV, global.get(HEAP_PTR)),
@@ -671,9 +652,8 @@ const allocEnvFunc = wasm
       )
   );
 
-const PRE_APPLY_FUNC = "$_pre_apply";
-const preApplyFunc = wasm
-  .func(PRE_APPLY_FUNC)
+export const PRE_APPLY_FUNC = wasm
+  .func("$_pre_apply")
   .params({ $tag: i32, $val: i64, $arity: i32 })
   .results(i32, i64)
   .body(
@@ -697,10 +677,9 @@ const preApplyFunc = wasm
     local.get("$val")
   );
 
-const APPLY_FUNC = "$_apply";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
-    .func(APPLY_FUNC)
+    .func("$_apply")
     .params({ $return_env: i32, $tag: i32, $val: i64 })
     .results(i32, i64)
     .body(
@@ -714,11 +693,8 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       )
     );
 
-const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
-const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
-
-const getLexAddressFunction = wasm
-  .func(GET_LEX_ADDR_FUNC)
+export const GET_LEX_ADDR_FUNC = wasm
+  .func("$_get_lex_addr")
   .params({ $depth: i32, $index: i32 })
   .results(i32, i64)
   .locals({ $env: i32, $tag: i32 })
@@ -749,8 +725,8 @@ const getLexAddressFunction = wasm
     wasm.unreachable()
   );
 
-const setLexAddressFunction = wasm
-  .func(SET_LEX_ADDR_FUNC)
+export const SET_LEX_ADDR_FUNC = wasm
+  .func("$_set_lex_addr")
   .params({ $depth: i32, $index: i32, $tag: i32, $payload: i64 })
   .locals({ $env: i32 })
   .body(
@@ -790,9 +766,8 @@ export const importedLogs = [
   wasm.import("console", "log_none").func("$_log_none"),
 ];
 
-const LOGGING_FX = "$_log";
-const logFunc = wasm
-  .func(LOGGING_FX)
+export const LOG_FX = wasm
+  .func("$_log")
   .params({ $tag: i32, $value: i64 })
   .body(
     wasm
@@ -840,34 +815,11 @@ const logFunc = wasm
     wasm
       .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
       .then(
-        wasm.call(LOGGING_FX).args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
-        wasm.call(LOGGING_FX).args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
         wasm.return()
       ),
 
     wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
     wasm.unreachable()
   );
-
-export const NATIVE_FUNCTIONS = [
-  makeIntFunc,
-  makeFloatFunc,
-  makeComplexFunc,
-  makeBoolFunc,
-  makeStringFunc,
-  makeClosureFunc,
-  makeNoneFunc,
-  makePairFunc,
-  getPairHeadFunc,
-  getPairTailFunc,
-  setPairHeadFunc,
-  setPairTailFunc,
-  negFunc,
-  arithmeticOpFunc,
-  stringCmpFunc,
-  comparisonOpFunc,
-  allocEnvFunc,
-  preApplyFunc,
-  getLexAddressFunction,
-  setLexAddressFunction,
-];
