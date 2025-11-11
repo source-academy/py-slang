@@ -1,6 +1,4 @@
 import { f64, global, i32, i64, local, memory, wasm } from "wasm-util";
-import { WasmInstruction } from "wasm-util/src/types";
-import { ERROR_MAP } from "../constants";
 
 // tags
 const TYPE_TAG = {
@@ -31,20 +29,20 @@ const CURR_ENV = "$_current_env";
 
 const makeIntFunc = wasm
   .func(MAKE_INT_FX)
-  .params({ $value: "i64" })
-  .results("i32", "i64")
+  .params({ $value: i64 })
+  .results(i32, i64)
   .body(i32.const(TYPE_TAG.INT), local.get("$value"));
 
 const makeFloatFunc = wasm
   .func(MAKE_FLOAT_FX)
-  .params({ $value: "f64" })
-  .results("i32", "i64")
+  .params({ $value: f64 })
+  .results(i32, i64)
   .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get("$value")));
 
 const makeComplexFunc = wasm
   .func(MAKE_COMPLEX_FX)
-  .params({ $real: "f64", $img: "f64" })
-  .results("i32", "i64")
+  .params({ $real: f64, $img: f64 })
+  .results(i32, i64)
   .body(
     f64.store(global.get(HEAP_PTR), local.get("$real")),
     f64.store(i32.add(global.get(HEAP_PTR), i32.const(8)), local.get("$img")),
@@ -57,15 +55,15 @@ const makeComplexFunc = wasm
 
 const makeBoolFunc = wasm
   .func(MAKE_BOOL_FX)
-  .params({ $value: "i32" })
-  .results("i32", "i64")
+  .params({ $value: i32 })
+  .results(i32, i64)
   .body(i32.const(TYPE_TAG.BOOL), i64.extend_i32_u(local.get("$value")));
 
 // upper 32: pointer; lower 32: length
 const makeStringFunc = wasm
   .func(MAKE_STRING_FX)
-  .params({ $ptr: "i32", $len: "i32" })
-  .results("i32", "i64")
+  .params({ $ptr: i32, $len: i32 })
+  .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.STRING),
     i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len")))
@@ -74,13 +72,8 @@ const makeStringFunc = wasm
 // upper 16: tag; upperMid 8: arity; lowerMid 8: envSize; lower 32: parentEnv
 const makeClosureFunc = wasm
   .func(MAKE_CLOSURE_FX)
-  .params({
-    $tag: "i32",
-    $arity: "i32",
-    $env_size: "i32",
-    $parent_env: "i32",
-  })
-  .results("i32", "i64")
+  .params({ $tag: i32, $arity: i32, $env_size: i32, $parent_env: i32 })
+  .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.CLOSURE),
 
@@ -96,7 +89,7 @@ const makeClosureFunc = wasm
     )
   );
 
-const makeNoneFunc = wasm.func(MAKE_NONE_FX).results("i32", "i64").body(i32.const(TYPE_TAG.NONE), i64.const(0));
+const makeNoneFunc = wasm.func(MAKE_NONE_FX).results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
 
 // pair-related functions
 const MAKE_PAIR_FX = "$_make_pair";
@@ -107,13 +100,8 @@ const SET_PAIR_TAIL_FX = "$_set_pair_tail";
 
 const makePairFunc = wasm
   .func(MAKE_PAIR_FX)
-  .params({
-    $tag1: "i32",
-    $val1: "i64",
-    $tag2: "i32",
-    $val2: "i64",
-  })
-  .results("i32", "i64")
+  .params({ $tag1: i32, $val1: i64, $tag2: i32, $val2: i64 })
+  .results(i32, i64)
   .body(
     i32.store(global.get(HEAP_PTR), local.get("$tag1")),
     i64.store(i32.add(global.get(HEAP_PTR), i32.const(4)), local.get("$val1")),
@@ -128,8 +116,8 @@ const makePairFunc = wasm
 
 const getPairHeadFunc = wasm
   .func(GET_PAIR_HEAD_FX)
-  .params({ $tag: "i32", $val: "i64" })
-  .results("i32", "i64")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
@@ -141,8 +129,8 @@ const getPairHeadFunc = wasm
 
 const getPairTailFunc = wasm
   .func(GET_PAIR_TAIL_FX)
-  .params({ $tag: "i32", $val: "i64" })
-  .results("i32", "i64")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
@@ -154,12 +142,7 @@ const getPairTailFunc = wasm
 
 const setPairHeadFunc = wasm
   .func(SET_PAIR_HEAD_FX)
-  .params({
-    $pair_tag: "i32",
-    $pair_val: "i64",
-    $tag: "i32",
-    $val: "i64",
-  })
+  .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
   .body(
     wasm
       .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
@@ -171,12 +154,7 @@ const setPairHeadFunc = wasm
 
 const setPairTailFunc = wasm
   .func(SET_PAIR_TAIL_FX)
-  .params({
-    $pair_tag: "i32",
-    $pair_val: "i64",
-    $tag: "i32",
-    $val: "i64",
-  })
+  .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
   .body(
     wasm
       .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
@@ -191,8 +169,8 @@ const NEG_FUNC_NAME = "$_py_neg";
 
 const negFunc = wasm
   .func(NEG_FUNC_NAME)
-  .params({ $x_tag: "i32", $x_val: "i64" })
-  .results("i32", "i64")
+  .params({ $x_tag: i32, $x_val: i64 })
+  .results(i32, i64)
   .body(
     wasm
       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.INT)))
@@ -227,9 +205,9 @@ const ARITHMETIC_OP_TAG = { ADD: 0, SUB: 1, MUL: 2, DIV: 3 } as const;
 
 const arithmeticOpFunc = wasm
   .func(ARITHMETIC_OP_FX)
-  .params({ $x_tag: "i32", $x_val: "i64", $y_tag: "i32", $y_val: "i64", $op: "i32" })
-  .results("i32", "i64")
-  .locals({ $a: "f64", $b: "f64", $c: "f64", $d: "f64", $denom: "f64" })
+  .params({ $x_tag: i32, $x_val: i64, $y_tag: i32, $y_val: i64, $op: i32 })
+  .results(i32, i64)
+  .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $denom: f64 })
   .body(
     wasm
       .if(
@@ -422,9 +400,9 @@ const COMPARISON_OP_TAG = {
 
 const stringCmpFunc = wasm
   .func(STRING_COMPARE_FX)
-  .params({ $x_ptr: "i32", $x_len: "i32", $y_ptr: "i32", $y_len: "i32" })
-  .results("i32")
-  .locals({ $i: "i32", $min_len: "i32", $x_char: "i32", $y_char: "i32", $result: "i32" })
+  .params({ $x_ptr: i32, $x_len: i32, $y_ptr: i32, $y_len: i32 })
+  .results(i32)
+  .locals({ $i: i32, $min_len: i32, $x_char: i32, $y_char: i32, $result: i32 })
   .body(
     local.set(
       "$min_len",
@@ -451,9 +429,9 @@ const stringCmpFunc = wasm
 
 const comparisonOpFunc = wasm
   .func(COMPARISON_OP_FX)
-  .params({ $x_tag: "i32", $x_val: "i64", $y_tag: "i32", $y_val: "i64", $op: "i32" })
-  .results("i32", "i64")
-  .locals({ $a: "f64", $b: "f64", $c: "f64", $d: "f64" })
+  .params({ $x_tag: i32, $x_val: i64, $y_tag: i32, $y_val: i64, $op: i32 })
+  .results(i32, i64)
+  .locals({ $a: f64, $b: f64, $c: f64, $d: f64 })
   .body(
     // if both are strings
     wasm
@@ -659,7 +637,7 @@ const comparisonOpFunc = wasm
 const ALLOC_ENV_FUNC = "$_alloc_env";
 const allocEnvFunc = wasm
   .func(ALLOC_ENV_FUNC)
-  .params({ $size: "i32", $parent: "i32" })
+  .params({ $size: i32, $parent: i32 })
   .body(
     global.set(CURR_ENV, global.get(HEAP_PTR)),
     i32.store(global.get(HEAP_PTR), local.get("$parent")),
@@ -682,8 +660,8 @@ const allocEnvFunc = wasm
 const PRE_APPLY_FUNC = "$_pre_apply";
 const preApplyFunc = wasm
   .func(PRE_APPLY_FUNC)
-  .params({ $tag: "i32", $val: "i64", $arity: "i32" })
-  .results("i32", "i64")
+  .params({ $tag: i32, $val: i64, $arity: i32 })
+  .results(i32, i64)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
@@ -709,8 +687,8 @@ const APPLY_FUNC = "$_apply";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FUNC)
-    .params({ $return_env: "i32", $tag: "i32", $val: "i64" })
-    .results("i32", "i64")
+    .params({ $return_env: i32, $tag: i32, $val: i64 })
+    .results(i32, i64)
     .body(
       ...wasm.buildBrTableBlocks(
         wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
@@ -741,3 +719,50 @@ export const NATIVE_FUNCTIONS = [
   comparisonOpFunc,
   allocEnvFunc,
 ];
+
+const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
+const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
+
+const getLexAddressFunction = wasm
+  .func(GET_LEX_ADDR_FUNC)
+  .params({ $depth: i32, $index: i32 })
+  .results(i32, i64)
+  .locals({ $env: i32, $tag: i32 });
+
+// const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (result i32 i64) (local $env i32) (local $tag i32)
+//   (local.set $env (global.get ${CURR_ENV}))
+
+//   (loop $loop
+//     (i32.eqz (local.get $depth)) (if (then
+//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load) (local.set $tag)
+//       (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then (call $_log_error (i32.const ${ERROR_MAP.UNBOUND[0]})) unreachable))
+//       (local.get $tag)
+//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
+//       (return)
+//     ))
+
+//     (local.get $env) (i32.load) (local.set $env)
+//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+//     (br $loop)
+//   )
+
+//   unreachable
+// )`;
+
+// const setLexAddressFunction = `(func ${SET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (param $tag i32) (param $payload i64) (local $env i32)
+//   (local.set $env (global.get ${CURR_ENV}))
+
+//   (loop $loop
+//     (i32.eqz (local.get $depth)) (if (then
+//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $tag) (i32.store)
+//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $payload) (i64.store)
+//       (return)
+//     ))
+
+//     (local.get $env) (i32.load) (local.set $env)
+//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
+//     (br $loop)
+//   )
+
+//   unreachable
+// )`;
