@@ -1,4 +1,5 @@
 import { f64, global, i32, i64, local, memory, wasm } from "wasm-util";
+import { WasmInstruction } from "wasm-util/src/types";
 import { ERROR_MAP } from "../constants";
 
 // tags
@@ -703,6 +704,23 @@ const preApplyFunc = wasm
     local.get("$tag"),
     local.get("$val")
   );
+
+const APPLY_FUNC = "$_apply";
+export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
+  wasm
+    .func(APPLY_FUNC)
+    .params({ $return_env: "i32", $tag: "i32", $val: "i64" })
+    .results("i32", "i64")
+    .body(
+      ...wasm.buildBrTableBlocks(
+        wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
+        ...bodies.map((body) => [
+          wasm
+            .block()
+            .body(...body, wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get("$return_env")), wasm.return()),
+        ])
+      )
+    );
 
 export const NATIVE_FUNCTIONS = [
   makeIntFunc,
