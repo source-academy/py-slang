@@ -1,4 +1,5 @@
 import { f64, global, i32, i64, local, memory, wasm } from "wasm-util";
+import { WasmInstruction } from "wasm-util/src/types";
 
 // tags
 const TYPE_TAG = {
@@ -11,6 +12,19 @@ const TYPE_TAG = {
   NONE: 6,
   UNBOUND: 7,
   PAIR: 8,
+} as const;
+
+const ERROR_MAP = {
+  NEG_NOT_SUPPORT: [0, "Unary minus operator used on unsupported operand."],
+  LOG_UNKNOWN_TYPE: [1, "Calling log on an unknown runtime type."],
+  ARITH_OP_UNKNOWN_TYPE: [2, "Calling an arithmetic operation on an unsupported runtime type."],
+  COMPLEX_COMPARISON: [3, "Using an unsupported comparison operator on complex type."],
+  COMPARE_OP_UNKNOWN_TYPE: [4, "Calling a comparison operation on an unsupported runtime type."],
+  CALL_NOT_FUNC: [5, "Calling a non-function value."],
+  FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
+  UNBOUND: [7, "Accessing an unbound value."],
+  HEAD_NOT_PAIR: [8, "Accessing the head of a non-pair value."],
+  TAIL_NOT_PAIR: [9, "Accessing the tail of a non-pair value."],
 } as const;
 
 const MAKE_INT_FX = "$_make_int";
@@ -166,7 +180,6 @@ const setPairTailFunc = wasm
 
 // unary operation functions
 const NEG_FUNC_NAME = "$_py_neg";
-
 const negFunc = wasm
   .func(NEG_FUNC_NAME)
   .params({ $x_tag: i32, $x_val: i64 })
@@ -634,6 +647,7 @@ const comparisonOpFunc = wasm
   );
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
+// TODO: memory.fill with unbound tag instead of loop
 const ALLOC_ENV_FUNC = "$_alloc_env";
 const allocEnvFunc = wasm
   .func(ALLOC_ENV_FUNC)
@@ -700,6 +714,141 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       )
     );
 
+const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
+const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
+
+const getLexAddressFunction = wasm
+  .func(GET_LEX_ADDR_FUNC)
+  .params({ $depth: i32, $index: i32 })
+  .results(i32, i64)
+  .locals({ $env: i32, $tag: i32 })
+  .body(
+    local.set("$env", global.get(CURR_ENV)),
+
+    wasm.loop("$loop").body(
+      wasm.if(i32.eqz(local.get("$depth"))).then(
+        local.set(
+          "$tag",
+          i32.load(i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))))
+        ),
+        wasm
+          .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.UNBOUND)))
+          .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.UNBOUND[0])), wasm.unreachable()),
+
+        wasm.return(
+          local.get("$tag"),
+          i64.load(i32.add(i32.add(local.get("$env"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12))))
+        )
+      ),
+
+      local.set("$env", i32.load(local.get("$env"))),
+      local.set("$depth", i32.sub(local.get("$depth"), i32.const(1))),
+      wasm.br("$loop")
+    ),
+
+    wasm.unreachable()
+  );
+
+const setLexAddressFunction = wasm
+  .func(SET_LEX_ADDR_FUNC)
+  .params({ $depth: i32, $index: i32, $tag: i32, $payload: i64 })
+  .locals({ $env: i32 })
+  .body(
+    local.set("$env", global.get(CURR_ENV)),
+
+    wasm.loop("$loop").body(
+      wasm
+        .if(i32.eqz(local.get("$depth")))
+        .then(
+          i32.store(
+            i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+            local.get("$tag")
+          ),
+          i64.store(
+            i32.add(i32.add(local.get("$env"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12))),
+            local.get("$payload")
+          ),
+          wasm.return()
+        ),
+
+      local.set("$env", i32.load(local.get("$env"))),
+      local.set("$depth", i32.sub(local.get("$depth"), i32.const(1))),
+      wasm.br("$loop")
+    ),
+
+    wasm.unreachable()
+  );
+
+// logging functions
+export const importedLogs = [
+  wasm.import("console", "log").func("$_log_int").params(i64),
+  wasm.import("console", "log").func("$_log_float").params(f64),
+  wasm.import("console", "log_complex").func("$_log_complex").params(f64, f64),
+  wasm.import("console", "log_bool").func("$_log_bool").params(i64),
+  wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
+  wasm.import("console", "log_closure").func("$_log_closure").params(i32, i32, i32, i32),
+  wasm.import("console", "log_none").func("$_log_none"),
+];
+
+const LOGGING_FX = "$_log";
+const logFunc = wasm
+  .func(LOGGING_FX)
+  .params({ $tag: i32, $value: i64 })
+  .body(
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_int").args(local.get("$value")), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.FLOAT)))
+      .then(wasm.call("$_log_float").args(f64.reinterpret_i64(local.get("$value"))), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
+      .then(
+        wasm
+          .call("$_log_complex")
+          .args(
+            f64.load(i32.wrap_i64(local.get("$value"))),
+            f64.load(i32.add(i32.wrap_i64(local.get("$value")), i32.const(8)))
+          ),
+        wasm.return()
+      ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.BOOL)))
+      .then(wasm.call("$_log_bool").args(local.get("$value")), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
+      .then(
+        wasm
+          .call("$_log_string")
+          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
+        wasm.return()
+      ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
+      .then(
+        wasm
+          .call("$_log_closure")
+          .args(
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(48))), i32.const(65535)),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(40))), i32.const(255)),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.const(255)),
+            i32.wrap_i64(local.get("$value"))
+          ),
+        wasm.return()
+      ),
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
+      .then(
+        wasm.call(LOGGING_FX).args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.call(LOGGING_FX).args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.return()
+      ),
+
+    wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
+    wasm.unreachable()
+  );
+
 export const NATIVE_FUNCTIONS = [
   makeIntFunc,
   makeFloatFunc,
@@ -718,51 +867,7 @@ export const NATIVE_FUNCTIONS = [
   stringCmpFunc,
   comparisonOpFunc,
   allocEnvFunc,
+  preApplyFunc,
+  getLexAddressFunction,
+  setLexAddressFunction,
 ];
-
-const GET_LEX_ADDR_FUNC = "$_get_lex_addr";
-const SET_LEX_ADDR_FUNC = "$_set_lex_addr";
-
-const getLexAddressFunction = wasm
-  .func(GET_LEX_ADDR_FUNC)
-  .params({ $depth: i32, $index: i32 })
-  .results(i32, i64)
-  .locals({ $env: i32, $tag: i32 });
-
-// const getLexAddressFunction = `(func ${GET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (result i32 i64) (local $env i32) (local $tag i32)
-//   (local.set $env (global.get ${CURR_ENV}))
-
-//   (loop $loop
-//     (i32.eqz (local.get $depth)) (if (then
-//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i32.load) (local.set $tag)
-//       (i32.eq (local.get $tag) (i32.const ${TYPE_TAG.UNBOUND})) (if (then (call $_log_error (i32.const ${ERROR_MAP.UNBOUND[0]})) unreachable))
-//       (local.get $tag)
-//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (i64.load)
-//       (return)
-//     ))
-
-//     (local.get $env) (i32.load) (local.set $env)
-//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
-//     (br $loop)
-//   )
-
-//   unreachable
-// )`;
-
-// const setLexAddressFunction = `(func ${SET_LEX_ADDR_FUNC} (param $depth i32) (param $index i32) (param $tag i32) (param $payload i64) (local $env i32)
-//   (local.set $env (global.get ${CURR_ENV}))
-
-//   (loop $loop
-//     (i32.eqz (local.get $depth)) (if (then
-//       (local.get $env) (i32.const 4) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $tag) (i32.store)
-//       (local.get $env) (i32.const 8) (i32.add) (local.get $index) (i32.const 12) (i32.mul) (i32.add) (local.get $payload) (i64.store)
-//       (return)
-//     ))
-
-//     (local.get $env) (i32.load) (local.set $env)
-//     (local.get $depth) (i32.const 1) (i32.sub) (local.set $depth)
-//     (br $loop)
-//   )
-
-//   unreachable
-// )`;
