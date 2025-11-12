@@ -165,6 +165,76 @@ export const SET_PAIR_TAIL_FX = wasm
     i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(16)), local.get("$val"))
   );
 
+// logging functions
+export const importedLogs = [
+  wasm.import("console", "log").func("$_log_int").params(i64),
+  wasm.import("console", "log").func("$_log_float").params(f64),
+  wasm.import("console", "log_complex").func("$_log_complex").params(f64, f64),
+  wasm.import("console", "log_bool").func("$_log_bool").params(i64),
+  wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
+  wasm.import("console", "log_closure").func("$_log_closure").params(i32, i32, i32, i32),
+  wasm.import("console", "log_none").func("$_log_none"),
+  wasm.import("console", "log_error").func("$_log_error").params(i32),
+];
+
+export const LOG_FX = wasm
+  .func("$_log")
+  .params({ $tag: i32, $value: i64 })
+  .body(
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_int").args(local.get("$value")), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.FLOAT)))
+      .then(wasm.call("$_log_float").args(f64.reinterpret_i64(local.get("$value"))), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
+      .then(
+        wasm
+          .call("$_log_complex")
+          .args(
+            f64.load(i32.wrap_i64(local.get("$value"))),
+            f64.load(i32.add(i32.wrap_i64(local.get("$value")), i32.const(8)))
+          ),
+        wasm.return()
+      ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.BOOL)))
+      .then(wasm.call("$_log_bool").args(local.get("$value")), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
+      .then(
+        wasm
+          .call("$_log_string")
+          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
+        wasm.return()
+      ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
+      .then(
+        wasm
+          .call("$_log_closure")
+          .args(
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(48))), i32.const(65535)),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(40))), i32.const(255)),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.const(255)),
+            i32.wrap_i64(local.get("$value"))
+          ),
+        wasm.return()
+      ),
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
+      .then(
+        wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm.return()
+      ),
+
+    wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
+    wasm.unreachable()
+  );
+
 // unary operation functions
 export const NEG_FX = wasm
   .func("$_py_neg")
@@ -687,9 +757,8 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       ...wasm.buildBrTableBlocks(
         wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
         ...bodies.map((body) => [
-          wasm
-            .block()
-            .body(...body, wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get("$return_env")), wasm.return()),
+          ...body,
+          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get("$return_env"))),
         ])
       )
     );
@@ -753,76 +822,6 @@ export const SET_LEX_ADDR_FX = wasm
       wasm.br("$loop")
     ),
 
-    wasm.unreachable()
-  );
-
-// logging functions
-export const importedLogs = [
-  wasm.import("console", "log").func("$_log_int").params(i64),
-  wasm.import("console", "log").func("$_log_float").params(f64),
-  wasm.import("console", "log_complex").func("$_log_complex").params(f64, f64),
-  wasm.import("console", "log_bool").func("$_log_bool").params(i64),
-  wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
-  wasm.import("console", "log_closure").func("$_log_closure").params(i32, i32, i32, i32),
-  wasm.import("console", "log_none").func("$_log_none"),
-  wasm.import("console", "log_error").func("$_log_error").params(i32),
-];
-
-export const LOG_FX = wasm
-  .func("$_log")
-  .params({ $tag: i32, $value: i64 })
-  .body(
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.INT)))
-      .then(wasm.call("$_log_int").args(local.get("$value")), wasm.return()),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.FLOAT)))
-      .then(wasm.call("$_log_float").args(f64.reinterpret_i64(local.get("$value"))), wasm.return()),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
-      .then(
-        wasm
-          .call("$_log_complex")
-          .args(
-            f64.load(i32.wrap_i64(local.get("$value"))),
-            f64.load(i32.add(i32.wrap_i64(local.get("$value")), i32.const(8)))
-          ),
-        wasm.return()
-      ),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.BOOL)))
-      .then(wasm.call("$_log_bool").args(local.get("$value")), wasm.return()),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
-      .then(
-        wasm
-          .call("$_log_string")
-          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
-        wasm.return()
-      ),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
-      .then(
-        wasm
-          .call("$_log_closure")
-          .args(
-            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(48))), i32.const(65535)),
-            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(40))), i32.const(255)),
-            i32.and(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.const(255)),
-            i32.wrap_i64(local.get("$value"))
-          ),
-        wasm.return()
-      ),
-    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(
-        wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
-        wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
-        wasm.return()
-      ),
-
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
     wasm.unreachable()
   );
 

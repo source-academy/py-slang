@@ -191,9 +191,10 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
         const tag = this.userFunctions.length;
         const newBody = [
           body,
-          ...(isVoid ? [wasm.call("$_log_none")] : []),
-          global.set(CURR_ENV, local.get("$return_env")),
-          wasm.return(),
+          wasm.return(
+            ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
+            global.set(CURR_ENV, local.get("$return_env"))
+          ),
         ];
         this.userFunctions.push(newBody);
 
