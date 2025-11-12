@@ -20,7 +20,7 @@ const ERROR_MAP = {
   ARITH_OP_UNKNOWN_TYPE: [2, "Calling an arithmetic operation on an unsupported runtime type."],
   COMPLEX_COMPARISON: [3, "Using an unsupported comparison operator on complex type."],
   COMPARE_OP_UNKNOWN_TYPE: [4, "Calling a comparison operation on an unsupported runtime type."],
-  CALL_NOT_FUNC: [5, "Calling a non-function value."],
+  CALL_NOT_FX: [5, "Calling a non-function value."],
   FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
   UNBOUND: [7, "Accessing an unbound value."],
   HEAD_NOT_PAIR: [8, "Accessing the head of a non-pair value."],
@@ -166,7 +166,7 @@ export const SET_PAIR_TAIL_FX = wasm
   );
 
 // unary operation functions
-export const NEG_FUNC = wasm
+export const NEG_FX = wasm
   .func("$_py_neg")
   .params({ $x_tag: i32, $x_val: i64 })
   .results(i32, i64)
@@ -630,7 +630,7 @@ export const COMPARISON_OP_FX = wasm
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
 // TODO: memory.fill with unbound tag instead of loop
-export const ALLOC_ENV_FUNC = wasm
+export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
   .params({ $size: i32, $parent: i32 })
   .body(
@@ -652,14 +652,14 @@ export const ALLOC_ENV_FUNC = wasm
       )
   );
 
-export const PRE_APPLY_FUNC = wasm
+export const PRE_APPLY_FX = wasm
   .func("$_pre_apply")
   .params({ $tag: i32, $val: i64, $arity: i32 })
   .results(i32, i64)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.CALL_NOT_FUNC[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.CALL_NOT_FX[0])), wasm.unreachable()),
 
     wasm
       .if(
@@ -668,7 +668,7 @@ export const PRE_APPLY_FUNC = wasm
       .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.FUNC_WRONG_ARITY[0])), wasm.unreachable()),
 
     wasm
-      .call(ALLOC_ENV_FUNC)
+      .call(ALLOC_ENV_FX)
       .args(
         i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
         i32.wrap_i64(local.get("$val"))
@@ -693,7 +693,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       )
     );
 
-export const GET_LEX_ADDR_FUNC = wasm
+export const GET_LEX_ADDR_FX = wasm
   .func("$_get_lex_addr")
   .params({ $depth: i32, $index: i32 })
   .results(i32, i64)
@@ -725,7 +725,7 @@ export const GET_LEX_ADDR_FUNC = wasm
     wasm.unreachable()
   );
 
-export const SET_LEX_ADDR_FUNC = wasm
+export const SET_LEX_ADDR_FX = wasm
   .func("$_set_lex_addr")
   .params({ $depth: i32, $index: i32, $tag: i32, $payload: i64 })
   .locals({ $env: i32 })
@@ -823,3 +823,27 @@ export const LOG_FX = wasm
     wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
     wasm.unreachable()
   );
+
+export const nativeFunctions = [
+  MAKE_INT_FX,
+  MAKE_FLOAT_FX,
+  MAKE_COMPLEX_FX,
+  MAKE_BOOL_FX,
+  MAKE_STRING_FX,
+  MAKE_CLOSURE_FX,
+  MAKE_NONE_FX,
+  MAKE_PAIR_FX,
+  GET_PAIR_HEAD_FX,
+  GET_PAIR_TAIL_FX,
+  SET_PAIR_HEAD_FX,
+  SET_PAIR_TAIL_FX,
+  NEG_FX,
+  ARITHMETIC_OP_FX,
+  STRING_COMPARE_FX,
+  COMPARISON_OP_FX,
+  ALLOC_ENV_FX,
+  PRE_APPLY_FX,
+  GET_LEX_ADDR_FX,
+  SET_LEX_ADDR_FX,
+  LOG_FX,
+];
