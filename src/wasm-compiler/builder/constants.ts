@@ -14,7 +14,7 @@ const TYPE_TAG = {
   PAIR: 8,
 } as const;
 
-const ERROR_MAP = {
+export const ERROR_MAP = {
   NEG_NOT_SUPPORT: [0, "Unary minus operator used on unsupported operand."],
   LOG_UNKNOWN_TYPE: [1, "Calling log on an unknown runtime type."],
   ARITH_OP_UNKNOWN_TYPE: [2, "Calling an arithmetic operation on an unsupported runtime type."],
@@ -677,9 +677,10 @@ export const PRE_APPLY_FX = wasm
     local.get("$val")
   );
 
+export const APPLY_FX_NAME = "$_apply";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
-    .func("$_apply")
+    .func(APPLY_FX_NAME)
     .params({ $return_env: i32, $tag: i32, $val: i64 })
     .results(i32, i64)
     .body(
@@ -764,6 +765,7 @@ export const importedLogs = [
   wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
   wasm.import("console", "log_closure").func("$_log_closure").params(i32, i32, i32, i32),
   wasm.import("console", "log_none").func("$_log_none"),
+  wasm.import("console", "log_error").func("$_log_error").params(i32),
 ];
 
 export const LOG_FX = wasm

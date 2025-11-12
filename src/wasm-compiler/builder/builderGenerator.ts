@@ -1,5 +1,5 @@
 import { i32, i64, wasm } from "wasm-util";
-import { global, local, mut } from "wasm-util/src/builder";
+import { f64, global, local, mut } from "wasm-util/src/builder";
 import { WasmCall, WasmInstruction } from "wasm-util/src/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
@@ -20,10 +20,21 @@ import {
 } from "../constants";
 import { BaseGenerator } from "../pyBaseGenerator";
 import {
+  APPLY_FX_NAME,
   applyFuncFactory,
+  COMPARISON_OP_FX,
+  COMPARISON_OP_TAG,
+  GET_LEX_ADDR_FX,
   importedLogs,
   LOG_FX,
+  MAKE_BOOL_FX,
+  MAKE_COMPLEX_FX,
+  MAKE_FLOAT_FX,
+  MAKE_NONE_FX,
+  MAKE_STRING_FX,
   nativeFunctions,
+  NEG_FX,
+  PRE_APPLY_FX,
   SET_LEX_ADDR_FX,
 } from "./constants";
 
@@ -206,9 +217,13 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
     const body = stmt.statements.map((s) => this.visit(s));
-    const implicitReturn =
-      body[body.length - 1].op === "drop" &&
-      body[body.length - 2].op === "drop";
+
+    // this matches the format of drop in visitSimpleExpr
+    const lastInstr = body.at(-1);
+    const undroppedInstr =
+      lastInstr?.op === "drop" &&
+      lastInstr.value?.op === "drop" &&
+      lastInstr.value.value;
 
     // collect all strings, native functions used and user functions
     const strings = this.strings.map(([str, add]) =>
@@ -234,7 +249,7 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
 
         wasm
           .func("$main")
-          .results(...(implicitReturn ? [i32, i64] : []))
+          .results(...(undroppedInstr ? [i32, i64] : []))
           .body(
             wasm
               .call(ALLOC_ENV_FUNC)
@@ -242,15 +257,16 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
 
             ...builtInFuncsDeclarations,
 
-            ...(implicitReturn ? body.slice(0, -2) : body)
+            ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body)
           )
       )
-      .exports(wasm.export("main").func("$main"));
+      .exports(wasm.export("main").func("$main"))
+      .build();
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): WasmInstruction {
     const expr = this.visit(stmt.expression);
-    return expr;
+    return wasm.drop(wasm.drop(expr));
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): WasmCall {
@@ -272,7 +288,169 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
     return wasm.call(ARITHMETIC_OP_FX).args(left, right, i32.const(opTag));
   }
 
+  visitCompareExpr(expr: ExprNS.Compare): WasmCall {
+    const left = this.visit(expr.left);
+    const right = this.visit(expr.right);
+
+    const type = expr.operator.type;
+    let opTag: number;
+    if (type === TokenType.DOUBLEEQUAL) opTag = COMPARISON_OP_TAG.EQ;
+    else if (type === TokenType.NOTEQUAL) opTag = COMPARISON_OP_TAG.NEQ;
+    else if (type === TokenType.LESS) opTag = COMPARISON_OP_TAG.LT;
+    else if (type === TokenType.LESSEQUAL) opTag = COMPARISON_OP_TAG.LTE;
+    else if (type === TokenType.GREATER) opTag = COMPARISON_OP_TAG.GT;
+    else if (type === TokenType.GREATEREQUAL) opTag = COMPARISON_OP_TAG.GTE;
+    else throw new Error(`Unsupported comparison operator: ${type}`);
+
+    return wasm.call(COMPARISON_OP_FX).args(left, right, i32.const(opTag));
+  }
+
+  visitUnaryExpr(expr: ExprNS.Unary): WasmCall {
+    const right = this.visit(expr.right);
+
+    if (expr.operator.type !== TokenType.MINUS) {
+      throw new Error(`Unsupported unary operator: ${expr.operator.type}`);
+    }
+
+    return wasm.call(NEG_FX).args(right);
+  }
+
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmCall {
-    return wasm.call(MAKE_INT_FX).args(i64.const(BigInt(expr.value)));
+    const value = BigInt(expr.value);
+    const min = BigInt("-9223372036854775808"); // -(2^63)
+    const max = BigInt("9223372036854775807"); // (2^63) - 1
+    if (value < min || value > max) {
+      throw new Error(`BigInt literal out of bounds: ${expr.value}`);
+    }
+
+    return wasm.call(MAKE_INT_FX).args(i64.const(value));
+  }
+
+  visitLiteralExpr(expr: ExprNS.Literal): WasmCall {
+    if (typeof expr.value === "number")
+      return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
+    else if (typeof expr.value === "boolean")
+      return wasm.call(MAKE_BOOL_FX).args(i32.const(expr.value ? 1 : 0));
+    else if (typeof expr.value === "string") {
+      const str = expr.value;
+      const len = str.length;
+      const toReturn = wasm
+        .call(MAKE_STRING_FX)
+        .args(i32.const(this.heapPointer), i32.const(len));
+
+      this.strings.push([str, this.heapPointer]);
+      this.heapPointer += len;
+      return toReturn;
+    } else {
+      throw new Error(`Unsupported literal type: ${typeof expr.value}`);
+    }
+  }
+
+  visitComplexExpr(expr: ExprNS.Complex): WasmCall {
+    return wasm
+      .call(MAKE_COMPLEX_FX)
+      .args(f64.const(expr.value.real), f64.const(expr.value.imag));
+  }
+
+  visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
+    const [depth, index] = this.getLexAddress(stmt.name.lexeme);
+    const expression = this.visit(stmt.value);
+
+    return wasm
+      .call(SET_LEX_ADDR_FX)
+      .args(i32.const(depth), i32.const(index), expression);
+  }
+
+  visitVariableExpr(expr: ExprNS.Variable): WasmCall {
+    const [depth, index] = this.getLexAddress(expr.name.lexeme);
+    return wasm.call(GET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index));
+  }
+
+  visitFunctionDefStmt(stmt: StmtNS.FunctionDef): WasmInstruction {
+    const [depth, index] = this.getLexAddress(stmt.name.lexeme);
+    const arity = stmt.parameters.length;
+    const tag = this.userFunctions.length;
+    this.userFunctions.push([]); // placeholder
+
+    const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
+
+    if (tag >= 1 << 16)
+      throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8)
+      throw new Error("Arity cannot be above 8-bit integer limit");
+    if (newFrame.length > 1 << 8)
+      throw new Error("Environment length cannot be above 8-bit integer limit");
+
+    this.environment.push(newFrame);
+    const body = stmt.body.map((s) => this.visit(s));
+    this.environment.pop();
+
+    this.userFunctions[tag] = body;
+
+    return wasm
+      .call(SET_LEX_ADDR_FX)
+      .args(
+        i32.const(depth),
+        i32.const(index),
+        wasm
+          .call(MAKE_CLOSURE_FX)
+          .args(
+            i32.const(tag),
+            i32.const(arity),
+            i32.const(newFrame.length),
+            global.get(CURR_ENV)
+          )
+      );
+  }
+
+  visitCallExpr(expr: ExprNS.Call): WasmCall {
+    const callee = this.visit(expr.callee);
+    const args = expr.args.map((arg) => this.visit(arg));
+
+    return wasm.call(APPLY_FX_NAME).args(
+      global.get(CURR_ENV),
+      wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length)),
+
+      // these are not arguments, but they don't produce values, so it's ok to insert them here
+      // this is to maintain the return type of WasmCall
+      ...[...Array(args.length).keys()].map((i) =>
+        wasm.call(SET_LEX_ADDR_FX).args(i32.const(0), i32.const(i), args[i])
+      )
+    );
+  }
+
+  visitReturnStmt(stmt: StmtNS.Return): WasmInstruction {
+    const value = stmt.value;
+
+    return wasm.return(
+      value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
+      global.set(CURR_ENV, local.get("$return_env"))
+    );
+  }
+
+  visitNonLocalStmt(stmt: StmtNS.NonLocal): WasmInstruction {
+    // because of this.collectDeclarations, this nonlocal declaration
+    // is guaranteed to have a nonlocal (and not global) binding.
+    // because of this.getLexAddress, it's also guaranteed to not have been
+    // used illegally before this statement.
+    // all that's left to do is remove the binding from the compile time environment
+    // from here onwards (from the local frame).
+    // if it doesn't exist in the local frame, do nothing as the statement has
+    // no effect
+
+    const currFrame = this.environment.at(-1);
+    const bindingIndex = currFrame?.findIndex(
+      (binding) => binding.name === stmt.name.lexeme
+    );
+
+    if (bindingIndex != null) {
+      currFrame?.splice(bindingIndex, 1);
+    }
+
+    return wasm.nop();
+  }
+
+  visitNoneExpr(expr: ExprNS.None): WasmCall {
+    return wasm.call(MAKE_NONE_FX);
   }
 }
