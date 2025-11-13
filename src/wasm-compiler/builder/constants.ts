@@ -317,26 +317,16 @@ export const ARITHMETIC_OP_FX = wasm
         )
       )
       .then(
-        wasm
-          .block("$div")
-          .body(
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div"),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.add(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.sub(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.mul(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(
             wasm
-              .block("$mul")
-              .body(
-                wasm
-                  .block("$sub")
-                  .body(
-                    wasm.block("$add").body(wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div")),
-                    wasm.return(wasm.call(MAKE_INT_FX).args(i64.add(local.get("$x_val"), local.get("$y_val"))))
-                  ),
-                wasm.return(wasm.call(MAKE_INT_FX).args(i64.sub(local.get("$x_val"), local.get("$y_val"))))
-              ),
-            wasm.return(wasm.call(MAKE_INT_FX).args(i64.mul(local.get("$x_val"), local.get("$y_val"))))
-          ),
-        wasm.return(
-          wasm
-            .call(MAKE_FLOAT_FX)
-            .args(f64.div(f64.convert_i64_s(local.get("$x_val")), f64.convert_i64_s(local.get("$y_val"))))
+              .call(MAKE_FLOAT_FX)
+              .args(f64.div(f64.convert_i64_s(local.get("$x_val")), f64.convert_i64_s(local.get("$y_val"))))
+          )
         )
       ),
 
@@ -358,23 +348,13 @@ export const ARITHMETIC_OP_FX = wasm
         )
       )
       .then(
-        wasm
-          .block("$div")
-          .body(
-            wasm
-              .block("$mul")
-              .body(
-                wasm
-                  .block("$sub")
-                  .body(
-                    wasm.block("$add").body(wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div")),
-                    wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.add(local.get("$a"), local.get("$c"))))
-                  ),
-                wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.sub(local.get("$a"), local.get("$c"))))
-              ),
-            wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.mul(local.get("$a"), local.get("$c"))))
-          ),
-        wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c"))))
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div"),
+          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.add(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.sub(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.mul(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c"))))
+        )
       ),
 
     wasm
@@ -401,53 +381,43 @@ export const ARITHMETIC_OP_FX = wasm
         )
       )
       .then(
-        wasm
-          .block("$div")
-          .body(
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div"),
+          wasm.return(
             wasm
-              .block("$mul")
-              .body(
-                wasm
-                  .block("$sub")
-                  .body(
-                    wasm.block("$add").body(wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div")),
-                    wasm.return(
-                      wasm
-                        .call(MAKE_COMPLEX_FX)
-                        .args(f64.add(local.get("$a"), local.get("$c")), f64.add(local.get("$b"), local.get("$d")))
-                    )
-                  ),
-                wasm.return(
-                  wasm
-                    .call(MAKE_COMPLEX_FX)
-                    .args(f64.sub(local.get("$a"), local.get("$c")), f64.sub(local.get("$b"), local.get("$d")))
-                )
-              ),
-            wasm.return(
-              wasm
-                .call(MAKE_COMPLEX_FX)
-                .args(
-                  f64.sub(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
-                  f64.add(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d")))
-                )
-            )
+              .call(MAKE_COMPLEX_FX)
+              .args(f64.add(local.get("$a"), local.get("$c")), f64.add(local.get("$b"), local.get("$d")))
           ),
-        wasm.return(
-          wasm
-            .call(MAKE_COMPLEX_FX)
-            .args(
-              local.tee(
-                "$denom",
-                f64.div(
-                  f64.add(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
-                  f64.add(f64.mul(local.get("$c"), local.get("$c")), f64.mul(local.get("$d"), local.get("$d")))
-                )
-              ),
-              f64.div(
-                f64.sub(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
-                local.get("$denom")
+          wasm.return(
+            wasm
+              .call(MAKE_COMPLEX_FX)
+              .args(f64.sub(local.get("$a"), local.get("$c")), f64.sub(local.get("$b"), local.get("$d")))
+          ),
+          wasm.return(
+            wasm
+              .call(MAKE_COMPLEX_FX)
+              .args(
+                f64.sub(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
+                f64.add(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d")))
               )
-            )
+          ),
+          wasm.return(
+            wasm
+              .call(MAKE_COMPLEX_FX)
+              .args(
+                local.tee(
+                  "$denom",
+                  f64.div(
+                    f64.add(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
+                    f64.add(f64.mul(local.get("$c"), local.get("$c")), f64.mul(local.get("$d"), local.get("$d")))
+                  )
+                ),
+                f64.div(
+                  f64.sub(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
+                  local.get("$denom")
+                )
+              )
+          )
         )
       ),
 
@@ -519,35 +489,15 @@ export const COMPARISON_OP_FX = wasm
             )
         ),
 
-        wasm
-          .block("$eq")
-          .body(
-            wasm
-              .block("$neq")
-              .body(
-                wasm
-                  .block("$lt")
-                  .body(
-                    wasm
-                      .block("$lte")
-                      .body(
-                        wasm
-                          .block("$gt")
-                          .body(
-                            wasm
-                              .block("$gte")
-                              .body(wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte")),
-                            wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ge_s(local.get("$x_tag"), i32.const(0))))
-                          ),
-                        wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.gt_s(local.get("$x_tag"), i32.const(0))))
-                      ),
-                    wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.le_s(local.get("$x_tag"), i32.const(0))))
-                  ),
-                wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.lt_s(local.get("$x_tag"), i32.const(0))))
-              ),
-            wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ne(local.get("$x_tag"), i32.const(0))))
-          ),
-        wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.eqz(local.get("$x_tag"))))
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte"),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.eqz(local.get("$x_tag")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ne(local.get("$x_tag"), i32.const(0)))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.lt_s(local.get("$x_tag"), i32.const(0)))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.le_s(local.get("$x_tag"), i32.const(0)))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.gt_s(local.get("$x_tag"), i32.const(0)))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ge_s(local.get("$x_tag"), i32.const(0))))
+        )
       ),
 
     // if either are bool, convert to int
@@ -563,37 +513,15 @@ export const COMPARISON_OP_FX = wasm
         )
       )
       .then(
-        wasm
-          .block("$eq")
-          .body(
-            wasm
-              .block("$neq")
-              .body(
-                wasm
-                  .block("$lt")
-                  .body(
-                    wasm
-                      .block("$lte")
-                      .body(
-                        wasm
-                          .block("$gt")
-                          .body(
-                            wasm
-                              .block("$gte")
-                              .body(wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte")),
-                            wasm.return(
-                              wasm.call(MAKE_BOOL_FX).args(i64.ge_s(local.get("$x_val"), local.get("$y_val")))
-                            )
-                          ),
-                        wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.gt_s(local.get("$x_val"), local.get("$y_val"))))
-                      ),
-                    wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.le_s(local.get("$x_val"), local.get("$y_val"))))
-                  ),
-                wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.lt_s(local.get("$x_val"), local.get("$y_val"))))
-              ),
-            wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.ne(local.get("$x_val"), local.get("$y_val"))))
-          ),
-        wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.eq(local.get("$x_val"), local.get("$y_val"))))
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte"),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.eq(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.ne(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.lt_s(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.le_s(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.gt_s(local.get("$x_val"), local.get("$y_val")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.ge_s(local.get("$x_val"), local.get("$y_val"))))
+        )
       ),
 
     // else, if either are int, convert to float and set float locals
@@ -615,34 +543,15 @@ export const COMPARISON_OP_FX = wasm
         )
       )
       .then(
-        wasm
-          .block("$eq")
-          .body(
-            wasm
-              .block("$neq")
-              .body(
-                wasm
-                  .block("$lt")
-                  .body(
-                    wasm
-                      .block("$lte")
-                      .body(
-                        wasm
-                          .block("$gt")
-                          .body(
-                            wasm
-                              .block("$gte")
-                              .body(wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte")),
-                            wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ge(local.get("$a"), local.get("$c"))))
-                          ),
-                        wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.gt(local.get("$a"), local.get("$c"))))
-                      ),
-                    wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.le(local.get("$a"), local.get("$c"))))
-                  ),
-                wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.lt(local.get("$a"), local.get("$c"))))
-              ),
-            wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.eq(local.get("$a"), local.get("$c"))))
-          )
+        ...wasm.buildBrTableBlocks(
+          wasm.br_table(local.get("$op"), "$eq", "$neq", "$lt", "$lte", "$gt", "$gte"),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.eq(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ne(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.lt(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.le(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.gt(local.get("$a"), local.get("$c")))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ge(local.get("$a"), local.get("$c"))))
+        )
       ),
 
     // else, if either are complex, load complex from memory and set float locals (default 0)
