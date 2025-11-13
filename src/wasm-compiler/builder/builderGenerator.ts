@@ -414,6 +414,7 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
 
       // these are not arguments, but they don't produce values, so it's ok to insert them here
       // this is to maintain the return type of WasmCall
+      // this is equivalent to setting lex addresses before calling APPLY_FX_NAME
       ...[...Array(args.length).keys()].map((i) =>
         wasm.call(SET_LEX_ADDR_FX).args(i32.const(0), i32.const(i), args[i])
       )
