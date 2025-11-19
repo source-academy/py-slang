@@ -56,10 +56,3 @@ export async function compileToWasmAndRun(code: string) {
   // run the exported main function
   return (result as any).instance.exports.main() as [number, number];
 }
-
-(async () => {
-  const code = `
-(2 + 3j) / (3 + 2j)
-`;
-  await compileToWasmAndRun(code);
-})();
