@@ -3,39 +3,36 @@ import { f64, global, local, mut } from "wasm-util/src/builder";
 import { WasmCall, WasmInstruction } from "wasm-util/src/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
+import { BaseGenerator } from "../pyBaseGenerator";
 import {
-  ALLOC_ENV_FUNC,
+  ALLOC_ENV_FX,
+  APPLY_FX_NAME,
+  applyFuncFactory,
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
+  COMPARISON_OP_FX,
+  COMPARISON_OP_TAG,
   CURR_ENV,
-  GET_LEX_ADDR_FUNC,
+  GET_LEX_ADDR_FX,
   GET_PAIR_HEAD_FX,
   GET_PAIR_TAIL_FX,
   HEAP_PTR,
-  MAKE_CLOSURE_FX,
-  MAKE_INT_FX,
-  MAKE_PAIR_FX,
-  SET_PAIR_HEAD_FX,
-  SET_PAIR_TAIL_FX,
-} from "../constants";
-import { BaseGenerator } from "../pyBaseGenerator";
-import {
-  APPLY_FX_NAME,
-  applyFuncFactory,
-  COMPARISON_OP_FX,
-  COMPARISON_OP_TAG,
-  GET_LEX_ADDR_FX,
   importedLogs,
   LOG_FX,
   MAKE_BOOL_FX,
+  MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
+  MAKE_INT_FX,
   MAKE_NONE_FX,
+  MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nativeFunctions,
   NEG_FX,
   PRE_APPLY_FX,
   SET_LEX_ADDR_FX,
+  SET_PAIR_HEAD_FX,
+  SET_PAIR_TAIL_FX,
 } from "./constants";
 
 const builtInFunctions: {
@@ -49,7 +46,7 @@ const builtInFunctions: {
     arity: 1,
     body: wasm
       .call(LOG_FX)
-      .args(wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0))),
+      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     isVoid: true,
   },
   {
@@ -58,8 +55,8 @@ const builtInFunctions: {
     body: wasm
       .call(MAKE_PAIR_FX)
       .args(
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
       ),
     isVoid: false,
   },
@@ -68,7 +65,7 @@ const builtInFunctions: {
     arity: 1,
     body: wasm
       .call(GET_PAIR_HEAD_FX)
-      .args(wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0))),
+      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     isVoid: false,
   },
   {
@@ -76,7 +73,7 @@ const builtInFunctions: {
     arity: 1,
     body: wasm
       .call(GET_PAIR_TAIL_FX)
-      .args(wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0))),
+      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     isVoid: false,
   },
   {
@@ -85,8 +82,8 @@ const builtInFunctions: {
     body: wasm
       .call(SET_PAIR_HEAD_FX)
       .args(
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
       ),
     isVoid: true,
   },
@@ -96,8 +93,8 @@ const builtInFunctions: {
     body: wasm
       .call(SET_PAIR_TAIL_FX)
       .args(
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FUNC).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
       ),
     isVoid: true,
   },
@@ -253,7 +250,7 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
           .results(...(undroppedInstr ? [i32, i64] : []))
           .body(
             wasm
-              .call(ALLOC_ENV_FUNC)
+              .call(ALLOC_ENV_FX)
               .args(i32.const(globalEnvLength), i32.const(0)),
 
             ...builtInFuncsDeclarations,
