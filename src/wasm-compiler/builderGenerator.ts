@@ -1,6 +1,3 @@
-import { i32, i64, wasm } from "wasm-util";
-import { f64, global, local, mut } from "wasm-util/src/builder";
-import { WasmCall, WasmInstruction } from "wasm-util/src/types";
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import {
@@ -33,6 +30,8 @@ import {
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
 } from "./constants";
+import { f64, global, i32, i64, local, mut, wasm } from "./wasm-util/builder";
+import { WasmCall, WasmInstruction } from "./wasm-util/types";
 
 const builtInFunctions: {
   name: string;

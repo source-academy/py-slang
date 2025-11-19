@@ -52,7 +52,6 @@
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.4.0",
-    "wabt": "^1.0.37",
-    "wasm-util": "file:../wasm-util"
+    "wabt": "^1.0.37"
   }
 }

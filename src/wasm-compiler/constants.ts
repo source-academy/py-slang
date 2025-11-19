@@ -1,5 +1,5 @@
-import { f64, global, i32, i64, local, memory, wasm } from "wasm-util";
-import { WasmInstruction } from "wasm-util/src/types";
+import { f64, global, i32, i64, local, memory, wasm } from "./wasm-util/builder";
+import { WasmInstruction } from "./wasm-util/types";
 
 // tags
 const TYPE_TAG = {
