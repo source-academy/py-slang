@@ -1,8 +1,8 @@
 import { i32, i64, wasm } from "wasm-util";
 import { f64, global, local, mut } from "wasm-util/src/builder";
 import { WasmCall, WasmInstruction } from "wasm-util/src/types";
-import { ExprNS, StmtNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { ExprNS, StmtNS } from "../ast-types";
+import { TokenType } from "../tokens";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,

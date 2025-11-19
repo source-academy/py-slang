@@ -1,7 +1,7 @@
 import wabt from "wabt";
 import { WatGenerator } from "wasm-util";
-import { Parser } from "../../parser";
-import { Tokenizer } from "../../tokenizer";
+import { Parser } from "../parser";
+import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 
@@ -54,7 +54,7 @@ export async function compileToWasmAndRun(code: string) {
   });
 
   // run the exported main function
-  return (result as any).instance.exports.main();
+  return (result as any).instance.exports.main() as [number, number];
 }
 
 (async () => {
