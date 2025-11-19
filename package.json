@@ -11,8 +11,7 @@
     "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest",
-    "wasm": "ts-node src/wasm-compiler/index.ts",
-    "builder": "ts-node src/wasm-compiler/builder/index.ts"
+    "wasm": "ts-node src/wasm-compiler/index.ts"
   },
   "keywords": [
     "Python",

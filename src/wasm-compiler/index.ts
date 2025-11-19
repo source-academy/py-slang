@@ -1,9 +1,9 @@
 import wabt from "wabt";
-import { WatGenerator } from "wasm-util";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
+import { WatGenerator } from "./wasm-util/watGenerator";
 
 export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";

@@ -55,8 +55,8 @@ import {
   type WasmStoreOp,
   type WasmUnaryOp,
   type WasmUnreachable,
-} from "./types.js";
-import { typedFromEntries } from "./util.js";
+} from "./types";
+import { typedFromEntries } from "./util";
 
 type BuilderAsType<T extends WasmNumericType = WasmNumericType> = {
   "~type": T;

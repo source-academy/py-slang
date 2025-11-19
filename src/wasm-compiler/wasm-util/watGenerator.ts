@@ -1,4 +1,4 @@
-import { instrToMethodMap, type WatVisitor } from "./builder.js";
+import { instrToMethodMap, type WatVisitor } from "./builder";
 import type {
   WasmBlock,
   WasmBr,
@@ -30,7 +30,7 @@ import type {
   WasmStart,
   WasmStore,
   WasmUnreachable,
-} from "./types.js";
+} from "./types";
 
 export class WatGenerator implements WatVisitor {
   // Dispatch method
