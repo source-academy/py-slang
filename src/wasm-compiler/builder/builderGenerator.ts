@@ -3,7 +3,6 @@ import { f64, global, local, mut } from "wasm-util/src/builder";
 import { WasmCall, WasmInstruction } from "wasm-util/src/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
-import { BaseGenerator } from "../pyBaseGenerator";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
@@ -103,7 +102,9 @@ const builtInFunctions: {
 type Binding = { name: string; tag: "local" | "nonlocal" };
 // all expressions compile to a call to a makeX function, so expressions return
 // WasmCalls. (every expression results in i32 i64)
-export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
+export class BuilderGenerator
+  implements StmtNS.Visitor<WasmInstruction>, ExprNS.Visitor<WasmCall>
+{
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
@@ -173,6 +174,12 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
         []),
       ...bindings,
     ];
+  }
+
+  visit(stmt: StmtNS.Stmt): WasmInstruction;
+  visit(stmt: ExprNS.Expr): WasmCall;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmCall {
+    return stmt.accept(this);
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
@@ -451,5 +458,55 @@ export class BuilderGenerator extends BaseGenerator<WasmInstruction, WasmCall> {
 
   visitNoneExpr(expr: ExprNS.None): WasmCall {
     return wasm.call(MAKE_NONE_FX);
+  }
+
+  // UNIMPLEMENTED PYTHON CONSTRUCTS
+  visitBoolOpExpr(expr: ExprNS.BoolOp): WasmCall {
+    throw new Error("Method not implemented.");
+  }
+  visitTernaryExpr(expr: ExprNS.Ternary): WasmCall {
+    throw new Error("Method not implemented.");
+  }
+  visitLambdaExpr(expr: ExprNS.Lambda): WasmCall {
+    throw new Error("Method not implemented.");
+  }
+  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmCall {
+    throw new Error("Method not implemented.");
+  }
+  visitIndentCreation(stmt: StmtNS.Indent): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitDedentCreation(stmt: StmtNS.Dedent): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitGlobalStmt(stmt: StmtNS.Global): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitIfStmt(stmt: StmtNS.If): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
+  visitForStmt(stmt: StmtNS.For): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
 }
