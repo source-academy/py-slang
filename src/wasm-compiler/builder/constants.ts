@@ -608,27 +608,16 @@ export const COMPARISON_OP_FX = wasm
   );
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
-// TODO: memory.fill with unbound tag instead of loop
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
   .params({ $size: i32, $parent: i32 })
   .body(
     global.set(CURR_ENV, global.get(HEAP_PTR)),
-    i32.store(global.get(HEAP_PTR), local.get("$parent")),
+    i32.store(global.get(CURR_ENV), local.get("$parent")),
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
 
-    wasm
-      .loop("$loop")
-      .body(
-        wasm
-          .if(local.get("$size"))
-          .then(
-            i32.store(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND)),
-            global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
-            local.set("$size", i32.sub(local.get("$size"), i32.const(1))),
-            wasm.br("$loop")
-          )
-      )
+    memory.fill(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND), i32.mul(local.get("$size"), i32.const(12))),
+    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$size"), i32.const(12))))
   );
 
 export const PRE_APPLY_FX = wasm
