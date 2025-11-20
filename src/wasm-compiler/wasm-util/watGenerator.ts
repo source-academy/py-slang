@@ -1,6 +1,7 @@
 import { instrToMethodMap, type WatVisitor } from "./builder";
 import type {
   WasmBlock,
+  WasmBlockType,
   WasmBr,
   WasmBrTable,
   WasmCall,
@@ -25,6 +26,7 @@ import type {
   WasmModule,
   WasmNop,
   WasmNumericType,
+  WasmRaw,
   WasmReturn,
   WasmSelect,
   WasmStart,
@@ -79,18 +81,31 @@ export class WatGenerator implements WatVisitor {
   }
 
   // Control visitor methods
+  private visitBlockType(type: WasmBlockType): string {
+    const params = type.paramTypes.map((param) => `(param ${param})`).join(" ");
+    const results = type.resultTypes
+      .map((result) => `(result ${result})`)
+      .join(" ");
+    const locals =
+      type.localTypes?.map((local) => `(local ${local})`).join(" ") ?? "";
+    return `${params} ${results} ${locals}`;
+  }
+
   visitBlockOp(instruction: WasmBlock): string {
     const label = instruction.label ?? "";
+    const typeStr = this.visitBlockType(instruction.blockType);
     const body = instruction.body.map((instr) => this.visit(instr)).join(" ");
-    return `(${instruction.op} ${label} ${body})`;
+    return `(${instruction.op} ${label} ${typeStr} ${body})`;
   }
   visitLoopOp(instruction: WasmLoop): string {
     const label = instruction.label ?? "";
+    const typeStr = this.visitBlockType(instruction.blockType);
     const body = instruction.body.map((instr) => this.visit(instr)).join(" ");
-    return `(${instruction.op} ${label} ${body})`;
+    return `(${instruction.op} ${label} ${typeStr} ${body})`;
   }
   visitIfOp(instruction: WasmIf): string {
     const label = instruction.label ?? "";
+    const typeStr = this.visitBlockType(instruction.blockType);
     const condition = this.visit(instruction.predicate);
     const thenBody = instruction.thenBody
       .map((instr) => this.visit(instr))
@@ -100,9 +115,9 @@ export class WatGenerator implements WatVisitor {
       .join(" ");
 
     if (elseBody) {
-      return `(if ${label} ${condition} (then ${thenBody}) (else ${elseBody}))`;
+      return `(if ${label} ${typeStr} ${condition} (then ${thenBody}) (else ${elseBody}))`;
     } else {
-      return `(if ${label} ${condition} (then ${thenBody}))`;
+      return `(if ${label} ${typeStr} ${condition} (then ${thenBody}))`;
     }
   }
   visitUnreachableOp(instruction: WasmUnreachable): string {
@@ -189,7 +204,9 @@ export class WatGenerator implements WatVisitor {
       .map(([name, type]) => `(param ${name} ${type})`)
       .join(" ");
 
-    const results = `(result ${instruction.funcType.resultTypes.join(" ")})`;
+    const results = instruction.funcType.resultTypes.length
+      ? `(result ${instruction.funcType.resultTypes.join(" ")})`
+      : "";
 
     const locals = Object.entries(instruction.funcType.localTypes)
       .map(([name, type]) => `(local ${name} ${type})`)
@@ -238,5 +255,22 @@ export class WatGenerator implements WatVisitor {
       .join("");
 
     return `(${instruction.op}\n${imports}\n${globals}\n${datas}\n${funcs}\n${startFunc}\n${exports})`;
+  }
+
+  visitRaw(instruction: WasmRaw): string {
+    let code = "";
+    for (let i = 0; i < instruction.interpolations.length; i++) {
+      code += instruction.codeFragments[i];
+      const interp = instruction.interpolations[i];
+      if (typeof interp === "string" || typeof interp === "number") {
+        code += interp.toString();
+      } else if (Array.isArray(interp)) {
+        code += interp.map((instr) => this.visit(instr)).join(" ");
+      } else {
+        code += this.visit(interp);
+      }
+    }
+    code += instruction.codeFragments[instruction.interpolations.length];
+    return code;
   }
 }

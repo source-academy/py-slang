@@ -13,6 +13,7 @@ import {
   intComparisonOp,
   intConversionOp,
   intTestOp,
+  WasmRaw,
   type WasmBinaryOp,
   type WasmBlock,
   type WasmBlockType,
@@ -233,13 +234,16 @@ const f64 = {
 } satisfies Builder<"f64">;
 
 const local = {
-  get: (label: WasmLabel): WasmLocalGet => ({ op: "local.get", label }),
-  set: (label: WasmLabel, right: WasmNumeric): WasmLocalSet => ({
+  get: (label: WasmLabel | number): WasmLocalGet => ({
+    op: "local.get",
+    label,
+  }),
+  set: (label: WasmLabel | number, right: WasmNumeric): WasmLocalSet => ({
     op: "local.set",
     label,
     right,
   }),
-  tee: (label: WasmLabel, right: WasmNumeric): WasmLocalTee => ({
+  tee: (label: WasmLabel | number, right: WasmNumeric): WasmLocalTee => ({
     op: "local.tee",
     label,
     right,
@@ -588,6 +592,11 @@ const wasm = {
 
     return buildBlock(bodies.length - 1);
   },
+
+  raw: (
+    codeFragments: TemplateStringsArray,
+    ...interpolations: (number | string | WasmInstruction | WasmInstruction[])[]
+  ): WasmRaw => ({ op: "raw", codeFragments, interpolations }),
 };
 
 // This maps all WASM instructions to a visitor method name that will
@@ -695,6 +704,8 @@ const instrToMethodMap = {
   export: "visitExportOp",
   start: "visitStartOp",
   module: "visitModuleOp",
+
+  raw: "visitRaw",
 } as const satisfies Record<WasmInstruction["op"], string>;
 
 // ------------------------ WASM Visitor Interface ----------------------------

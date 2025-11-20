@@ -222,13 +222,13 @@ export type WasmNumeric =
 
 export type WasmLocalSet = {
   op: "local.set";
-  label: WasmLabel;
+  label: WasmLabel | number;
   right: WasmNumeric;
 };
-export type WasmLocalGet = { op: "local.get"; label: WasmLabel };
+export type WasmLocalGet = { op: "local.get"; label: WasmLabel | number };
 export type WasmLocalTee = {
   op: "local.tee";
-  label: WasmLabel;
+  label: WasmLabel | number;
   right: WasmNumeric;
 };
 export type WasmGlobalSet = {
@@ -396,9 +396,17 @@ export type WasmModuleInstruction =
   | WasmStart
   | WasmModule;
 
+// meant to be used with wasm.raw (tagged template)
+export type WasmRaw = {
+  op: "raw";
+  codeFragments: TemplateStringsArray;
+  interpolations: (number | string | WasmInstruction | WasmInstruction[])[];
+};
+
 export type WasmInstruction =
   | WasmNumeric
   | WasmMemory
   | WasmControl
   | WasmVariable
-  | WasmModuleInstruction;
+  | WasmModuleInstruction
+  | WasmRaw;
