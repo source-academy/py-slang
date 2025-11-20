@@ -99,8 +99,9 @@ const builtInFunctions: {
 ];
 
 type Binding = { name: string; tag: "local" | "nonlocal" };
-// all expressions compile to a call to a makeX function, so expressions return
-// WasmCalls. (every expression results in i32 i64)
+
+// all expressions compile to a call to a function like makeX, get/setLexAddress, arithOp, etc.
+// so expressions return WasmCalls. (every expression results in i32 i64)
 export class BuilderGenerator
   implements StmtNS.Visitor<WasmInstruction>, ExprNS.Visitor<WasmCall>
 {
@@ -409,7 +410,27 @@ export class BuilderGenerator
 
   visitCallExpr(expr: ExprNS.Call): WasmCall {
     const callee = this.visit(expr.callee);
-    const args = expr.args.map((arg) => this.visit(arg));
+
+    // because we're not actually passing in arguments to apply, the lex addresses from the args
+    // are not accurate.
+    // they assume that we're not yet in the new function call's environment, because that's how it is
+    // from the compiler's perspective.
+    // but here, we're already in the new environment because PRE_APPLY was called. so we have to
+    // increment the depth from each GET_LEX_ADDRESS call from each arg by 1.
+    const args: WasmCall[] = expr.args
+      .map((arg) => this.visit(arg))
+      .map((arg) => ({
+        ...arg,
+        ...(arg.function === GET_LEX_ADDR_FX.name && {
+          arguments: arg.arguments.map((a, i) => ({
+            ...a,
+
+            // first argument is depth
+            ...(i === 0 &&
+              a.op === "i32.const" && { value: a.value + BigInt(1) }),
+          })),
+        }),
+      }));
 
     return wasm.call(APPLY_FX_NAME).args(
       global.get(CURR_ENV),
@@ -417,7 +438,8 @@ export class BuilderGenerator
 
       // these are not arguments, but they don't produce values, so it's ok to insert them here
       // this is to maintain the return type of WasmCall
-      // this is equivalent to setting lex addresses before calling APPLY_FX_NAME
+      // this is equivalent to setting lex addresses after calling PRE_APPLY, but before APPLY
+
       ...[...Array(args.length).keys()].map((i) =>
         wasm.call(SET_LEX_ADDR_FX).args(i32.const(0), i32.const(i), args[i])
       )
