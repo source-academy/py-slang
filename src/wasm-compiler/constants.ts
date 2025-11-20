@@ -605,22 +605,29 @@ export const COMPARISON_OP_FX = wasm
   );
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
+// we initialise only local variables to UNBOUND, NOT parameters.
+// this is because have already set parameters in the new environment before calling this function.
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
-  .params({ $size: i32, $parent: i32 })
+  .params({ $size: i32, $parent: i32, $arity: i32 })
+  .results(i32)
   .body(
-    global.set(CURR_ENV, global.get(HEAP_PTR)),
-    i32.store(global.get(CURR_ENV), local.get("$parent")),
+    global.get(HEAP_PTR), // return the start of the new env, set CURR_ENV AFTER
+    i32.store(global.get(HEAP_PTR), local.get("$parent")),
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
 
-    memory.fill(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND), i32.mul(local.get("$size"), i32.const(12))),
+    memory.fill(
+      i32.add(global.get(HEAP_PTR), i32.mul(local.get("$arity"), i32.const(12))),
+      i32.const(TYPE_TAG.UNBOUND),
+      i32.mul(i32.sub(local.get("$size"), local.get("$arity")), i32.const(12))
+    ),
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$size"), i32.const(12))))
   );
 
 export const PRE_APPLY_FX = wasm
   .func("$_pre_apply")
   .params({ $tag: i32, $val: i64, $arity: i32 })
-  .results(i32, i64)
+  .results(i32, i64, i32)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
@@ -632,14 +639,15 @@ export const PRE_APPLY_FX = wasm
       )
       .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.FUNC_WRONG_ARITY[0])), wasm.unreachable()),
 
+    local.get("$tag"),
+    local.get("$val"),
     wasm
       .call(ALLOC_ENV_FX)
       .args(
         i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
-        i32.wrap_i64(local.get("$val"))
-      ),
-    local.get("$tag"),
-    local.get("$val")
+        i32.wrap_i64(local.get("$val")),
+        local.get("$arity")
+      )
   );
 
 export const APPLY_FX_NAME = "$_apply";
@@ -672,10 +680,6 @@ export const GET_LEX_ADDR_FX = wasm
           "$tag",
           i32.load(i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))))
         ),
-
-        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$depth"))),
-        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$index"))),
-        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$tag"))),
 
         wasm
           .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.UNBOUND)))
@@ -725,6 +729,17 @@ export const SET_LEX_ADDR_FX = wasm
     wasm.unreachable()
   );
 
+export const SET_PARAM_FX = wasm
+  .func("$_set_param")
+  .params({ $addr: i32, $tag: i32, $value: i64 })
+  .results(i32)
+  .body(
+    i32.store(i32.add(local.get("$addr"), i32.const(4)), local.get("$tag")),
+    i64.store(i32.add(local.get("$addr"), i32.const(8)), local.get("$value")),
+
+    local.get("$addr")
+  );
+
 export const nativeFunctions = [
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
@@ -738,6 +753,7 @@ export const nativeFunctions = [
   GET_PAIR_TAIL_FX,
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
+  LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,
   STRING_COMPARE_FX,
@@ -746,5 +762,5 @@ export const nativeFunctions = [
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
-  LOG_FX,
+  SET_PARAM_FX,
 ];
