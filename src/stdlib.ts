@@ -1599,7 +1599,7 @@ export function toPythonFloat(num: number): string {
         return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2');
     }
     if (Number.isInteger(num)) {
-        return num.toFixed(1).toString();
+        return num.toFixed(1);
     }
     return num.toString();
 }
