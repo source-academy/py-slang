@@ -52,7 +52,7 @@ export const MAKE_COMPLEX_FX = wasm
     f64.store(i32.add(global.get(HEAP_PTR), i32.const(8)), local.get("$img")),
 
     i32.const(TYPE_TAG.COMPLEX),
-    i64.extend_i32_s(global.get(HEAP_PTR)),
+    i64.extend_i32_u(global.get(HEAP_PTR)),
 
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16)))
   );
@@ -672,6 +672,11 @@ export const GET_LEX_ADDR_FX = wasm
           "$tag",
           i32.load(i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))))
         ),
+
+        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$depth"))),
+        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$index"))),
+        wasm.call("$_log_int").args(i64.extend_i32_u(local.get("$tag"))),
+
         wasm
           .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.UNBOUND)))
           .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.UNBOUND[0])), wasm.unreachable()),
