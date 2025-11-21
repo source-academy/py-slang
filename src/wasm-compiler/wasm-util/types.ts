@@ -216,7 +216,8 @@ export type WasmNumeric =
   | WasmNumericFor<"i32">
   | WasmNumericFor<"i64">
   | WasmNumericFor<"f32">
-  | WasmNumericFor<"f64">;
+  | WasmNumericFor<"f64">
+  | WasmRaw;
 
 // ------------------------ WASM Variable Instructions ----------------------------
 
@@ -243,7 +244,8 @@ type WasmVariable =
   | WasmLocalGet
   | WasmLocalTee
   | WasmGlobalSet
-  | WasmGlobalGet;
+  | WasmGlobalGet
+  | WasmRaw;
 
 // ------------------------ WASM Memory Instructions ----------------------------
 // Technically WasmStoreOp and WasmLoadOp are memory instructions, but they are defined
@@ -263,7 +265,7 @@ export type WasmMemoryFill = {
   numOfBytes: WasmNumericFor<"i32">;
 };
 
-type WasmMemory = WasmMemoryCopy | WasmMemoryFill;
+type WasmMemory = WasmMemoryCopy | WasmMemoryFill | WasmRaw;
 
 // ------------------------ WASM Control Instructions ----------------------------
 
@@ -322,7 +324,8 @@ type WasmControl =
   | WasmBrTable
   | WasmCall
   | WasmReturn
-  | WasmSelect;
+  | WasmSelect
+  | WasmRaw;
 
 // ------------------------ WASM Module Instructions ----------------------------
 
@@ -394,7 +397,8 @@ export type WasmModuleInstruction =
   | WasmFunction
   | WasmExport
   | WasmStart
-  | WasmModule;
+  | WasmModule
+  | WasmRaw;
 
 // meant to be used with wasm.raw (tagged template)
 export type WasmRaw = {
@@ -408,5 +412,4 @@ export type WasmInstruction =
   | WasmMemory
   | WasmControl
   | WasmVariable
-  | WasmModuleInstruction
-  | WasmRaw;
+  | WasmModuleInstruction;

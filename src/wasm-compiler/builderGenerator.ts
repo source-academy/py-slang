@@ -104,10 +104,15 @@ type Binding = { name: string; tag: "local" | "nonlocal" };
 // all expressions compile to a call to a function like makeX, get/setLexAddress, arithOp, etc.
 // so expressions return WasmCalls. (every expression results in i32 i64)
 // WasmRaw is for function calls
+
+interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
+  visit(stmt: StmtNS.Stmt): S;
+  visit(stmt: ExprNS.Expr): E;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): S | E;
+}
+
 export class BuilderGenerator
-  implements
-    StmtNS.Visitor<WasmInstruction>,
-    ExprNS.Visitor<WasmCall | WasmRaw>
+  implements BuilderVisitor<WasmInstruction, WasmCall | WasmRaw>
 {
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -181,8 +186,8 @@ export class BuilderGenerator
   }
 
   visit(stmt: StmtNS.Stmt): WasmInstruction;
-  visit(stmt: ExprNS.Expr): WasmCall;
-  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmCall {
+  visit(stmt: ExprNS.Expr): WasmCall | WasmRaw;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmCall | WasmRaw {
     return stmt.accept(this);
   }
 
@@ -281,7 +286,7 @@ export class BuilderGenerator
     return wasm.drop(wasm.drop(expr));
   }
 
-  visitGroupingExpr(expr: ExprNS.Grouping): WasmCall {
+  visitGroupingExpr(expr: ExprNS.Grouping): WasmCall | WasmRaw {
     return this.visit(expr.expression);
   }
 
