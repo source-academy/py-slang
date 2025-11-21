@@ -31,18 +31,22 @@ export const HEAP_PTR = "$_heap_pointer";
 export const CURR_ENV = "$_current_env";
 
 // boxing functions
+
+// store directly in payload
 export const MAKE_INT_FX = wasm
   .func("$_make_int")
   .params({ $value: i64 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.INT), local.get("$value"));
 
+// reinterpret bits as int
 export const MAKE_FLOAT_FX = wasm
   .func("$_make_float")
   .params({ $value: f64 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get("$value")));
 
+// upper 32: pointer to f64 real part; lower 32: pointer to f64 imaginary part
 export const MAKE_COMPLEX_FX = wasm
   .func("$_make_complex")
   .params({ $real: f64, $img: f64 })
@@ -57,6 +61,7 @@ export const MAKE_COMPLEX_FX = wasm
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16)))
   );
 
+// store directly as i32
 export const MAKE_BOOL_FX = wasm
   .func("$_make_bool")
   .params({ $value: i32 })
@@ -96,6 +101,8 @@ export const MAKE_CLOSURE_FX = wasm
 export const MAKE_NONE_FX = wasm.func("$_make_none").results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
 
 // pair-related functions
+
+// upper 32: pointer to head; lower 32: pointer to tail
 export const MAKE_PAIR_FX = wasm
   .func("$_make_pair")
   .params({ $tag1: i32, $val1: i64, $tag2: i32, $val2: i64 })
@@ -273,6 +280,7 @@ export const ARITHMETIC_OP_FX = wasm
   .results(i32, i64)
   .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $denom: f64 })
   .body(
+    // if adding, check if both are strings
     wasm
       .if(
         i32.and(
@@ -284,7 +292,7 @@ export const ARITHMETIC_OP_FX = wasm
         )
       )
       .then(
-        global.get(HEAP_PTR),
+        global.get(HEAP_PTR), // starting address of new string
 
         memory.copy(
           global.get(HEAP_PTR),
@@ -303,9 +311,11 @@ export const ARITHMETIC_OP_FX = wasm
         wasm.return(wasm.call(MAKE_STRING_FX).args())
       ),
 
+    // if either's bool, convert to int
     wasm.if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.BOOL))).then(local.set("$x_tag", i32.const(TYPE_TAG.INT))),
     wasm.if(i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.BOOL))).then(local.set("$y_tag", i32.const(TYPE_TAG.INT))),
 
+    // if both int, use int instr (except for division: use float)
     wasm
       .if(
         i32.and(
@@ -327,6 +337,7 @@ export const ARITHMETIC_OP_FX = wasm
         )
       ),
 
+    // else, if either's int, convert to float and set float locals
     wasm
       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.INT)))
       .then(local.set("$a", f64.convert_i64_s(local.get("$x_val"))), local.set("$x_tag", i32.const(TYPE_TAG.FLOAT)))
@@ -337,6 +348,7 @@ export const ARITHMETIC_OP_FX = wasm
       .then(local.set("$c", f64.convert_i64_s(local.get("$y_val"))), local.set("$y_tag", i32.const(TYPE_TAG.FLOAT)))
       .else(local.set("$c", f64.reinterpret_i64(local.get("$y_val")))),
 
+    // if both float, use float instr
     wasm
       .if(
         i32.and(
@@ -354,6 +366,7 @@ export const ARITHMETIC_OP_FX = wasm
         )
       ),
 
+    // else, if either's complex, load from mem, set locals (default 0)
     wasm
       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.FLOAT)))
       .then(local.set("$x_tag", i32.const(TYPE_TAG.COMPLEX)))
@@ -361,7 +374,6 @@ export const ARITHMETIC_OP_FX = wasm
         local.set("$a", f64.load(i32.wrap_i64(local.get("$x_val")))),
         local.set("$b", f64.load(i32.add(i32.wrap_i64(local.get("$x_val")), i32.const(8))))
       ),
-
     wasm
       .if(i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.FLOAT)))
       .then(local.set("$y_tag", i32.const(TYPE_TAG.COMPLEX)))
@@ -370,6 +382,7 @@ export const ARITHMETIC_OP_FX = wasm
         local.set("$d", f64.load(i32.add(i32.wrap_i64(local.get("$y_val")), i32.const(8))))
       ),
 
+    // if both complex, perform complex operations
     wasm
       .if(
         i32.and(
@@ -390,6 +403,7 @@ export const ARITHMETIC_OP_FX = wasm
               .call(MAKE_COMPLEX_FX)
               .args(f64.sub(local.get("$a"), local.get("$c")), f64.sub(local.get("$b"), local.get("$d")))
           ),
+          // (a+bi)*(c+di) = (ac-bd) + (ad+bc)i
           wasm.return(
             wasm
               .call(MAKE_COMPLEX_FX)
@@ -398,6 +412,7 @@ export const ARITHMETIC_OP_FX = wasm
                 f64.add(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d")))
               )
           ),
+          // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
           wasm.return(
             wasm
               .call(MAKE_COMPLEX_FX)
@@ -418,6 +433,7 @@ export const ARITHMETIC_OP_FX = wasm
         )
       ),
 
+    wasm.call("$_log_error").args(i32.const(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0])),
     wasm.unreachable()
   );
 
