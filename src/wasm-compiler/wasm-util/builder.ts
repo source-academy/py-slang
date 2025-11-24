@@ -87,13 +87,13 @@ const binaryOp = <
       [K in keyof Op]: [
         Op[K],
         (
-          ...args: Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }> extends {
+          ...args: Extract<WasmInstruction, { op: `${T}.${Op[K]}` }> extends {
             left: infer L;
             right: infer R;
           }
             ? [left: L, right: R]
             : never
-        ) => Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }>
+        ) => Extract<WasmInstruction, { op: `${T}.${Op[K]}` }>
       ];
     }
   );

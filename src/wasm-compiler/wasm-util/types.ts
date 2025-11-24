@@ -199,13 +199,14 @@ export type WasmNumericFor<T extends WasmNumericType> =
   | WasmConst<T>
   | (T extends WasmFloatNumericType ? WasmUnaryOp<T> : never)
   | WasmBinaryOp<T>
-  | (T extends WasmIntNumericType ? WasmIntTestOp<T> : never)
-  | (T extends "i32" ? WasmComparisonOp<WasmNumericType> : never)
+  | (T extends "i32"
+      ? WasmIntTestOp<T> | WasmComparisonOp<WasmNumericType>
+      : never)
   | WasmConversionOp<T>
+  | WasmRaw
 
   // below are not numeric instructions, but the results of these are numeric
   | WasmLoad
-  | WasmStore
   | WasmLocalGet
   | WasmGlobalGet
   | WasmLocalTee
@@ -216,8 +217,7 @@ export type WasmNumeric =
   | WasmNumericFor<"i32">
   | WasmNumericFor<"i64">
   | WasmNumericFor<"f32">
-  | WasmNumericFor<"f64">
-  | WasmRaw;
+  | WasmNumericFor<"f64">;
 
 // ------------------------ WASM Variable Instructions ----------------------------
 
@@ -265,7 +265,12 @@ export type WasmMemoryFill = {
   numOfBytes: WasmNumericFor<"i32">;
 };
 
-type WasmMemory = WasmMemoryCopy | WasmMemoryFill | WasmRaw;
+type WasmMemory =
+  | WasmMemoryCopy
+  | WasmMemoryFill
+  | WasmLoad
+  | WasmStore
+  | WasmRaw;
 
 // ------------------------ WASM Control Instructions ----------------------------
 

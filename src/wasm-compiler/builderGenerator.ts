@@ -6,6 +6,8 @@ import {
   applyFuncFactory,
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
+  BOOL_NOT_FX,
+  BOOLISE_FX,
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
@@ -30,14 +32,15 @@ import {
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
   SET_PARAM_FX,
+  TYPE_TAG,
 } from "./constants";
 import { f64, global, i32, i64, local, mut, wasm } from "./wasm-util/builder";
-import { WasmCall, WasmInstruction, WasmRaw } from "./wasm-util/types";
+import { WasmInstruction, WasmNumeric, WasmRaw } from "./wasm-util/types";
 
 const builtInFunctions: {
   name: string;
   arity: number;
-  body: WasmInstruction;
+  body: WasmInstruction | WasmInstruction[];
   isVoid: boolean;
 }[] = [
   {
@@ -97,13 +100,20 @@ const builtInFunctions: {
       ),
     isVoid: true,
   },
+  {
+    name: "bool",
+    arity: 1,
+    body: [
+      i32.const(TYPE_TAG.BOOL),
+      wasm
+        .call(BOOLISE_FX)
+        .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
+    ],
+    isVoid: false,
+  },
 ];
 
 type Binding = { name: string; tag: "local" | "nonlocal" };
-
-// all expressions compile to a call to a function like makeX, get/setLexAddress, arithOp, etc.
-// so expressions return WasmCalls. (every expression results in i32 i64)
-// WasmRaw is for function calls
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt): S;
@@ -112,7 +122,7 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
 }
 
 export class BuilderGenerator
-  implements BuilderVisitor<WasmInstruction, WasmCall | WasmRaw>
+  implements BuilderVisitor<WasmInstruction, WasmNumeric>
 {
   private strings: [string, number][] = [];
   private heapPointer = 0;
@@ -186,8 +196,8 @@ export class BuilderGenerator
   }
 
   visit(stmt: StmtNS.Stmt): WasmInstruction;
-  visit(stmt: ExprNS.Expr): WasmCall | WasmRaw;
-  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmCall | WasmRaw {
+  visit(stmt: ExprNS.Expr): WasmNumeric;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmNumeric {
     return stmt.accept(this);
   }
 
@@ -203,7 +213,7 @@ export class BuilderGenerator
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions.length;
         const newBody = [
-          body,
+          ...(Array.isArray(body) ? body : [body]),
           wasm.return(
             ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
             global.set(CURR_ENV, local.get("$return_env"))
@@ -286,11 +296,11 @@ export class BuilderGenerator
     return wasm.drop(wasm.drop(expr));
   }
 
-  visitGroupingExpr(expr: ExprNS.Grouping): WasmCall | WasmRaw {
+  visitGroupingExpr(expr: ExprNS.Grouping): WasmNumeric {
     return this.visit(expr.expression);
   }
 
-  visitBinaryExpr(expr: ExprNS.Binary): WasmCall {
+  visitBinaryExpr(expr: ExprNS.Binary): WasmNumeric {
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
 
@@ -305,7 +315,7 @@ export class BuilderGenerator
     return wasm.call(ARITHMETIC_OP_FX).args(left, right, i32.const(opTag));
   }
 
-  visitCompareExpr(expr: ExprNS.Compare): WasmCall {
+  visitCompareExpr(expr: ExprNS.Compare): WasmNumeric {
     const left = this.visit(expr.left);
     const right = this.visit(expr.right);
 
@@ -322,17 +332,35 @@ export class BuilderGenerator
     return wasm.call(COMPARISON_OP_FX).args(left, right, i32.const(opTag));
   }
 
-  visitUnaryExpr(expr: ExprNS.Unary): WasmCall {
+  visitUnaryExpr(expr: ExprNS.Unary): WasmNumeric {
     const right = this.visit(expr.right);
 
-    if (expr.operator.type !== TokenType.MINUS) {
-      throw new Error(`Unsupported unary operator: ${expr.operator.type}`);
-    }
-
-    return wasm.call(NEG_FX).args(right);
+    const type = expr.operator.type;
+    if (type === TokenType.MINUS) return wasm.call(NEG_FX).args(right);
+    else if (type === TokenType.NOT) return wasm.call(BOOL_NOT_FX).args(right);
+    else throw new Error(`Unsupported unary operator: ${type}`);
   }
 
-  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmCall {
+  visitBoolOpExpr(expr: ExprNS.BoolOp): WasmNumeric {
+    const left = this.visit(expr.left);
+    const right = this.visit(expr.right);
+
+    const type = expr.operator.type;
+
+    const boolised = i64.eqz(wasm.call(BOOLISE_FX).args(left));
+
+    if (type === TokenType.AND) {
+      return wasm.raw`(if (result i32 i64) ${boolised} (then ${left}) (else ${right}))`;
+    } else if (type === TokenType.OR) {
+      return wasm.raw`(if (result i32 i64) ${boolised} (then ${right}) (else ${left}))`;
+    } else throw new Error(`Unsupported boolean binary operator: ${type}`);
+  }
+
+  visitNoneExpr(expr: ExprNS.None): WasmNumeric {
+    return wasm.call(MAKE_NONE_FX);
+  }
+
+  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmNumeric {
     const value = BigInt(expr.value);
     const min = BigInt("-9223372036854775808"); // -(2^63)
     const max = BigInt("9223372036854775807"); // (2^63) - 1
@@ -343,7 +371,7 @@ export class BuilderGenerator
     return wasm.call(MAKE_INT_FX).args(i64.const(value));
   }
 
-  visitLiteralExpr(expr: ExprNS.Literal): WasmCall {
+  visitLiteralExpr(expr: ExprNS.Literal): WasmNumeric {
     if (typeof expr.value === "number")
       return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
     else if (typeof expr.value === "boolean")
@@ -363,7 +391,7 @@ export class BuilderGenerator
     }
   }
 
-  visitComplexExpr(expr: ExprNS.Complex): WasmCall {
+  visitComplexExpr(expr: ExprNS.Complex): WasmNumeric {
     return wasm
       .call(MAKE_COMPLEX_FX)
       .args(f64.const(expr.value.real), f64.const(expr.value.imag));
@@ -378,7 +406,7 @@ export class BuilderGenerator
       .args(i32.const(depth), i32.const(index), expression);
   }
 
-  visitVariableExpr(expr: ExprNS.Variable): WasmCall {
+  visitVariableExpr(expr: ExprNS.Variable): WasmNumeric {
     const [depth, index] = this.getLexAddress(expr.name.lexeme);
     return wasm.call(GET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index));
   }
@@ -437,8 +465,8 @@ export class BuilderGenerator
     // the SET_PARAM function returns the env address after setting the parameter
     // so we can chain the calls together
     return wasm.raw`
-(global.get ${CURR_ENV})
-(call ${PRE_APPLY_FX.name} ${callee} (i32.const ${args.length}))
+${global.get(CURR_ENV)}
+${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 
 ${args.map(
   (arg, i) =>
@@ -482,21 +510,14 @@ ${args.map(
     return wasm.nop();
   }
 
-  visitNoneExpr(expr: ExprNS.None): WasmCall {
-    return wasm.call(MAKE_NONE_FX);
-  }
-
   // UNIMPLEMENTED PYTHON CONSTRUCTS
-  visitBoolOpExpr(expr: ExprNS.BoolOp): WasmCall {
+  visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
     throw new Error("Method not implemented.");
   }
-  visitTernaryExpr(expr: ExprNS.Ternary): WasmCall {
+  visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
-  visitLambdaExpr(expr: ExprNS.Lambda): WasmCall {
-    throw new Error("Method not implemented.");
-  }
-  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmCall {
+  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
   visitIndentCreation(stmt: StmtNS.Indent): WasmInstruction {

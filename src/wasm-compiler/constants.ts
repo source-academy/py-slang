@@ -2,7 +2,7 @@ import { f64, global, i32, i64, local, memory, wasm } from "./wasm-util/builder"
 import { WasmInstruction } from "./wasm-util/types";
 
 // tags
-const TYPE_TAG = {
+export const TYPE_TAG = {
   INT: 0,
   FLOAT: 1,
   COMPLEX: 2,
@@ -25,6 +25,8 @@ export const ERROR_MAP = {
   UNBOUND: [7, "Accessing an unbound value."],
   HEAD_NOT_PAIR: [8, "Accessing the head of a non-pair value."],
   TAIL_NOT_PAIR: [9, "Accessing the tail of a non-pair value."],
+  BOOL_UNKNOWN_TYPE: [10, "Trying to convert an unknnown runtime type to a bool."],
+  BOOL_UNKNOWN_OP: [11, "Unknown boolean binary operator."],
 } as const;
 
 export const HEAP_PTR = "$_heap_pointer";
@@ -627,6 +629,74 @@ export const COMPARISON_OP_FX = wasm
     wasm.unreachable()
   );
 
+// bool related functions
+
+export const BOOLISE_FX = wasm
+  .func("$_boolise")
+  .params({ $tag: i32, $val: i64 })
+  .results(i64)
+  .body(
+    // None => False
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE)))
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(0)))),
+
+    // bool or int => return bool with value (False if 0)
+    wasm
+      .if(
+        i32.or(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.INT)), i32.eq(local.get("$tag"), i32.const(TYPE_TAG.BOOL)))
+      )
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.wrap_i64(local.get("$val"))))),
+
+    // float/complex => False if equivalent of 0
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.FLOAT)))
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ne(f64.reinterpret_i64(local.get("$val")), f64.const(0))))),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
+      .then(
+        wasm.return(
+          wasm
+            .call(MAKE_BOOL_FX)
+            .args(
+              i32.or(
+                f64.ne(f64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(8))), f64.const(0)),
+                f64.ne(f64.load(i32.wrap_i64(local.get("$val"))), f64.const(0))
+              )
+            )
+        )
+      ),
+
+    // string => False if length is 0
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.wrap_i64(local.get("$val"))))),
+
+    // closure/pair => True
+    wasm
+      .if(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)),
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR))
+        )
+      )
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1)))),
+
+    wasm.call("$_log_error").args(i32.const(ERROR_MAP.BOOL_UNKNOWN_TYPE[0])),
+    wasm.unreachable()
+  );
+
+export const BOOL_NOT_FX = wasm
+  .func("$_bool_not")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    i32.const(TYPE_TAG.BOOL),
+    i64.extend_i32_u(i64.eqz(wasm.call(BOOLISE_FX).args(local.get("$tag"), local.get("$val"))))
+  );
+
+export const BOOL_BINARY_OP_TAG = { AND: 0, OR: 1 };
+
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
 // we initialise only local variables to UNBOUND, NOT parameters.
 // this is because have already set parameters in the new environment before calling this function.
@@ -781,6 +851,8 @@ export const nativeFunctions = [
   ARITHMETIC_OP_FX,
   STRING_COMPARE_FX,
   COMPARISON_OP_FX,
+  BOOLISE_FX,
+  BOOL_NOT_FX,
   ALLOC_ENV_FX,
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
