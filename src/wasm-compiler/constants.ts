@@ -66,7 +66,14 @@ export const MAKE_BOOL_FX = wasm
   .func("$_make_bool")
   .params({ $value: i32 })
   .results(i32, i64)
-  .body(i32.const(TYPE_TAG.BOOL), i64.extend_i32_u(local.get("$value")));
+  .body(
+    i32.const(TYPE_TAG.BOOL),
+    wasm
+      .if(i32.eqz(local.get("$value")))
+      .results(i64)
+      .then(i64.const(0))
+      .else(i64.const(1))
+  );
 
 // upper 32: pointer; lower 32: length
 export const MAKE_STRING_FX = wasm
