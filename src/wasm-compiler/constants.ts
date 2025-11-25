@@ -19,7 +19,7 @@ export const ERROR_MAP = {
   LOG_UNKNOWN_TYPE: [1, "Calling log on an unknown runtime type."],
   ARITH_OP_UNKNOWN_TYPE: [2, "Calling an arithmetic operation on an unsupported runtime type."],
   COMPLEX_COMPARISON: [3, "Using an unsupported comparison operator on complex type."],
-  COMPARE_OP_UNKNOWN_TYPE: [4, "Calling a comparison operation on an unsupported runtime type."],
+  COMPARE_OP_UNKNOWN_TYPE: [4, "Calling a comparison operation on unsupported operands."],
   CALL_NOT_FX: [5, "Calling a non-function value."],
   FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
   UNBOUND: [7, "Accessing an unbound value."],
@@ -624,7 +624,17 @@ export const COMPARISON_OP_FX = wasm
           )
       ),
 
-    // else, unreachable
+    // else, default to not equal
+    wasm
+      .if(i32.eq(local.get("$op"), i32.const(COMPARISON_OP_TAG.EQ)))
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(0))))
+      .else(
+        wasm
+          .if(i32.eq(local.get("$op"), i32.const(COMPARISON_OP_TAG.NEQ)))
+          .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1))))
+      ),
+
+    // other operators: unreachable
     wasm.call("$_log_error").args(i32.const(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE[0])),
     wasm.unreachable()
   );

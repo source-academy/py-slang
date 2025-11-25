@@ -532,6 +532,21 @@ ${args.map(
     return wasm.nop();
   }
 
+  visitIfStmt(stmt: StmtNS.If): WasmInstruction {
+    const condition = this.visit(stmt.condition);
+    const body = stmt.body.map((b) => this.visit(b));
+    const elseBody = stmt.elseBlock?.map((e) => this.visit(e));
+
+    return elseBody
+      ? wasm
+          .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
+          .then(...body)
+          .else(...elseBody)
+      : wasm
+          .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
+          .then(...body);
+  }
+
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
     throw new Error("Method not implemented.");
@@ -564,9 +579,6 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitIfStmt(stmt: StmtNS.If): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
