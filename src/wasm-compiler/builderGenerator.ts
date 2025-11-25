@@ -347,13 +347,35 @@ export class BuilderGenerator
 
     const type = expr.operator.type;
 
-    const boolised = i64.eqz(wasm.call(BOOLISE_FX).args(left));
-
+    // not a wasm function as it needs to short-circuit
     if (type === TokenType.AND) {
-      return wasm.raw`(if (result i32 i64) ${boolised} (then ${left}) (else ${right}))`;
+      // if x is false, then x else y
+      return wasm
+        .if(i64.eqz(wasm.call(BOOLISE_FX).args(left)))
+        .results(i32, i64)
+        .then(left)
+        .else(right) as unknown as WasmNumeric; // these WILL return WasmNumeric
     } else if (type === TokenType.OR) {
-      return wasm.raw`(if (result i32 i64) ${boolised} (then ${right}) (else ${left}))`;
+      // if x is false, then y else x
+      return wasm
+        .if(i64.eqz(wasm.call(BOOLISE_FX).args(left)))
+        .results(i32, i64)
+        .then(right)
+        .else(left) as unknown as WasmNumeric;
     } else throw new Error(`Unsupported boolean binary operator: ${type}`);
+  }
+
+  visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
+    const consequent = this.visit(expr.consequent);
+    const alternative = this.visit(expr.alternative);
+
+    const predicate = this.visit(expr.predicate);
+
+    return wasm
+      .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(predicate)))
+      .results(i32, i64)
+      .then(consequent)
+      .else(alternative) as unknown as WasmNumeric;
   }
 
   visitNoneExpr(expr: ExprNS.None): WasmNumeric {
@@ -511,9 +533,6 @@ ${args.map(
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS
-  visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
   visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
