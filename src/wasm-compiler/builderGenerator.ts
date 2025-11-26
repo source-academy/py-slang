@@ -470,6 +470,38 @@ export class BuilderGenerator
       );
   }
 
+  visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
+    const arity = expr.parameters.length;
+    const tag = this.userFunctions.length;
+    this.userFunctions.push([]); // placeholder
+
+    // no statements allowed in lambdas, so there won't be any new local declarations
+    // other than parameters
+    const newFrame = this.collectDeclarations([], expr.parameters);
+
+    if (tag >= 1 << 16)
+      throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8)
+      throw new Error("Arity cannot be above 8-bit integer limit");
+    if (newFrame.length > 1 << 8)
+      throw new Error("Environment length cannot be above 8-bit integer limit");
+
+    this.environment.push(newFrame);
+    const body = this.visit(expr.body);
+    this.environment.pop();
+
+    this.userFunctions[tag] = [wasm.return(body)];
+
+    return wasm
+      .call(MAKE_CLOSURE_FX)
+      .args(
+        i32.const(tag),
+        i32.const(arity),
+        i32.const(newFrame.length),
+        global.get(CURR_ENV)
+      );
+  }
+
   visitCallExpr(expr: ExprNS.Call): WasmRaw {
     const callee = this.visit(expr.callee);
     const args = expr.args.map((arg) => this.visit(arg));
@@ -548,9 +580,6 @@ ${args.map(
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS
-  visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
