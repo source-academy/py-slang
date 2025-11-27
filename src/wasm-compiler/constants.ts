@@ -840,11 +840,17 @@ export const SET_LEX_ADDR_FX = wasm
 
 export const SET_PARAM_FX = wasm
   .func("$_set_param")
-  .params({ $addr: i32, $tag: i32, $value: i64 })
+  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64 })
   .results(i32)
   .body(
-    i32.store(i32.add(local.get("$addr"), i32.const(4)), local.get("$tag")),
-    i64.store(i32.add(local.get("$addr"), i32.const(8)), local.get("$value")),
+    i32.store(
+      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+      local.get("$tag")
+    ),
+    i64.store(
+      i32.add(i32.add(local.get("$addr"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12))),
+      local.get("$value")
+    ),
 
     local.get("$addr")
   );

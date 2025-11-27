@@ -525,7 +525,7 @@ ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 ${args.map(
   (arg, i) =>
     wasm.raw`
-(i32.const ${i * 12}) (i32.add) ${arg} (call ${SET_PARAM_FX.name})`
+(i32.const ${i}) ${arg} (call ${SET_PARAM_FX.name})`
 )}
 
 (global.set ${CURR_ENV})
