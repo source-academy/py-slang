@@ -719,12 +719,18 @@ export const ALLOC_ENV_FX = wasm
     i32.store(global.get(HEAP_PTR), local.get("$parent")),
     global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
 
-    memory.fill(
-      i32.add(global.get(HEAP_PTR), i32.mul(local.get("$arity"), i32.const(12))),
-      i32.const(TYPE_TAG.UNBOUND),
-      i32.mul(i32.sub(local.get("$size"), local.get("$arity")), i32.const(12))
-    ),
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$size"), i32.const(12))))
+    wasm
+      .loop("$loop")
+      .body(
+        wasm
+          .if(local.get("$size"))
+          .then(
+            i32.store(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND)),
+            global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
+            local.set("$size", i32.sub(local.get("$size"), i32.const(1))),
+            wasm.br("$loop")
+          )
+      )
   );
 
 export const PRE_APPLY_FX = wasm
