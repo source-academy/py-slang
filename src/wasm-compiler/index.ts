@@ -1,3 +1,4 @@
+import assert from "assert";
 import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
@@ -19,7 +20,7 @@ export async function compileToWasmAndRun(code: string) {
   const wat = watGenerator.visit(watIR);
 
   const w = await wabt();
-  const wasm: Uint8Array = w.parseWat("a", wat).toBinary({}).buffer;
+  const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
   const memory = new WebAssembly.Memory({ initial: 1 });
 
@@ -54,5 +55,6 @@ export async function compileToWasmAndRun(code: string) {
   });
 
   // run the exported main function
-  return (result as any).instance.exports.main() as [number, number];
+  assert(typeof result.instance.exports.main === "function");
+  return result.instance.exports.main() as [number, number];
 }
