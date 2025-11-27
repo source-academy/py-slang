@@ -579,6 +579,10 @@ ${args.map(
           .then(...body);
   }
 
+  visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {
+    return wasm.nop();
+  }
+
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
@@ -587,9 +591,6 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitDedentCreation(stmt: StmtNS.Dedent): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
