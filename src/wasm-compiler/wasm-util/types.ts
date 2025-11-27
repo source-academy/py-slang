@@ -206,7 +206,8 @@ export type WasmNumericFor<T extends WasmNumericType> =
   | WasmRaw
 
   // below are not numeric instructions, but the results of these are numeric
-  | WasmLoad
+  | WasmLoadOp<T>
+  | (T extends WasmIntNumericType ? WasmLoadNarrowOp<T> : never)
   | WasmLocalGet
   | WasmGlobalGet
   | WasmLocalTee
