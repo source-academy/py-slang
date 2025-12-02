@@ -8,6 +8,8 @@
     "regen": "npm run build && node dist/generate.js",
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
+    "format": "prettier --write \"src/**/*.{ts,tsx}\"",
+    "format:ci": "prettier --list-different \"src/**/*.{ts,tsx}\"",
     "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest"
@@ -39,6 +41,7 @@
     "jest": "^29.7.0",
     "jsdoc": "^4.0.4",
     "nodemon": "^3.1.10",
+    "prettier": "^3.7.3",
     "rimraf": "^3.0.2",
     "rollup": "^4.38.0",
     "rollup-plugin-modify": "^3.0.0",

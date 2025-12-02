@@ -1,18 +1,18 @@
-import { Stash, Value } from './stash';
-import { PyControl, PyControlItem } from './py_control';
-import { createSimpleEnvironment, createProgramEnvironment, PyEnvironment } from './py_environment';
-import { CseError } from './error';
-import { Heap } from './heap';
-import { PyNode } from './py_types';
-import { NativeStorage } from '../types';
-import { StmtNS } from '../ast-types';
+import { Stash, Value } from './stash'
+import { PyControl, PyControlItem } from './py_control'
+import { createSimpleEnvironment, createProgramEnvironment, PyEnvironment } from './py_environment'
+import { CseError } from './error'
+import { Heap } from './heap'
+import { PyNode } from './py_types'
+import { NativeStorage } from '../types'
+import { StmtNS } from '../ast-types'
 
 export class PyContext {
-  public control: PyControl;
-  public stash: Stash;
-  public output: string = '';
+  public control: PyControl
+  public stash: Stash
+  public output: string = ''
   //public environment: Environment;
-  public errors: CseError[] = [];
+  public errors: CseError[] = []
 
   runtime: {
     break: boolean
@@ -28,16 +28,16 @@ export class PyContext {
     breakpointSteps: number[]
     changepointSteps: number[]
   }
-  
+
   /**
    * Used for storing the native context and other values
    */
   nativeStorage: NativeStorage
 
   constructor(program?: StmtNS.Stmt, context?: PyContext) {
-    this.control = new PyControl(program);
-    this.stash = new Stash();
-    this.runtime = this.createEmptyRuntime();
+    this.control = new PyControl(program)
+    this.stash = new Stash()
+    this.runtime = this.createEmptyRuntime()
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment()
@@ -51,7 +51,7 @@ export class PyContext {
       maxExecTime: 1000,
       //evaller: null,
       loadedModules: {},
-      loadedModuleTypes: {},
+      loadedModuleTypes: {}
     }
   }
 
@@ -81,32 +81,32 @@ export class PyContext {
   })
 
   public reset(program?: StmtNS.Stmt): void {
-    this.control = new PyControl(program);
-    this.stash = new Stash();
+    this.control = new PyControl(program)
+    this.stash = new Stash()
     //this.environment = createProgramEnvironment(this, false);
-    this.errors = []; 
+    this.errors = []
   }
 
   public copy(): PyContext {
-    const newContext = new PyContext();
-    newContext.control = this.control.copy();
-    newContext.stash = this.stash.copy();
+    const newContext = new PyContext()
+    newContext.control = this.control.copy()
+    newContext.stash = this.stash.copy()
     //newContext.environments = this.copyEnvironment(this.environments);
-    return newContext;
+    return newContext
   }
 
   private copyEnvironment(env: PyEnvironment): PyEnvironment {
-    const newTail = env.tail ? this.copyEnvironment(env.tail) : null;
+    const newTail = env.tail ? this.copyEnvironment(env.tail) : null
     const newEnv: PyEnvironment = {
-      id: env.id, 
+      id: env.id,
       name: env.name,
       tail: newTail,
       head: { ...env.head },
       heap: new Heap(),
-      callExpression: env.callExpression, 
+      callExpression: env.callExpression,
       thisContext: env.thisContext
-    };
-    return newEnv;
+    }
+    return newEnv
   }
 }
 
@@ -143,7 +143,10 @@ export class EnvTree {
 export class EnvTreeNode {
   private _children: EnvTreeNode[] = []
 
-  constructor(readonly environment: PyEnvironment, public parent: EnvTreeNode | null) {}
+  constructor(
+    readonly environment: PyEnvironment,
+    public parent: EnvTreeNode | null
+  ) {}
 
   get children(): EnvTreeNode[] {
     return this._children

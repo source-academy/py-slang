@@ -1,9 +1,9 @@
-import * as es from 'estree';
-import { Stash, Value } from './stash';
-import { Control, ControlItem } from './control';
-import { createSimpleEnvironment, createProgramEnvironment, Environment } from './environment';
-import { CseError } from './error';
-import { Heap } from './heap';
+import * as es from 'estree'
+import { Stash, Value } from './stash'
+import { Control, ControlItem } from './control'
+import { createSimpleEnvironment, createProgramEnvironment, Environment } from './environment'
+import { CseError } from './error'
+import { Heap } from './heap'
 import {
   AppInstr,
   Instr,
@@ -14,13 +14,13 @@ import {
   Node,
   StatementSequence
 } from './types'
-import { NativeStorage } from '../types';
+import { NativeStorage } from '../types'
 
 export class Context {
-  public control: Control;
-  public stash: Stash;
+  public control: Control
+  public stash: Stash
   //public environment: Environment;
-  public errors: CseError[] = [];
+  public errors: CseError[] = []
 
   runtime: {
     break: boolean
@@ -36,16 +36,16 @@ export class Context {
     breakpointSteps: number[]
     changepointSteps: number[]
   }
-  
+
   /**
    * Used for storing the native context and other values
    */
   nativeStorage: NativeStorage
 
   constructor(program?: es.Program | StatementSequence, context?: Context) {
-    this.control = new Control(program);
-    this.stash = new Stash();
-    this.runtime = this.createEmptyRuntime();
+    this.control = new Control(program)
+    this.stash = new Stash()
+    this.runtime = this.createEmptyRuntime()
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment()
@@ -89,32 +89,32 @@ export class Context {
   })
 
   public reset(program?: es.Program | StatementSequence): void {
-    this.control = new Control(program);
-    this.stash = new Stash();
+    this.control = new Control(program)
+    this.stash = new Stash()
     //this.environment = createProgramEnvironment(this, false);
-    this.errors = []; 
+    this.errors = []
   }
 
   public copy(): Context {
-    const newContext = new Context();
-    newContext.control = this.control.copy();
-    newContext.stash = this.stash.copy();
+    const newContext = new Context()
+    newContext.control = this.control.copy()
+    newContext.stash = this.stash.copy()
     //newContext.environments = this.copyEnvironment(this.environments);
-    return newContext;
+    return newContext
   }
 
   private copyEnvironment(env: Environment): Environment {
-    const newTail = env.tail ? this.copyEnvironment(env.tail) : null;
+    const newTail = env.tail ? this.copyEnvironment(env.tail) : null
     const newEnv: Environment = {
-      id: env.id, 
+      id: env.id,
       name: env.name,
       tail: newTail,
       head: { ...env.head },
       heap: new Heap(),
-      callExpression: env.callExpression, 
+      callExpression: env.callExpression,
       thisContext: env.thisContext
-    };
-    return newEnv;
+    }
+    return newEnv
   }
 }
 
@@ -151,7 +151,10 @@ export class EnvTree {
 export class EnvTreeNode {
   private _children: EnvTreeNode[] = []
 
-  constructor(readonly environment: Environment, public parent: EnvTreeNode | null) {}
+  constructor(
+    readonly environment: Environment,
+    public parent: EnvTreeNode | null
+  ) {}
 
   get children(): EnvTreeNode[] {
     return this._children

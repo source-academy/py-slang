@@ -1,7 +1,7 @@
 // astHelpers.ts
-import type * as es from 'estree';
-import { StatementSequence } from './types';
-import { ControlItem } from './control';
+import type * as es from 'estree'
+import { StatementSequence } from './types'
+import { ControlItem } from './control'
 
 /**
  * Create a StatementSequence node.
@@ -13,20 +13,22 @@ export const statementSequence = (
   type: 'StatementSequence',
   body,
   loc,
-  innerComments: undefined,
-});
+  innerComments: undefined
+})
 
 export const isNode = (item: any): item is es.Node => {
-  return typeof item === 'object' && item !== null && 'type' in item;
-};
+  return typeof item === 'object' && item !== null && 'type' in item
+}
 
 export const isBlockStatement = (node: es.Node | StatementSequence): node is es.BlockStatement => {
-  return node.type === 'BlockStatement';
-};
+  return node.type === 'BlockStatement'
+}
 
 export const hasDeclarations = (node: es.BlockStatement): boolean => {
-  return node.body.some(stmt => stmt.type === 'VariableDeclaration' || stmt.type === 'FunctionDeclaration');
-};
+  return node.body.some(
+    stmt => stmt.type === 'VariableDeclaration' || stmt.type === 'FunctionDeclaration'
+  )
+}
 
 export const blockArrowFunction = (
   params: es.Identifier[],
@@ -77,20 +79,26 @@ export const declaration = (
 type AllowedDeclarations = 'declaration' | 'const'
 
 export interface pyVariableDeclaration {
-  type: "VariableDeclaration";
-  declarations: pyVariableDeclarator[];
-  kind: "declaration" | "const";
-  loc?: es.SourceLocation | null | undefined;
-  range?: [number, number] | undefined;
+  type: 'VariableDeclaration'
+  declarations: pyVariableDeclarator[]
+  kind: 'declaration' | 'const'
+  loc?: es.SourceLocation | null | undefined
+  range?: [number, number] | undefined
 }
 
 export interface pyVariableDeclarator {
-  type: "VariableDeclarator";
-  id: Pattern;
-  init?: es.Expression | null | undefined;
+  type: 'VariableDeclarator'
+  id: Pattern
+  init?: es.Expression | null | undefined
 }
 
-export type Pattern = es.Identifier | es.ObjectPattern | es.ArrayPattern | es.RestElement | es.AssignmentPattern | es.MemberExpression;
+export type Pattern =
+  | es.Identifier
+  | es.ObjectPattern
+  | es.ArrayPattern
+  | es.RestElement
+  | es.AssignmentPattern
+  | es.MemberExpression
 
 export const identifier = (name: string, loc?: es.SourceLocation | null): es.Identifier => ({
   type: 'Identifier',

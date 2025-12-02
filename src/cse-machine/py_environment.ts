@@ -1,10 +1,9 @@
-import { Value } from './stash';
-import { Heap } from './heap';
-import { PyClosure } from './py_closure';
-import { PyContext } from './py_context';
-import { PyNode } from './py_types';
-import { ExprNS, StmtNS } from '../ast-types';
-
+import { Value } from './stash'
+import { Heap } from './heap'
+import { PyClosure } from './py_closure'
+import { PyContext } from './py_context'
+import { PyNode } from './py_types'
+import { ExprNS, StmtNS } from '../ast-types'
 
 export interface Frame {
   [name: string]: any
@@ -14,7 +13,7 @@ export interface PyEnvironment {
   readonly id: string
   name: string
   tail: PyEnvironment | null
-  callExpression?: ExprNS.Call;
+  callExpression?: ExprNS.Call
   head: Frame
   heap: Heap
   thisContext?: Value
@@ -32,7 +31,10 @@ export const createEnvironment = (
   callExpression: ExprNS.Call
 ): PyEnvironment => {
   const environment: PyEnvironment = {
-    name: closure.node.constructor.name === 'FunctionDef' ? (closure.node as StmtNS.FunctionDef).name.lexeme: 'lambda',
+    name:
+      closure.node.constructor.name === 'FunctionDef'
+        ? (closure.node as StmtNS.FunctionDef).name.lexeme
+        : 'lambda',
     tail: closure.environment,
     head: {},
     heap: new Heap(),
@@ -40,11 +42,11 @@ export const createEnvironment = (
     callExpression: callExpression,
     closure: closure
   }
-  
+
   closure.node.parameters.forEach((paramToken, index) => {
-    const paramName = paramToken.lexeme;
-    environment.head[paramName] = args[index];
-  });
+    const paramName = paramToken.lexeme
+    environment.head[paramName] = args[index]
+  })
   return environment
 }
 
@@ -58,14 +60,14 @@ export const createSimpleEnvironment = (
     name,
     tail,
     head: {},
-    heap: new Heap(),
+    heap: new Heap()
     // TODO: callExpression and thisContext are optional and can be provided as needed.
-  };
-};
+  }
+}
 
 export const createProgramEnvironment = (context: PyContext, isPrelude: boolean): PyEnvironment => {
-  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment');
-};
+  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment')
+}
 
 export const createBlockEnvironment = (
   context: PyContext,
@@ -98,8 +100,8 @@ export const createBlockEnvironment = (
 // };
 
 export const currentEnvironment = (context: PyContext): PyEnvironment => {
-  return context.runtime.environments[0];
-};
+  return context.runtime.environments[0]
+}
 
 export const popEnvironment = (context: PyContext) => context.runtime.environments.shift()
 

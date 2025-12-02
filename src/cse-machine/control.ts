@@ -1,13 +1,13 @@
-import type * as es from 'estree';
-import { Stack } from './stack';
-import { isNode, isBlockStatement, hasDeclarations, statementSequence } from './ast-helper';
-import { Node, StatementSequence, Instr } from './types';
-import { isEnvDependent } from './utils';
+import type * as es from 'estree'
+import { Stack } from './stack'
+import { isNode, isBlockStatement, hasDeclarations, statementSequence } from './ast-helper'
+import { Node, StatementSequence, Instr } from './types'
+import { isEnvDependent } from './utils'
 
 export type ControlItem = (Node | Instr) & {
-  isEnvDependent?: boolean;
-  skipEnv?: boolean;
-};
+  isEnvDependent?: boolean
+  skipEnv?: boolean
+}
 
 export class Control extends Stack<ControlItem> {
   private numEnvDependentItems: number

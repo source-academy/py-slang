@@ -1,10 +1,22 @@
-import { Environment } from "./environment";
-import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, InstrType, PyNode, UnOpInstr, BoolOpInstr, EndOfFunctionBodyInstr } from "./py_types";
-import { TokenType } from "../tokens";
+import { Environment } from './environment'
+import {
+  AppInstr,
+  AssmtInstr,
+  BinOpInstr,
+  BranchInstr,
+  EnvInstr,
+  Instr,
+  InstrType,
+  PyNode,
+  UnOpInstr,
+  BoolOpInstr,
+  EndOfFunctionBodyInstr
+} from './py_types'
+import { TokenType } from '../tokens'
 
-export const popInstr = (srcNode: PyNode): Instr => ({ 
-  instrType: InstrType.POP, 
-  srcNode 
+export const popInstr = (srcNode: PyNode): Instr => ({
+  instrType: InstrType.POP,
+  srcNode
 })
 
 export const assmtInstr = (
@@ -69,7 +81,7 @@ export const boolOpInstr = (symbol: TokenType, srcNode: PyNode): BoolOpInstr => 
   instrType: InstrType.BOOL_OP,
   symbol,
   srcNode
-});
+})
 
 export const endOfFunctionBodyInstr = (srcNode: PyNode): EndOfFunctionBodyInstr => ({
   instrType: InstrType.END_OF_FUNCTION_BODY,

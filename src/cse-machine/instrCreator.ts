@@ -1,6 +1,16 @@
-import { Environment } from "./environment";
-import { AppInstr, AssmtInstr, BinOpInstr, BranchInstr, EnvInstr, Instr, InstrType, Node, UnOpInstr } from "./types";
-import type * as es from 'estree';
+import { Environment } from './environment'
+import {
+  AppInstr,
+  AssmtInstr,
+  BinOpInstr,
+  BranchInstr,
+  EnvInstr,
+  Instr,
+  InstrType,
+  Node,
+  UnOpInstr
+} from './types'
+import type * as es from 'estree'
 
 export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
 

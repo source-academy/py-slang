@@ -2,7 +2,14 @@ import * as es from 'estree'
 import { Environment } from './environment'
 import { Context } from './context'
 import { StatementSequence } from './types'
-import { blockArrowFunction, blockStatement, hasReturnStatement, identifier, isBlockStatement, returnStatement } from './ast-helper'
+import {
+  blockArrowFunction,
+  blockStatement,
+  hasReturnStatement,
+  identifier,
+  isBlockStatement,
+  returnStatement
+} from './ast-helper'
 import { ControlItem } from './control'
 
 export class Closure {
@@ -19,9 +26,9 @@ export class Closure {
     public environment: Environment,
     public context: Context,
     public predefined: boolean = false
-) {
-      this.originalNode = node
-  } 
+  ) {
+    this.originalNode = node
+  }
 
   static makeFromArrowFunction(
     node: es.ArrowFunctionExpression,
@@ -35,17 +42,21 @@ export class Closure {
       !isBlockStatement(node.body) && !isStatementSequence(node.body)
         ? blockStatement([returnStatement(node.body, node.body.loc)], node.body.loc)
         : dummyReturn && !hasReturnStatement(node.body)
-        ? blockStatement(
-            [
-              ...node.body.body,
-              returnStatement(identifier('undefined', node.body.loc), node.body.loc)
-            ],
-            node.body.loc
-          )
-        : node.body
+          ? blockStatement(
+              [
+                ...node.body.body,
+                returnStatement(identifier('undefined', node.body.loc), node.body.loc)
+              ],
+              node.body.loc
+            )
+          : node.body
 
-    const closure = new Closure(blockArrowFunction(node.params as es.Identifier[], functionBody, node.loc), 
-      environment, context, predefined)
+    const closure = new Closure(
+      blockArrowFunction(node.params as es.Identifier[], functionBody, node.loc),
+      environment,
+      context,
+      predefined
+    )
 
     closure.originalNode = node
 

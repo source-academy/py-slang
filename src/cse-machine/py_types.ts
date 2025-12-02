@@ -1,38 +1,36 @@
-import { Environment } from './environment';
-import { StmtNS, ExprNS } from '../ast-types';
-import { TokenType } from '../tokens';
+import { Environment } from './environment'
+import { StmtNS, ExprNS } from '../ast-types'
+import { TokenType } from '../tokens'
 
-
-export type PyNode = StmtNS.Stmt | ExprNS.Expr | StatementSequence;
+export type PyNode = StmtNS.Stmt | ExprNS.Expr | StatementSequence
 
 export interface StatementSequence {
-       type: 'StatementSequence';
-       body: StmtNS.Stmt[];
-       loc?: {
-           start: { line: number; column: number };
-           end: { line: number; column: number };
-       };
-   }
-
+  type: 'StatementSequence'
+  body: StmtNS.Stmt[]
+  loc?: {
+    start: { line: number; column: number }
+    end: { line: number; column: number }
+  }
+}
 
 export function typeTranslator(type: string): string {
   switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "bool":
-      return "bool";
-    case "string":
-      return "str";
-    case "complex":
-      return "complex";
-    case "undefined":
-      return "NoneType";
+    case 'bigint':
+      return 'int'
+    case 'number':
+      return 'float'
+    case 'boolean':
+      return 'bool'
+    case 'bool':
+      return 'bool'
+    case 'string':
+      return 'str'
+    case 'complex':
+      return 'complex'
+    case 'undefined':
+      return 'NoneType'
     default:
-      return "unknown";
+      return 'unknown'
   }
 }
 
@@ -40,76 +38,76 @@ export function typeTranslator(type: string): string {
 export function operatorTranslator(operator: TokenType | string) {
   switch (operator) {
     case TokenType.PLUS:
-      return '+';
+      return '+'
     case TokenType.MINUS:
-      return '-';
+      return '-'
     case TokenType.STAR:
-      return '*';
+      return '*'
     case TokenType.SLASH:
-      return '/';
+      return '/'
     case TokenType.DOUBLESLASH:
-      return '//';
+      return '//'
     case TokenType.PERCENT:
-      return '%';
+      return '%'
     case TokenType.DOUBLESTAR:
-      return '**';  
+      return '**'
     case TokenType.LESS:
-      return '<';
+      return '<'
     case TokenType.GREATER:
-      return '>';
+      return '>'
     case TokenType.DOUBLEEQUAL:
-      return '==';
+      return '=='
     case TokenType.NOTEQUAL:
       return '!='
     case TokenType.LESSEQUAL:
-      return '<=';
+      return '<='
     case TokenType.GREATEREQUAL:
-      return '>=';
+      return '>='
     case TokenType.NOT:
-      return 'not';
+      return 'not'
     case TokenType.AND:
-      return 'and';
+      return 'and'
     case TokenType.OR:
-      return 'or';
+      return 'or'
     default:
-        return String(operator);
+      return String(operator)
   }
 }
 
 export enum InstrType {
-    END_OF_FUNCTION_BODY = "EndOfFunctionBody",
-    RESET = 'Reset',
-    WHILE = 'While',
-    FOR = 'For',
-    ASSIGNMENT = 'Assignment',
-    ANN_ASSIGNMENT = 'AnnAssignment',
-    APPLICATION = 'Application',
-    UNARY_OP = 'UnaryOperation',
-    BINARY_OP = 'BinaryOperation',
-    BOOL_OP = 'BoolOperation',
-    COMPARE = 'Compare',
-    CALL = 'Call',
-    RETURN = 'Return',
-    BREAK = 'Break',
-    CONTINUE = 'Continue',
-    IF = 'If',
-    FUNCTION_DEF = 'FunctionDef',
-    LAMBDA = 'Lambda',
-    MULTI_LAMBDA = 'MultiLambda',
-    GROUPING = 'Grouping',
-    LITERAL = 'Literal',
-    VARIABLE = 'Variable',
-    TERNARY = 'Ternary',
-    PASS = 'Pass',
-    ASSERT = 'Assert',
-    IMPORT = 'Import',
-    GLOBAL = 'Global',
-    NONLOCAL = 'NonLocal',
-    Program = 'Program',
-    BRANCH = 'Branch',
-    POP = 'Pop',
-    ENVIRONMENT = 'environment',
-    MARKER = 'marker',
+  END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+  RESET = 'Reset',
+  WHILE = 'While',
+  FOR = 'For',
+  ASSIGNMENT = 'Assignment',
+  ANN_ASSIGNMENT = 'AnnAssignment',
+  APPLICATION = 'Application',
+  UNARY_OP = 'UnaryOperation',
+  BINARY_OP = 'BinaryOperation',
+  BOOL_OP = 'BoolOperation',
+  COMPARE = 'Compare',
+  CALL = 'Call',
+  RETURN = 'Return',
+  BREAK = 'Break',
+  CONTINUE = 'Continue',
+  IF = 'If',
+  FUNCTION_DEF = 'FunctionDef',
+  LAMBDA = 'Lambda',
+  MULTI_LAMBDA = 'MultiLambda',
+  GROUPING = 'Grouping',
+  LITERAL = 'Literal',
+  VARIABLE = 'Variable',
+  TERNARY = 'Ternary',
+  PASS = 'Pass',
+  ASSERT = 'Assert',
+  IMPORT = 'Import',
+  GLOBAL = 'Global',
+  NONLOCAL = 'NonLocal',
+  Program = 'Program',
+  BRANCH = 'Branch',
+  POP = 'Pop',
+  ENVIRONMENT = 'environment',
+  MARKER = 'marker'
 }
 
 interface BaseInstr {
@@ -132,39 +130,39 @@ export interface ForInstr extends BaseInstr {
 }
 
 export interface AssmtInstr extends BaseInstr {
-  instrType: InstrType.ASSIGNMENT;
-  symbol: string;
-  constant: boolean;
-  declaration: boolean;
+  instrType: InstrType.ASSIGNMENT
+  symbol: string
+  constant: boolean
+  declaration: boolean
 }
 
 export interface UnOpInstr extends BaseInstr {
-  instrType: InstrType.UNARY_OP;
-  symbol: TokenType;
+  instrType: InstrType.UNARY_OP
+  symbol: TokenType
 }
 
 export interface BinOpInstr extends BaseInstr {
-  instrType: InstrType.BINARY_OP;
-  symbol: TokenType;
+  instrType: InstrType.BINARY_OP
+  symbol: TokenType
 }
 
 export interface BoolOpInstr extends BaseInstr {
-  instrType: InstrType.BOOL_OP;
-  symbol: TokenType;
+  instrType: InstrType.BOOL_OP
+  symbol: TokenType
 }
 
 export interface AppInstr extends BaseInstr {
-  instrType: InstrType.APPLICATION;
-  numOfArgs: number;
-  srcNode: PyNode;
+  instrType: InstrType.APPLICATION
+  numOfArgs: number
+  srcNode: PyNode
 }
 
 export interface EndOfFunctionBodyInstr extends BaseInstr {
-  instrType: InstrType.END_OF_FUNCTION_BODY;
+  instrType: InstrType.END_OF_FUNCTION_BODY
 }
 
 export interface ResetInstr extends BaseInstr {
-  instrType: InstrType.RESET;
+  instrType: InstrType.RESET
 }
 
 export interface BranchInstr extends BaseInstr {
@@ -173,7 +171,7 @@ export interface BranchInstr extends BaseInstr {
 }
 
 export interface PopInstr extends BaseInstr {
-  instrType: InstrType.POP;
+  instrType: InstrType.POP
 }
 
 export interface EnvInstr extends BaseInstr {
