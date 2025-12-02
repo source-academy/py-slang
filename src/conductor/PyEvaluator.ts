@@ -2,12 +2,12 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { runInContext, IOptions } from "../runner/pyRunner";
-import { Context } from "../cse-machine/context";
+import { PyRunInContext, IOptions } from "../runner/pyRunner";
+import { PyContext } from "../cse-machine/py_context";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Finished } from "../types";
 
-const defaultContext = new Context();
+const defaultContext = new PyContext();
 const defaultOptions: IOptions = {
   isPrelude: false,
   envSteps: 100000,
@@ -15,7 +15,7 @@ const defaultOptions: IOptions = {
 };
 
 export default class PyEvaluator extends BasicEvaluator {
-  private context: Context;
+  private context: PyContext;
   private options: IOptions;
 
   constructor(conductor: IRunnerPlugin) {
@@ -26,8 +26,8 @@ export default class PyEvaluator extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      const result = await runInContext(
-        chunk, // Code
+      const result = await PyRunInContext(
+        chunk, 
         this.context,
         this.options
       );

@@ -13,11 +13,9 @@ import { PyControl, PyControlItem } from './py_control';
 import { createEnvironment, currentEnvironment, pushEnvironment, popEnvironment } from './py_environment';
 import { PyNode, Instr, InstrType, UnOpInstr, BinOpInstr, BoolOpInstr, AssmtInstr, AppInstr, BranchInstr } from './py_types';
 import { Stash, Value, ErrorValue } from './stash';
-import { IOptions } from '..';
+import { IOptions } from '../runner/pyRunner';
 import * as instrCreator from './py_instrCreator';
 import { evaluateUnaryExpression, evaluateBinaryExpression, evaluateBoolExpression, isFalsy } from './py_operators';
-import { TokenType } from '../tokens';
-import { Token } from '../tokenizer';
 import { Result, Finished, CSEBreak, Representation} from '../types';
 import { toPythonString } from '../py_stdlib'
 import { pyGetVariable, pyDefineVariable, scanForAssignments } from './py_utils';
@@ -32,6 +30,11 @@ type CmdEvaluator = (
   isPrelude: boolean
 ) => void
 
+let cseFinalPrint = "";
+export function addPrint(str: string) {
+  cseFinalPrint = cseFinalPrint + str + "\n";
+}
+
 /**
  * Function that returns the appropriate Promise<Result> given the output of CSE machine evaluating, depending
  * on whether the program is finished evaluating, ran into a breakpoint or ran into an error.
@@ -40,18 +43,18 @@ type CmdEvaluator = (
  * @returns The corresponding promise.
  */
 export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Result> {
-    return new Promise((resolve, reject) => {
-        if (value instanceof CSEBreak) {
-            resolve({ status: 'suspended-cse-eval', context });
-        } else if (value && (value as any).type === 'error') {
-            const errorValue = value as ErrorValue;
-            const representation = new Representation(errorValue.message);
-            resolve({ status: 'finished', context, value, representation });
-        } else {
-            const representation = new Representation(toPythonString(value));
-            resolve({ status: 'finished', context, value, representation });
-        }
-    });
+  return new Promise((resolve, reject) => {
+    if (value instanceof CSEBreak) {
+      resolve({ status: 'suspended-cse-eval', context });
+    } else if (value.type === 'error') {
+      const msg = value.message;
+      const representation = new Representation(cseFinalPrint + msg);
+      resolve({ status: 'finished', context, value, representation });
+    } else {
+      const representation = new Representation(value);
+      resolve({ status: 'finished', context, value, representation });
+    }
+  });
 }
 
 /**
@@ -64,21 +67,34 @@ export function PyCSEResultPromise(context: PyContext, value: Value): Promise<Re
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
+
+let source = '';
+
 export function PyEvaluate(code: string, program: StmtNS.Stmt, context: PyContext, options: IOptions): Value {
+    source = code;
+
+    try {
+    // TODO: is undefined variables check necessary for Python?
+    // checkProgramForUndefinedVariables(program, context)
+    } catch (error: any) {
+      return { type: 'error', message: error.message };
+    }
+
     try {
         context.runtime.isRunning = true;
         context.control = new PyControl(program);
-        
+        context.stash = new Stash();
+
         const result = pyRunCSEMachine(
             code, 
             context, 
             context.control, 
             context.stash, 
-            options.envSteps,
-            options.stepLimit,
-            options.isPrelude || false,
+            options.envSteps!,
+            options.stepLimit!,
+            options.isPrelude,
         );
-        return context.output ? { type: "string", value: context.output} : { type: 'string', value: '' };
+        return context.output ? { type: "string", value: context.output} : result;
     } catch(error: any) {
         return { type: 'error', message: error.message};
     } finally {
@@ -250,7 +266,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         } else if (typeof literal.value === 'string') {
             stash.push({ type: 'string', value: literal.value });
         } else {
-            stash.push({ type: 'undefined' }); // For null
+            stash.push({ type: 'undefined' });
         }
     },
 
@@ -434,6 +450,13 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(ternaryNode.predicate);
     },
 
+    'FromImport': (code, command, context, control, stash, isPrelude) => {
+           // TODO: nothing to do for now, we can implement it for CSE instructions later on
+           // All modules are preloaded into the global environment by the runner.
+           // When the code later uses the module name (e.g., 'runes'), pyGetVariable
+           // will find it in the global scope.
+       },
+
     /**
      * Instruction Handlers
      */
@@ -529,7 +552,7 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
             // push function body onto control stack
             const closureNode = closure.node;
             if (closureNode.constructor.name === 'FunctionDef') {
-               // 'def' has a body of statements (an array)
+                // 'def' has a body of statements
                 const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
                 control.push(...bodyStmts);
             } else {

@@ -2,8 +2,7 @@ import { ExprNS } from '../ast-types';
 import { ErrorType, SourceError, SourceLocation} from '../types'
 import { PyRuntimeSourceError } from './py_runtimeSourceError';
 import { PyContext } from '../cse-machine/py_context';
-import { column } from 'mathjs';
-import { typeTranslator, operatorTranslator } from '../cse-machine/py_utils';
+import { typeTranslator, operatorTranslator } from '../cse-machine/py_types';
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): { line: number; fullLine: string } {

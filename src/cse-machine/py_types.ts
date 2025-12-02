@@ -2,6 +2,7 @@ import { Environment } from './environment';
 import { StmtNS, ExprNS } from '../ast-types';
 import { TokenType } from '../tokens';
 
+
 export type PyNode = StmtNS.Stmt | ExprNS.Expr | StatementSequence;
 
 export interface StatementSequence {
@@ -12,6 +13,68 @@ export interface StatementSequence {
            end: { line: number; column: number };
        };
    }
+
+
+export function typeTranslator(type: string): string {
+  switch (type) {
+    case "bigint":
+      return "int";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "bool":
+      return "bool";
+    case "string":
+      return "str";
+    case "complex":
+      return "complex";
+    case "undefined":
+      return "NoneType";
+    default:
+      return "unknown";
+  }
+}
+
+// TODO: properly adapt for the rest, string is passed in to cater for __py_adder etc...
+export function operatorTranslator(operator: TokenType | string) {
+  switch (operator) {
+    case TokenType.PLUS:
+      return '+';
+    case TokenType.MINUS:
+      return '-';
+    case TokenType.STAR:
+      return '*';
+    case TokenType.SLASH:
+      return '/';
+    case TokenType.DOUBLESLASH:
+      return '//';
+    case TokenType.PERCENT:
+      return '%';
+    case TokenType.DOUBLESTAR:
+      return '**';  
+    case TokenType.LESS:
+      return '<';
+    case TokenType.GREATER:
+      return '>';
+    case TokenType.DOUBLEEQUAL:
+      return '==';
+    case TokenType.NOTEQUAL:
+      return '!='
+    case TokenType.LESSEQUAL:
+      return '<=';
+    case TokenType.GREATEREQUAL:
+      return '>=';
+    case TokenType.NOT:
+      return 'not';
+    case TokenType.AND:
+      return 'and';
+    case TokenType.OR:
+      return 'or';
+    default:
+        return String(operator);
+  }
+}
 
 export enum InstrType {
     END_OF_FUNCTION_BODY = "EndOfFunctionBody",

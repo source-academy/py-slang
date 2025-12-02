@@ -3,7 +3,7 @@ import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
 import { PyContext } from './cse-machine/py_context'
-import { PyControl } from './cse-machine/py_control'
+
 
 export class CSEBreak {}
 
@@ -321,10 +321,11 @@ export interface Finished {
 export class Representation {
     constructor(public representation: string) {}
   
-    toString(): string {
+    toString(value: any): string {
         // call str(value) in stdlib
         // TODO: mapping
-        return this.representation;
+        const result = toPythonString(value);
+        return result;
     }
 }
 

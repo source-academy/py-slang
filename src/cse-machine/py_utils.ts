@@ -1,7 +1,6 @@
 import { PyContext } from "./py_context";
 import { Value } from "./stash";
 import { PyNode } from "./py_types";
-import { TokenType } from "../tokens";
 import { PyRuntimeSourceError } from "../errors/py_runtimeSourceError";
 import { currentEnvironment, PyEnvironment } from "./py_environment";
 import { builtIns } from "../py_stdlib";
@@ -14,66 +13,7 @@ export function pyHandleRuntimeError (context: PyContext, error: PyRuntimeSource
   throw error;
 }
 
-export function typeTranslator(type: string): string {
-  switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "bool":
-      return "bool";
-    case "string":
-      return "str";
-    case "complex":
-      return "complex";
-    case "undefined":
-      return "NoneType";
-    default:
-      return "unknown";
-  }
-}
 
-// TODO: properly adapt for the rest, string is passed in to cater for __py_adder etc...
-export function operatorTranslator(operator: TokenType | string) {
-  switch (operator) {
-    case TokenType.PLUS:
-      return '+';
-    case TokenType.MINUS:
-      return '-';
-    case TokenType.STAR:
-      return '*';
-    case TokenType.SLASH:
-      return '/';
-    case TokenType.DOUBLESLASH:
-      return '//';
-    case TokenType.PERCENT:
-      return '%';
-    case TokenType.DOUBLESTAR:
-      return '**';  
-    case TokenType.LESS:
-      return '<';
-    case TokenType.GREATER:
-      return '>';
-    case TokenType.DOUBLEEQUAL:
-      return '==';
-    case TokenType.NOTEQUAL:
-      return '!='
-    case TokenType.LESSEQUAL:
-      return '<=';
-    case TokenType.GREATEREQUAL:
-      return '>=';
-    case TokenType.NOT:
-      return 'not';
-    case TokenType.AND:
-      return 'and';
-    case TokenType.OR:
-      return 'or';
-    default:
-        return String(operator);
-  }
-}
 
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
   if (typeof a === 'bigint' || typeof b === 'bigint') {
@@ -96,18 +36,21 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
   }
 }
 
-export function pyDefineVariable(context: PyContext, name: string, value: Value) {
-    const environment = currentEnvironment(context);
-    Object.defineProperty(environment.head, name, {
-        value: value,
-        writable: true,
-        enumerable: true
-    });
+export function pyDefineVariable(
+  context: PyContext,
+  name: string,
+  value: Value,
+  env: PyEnvironment = currentEnvironment(context)
+) {
+  Object.defineProperty(env.head, name, {
+      value: value,
+      writable: true,
+      enumerable: true
+  });
 }
 
 export function pyGetVariable(code: string, context: PyContext, name: string, node: PyNode): Value {
     const env = currentEnvironment(context);
-    // UnboundLocalError check
     if (env.closure && env.closure.localVariables.has(name)) {
         if (!env.head.hasOwnProperty(name)) {
             throw new UnboundLocalError(code, name, node as ExprNS.Variable);

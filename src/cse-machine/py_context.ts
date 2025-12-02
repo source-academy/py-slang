@@ -51,7 +51,7 @@ export class PyContext {
       maxExecTime: 1000,
       //evaller: null,
       loadedModules: {},
-      loadedModuleTypes: {}
+      loadedModuleTypes: {},
     }
   }
 

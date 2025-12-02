@@ -4,7 +4,8 @@ import { PyComplexNumber} from "../types";
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "../errors/py_errors";
 import { ExprNS } from "../ast-types";
 import { TokenType } from "../tokens";
-import { pyHandleRuntimeError, operatorTranslator, pythonMod, typeTranslator } from "./py_utils";
+import { pyHandleRuntimeError, pythonMod } from "./py_utils";
+import { operatorTranslator, typeTranslator } from "./py_types";
 import { Token } from "../tokenizer";
 import { operandTranslator } from "./utils";
 
