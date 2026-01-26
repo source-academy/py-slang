@@ -3,52 +3,13 @@ import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
 import { PyContext } from './cse-machine/py_context'
+import { SourceLocation } from './errors/base'
 
 export class CSEBreak {}
 
 // export class CseError {
 //     constructor(public readonly error: any) {}
 // }
-
-/**
- * Represents a specific position in source code
- * Line is 1-based, Column is 0-based
- */
-export interface SourcePosition {
-  line: number
-  column: number
-}
-
-/**
- * Represents the span of code within source code from start to end
- * Can be null if source code is not available
- */
-export interface SourceLocation {
-  source?: string | null
-  start: SourcePosition
-  end: SourcePosition
-}
-
-export enum ErrorType {
-  IMPORT = 'Import',
-  RUNTIME = 'Runtime',
-  SYNTAX = 'Syntax',
-  TYPE = 'Type'
-}
-
-export enum ErrorSeverity {
-  WARNING = 'Warning',
-  ERROR = 'Error'
-}
-
-// any and all errors ultimately implement this interface. as such, changes to this will affect every type of error.
-export interface SourceError {
-  type: ErrorType
-  severity: ErrorSeverity
-  location: SourceLocation
-  explain(): string
-  elaborate(): string
-}
 
 export class PyComplexNumber {
   public real: number
@@ -301,6 +262,11 @@ export interface SuspendedCseEval {
   context: Context | PyContext
 }
 
+export interface Error {
+  status: 'error';
+  context: Context | PyContext;
+}
+
 export interface Finished {
   status: 'finished'
   context: Context | PyContext
@@ -322,8 +288,6 @@ export class Representation {
   constructor(public representation: string) {}
 
   toString(value: any): string {
-    // call str(value) in stdlib
-    // TODO: mapping
     const result = toPythonString(value)
     return result
   }
@@ -342,4 +306,9 @@ export interface NativeStorage {
      */
   loadedModules: Record<string, ModuleFunctions>
   loadedModuleTypes: Record<string, Record<string, string>>
+}
+
+export interface ModuleContext {
+  state: null | any
+  tabs: null | any[]
 }

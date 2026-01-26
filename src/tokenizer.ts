@@ -78,6 +78,7 @@ const specialIdentifiers = new Map([
     ["return", TokenType.RETURN],
     ["assert", TokenType.ASSERT],
     ["import", TokenType.IMPORT],
+    ["as", TokenType.AS], 
     ["global", TokenType.GLOBAL],
     ["nonlocal", TokenType.NONLOCAL],
     ["if", TokenType.IF],

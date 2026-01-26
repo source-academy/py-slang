@@ -1,13 +1,13 @@
 import { PyContext } from './py_context'
 import { Value } from './stash'
 import { PyNode } from './py_types'
-import { PyRuntimeSourceError } from '../errors/py_runtimeSourceError'
+import { RuntimeSourceError } from '../errors/py_runtimeSourceError'
 import { currentEnvironment, PyEnvironment } from './py_environment'
 import { builtIns } from '../py_stdlib'
 import { StmtNS, ExprNS } from '../ast-types'
 import { UnboundLocalError, NameError } from '../errors/py_errors'
 
-export function pyHandleRuntimeError(context: PyContext, error: PyRuntimeSourceError) {
+export function pyHandleRuntimeError(context: PyContext, error: RuntimeSourceError) {
   context.errors.push(error)
   throw error
 }

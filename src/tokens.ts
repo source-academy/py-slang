@@ -55,6 +55,7 @@ export enum TokenType {
   RETURN,
   ASSERT,
   IMPORT,
+  AS,
   GLOBAL,
   NONLOCAL,
   IF,

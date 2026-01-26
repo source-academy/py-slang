@@ -4,7 +4,7 @@ import { createSimpleEnvironment, createProgramEnvironment, PyEnvironment } from
 import { CseError } from './error'
 import { Heap } from './heap'
 import { PyNode } from './py_types'
-import { NativeStorage } from '../types'
+import { ModuleContext, NativeStorage } from '../types'
 import { StmtNS } from '../ast-types'
 
 export class PyContext {
@@ -13,6 +13,7 @@ export class PyContext {
   public output: string = ''
   //public environment: Environment;
   public errors: CseError[] = []
+  public moduleContexts: { [name: string]: ModuleContext }
 
   runtime: {
     break: boolean
@@ -38,6 +39,7 @@ export class PyContext {
     this.control = new PyControl(program)
     this.stash = new Stash()
     this.runtime = this.createEmptyRuntime()
+    this.moduleContexts = {}
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment()

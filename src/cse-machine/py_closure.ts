@@ -3,6 +3,17 @@ import { PyEnvironment, uniqueId } from './py_environment'
 import { PyContext } from './py_context'
 import { StatementSequence } from './py_types'
 import { PyControlItem } from './py_control'
+import { Value } from './stash'
+
+export class JSValue {
+  public readonly value: Value
+  public readonly name: string
+
+  constructor(value: Value, name: string) {
+    this.value = value
+    this.name = name
+  }
+}
 
 /**
  * Represents a python closure, the class is a runtime representation of a function.

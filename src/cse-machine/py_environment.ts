@@ -103,6 +103,11 @@ export const currentEnvironment = (context: PyContext): PyEnvironment => {
   return context.runtime.environments[0]
 }
 
+export const getGlobalEnvironment = (context: PyContext): PyEnvironment | null => {
+  const envs = context.runtime.environments;
+  return envs.length > 0 ? envs[envs.length - 1] : null;
+};
+
 export const popEnvironment = (context: PyContext) => context.runtime.environments.shift()
 
 export const pushEnvironment = (context: PyContext, environment: PyEnvironment) => {

@@ -1,29 +1,10 @@
-import { ErrorSeverity, ErrorType, SourceError, SourceLocation } from '../types'
-import { Token } from '../tokenizer'
+import { ErrorSeverity, ErrorType, Locatable, type SourceError, SourceLocation, UNKNOWN_LOCATION } from "./base"
 
-// todo
-// just put on here temporarily
-export const UNKNOWN_LOCATION: SourceLocation = {
-  start: {
-    line: -1,
-    column: -1
-  },
-  end: {
-    line: -1,
-    column: -1
-  }
-}
-
-interface Locatable {
-  startToken: Token
-  endToken: Token
-}
-
-export abstract class PyRuntimeSourceError implements SourceError {
+export class RuntimeSourceError implements SourceError {
   public type: ErrorType = ErrorType.RUNTIME
   public severity: ErrorSeverity = ErrorSeverity.ERROR
   public location: SourceLocation
-  public message = 'Unknown runtime error has occured'
+  public message = "Default error message"
 
   constructor(node?: Locatable) {
     if (node) {

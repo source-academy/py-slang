@@ -1,6 +1,6 @@
 import { ExprNS } from '../ast-types'
-import { ErrorType, SourceError, SourceLocation } from '../types'
-import { PyRuntimeSourceError } from './py_runtimeSourceError'
+import { ErrorType, SourceError, SourceLocation } from './base'
+import { RuntimeSourceError } from './py_runtimeSourceError'
 import { PyContext } from '../cse-machine/py_context'
 import { typeTranslator, operatorTranslator } from '../cse-machine/py_types'
 
@@ -52,7 +52,7 @@ export function createErrorIndicator(snippet: string, errorPos: number): string 
 //     }
 // }
 
-export class UnsupportedOperandTypeError extends PyRuntimeSourceError {
+export class UnsupportedOperandTypeError extends RuntimeSourceError {
   constructor(
     source: string,
     node: ExprNS.Expr,
@@ -98,7 +98,7 @@ export class UnsupportedOperandTypeError extends PyRuntimeSourceError {
   }
 }
 
-export class MissingRequiredPositionalError extends PyRuntimeSourceError {
+export class MissingRequiredPositionalError extends RuntimeSourceError {
   private functionName: string
   private missingParamCnt: number
   private missingParamName: string
@@ -159,7 +159,7 @@ You called ${this.functionName}() without providing the required positional argu
   }
 }
 
-export class TooManyPositionalArgumentsError extends PyRuntimeSourceError {
+export class TooManyPositionalArgumentsError extends RuntimeSourceError {
   private functionName: string
   private expectedCount: number
   private givenCount: number
@@ -206,7 +206,7 @@ export class TooManyPositionalArgumentsError extends PyRuntimeSourceError {
   }
 }
 
-export class ZeroDivisionError extends PyRuntimeSourceError {
+export class ZeroDivisionError extends RuntimeSourceError {
   constructor(source: string, node: ExprNS.Expr, context: PyContext) {
     super(node)
     this.type = ErrorType.TYPE
@@ -249,7 +249,7 @@ export class ZeroDivisionError extends PyRuntimeSourceError {
   }
 }
 
-export class UnboundLocalError extends PyRuntimeSourceError {
+export class UnboundLocalError extends RuntimeSourceError {
   constructor(source: string, name: string, node: ExprNS.Expr) {
     super(node)
     this.type = ErrorType.TYPE
@@ -272,7 +272,7 @@ export class UnboundLocalError extends PyRuntimeSourceError {
   }
 }
 
-export class NameError extends PyRuntimeSourceError {
+export class NameError extends RuntimeSourceError {
   constructor(source: string, name: string, node: ExprNS.Variable) {
     super(node)
     this.type = ErrorType.TYPE
