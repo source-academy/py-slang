@@ -34,17 +34,17 @@ export async function compileToWasmAndRun(code: string) {
       log_string: (offset: number, length: number) =>
         console.log(
           new TextDecoder("utf8").decode(
-            new Uint8Array(memory.buffer, offset, length)
-          )
+            new Uint8Array(memory.buffer, offset, length),
+          ),
         ),
       log_closure: (
         tag: number,
         arity: number,
         envSize: number,
-        parentEnv: number
+        parentEnv: number,
       ) =>
         console.log(
-          `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`
+          `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`,
         ),
       log_none: () => console.log("None"),
       log_error: (tag: number) =>

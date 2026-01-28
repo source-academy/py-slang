@@ -58,7 +58,7 @@ const builtInFunctions: {
       .call(MAKE_PAIR_FX)
       .args(
         wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
       ),
     isVoid: false,
   },
@@ -85,7 +85,7 @@ const builtInFunctions: {
       .call(SET_PAIR_HEAD_FX)
       .args(
         wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
       ),
     isVoid: true,
   },
@@ -96,7 +96,7 @@ const builtInFunctions: {
       .call(SET_PAIR_TAIL_FX)
       .args(
         wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1))
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
       ),
     isVoid: true,
   },
@@ -121,9 +121,10 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): S | E;
 }
 
-export class BuilderGenerator
-  implements BuilderVisitor<WasmInstruction, WasmNumeric>
-{
+export class BuilderGenerator implements BuilderVisitor<
+  WasmInstruction,
+  WasmNumeric
+> {
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
@@ -139,7 +140,7 @@ export class BuilderGenerator
         // check if variable is used before nonlocal declaration
         if (curr[index].tag === "nonlocal") {
           throw new Error(
-            `Name ${curr[index].name} is used prior to nonlocal declaration`
+            `Name ${curr[index].name} is used prior to nonlocal declaration`,
           );
         }
 
@@ -151,13 +152,34 @@ export class BuilderGenerator
 
   private collectDeclarations(
     statements: StmtNS.Stmt[],
-    parameters?: StmtNS.FunctionDef["parameters"]
+    parameters?: StmtNS.FunctionDef["parameters"],
   ): Binding[] {
-    const bindings: Binding[] = statements
-      .filter(
-        (s) => s instanceof StmtNS.Assign || s instanceof StmtNS.FunctionDef
-      )
-      .map((s) => ({ name: s.name.lexeme, tag: "local" }));
+    const findInNestedBody = (
+      stmts: StmtNS.Stmt[],
+    ): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
+      const found: (StmtNS.FunctionDef | StmtNS.Assign)[] = [];
+      for (const stmt of stmts) {
+        if (
+          stmt instanceof StmtNS.FunctionDef ||
+          stmt instanceof StmtNS.Assign
+        ) {
+          found.push(stmt);
+        } else if (stmt instanceof StmtNS.If) {
+          found.push(...findInNestedBody(stmt.body));
+          if (stmt.elseBlock) {
+            found.push(...findInNestedBody(stmt.elseBlock));
+          }
+        } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
+          found.push(...findInNestedBody(stmt.body));
+        }
+      }
+      return found;
+    };
+
+    const bindings: Binding[] = findInNestedBody(statements).map((s) => ({
+      name: s.name.lexeme,
+      tag: "local",
+    }));
 
     statements
       .filter((s) => s instanceof StmtNS.NonLocal)
@@ -167,7 +189,7 @@ export class BuilderGenerator
         if (
           !this.environment.find(
             (frame, i) =>
-              i !== 0 && frame.find((binding) => binding.name === name)
+              i !== 0 && frame.find((binding) => binding.name === name),
           )
         )
           throw new Error(`No binding for nonlocal ${name} found!`);
@@ -216,7 +238,7 @@ export class BuilderGenerator
           ...(Array.isArray(body) ? body : [body]),
           wasm.return(
             ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-            global.set(CURR_ENV, local.get("$return_env"))
+            global.set(CURR_ENV, local.get("$return_env")),
           ),
         ];
         this.userFunctions.push(newBody);
@@ -232,10 +254,10 @@ export class BuilderGenerator
                 i32.const(tag),
                 i32.const(arity),
                 i32.const(arity),
-                global.get(CURR_ENV)
-              )
+                global.get(CURR_ENV),
+              ),
           );
-      }
+      },
     );
 
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
@@ -251,7 +273,7 @@ export class BuilderGenerator
 
     // collect all strings, native functions used and user functions
     const strings = this.strings.map(([str, add]) =>
-      wasm.data(i32.const(add), str)
+      wasm.data(i32.const(add), str),
     );
 
     const applyFunction = applyFuncFactory(this.userFunctions);
@@ -264,7 +286,7 @@ export class BuilderGenerator
       .imports(wasm.import("js", "memory").memory(1), ...importedLogs)
       .globals(
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(this.heapPointer)),
-        wasm.global(CURR_ENV, mut.i32).init(i32.const(0))
+        wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
       )
       .datas(...strings)
       .funcs(
@@ -279,13 +301,13 @@ export class BuilderGenerator
               CURR_ENV,
               wasm
                 .call(ALLOC_ENV_FX)
-                .args(i32.const(globalEnvLength), i32.const(0), i32.const(0))
+                .args(i32.const(globalEnvLength), i32.const(0), i32.const(0)),
             ),
 
             ...builtInFuncsDeclarations,
 
-            ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body)
-          )
+            ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body),
+          ),
       )
       .exports(wasm.export("main").func("$main"))
       .build();
@@ -465,8 +487,8 @@ export class BuilderGenerator
             i32.const(tag),
             i32.const(arity),
             i32.const(newFrame.length),
-            global.get(CURR_ENV)
-          )
+            global.get(CURR_ENV),
+          ),
       );
   }
 
@@ -498,7 +520,7 @@ export class BuilderGenerator
         i32.const(tag),
         i32.const(arity),
         i32.const(newFrame.length),
-        global.get(CURR_ENV)
+        global.get(CURR_ENV),
       );
   }
 
@@ -525,7 +547,7 @@ ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 ${args.map(
   (arg, i) =>
     wasm.raw`
-(i32.const ${i}) ${arg} (call ${SET_PARAM_FX.name})`
+(i32.const ${i}) ${arg} (call ${SET_PARAM_FX.name})`,
 )}
 
 (global.set ${CURR_ENV})
@@ -538,7 +560,7 @@ ${args.map(
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get("$return_env"))
+      global.set(CURR_ENV, local.get("$return_env")),
     );
   }
 
@@ -554,7 +576,7 @@ ${args.map(
 
     const currFrame = this.environment.at(-1);
     const bindingIndex = currFrame?.findIndex(
-      (binding) => binding.name === stmt.name.lexeme
+      (binding) => binding.name === stmt.name.lexeme,
     );
 
     if (bindingIndex != null) {
