@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "regen": "npm run build && node dist/generate.js",
-    "compile-grammar": "nearleyc src/nearley/python.ne -o src/nearley/python-grammar.ts",
+    "compile-grammar": "nearleyc src/parser/python.ne -o src/parser/python-grammar.ts",
     "build": "rollup -c --bundleConfigAsCjs",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest"

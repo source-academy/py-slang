@@ -1,9 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
 import { RecursivePartial, Result } from "../types";
-import { Tokenizer } from "../tokenizer";
-import { Parser } from "../parser";
-import { parse } from '../nearley/parser-adapter';
+import { parse } from '../parser/parser-adapter';
 import { Resolver } from "../resolver";
 import { Program } from "estree";
 import { Translator } from "../translator";
