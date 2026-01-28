@@ -3,6 +3,7 @@ import { ErrorType, SourceError, SourceLocation } from './base'
 import { RuntimeSourceError } from './py_runtimeSourceError'
 import { PyContext } from '../cse-machine/py_context'
 import { typeTranslator, operatorTranslator } from '../cse-machine/py_types'
+import { error } from 'console'
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): { line: number; fullLine: string } {
@@ -332,49 +333,50 @@ export class NameError extends RuntimeSourceError {
 //   }
 // }
 
-// export class ValueError extends PyRuntimeSourceError {
-//   constructor(source: string, node: ExprNS.Expr, context: PyContext, functionName: string) {
-//     super(node);
-//     this.type = ErrorType.TYPE;
-//     const index = (node as any).loc?.start?.index
-//                   ?? (node as any).srcNode?.loc?.start?.index
-//                   ?? 0;
-//     const { line, fullLine } = getFullLine(source, index);
-//     const snippet = (node as any).loc?.source
-//                   ?? (node as any).srcNode?.loc?.source
-//                   ?? '<unknown source>';
-//     let hint = 'ValueError: math domain error. ';
-//     const offset = fullLine.indexOf(snippet);
-//     const indicator = createErrorIndicator(snippet, '@');
-//     const name = "ValueError";
-//     const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
-//     const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(offset) + indicator + "\n" + hint + suggestion;
-//     this.message = msg;
-//   }
-// }
+export class ValueError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Expr, context: PyContext, functionName: string) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { line, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length
+    )
+    let hint = 'ValueError: math domain error. ';
+    const offset = fullLine.indexOf(snippet);
 
-// export class TypeError extends PyRuntimeSourceError {
-//   constructor(source: string, node: ExprNS.Expr, context: PyContext, originalType: string, targetType: string) {
-//     super(node);
-//     originalType = typeTranslator(originalType);
-//     this.type = ErrorType.TYPE;
-//     const index = (node as any).loc?.start?.index
-//                   ?? (node as any).srcNode?.loc?.start?.index
-//                   ?? 0;
-//     const { line, fullLine } = getFullLine(source, index);
-//     const snippet = (node as any).loc?.source
-//                   ?? (node as any).srcNode?.loc?.source
-//                   ?? '<unknown source>';
-//     let hint = "TypeError: '" + originalType + "' cannot be interpreted as an '" + targetType + "'.";
-//     const offset = fullLine.indexOf(snippet);
-//     const adjustedOffset = offset >= 0 ? offset : 0;
-//     const indicator = createErrorIndicator(snippet, '@');
-//     const name = "TypeError";
-//     const suggestion = ' Make sure the value you are passing is compatible with the expected type.';
-//     const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(adjustedOffset) + indicator + "\n" + hint + suggestion;
-//     this.message = msg;
-//   }
-// }
+    const errorPos = 0
+    const indicator = createErrorIndicator(snippet, errorPos);
+    const name = "ValueError";
+    const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
+    const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(offset) + indicator + "\n" + hint + suggestion;
+    this.message = msg;
+  }
+}
+
+export class TypeError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Expr, context: PyContext, originalType: string, targetType: string) {
+    super(node);
+    originalType = typeTranslator(originalType);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { line, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length
+    )
+    let hint = "TypeError: '" + originalType + "' cannot be interpreted as an '" + targetType + "'.";
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0
+    const errorPos = 0
+    const indicator = createErrorIndicator(snippet, errorPos);
+    const name = "TypeError";
+    const suggestion = ' Make sure the value you are passing is compatible with the expected type.';
+    const msg = name + " at line " + line + "\n\n    " + fullLine + "\n    " + " ".repeat(adjustedOffset) + indicator + "\n" + hint + suggestion;
+    this.message = msg;
+  }
+}
 
 // export class SublanguageError extends PyRuntimeSourceError {
 //   constructor (

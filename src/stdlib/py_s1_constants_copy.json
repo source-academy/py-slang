@@ -1,0 +1,16 @@
+{
+    "builtInFuncs": [
+    "_int",
+    "abs",
+    "error",
+    "str",
+    "print"
+    ], 
+    "constants": [
+    "math_e",
+    "math_inf",
+    "math_nan",
+    "math_pi",
+    "math_tau"
+    ]
+}

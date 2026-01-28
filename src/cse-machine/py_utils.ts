@@ -3,7 +3,7 @@ import { Value } from './stash'
 import { PyNode } from './py_types'
 import { RuntimeSourceError } from '../errors/py_runtimeSourceError'
 import { currentEnvironment, PyEnvironment } from './py_environment'
-import { builtIns } from '../py_stdlib'
+import { builtInConstants, builtIns } from '../py_stdlib'
 import { StmtNS, ExprNS } from '../ast-types'
 import { UnboundLocalError, NameError } from '../errors/py_errors'
 
@@ -64,6 +64,9 @@ export function pyGetVariable(code: string, context: PyContext, name: string, no
   }
   if (builtIns.has(name)) {
     return builtIns.get(name)!
+  }
+  if (builtInConstants.has(name)) {
+    return builtInConstants.get(name)!
   }
   throw new NameError(code, name, node as ExprNS.Variable)
 }
