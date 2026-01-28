@@ -19,11 +19,18 @@ export type Value = any
 // | ErrorValue
 // | UndefinedValue
 // | BigIntValue
-// | pyClosureValue;
+// | pyClosureValue
+// | Builtin;
 
 export interface pyClosureValue {
   type: 'closure'
   closure: Closure
+}
+
+export interface Builtin {
+  type: 'builtin'
+  name: string
+  func: (...args: any[]) => any
 }
 
 export interface BigIntValue {

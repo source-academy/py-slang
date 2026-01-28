@@ -37,6 +37,9 @@ export function toPythonString(obj: Value): string {
   if (!obj) {
     return 'None'
   }
+  if ((obj as Value).type === 'builtin') {
+    return `<built-in function ${(obj as any).name}>`
+  }
   if ((obj as Value).type === 'bigint' || (obj as Value).type === 'complex') {
     ret = (obj as Value).value.toString()
   } else if ((obj as Value).type === 'number') {
@@ -92,6 +95,6 @@ export class BuiltInFunctions {
 }
 
 // Load only the functions we have implemented
-export const builtIns = new Map<string, (...args: any[]) => any>()
-builtIns.set('print', BuiltInFunctions.print)
-builtIns.set('_int', BuiltInFunctions._int)
+export const builtIns = new Map<string, Value>()
+builtIns.set('print', { type: 'builtin', name: 'print', func: BuiltInFunctions.print })
+builtIns.set('_int', { type: 'builtin', name: 'int', func: BuiltInFunctions._int })

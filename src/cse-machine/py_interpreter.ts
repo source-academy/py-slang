@@ -578,8 +578,14 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
       }
     } else {
       // Built-in function from stdlib / constants
-      const result = (callable as any)(context, ...args)
-      stash.push(result)
+      if (callable && callable.type === 'builtin') {
+        const result = callable.func(context, ...args)
+        stash.push(result)
+      } else {
+        // Fallback for any other callable types, though not expected
+        const result = (callable as any)(context, ...args)
+        stash.push(result)
+      }
     }
   },
 
