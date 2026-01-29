@@ -102,14 +102,14 @@ export type WasmBinaryOp<T extends WasmNumericType> =
         };
       }[IntBinaryOp]
     : T extends WasmFloatNumericType
-    ? {
-        [Op in FloatBinaryOp]: {
-          op: `${T}.${Op}`;
-          left: WasmNumericFor<T>;
-          right: WasmNumericFor<T>;
-        };
-      }[FloatBinaryOp]
-    : never;
+      ? {
+          [Op in FloatBinaryOp]: {
+            op: `${T}.${Op}`;
+            left: WasmNumericFor<T>;
+            right: WasmNumericFor<T>;
+          };
+        }[FloatBinaryOp]
+      : never;
 
 export type WasmIntTestOp<T extends WasmIntNumericType> = {
   [Op in IntTestOp]: { op: `${T}.${Op}`; right: WasmNumericFor<T> };
@@ -125,21 +125,21 @@ export type WasmComparisonOp<T extends WasmNumericType> =
         };
       }[IntComparisonOp]
     : T extends WasmFloatNumericType
-    ? {
-        [Op in FloatComparisonOp]: {
-          op: `${T}.${Op}`;
-          left: WasmNumericFor<T>;
-          right: WasmNumericFor<T>;
-        };
-      }[FloatComparisonOp]
-    : never;
+      ? {
+          [Op in FloatComparisonOp]: {
+            op: `${T}.${Op}`;
+            left: WasmNumericFor<T>;
+            right: WasmNumericFor<T>;
+          };
+        }[FloatComparisonOp]
+      : never;
 
 type ExtractConversion<I extends string> = I extends `${string}_${infer T}`
   ? T extends WasmNumericType
     ? T
     : T extends `${infer U}_${string}`
-    ? U
-    : never
+      ? U
+      : never
   : never;
 
 type WasmConversionOpHelper<I> = I extends
@@ -154,10 +154,10 @@ export type WasmConversionOp<T extends WasmNumericType> =
   WasmConversionOpHelper<`${T}.${T extends "i32"
     ? I32ConversionOp | IntConversionOp
     : T extends "i64"
-    ? I64ConversionOp | IntConversionOp
-    : T extends "f32"
-    ? F32ConversionOp | FloatConversionOp
-    : F64ConversionOp | FloatConversionOp}`>;
+      ? I64ConversionOp | IntConversionOp
+      : T extends "f32"
+        ? F32ConversionOp | FloatConversionOp
+        : F64ConversionOp | FloatConversionOp}`>;
 
 export type WasmLoadOp<T extends WasmNumericType> = {
   op: `${T}.load`;
@@ -300,7 +300,7 @@ export type WasmIf = WasmBlockBase & {
   thenBody: WasmInstruction[];
   elseBody?: WasmInstruction[];
 };
-export type WasmBr = { op: "br"; label: WasmLabel };
+export type WasmBr = { op: "br"; label: WasmLabel | number };
 export type WasmBrTable = {
   op: "br_table";
   labels: (WasmLabel | number)[];

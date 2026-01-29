@@ -70,10 +70,10 @@ const binaryOp = <
     | WasmComparisonOp<T>
   )["op"] extends `${T}.${infer S}`
     ? S
-    : never)[]
+    : never)[],
 >(
   type: T,
-  ops: Op
+  ops: Op,
 ) =>
   typedFromEntries(
     ops.map((op) => {
@@ -93,9 +93,9 @@ const binaryOp = <
           }
             ? [left: L, right: R]
             : never
-        ) => Extract<WasmInstruction, { op: `${T}.${Op[K]}` }>
+        ) => Extract<WasmInstruction, { op: `${T}.${Op[K]}` }>,
       ];
-    }
+    },
   );
 
 const unaryOp = <
@@ -105,14 +105,14 @@ const unaryOp = <
     | (T extends WasmIntNumericType
         ? WasmIntTestOp<T> | WasmLoadOp<T>
         : T extends WasmFloatNumericType
-        ? WasmUnaryOp<T>
-        : never)
+          ? WasmUnaryOp<T>
+          : never)
   )["op"] extends `${T}.${infer S}`
     ? S
-    : never)[]
+    : never)[],
 >(
   type: T,
-  ops: Op
+  ops: Op,
 ) =>
   typedFromEntries(
     ops.map((op) => {
@@ -130,9 +130,9 @@ const unaryOp = <
           }
             ? [right: R]
             : never
-        ) => Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }>
+        ) => Extract<WasmNumericFor<T>, { op: `${T}.${Op[K]}` }>,
       ];
-    }
+    },
   );
 
 type Builder<T extends WasmNumericType | "local" | "global" | "memory"> = {
@@ -159,7 +159,7 @@ const i32 = {
   load16_u: loadHelper("i32.load16_u"),
   store: (
     address: WasmNumericFor<"i32">,
-    value: WasmNumericFor<"i32">
+    value: WasmNumericFor<"i32">,
   ): WasmStoreOp<"i32"> => ({ op: "i32.store", address, value }),
 
   "~type": "i32",
@@ -181,7 +181,7 @@ const i64 = {
   load32_u: loadHelper("i64.load32_u"),
   store: (
     address: WasmNumericFor<"i32">,
-    value: WasmNumericFor<"i64">
+    value: WasmNumericFor<"i64">,
   ): WasmStoreOp<"i64"> => ({ op: "i64.store", address, value }),
 
   "~type": "i64",
@@ -204,7 +204,7 @@ const f32 = {
   }),
   store: (
     address: WasmNumericFor<"i32">,
-    value: WasmNumericFor<"f32">
+    value: WasmNumericFor<"f32">,
   ): WasmStoreOp<"f32"> => ({ op: "f32.store", address, value }),
 
   "~type": "f32",
@@ -227,7 +227,7 @@ const f64 = {
   }),
   store: (
     address: WasmNumericFor<"i32">,
-    value: WasmNumericFor<"f64">
+    value: WasmNumericFor<"f64">,
   ): WasmStoreOp<"f64"> => ({ op: "f64.store", address, value }),
 
   "~type": "f64",
@@ -263,13 +263,13 @@ const memory = {
   copy: (
     destination: WasmNumericFor<"i32">,
     source: WasmNumericFor<"i32">,
-    size: WasmNumericFor<"i32">
+    size: WasmNumericFor<"i32">,
   ): WasmMemoryCopy => ({ op: "memory.copy", destination, source, size }),
 
   fill: (
     address: WasmNumericFor<"i32">,
     value: WasmNumericFor<"i32">,
-    numOfBytes: WasmNumericFor<"i32">
+    numOfBytes: WasmNumericFor<"i32">,
   ): WasmMemoryFill => ({ op: "memory.fill", address, value, numOfBytes }),
 } satisfies Builder<"memory">;
 
@@ -313,7 +313,7 @@ type WasmModuleHelper = {
 const blockLoopHelper =
   <T extends "block" | "loop">(type: T) =>
   (
-    label?: WasmLabel
+    label?: WasmLabel,
   ): WasmBlockTypeHelper<T extends "block" ? WasmBlock : WasmLoop> => {
     const blockType: Required<WasmBlockType> = {
       paramTypes: [],
@@ -391,14 +391,14 @@ const wasm = {
   drop: (value?: WasmInstruction): WasmDrop => ({ op: "drop", value }),
   unreachable: (): WasmUnreachable => ({ op: "unreachable" }),
   nop: (): WasmNop => ({ op: "nop" }),
-  br: (label: WasmLabel): WasmBr => ({ op: "br", label }),
+  br: (label: WasmLabel | number): WasmBr => ({ op: "br", label }),
   br_table: (
     value: WasmNumeric,
     ...labels: (WasmLabel | number)[]
   ): WasmBrTable => ({ op: "br_table", labels, value }),
 
   call: (
-    functionName: WasmLabel | WasmFunction
+    functionName: WasmLabel | WasmFunction,
   ): WasmCall & { args(...args: WasmNumeric[]): WasmCall } => ({
     op: "call",
     function:
@@ -416,7 +416,7 @@ const wasm = {
   select: (
     first: WasmNumeric,
     second: WasmNumeric,
-    condition: WasmNumeric
+    condition: WasmNumeric,
   ): WasmSelect => ({ op: "select", first, second, condition }),
 
   import: (moduleName: string, itemName: string) => ({
@@ -460,7 +460,7 @@ const wasm = {
 
   global: <T extends WasmNumericType>(
     name: WasmLabel,
-    valueType: BuilderAsType<T> | BuilderMutableType<T>
+    valueType: BuilderAsType<T> | BuilderMutableType<T>,
   ) => ({
     init: (initialValue: WasmNumericFor<T>): WasmGlobalFor<T> => ({
       op: "global",
@@ -566,7 +566,7 @@ const wasm = {
   ) => {
     if (labels.length !== bodies.length) {
       throw new Error(
-        `Number of labels in br_table (${labels.length}) does not match number of blocks (${bodies.length})`
+        `Number of labels in br_table (${labels.length}) does not match number of blocks (${bodies.length})`,
       );
     }
 
@@ -574,7 +574,7 @@ const wasm = {
       const body = bodies[index];
       if (!body) {
         throw new Error(
-          `No body found for block at index ${index} in br_table`
+          `No body found for block at index ${index} in br_table`,
         );
       }
 
@@ -584,7 +584,7 @@ const wasm = {
           .body(
             ...(index === 0
               ? [wasm.br_table(value, ...labels)]
-              : buildBlock(index - 1))
+              : buildBlock(index - 1)),
           ),
         ...(Array.isArray(body) ? body : [body]),
       ];
@@ -612,44 +612,44 @@ const instrToMethodMap = {
   // numerics: binary ops and comparisons
   ...typedFromEntries(
     [...intBinaryOp, ...intComparisonOp].map(
-      (op) => [`i32.${op}`, "visitBinaryOp"] as const
-    )
+      (op) => [`i32.${op}`, "visitBinaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...intBinaryOp, ...intComparisonOp].map(
-      (op) => [`i64.${op}`, "visitBinaryOp"] as const
-    )
+      (op) => [`i64.${op}`, "visitBinaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...floatBinaryOp, ...floatComparisonOp].map(
-      (op) => [`f32.${op}`, "visitBinaryOp"] as const
-    )
+      (op) => [`f32.${op}`, "visitBinaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...floatBinaryOp, ...floatComparisonOp].map(
-      (op) => [`f64.${op}`, "visitBinaryOp"] as const
-    )
+      (op) => [`f64.${op}`, "visitBinaryOp"] as const,
+    ),
   ),
 
   ...typedFromEntries(
     [...i32ConversionOp, ...intConversionOp, ...intTestOp].map(
-      (op) => [`i32.${op}`, "visitUnaryOp"] as const
-    )
+      (op) => [`i32.${op}`, "visitUnaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...i64ConversionOp, ...intConversionOp, ...intTestOp].map(
-      (op) => [`i64.${op}`, "visitUnaryOp"] as const
-    )
+      (op) => [`i64.${op}`, "visitUnaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...f32ConversionOp, ...floatConversionOp, ...floatUnaryOp].map(
-      (op) => [`f32.${op}`, "visitUnaryOp"] as const
-    )
+      (op) => [`f32.${op}`, "visitUnaryOp"] as const,
+    ),
   ),
   ...typedFromEntries(
     [...f64ConversionOp, ...floatConversionOp, ...floatUnaryOp].map(
-      (op) => [`f64.${op}`, "visitUnaryOp"] as const
-    )
+      (op) => [`f64.${op}`, "visitUnaryOp"] as const,
+    ),
   ),
 
   // memory
@@ -722,8 +722,8 @@ type WatVisitor = {
     instruction: (typeof instrToMethodMap)[K] extends "visitUnaryOp"
       ? { op: string; right: WasmInstruction }
       : (typeof instrToMethodMap)[K] extends "visitBinaryOp"
-      ? { op: string; left: WasmInstruction; right: WasmInstruction }
-      : Extract<WasmInstruction, { op: K }>
+        ? { op: string; left: WasmInstruction; right: WasmInstruction }
+        : Extract<WasmInstruction, { op: K }>,
   ) => string;
 };
 
