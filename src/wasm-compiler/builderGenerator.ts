@@ -605,6 +605,17 @@ ${args.map(
     return wasm.nop();
   }
 
+  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
+    const condition = this.visit(stmt.condition);
+    const body = stmt.body.map((b) => this.visit(b));
+
+    return wasm.loop().body(
+      wasm
+        .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
+        .then(...body, wasm.br(1)), // 1 to jump to the beginning of the loop
+    );
+  }
+
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
@@ -631,9 +642,6 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitForStmt(stmt: StmtNS.For): WasmInstruction {
