@@ -1,7 +1,6 @@
 {
     "builtInFuncs": [
     "_int",
-    "_int_from_string",
     "abs",
     "error",
     "isinstance",

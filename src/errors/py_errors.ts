@@ -378,33 +378,32 @@ export class TypeError extends RuntimeSourceError {
   }
 }
 
-// export class SublanguageError extends PyRuntimeSourceError {
-//   constructor (
-//   source: string,
-//   node: ExprNS.Expr,
-//   context: PyContext,
-//   functionName: string,
-//   chapter: string,
-//   details?: string
-// ) {
-//     super(node)
+export class SublanguageError extends RuntimeSourceError {
+  constructor (
+  source: string,
+  node: ExprNS.Expr,
+  context: PyContext,
+  functionName: string,
+  chapter: string,
+  details?: string
+) {
+    super(node)
 
-//     this.type = ErrorType.TYPE
+    this.type = ErrorType.TYPE
+    const index = node.startToken.indexInSource;
+    const { line, fullLine } = getFullLine(source, index)
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length
+    )
+    const offset = fullLine.indexOf(snippet)
+    const errorPos = 0
+    const indicator = createErrorIndicator(snippet, errorPos);
 
-//     const index = (node as any).loc?.start?.index
-//                 ?? (node as any).srcNode?.loc?.start?.index
-//                 ?? 0
-//     const { line, fullLine } = getFullLine(source, index)
-//     const snippet = (node as any).loc?.source
-//                   ?? (node as any).srcNode?.loc?.source
-//                   ?? '<unknown source>'
-//     const offset = fullLine.indexOf(snippet)
-//     const indicator = createErrorIndicator(snippet, '@')
+    const name = 'SublanguageError'
+    const hint = 'Feature not supported in Python §' + chapter + '. '
+    const suggestion = `The call to '${functionName}()' relies on behaviour that is valid in full Python but outside the Python §1 sublanguage${details ? ': ' + details : ''}.`
 
-//     const name = 'SublanguageError'
-//     const hint = 'Feature not supported in Python §' + chapter + '. '
-//     const suggestion = `The call to '${functionName}()' relies on behaviour that is valid in full Python but outside the Python §1 sublanguage${details ? ': ' + details : ''}.`
-
-//     this.message = `${name} at line ${line}\n\n ${fullLine}\n ${' '.repeat(offset)}${indicator}\n${hint}${suggestion}`
-//   }
-// }
+    this.message = `${name} at line ${line}\n\n ${fullLine}\n ${' '.repeat(offset)}${indicator}\n${hint}${suggestion}`
+  }
+}
