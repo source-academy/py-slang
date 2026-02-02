@@ -37,8 +37,9 @@ import {
   isFalsy
 } from './py_operators'
 import { Result, Finished, CSEBreak, Representation } from '../types'
-import { toPythonString } from '../py_stdlib'
+import { builtIns, toPythonString } from '../py_stdlib'
 import { pyGetVariable, pyDefineVariable, scanForAssignments } from './py_utils'
+import { BuiltinReassignmentError } from '../errors/py_errors'
 
 type CmdEvaluator = (
   code: string,
@@ -533,6 +534,9 @@ const pyCmdEvaluators: { [type: string]: CmdEvaluator } = {
     const value = stash.pop()
 
     if (value) {
+      if (builtIns.has(instr.symbol)) {
+        throw new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr)
+      }
       pyDefineVariable(context, instr.symbol, value)
     }
   },

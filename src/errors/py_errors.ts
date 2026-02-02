@@ -407,3 +407,26 @@ export class SublanguageError extends RuntimeSourceError {
     this.message = `${name} at line ${line}\n\n ${fullLine}\n ${' '.repeat(offset)}${indicator}\n${hint}${suggestion}`
   }
 }
+
+export class BuiltinReassignmentError extends RuntimeSourceError {
+  constructor(source: string, name: string, node: ExprNS.Expr) {
+    super(node)
+    this.type = ErrorType.TYPE
+
+    const { line, fullLine } = getFullLine(source, node.startToken.indexInSource)
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length
+    )
+    const offset = fullLine.indexOf(snippet)
+    const adjustedOffset = offset >= 0 ? offset : 0
+
+    const errorPos = 0
+    const indicator = createErrorIndicator(snippet, errorPos)
+
+    const hint = `TypeError: cannot reassign built-in function '${name}'`
+    const suggestion = `You are trying to assign a value to '${name}', which is a built-in function. This is not allowed.`
+    const msg = `TypeError at line ${line}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
+    this.message = msg
+  }
+}
