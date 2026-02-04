@@ -424,7 +424,7 @@ def f():
 f()
 `;
     await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
-      "No binding for nonlocal x found!"
+      new Error("No binding for nonlocal x found!"),
     );
   });
 
@@ -437,7 +437,7 @@ def f():
 f()
 `;
     await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
-      "No binding for nonlocal x found!"
+      new Error("No binding for nonlocal x found!"),
     );
   });
 
@@ -471,5 +471,26 @@ b()
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]); // last expr => b()
+  });
+});
+
+describe("Miscellaneous tests", () => {
+  it("Temporal dead zone for local variables", async () => {
+    const pythonCode = `
+y = 1
+def f(x):
+    print(y)
+    if True:
+        print("true")
+        y = 3
+    else:
+        print("false")
+    print(y)
+    
+f(4)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Accessing an unbound value."),
+    );
   });
 });

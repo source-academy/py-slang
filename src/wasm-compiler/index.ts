@@ -47,8 +47,9 @@ export async function compileToWasmAndRun(code: string) {
           `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`,
         ),
       log_none: () => console.log("None"),
-      log_error: (tag: number) =>
-        console.error(Object.values(ERROR_MAP).find(([i]) => i === tag)?.[1]),
+      log_error: (tag: number) => {
+        throw new Error(Object.values(ERROR_MAP).find(([i]) => i === tag)?.[1]);
+      },
       log_pair: () => console.log(),
     },
     js: { memory },
