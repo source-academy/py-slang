@@ -1,4 +1,4 @@
-import type { PyContext } from '../../cse-machine/py_context';
+import type { Context } from '../../cse-machine/context';
 import type { IOptions } from '../../runner/pyRunner';
 import type { PreprocessResult } from '../moduleTypes';
 import parseProgramsAndConstructImportGraph from './linker';
@@ -11,7 +11,7 @@ import { ModuleConnectionError } from '../errors';
 export async function preprocessFileImports(
   program: StmtNS.Stmt,
   entrypointFilePath: string,
-  context: PyContext,
+  context: Context,
   options: IOptions
 ): Promise<PreprocessResult> {
 

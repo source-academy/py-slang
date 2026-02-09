@@ -1,5 +1,5 @@
 
-import type { PyContext } from '../../cse-machine/py_context';
+import type { Context } from '../../cse-machine/context';
 import { Token } from '../../tokenizer';
 import { memoizedGetModuleManifestAsync } from '../loader/loaders';
 import type { FileGetter, LinkerResult } from '../moduleTypes';
@@ -23,7 +23,7 @@ export const defaultLinkerOptions: LinkerOptions = {
 export default async function parseProgramsAndConstructImportGraph(
   program: StmtNS.Stmt,
   entrypointFilePath: string,
-  context: PyContext,
+  context: Context,
   options: Partial<LinkerOptions> = defaultLinkerOptions,
   shouldAddFileName?: boolean
 ): Promise<LinkerResult> {

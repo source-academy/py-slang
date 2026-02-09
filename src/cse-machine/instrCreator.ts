@@ -3,16 +3,18 @@ import {
   AppInstr,
   AssmtInstr,
   BinOpInstr,
+  BoolOpInstr,
   BranchInstr,
+  EndOfFunctionBodyInstr,
   EnvInstr,
   Instr,
   InstrType,
   Node,
-  UnOpInstr
+  UnOpInstr,
 } from './types'
-import type * as es from 'estree'
+import { TokenType } from '../tokens'
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
+export const popInstr = (srcNode: Node): Instr => ({instrType: InstrType.POP, srcNode })
 
 export const assmtInstr = (
   symbol: string,
@@ -27,7 +29,7 @@ export const assmtInstr = (
   srcNode
 })
 
-export const appInstr = (numOfArgs: number, srcNode: es.CallExpression): AppInstr => ({
+export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({
   instrType: InstrType.APPLICATION,
   numOfArgs,
   srcNode
@@ -56,8 +58,8 @@ export const resetInstr = (srcNode: Node): Instr => ({
 })
 
 export const branchInstr = (
-  consequent: es.Expression | es.Statement,
-  alternate: es.Expression | es.Statement | null | undefined,
+  consequent: Node,
+  alternate: Node | null | undefined,
   srcNode: Node
 ): BranchInstr => ({
   instrType: InstrType.BRANCH,
@@ -66,21 +68,19 @@ export const branchInstr = (
   srcNode
 })
 
-export const conditionalExpression = (
-  test: es.Expression,
-  consequent: es.Expression,
-  alternate: es.Expression,
-  loc?: es.SourceLocation | null
-): es.ConditionalExpression => ({
-  type: 'ConditionalExpression',
-  test,
-  consequent,
-  alternate,
-  loc
-})
-
-export const unOpInstr = (symbol: es.UnaryOperator, srcNode: Node): UnOpInstr => ({
+export const unOpInstr = (symbol: TokenType, srcNode: Node): UnOpInstr => ({
   instrType: InstrType.UNARY_OP,
   symbol,
+  srcNode
+})
+
+export const boolOpInstr = (symbol: TokenType, srcNode: Node): BoolOpInstr => ({
+  instrType: InstrType.BOOL_OP,
+  symbol,
+  srcNode
+})
+
+export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr => ({
+  instrType: InstrType.END_OF_FUNCTION_BODY,
   srcNode
 })

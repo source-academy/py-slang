@@ -1,11 +1,11 @@
-import type { PyContext } from '../../cse-machine/py_context'
+import type { Context } from '../../cse-machine/context'
 import type { ModuleFunctions } from '../moduleTypes'
 import { loadModuleBundleAsync, loadModuleTabsAsync } from './loaders'
 
 /**
  * Initialize module contexts and add UI tabs needed for modules to program context
  */
-async function initModuleContextAsync(moduleName: string, context: PyContext, loadTabs: boolean) {
+async function initModuleContextAsync(moduleName: string, context: Context, loadTabs: boolean) {
   // Load the module's tabs
   if (!(moduleName in context.moduleContexts)) {
     context.moduleContexts[moduleName] = {
@@ -24,7 +24,7 @@ async function initModuleContextAsync(moduleName: string, context: PyContext, lo
  */
 export default async function loadSourceModules(
   sourceModulesToImport: Set<string>,
-  context: PyContext,
+  context: Context,
   loadTabs: boolean
 ) {
   const loadedModules = await Promise.all(
@@ -39,7 +39,7 @@ export default async function loadSourceModules(
   return loadedObj
 }
 
-export async function loadSourceModuleTypes(sourceModulesToImport: Set<string>, context: PyContext) {
+export async function loadSourceModuleTypes(sourceModulesToImport: Set<string>, context: Context) {
   const loadedModules = await Promise.all(
     [...sourceModulesToImport].map(async moduleName => {
       await initModuleContextAsync(moduleName, context, false)

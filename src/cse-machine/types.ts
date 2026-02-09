@@ -1,16 +1,81 @@
-import type * as es from 'estree'
-import { Environment } from './environment'
+import { Environment } from './environment';
+import { ExprNS, StmtNS } from '../ast-types';
+import { TokenType } from '../tokens';
 
-export type Node = { isEnvDependent?: boolean } & (es.Node | StatementSequence)
+export type Node = StmtNS.Stmt | ExprNS.Expr | StatementSequence
 
-export interface StatementSequence extends es.BaseStatement {
+export interface StatementSequence {
   type: 'StatementSequence'
-  body: es.Statement[]
-  innerComments?: es.Comment[] | undefined
-  // isEnvDependent?: boolean
+  body: StmtNS.Stmt[]
+  loc?: {
+    start: { line: number; column: number }
+    end: { line: number; column: number }
+  }
+}
+
+export function typeTranslator(type: string): string {
+  switch (type) {
+    case 'bigint':
+      return 'int'
+    case 'number':
+      return 'float'
+    case 'boolean':
+      return 'bool'
+    case 'bool':
+      return 'bool'
+    case 'string':
+      return 'str'
+    case 'complex':
+      return 'complex'
+    case 'undefined':
+      return 'NoneType'
+    default:
+      return 'unknown'
+  }
+}
+
+// TODO: properly adapt for the rest, string is passed in to cater for __py_adder etc...
+export function operatorTranslator(operator: TokenType | string) {
+  switch (operator) {
+    case TokenType.PLUS:
+      return '+'
+    case TokenType.MINUS:
+      return '-'
+    case TokenType.STAR:
+      return '*'
+    case TokenType.SLASH:
+      return '/'
+    case TokenType.DOUBLESLASH:
+      return '//'
+    case TokenType.PERCENT:
+      return '%'
+    case TokenType.DOUBLESTAR:
+      return '**'
+    case TokenType.LESS:
+      return '<'
+    case TokenType.GREATER:
+      return '>'
+    case TokenType.DOUBLEEQUAL:
+      return '=='
+    case TokenType.NOTEQUAL:
+      return '!='
+    case TokenType.LESSEQUAL:
+      return '<='
+    case TokenType.GREATEREQUAL:
+      return '>='
+    case TokenType.NOT:
+      return 'not'
+    case TokenType.AND:
+      return 'and'
+    case TokenType.OR:
+      return 'or'
+    default:
+      return String(operator)
+  }
 }
 
 export enum InstrType {
+  END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
   RESET = 'Reset',
   WHILE = 'While',
   FOR = 'For',
@@ -52,39 +117,61 @@ interface BaseInstr {
 }
 
 export interface WhileInstr extends BaseInstr {
-  test: es.Expression
-  body: es.Statement
+  test: Node
+  body: Node
 }
 
+// TODO: more strict type in the future
 export interface ForInstr extends BaseInstr {
-  init: es.VariableDeclaration | es.Expression
-  test: es.Expression
-  update: es.Expression
-  body: es.Statement
+  init: Node
+  test: Node
+  update: Node
+  body: Node
 }
 
 export interface AssmtInstr extends BaseInstr {
+  instrType: InstrType.ASSIGNMENT
   symbol: string
   constant: boolean
   declaration: boolean
 }
 
 export interface UnOpInstr extends BaseInstr {
-  symbol: es.UnaryOperator
+  instrType: InstrType.UNARY_OP
+  symbol: TokenType
 }
 
 export interface BinOpInstr extends BaseInstr {
-  symbol: es.Identifier
+  instrType: InstrType.BINARY_OP
+  symbol: TokenType
+}
+
+export interface BoolOpInstr extends BaseInstr {
+  instrType: InstrType.BOOL_OP
+  symbol: TokenType
 }
 
 export interface AppInstr extends BaseInstr {
+  instrType: InstrType.APPLICATION
   numOfArgs: number
-  srcNode: es.CallExpression
+  srcNode: Node
+}
+
+export interface EndOfFunctionBodyInstr extends BaseInstr {
+  instrType: InstrType.END_OF_FUNCTION_BODY
+}
+
+export interface ResetInstr extends BaseInstr {
+  instrType: InstrType.RESET
 }
 
 export interface BranchInstr extends BaseInstr {
-  consequent: es.Expression | es.Statement
-  alternate: es.Expression | es.Statement | null | undefined
+  consequent: Node
+  alternate: Node | null | undefined
+}
+
+export interface PopInstr extends BaseInstr {
+  instrType: InstrType.POP
 }
 
 export interface EnvInstr extends BaseInstr {
@@ -95,17 +182,18 @@ export interface ArrLitInstr extends BaseInstr {
   arity: number
 }
 
-export interface AssmtInstr extends BaseInstr {
-  symbol: string
-  constant: boolean
-  declaration: boolean
-}
-
 export type Instr =
   | BaseInstr
   | WhileInstr
+  | ForInstr
   | AssmtInstr
   | AppInstr
+  | EndOfFunctionBodyInstr
+  | ResetInstr
   | BranchInstr
+  | PopInstr
   | EnvInstr
   | ArrLitInstr
+  | UnOpInstr
+  | BinOpInstr
+  | BoolOpInstr

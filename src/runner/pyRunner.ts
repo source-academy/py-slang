@@ -1,13 +1,13 @@
 import { ErrorValue } from '../cse-machine/stash'
-import { PyContext } from '../cse-machine/py_context'
-import { PyCSEResultPromise, PyEvaluate } from '../cse-machine/py_interpreter'
+import { Context } from '../cse-machine/context'
+import { CSEResultPromise, evaluate } from '../cse-machine/interpreter'
 import { RecursivePartial, Result } from '../types'
 import { Tokenizer } from '../tokenizer'
 import { Parser } from '../parser'
 import { Resolver } from '../resolver'
 import { StmtNS } from '../ast-types'
 import { preprocessFileImports } from '../modules/preprocessor/index'
-import { createProgramEnvironment, pushEnvironment } from '../cse-machine/py_environment'
+import { createProgramEnvironment, pushEnvironment } from '../cse-machine/environment'
 
 type Stmt = StmtNS.Stmt
 
@@ -24,20 +24,20 @@ export async function runPyAST(
   variant: number = 1,
   doValidate: boolean = false
 ): Promise<Stmt> {
-  const script = code + '\n'
-  const tokenizer = new Tokenizer(script)
-  const tokens = tokenizer.scanEverything()
-  const pyParser = new Parser(script, tokens)
-  const ast = pyParser.parse()
+  const script = code + "\n";
+  const tokenizer = new Tokenizer(script);
+  const tokens = tokenizer.scanEverything();
+  const pyParser = new Parser(script, tokens);
+  const ast = pyParser.parse();
   if (doValidate) {
-    new Resolver(code, ast).resolve(ast)
+    new Resolver(script, ast).resolve(ast);
   }
-  return ast
+  return ast;
 }
 
-export async function PyRunInContext(
+export async function runInContext(
   code: string,
-  context: PyContext,
+  context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
   // TODO: Refactor to use createContext function similar to js-slang.
@@ -59,7 +59,7 @@ export async function PyRunInContext(
 
   if (!preprocessResult.ok) {
     const errorValue = { type: 'error', message: context.errors[0].explain() } as ErrorValue;
-    return PyCSEResultPromise(context, errorValue);
+    return CSEResultPromise(context, errorValue);
   }
   const result = PyRunCSEMachine(code, ast, context, options)
   return result
@@ -68,9 +68,9 @@ export async function PyRunInContext(
 export function PyRunCSEMachine(
   code: string,
   program: Stmt,
-  context: PyContext,
+  context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const result = PyEvaluate(code, program, context, options as IOptions)
-  return PyCSEResultPromise(context, result)
+  const result = evaluate(code, program, context, options as IOptions)
+  return CSEResultPromise(context, result)
 }

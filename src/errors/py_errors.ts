@@ -1,8 +1,8 @@
 import { ExprNS } from '../ast-types'
 import { ErrorType, SourceError, SourceLocation } from './base'
 import { RuntimeSourceError } from './py_runtimeSourceError'
-import { PyContext } from '../cse-machine/py_context'
-import { typeTranslator, operatorTranslator } from '../cse-machine/py_types'
+import { Context } from '../cse-machine/context'
+import { typeTranslator, operatorTranslator } from '../cse-machine/types'
 import { error } from 'console'
 
 /* Searches backwards and forwards till it hits a newline */
@@ -208,7 +208,7 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
 }
 
 export class ZeroDivisionError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: PyContext) {
+  constructor(source: string, node: ExprNS.Expr, context: Context) {
     super(node)
     this.type = ErrorType.TYPE
 
@@ -299,7 +299,7 @@ export class NameError extends RuntimeSourceError {
 }
 
 // export class StepLimitExceededError extends PyRuntimeSourceError {
-//   constructor(source: string, node: ExprNS.Expr, context: PyContext) {
+//   constructor(source: string, node: ExprNS.Expr, context: Context) {
 //     super(node);
 //     this.type = ErrorType.RUNTIME;
 
@@ -334,7 +334,7 @@ export class NameError extends RuntimeSourceError {
 // }
 
 export class ValueError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: PyContext, functionName: string) {
+  constructor(source: string, node: ExprNS.Expr, context: Context, functionName: string) {
     super(node);
     this.type = ErrorType.TYPE;
     const index = node.startToken.indexInSource;
@@ -356,7 +356,7 @@ export class ValueError extends RuntimeSourceError {
 }
 
 export class TypeError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: PyContext, originalType: string, targetType: string) {
+  constructor(source: string, node: ExprNS.Expr, context: Context, originalType: string, targetType: string) {
     super(node);
     originalType = typeTranslator(originalType);
     this.type = ErrorType.TYPE;
@@ -382,7 +382,7 @@ export class SublanguageError extends RuntimeSourceError {
   constructor (
   source: string,
   node: ExprNS.Expr,
-  context: PyContext,
+  context: Context,
   functionName: string,
   chapter: string,
   details?: string

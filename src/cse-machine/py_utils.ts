@@ -1,16 +1,10 @@
-import { PyContext } from './py_context'
-import { Value } from './stash'
-import { PyNode } from './py_types'
-import { RuntimeSourceError } from '../errors/py_runtimeSourceError'
-import { currentEnvironment, PyEnvironment } from './py_environment'
-import { builtInConstants, builtIns } from '../py_stdlib'
-import { StmtNS, ExprNS } from '../ast-types'
-import { UnboundLocalError, NameError } from '../errors/py_errors'
-
-export function pyHandleRuntimeError(context: PyContext, error: RuntimeSourceError) {
-  context.errors.push(error)
-  throw error
-}
+import { Context } from './context';
+import { currentEnvironment, Environment } from './environment';
+import { Value } from './stash';
+import { Node } from './types';
+import { ExprNS, StmtNS } from '../ast-types';
+import { builtIns, builtInConstants } from '../stdlib';
+import { NameError, UnboundLocalError } from '../errors/py_errors';
 
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
   if (typeof a === 'bigint' || typeof b === 'bigint') {
@@ -34,10 +28,10 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
 }
 
 export function pyDefineVariable(
-  context: PyContext,
+  context: Context,
   name: string,
   value: Value,
-  env: PyEnvironment = currentEnvironment(context)
+  env: Environment = currentEnvironment(context)
 ) {
   Object.defineProperty(env.head, name, {
     value: value,
@@ -46,7 +40,7 @@ export function pyDefineVariable(
   })
 }
 
-export function pyGetVariable(code: string, context: PyContext, name: string, node: PyNode): Value {
+export function pyGetVariable(code: string, context: Context, name: string, node: Node): Value {
   const env = currentEnvironment(context)
   if (env.closure && env.closure.localVariables.has(name)) {
     if (!env.head.hasOwnProperty(name)) {
@@ -54,7 +48,7 @@ export function pyGetVariable(code: string, context: PyContext, name: string, no
     }
   }
 
-  let currentEnv: PyEnvironment | null = env
+  let currentEnv: Environment | null = env
   while (currentEnv) {
     if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
       return currentEnv.head[name]
@@ -71,9 +65,9 @@ export function pyGetVariable(code: string, context: PyContext, name: string, no
   throw new NameError(code, name, node as ExprNS.Variable)
 }
 
-export function scanForAssignments(node: PyNode | PyNode[]): Set<string> {
+export function scanForAssignments(node: Node | Node[]): Set<string> {
   const assignments = new Set<string>()
-  const visitor = (curNode: PyNode) => {
+  const visitor = (curNode: Node) => {
     if (!curNode || typeof curNode !== 'object') {
       return
     }

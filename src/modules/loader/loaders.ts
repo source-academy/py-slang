@@ -1,4 +1,4 @@
-import type { PyContext } from '../../cse-machine/py_context'
+import type { Context } from '../../cse-machine/context'
 import { Locatable } from '../../errors/base'
 import { ModuleInternalError } from '../errors'
 import type { ModuleDocumentation, ModuleFunctions, ModuleManifest } from '../moduleTypes'
@@ -85,7 +85,7 @@ export async function loadModuleTabsAsync(moduleName: string) {
 
 export async function loadModuleBundleAsync(
   moduleName: string,
-  context: PyContext,
+  context: Context,
   node?: Locatable
 ): Promise<ModuleFunctions> {
   const { default: result } = await bundleAndTabImporter(

@@ -1,6 +1,6 @@
 import * as _ from 'lodash'
 
-import type { PyContext } from '../../cse-machine/py_context'
+import type { Context } from '../../cse-machine/context'
 import * as interpreter from 'js-slang/dist/cse-machine/interpreter'
 import * as parser from 'js-slang/dist/parser/parser'
 import * as stdlib from 'js-slang/dist/stdlib'
@@ -13,7 +13,7 @@ import * as stringify from 'js-slang/dist/utils/stringify'
  * provider is then used by Source modules to access the context and js-slang standard
  * library
  */
-export const getRequireProvider = (context: PyContext) => (x: string) => {
+export const getRequireProvider = (context: Context) => (x: string) => {
   const pathSegments = x.split('/')
 
   const recurser = (obj: Record<string, any>, segments: string[]): any => {

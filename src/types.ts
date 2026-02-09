@@ -2,7 +2,6 @@ import { toPythonString } from './stdlib'
 import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
-import { PyContext } from './cse-machine/py_context'
 import { SourceLocation } from './errors/base'
 
 export class CSEBreak {}
@@ -259,17 +258,17 @@ export type Result = Finished | Error | SuspendedCseEval // | Suspended
 
 export interface SuspendedCseEval {
   status: 'suspended-cse-eval'
-  context: Context | PyContext
+  context: Context;
 }
 
 export interface Error {
   status: 'error';
-  context: Context | PyContext;
+  context: Context;
 }
 
 export interface Finished {
   status: 'finished'
-  context: Context | PyContext
+  context: Context
   value: Value
   representation: Representation // if the returned value needs a unique representation,
   // (for example if the language used is not JS),

@@ -1,10 +1,12 @@
+import { Context } from './context';
 import {
   SourceError,
   ErrorType,
   ErrorSeverity,
   SourceLocation,
   UNKNOWN_LOCATION
-} from '../errors/base'
+} from '../errors/base';
+import { RuntimeSourceError } from '../errors/py_runtimeSourceError';
 
 export class CseError implements SourceError {
   public type = ErrorType.RUNTIME
@@ -22,4 +24,9 @@ export class CseError implements SourceError {
   public elaborate() {
     return 'There is an error in the CSE machine.'
   }
+}
+
+export function handleRuntimeError(context: Context, error: RuntimeSourceError) {
+  context.errors.push(error)
+  throw error
 }

@@ -1,4 +1,4 @@
-import type { PyContext } from '../../cse-machine/py_context';
+import type { Context } from '../../cse-machine/context';
 import { UndefinedImportError } from '../errors';
 import type { ModuleFunctions } from '../moduleTypes';
 
@@ -7,9 +7,9 @@ import type { ModuleFunctions } from '../moduleTypes';
  * If an imported name does not exist in the module, it adds an error to the context.
  *
  * @param imports A map from module names to the specific names imported from them.
- * @param context The current PyContext, containing loadedModules.
+ * @param context The current Context, containing loadedModules.
  */
-export function analyzeImports(imports: Map<string, Array<{ name: string; alias: string | null }>>, context: PyContext): void {
+export function analyzeImports(imports: Map<string, Array<{ name: string; alias: string | null }>>, context: Context): void {
   for (const [moduleName, importedItems] of imports.entries()) {
     const loadedModule: ModuleFunctions | undefined = context.nativeStorage.loadedModules[moduleName];
 

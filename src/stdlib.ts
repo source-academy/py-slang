@@ -1,20 +1,17 @@
-import { Closure } from './cse-machine/closure'
-import { Value } from './cse-machine/stash'
-// npm install mathjs
 import { gamma, lgamma, erf } from 'mathjs'
-import { addPrint } from './cse-machine/interpreter'
-import { handleRuntimeError } from './cse-machine/utils'
-import {
-  MissingRequiredPositionalError,
-  TooManyPositionalArgumentsError,
-  ValueError,
-  TypeError,
-  ZeroDivisionError,
-  SublanguageError
-} from './errors/errors'
 import { ControlItem } from './cse-machine/control'
 import { Context } from './cse-machine/context'
-import * as es from 'estree'
+import { Closure } from './cse-machine/closure'
+import { Value } from './cse-machine/stash'
+import { handleRuntimeError } from './cse-machine/error'
+import {
+  MissingRequiredPositionalError,
+  ValueError,
+  SublanguageError,
+  TooManyPositionalArgumentsError,
+  TypeError
+} from './errors/py_errors'
+import { ExprNS } from './ast-types'
 
 export function Validate(
   minArgs: number | null,
@@ -40,7 +37,7 @@ export function Validate(
       if (minArgs !== null && args.length < minArgs) {
         throw new MissingRequiredPositionalError(
           source,
-          command as es.Node,
+          command as ExprNS.Expr,
           functionName,
           minArgs,
           args,
@@ -51,7 +48,7 @@ export function Validate(
       if (maxArgs !== null && args.length > maxArgs) {
         throw new TooManyPositionalArgumentsError(
           source,
-          command as es.Node,
+          command as ExprNS.Expr,
           functionName,
           maxArgs,
           args,
@@ -64,94 +61,155 @@ export function Validate(
   }
 }
 
+export function toPythonFloat(num: number): string {
+  if (Object.is(num, -0)) {
+    return '-0.0'
+  }
+  if (num === 0) {
+    return '0.0'
+  }
+
+  if (num === Infinity) {
+    return 'inf'
+  }
+  if (num === -Infinity) {
+    return '-inf'
+  }
+
+  if (Number.isNaN(num)) {
+    return 'nan'
+  }
+
+  if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
+    return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2')
+  }
+  if (Number.isInteger(num)) {
+    return num.toFixed(1).toString()
+  }
+  return num.toString()
+}
+
+export function toPythonString(obj: Value): string {
+  let ret: any
+  if (!obj) {
+    return 'None'
+  }
+  if ((obj as Value).type === 'builtin') {
+    return `<built-in function ${(obj as any).name}>`
+  }
+  if ((obj as Value).type === 'bigint' || (obj as Value).type === 'complex') {
+    ret = (obj as Value).value.toString()
+  } else if ((obj as Value).type === 'number') {
+    ret = toPythonFloat((obj as Value).value)
+  } else if ((obj as Value).type === 'bool') {
+    if ((obj as Value).value === true) {
+      return 'True'
+    } else {
+      return 'False'
+    }
+  } else if ((obj as Value).type === 'error') {
+    return (obj as Value).message
+  } else if (obj instanceof Closure) {
+    if (obj.node) {
+      const funcName = (obj.node as any).name?.lexeme || '(anonymous)'
+      return `<function ${funcName}>`
+    }
+  } else if ((obj as Value).value === undefined) {
+    ret = 'None'
+  } else {
+    ret = (obj as Value).value.toString()
+  }
+  return ret
+}
+
 export class BuiltInFunctions {
+  static print(args: Value[], source: string, command: ControlItem, context: Context): Value {
+    const output = args.map(arg => toPythonString(arg)).join(' ')
+    context.output += output + '\n'
+    return { type: 'undefined' }
+  }
+
   @Validate(null, 1, '_int', true)
   static _int(args: Value[], source: string, command: ControlItem, context: Context): Value {
     if (args.length === 0) {
-      return { type: 'bigint', value: '0' }
+      return { type: 'bigint', value: BigInt(0) }
     }
 
     const arg = args[0]
-    // If the value is a number, use Math.trunc to truncate toward zero.
-    if (arg.type === 'number') {
-      const truncated = Math.trunc(arg.value)
-      return { type: 'bigint', value: BigInt(truncated) }
-    }
-    // If the value is a bigint, simply return the same value.
-    if (arg.type === 'bigint') {
-      return { type: 'bigint', value: arg.value }
-    }
-
-    handleRuntimeError(
-      context,
-      new TypeError(source, command as es.Node, context, arg.type, "float' or 'int")
-    )
-  }
-
-  @Validate(1, 2, '_int_from_string', true)
-  static _int_from_string(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context
-  ): Value {
-    const strVal = args[0]
-    if (strVal.type !== 'string') {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as es.Node, context, args[0].type, 'string')
-      )
-    }
-
-    let base: number = 10
-    if (args.length === 2) {
-      // The second argument must be either a bigint or a number (it will be converted to a number for uniform processing).
-      const baseVal = args[1]
-      if (baseVal.type === 'bigint') {
-        base = Number(baseVal.value)
-      } else {
+    if (args.length === 1) {
+      if (arg.type === 'number') {
+        const truncated = Math.trunc(arg.value)
+        return { type: 'bigint', value: BigInt(truncated) }
+      }
+      if (arg.type === 'bigint') {
+        return { type: 'bigint', value: arg.value }
+      }
+      if (arg.type === 'string') {
+        const str = arg.value.trim().replace(/_/g, '')
+        if (!/^[+-]?\d+$/.test(str)) {
+          handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'int'))
+        }
+        return { type: 'bigint', value: BigInt(str) }
+      }
+    } else if (args.length === 2) {
+      const baseArg = args[1]
+      if (arg.type !== 'string') {
+        handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, arg.type, 'string'))
+      }
+      if (baseArg.type !== 'bigint') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, args[1].type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, baseArg.type, "float' or 'int")
         )
       }
-    }
 
-    // base should be in between 2 and 36
-    if (base < 2 || base > 36) {
-      handleRuntimeError(
+      let base = Number(baseArg.value)
+      let str = arg.value.trim().replace(/_/g, '')
+
+      const sign = str.startsWith('-') ? -1 : 1
+      if (str.startsWith('+') || str.startsWith('-')) {
+        str = str.substring(1)
+      }
+
+      if (base === 0) {
+        if (str.startsWith('0x') || str.startsWith('0X')) {
+          base = 16
+          str = str.substring(2)
+        } else if (str.startsWith('0o') || str.startsWith('0O')) {
+          base = 8
+          str = str.substring(2)
+        } else if (str.startsWith('0b') || str.startsWith('0B')) {
+          base = 2
+          str = str.substring(2)
+        } else {
+          base = 10
+        }
+      }
+
+      if (base < 2 || base > 36) {
+        handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, "float' or 'int"))
+      }
+
+      const validChars = '0123456789abcdefghijklmnopqrstuvwxyz'.substring(0, base)
+      const regex = new RegExp(`^[${validChars}]+$`, 'i')
+      if (!regex.test(str)) {
+        handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, "float' or 'int"))
+      }
+
+      const parsed = parseInt(str, base)
+      return { type: 'bigint', value: BigInt(sign * parsed) }
+    }
+    handleRuntimeError(
+      context,
+      new TypeError(
+        source,
+        command as ExprNS.Expr,
         context,
-        new ValueError(source, command as es.Node, context, '_int_from_string')
+        arg.type,
+        'string, a bytes-like object or a real number'
       )
-    }
-
-    let str = strVal.value as string
-    str = str.trim()
-    str = str.replace(/_/g, '')
-
-    // Parse the sign (determine if the value is positive or negative)
-    let sign: bigint = BigInt(1)
-    if (str.startsWith('+')) {
-      str = str.slice(1)
-    } else if (str.startsWith('-')) {
-      sign = BigInt(-1)
-      str = str.slice(1)
-    }
-
-    // The remaining portion must consist of valid characters for the specified base.
-    const parsedNumber = parseInt(str, base)
-    if (isNaN(parsedNumber)) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command as es.Node, context, '_int_from_string')
-      )
-    }
-
-    const result: bigint = sign * BigInt(parsedNumber)
-
-    return { type: 'bigint', value: result }
+    )
   }
-
   @Validate(1, 1, 'abs', false)
   static abs(args: Value[], source: string, command: ControlItem, context: Context): Value {
     const x = args[0]
@@ -174,23 +232,24 @@ export class BuiltInFunctions {
       default:
         handleRuntimeError(
           context,
-          new TypeError(
-            source,
-            command as es.Node,
-            context,
-            args[0].type,
-            "float', 'int' or 'complex"
-          )
+          new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float', 'int' or 'complex")
         )
     }
   }
 
-  static toStr(val: Value): string {
-    return String(val.value)
+  @Validate(0, 1, 'str', false)
+  static str(args: Value[], source: string, command: ControlItem, context: Context): Value {
+    if (args.length === 0) {
+      return { type: 'string', value: '' }
+    }
+    const obj = args[0]
+    const result = toPythonString(obj)
+    return { type: 'string', value: result }
   }
 
+  @Validate(1, null, 'error', false)
   static error(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    const output = 'Error: ' + args.map(arg => BuiltInFunctions.toStr(arg)).join(' ') + '\n'
+    const output = 'Error: ' + args.map(arg => toPythonString(arg)).join(' ') + '\n'
     throw new Error(output)
   }
 
@@ -209,7 +268,7 @@ export class BuiltInFunctions {
               context,
               new SublanguageError(
                 source,
-                command as es.Node,
+                command as ExprNS.Expr,
                 context,
                 'isinstance',
                 '1',
@@ -236,14 +295,14 @@ export class BuiltInFunctions {
         default:
           handleRuntimeError(
             context,
-            new ValueError(source, command as es.Node, context, 'isinstance')
+            new ValueError(source, command as ExprNS.Expr, context, 'isinstance')
           )
           return
       }
     } else {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, args[0].type, 'string')
+        new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'string')
       )
       return
     }
@@ -255,11 +314,12 @@ export class BuiltInFunctions {
 
   @Validate(1, 1, 'math_acos', false)
   static math_acos(args: Value[], source: string, command: ControlItem, context: Context): Value {
+
     const x = args[0]
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -271,13 +331,13 @@ export class BuiltInFunctions {
     }
 
     if (num < -1 || num > 1) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_acos'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_acos'))
     }
 
     const result = Math.acos(num)
     return { type: 'number', value: result }
   }
-
+  
   @Validate(1, 1, 'math_acosh', false)
   static math_acosh(args: Value[], source: string, command: ControlItem, context: Context): Value {
     const x = args[0]
@@ -285,7 +345,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -297,7 +357,7 @@ export class BuiltInFunctions {
     }
 
     if (num < 1) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_acosh'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_acosh'))
     }
 
     const result = Math.acosh(num)
@@ -310,7 +370,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -322,7 +382,7 @@ export class BuiltInFunctions {
     }
 
     if (num < -1 || num > 1) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_asin'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_asin'))
     }
 
     const result = Math.asin(num)
@@ -335,7 +395,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -356,7 +416,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -378,12 +438,12 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     } else if (y.type !== 'number' && y.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, y.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, y.type, "float' or 'int")
       )
     }
 
@@ -410,7 +470,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -422,7 +482,7 @@ export class BuiltInFunctions {
     }
 
     if (num <= -1 || num >= 1) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_atanh'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_atanh'))
     }
 
     const result = Math.atanh(num)
@@ -435,7 +495,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -456,7 +516,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -472,17 +532,12 @@ export class BuiltInFunctions {
   }
 
   @Validate(1, 1, 'math_degrees', false)
-  static math_degrees(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context
-  ): Value {
+  static math_degrees(args: Value[], source: string, command: ControlItem, context: Context): Value {
     const x = args[0]
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -503,7 +558,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -525,7 +580,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -542,13 +597,13 @@ export class BuiltInFunctions {
     if (s.type !== 'string') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, s.type, 'string')
+        new TypeError(source, command as ExprNS.Expr, context, s.type, 'string')
       )
     }
     if (i.type !== 'number' && i.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, i.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, i.type, "float' or 'int")
       )
     }
 
@@ -563,16 +618,16 @@ export class BuiltInFunctions {
     const k = args[1]
 
     if (n.type !== 'bigint') {
-      handleRuntimeError(context, new TypeError(source, command as es.Node, context, n.type, 'int'))
+      handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, n.type, 'int'))
     } else if (k.type !== 'bigint') {
-      handleRuntimeError(context, new TypeError(source, command as es.Node, context, k.type, 'int'))
+      handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, k.type, 'int'))
     }
 
     const nVal = BigInt(n.value)
     const kVal = BigInt(k.value)
 
     if (nVal < 0 || kVal < 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_comb'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_comb'))
     }
 
     if (kVal > nVal) {
@@ -590,16 +645,11 @@ export class BuiltInFunctions {
   }
 
   @Validate(1, 1, 'math_factorial', false)
-  static math_factorial(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context
-  ): Value {
+  static math_factorial(args: Value[], source: string, command: ControlItem, context: Context): Value {
     const n = args[0]
 
     if (n.type !== 'bigint') {
-      handleRuntimeError(context, new TypeError(source, command as es.Node, context, n.type, 'int'))
+      handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, n.type, 'int'))
     }
 
     const nVal = BigInt(n.value)
@@ -607,7 +657,7 @@ export class BuiltInFunctions {
     if (nVal < 0) {
       handleRuntimeError(
         context,
-        new ValueError(source, command as es.Node, context, 'math_factorial')
+        new ValueError(source, command as ExprNS.Expr, context, 'math_factorial')
       )
     }
 
@@ -633,7 +683,7 @@ export class BuiltInFunctions {
       if (v.type !== 'bigint') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, v.type, 'int')
+          new TypeError(source, command as ExprNS.Expr, context, v.type, 'int')
         )
       }
       return BigInt(v.value)
@@ -672,14 +722,14 @@ export class BuiltInFunctions {
     if (nValObj.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, nValObj.type, 'int')
+        new TypeError(source, command as ExprNS.Expr, context, nValObj.type, 'int')
       )
     }
 
     const n: bigint = nValObj.value
 
     if (n < 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_isqrt'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_isqrt'))
     }
 
     if (n < 2) {
@@ -711,7 +761,7 @@ export class BuiltInFunctions {
       if (val.type !== 'bigint') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, val.type, 'int')
+          new TypeError(source, command as ExprNS.Expr, context, val.type, 'int')
         )
       }
       return BigInt(val.value)
@@ -747,7 +797,7 @@ export class BuiltInFunctions {
     if (nValObj.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, nValObj.type, 'int')
+        new TypeError(source, command as ExprNS.Expr, context, nValObj.type, 'int')
       )
     }
     const n = BigInt(nValObj.value)
@@ -762,13 +812,13 @@ export class BuiltInFunctions {
       } else {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, kValObj.type, "int' or 'None")
+          new TypeError(source, command as ExprNS.Expr, context, kValObj.type, "int' or 'None")
         )
       }
     }
 
     if (n < 0 || k < 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_perm'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_perm'))
     }
 
     if (k > n) {
@@ -796,7 +846,7 @@ export class BuiltInFunctions {
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
         )
       }
       const ceiled: bigint = BigInt(Math.ceil(numVal))
@@ -805,7 +855,7 @@ export class BuiltInFunctions {
 
     handleRuntimeError(
       context,
-      new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+      new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
     )
   }
 
@@ -824,7 +874,7 @@ export class BuiltInFunctions {
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
         )
       }
       const absVal: number = Math.abs(numVal)
@@ -833,7 +883,7 @@ export class BuiltInFunctions {
 
     handleRuntimeError(
       context,
-      new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+      new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
     )
   }
 
@@ -850,7 +900,7 @@ export class BuiltInFunctions {
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
         )
       }
       const floored: bigint = BigInt(Math.floor(numVal))
@@ -859,7 +909,7 @@ export class BuiltInFunctions {
 
     handleRuntimeError(
       context,
-      new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+      new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
     )
   }
 
@@ -899,7 +949,7 @@ export class BuiltInFunctions {
     } else {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, val.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, val.type, "float' or 'int")
       )
       return 0
     }
@@ -935,7 +985,7 @@ export class BuiltInFunctions {
 
     // Divisor cannot be zero
     if (yVal === 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_fmod'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_fmod'))
     }
 
     // JavaScript's % operator behaves similarly to C's fmod
@@ -979,7 +1029,7 @@ export class BuiltInFunctions {
     } else {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
       return
     }
@@ -992,7 +1042,7 @@ export class BuiltInFunctions {
     } else {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, y.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, y.type, "float' or 'int")
       )
       return
     }
@@ -1000,7 +1050,7 @@ export class BuiltInFunctions {
     if (yValue === 0) {
       handleRuntimeError(
         context,
-        new ValueError(source, command as es.Node, context, 'math_remainder')
+        new ValueError(source, command as ExprNS.Expr, context, 'math_remainder')
       )
     }
 
@@ -1024,7 +1074,7 @@ export class BuiltInFunctions {
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
         )
       }
       let truncated: number
@@ -1040,7 +1090,7 @@ export class BuiltInFunctions {
 
     handleRuntimeError(
       context,
-      new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+      new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
     )
   }
 
@@ -1056,12 +1106,12 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     } else if (y.type !== 'number' && y.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, y.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, y.type, "float' or 'int")
       )
     }
 
@@ -1086,7 +1136,7 @@ export class BuiltInFunctions {
     if (xValObj.type !== 'number' && xValObj.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, xValObj.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, xValObj.type, "float' or 'int")
       )
     }
 
@@ -1102,7 +1152,7 @@ export class BuiltInFunctions {
     if (xValObj.type !== 'number' && xValObj.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, xValObj.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, xValObj.type, "float' or 'int")
       )
     }
 
@@ -1118,7 +1168,7 @@ export class BuiltInFunctions {
     if (xValObj.type !== 'number' && xValObj.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, xValObj.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, xValObj.type, "float' or 'int")
       )
     }
 
@@ -1135,7 +1185,7 @@ export class BuiltInFunctions {
     if (args[1].type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, args[1].type, 'int')
+        new TypeError(source, command as ExprNS.Expr, context, args[1].type, 'int')
       )
     }
     const expVal = args[1].value
@@ -1174,7 +1224,7 @@ export class BuiltInFunctions {
       } else {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, xVal.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
         return
       }
@@ -1198,7 +1248,7 @@ export class BuiltInFunctions {
       } else {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, xVal.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
         return
       }
@@ -1221,7 +1271,7 @@ export class BuiltInFunctions {
       } else {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, xVal.type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
         return
       }
@@ -1239,7 +1289,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1260,7 +1310,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1276,7 +1326,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1292,7 +1342,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
     let num: number
@@ -1303,7 +1353,7 @@ export class BuiltInFunctions {
     }
 
     if (num <= 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_log'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_log'))
     }
 
     if (args.length === 1) {
@@ -1314,7 +1364,7 @@ export class BuiltInFunctions {
     if (baseArg.type !== 'number' && baseArg.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, baseArg.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, baseArg.type, "float' or 'int")
       )
     }
     let baseNum: number
@@ -1324,7 +1374,7 @@ export class BuiltInFunctions {
       baseNum = Number(baseArg.value)
     }
     if (baseNum <= 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_log'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_log'))
     }
 
     const result = Math.log(num) / Math.log(baseNum)
@@ -1337,7 +1387,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, args[0].type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int")
       )
     }
     let num: number
@@ -1347,7 +1397,7 @@ export class BuiltInFunctions {
       num = Number(x.value)
     }
     if (num <= 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_log10'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_log10'))
     }
 
     const result = Math.log10(num)
@@ -1360,7 +1410,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, args[0].type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int")
       )
     }
     let num: number
@@ -1370,7 +1420,7 @@ export class BuiltInFunctions {
       num = Number(x.value)
     }
     if (1 + num <= 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_log1p'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_log1p'))
     }
 
     const result = Math.log1p(num)
@@ -1383,7 +1433,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, args[0].type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int")
       )
     }
     let num: number
@@ -1393,7 +1443,7 @@ export class BuiltInFunctions {
       num = Number(x.value)
     }
     if (num <= 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_log2'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_log2'))
     }
 
     const result = Math.log2(num)
@@ -1408,12 +1458,12 @@ export class BuiltInFunctions {
     if (base.type !== 'number' && base.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, base.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, base.type, "float' or 'int")
       )
     } else if (exp.type !== 'number' && exp.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, exp.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, exp.type, "float' or 'int")
       )
     }
 
@@ -1446,7 +1496,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1467,7 +1517,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1488,7 +1538,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1509,7 +1559,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1530,7 +1580,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1551,7 +1601,7 @@ export class BuiltInFunctions {
     if (x.type !== 'number' && x.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, x.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
     }
 
@@ -1563,7 +1613,7 @@ export class BuiltInFunctions {
     }
 
     if (num < 0) {
-      handleRuntimeError(context, new ValueError(source, command as es.Node, context, 'math_sqrt'))
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, 'math_sqrt'))
     }
 
     const result = Math.sqrt(num)
@@ -1582,13 +1632,13 @@ export class BuiltInFunctions {
       if (isNumeric && !numericTypes.includes(t)) {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, args[i].type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, args[i].type, "float' or 'int")
         )
       }
       if (isString && t !== 'string') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, args[i].type, 'string')
+          new TypeError(source, command as ExprNS.Expr, context, args[i].type, 'string')
         )
       }
     }
@@ -1646,7 +1696,7 @@ export class BuiltInFunctions {
     if (args.length < 2) {
       handleRuntimeError(
         context,
-        new MissingRequiredPositionalError(source, command as es.Node, 'min', Number(2), args, true)
+        new MissingRequiredPositionalError(source, command as ExprNS.Expr, 'min', Number(2), args, true)
       )
     }
 
@@ -1660,13 +1710,13 @@ export class BuiltInFunctions {
       if (isNumeric && !numericTypes.includes(t)) {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, args[i].type, "float' or 'int")
+          new TypeError(source, command as ExprNS.Expr, context, args[i].type, "float' or 'int")
         )
       }
       if (isString && t !== 'string') {
         handleRuntimeError(
           context,
-          new TypeError(source, command as es.Node, context, args[i].type, 'string')
+          new TypeError(source, command as ExprNS.Expr, context, args[i].type, 'string')
         )
       }
     }
@@ -1736,7 +1786,7 @@ export class BuiltInFunctions {
     if (numArg.type !== 'number' && numArg.type !== 'bigint') {
       handleRuntimeError(
         context,
-        new TypeError(source, command as es.Node, context, numArg.type, "float' or 'int")
+        new TypeError(source, command as ExprNS.Expr, context, numArg.type, "float' or 'int")
       )
     }
 
@@ -1779,24 +1829,9 @@ export class BuiltInFunctions {
   static input(args: Value[], source: string, command: ControlItem, context: Context): Value {
     // TODO: : call conductor to receive user input
   }
-
-  static print(args: Value[], source: string, command: ControlItem, context: Context) {
-    const pieces = args.map(arg => toPythonString(arg))
-    const output = pieces.join(' ')
-    addPrint(output)
-    //return { type: 'string', value: output };
-  }
-
-  static str(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    if (args.length === 0) {
-      return { type: 'string', value: '' }
-    }
-    const obj = args[0]
-    const result = toPythonString(obj)
-    return { type: 'string', value: result }
-  }
 }
 
+  
 import py_s1_constants from './stdlib/py_s1_constants.json'
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
@@ -1824,95 +1859,15 @@ for (const name of constants.constants as string[]) {
   }
   builtInConstants.set(name, valueObj)
 }
-
-/*
-    Create a map to hold built-in functions.
-    The keys are strings (function names) and the values are functions that can take any arguments.
-*/
-export const builtIns = new Map<string, (...args: any[]) => any>()
+// Load only the functions we have implemented
+export const builtIns = new Map<string, Value>()
 for (const name of constants.builtInFuncs as string[]) {
-  let impl = (BuiltInFunctions as any)[name]
+  const impl = (BuiltInFunctions as any)[name]
   if (typeof impl !== 'function') {
-    throw new Error(`BuiltInFunctions.${name} is not implemented`)
+    // some functions are not yet implemented
+    console.warn(`BuiltInFunctions.${name} is not implemented`)
+    continue
   }
-  builtIns.set(name, impl)
-}
-
-/**
- * Converts a number to a string that mimics Python's float formatting behavior.
- *
- * In Python, float values are printed in scientific notation when their absolute value
- * is ≥ 1e16 or < 1e-4. This differs from JavaScript/TypeScript's default behavior,
- * so we explicitly enforce these formatting thresholds.
- *
- * The logic here is based on Python's internal `format_float_short` implementation
- * in CPython's `pystrtod.c`:
- * https://github.com/python/cpython/blob/main/Python/pystrtod.c
- *
- * Special cases such as -0, Infinity, and NaN are also handled to ensure that
- * output matches Python’s display conventions.
- */
-export function toPythonFloat(num: number): string {
-  if (Object.is(num, -0)) {
-    return '-0.0'
-  }
-  if (num === 0) {
-    return '0.0'
-  }
-
-  if (num === Infinity) {
-    return 'inf'
-  }
-  if (num === -Infinity) {
-    return '-inf'
-  }
-
-  if (Number.isNaN(num)) {
-    return 'nan'
-  }
-
-  if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
-    return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2')
-  }
-  if (Number.isInteger(num)) {
-    return num.toFixed(1).toString()
-  }
-  return num.toString()
-}
-
-export function toPythonString(obj: Value): string {
-  let ret: any
-  if ((obj as Value).type === 'bigint' || (obj as Value).type === 'complex') {
-    ret = (obj as Value).value.toString()
-  } else if ((obj as Value).type === 'number') {
-    ret = toPythonFloat((obj as Value).value)
-  } else if ((obj as Value).type === 'bool') {
-    if ((obj as Value).value === true) {
-      return 'True'
-    } else {
-      return 'False'
-    }
-  } else if ((obj as Value).type === 'error') {
-    return (obj as Value).message
-  } else if ((obj as unknown as Closure).node) {
-    for (let name in (obj as unknown as Closure).environment!.head) {
-      if ((obj as unknown as Closure).environment!.head[name] === obj) {
-        return '<function ' + name + '>'
-      }
-    }
-  } else if ((obj as Value) === undefined || (obj as Value).value === undefined) {
-    ret = 'None'
-  } else {
-    ret = (obj as Value).value.toString()
-  }
-  return ret
-}
-
-export function str(args: Value[], source: string, command: ControlItem, context: Context): Value {
-  if (args.length === 0) {
-    return { type: 'string', value: '' }
-  }
-  const obj = args[0]
-  const result = toPythonString(obj)
-  return { type: 'string', value: result }
+  const builtinName = name.startsWith('_') ? name.substring(1) : name
+  builtIns.set(name, { type: 'builtin', name: builtinName, func: impl })
 }

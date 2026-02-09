@@ -1,9 +1,8 @@
-import { Value } from './stash'
-import * as es from 'estree'
-import { Heap } from './heap'
-import { Context } from './context'
-import { Closure } from './closure'
-import { Node } from './types'
+import { Closure } from './closure';
+import { Context } from './context';
+import { Heap } from './heap';
+import { Value } from './stash';
+import { ExprNS, StmtNS } from '../ast-types';
 
 export interface Frame {
   [name: string]: any
@@ -13,10 +12,11 @@ export interface Environment {
   readonly id: string
   name: string
   tail: Environment | null
-  callExpression?: es.CallExpression
+  callExpression?: ExprNS.Call
   head: Frame
   heap: Heap
   thisContext?: Value
+  closure?: Closure
 }
 
 export const uniqueId = (context: Context): string => {
@@ -27,32 +27,24 @@ export const createEnvironment = (
   context: Context,
   closure: Closure,
   args: Value[],
-  callExpression: es.CallExpression
+  callExpression: ExprNS.Call
 ): Environment => {
   const environment: Environment = {
-    // TODO: name
-    name: '',
+    name:
+      closure.node.constructor.name === 'FunctionDef'
+        ? (closure.node as StmtNS.FunctionDef).name.lexeme
+        : 'lambda',
     tail: closure.environment,
     head: {},
     heap: new Heap(),
     id: uniqueId(context),
-    callExpression: {
-      ...callExpression
-      //arguments: args.map(ast.primitive)
-    }
+    callExpression: callExpression,
+    closure: closure
   }
 
-  // console.info('closure.node.params:', closure.node.params);
-  // console.info('Number of params:', closure.node.params.length);
-
-  closure.node.params.forEach((param, index) => {
-    if (isRestElement(param)) {
-      const array = args.slice(index)
-      handleArrayCreation(context, array, environment)
-      environment.head[(param.argument as es.Identifier).name] = array
-    } else {
-      environment.head[(param as es.Identifier).name] = args[index]
-    }
+  closure.node.parameters.forEach((paramToken, index) => {
+    const paramName = paramToken.lexeme
+    environment.head[paramName] = args[index]
   })
   return environment
 }
@@ -89,26 +81,31 @@ export const createBlockEnvironment = (
   }
 }
 
-export const isRestElement = (node: Node): node is es.RestElement => {
-  return (node as es.RestElement).type === 'RestElement'
-}
+// export const isRestElement = (node: Node): node is es.RestElement => {
+//   return (node as es.RestElement).type === 'RestElement';
+// };
 
-export const handleArrayCreation = (
-  context: Context,
-  array: any[],
-  envOverride?: Environment
-): void => {
-  const environment = envOverride ?? currentEnvironment(context)
-  Object.defineProperties(array, {
-    id: { value: uniqueId(context) },
-    environment: { value: environment, writable: true }
-  })
-  environment.heap.add(array as any)
-}
+// export const handleArrayCreation = (
+//   context: Context,
+//   array: any[],
+//   envOverride?: Environment
+// ): void => {
+//   const environment = envOverride ?? currentEnvironment(context);
+//   Object.defineProperties(array, {
+//     id: { value: uniqueId(context) },
+//     environment: { value: environment, writable: true }
+//   });
+//   environment.heap.add(array as any);
+// };
 
 export const currentEnvironment = (context: Context): Environment => {
   return context.runtime.environments[0]
 }
+
+export const getGlobalEnvironment = (context: Context): Environment | null => {
+  const envs = context.runtime.environments;
+  return envs.length > 0 ? envs[envs.length - 1] : null;
+};
 
 export const popEnvironment = (context: Context) => context.runtime.environments.shift()
 

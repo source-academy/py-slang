@@ -1,6 +1,6 @@
-import { PyContext } from '../../cse-machine/py_context';
-import { JSValue } from '../../cse-machine/py_closure';
-import { getGlobalEnvironment } from '../../cse-machine/py_environment';
+import { Context } from '../../cse-machine/context';
+import { JSValue } from '../../cse-machine/closure';
+import { getGlobalEnvironment } from '../../cse-machine/environment';
 import { pyDefineVariable } from '../../cse-machine/py_utils';
 import { LinkerResult } from '../moduleTypes';
 import { Value } from '../../cse-machine/stash';
@@ -10,10 +10,10 @@ import { CseError } from '../../cse-machine/error';
  * Binds imported foreign values (JS functions/constants) to the global environment.
  * This function runs after the loader and analyzer, but before the CSE machine.
  *
- * @param context The PyContext containing loaded modules and the runtime environment.
+ * @param context The Context containing loaded modules and the runtime environment.
  * @param linkerResult The result from the linker, containing import information.
  */
-export function bundleAndBind(context: PyContext, linkerResult: LinkerResult): void {
+export function bundleAndBind(context: Context, linkerResult: LinkerResult): void {
   if (!linkerResult.ok) {
     return;
   }
