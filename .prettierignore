@@ -1,0 +1,8 @@
+/src/tests
+/src/ast-types.ts
+/src/generate-ast.ts
+/src/generate-parser.ts
+/src/generate.ts
+/src/parser.ts
+/src/resolver.ts
+/src/tokenizer.ts

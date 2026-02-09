@@ -1,8 +1,8 @@
-import * as es from 'estree'
 import { toPythonString } from './stdlib'
 import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
+import { SourceLocation } from './errors/base'
 
 export class CSEBreak {}
 
@@ -91,99 +91,99 @@ export class PyComplexNumber {
     }
 
     public mul(other: PyComplexNumber): PyComplexNumber {
-        // (a+bi)*(c+di) = (ac - bd) + (bc + ad)i
-        const realPart = this.real * other.real - this.imag * other.imag;
-        const imagPart = this.real * other.imag + this.imag * other.real;
-        return new PyComplexNumber(realPart, imagPart);
+      // (a+bi)*(c+di) = (ac - bd) + (bc + ad)i
+      const realPart = this.real * other.real - this.imag * other.imag
+      const imagPart = this.real * other.imag + this.imag * other.real
+      return new PyComplexNumber(realPart, imagPart)
     }
 
     // https://github.com/python/cpython/blob/main/Objects/complexobject.c#L986
     // In the CPython source code, a branch algorithm is used for complex division.
-    // It first compares the magnitudes of the dividend and divisor, and if some components are too large or too small, 
-    // appropriate scaling is applied before performing the operation. 
+    // It first compares the magnitudes of the dividend and divisor, and if some components are too large or too small,
+    // appropriate scaling is applied before performing the operation.
     // This approach can significantly reduce overflow or underflow, thereby ensuring that the results remain more consistent with Python.
     public div(other: PyComplexNumber): PyComplexNumber {
-        // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
-        const denominator = other.real * other.real + other.imag * other.imag;
-        if (denominator === 0) {
-            throw new Error(`Division by zero in complex number.`);
-        }
+      // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
+      const denominator = other.real * other.real + other.imag * other.imag
+      if (denominator === 0) {
+        throw new Error(`Division by zero in complex number.`)
+      }
 
-        const a = this.real;
-        const b = this.imag;
-        const c = other.real;
-        const d = other.imag;
+      const a = this.real
+      const b = this.imag
+      const c = other.real
+      const d = other.imag
 
-        const absC = Math.abs(c);
-        const absD = Math.abs(d);
+      const absC = Math.abs(c)
+      const absD = Math.abs(d)
 
-        let real: number;
-        let imag: number;
-        if (absD < absC) {
-            const ratio = d / c;
-            const denom = c + d * ratio; // c + d*(d/c) = c + d^2/c
-            real = (a + b * ratio) / denom;
-            imag = (b - a * ratio) / denom;
-        } else {
-            const ratio = c / d;
-            const denom = d + c * ratio; // d + c*(c/d) = d + c^2/d
-            real = (a * ratio + b) / denom;
-            imag = (b * ratio - a) / denom;
-        }
-        
-        return new PyComplexNumber(real, imag);
+      let real: number
+      let imag: number
+      if (absD < absC) {
+        const ratio = d / c
+        const denom = c + d * ratio // c + d*(d/c) = c + d^2/c
+        real = (a + b * ratio) / denom
+        imag = (b - a * ratio) / denom
+      } else {
+        const ratio = c / d
+        const denom = d + c * ratio // d + c*(c/d) = d + c^2/d
+        real = (a * ratio + b) / denom
+        imag = (b * ratio - a) / denom
+      }
 
-        //const numerator = this.mul(new PyComplexNumber(other.real, -other.imag));
-        //return new PyComplexNumber(numerator.real / denominator, numerator.imag / denominator);
+      return new PyComplexNumber(real, imag)
+
+      //const numerator = this.mul(new PyComplexNumber(other.real, -other.imag));
+      //return new PyComplexNumber(numerator.real / denominator, numerator.imag / denominator);
     }
 
     public pow(other: PyComplexNumber): PyComplexNumber {
-        // z = this (a+bi), w = other (A+Bi)
-        const a = this.real;
-        const b = this.imag;
-        const A = other.real;
-        const B = other.imag;
-    
-        const r = Math.sqrt(a * a + b * b);
-        const theta = Math.atan2(b, a);
-    
-        if (r === 0) {
-            // In Python, raising 0 to a negative or complex power raises an error.
-            // For example, 0**(1j) in CPython directly raises ValueError: complex power.
-            if (A < 0 || B !== 0) {
-                throw new Error('0 cannot be raised to a negative or complex power');
-            }
-            // Otherwise, 0**(positive number) = 0.
-            return new PyComplexNumber(0, 0);
-        }
-    
-        const logR = Math.log(r);
-    
-        // realExpPart = A*ln(r) - B*theta
-        // imagExpPart = B*ln(r) + A*theta
-        const realExpPart = A * logR - B * theta;
-        const imagExpPart = B * logR + A * theta;
-    
-        // e^(x + i y) = e^x [cos(y) + i sin(y)]
-        const expOfReal = Math.exp(realExpPart);
-        const c = expOfReal * Math.cos(imagExpPart);
-        const d = expOfReal * Math.sin(imagExpPart);
-    
-        return new PyComplexNumber(c, d);
-    }
-    
-    public toString(): string {
-        if (this.real === 0) {
-            return `${this.imag}j`;
-        }
-        // if (this.imag === 0) {
-        //     return `${this.real}`;
-        // }
-        
-        const sign = (this.imag >= 0) ? "+" : "";
+      // z = this (a+bi), w = other (A+Bi)
+      const a = this.real
+      const b = this.imag
+      const A = other.real
+      const B = other.imag
 
-        // return `(${this.real}${sign}${this.imag}j)`;
-        return `(${this.toPythonComplexFloat(this.real)}${sign}${this.toPythonComplexFloat(this.imag)}j)`;
+      const r = Math.sqrt(a * a + b * b)
+      const theta = Math.atan2(b, a)
+
+      if (r === 0) {
+        // In Python, raising 0 to a negative or complex power raises an error.
+        // For example, 0**(1j) in CPython directly raises ValueError: complex power.
+        if (A < 0 || B !== 0) {
+          throw new Error('0 cannot be raised to a negative or complex power')
+        }
+        // Otherwise, 0**(positive number) = 0.
+        return new PyComplexNumber(0, 0)
+      }
+
+      const logR = Math.log(r)
+
+      // realExpPart = A*ln(r) - B*theta
+      // imagExpPart = B*ln(r) + A*theta
+      const realExpPart = A * logR - B * theta
+      const imagExpPart = B * logR + A * theta
+
+      // e^(x + i y) = e^x [cos(y) + i sin(y)]
+      const expOfReal = Math.exp(realExpPart)
+      const c = expOfReal * Math.cos(imagExpPart)
+      const d = expOfReal * Math.sin(imagExpPart)
+
+      return new PyComplexNumber(c, d)
+    }
+
+    public toString(): string {
+      if (this.real === 0) {
+        return `${this.imag}j`
+      }
+      // if (this.imag === 0) {
+      //     return `${this.real}`;
+      // }
+
+      const sign = this.imag >= 0 ? '+' : ''
+
+      // return `(${this.real}${sign}${this.imag}j)`;
+      return `(${this.toPythonComplexFloat(this.real)}${sign}${this.toPythonComplexFloat(this.imag)}j)`
     }
 
     /*
@@ -192,45 +192,41 @@ export class PyComplexNumber {
     * notation when their absolute value is less than 1e-4 or at least 1e16. TypeScript's default
     * formatting thresholds differ, so here we explicitly enforce Python's behavior.
     *
-    * The chosen bounds (1e-4 and 1e16) are derived from Python's internal formatting logic 
-    * (refer to the `format_float_short` function in CPython's pystrtod.c 
+    * The chosen bounds (1e-4 and 1e16) are derived from Python's internal formatting logic
+    * (refer to the `format_float_short` function in CPython's pystrtod.c
     * (https://github.com/python/cpython/blob/main/Python/pystrtod.c)). This ensures that the
     * output of py-slang more closely matches that of native Python.
     */
-    private toPythonComplexFloat(num: number){
-        if (num === Infinity) {
-            return "inf";
-        }
-        if (num === -Infinity) {
-            return "-inf";
-        }
-        
-        // Force scientific notation for values < 1e-4 or ≥ 1e16 to mimic Python's float formatting behavior.
-        if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
-            return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2');
-        }
-        return num.toString();
+    private toPythonComplexFloat(num: number) {
+      if (num === Infinity) {
+        return 'inf'
+      }
+      if (num === -Infinity) {
+        return '-inf'
+      }
+
+      // Force scientific notation for values < 1e-4 or ≥ 1e16 to mimic Python's float formatting behavior.
+      if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
+        return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2')
+      }
+      return num.toString()
     }
 
     public equals(other: PyComplexNumber): boolean {
-        return (Number(this.real) === Number(other.real) && Number(this.imag) === Number(other.imag));
+      return Number(this.real) === Number(other.real) && Number(this.imag) === Number(other.imag)
     }
+  }
+
+export interface None {
+  type: 'NoneType'
+  loc?: SourceLocation | null
 }
 
-export interface None extends es.BaseNode {
-    type: 'NoneType';
-    loc?: es.SourceLocation;
+export interface ComplexLiteral {
+  type: 'Literal'
+  complex?: PyComplexNumber
+  loc?: SourceLocation | null
 }
-
-export interface ComplexLiteral extends es.BaseNode {
-    type: 'Literal';
-    complex: {
-        real: number;
-        imag: number;
-    }
-    loc?: es.SourceLocation;
-}
-
 
 /**
  * Helper type to recursively make properties that are also objects
@@ -257,10 +253,15 @@ export type Result = Finished | Error | SuspendedCseEval // | Suspended
 //     scheduler: Scheduler
 //     context: Context
 // }
-  
+
 export interface SuspendedCseEval {
     status: 'suspended-cse-eval'
-    context: Context
+    context: Context;
+}
+
+export interface Error {
+  status: 'error';
+  context: Context;
 }
 
 export interface Finished {
@@ -304,4 +305,9 @@ export interface NativeStorage {
      */
     loadedModules: Record<string, ModuleFunctions>
     loadedModuleTypes: Record<string, Record<string, string>>
+}
+
+export interface ModuleContext {
+  state: null | any
+  tabs: null | any[]
 }

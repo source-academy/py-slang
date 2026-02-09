@@ -1,4 +1,5 @@
-import { createErrorIndicator, getFullLine, MAGIC_OFFSET } from "../errors";
+import { getFullLine, MAGIC_OFFSET } from "../errors";
+import { createErrorIndicator } from "../errors/errors";
 import { Token } from "../tokenizer";
 
 export namespace ParserErrors {
@@ -16,7 +17,7 @@ export namespace ParserErrors {
     }
     export class ExpectedTokenError extends BaseParserError {
         constructor(source: string, current: Token, expected: string) {
-            let { lineIndex, fullLine } = getFullLine(source, current.indexInSource - current.lexeme.length);
+            let { lineIndex, msg: fullLine } = getFullLine(source, current.indexInSource - current.lexeme.length);
             fullLine = '\n' + fullLine + '\n';
             let hint = `^ ${expected}. Found '${current.lexeme}'.`;
             hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
@@ -26,7 +27,7 @@ export namespace ParserErrors {
     }
     export class NoElseBlockError extends BaseParserError {
         constructor(source: string, current: Token) {
-            let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+            let { lineIndex, msg: fullLine } = getFullLine(source, current.indexInSource);
             fullLine = '\n' + fullLine + '\n';
             let hint = `^ Expected else block after this if block.`;
             hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
@@ -36,10 +37,10 @@ export namespace ParserErrors {
     }
     export class GenericUnexpectedSyntaxError extends BaseParserError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
-            let { lineIndex, fullLine } = getFullLine(source, start);
+            let { lineIndex, msg: fullLine } = getFullLine(source, start);
             fullLine = '\n' + fullLine + '\n';
             let hint = ` Detected invalid syntax.`;
-            const indicator = createErrorIndicator(fullLine, '@');
+            const indicator = createErrorIndicator(fullLine, -1);
             super(fullLine + indicator + hint, lineIndex, col);
             this.name = "GenericUnexpectedSyntaxError";
         }

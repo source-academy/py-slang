@@ -290,16 +290,47 @@ export class Parser {
 
     private import_from(): Stmt {
         const startToken = this.previous();
-        const module = this.advance();
+        const module = this.consume(TokenType.NAME, "Expected module name after 'from'");
         this.consume(TokenType.IMPORT, "Expected import keyword");
-        let params;
-        if (this.check(TokenType.NAME)) {
-            params = [this.advance()];
+
+        let importedNames: Token[];
+
+        if (this.match(TokenType.LPAR)) {
+            // Case: from x import (a, b as c, d)
+            importedNames = this.import_as_names();
+            this.consume(TokenType.RPAR, "Expected closing ')' after imports");
         } else {
-            params = this.parameters();
+            // Case: from x import a, b as c, d
+            importedNames = this.import_as_names();
         }
-        return new StmtNS.FromImport(startToken, this.previous(), module, params);
+
+        if (importedNames.length === 0) {
+            throw new ParserErrors.ExpectedTokenError(this.source, this.peek(), "Expected imported name(s) after 'import'");
+        }
+
+        return new StmtNS.FromImport(startToken, this.previous(), module, importedNames);
     }
+
+    private import_as_names(): Token[] {
+        const names: Token[] = [];
+        while (this.check(TokenType.NAME)) {
+            const name = this.advance();
+            names.push(name);
+
+            if (this.match(TokenType.AS)) {
+                const alias = this.consume(TokenType.NAME, "Expected alias name after 'as'");
+                names.push(alias);
+            }
+
+            if (this.match(TokenType.COMMA)) {
+                continue;
+            } else {
+                break;
+            }
+        }
+        return names;
+    }
+
 
     private parameters(): Token[] {
         this.consume(TokenType.LPAR, "Expected opening parentheses");

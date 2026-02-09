@@ -1,5 +1,5 @@
-import { Environment } from './environment';
 import { Closure } from './closure';
+import { Environment } from './environment';
 
 // Every array also has the properties `id` and `environment` for use in the frontend CSE Machine
 export type EnvArray = any[] & {

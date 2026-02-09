@@ -62,6 +62,7 @@ const specialIdentifiers = new Map([
     ["return", TokenType.RETURN],
     ["assert", TokenType.ASSERT],
     ["import", TokenType.IMPORT],
+    ["as", TokenType.AS], 
     ["global", TokenType.GLOBAL],
     ["nonlocal", TokenType.NONLOCAL],
     ["if", TokenType.IF],
@@ -464,7 +465,7 @@ export class Tokenizer {
             const previousToken = this.tokens[this.tokens.length - 1];
             switch (specialIdent) {
                 case TokenType.NOT:
-                    if (previousToken.type === TokenType.IS) {
+                    if (previousToken && previousToken.type === TokenType.IS) {
                         this.overwriteToken(TokenType.ISNOT);
                     } else {
                         this.addToken(specialIdent);

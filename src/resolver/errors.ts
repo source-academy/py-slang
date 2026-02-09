@@ -17,7 +17,7 @@ export namespace ResolverErrors {
     export class NameNotFoundError extends BaseResolverError {
         constructor(line: number, col: number, source: string, start: number,
                     current: number, suggestion: string | null) {
-            let { lineIndex, fullLine } = getFullLine(source, start);
+            let { lineIndex, msg: fullLine } = getFullLine(source, start);
             fullLine = '\n' + fullLine + '\n';
             let hint = ` This name is not found in the current or enclosing environment(s).`;
             const diff = (current - start);
@@ -38,13 +38,13 @@ export namespace ResolverErrors {
     export class NameReassignmentError extends BaseResolverError {
         constructor(line: number, col: number, source: string, start: number,
                     current: number, oldName: Token) {
-            let { lineIndex, fullLine } = getFullLine(source, start);
+            let { lineIndex, msg: fullLine } = getFullLine(source, start);
             fullLine = '\n' + fullLine + '\n';
             let hint = ` A name has been declared here.`;
             const diff = (current - start);
             hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
             hint = hint.padStart(hint.length + col - diff, " ");
-            let { lineIndex: oldLine, fullLine: oldNameLine } = getFullLine(source, oldName.indexInSource);
+            let { lineIndex: oldLine, msg: oldNameLine } = getFullLine(source, oldName.indexInSource);
             oldNameLine = '\n' + oldNameLine + '\n';
             let sugg = ` However, it has already been declared in the same environment at line ${oldLine}, here: `
             sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");

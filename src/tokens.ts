@@ -3,7 +3,7 @@
 // We could also resolve special names at AST parse time.
 // Also renamed some token names to make more sense.
 export enum TokenType {
-    //// Source S1
+      //// Source S1
     ENDMARKER,
     NAME,
     NUMBER,
@@ -55,6 +55,7 @@ export enum TokenType {
     RETURN,
     ASSERT,
     IMPORT,
+    AS,
     GLOBAL,
     NONLOCAL,
     IF,
