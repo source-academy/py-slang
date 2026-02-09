@@ -99,6 +99,7 @@ export class Tokenizer {
     private specialIdentifiers: Map<string, TokenType>;
     private forbiddenIdentifiers: Map<string, TokenType>;
     private parenthesesLevel: number;
+    private bracktsLevel: number;
 
     // forbiddenOperators: Set<TokenType>;
     constructor(source: string) {
@@ -141,6 +142,7 @@ export class Tokenizer {
         //     TokenType.DOUBLESLASHEQUAL,
         // ])
         this.parenthesesLevel = 0;
+        this.bracktsLevel = 0;
     }
 
     private isAtEnd() {
@@ -752,6 +754,17 @@ export class Tokenizer {
                     throw new TokenizerErrors.NonMatchingParenthesesError(this.line, this.col, this.source, this.current);
                 }
                 this.parenthesesLevel--;
+                break;
+            case '[':
+                this.addToken(TokenType.LSQB);
+                this.bracktsLevel++;
+                break;
+            case ']':
+                this.addToken(TokenType.RSQB);
+                if (this.bracktsLevel === 0) {
+                    throw new TokenizerErrors.NonMatchingBracketsError(this.line, this.col, this.source, this.current);
+                }
+                this.bracktsLevel--;
                 break;
             case ',':
                 this.addToken(TokenType.COMMA);
