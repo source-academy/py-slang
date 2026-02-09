@@ -39,7 +39,7 @@ import { IOptions } from '../runner/pyRunner'
 import { CSEBreak, Finished, RecursivePartial, Result, Representation } from '../types'
 import { builtIns, toPythonString } from '../stdlib'
 import { pyDefineVariable, pyGetVariable, scanForAssignments } from './py_utils'
-import { BuiltinReassignmentError } from '../errors/py_errors'
+import { BuiltinReassignmentError } from '../errors/errors'
 
 type CmdEvaluator = (
   code: string,

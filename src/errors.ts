@@ -6,7 +6,7 @@ import {Position} from "estree";
     The offset is calculated as follows:    
     Current position is one after real position of end of token: 1
 */
-const MAGIC_OFFSET = 1;
+export const MAGIC_OFFSET = 1;
 
 const SPECIAL_CHARS = new RegExp("[\\\\$'\"]", "g");
 
@@ -16,7 +16,7 @@ function escape(unsafe: string): string {
 }
 
 /* Searches backwards and forwards till it hits a newline */
-function getFullLine(source: string, current: number): {lineIndex: number; msg: string} {
+export function getFullLine(source: string, current: number): {lineIndex: number; msg: string} {
     let back: number = current;
     let forward: number = current;
     if (source[back] == '\n') {
@@ -194,7 +194,7 @@ export namespace ParserErrors {
             let { lineIndex, msg } = getFullLine(source, start);
             msg = '\n' + msg + '\n';
             let hint = ` Detected invalid syntax.`;
-            const indicator = createErrorIndicator(msg, '@');
+            const indicator = createErrorIndicator(msg, -1);
             super(msg + indicator + hint, lineIndex, col);
             this.name = "GenericUnexpectedSyntaxError";
         }

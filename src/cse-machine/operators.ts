@@ -6,7 +6,7 @@ import { pythonMod } from './py_utils';
 import { ExprNS } from '../ast-types';
 import { TokenType } from '../tokens';
 import { PyComplexNumber } from '../types';
-import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/py_errors';
+import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
 
 export type BinaryOperator =
     | "=="

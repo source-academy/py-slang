@@ -11,7 +11,7 @@ import {
   SublanguageError,
   TooManyPositionalArgumentsError,
   TypeError
-} from './errors/py_errors';
+} from './errors/errors';
 
 export function Validate(
     minArgs: number | null,

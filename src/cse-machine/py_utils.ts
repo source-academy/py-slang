@@ -4,7 +4,7 @@ import { Value } from './stash';
 import { Node } from './types';
 import { ExprNS, StmtNS } from '../ast-types';
 import { builtIns, builtInConstants } from '../stdlib';
-import { NameError, UnboundLocalError } from '../errors/py_errors';
+import { NameError, UnboundLocalError } from '../errors/errors';
 
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
   if (typeof a === 'bigint' || typeof b === 'bigint') {
