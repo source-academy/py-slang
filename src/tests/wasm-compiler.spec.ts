@@ -474,6 +474,230 @@ b()
   });
 });
 
+describe("Loop semantics tests", () => {
+  it("for loop: range(stop)", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(5):
+    sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("for loop: range(start, stop)", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(2, 5):
+    sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
+
+  it("for loop: range(start, stop, step) positive step", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(1, 6, 2):
+    sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
+
+  it("for loop: range(start, stop, step) negative step", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(5, 0, -2):
+    sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
+
+  it("for loop: loop variable mutation does not affect iteration", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(5):
+    i = 100
+    sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(500)]);
+  });
+
+  it("for loop: loop variable reassignment does not leak across iterations", async () => {
+    const pythonCode = `
+last = 0
+for i in range(3):
+    last = i
+    i = 999
+last
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+  });
+
+  it("for loop: range expression evaluated once", async () => {
+    const pythonCode = `
+def outer():
+    x = 0
+    def f():
+        nonlocal x
+        x = x + 1
+        return 3
+
+    for i in range(f()):
+        pass
+    return x
+outer()
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("for loop: start and stop expressions evaluated once", async () => {
+    const pythonCode = `
+def outer():
+    x = 0
+    def f():
+        nonlocal x
+        x = x + 1
+        return 3
+
+    for i in range(0, f()):
+        pass
+    return x
+outer()
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("for loop: step expression evaluated once", async () => {
+    const pythonCode = `
+def outer():
+    x = 0
+    def f():
+        nonlocal x
+        x = x + 1
+        return 2
+
+    for i in range(0, 10, f()):
+        pass
+    return x
+outer()
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("while loop: basic iteration", async () => {
+    const pythonCode = `
+i = 0
+sum = 0
+while i < 5:
+    sum = sum + i
+    i = i + 1
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("while loop: condition re-evaluated every iteration", async () => {
+    const pythonCode = `
+def outer():
+    x = 0
+    def f():
+        nonlocal x
+        x = x + 1
+        return 3
+    i = 0
+    while i < f():
+        i = i + 1
+    return x
+outer()
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
+
+  it("nested for loops: independent loop variables", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(3):
+    for j in range(2):
+        sum = sum + i + j
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
+
+  it("nested for loops: mutating inner loop variable does not affect iteration", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(3):
+    for j in range(3):
+        j = 100
+        sum = sum + j
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(900)]);
+  });
+
+  it("nested for loops: mutating outer loop variable inside inner loop does not affect outer iteration", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(3):
+    for j in range(2):
+        i = 50
+        sum = sum + i
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(300)]);
+  });
+
+  it("nested loops: while inside for with loop variable mutation", async () => {
+    const pythonCode = `
+sum = 0
+for i in range(3):
+    j = 0
+    while j < 2:
+        i = 10
+        sum = sum + i
+        j = j + 1
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(60)]);
+  });
+
+  it("nested loops: while loop re-evaluates condition using mutated variable", async () => {
+    const pythonCode = `
+i = 0
+count = 0
+while i < 3:
+    j = 0
+    while j < 3:
+        j = j + 1
+        count = count + 1
+    i = i + 1
+count
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
+});
+
 describe("Miscellaneous tests", () => {
   it("Temporal dead zone for local variables", async () => {
     const pythonCode = `

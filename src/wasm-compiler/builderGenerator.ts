@@ -113,6 +113,10 @@ const builtInFunctions: {
   },
 ];
 
+const FOR_END_PREFIX = "_for_end_";
+const FOR_STEP_PREFIX = "_for_step_";
+const FOR_ITER_PREFIX = "_for_iter_";
+
 type Binding = { name: string; tag: "local" | "nonlocal" };
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
@@ -130,6 +134,7 @@ export class BuilderGenerator implements BuilderVisitor<
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
+  private forDepth = 0;
 
   private getLexAddress(name: string): [number, number] {
     for (let i = this.environment.length - 1; i >= 0; i--) {
@@ -154,30 +159,40 @@ export class BuilderGenerator implements BuilderVisitor<
     statements: StmtNS.Stmt[],
     parameters?: StmtNS.FunctionDef["parameters"],
   ): Binding[] {
-    const findInNestedBody = (
-      stmts: StmtNS.Stmt[],
-    ): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
-      const found: (StmtNS.FunctionDef | StmtNS.Assign)[] = [];
+    const findLexemes = (stmts: StmtNS.Stmt[], forDepth: number): string[] => {
+      const found: string[] = [];
       for (const stmt of stmts) {
         if (
           stmt instanceof StmtNS.FunctionDef ||
           stmt instanceof StmtNS.Assign
         ) {
-          found.push(stmt);
+          // base case: variable declaration
+          found.push(stmt.name.lexeme);
         } else if (stmt instanceof StmtNS.If) {
-          found.push(...findInNestedBody(stmt.body));
+          // recursively search if and else block
+          found.push(...findLexemes(stmt.body, forDepth));
           if (stmt.elseBlock) {
-            found.push(...findInNestedBody(stmt.elseBlock));
+            found.push(...findLexemes(stmt.elseBlock, forDepth));
           }
-        } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
-          found.push(...findInNestedBody(stmt.body));
+        } else if (stmt instanceof StmtNS.While) {
+          // recursively search loop body
+          found.push(...findLexemes(stmt.body, forDepth));
+        } else if (stmt instanceof StmtNS.For) {
+          // add _end, _step variables for range() to avoid evaluating args multiple times
+          found.push(`${FOR_END_PREFIX}${forDepth}`);
+          found.push(`${FOR_STEP_PREFIX}${forDepth}`);
+          // add _iter variable to prevent mutation to loop variable affecting iteration
+          found.push(`${FOR_ITER_PREFIX}${forDepth}`);
+          // for loop target is also a declaration
+          found.push(stmt.target.lexeme);
+          found.push(...findLexemes(stmt.body, forDepth + 1));
         }
       }
       return found;
     };
 
-    const bindings: Binding[] = findInNestedBody(statements).map((s) => ({
-      name: s.name.lexeme,
+    const bindings: Binding[] = findLexemes(statements, 0).map((lexeme) => ({
+      name: lexeme,
       tag: "local",
     }));
 
@@ -616,6 +631,139 @@ ${args.map(
     );
   }
 
+  visitForStmt(stmt: StmtNS.For): WasmRaw {
+    if (
+      !(stmt.iter instanceof ExprNS.Call) ||
+      !(stmt.iter.callee instanceof ExprNS.Variable) ||
+      stmt.iter.callee.name.lexeme !== "range"
+    ) {
+      throw new Error("Only range() is supported in for loops");
+    } else if (stmt.iter.args.length === 0) {
+      throw new Error("range() requires at least one argument");
+    } else if (stmt.iter.args.length > 3) {
+      throw new Error("range() accepts at most 3 arguments");
+    }
+
+    this.forDepth += 1;
+    const body = stmt.body.map((b) => this.visit(b));
+    this.forDepth -= 1;
+
+    const targetLex = this.getLexAddress(stmt.target.lexeme).map((n) =>
+      i32.const(n),
+    );
+    const iterLex = this.getLexAddress(
+      `${FOR_ITER_PREFIX}${this.forDepth}`,
+    ).map((n) => i32.const(n));
+    const endLex = this.getLexAddress(`${FOR_END_PREFIX}${this.forDepth}`).map(
+      (n) => i32.const(n),
+    );
+    const stepLex = this.getLexAddress(
+      `${FOR_STEP_PREFIX}${this.forDepth}`,
+    ).map((n) => i32.const(n));
+
+    const setIter = wasm
+      .call(SET_LEX_ADDR_FX)
+      .args(...targetLex, wasm.call(GET_LEX_ADDR_FX).args(...iterLex));
+    const loopCondition = (comparison: WasmNumeric) =>
+      i32.wrap_i64(
+        wasm
+          .call(BOOLISE_FX)
+          .args(
+            wasm
+              .call(COMPARISON_OP_FX)
+              .args(
+                wasm.call(GET_LEX_ADDR_FX).args(...iterLex),
+                wasm.call(GET_LEX_ADDR_FX).args(...endLex),
+                comparison,
+              ),
+          ),
+      );
+    const loopStep = (step: WasmNumeric) =>
+      wasm
+        .call(SET_LEX_ADDR_FX)
+        .args(
+          ...iterLex,
+          wasm
+            .call(ARITHMETIC_OP_FX)
+            .args(
+              wasm.call(GET_LEX_ADDR_FX).args(...iterLex),
+              step,
+              i32.const(ARITHMETIC_OP_TAG.ADD),
+            ),
+        );
+
+    const rangeArgs = stmt.iter.args;
+
+    if (rangeArgs.length === 1 || rangeArgs.length === 2) {
+      return wasm.raw`
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : this.visit(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? this.visit(rangeArgs[0]) : this.visit(rangeArgs[1]))}
+      
+      ${wasm
+        .loop()
+        .body(
+          wasm
+            .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+            .then(
+              setIter,
+              ...body,
+              loopStep(wasm.call(MAKE_INT_FX).args(i64.const(1))),
+              wasm.br(1),
+            ),
+        )}`;
+    } else {
+      return wasm.raw`
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, this.visit(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, this.visit(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, this.visit(rangeArgs[2]))}
+
+      ${wasm
+        .if(
+          i32.wrap_i64(
+            wasm
+              .call(BOOLISE_FX)
+              .args(
+                wasm
+                  .call(COMPARISON_OP_FX)
+                  .args(
+                    wasm.call(GET_LEX_ADDR_FX).args(...stepLex),
+                    wasm.call(MAKE_INT_FX).args(i64.const(0)),
+                    i32.const(COMPARISON_OP_TAG.GT),
+                  ),
+              ),
+          ),
+        )
+        .then(
+          wasm
+            .loop()
+            .body(
+              wasm
+                .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+                .then(
+                  setIter,
+                  ...body,
+                  loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                  wasm.br(1),
+                ),
+            ),
+        )
+        .else(
+          wasm
+            .loop()
+            .body(
+              wasm
+                .if(loopCondition(i32.const(COMPARISON_OP_TAG.GT)))
+                .then(
+                  setIter,
+                  ...body,
+                  loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                  wasm.br(1),
+                ),
+            ),
+        )}`;
+    }
+  }
+
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
@@ -642,9 +790,6 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitForStmt(stmt: StmtNS.For): WasmInstruction {
     throw new Error("Method not implemented.");
   }
 }
