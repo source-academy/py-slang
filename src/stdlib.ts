@@ -1,63 +1,66 @@
-import { gamma, lgamma, erf } from 'mathjs'
-import { ControlItem } from './cse-machine/control'
-import { Context } from './cse-machine/context'
-import { Closure } from './cse-machine/closure'
-import { Value } from './cse-machine/stash'
-import { handleRuntimeError } from './cse-machine/error'
+import { erf, gamma, lgamma } from 'mathjs';
+import { ExprNS } from './ast-types';
+import { Closure } from './cse-machine/closure';
+import { Context } from './cse-machine/context';
+import { ControlItem } from './cse-machine/control';
+import { handleRuntimeError } from './cse-machine/error';
+import { Value } from './cse-machine/stash';
 import {
   MissingRequiredPositionalError,
   ValueError,
   SublanguageError,
   TooManyPositionalArgumentsError,
   TypeError
-} from './errors/py_errors'
-import { ExprNS } from './ast-types'
+} from './errors/py_errors';
 
 export function Validate(
-  minArgs: number | null,
-  maxArgs: number | null,
-  functionName: string,
-  strict: boolean
+    minArgs: number | null,
+    maxArgs: number | null,
+    functionName: string,
+    strict: boolean
 ) {
-  return function (
-    target: any,
-    propertyKey: string,
-    descriptor: TypedPropertyDescriptor<
-      (args: Value[], source: string, command: ControlItem, context: Context) => Value
-    >
-  ): void {
+    return function (
+        target: any,
+        propertyKey: string,
+        descriptor: TypedPropertyDescriptor<(
+            args: Value[],
+            source: string,
+            command: ControlItem,
+            context: Context
+        ) => Value>
+    ): void {
     const originalMethod = descriptor.value!
-
-    descriptor.value = function (
-      args: Value[],
-      source: string,
-      command: ControlItem,
-      context: Context
-    ): Value {
-      if (minArgs !== null && args.length < minArgs) {
-        throw new MissingRequiredPositionalError(
-          source,
-          command as ExprNS.Expr,
-          functionName,
-          minArgs,
-          args,
-          strict
-        )
-      }
-
-      if (maxArgs !== null && args.length > maxArgs) {
-        throw new TooManyPositionalArgumentsError(
-          source,
-          command as ExprNS.Expr,
-          functionName,
-          maxArgs,
-          args,
-          strict
-        )
-      }
-
-      return originalMethod.call(this, args, source, command, context)
-    }
+    
+        descriptor.value = function (
+            args: Value[],
+            source: string,
+            command: ControlItem,
+            context: Context
+        ): Value {
+            if (minArgs !== null && args.length < minArgs) {
+                throw new MissingRequiredPositionalError(
+                    source,
+                    command as ExprNS.Expr,
+                    functionName,
+                    minArgs,
+                    args,
+                    strict
+                )
+            }
+    
+            if (maxArgs !== null && args.length > maxArgs) {
+                throw new TooManyPositionalArgumentsError(
+                    source,
+                    command as ExprNS.Expr,
+                    functionName,
+                    maxArgs,
+                    args,
+                    strict
+                )
+            }
+    
+            return originalMethod.call(this, args, source, command, context)
+        }
   }
 }
 

@@ -8,12 +8,12 @@ import { StmtNS } from '../ast-types';
 import { ModuleContext, NativeStorage } from '../types';
 
 export class Context {
-  public control: Control
-  public stash: Stash
-  public output: string = ''
+  public control: Control;
+  public stash: Stash;
+  public output: string = '';
   //public environment: Environment;
-  public errors: CseError[] = []
-  public moduleContexts: { [name: string]: ModuleContext }
+  public errors: CseError[] = [];
+  public moduleContexts: { [name: string]: ModuleContext };
 
   runtime: {
     break: boolean
@@ -36,10 +36,10 @@ export class Context {
   nativeStorage: NativeStorage
 
   constructor(program?: StmtNS.Stmt, context?: Context) {
-    this.control = new Control(program)
-    this.stash = new Stash()
-    this.runtime = this.createEmptyRuntime()
-    this.moduleContexts = {}
+    this.control = new Control(program);
+    this.stash = new Stash();
+    this.runtime = this.createEmptyRuntime();
+    this.moduleContexts = {};
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment()
@@ -83,22 +83,22 @@ export class Context {
   })
 
   public reset(program?: StmtNS.Stmt): void {
-    this.control = new Control(program)
-    this.stash = new Stash()
+    this.control = new Control(program);
+    this.stash = new Stash();
     //this.environment = createProgramEnvironment(this, false);
-    this.errors = []
+    this.errors = [];
   }
 
   public copy(): Context {
-    const newContext = new Context()
-    newContext.control = this.control.copy()
-    newContext.stash = this.stash.copy()
+    const newContext = new Context();
+    newContext.control = this.control.copy();
+    newContext.stash = this.stash.copy();
     //newContext.environments = this.copyEnvironment(this.environments);
-    return newContext
+    return newContext;
   }
 
   private copyEnvironment(env: Environment): Environment {
-    const newTail = env.tail ? this.copyEnvironment(env.tail) : null
+    const newTail = env.tail ? this.copyEnvironment(env.tail) : null;
     const newEnv: Environment = {
       id: env.id,
       name: env.name,
@@ -108,7 +108,7 @@ export class Context {
       callExpression: env.callExpression,
       thisContext: env.thisContext
     }
-    return newEnv
+    return newEnv;
   }
 }
 
@@ -145,10 +145,7 @@ export class EnvTree {
 export class EnvTreeNode {
   private _children: EnvTreeNode[] = []
 
-  constructor(
-    readonly environment: Environment,
-    public parent: EnvTreeNode | null
-  ) {}
+constructor(readonly environment: Environment, public parent: EnvTreeNode | null) {}
 
   get children(): EnvTreeNode[] {
     return this._children

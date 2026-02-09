@@ -71,6 +71,6 @@ export function PyRunCSEMachine(
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options as IOptions)
-  return CSEResultPromise(context, result)
+  const result = evaluate(code, program, context, options as IOptions);
+  return CSEResultPromise(context, result);
 }

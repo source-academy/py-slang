@@ -1,5 +1,5 @@
-import * as es from "estree";
-import { isImportDeclaration, getModuleDeclarationSource } from "./utils";
+import * as es from 'estree';
+import { isImportDeclaration, getModuleDeclarationSource } from './utils';
 
 /**
  * Python style dictionary

@@ -7,7 +7,7 @@ import { Context } from "../cse-machine/context";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Finished } from "../types";
 
-const defaultContext = new Context()
+const defaultContext = new Context();
 const defaultOptions: IOptions = {
   isPrelude: false,
   envSteps: 100000,
@@ -19,7 +19,7 @@ export default class PyEvaluator extends BasicEvaluator {
   private options: IOptions;
 
   constructor(conductor: IRunnerPlugin) {
-    super(conductor)
+    super(conductor);
     this.context = defaultContext;
     this.options = defaultOptions;
   }
@@ -27,7 +27,7 @@ export default class PyEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     try {
       const result = await runInContext(
-        chunk,
+        chunk, // Code
         this.context,
         this.options
       );
@@ -43,3 +43,4 @@ export default class PyEvaluator extends BasicEvaluator {
     }
   }
 }
+

@@ -59,7 +59,7 @@ export const createSimpleEnvironment = (
     name,
     tail,
     head: {},
-    heap: new Heap()
+    heap: new Heap(),
     // TODO: callExpression and thisContext are optional and can be provided as needed.
   }
 }
@@ -78,8 +78,8 @@ export const createBlockEnvironment = (
     head: {},
     heap: new Heap(),
     id: uniqueId(context)
-  }
-}
+  };
+};
 
 // export const isRestElement = (node: Node): node is es.RestElement => {
 //   return (node as es.RestElement).type === 'RestElement';
@@ -99,7 +99,7 @@ export const createBlockEnvironment = (
 // };
 
 export const currentEnvironment = (context: Context): Environment => {
-  return context.runtime.environments[0]
+  return context.runtime.environments[0];
 }
 
 export const getGlobalEnvironment = (context: Context): Environment | null => {

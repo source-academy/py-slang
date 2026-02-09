@@ -3,7 +3,6 @@ import { ErrorType, SourceError, SourceLocation } from './base'
 import { RuntimeSourceError } from './py_runtimeSourceError'
 import { Context } from '../cse-machine/context'
 import { typeTranslator, operatorTranslator } from '../cse-machine/types'
-import { error } from 'console'
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): { line: number; fullLine: string } {

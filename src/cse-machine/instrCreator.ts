@@ -14,7 +14,7 @@ import {
 } from './types'
 import { TokenType } from '../tokens'
 
-export const popInstr = (srcNode: Node): Instr => ({instrType: InstrType.POP, srcNode })
+export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
 
 export const assmtInstr = (
   symbol: string,

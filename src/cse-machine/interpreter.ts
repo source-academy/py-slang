@@ -50,9 +50,9 @@ type CmdEvaluator = (
   isPrelude: boolean
 ) => void
 
-let cseFinalPrint = ''
+let cseFinalPrint = "";
 export function addPrint(str: string) {
-  cseFinalPrint = cseFinalPrint + str + '\n'
+  cseFinalPrint = cseFinalPrint + str + "\n";
 }
 
 /**
@@ -65,19 +65,19 @@ export function addPrint(str: string) {
 export function CSEResultPromise(context: Context, value: Value): Promise<Result> {
   return new Promise((resolve, reject) => {
     if (value instanceof CSEBreak) {
-      resolve({ status: 'suspended-cse-eval', context })
+      resolve({ status: 'suspended-cse-eval', context });
     } else if (value.type === 'error') {
-      const msg = value.message
-      const representation = new Representation(cseFinalPrint + msg)
+      const msg = value.message;
+      const representation = new Representation(cseFinalPrint + msg);
       resolve({ status: 'finished', context, value, representation })
     } else {
-      const representation = new Representation(value)
+      const representation = new Representation(value);
       resolve({ status: 'finished', context, value, representation })
     }
   })
 }
 
-let source = ''
+let source = "";
 
 /**
  * Function to be called when a program is to be interpreted using
@@ -89,19 +89,13 @@ let source = ''
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
-export function evaluate(
-  code: string,
-  program: StmtNS.Stmt,
-  context: Context,
-  options: RecursivePartial<IOptions> = {}
-): Value {
-  source = code
-
+export function evaluate(code: string, program: StmtNS.Stmt, context: Context, options: RecursivePartial<IOptions> = {}): Value {
+  source = code;
   try {
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error: any) {
-    return { type: 'error', message: error.message }
+    return { type: 'error', message: error.message };
   }
 
   try {
@@ -120,9 +114,9 @@ export function evaluate(
     )
     return context.output ? { type: 'string', value: context.output } : result
   } catch (error: any) {
-    return { type: 'error', message: error.message }
+    return { type: 'error', message: error.message };
   } finally {
-    context.runtime.isRunning = false
+    context.runtime.isRunning = false;
   }
 }
 
@@ -155,16 +149,16 @@ export function runCSEMachine(
     envSteps,
     stepLimit,
     isPrelude
-  )
+  );
 
   // Execute the generator until it completes
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const _ of eceState) {
+  for (const value of eceState) {
   }
 
   // Return the value at the top of the storage as the result
-  const result = stash.peek()
-  return result !== undefined ? result : { type: 'undefined' }
+  const result = stash.peek();
+  return result !== undefined ? result : { type: 'undefined' };
 }
 
 /**
@@ -265,7 +259,7 @@ export function* generateCSEMachineStateStream(
 
 const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   /**
-   * AST Node Handlers
+   * AST Nodes
    */
 
   FileInput: (code, command, context, control, stash, isPrelude) => {

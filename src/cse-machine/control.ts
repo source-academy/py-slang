@@ -5,9 +5,9 @@ import { StatementSequence } from './types'; //TODO
 import { StmtNS } from '../ast-types';
 
 export type ControlItem = (Node | Instr) & {
-  isEnvDependent?: boolean
-  skipEnv?: boolean
-}
+  isEnvDependent?: boolean;
+  skipEnv?: boolean;
+};
 
 export class Control extends Stack<ControlItem> {
   private numEnvDependentItems: number

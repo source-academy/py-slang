@@ -288,19 +288,6 @@ export class Parser {
         }
     }
 
-    // private import_from(): Stmt {
-    //     const startToken = this.previous();
-    //     const module = this.advance();
-    //     this.consume(TokenType.IMPORT, "Expected import keyword");
-    //     let params;
-    //     if (this.check(TokenType.NAME)) {
-    //         params = [this.advance()];
-    //     } else {
-    //         params = this.parameters();
-    //     }
-    //     return new StmtNS.FromImport(startToken, this.previous(), module, params);
-    // }
-
     private import_from(): Stmt {
         const startToken = this.previous();
         const module = this.consume(TokenType.NAME, "Expected module name after 'from'");
