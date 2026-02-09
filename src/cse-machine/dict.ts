@@ -1,4 +1,4 @@
-import * as es from 'estree';
+import * as es from 'estree'
 import { isImportDeclaration, getModuleDeclarationSource } from './utils';
 
 /**

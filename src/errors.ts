@@ -1,6 +1,6 @@
 import { createErrorIndicator } from "./errors/errors";
-import { Token } from "./tokenizer";
-import { Position } from "estree";
+import {Token} from "./tokenizer";
+import {Position} from "estree";
 
 /*
     The offset is calculated as follows:    
@@ -13,7 +13,7 @@ const SPECIAL_CHARS = new RegExp("[\\\\$'\"]", "g");
 function escape(unsafe: string): string {
     // @TODO escape newlines
     return unsafe.replace(SPECIAL_CHARS, "\\$&");
-  }
+}
 
 /* Searches backwards and forwards till it hits a newline */
 function getFullLine(source: string, current: number): {lineIndex: number; msg: string} {
@@ -35,7 +35,7 @@ function getFullLine(source: string, current: number): {lineIndex: number; msg: 
     const msg = source.slice(back, forward);
 
     return {lineIndex, msg};
-  }
+}
 
 function toEstreeLocation(line: number, column: number, offset: number) {
     return {line, column, offset}
@@ -55,7 +55,7 @@ export namespace TokenizerErrors {
             this.name = "BaseTokenizerError";
             this.loc = toEstreeLocation(line, col, 0);
         }
-      }
+    }
 
     export class UnknownTokenError extends BaseTokenizerError {
         constructor(token: string, line: number, col: number, source: string, current: number) {
@@ -67,7 +67,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "UnknownTokenError";
         }
-  }
+    }
 
     export class UnterminatedStringError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
@@ -81,7 +81,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "UnterminatedStringError";
         }
-  }
+    }
 
     export class NonFourIndentError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
@@ -92,7 +92,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "NonFourIndentError";
         }
-  }
+    }
 	
     export class InvalidNumberError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
@@ -106,7 +106,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "InvalidNumberError";
         }
-  }
+    }
 
     export class InconsistentIndentError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
@@ -117,7 +117,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "InconsistentIndentError";
         }
-  }
+    }
     export class ForbiddenIdentifierError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number) {
             let { lineIndex, msg } = getFullLine(source, start);
@@ -127,7 +127,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "ForbiddenIdentifierError";
         }
-  }
+    }
     export class ForbiddenOperatorError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
             let { lineIndex, msg } = getFullLine(source, start);
@@ -139,7 +139,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "ForbiddenOperatorError";
         }
-  }
+    }
 
     export class NonMatchingParenthesesError extends BaseTokenizerError {
         constructor(line: number, col: number, source: string, current: number) {
@@ -151,7 +151,7 @@ export namespace TokenizerErrors {
             super(msg + hint, lineIndex, col);
             this.name = "NonMatchingParenthesesError";
         }
-  }
+    }
 }
 
 export namespace ParserErrors {
@@ -168,7 +168,7 @@ export namespace ParserErrors {
             this.name = "BaseParserError";
             this.loc = toEstreeLocation(line, col, 0);
         }
-  }
+    }
     export class ExpectedTokenError extends BaseParserError {
         constructor(source: string, current: Token, expected: string) {
             let { lineIndex, msg } = getFullLine(source, current.indexInSource - current.lexeme.length);
@@ -178,7 +178,7 @@ export namespace ParserErrors {
             super(msg + hint, lineIndex, current.col);
             this.name = "ExpectedTokenError";
         }
-  }
+    }
     export class NoElseBlockError extends BaseParserError {
         constructor(source: string, current: Token) {
             let { lineIndex, msg } = getFullLine(source, current.indexInSource);
@@ -188,7 +188,7 @@ export namespace ParserErrors {
             super(msg + hint, lineIndex, current.col);
             this.name = "ExpectedTokenError";
         }
-  }
+    }
     export class GenericUnexpectedSyntaxError extends BaseParserError {
         constructor(line: number, col: number, source: string, start: number, current: number) {
             let { lineIndex, msg } = getFullLine(source, start);
@@ -198,7 +198,7 @@ export namespace ParserErrors {
             super(msg + indicator + hint, lineIndex, col);
             this.name = "GenericUnexpectedSyntaxError";
         }
-  }
+    }
 }
 
 export namespace ResolverErrors {
@@ -215,7 +215,7 @@ export namespace ResolverErrors {
             this.name = "BaseResolverError";
             this.loc = toEstreeLocation(line, col, 0);
         }
-  }
+    }
     export class NameNotFoundError extends BaseResolverError {
         constructor(line: number, col: number, source: string, start: number,
                     current: number, suggestion: string | null) {
@@ -235,7 +235,7 @@ export namespace ResolverErrors {
             super(name, msg + hint, lineIndex, col);
             this.name = "NameNotFoundError";
         }
-  }
+    }
 
     export class NameReassignmentError extends BaseResolverError {
         constructor(line: number, col: number, source: string, start: number,
@@ -258,7 +258,7 @@ export namespace ResolverErrors {
             super(name, msg + hint, lineIndex, col);
             this.name = "NameReassignmentError";
         }
-  }
+    }
 }
 
 export namespace TranslatorErrors {
@@ -275,7 +275,7 @@ export namespace TranslatorErrors {
             this.name = "BaseTranslatorError";
             this.loc = toEstreeLocation(line, col, 0);
         }
-  }
+    }
     export class UnsupportedOperator extends BaseTranslatorError {
         constructor(line: number, col: number, source: string, start: number) {
             let { lineIndex, msg } = getFullLine(source, start);
@@ -285,5 +285,5 @@ export namespace TranslatorErrors {
             super(msg + hint, lineIndex, col);
             this.name = "UnsupportedOperator";
         }
-  }
+    }
 }

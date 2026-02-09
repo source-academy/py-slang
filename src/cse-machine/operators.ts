@@ -9,78 +9,28 @@ import { PyComplexNumber } from '../types';
 import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/py_errors';
 
 export type BinaryOperator =
-    | '=='
-    | '!='
-    | '==='
-    | '!=='
-    | '<'
-    | '<='
-    | '>'
-    | '>='
-    | '<<'
-    | '>>'
-    | '>>>'
-    | '+'
-    | '-'
-    | '*'
-    | '/'
-    | '%'
-    | '**'
-    | '|'
-    | '^'
-    | '&'
-    | 'in'
-    | 'instanceof'
-
-// Helper function for truthiness based on Python rules
-export function isFalsy(value: Value): boolean {
-  switch (value.type) {
-    case 'bigint':
-      return value.value === 0n
-    case 'number':
-      return value.value === 0
-    case 'bool':
-      return !value.value
-    case 'string':
-      return value.value === ''
-    case 'complex':
-      return value.value.real === 0 && value.value.imag == 0
-    case 'undefined': // Represents None
-      return true
-    default:
-      // All other objects are considered truthy
-      return false
-  }
-}
-
-export function evaluateBoolExpression(
-  code: string,
-  command: ExprNS.Expr,
-  context: Context,
-  operator: TokenType,
-  left: Value,
-  right: Value
-): Value {
-  if (operator === TokenType.OR) {
-    // Python 'or': if the first value is truthy, return it. Otherwise, evaluate and return the second value.
-    return !isFalsy(left) ? left : right
-  } else if (operator === TokenType.AND) {
-    // Python 'and': if the first value is falsy, return it. Otherwise, evaluate and return the second value.
-    return isFalsy(left) ? left : right
-  } else {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(
-        code,
-        command,
-        typeTranslator(left.type),
-        typeTranslator(right.type),
-        operatorTranslator(operator)
-      )
-    )
-    return { type: 'error', message: `Unreachable in evaluateBoolExpression}` }
-  }
-}
+    | "=="
+    | "!="
+    | "==="
+    | "!=="
+    | "<"
+    | "<="
+    | ">"
+    | ">="
+    | "<<"
+    | ">>"
+    | ">>>"
+    | "+"
+    | "-"
+    | "*"
+    | "/"
+    | "%"
+    | "**"
+    | "|"
+    | "^"
+    | "&"
+    | "in"
+    | "instanceof";
 
 export function evaluateUnaryExpression(
   code: string,
@@ -607,4 +557,54 @@ function approximateBigIntString(num: number, precision: number): string {
   // If the mantissa is too long, truncate it (this is equivalent to taking the floor).
   // Rounding could be applied if necessary, but truncation is sufficient for comparison.
   return mantissaStr.slice(0, integerLen)
+}
+
+// Helper function for truthiness based on Python rules
+export function isFalsy(value: Value): boolean {
+  switch (value.type) {
+    case 'bigint':
+      return value.value === 0n
+    case 'number':
+      return value.value === 0
+    case 'bool':
+      return !value.value
+    case 'string':
+      return value.value === ''
+    case 'complex':
+      return value.value.real === 0 && value.value.imag == 0
+    case 'undefined': // Represents None
+      return true
+    default:
+      // All other objects are considered truthy
+      return false
+  }
+}
+
+export function evaluateBoolExpression(
+  code: string,
+  command: ExprNS.Expr,
+  context: Context,
+  operator: TokenType,
+  left: Value,
+  right: Value
+): Value {
+  if (operator === TokenType.OR) {
+    // Python 'or': if the first value is truthy, return it. Otherwise, evaluate and return the second value.
+    return !isFalsy(left) ? left : right
+  } else if (operator === TokenType.AND) {
+    // Python 'and': if the first value is falsy, return it. Otherwise, evaluate and return the second value.
+    return isFalsy(left) ? left : right
+  } else {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        typeTranslator(left.type),
+        typeTranslator(right.type),
+        operatorTranslator(operator)
+      )
+    )
+    return { type: 'error', message: `Unreachable in evaluateBoolExpression}` }
+  }
 }
