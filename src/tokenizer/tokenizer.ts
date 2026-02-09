@@ -464,23 +464,12 @@ export class Tokenizer {
         if (specialIdent !== undefined) {
             /* Merge multi-token operators, like 'is not', 'not in' */
             const previousToken = this.tokens[this.tokens.length - 1];
-            switch (specialIdent) {
-                case TokenType.NOT:
-                    if (previousToken.type === TokenType.IS) {
-                        this.overwriteToken(TokenType.ISNOT);
-                    } else {
-                        this.addToken(specialIdent);
-                    }
-                    return;
-                case TokenType.IN:
-                    if (previousToken.type === TokenType.NOT) {
-                        this.overwriteToken(TokenType.NOTIN);
-                    } else {
-                        this.addToken(specialIdent);
-                    }
-                    return;
-                default:
-                    this.addToken(specialIdent);
+            if (specialIdent === TokenType.NOT && previousToken?.type === TokenType.IS) {
+                this.overwriteToken(TokenType.ISNOT);
+            } else if (specialIdent === TokenType.IN && previousToken?.type === TokenType.NOT) {
+                this.overwriteToken(TokenType.NOTIN);
+            } else {
+                this.addToken(specialIdent);
             }
         } else {
             this.addToken(TokenType.NAME);
