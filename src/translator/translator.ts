@@ -10,6 +10,7 @@ import { Token } from "../tokenizer";
 import { TokenType } from "../tokens";
 
 import {
+    ArrayExpression,
     ArrowFunctionExpression,
     AssignmentExpression,
     BaseNode,
@@ -30,6 +31,7 @@ import {
     ImportDeclaration, ImportSpecifier,
     LogicalExpression,
     LogicalOperator,
+    MemberExpression,
     Program,
     ReturnStatement,
     SimpleLiteral,
@@ -624,6 +626,25 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
                 imag: expr.value.imag
             },
     
+            loc: this.toEstreeLocation(expr),
+        }
+    }
+
+    visitListExpr(expr: ExprNS.List): ArrayExpression {
+        return {
+            type: 'ArrayExpression',
+            elements: this.resolveManyExpr(expr.elements),
+            loc: this.toEstreeLocation(expr),
+        }
+    }
+
+    visitSubscriptExpr(expr: ExprNS.Subscript): MemberExpression {
+        return {
+            type: 'MemberExpression',
+            object: this.resolveExpr(expr.value),
+            property: this.resolveExpr(expr.index),
+            computed: true,
+            optional: false,
             loc: this.toEstreeLocation(expr),
         }
     }
