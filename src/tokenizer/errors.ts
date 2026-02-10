@@ -109,4 +109,16 @@ export namespace TokenizerErrors {
             this.name = "NonMatchingParenthesesError";
         }
     }
+
+    export class NonMatchingBracketsError extends BaseTokenizerError {
+        constructor(line: number, col: number, source: string, current: number) {
+            let { lineIndex, fullLine } = getFullLine(source, current-1);
+            fullLine = '\n' + fullLine + '\n';
+            let hint = `${col > 1 ? '~' : ''}^~ Non-matching closing brackets.`;
+            // The extra `~` character takes up some space.
+            hint = hint.padStart(hint.length + col - MAGIC_OFFSET - (col > 1 ? 1 : 0), " ");
+            super(fullLine + hint, lineIndex, col);
+            this.name = "NonMatchingBracketsError";
+        }
+    }
 }
