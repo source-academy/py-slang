@@ -476,4 +476,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitComplexExpr(expr: ExprNS.Complex): void {
     }
 
+    visitListExpr(expr: ExprNS.List): void {
+        this.resolve(expr.elements);
+    }
+    visitSubscriptExpr(expr: ExprNS.Subscript): void {
+        this.resolve(expr.value);
+        this.resolve(expr.index);
+    }
 }
