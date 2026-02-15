@@ -1,5 +1,5 @@
-import * as es from 'estree'
-import { isImportDeclaration, getModuleDeclarationSource } from './utils';
+// import * as es from 'estree'
+// import { isImportDeclaration, getModuleDeclarationSource } from './utils';
 
 /**
  * Python style dictionary
@@ -90,23 +90,23 @@ export class ArrayMap<K, V> extends Dict<K, V[]> {
     }
   }
   
-  export function filterImportDeclarations({
-    body
-  }: es.Program): [
-    ArrayMap<string, es.ImportDeclaration>,
-    Exclude<es.Program['body'][0], es.ImportDeclaration>[]
-  ] {
-    return body.reduce(
-      ([importNodes, otherNodes], node) => {
-        if (!isImportDeclaration(node)) return [importNodes, [...otherNodes, node]]
+//   export function filterImportDeclarations({
+//     body
+//   }: es.Program): [
+//     ArrayMap<string, es.ImportDeclaration>,
+//     Exclude<es.Program['body'][0], es.ImportDeclaration>[]
+//   ] {
+//     return body.reduce(
+//       ([importNodes, otherNodes], node) => {
+//         if (!isImportDeclaration(node)) return [importNodes, [...otherNodes, node]]
   
-        const moduleName = getModuleDeclarationSource(node)
-        importNodes.add(moduleName, node)
-        return [importNodes, otherNodes]
-      },
-      [new ArrayMap(), []] as [
-        ArrayMap<string, es.ImportDeclaration>,
-        Exclude<es.Program['body'][0], es.ImportDeclaration>[]
-      ]
-    )
-}
+//         const moduleName = getModuleDeclarationSource(node)
+//         importNodes.add(moduleName, node)
+//         return [importNodes, otherNodes]
+//       },
+//       [new ArrayMap(), []] as [
+//         ArrayMap<string, es.ImportDeclaration>,
+//         Exclude<es.Program['body'][0], es.ImportDeclaration>[]
+//       ]
+//     )
+// }
