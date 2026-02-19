@@ -4,9 +4,9 @@ import { RecursivePartial, Result } from "../types";
 import { Tokenizer } from "../tokenizer";
 import { Parser } from "../parser";
 import { Resolver } from "../resolver";
-import { Program } from "estree";
-import { Translator } from "../translator";
-import * as es from "estree";
+import { StmtNS } from "../ast-types";
+
+type Stmt = StmtNS.Stmt
 
 export interface IOptions {
   isPrelude: boolean;
@@ -14,11 +14,11 @@ export interface IOptions {
   stepLimit: number;
 }
 
-function parsePythonToEstreeAst(
+function runPyAST(
   code: string,
   variant: number = 1,
   doValidate: boolean = false
-): Program {
+): Stmt {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
@@ -27,8 +27,7 @@ function parsePythonToEstreeAst(
   if (doValidate) {
     new Resolver(script, ast).resolve(ast);
   }
-  const translator = new Translator(script);
-  return translator.resolve(ast) as unknown as Program;
+  return ast;
 }
 
 export async function runInContext(
@@ -36,17 +35,17 @@ export async function runInContext(
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const estreeAst = parsePythonToEstreeAst(code, 1, true);
-  const result = runCSEMachine(code, estreeAst, context, options);
+  const pyAst = runPyAST(code, 1, true);
+  const result = runCSEMachine(code, pyAst, context, options);
   return result;
 }
 
 export function runCSEMachine(
   code: string,
-  program: es.Program,
+  program: Stmt,
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options);
+  const result = evaluate(code, program, context, options as IOptions);
   return CSEResultPromise(context, result);
 }

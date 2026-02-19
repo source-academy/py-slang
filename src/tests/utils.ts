@@ -6,7 +6,7 @@ import {
 import {Tokenizer} from '../tokenizer';
 import {Parser} from '../parser';
 import {Resolver} from '../resolver';
-import {Translator} from '../translator';
+// import {Translator} from '../translator';
 import {StmtNS} from "../ast-types";
 import Stmt = StmtNS.Stmt;
 
@@ -26,13 +26,13 @@ export function toPythonAstAndResolve(text: string): Stmt {
     return ast;
 }
 
-export function toEstreeAST(text: string): Expression | Statement {
-    const ast = toPythonAst(text);
-    return new Translator(text).resolve(ast);
-}
+// export function toEstreeAST(text: string): Expression | Statement {
+//     const ast = toPythonAst(text);
+//     return new Translator(text).resolve(ast);
+// }
 
-export function toEstreeAstAndResolve(text: string): Expression | Statement {
-    const ast = toPythonAst(text);
-    new Resolver(text, ast).resolve(ast);
-    return new Translator(text).resolve(ast);
-}
+// export function toEstreeAstAndResolve(text: string): Expression | Statement {
+//     const ast = toPythonAst(text);
+//     new Resolver(text, ast).resolve(ast);
+//     return new Translator(text).resolve(ast);
+// }
