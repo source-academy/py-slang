@@ -12,22 +12,29 @@ export const TYPE_TAG = {
   NONE: 6,
   UNBOUND: 7,
   PAIR: 8,
+  LIST: 9,
 } as const;
 
 export const ERROR_MAP = {
-  NEG_NOT_SUPPORT: [0, "Unary minus operator used on unsupported operand."],
-  LOG_UNKNOWN_TYPE: [1, "Calling log on an unknown runtime type."],
-  ARITH_OP_UNKNOWN_TYPE: [2, "Calling an arithmetic operation on an unsupported runtime type."],
-  COMPLEX_COMPARISON: [3, "Using an unsupported comparison operator on complex type."],
-  COMPARE_OP_UNKNOWN_TYPE: [4, "Calling a comparison operation on unsupported operands."],
-  CALL_NOT_FX: [5, "Calling a non-function value."],
-  FUNC_WRONG_ARITY: [6, "Calling function with wrong number of arguments."],
-  UNBOUND: [7, "Accessing an unbound value."],
-  HEAD_NOT_PAIR: [8, "Accessing the head of a non-pair value."],
-  TAIL_NOT_PAIR: [9, "Accessing the tail of a non-pair value."],
-  BOOL_UNKNOWN_TYPE: [10, "Trying to convert an unknnown runtime type to a bool."],
-  BOOL_UNKNOWN_OP: [11, "Unknown boolean binary operator."],
+  NEG_NOT_SUPPORT: "Unary minus operator used on unsupported operand.",
+  LOG_UNKNOWN_TYPE: "Calling log on an unknown runtime type.",
+  ARITH_OP_UNKNOWN_TYPE: "Calling an arithmetic operation on an unsupported runtime type.",
+  COMPLEX_COMPARISON: "Using an unsupported comparison operator on complex type.",
+  COMPARE_OP_UNKNOWN_TYPE: "Calling a comparison operation on unsupported operands.",
+  CALL_NOT_FX: "Calling a non-function value.",
+  FUNC_WRONG_ARITY: "Calling function with wrong number of arguments.",
+  UNBOUND: "Accessing an unbound value.",
+  HEAD_NOT_PAIR: "Accessing the head of a non-pair value.",
+  TAIL_NOT_PAIR: "Accessing the tail of a non-pair value.",
+  BOOL_UNKNOWN_TYPE: "Trying to convert an unknnown runtime type to a bool.",
+  BOOL_UNKNOWN_OP: "Unknown boolean binary operator.",
+  GET_ELEMENT_NOT_LIST: "Accessing an element of a non-list value.",
+  INDEX_NOT_INT: "Using a non-integer index to access a list element.",
+  LIST_OUT_OF_RANGE: "List index out of range.",
 } as const;
+
+const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
+  Object.values(ERROR_MAP).findIndex((v) => v === errorKey);
 
 export const HEAP_PTR = "$_heap_pointer";
 export const CURR_ENV = "$_current_env";
@@ -109,8 +116,18 @@ export const MAKE_CLOSURE_FX = wasm
 
 export const MAKE_NONE_FX = wasm.func("$_make_none").results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
 
-// pair-related functions
+// upper 32: pointer; lower 32: length
+// assumption: list elements are already stored in contiguous memory starting from pointer
+export const MAKE_LIST_FX = wasm
+  .func("$_make_list")
+  .params({ $ptr: i32, $len: i32 })
+  .results(i32, i64)
+  .body(
+    i32.const(TYPE_TAG.LIST),
+    i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+  );
 
+// pair-related functions
 // upper 32: pointer to head; lower 32: pointer to tail
 export const MAKE_PAIR_FX = wasm
   .func("$_make_pair")
@@ -135,7 +152,7 @@ export const GET_PAIR_HEAD_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HEAD_NOT_PAIR))), wasm.unreachable()),
 
     i32.load(i32.wrap_i64(local.get("$val"))),
     i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(4))),
@@ -148,7 +165,7 @@ export const GET_PAIR_TAIL_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.TAIL_NOT_PAIR))), wasm.unreachable()),
 
     i32.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(12))),
     i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(16))),
@@ -160,7 +177,7 @@ export const SET_PAIR_HEAD_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HEAD_NOT_PAIR))), wasm.unreachable()),
 
     i32.store(i32.wrap_i64(local.get("$pair_val")), local.get("$tag")),
     i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(4)), local.get("$val")),
@@ -172,10 +189,45 @@ export const SET_PAIR_TAIL_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.TAIL_NOT_PAIR))), wasm.unreachable()),
 
     i32.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(12)), local.get("$tag")),
     i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(16)), local.get("$val")),
+  );
+
+// list related functions
+export const GET_LIST_ELEMENT_FX = wasm
+  .func("$_get_list_element")
+  .params({ $tag: i32, $val: i64, $index_tag: i32, $index_val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .then(
+        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_ELEMENT_NOT_LIST))),
+        wasm.unreachable(),
+      ),
+
+    wasm
+      .if(i32.ne(local.get("$index_tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.INDEX_NOT_INT))), wasm.unreachable()),
+
+    wasm
+      .if(i32.ge_u(i32.wrap_i64(local.get("$index_val")), i32.wrap_i64(local.get("$val"))))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LIST_OUT_OF_RANGE))), wasm.unreachable()),
+
+    i32.load(
+      i32.add(
+        i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+        i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
+      ),
+    ),
+    i64.load(
+      i32.add(
+        i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+        i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
+      ),
+    ),
   );
 
 // logging functions
@@ -244,7 +296,7 @@ export const LOG_FX = wasm
         wasm.return(),
       ),
 
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LOG_UNKNOWN_TYPE))),
     wasm.unreachable(),
   );
 
@@ -277,7 +329,7 @@ export const NEG_FX = wasm
         ),
       ),
 
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.NEG_NOT_SUPPORT[0])),
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.NEG_NOT_SUPPORT))),
     wasm.unreachable(),
   );
 
@@ -442,7 +494,7 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       ),
 
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0])),
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE))),
     wasm.unreachable(),
   );
 
@@ -620,7 +672,10 @@ export const COMPARISON_OP_FX = wasm
                     .args(i32.or(f64.ne(local.get("$a"), local.get("$c")), f64.ne(local.get("$b"), local.get("$d")))),
                 ),
               )
-              .else(wasm.call("$_log_error").args(i32.const(ERROR_MAP.COMPLEX_COMPARISON[0])), wasm.unreachable()),
+              .else(
+                wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.COMPLEX_COMPARISON))),
+                wasm.unreachable(),
+              ),
           ),
       ),
 
@@ -635,7 +690,7 @@ export const COMPARISON_OP_FX = wasm
       ),
 
     // other operators: unreachable
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE[0])),
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE))),
     wasm.unreachable(),
   );
 
@@ -692,7 +747,7 @@ export const BOOLISE_FX = wasm
       )
       .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1)))),
 
-    wasm.call("$_log_error").args(i32.const(ERROR_MAP.BOOL_UNKNOWN_TYPE[0])),
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.BOOL_UNKNOWN_TYPE))),
     wasm.unreachable(),
   );
 
@@ -740,13 +795,13 @@ export const PRE_APPLY_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.CALL_NOT_FX[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.CALL_NOT_FX))), wasm.unreachable()),
 
     wasm
       .if(
         i32.ne(i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)), local.get("$arity")),
       )
-      .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.FUNC_WRONG_ARITY[0])), wasm.unreachable()),
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.FUNC_WRONG_ARITY))), wasm.unreachable()),
 
     local.get("$tag"),
     local.get("$val"),
@@ -760,17 +815,18 @@ export const PRE_APPLY_FX = wasm
   );
 
 export const APPLY_FX_NAME = "$_apply";
+export const RETURN_ENV_NAME = "$return_env";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .params({ $return_env: i32, $tag: i32, $val: i64 })
+    .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64 })
     .results(i32, i64)
     .body(
       ...wasm.buildBrTableBlocks(
         wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
         ...bodies.map((body) => [
           ...body,
-          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get("$return_env"))),
+          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get(RETURN_ENV_NAME))),
         ]),
       ),
     );
@@ -792,7 +848,7 @@ export const GET_LEX_ADDR_FX = wasm
 
         wasm
           .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.UNBOUND)))
-          .then(wasm.call("$_log_error").args(i32.const(ERROR_MAP.UNBOUND[0])), wasm.unreachable()),
+          .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.UNBOUND))), wasm.unreachable()),
 
         wasm.return(
           local.get("$tag"),
@@ -838,17 +894,20 @@ export const SET_LEX_ADDR_FX = wasm
     wasm.unreachable(),
   );
 
-export const SET_PARAM_FX = wasm
-  .func("$_set_param")
-  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64 })
+export const SET_CONTIGUOUS_BLOCK_FX = wasm
+  .func("$_set_contiguous_block")
+  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $offset: i32 })
   .results(i32)
   .body(
     i32.store(
-      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+      i32.add(i32.add(local.get("$addr"), local.get("$offset")), i32.mul(local.get("$index"), i32.const(12))),
       local.get("$tag"),
     ),
     i64.store(
-      i32.add(i32.add(local.get("$addr"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12))),
+      i32.add(
+        i32.add(local.get("$addr"), i32.add(local.get("$offset"), i32.const(4))),
+        i32.mul(local.get("$index"), i32.const(12)),
+      ),
       local.get("$value"),
     ),
 
@@ -864,10 +923,12 @@ export const nativeFunctions = [
   MAKE_CLOSURE_FX,
   MAKE_NONE_FX,
   MAKE_PAIR_FX,
+  MAKE_LIST_FX,
   GET_PAIR_HEAD_FX,
   GET_PAIR_TAIL_FX,
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
+  GET_LIST_ELEMENT_FX,
   LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,
@@ -879,5 +940,5 @@ export const nativeFunctions = [
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
-  SET_PARAM_FX,
+  SET_CONTIGUOUS_BLOCK_FX,
 ];

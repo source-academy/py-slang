@@ -12,6 +12,7 @@ import {
   COMPARISON_OP_TAG,
   CURR_ENV,
   GET_LEX_ADDR_FX,
+  GET_LIST_ELEMENT_FX,
   GET_PAIR_HEAD_FX,
   GET_PAIR_TAIL_FX,
   HEAP_PTR,
@@ -22,95 +23,62 @@ import {
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
+  MAKE_LIST_FX,
   MAKE_NONE_FX,
   MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nativeFunctions,
   NEG_FX,
   PRE_APPLY_FX,
+  RETURN_ENV_NAME,
+  SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
-  SET_PARAM_FX,
   TYPE_TAG,
 } from "./constants";
 import { f64, global, i32, i64, local, mut, wasm } from "./wasm-util/builder";
-import { WasmInstruction, WasmNumeric, WasmRaw } from "./wasm-util/types";
+import {
+  WasmCall,
+  WasmInstruction,
+  WasmNumeric,
+  WasmRaw,
+} from "./wasm-util/types";
 
-const builtInFunctions: {
+const libFunc = (name: string, arity: number, isVoid?: boolean) => ({
+  body: (
+    mapper: (...args: WasmCall[]) => WasmInstruction | WasmInstruction[],
+  ) => {
+    let body = mapper(
+      ...[...Array(arity).keys()].map((i) =>
+        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(i)),
+      ),
+    );
+    body = Array.isArray(body) ? body : [body];
+    return { name, arity, isVoid: isVoid ?? false, body };
+  },
+});
+
+const libraryFunctions: {
   name: string;
   arity: number;
-  body: WasmInstruction | WasmInstruction[];
+  body: WasmInstruction[];
   isVoid: boolean;
 }[] = [
-  {
-    name: "print",
-    arity: 1,
-    body: wasm
-      .call(LOG_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: true,
-  },
-  {
-    name: "pair",
-    arity: 2,
-    body: wasm
-      .call(MAKE_PAIR_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: false,
-  },
-  {
-    name: "head",
-    arity: 1,
-    body: wasm
-      .call(GET_PAIR_HEAD_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: false,
-  },
-  {
-    name: "tail",
-    arity: 1,
-    body: wasm
-      .call(GET_PAIR_TAIL_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: false,
-  },
-  {
-    name: "set_head",
-    arity: 2,
-    body: wasm
-      .call(SET_PAIR_HEAD_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: true,
-  },
-  {
-    name: "set_tail",
-    arity: 2,
-    body: wasm
-      .call(SET_PAIR_TAIL_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: true,
-  },
-  {
-    name: "bool",
-    arity: 1,
-    body: [
-      i32.const(TYPE_TAG.BOOL),
-      wasm
-        .call(BOOLISE_FX)
-        .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    ],
-    isVoid: false,
-  },
+  libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
+  libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
+  libFunc("head", 1).body((x) => wasm.call(GET_PAIR_HEAD_FX).args(x)),
+  libFunc("tail", 1).body((x) => wasm.call(GET_PAIR_TAIL_FX).args(x)),
+  libFunc("set_head", 2, true).body((x, y) =>
+    wasm.call(SET_PAIR_HEAD_FX).args(x, y),
+  ),
+  libFunc("set_tail", 2, true).body((x, y) =>
+    wasm.call(SET_PAIR_TAIL_FX).args(x, y),
+  ),
+  libFunc("bool", 1).body((x) => [
+    i32.const(TYPE_TAG.BOOL),
+    wasm.call(BOOLISE_FX).args(x),
+  ]),
 ];
 
 const FOR_END_PREFIX = "_for_end_";
@@ -245,15 +213,15 @@ export class BuilderGenerator implements BuilderVisitor<
     }
 
     // declare built-in functions in the global environment before user code
-    const builtInFuncsDeclarations = builtInFunctions.map(
+    const builtInFuncsDeclarations = libraryFunctions.map(
       ({ name, arity, body, isVoid }, i) => {
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions.length;
         const newBody = [
-          ...(Array.isArray(body) ? body : [body]),
+          ...body,
           wasm.return(
             ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-            global.set(CURR_ENV, local.get("$return_env")),
+            global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
           ),
         ];
         this.userFunctions.push(newBody);
@@ -551,9 +519,9 @@ export class BuilderGenerator implements BuilderVisitor<
     // this is so that we can set the arguments in the new environment first
 
     // this means we can't use SET_LEX_ADDR_FX because it uses CURR_ENV internally
-    // so we manually set the arguments in the new environment using SET_PARAM_FX
+    // so we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
 
-    // the SET_PARAM function returns the env address after setting the parameter
+    // the SET_CONTIGUOUS_BLOCK function returns the env address after setting the parameter
     // so we can chain the calls together
     return wasm.raw`
 ${global.get(CURR_ENV)}
@@ -562,7 +530,7 @@ ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 ${args.map(
   (arg, i) =>
     wasm.raw`
-(i32.const ${i}) ${arg} (call ${SET_PARAM_FX.name})`,
+(i32.const ${i}) ${arg} (i32.const 4) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
 )}
 
 (global.set ${CURR_ENV})
@@ -575,7 +543,7 @@ ${args.map(
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get("$return_env")),
+      global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
     );
   }
 
@@ -762,6 +730,32 @@ ${args.map(
             ),
         )}`;
     }
+  }
+
+  visitListExpr(expr: ExprNS.List): WasmRaw {
+    const length = expr.elements.length;
+    const elements = expr.elements.map((el) => this.visit(el));
+
+    return wasm.raw`
+${global.get(HEAP_PTR)}
+
+${elements.map(
+  (element, i) =>
+    wasm.raw`
+(i32.const ${i}) ${element} (i32.const 0) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
+)}
+
+(i32.const ${length})
+(call ${MAKE_LIST_FX.name})
+(global.set ${HEAP_PTR} (i32.add (global.get ${HEAP_PTR}) (i32.const ${length * 8})))
+`;
+  }
+
+  visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    const value = this.visit(expr.value);
+    const index = this.visit(expr.index);
+
+    return wasm.call(GET_LIST_ELEMENT_FX).args(value, index);
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS

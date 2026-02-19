@@ -48,7 +48,7 @@ export async function compileToWasmAndRun(code: string) {
         ),
       log_none: () => console.log("None"),
       log_error: (tag: number) => {
-        throw new Error(Object.values(ERROR_MAP).find(([i]) => i === tag)?.[1]);
+        throw new Error(Object.values(ERROR_MAP).at(tag) ?? "Unknown Error");
       },
       log_pair: () => console.log(),
     },
