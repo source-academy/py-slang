@@ -39,7 +39,7 @@ export namespace ParserErrors {
             let { lineIndex, fullLine } = getFullLine(source, start);
             fullLine = '\n' + fullLine + '\n';
             let hint = ` Detected invalid syntax.`;
-            const indicator = createErrorIndicator(fullLine, '@');
+            const indicator = createErrorIndicator(fullLine, -1);
             super(fullLine + indicator + hint, lineIndex, col);
             this.name = "GenericUnexpectedSyntaxError";
         }
