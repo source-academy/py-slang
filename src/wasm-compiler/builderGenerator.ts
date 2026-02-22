@@ -639,4 +639,10 @@ ${args.map(
   visitForStmt(stmt: StmtNS.For): WasmInstruction {
     throw new Error("Method not implemented.");
   }
+  visitListExpr(expr: ExprNS.List): WasmNumeric {
+    throw new Error("Method not implemented.");
+  }
+  visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    throw new Error("Method not implemented.");
+  }
 }
