@@ -18,6 +18,8 @@ export namespace ExprNS {
         visitCallExpr(expr: Call): T
         visitComplexExpr(expr: Complex): T
         visitNoneExpr(expr: None): T
+        visitListExpr(expr: List): T
+        visitSubscriptExpr(expr: Subscript): T
     }
     export abstract class Expr {
         startToken: Token;
@@ -193,7 +195,29 @@ export namespace ExprNS {
         }
     }
     
-    
+    export class List extends Expr {
+        elements: ExprNS.Expr[];
+        constructor(startToken: Token, endToken: Token, elements: ExprNS.Expr[]){
+            super(startToken, endToken)
+            this.elements = elements;
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitListExpr(this)
+        }
+    }
+
+    export class Subscript extends Expr {
+        value: Expr;
+        index: Expr;
+        constructor(startToken: Token, endToken: Token, value: Expr, index: Expr){
+            super(startToken, endToken)
+            this.value = value;
+            this.index = index;
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitSubscriptExpr(this)
+        }
+    }
 }
 export namespace StmtNS {
     export interface Visitor<T> {

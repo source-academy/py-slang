@@ -156,7 +156,7 @@ export class Parser {
         } else if (this.check(TokenType.NAME, ...PSEUD_NAMES, TokenType.NUMBER,
             TokenType.PASS, TokenType.BREAK, TokenType.CONTINUE, TokenType.MINUS, TokenType.PLUS, TokenType.INDENT, TokenType.DEDENT,
             TokenType.RETURN, TokenType.FROM, TokenType.GLOBAL, TokenType.NONLOCAL,
-            TokenType.ASSERT, TokenType.LPAR, TokenType.STRING, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
+            TokenType.ASSERT, TokenType.LPAR, TokenType.LSQB, TokenType.STRING, TokenType.BIGINT, ...SPECIAL_IDENTIFIER_TOKENS)) {
             return this.simple_stmt();
         }
         const startToken = this.peek();
@@ -259,7 +259,7 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.NUMBER, TokenType.STRING,
+        } else if (this.check(TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
             TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
             res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
         } else {
@@ -464,22 +464,20 @@ export class Parser {
     private atom_expr(): Expr {
         let startToken = this.peek();
         let ato = this.atom();
-        let res;
-        if (this.match(TokenType.LPAR)) {
-            let args = this.arglist();
-            const endToken = this.previous();
-            res = new ExprNS.Call(startToken, endToken, ato, args);
-        } else {
-            return ato;
-        }
-        // To handle things like x()()()
-        startToken = this.peek();
-        while (this.match(TokenType.LPAR)) {
-            let args = this.arglist();
-            res = new ExprNS.Call(startToken, this.previous(), res, args);
+        while (this.check(TokenType.LPAR, TokenType.LSQB)) {
+            if (this.match(TokenType.LPAR)) {
+                const args = this.arglist();
+                const endToken = this.previous();
+                ato = new ExprNS.Call(startToken, endToken, ato, args);
+            } else if (this.match(TokenType.LSQB)) {
+                const index = this.test();
+                const endToken = this.previous();
+                this.consume(TokenType.RSQB, "Expected closing ']'");
+                ato = new ExprNS.Subscript(startToken, endToken, ato, index);
+            }
             startToken = this.peek();
         }
-        return res;
+        return ato;
     }
 
     private arglist(): Expr[] {
@@ -493,6 +491,19 @@ export class Parser {
         }
         this.consume(TokenType.RPAR, "Expected closing ')' after function application");
         return args;
+    }
+
+    private list_expr(): Expr[] {
+        let elements: Expr[] = [];
+        while (!this.check(TokenType.RSQB)) {
+            let element = this.test();
+            elements.push(element);
+            if (!this.match(TokenType.COMMA)) {
+                break;
+            }
+        }
+        this.consume(TokenType.RSQB, "Expected closing ']'");
+        return elements;
     }
 
     private atom(): Expr {
@@ -521,6 +532,11 @@ export class Parser {
             let expr = this.test();
             this.consume(TokenType.RPAR, "Expected closing ')'");
             return new ExprNS.Grouping(startToken, this.previous(), expr);
+        }
+
+        if (this.match(TokenType.LSQB)) {
+            let elements = this.list_expr();
+            return new ExprNS.List(startToken, this.previous(), elements);
         }
         const startTokenInvalid = this.peek();
         this.synchronize();

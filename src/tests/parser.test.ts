@@ -255,11 +255,10 @@ else:
             expect(toPythonAst(text)).toMatchObject({})
         });
 
-        // TODO: FIX THIS
-//        test('Logical NOT', () => {
-//            const text = `not 1\n`;
-//            expect(toPythonAst(text)).toMatchObject({})
-//        });
+       test('Logical NOT', () => {
+           const text = `not 1\n`;
+           expect(toPythonAst(text)).toMatchObject({})
+       });
     });
 
     describe('Binary logical operators', () => {
