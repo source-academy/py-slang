@@ -4,7 +4,7 @@ import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
-import { WatGenerator } from "./wasm-util/watGenerator";
+import { WatGenerator } from "@sourceacademy/wasm-util";
 
 export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";

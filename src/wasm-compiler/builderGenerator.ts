@@ -34,8 +34,21 @@ import {
   SET_PARAM_FX,
   TYPE_TAG,
 } from "./constants";
-import { f64, global, i32, i64, local, mut, wasm } from "./wasm-util/builder";
-import { WasmInstruction, WasmNumeric, WasmRaw } from "./wasm-util/types";
+import {
+  f64,
+  global,
+  i32,
+  i64,
+  local,
+  mut,
+  wasm,
+} from "@sourceacademy/wasm-util";
+import {
+  WasmCall,
+  WasmInstruction,
+  WasmNumeric,
+  WasmRaw,
+} from "@sourceacademy/wasm-util";
 
 const builtInFunctions: {
   name: string;
