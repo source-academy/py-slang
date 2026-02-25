@@ -37,13 +37,19 @@ import {
   SET_PAIR_TAIL_FX,
   TYPE_TAG,
 } from "./constants";
-import { f64, global, i32, i64, local, mut, wasm } from "./wasm-util/builder";
 import {
-  WasmCall,
-  WasmInstruction,
-  WasmNumeric,
-  WasmRaw,
-} from "./wasm-util/types";
+  f64,
+  global,
+  i32,
+  i64,
+  local,
+  mut,
+  wasm,
+  type WasmCall,
+  type WasmInstruction,
+  type WasmNumeric,
+  type WasmRaw,
+} from "@sourceacademy/wasm-util";
 
 const libFunc = (name: string, arity: number, isVoid?: boolean) => ({
   body: (
