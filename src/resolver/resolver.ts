@@ -4,13 +4,14 @@ type Stmt = StmtNS.Stmt;
 import { Token } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
 import { ResolverErrors } from "./errors";
+import { FeatureValidator } from "../validator/types";
 
 import levenshtein from 'fast-levenshtein';
 // const levenshtein = require('fast-levenshtein');
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
-class Environment {
+export class Environment {
     source: string;
     // The parent of this environment
     enclosing: Environment | null;
@@ -77,22 +78,6 @@ class Environment {
 
     }
     declareName(identifier: Token) {
-        const lookup = this.lookupNameCurrentEnv(identifier);
-        if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) { 
-            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-                this.source,
-                identifier.indexInSource,
-                identifier.indexInSource + identifier.lexeme.length,
-                lookup);
-        }
-        if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
-            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-                this.source,
-                identifier.indexInSource,
-                identifier.indexInSource + identifier.lexeme.length,
-                lookup);
-
-        }
         this.names.set(identifier.lexeme, identifier);
         this.definedNames.add(identifier.lexeme);
     }
@@ -155,9 +140,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // change the environment to be suite scope as in python
     environment: Environment | null;
     functionScope: Environment | null;
-    constructor(source: string, ast: Stmt) {
+    private validators: FeatureValidator[];
+
+    constructor(source: string, ast: Stmt, validators: FeatureValidator[] = []) {
         this.source = source;
         this.ast = ast;
+        this.validators = validators;
         // The global environment
         this.environment = new Environment(source, null, new Map([
             // misc library
@@ -236,6 +224,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ]));
         this.functionScope = null;
     }
+
+    private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
+        for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+    }
+
     resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
         if (stmt === null) {
             return;
@@ -291,6 +284,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
     //// STATEMENTS
     visitFileInputStmt(stmt: StmtNS.FileInput): void {
+        this.runValidators(stmt);
         // Create a new environment.
         const oldEnv = this.environment;
         this.environment = new Environment(this.source, this.environment, new Map());
@@ -301,11 +295,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitIndentCreation(_stmt: StmtNS.Indent): void {
+        this.runValidators(_stmt);
         // Create a new environment
         this.environment = new Environment(this.source, this.environment, new Map());
     }
 
     visitDedentCreation(_stmt: StmtNS.Dedent): void {
+        this.runValidators(_stmt);
         // Switch to the previous environment.
         if (this.environment?.enclosing !== undefined) {
             this.environment = this.environment.enclosing;
@@ -313,6 +309,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
+        this.runValidators(stmt);
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
 
@@ -339,6 +336,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
+        this.runValidators(stmt);
         this.resolve(stmt.ann);
         this.resolve(stmt.value);
         this.functionVarConstraint(stmt.name);
@@ -346,21 +344,25 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitAssignStmt(stmt: StmtNS.Assign): void {
+        this.runValidators(stmt);
         this.resolve(stmt.value);
         this.functionVarConstraint(stmt.name);
         this.environment?.declareName(stmt.name);
     }
 
     visitAssertStmt(stmt: StmtNS.Assert): void {
+        this.runValidators(stmt);
         this.resolve(stmt.value);
     }
     visitForStmt(stmt: StmtNS.For): void {
+        this.runValidators(stmt);
         this.environment?.declareName(stmt.target);
         this.resolve(stmt.iter);
         this.resolve(stmt.body);
     }
 
     visitIfStmt(stmt: StmtNS.If): void {
+        this.runValidators(stmt);
         this.resolve(stmt.condition);
         this.resolve(stmt.body);
         this.resolve(stmt.elseBlock);
@@ -368,30 +370,36 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // @TODO we need to treat all global statements as variable declarations in the global
     // scope.
     visitGlobalStmt(stmt: StmtNS.Global): void {
+        this.runValidators(stmt);
         // Do nothing because global can also be declared in our
         // own scope.
     }
     // @TODO nonlocals mean that any variable following that name in the current env
     // should not create a variable declaration, but instead point to an outer variable.
     visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
+        this.runValidators(stmt);
         this.environment?.lookupNameParentEnvWithError(stmt.name);
     }
 
     visitReturnStmt(stmt: StmtNS.Return): void {
+        this.runValidators(stmt);
         if (stmt.value !== null) {
             this.resolve(stmt.value);
         }
     }
 
     visitWhileStmt(stmt: StmtNS.While): void {
+        this.runValidators(stmt);
         this.resolve(stmt.condition);
         this.resolve(stmt.body);
     }
     visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
+        this.runValidators(stmt);
         this.resolve(stmt.expression);
     }
 
     visitFromImportStmt(stmt: StmtNS.FromImport): void {
+        this.runValidators(stmt);
         for (const name of stmt.names) {
             this.environment?.declareName(name);
             this.environment?.moduleBindings.add(name.lexeme);
@@ -399,10 +407,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitContinueStmt(stmt: StmtNS.Continue): void {
+        this.runValidators(stmt);
     }
     visitBreakStmt(stmt: StmtNS.Break): void {
+        this.runValidators(stmt);
     }
     visitPassStmt(stmt: StmtNS.Pass): void {
+        this.runValidators(stmt);
     }
 
 
@@ -411,9 +422,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
     //// EXPRESSIONS
     visitVariableExpr(expr: ExprNS.Variable): void {
+        this.runValidators(expr);
         this.environment?.lookupNameCurrentEnvWithError(expr.name);
     }
     visitLambdaExpr(expr: ExprNS.Lambda): void {
+        this.runValidators(expr);
         // Create a new environment.
         const oldEnv = this.environment;
         // Assign the parameters to the new environment.
@@ -426,6 +439,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = oldEnv;
     }
     visitMultiLambdaExpr(expr: ExprNS.MultiLambda): void {
+        this.runValidators(expr);
         // Create a new environment.
         const oldEnv = this.environment;
         // Assign the parameters to the new environment.
@@ -440,45 +454,58 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = oldEnv;
     }
     visitUnaryExpr(expr: ExprNS.Unary): void {
+        this.runValidators(expr);
         this.resolve(expr.right);
     }
     visitGroupingExpr(expr: ExprNS.Grouping): void {
+        this.runValidators(expr);
         this.resolve(expr.expression);
     }
     visitBinaryExpr(expr: ExprNS.Binary): void {
+        this.runValidators(expr);
         this.resolve(expr.left);
         this.resolve(expr.right);
     }
     visitBoolOpExpr(expr: ExprNS.BoolOp): void {
+        this.runValidators(expr);
         this.resolve(expr.left);
         this.resolve(expr.right);
     }
     visitCompareExpr(expr: ExprNS.Compare): void {
+        this.runValidators(expr);
         this.resolve(expr.left);
         this.resolve(expr.right);
     }
 
     visitCallExpr(expr: ExprNS.Call): void {
+        this.runValidators(expr);
         this.resolve(expr.callee);
         this.resolve(expr.args);
     }
     visitTernaryExpr(expr: ExprNS.Ternary): void {
+        this.runValidators(expr);
         this.resolve(expr.predicate);
         this.resolve(expr.consequent);
         this.resolve(expr.alternative);
     }
     visitNoneExpr(expr: ExprNS.None): void {
+        this.runValidators(expr);
     }
     visitLiteralExpr(expr: ExprNS.Literal): void {
+        this.runValidators(expr);
     }
     visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
+        this.runValidators(expr);
     }
     visitComplexExpr(expr: ExprNS.Complex): void {
+        this.runValidators(expr);
     }
     visitListExpr(expr: ExprNS.List): void {
+        this.runValidators(expr);
         this.resolve(expr.elements);
     }
     visitSubscriptExpr(expr: ExprNS.Subscript): void {
+        this.runValidators(expr);
         this.resolve(expr.value);
         this.resolve(expr.index);
     }

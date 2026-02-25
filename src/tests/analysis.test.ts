@@ -58,8 +58,8 @@ describe('NameResolver — scope analysis', () => {
         expect(() => analyzeOk('print(abs(1))')).not.toThrow();
     });
 
-    test('re-declaring the same name in the same scope throws', () => {
-        analyzeThrows('x = 1\nx = 2');
+    test('re-declaring the same name in the same scope throws in chapter 1', () => {
+        analyzeThrows('x = 1\nx = 2', 1);
     });
 
     test('nested function can reference outer variable', () => {
@@ -133,7 +133,7 @@ describe('Chapter 2 — loops still banned, reassignment allowed', () => {
     });
 });
 
-describe('Chapter 3 — loops allowed, lists banned', () => {
+describe('Chapter 3 — loops and lists allowed', () => {
     test('while loop is allowed in chapter 3', () => {
         expect(() => analyzeOk('while True:\n    pass', 3)).not.toThrow();
     });
@@ -142,8 +142,8 @@ describe('Chapter 3 — loops allowed, lists banned', () => {
         expect(() => analyzeOk('xs = 1\nfor i in xs:\n    pass', 3)).not.toThrow();
     });
 
-    test('list literal is banned in chapter 3', () => {
-        expect(() => analyzeOk('x = []', 3)).toThrow(FeatureNotSupportedError);
+    test('list literal is allowed in chapter 3', () => {
+        expect(() => analyzeOk('x = []', 3)).not.toThrow();
     });
 });
 

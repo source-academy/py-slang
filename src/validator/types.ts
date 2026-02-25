@@ -1,9 +1,10 @@
 import { StmtNS, ExprNS } from '../ast-types';
+import { Environment } from '../resolver/resolver';
 
 export type ASTNode = StmtNS.Stmt | ExprNS.Expr;
 
 export interface FeatureValidator {
-    validate(node: ASTNode): void;
+    validate(node: ASTNode, env?: Environment): void;
 }
 
 export class FeatureNotSupportedError extends Error {

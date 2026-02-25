@@ -1,21 +1,30 @@
 import { StmtNS } from '../../ast-types';
-import { ASTNode, FeatureValidator, FeatureNotSupportedError } from '../types';
+import { ASTNode, FeatureValidator } from '../types';
+import { Environment } from '../../resolver/resolver';
+import { ResolverErrors } from '../../resolver/errors';
 
 /**
- * Stateful validator that tracks declared names and throws if a name is assigned more than once.
- * Each call to create() returns a fresh validator instance for a single validation run.
+ * Scope-aware validator that throws NameReassignmentError if a name is assigned more than once
+ * within the same scope. Uses a WeakMap keyed on Environment so nested scopes are isolated.
+ * Must be run inside the Resolver (with env passed) to work correctly.
  */
 export function createNoReassignmentValidator(): FeatureValidator {
-    const declared = new Set<string>();
+    const declaredPerScope = new WeakMap<Environment, Set<string>>();
     return {
-        validate(node: ASTNode): void {
-            if (node instanceof StmtNS.Assign) {
-                const name = node.name.lexeme;
-                if (declared.has(name)) {
-                    throw new FeatureNotSupportedError(`reassignment of '${name}'`, node);
-                }
-                declared.add(name);
+        validate(node: ASTNode, env?: Environment): void {
+            if (!(node instanceof StmtNS.Assign) || !env) return;
+            let declared = declaredPerScope.get(env);
+            if (!declared) { declared = new Set(); declaredPerScope.set(env, declared); }
+            const name = node.name.lexeme;
+            if (declared.has(name)) {
+                throw new ResolverErrors.NameReassignmentError(
+                    node.name.line, node.name.col, env.source,
+                    node.name.indexInSource,
+                    node.name.indexInSource + name.length,
+                    env.names.get(name)!
+                );
             }
+            declared.add(name);
         }
     };
 }

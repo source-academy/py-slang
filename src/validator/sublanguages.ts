@@ -31,12 +31,10 @@ export function makeChapter2Validators(): FeatureValidator[] {
 }
 
 /**
- * Source Chapter 3: no lists. Loops and reassignment are allowed.
+ * Source Chapter 3: lists, loops, and reassignment are all allowed.
  */
 export function makeChapter3Validators(): FeatureValidator[] {
-    return [
-        NoListsValidator,
-    ];
+    return [];
 }
 
 /**
