@@ -41,7 +41,7 @@
 
 import { Token, SPECIAL_IDENTIFIER_TOKENS } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { ParserErrors } from "./errors";
 
 type Expr = ExprNS.Expr;
@@ -292,16 +292,16 @@ export class Parser {
         const startToken = this.previous();
         const module = this.advance();
         this.consume(TokenType.IMPORT, "Expected import keyword");
-        let params;
-        if (this.check(TokenType.NAME)) {
-            params = [this.advance()];
-        } else {
-            params = this.parameters();
+
+        const names: Token[] = [];
+        names.push(this.consume(TokenType.NAME, "Expected name to import"));
+        while (this.match(TokenType.COMMA)) {
+            names.push(this.consume(TokenType.NAME, "Expected name after comma"));
         }
-        return new StmtNS.FromImport(startToken, this.previous(), module, params);
+        return new StmtNS.FromImport(startToken, this.previous(), module, names);
     }
 
-    private parameters(): Token[] {
+    private parameters(): FunctionParam[] {
         this.consume(TokenType.LPAR, "Expected opening parentheses");
         let res = this.varparamslist();
         this.consume(TokenType.RPAR, "Expected closing parentheses");
@@ -349,11 +349,16 @@ export class Parser {
         return stmts;
     }
 
-    private varparamslist(): Token[] {
+    private varparamslist(): FunctionParam[] {
         let params = [];
         while (!this.check(TokenType.COLON) && !this.check(TokenType.RPAR)) {
-            let name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
-            params.push(name);
+            if (this.match(TokenType.STAR)) {
+                let name = this.consume(TokenType.NAME, "Expected a proper identifier after * in parameter");
+                params.push({ ...name, isStarred: true });
+            } else {
+                let name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
+                params.push({ ...name, isStarred: false });
+            }
             if (!this.match(TokenType.COMMA)) {
                 break;
             }

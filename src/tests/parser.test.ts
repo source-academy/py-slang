@@ -24,7 +24,7 @@ describe('Tests for Python language constructs', () => {
     describe('Script', () => {
         test('An entire Python script', () => {
             const text = `
-from x import (y)
+from x import y
 x = 1 if 2 else 3
 
 1 is not 2
@@ -59,7 +59,7 @@ else:
             expect(toPythonAst(text)).toMatchObject({})
         })
         test('From imports: multiple binding', () => {
-            const text = `from x import (a, b, c)\n`;
+            const text = `from x import a, b, c\n`;
 
             expect(toPythonAst(text)).toMatchObject({})
         });

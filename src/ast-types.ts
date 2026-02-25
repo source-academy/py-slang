@@ -2,6 +2,7 @@
 import {Token} from "./tokenizer";
 import { PyComplexNumber } from "./types";
 
+export type FunctionParam = Token & { isStarred: boolean };
 export namespace ExprNS {
     export interface Visitor<T> {
         visitBigIntLiteralExpr(expr: BigIntLiteral): T
@@ -147,9 +148,9 @@ export namespace ExprNS {
         }
     }
     export class Lambda extends Expr {
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: Expr;
-        constructor(startToken: Token, endToken: Token, parameters: Token[], body: Expr){
+        constructor(startToken: Token, endToken: Token, parameters: FunctionParam[], body: Expr){
             super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
@@ -159,10 +160,10 @@ export namespace ExprNS {
         }
     }
     export class MultiLambda extends Expr {
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: StmtNS.Stmt[];
         varDecls: Token[];
-        constructor(startToken: Token, endToken: Token, parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[]){
+        constructor(startToken: Token, endToken: Token, parameters: FunctionParam[], body: StmtNS.Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
@@ -409,10 +410,10 @@ export namespace StmtNS {
     }
     export class FunctionDef extends Stmt {
         name: Token;
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: Stmt[];
         varDecls: Token[];
-        constructor(startToken: Token, endToken: Token, name: Token, parameters: Token[], body: Stmt[], varDecls: Token[]){
+        constructor(startToken: Token, endToken: Token, name: Token, parameters: FunctionParam[], body: Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.name = name;
             this.parameters = parameters;
