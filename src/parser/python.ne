@@ -1,60 +1,15 @@
 # Nearley grammar for Python subset (Source Academy)
-# Produces plain tagged-union AST nodes
+# Produces class-based AST nodes
 
 @preprocessor esmodule
 
 @{%
-import { pythonLexer } from './lexer';
+import { StmtNS, ExprNS } from '../ast-types';
+import pythonLexer from './lexer';
+import { toAstToken } from './token-bridge';
 
-// ============================================================================
-// AST Node Factories - minimal tagged unions, no token tracking
-// ============================================================================
-
-const Expr = {
-  literal:     (value) => ({ tag: 'Literal', value }),
-  bigInt:      (value) => ({ tag: 'BigIntLiteral', value }),
-  complex:     (value) => ({ tag: 'Complex', value }),
-  variable:    (name) => ({ tag: 'Variable', name }),
-  binary:      (left, op, right) => ({ tag: 'Binary', left, op, right }),
-  compare:     (left, op, right) => ({ tag: 'Compare', left, op, right }),
-  boolOp:      (left, op, right) => ({ tag: 'BoolOp', left, op, right }),
-  unary:       (op, arg) => ({ tag: 'Unary', op, arg }),
-  ternary:     (test, cons, alt) => ({ tag: 'Ternary', test, cons, alt }),
-  lambda:      (params, body) => ({ tag: 'Lambda', params, body }),
-  multiLambda: (params, body) => ({ tag: 'MultiLambda', params, body }),
-  call:        (callee, args) => ({ tag: 'Call', callee, args }),
-  group:       (expr) => ({ tag: 'Group', expr }),
-  none:        () => ({ tag: 'None' }),
-};
-
-const Stmt = {
-  pass:       () => ({ tag: 'Pass' }),
-  break_:     () => ({ tag: 'Break' }),
-  continue_:  () => ({ tag: 'Continue' }),
-  return_:    (value) => ({ tag: 'Return', value }),
-  assign:     (name, value) => ({ tag: 'Assign', name, value }),
-  annAssign:  (name, ann, value) => ({ tag: 'AnnAssign', name, ann, value }),
-  expr:       (expr) => ({ tag: 'Expr', expr }),
-  if_:        (test, body, else_) => ({ tag: 'If', test, body, else: else_ }),
-  while_:     (test, body) => ({ tag: 'While', test, body }),
-  for_:       (target, iter, body) => ({ tag: 'For', target, iter, body }),
-  funcDef:    (name, params, body) => ({ tag: 'FunctionDef', name, params, body }),
-  fromImport: (module, names) => ({ tag: 'FromImport', module, names }),
-  global:     (name) => ({ tag: 'Global', name }),
-  nonlocal:   (name) => ({ tag: 'NonLocal', name }),
-  assert:     (test) => ({ tag: 'Assert', test }),
-  file:       (stmts) => ({ tag: 'File', stmts }),
-};
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-const id = ([x]) => x;
 const nil = () => null;
-const val = ([t]) => t.value;
 const list = ([x]) => [x];
-const append = ([xs,,,, x]) => [...xs, x];
 const cons = ([xs, x]) => [...xs, x];
 const drop = () => [];
 %}
@@ -65,11 +20,21 @@ const drop = () => [];
 # Program
 # ============================================================================
 
-file -> _ stmts _ %EOF                        {% ([, stmts]) => Stmt.file(stmts) %}
+file -> stmts
+  {% ([stmts]) => {
+       const filtered = (stmts || []).filter(Boolean);
+       const start = filtered[0]
+         ? filtered[0].startToken
+         : toAstToken({type:'newline',value:'',line:1,col:1,offset:0});
+       const end = filtered.length > 0
+         ? filtered[filtered.length-1].endToken
+         : start;
+       return new StmtNS.FileInput(start, end, filtered, []);
+     } %}
 
 stmts ->
     null                                      {% drop %}
-  | stmts stmt                                {% cons %}
+  | stmts stmt                                {% ([xs, x]) => x ? [...xs, x] : xs %}
   | stmts %newline                            {% id %}
 
 stmt -> simple_stmt {% id %} | compound_stmt {% id %}
@@ -92,35 +57,56 @@ small_stmt ->
   | assert_stmt   {% id %}
   | expr_stmt     {% id %}
 
-pass_stmt     -> %kw_pass                     {% () => Stmt.pass() %}
-break_stmt    -> %kw_break                    {% () => Stmt.break_() %}
-continue_stmt -> %kw_continue                 {% () => Stmt.continue_() %}
+pass_stmt -> %kw_pass
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
+
+break_stmt -> %kw_break
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Break(tok, tok); } %}
+
+continue_stmt -> %kw_continue
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
 
 return_stmt ->
-    %kw_return _ test                         {% ([,, expr]) => Stmt.return_(expr) %}
-  | %kw_return                                {% () => Stmt.return_(null) %}
+    %kw_return _ test
+      {% ([kw,, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
+  | %kw_return
+      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
 
 assign_stmt ->
-    %identifier _ ":" _ test _ "=" _ test     {% ([n,,,, ann,,,, v]) => Stmt.annAssign(n.value, ann, v) %}
-  | %identifier _ ":" _ test                  {% ([n,,,, ann]) => Stmt.annAssign(n.value, ann, null) %}
-  | %identifier _ "=" _ test                  {% ([n,,,, v]) => Stmt.assign(n.value, v) %}
+    %identifier _ ":" _ test _ "=" _ test
+      {% ([n,,,, ann,,,, v]) => new StmtNS.AnnAssign(toAstToken(n), v.endToken, toAstToken(n), v, ann) %}
+  | %identifier _ ":" _ test
+      {% ([n,,,, ann]) => {
+           const nameTok = toAstToken(n);
+           const dummyVal = new ExprNS.None(ann.endToken, ann.endToken);
+           return new StmtNS.AnnAssign(nameTok, ann.endToken, nameTok, dummyVal, ann);
+         } %}
+  | %identifier _ "=" _ test
+      {% ([n,,,, v]) => new StmtNS.Assign(toAstToken(n), v.endToken, toAstToken(n), v) %}
 
 import_stmt ->
     %kw_from _ %identifier _ %kw_import _ import_names
-                                              {% ([,, mod,,,, names]) => Stmt.fromImport(mod.value, names) %}
+      {% ([kw,, mod,,,, names]) => new StmtNS.FromImport(toAstToken(kw), names[names.length-1], toAstToken(mod), names) %}
 
 import_names ->
-    %identifier                               {% ([t]) => [t.value] %}
-  | "(" _ name_list _ ")"                     {% ([,, ns]) => ns %}
+    %identifier                               {% ([t]) => [toAstToken(t)] %}
+  | "(" _ name_list _ ")"                    {% ([,, ns]) => ns %}
 
 name_list ->
-    %identifier                               {% ([t]) => [t.value] %}
-  | name_list _ "," _ %identifier             {% ([ns,,,, t]) => [...ns, t.value] %}
+    %identifier                               {% ([t]) => [toAstToken(t)] %}
+  | name_list _ "," _ %identifier            {% ([ns,,,, t]) => [...ns, toAstToken(t)] %}
 
-global_stmt   -> %kw_global _ %identifier     {% ([,, n]) => Stmt.global(n.value) %}
-nonlocal_stmt -> %kw_nonlocal _ %identifier   {% ([,, n]) => Stmt.nonlocal(n.value) %}
-assert_stmt   -> %kw_assert _ test            {% ([,, e]) => Stmt.assert(e) %}
-expr_stmt     -> test                         {% ([e]) => Stmt.expr(e) %}
+global_stmt -> %kw_global _ %identifier
+  {% ([kw,, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+
+nonlocal_stmt -> %kw_nonlocal _ %identifier
+  {% ([kw,, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+
+assert_stmt -> %kw_assert _ test
+  {% ([kw,, e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
+
+expr_stmt -> test
+  {% ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
 
 # ============================================================================
 # Compound statements
@@ -129,35 +115,47 @@ expr_stmt     -> test                         {% ([e]) => Stmt.expr(e) %}
 compound_stmt -> if_stmt {% id %} | while_stmt {% id %} | for_stmt {% id %} | funcdef {% id %}
 
 if_stmt ->
-    %kw_if _ test _ ":" _ suite elif_chain    {% ([,, test,,,, body, else_]) => Stmt.if_(test, body, else_) %}
+    %kw_if _ test _ ":" _ suite elif_chain
+      {% ([kw,, test,,,, body, else_]) =>
+           new StmtNS.If(toAstToken(kw),
+             (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
+             test, body, else_) %}
 
 elif_chain ->
-    %kw_elif _ test _ ":" _ suite elif_chain  {% ([,, test,,,, body, else_]) => [Stmt.if_(test, body, else_)] %}
-  | %kw_else _ ":" _ suite                    {% ([,,,, body]) => body %}
+    %kw_elif _ test _ ":" _ suite elif_chain
+      {% ([kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
+           (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
+           test, body, else_)] %}
+  | %kw_else _ ":" _ suite                   {% ([,,,, body]) => body %}
   | null                                      {% nil %}
 
 while_stmt ->
-    %kw_while _ test _ ":" _ suite            {% ([,, test,,,, body]) => Stmt.while_(test, body) %}
+    %kw_while _ test _ ":" _ suite
+      {% ([kw,, test,,,, body]) =>
+           new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
 
 for_stmt ->
     %kw_for _ %identifier _ %kw_in _ test _ ":" _ suite
-                                              {% ([,, target,,,, iter,,,, body]) => Stmt.for_(target.value, iter, body) %}
+      {% ([kw,, target,,,, iter,,,, body]) =>
+           new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
 
 funcdef ->
     %kw_def _ %identifier _ params _ ":" _ suite
-                                              {% ([,, name,, params,,,, body]) => Stmt.funcDef(name.value, params, body) %}
+      {% ([kw,, name,, params,,,, body]) =>
+           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
+             toAstToken(name), params, body, []) %}
 
 params ->
     "(" _ ")"                                 {% drop %}
   | "(" _ param_list _ ")"                    {% ([,, ps]) => ps %}
 
 param_list ->
-    %identifier                               {% ([t]) => [t.value] %}
-  | param_list _ "," _ %identifier            {% ([ps,,,, t]) => [...ps, t.value] %}
+    %identifier                               {% ([t]) => [toAstToken(t)] %}
+  | param_list _ "," _ %identifier            {% ([ps,,,, t]) => [...ps, toAstToken(t)] %}
 
 suite ->
     simple_stmt                               {% list %}
-  | %newline %INDENT suite_stmts %DEDENT      {% ([, , stmts]) => stmts %}
+  | %newline %indent suite_stmts %dedent      {% ([,, stmts]) => stmts %}
 
 suite_stmts ->
     stmt                                      {% list %}
@@ -170,72 +168,91 @@ suite_stmts ->
 
 test ->
     or_test _ %kw_if _ or_test _ %kw_else _ test
-                                              {% ([cons,,,, test,,,, alt]) => Expr.ternary(test, cons, alt) %}
+      {% ([cons,,,, test,,,, alt]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt) %}
   | or_test                                   {% id %}
   | lambdef                                   {% id %}
 
 lambdef ->
-    %kw_lambda _ param_list _ ":" _ test      {% ([,, params,,,, body]) => Expr.lambda(params, body) %}
-  | %kw_lambda _ param_list _ "::" _ suite    {% ([,, params,,,, body]) => Expr.multiLambda(params, body) %}
-  | %kw_lambda _ ":" _ test                   {% ([,,,, body]) => Expr.lambda([], body) %}
-  | %kw_lambda _ "::" _ suite                 {% ([,,,, body]) => Expr.multiLambda([], body) %}
+    %kw_lambda _ param_list _ ":" _ test
+      {% ([kw,, params,,,, body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body) %}
+  | %kw_lambda _ param_list _ "::" _ suite
+      {% ([kw,, params,,,, body]) =>
+           new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, params, body, []) %}
+  | %kw_lambda _ ":" _ test
+      {% ([kw,,,, body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body) %}
+  | %kw_lambda _ "::" _ suite
+      {% ([kw,,,, body]) =>
+           new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, [], body, []) %}
 
 or_test ->
-    and_test _ %kw_or _ or_test               {% ([left,, op,, right]) => Expr.boolOp(left, 'or', right) %}
+    and_test _ %kw_or _ or_test
+      {% ([left,, op,, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
   | and_test                                  {% id %}
 
 and_test ->
-    not_test _ %kw_and _ and_test             {% ([left,, op,, right]) => Expr.boolOp(left, 'and', right) %}
+    not_test _ %kw_and _ and_test
+      {% ([left,, op,, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
   | not_test                                  {% id %}
 
 not_test ->
-    %kw_not _ not_test                        {% ([,, arg]) => Expr.unary('not', arg) %}
+    %kw_not _ not_test
+      {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
   | comparison                                {% id %}
 
 comparison ->
-    arith _ comp_op _ comparison              {% ([left,, op,, right]) => Expr.compare(left, op, right) %}
+    arith _ comp_op _ comparison
+      {% ([left,, op,, right]) => new ExprNS.Compare(left.startToken, right.endToken, left, op, right) %}
   | arith                                     {% id %}
 
 comp_op ->
-    %less             {% () => '<' %}
-  | %greater          {% () => '>' %}
-  | %doubleequal      {% () => '==' %}
-  | %greaterequal     {% () => '>=' %}
-  | %lessequal        {% () => '<=' %}
-  | %notequal         {% () => '!=' %}
-  | %kw_in            {% () => 'in' %}
-  | %kw_not _ %kw_in  {% () => 'not in' %}
-  | %kw_is            {% () => 'is' %}
-  | %kw_is _ %kw_not  {% () => 'is not' %}
+    %less             {% ([t]) => toAstToken(t) %}
+  | %greater          {% ([t]) => toAstToken(t) %}
+  | %doubleequal      {% ([t]) => toAstToken(t) %}
+  | %greaterequal     {% ([t]) => toAstToken(t) %}
+  | %lessequal        {% ([t]) => toAstToken(t) %}
+  | %notequal         {% ([t]) => toAstToken(t) %}
+  | %kw_in            {% ([t]) => toAstToken(t) %}
+  | %kw_not _ %kw_in  {% ([t]) => toAstToken(t) %}
+  | %kw_is            {% ([t]) => toAstToken(t) %}
+  | %kw_is _ %kw_not  {% ([t]) => toAstToken(t) %}
 
 arith ->
-    term _ arith_op _ arith                   {% ([left,, op,, right]) => Expr.binary(left, op, right) %}
+    term _ arith_op _ arith
+      {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
   | term                                      {% id %}
 
-arith_op -> %plus {% () => '+' %} | %minus {% () => '-' %}
+arith_op -> %plus {% ([t]) => toAstToken(t) %} | %minus {% ([t]) => toAstToken(t) %}
 
 term ->
-    factor _ term_op _ term                   {% ([left,, op,, right]) => Expr.binary(left, op, right) %}
+    factor _ term_op _ term
+      {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
   | factor                                    {% id %}
 
 term_op ->
-    %star        {% () => '*' %}
-  | %slash       {% () => '/' %}
-  | %percent     {% () => '%' %}
-  | %doubleslash {% () => '//' %}
+    %star        {% ([t]) => toAstToken(t) %}
+  | %slash       {% ([t]) => toAstToken(t) %}
+  | %percent     {% ([t]) => toAstToken(t) %}
+  | %doubleslash {% ([t]) => toAstToken(t) %}
 
 factor ->
-    %plus _ factor                            {% ([,, arg]) => Expr.unary('+', arg) %}
-  | %minus _ factor                           {% ([,, arg]) => Expr.unary('-', arg) %}
+    %plus _ factor
+      {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
+  | %minus _ factor
+      {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
   | power                                     {% id %}
 
 power ->
-    atom_expr _ %doublestar _ factor          {% ([left,,,, right]) => Expr.binary(left, '**', right) %}
+    atom_expr _ %doublestar _ factor
+      {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, toAstToken(op), right) %}
   | atom_expr                                 {% id %}
 
 atom_expr ->
-    atom "(" _ args _ ")"                     {% ([callee,, , args]) => Expr.call(callee, args) %}
-  | atom "(" _ ")"                            {% ([callee]) => Expr.call(callee, []) %}
+    atom_expr %lsqb _ test _ %rsqb
+      {% ([obj, ,, idx,, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
+  | atom "(" _ args _ ")"
+      {% ([callee,,,  args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+  | atom "(" _ ")"
+      {% ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
   | atom                                      {% id %}
 
 args ->
@@ -244,23 +261,34 @@ args ->
   | test _ ","                                {% list %}
 
 atom ->
-    "(" _ test _ ")"                          {% ([,, e]) => Expr.group(e) %}
-  | %identifier                               {% ([t]) => Expr.variable(t.value) %}
-  | %float                                    {% ([t]) => Expr.literal(parseFloat(t.value)) %}
-  | %bigint                                   {% ([t]) => Expr.bigInt(t.value) %}
-  | %complex                                  {% ([t]) => Expr.complex(t.value) %}
+    "(" _ test _ ")"
+      {% ([,, e]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
+  | %lsqb _ %rsqb
+      {% ([l,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
+  | %lsqb _ args _ %rsqb
+      {% ([l,, elems,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
+  | %identifier
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Variable(tok, tok, tok); } %}
+  | %float
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
+  | %bigint
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 10)); } %}
+  | %complex
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); } %}
   | string                                    {% id %}
-  | %kw_None                                  {% () => Expr.none() %}
-  | %kw_True                                  {% () => Expr.literal(true) %}
-  | %kw_False                                 {% () => Expr.literal(false) %}
+  | %kw_None
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.None(tok, tok); } %}
+  | %kw_True
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, true); } %}
+  | %kw_False
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, false); } %}
 
 string ->
-    %stringTripleDouble                       {% ([t]) => Expr.literal(t.value) %}
-  | %stringTripleSingle                       {% ([t]) => Expr.literal(t.value) %}
-  | %stringDouble                             {% ([t]) => Expr.literal(t.value) %}
-  | %stringSingle                             {% ([t]) => Expr.literal(t.value) %}
+    %stringTripleDouble  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, t.value); } %}
+  | %stringTripleSingle  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, t.value); } %}
+  | %stringDouble        {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, t.value); } %}
+  | %stringSingle        {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, t.value); } %}
 
 # Whitespace
 _ -> null | %ws
 __ -> %ws
-

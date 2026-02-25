@@ -615,17 +615,16 @@ export class Translator implements StmtNS.Visitor<BaseNode>, ExprNS.Visitor<Base
         }
     }
 
-    visitComplexExpr(expr: ExprNS.Complex): ComplexLiteral {
-        return {
-            type: 'Literal',
-    
-            complex: {
-                real: expr.value.real,
-                imag: expr.value.imag
-            },
-    
-            loc: this.toEstreeLocation(expr),
-        }
+    visitComplexExpr(expr: ExprNS.Complex): never {
+        throw new Error('Complex numbers are not yet supported');
     }
-    
+
+    visitListExpr(expr: ExprNS.List): never {
+        throw new Error('List literals are not yet supported by the translator');
+    }
+
+    visitSubscriptExpr(expr: ExprNS.Subscript): never {
+        throw new Error('Subscript expressions are not yet supported by the translator');
+    }
+
 }

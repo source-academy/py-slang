@@ -2,7 +2,7 @@ import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
 import { RecursivePartial, Result } from "../types";
 import { parse } from '../parser/parser-adapter';
-import { Resolver } from "../resolver";
+import { analyze } from "../resolver";
 import { Program } from "estree";
 import { Translator } from "../translator";
 import * as es from "estree";
@@ -11,21 +11,18 @@ export interface IOptions {
   isPrelude: boolean;
   envSteps: number;
   stepLimit: number;
+  chapter: number;
 }
 
 function parsePythonToEstreeAst(
   code: string,
-  variant: number = 1,
+  chapter: number = 4,
   doValidate: boolean = false
 ): Program {
   const script = code + "\n";
-  // const tokenizer = new Tokenizer(script);
-  // const tokens = tokenizer.scanEverything();
-  // const pyParser = new Parser(script, tokens);
-  // const ast = pyParser.parse();
   const ast = parse(script);
   if (doValidate) {
-    new Resolver(script, ast).resolve(ast);
+    analyze(ast, script, chapter);
   }
   const translator = new Translator(script);
   return translator.resolve(ast) as unknown as Program;
@@ -36,7 +33,7 @@ export async function runInContext(
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const estreeAst = parsePythonToEstreeAst(code, 1, true);
+  const estreeAst = parsePythonToEstreeAst(code, options.chapter ?? 4, true);
   const result = runCSEMachine(code, estreeAst, context, options);
   return result;
 }
