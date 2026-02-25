@@ -1,5 +1,4 @@
-import { f64, global, i32, i64, local, memory, wasm } from "@sourceacademy/wasm-util";
-import { WasmInstruction } from "@sourceacademy/wasm-util";
+import { f64, global, i32, i64, local, memory, wasm, type WasmInstruction } from "@sourceacademy/wasm-util";
 
 // tags
 export const TYPE_TAG = {
@@ -94,10 +93,14 @@ export const MAKE_STRING_FX = wasm
     i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
   );
 
-// upper 16: tag; upperMid 8: arity; lowerMid 8: envSize; lower 32: parentEnv
+// first     1: has varargs;
+// upper    15: tag;
+// upperMid  8: arity;
+// lowerMid  8: envSize;
+// lower    32: parentEnv
 export const MAKE_CLOSURE_FX = wasm
   .func("$_make_closure")
-  .params({ $tag: i32, $arity: i32, $env_size: i32, $parent_env: i32 })
+  .params({ $varargs: i32, $tag: i32, $arity: i32, $env_size: i32, $parent_env: i32 })
   .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.CLOSURE),
@@ -105,7 +108,10 @@ export const MAKE_CLOSURE_FX = wasm
     i64.or(
       i64.or(
         i64.or(
-          i64.shl(i64.extend_i32_u(local.get("$tag")), i64.const(48)),
+          i64.or(
+            i64.shl(i64.extend_i32_u(local.get("$varargs")), i64.const(63)),
+            i64.shl(i64.extend_i32_u(local.get("$tag")), i64.const(48)),
+          ),
           i64.shl(i64.extend_i32_u(local.get("$arity")), i64.const(40)),
         ),
         i64.shl(i64.extend_i32_u(local.get("$env_size")), i64.const(32)),
@@ -762,12 +768,10 @@ export const BOOL_NOT_FX = wasm
 
 export const BOOL_BINARY_OP_TAG = { AND: 0, OR: 1 };
 
-// *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
-// we initialise only local variables to UNBOUND, NOT parameters.
-// this is because have already set parameters in the new environment before calling this function.
+// +4 because parentEnv is stored at start of env
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
-  .params({ $size: i32, $parent: i32, $arity: i32 })
+  .params({ $size: i32, $parent: i32 })
   .results(i32)
   .body(
     global.get(HEAP_PTR), // return the start of the new env, set CURR_ENV AFTER
@@ -797,9 +801,26 @@ export const PRE_APPLY_FX = wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.CALL_NOT_FX))), wasm.unreachable()),
 
+    // if varargs bit is true AND arity is greater than argument length, error
+    // if not varargs AND arity doesn't equal argument length, error
     wasm
       .if(
-        i32.ne(i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)), local.get("$arity")),
+        i32.or(
+          i32.and(
+            i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63))),
+            i32.gt_u(
+              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+              local.get("$arity"),
+            ),
+          ),
+          i32.and(
+            i32.eqz(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63)))),
+            i32.ne(
+              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+              local.get("$arity"),
+            ),
+          ),
+        ),
       )
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.FUNC_WRONG_ARITY))), wasm.unreachable()),
 
@@ -810,7 +831,6 @@ export const PRE_APPLY_FX = wasm
       .args(
         i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
         i32.wrap_i64(local.get("$val")),
-        local.get("$arity"),
       ),
   );
 
@@ -819,9 +839,34 @@ export const RETURN_ENV_NAME = "$return_env";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64 })
+    .locals({ $list_len: i32, $list_tag: i32, $list_val: i64 })
+    .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64, $arg_len: i32 })
     .results(i32, i64)
     .body(
+      wasm.if(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63)))).then(
+        local.set(
+          "$list_len",
+          i32.sub(
+            local.get("$arg_len"),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+          ),
+        ),
+
+        memory.copy(
+          global.get(HEAP_PTR),
+          i32.sub(global.get(HEAP_PTR), i32.const(12)),
+          i32.mul(local.get("$list_len"), i32.const(12)),
+        ),
+
+        wasm.raw`${wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), local.get("$list_len"))}
+        (local.set $list_val)
+        (local.set $list_tag)`,
+        i32.store(i32.sub(global.get(HEAP_PTR), i32.const(12)), local.get("$list_tag")),
+        i64.store(i32.sub(global.get(HEAP_PTR), i32.const(8)), local.get("$list_val")),
+
+        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$list_len"), i32.const(12)))),
+      ),
+
       ...wasm.buildBrTableBlocks(
         wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
         ...bodies.map((body) => [

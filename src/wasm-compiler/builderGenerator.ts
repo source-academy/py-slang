@@ -51,7 +51,12 @@ import {
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 
-const libFunc = (name: string, arity: number, isVoid?: boolean) => ({
+const libFunc = (
+  name: string,
+  arity: number,
+  isVoid?: boolean,
+  hasVarArgs?: boolean,
+) => ({
   body: (
     mapper: (...args: WasmCall[]) => WasmInstruction | WasmInstruction[],
   ) => {
@@ -61,7 +66,13 @@ const libFunc = (name: string, arity: number, isVoid?: boolean) => ({
       ),
     );
     body = Array.isArray(body) ? body : [body];
-    return { name, arity, isVoid: isVoid ?? false, body };
+    return {
+      name,
+      arity,
+      isVoid: isVoid ?? false,
+      hasVarArgs: hasVarArgs ?? false,
+      body,
+    };
   },
 });
 
@@ -70,6 +81,7 @@ const libraryFunctions: {
   arity: number;
   body: WasmInstruction[];
   isVoid: boolean;
+  hasVarArgs: boolean;
 }[] = [
   libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
   libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
@@ -200,8 +212,10 @@ export class BuilderGenerator implements BuilderVisitor<
       });
 
     return [
-      ...(parameters?.map((p) => ({ name: p.lexeme, tag: "local" as const })) ??
-        []),
+      ...(parameters?.map((p) => ({
+        name: p.lexeme,
+        tag: "local" as const,
+      })) ?? []),
       ...bindings,
     ];
   }
@@ -220,7 +234,7 @@ export class BuilderGenerator implements BuilderVisitor<
 
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = libraryFunctions.map(
-      ({ name, arity, body, isVoid }, i) => {
+      ({ name, arity, body, isVoid, hasVarArgs }, i) => {
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions.length;
         const newBody = [
@@ -240,6 +254,7 @@ export class BuilderGenerator implements BuilderVisitor<
             wasm
               .call(MAKE_CLOSURE_FX)
               .args(
+                i32.const(hasVarArgs ? 1 : 0),
                 i32.const(tag),
                 i32.const(arity),
                 i32.const(arity),
@@ -290,7 +305,7 @@ export class BuilderGenerator implements BuilderVisitor<
               CURR_ENV,
               wasm
                 .call(ALLOC_ENV_FX)
-                .args(i32.const(globalEnvLength), i32.const(0), i32.const(0)),
+                .args(i32.const(globalEnvLength), i32.const(0)),
             ),
 
             ...builtInFuncsDeclarations,
@@ -446,14 +461,29 @@ export class BuilderGenerator implements BuilderVisitor<
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): WasmInstruction {
     const [depth, index] = this.getLexAddress(stmt.name.lexeme);
-    const arity = stmt.parameters.length;
+    const arity = stmt.parameters.filter((p) => !p.isStarred).length;
     const tag = this.userFunctions.length;
+    let hasStarred = false;
     this.userFunctions.push([]); // placeholder
+
+    if (stmt.parameters.some((p) => p.isStarred)) {
+      if (stmt.parameters.filter((p) => p.isStarred).length > 1) {
+        throw new Error("Only one starred parameter is allowed");
+      }
+      if (
+        stmt.parameters.findIndex((p) => p.isStarred) !==
+        stmt.parameters.length - 1
+      ) {
+        throw new Error("Starred parameter must be the last parameter");
+      }
+
+      hasStarred = true;
+    }
 
     const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
-    if (tag >= 1 << 16)
-      throw new Error("Tag cannot be above 16-bit integer limit");
+    if (tag >= 1 << 15)
+      throw new Error("Tag cannot be above 15-bit integer limit");
     if (arity >= 1 << 8)
       throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
@@ -473,6 +503,7 @@ export class BuilderGenerator implements BuilderVisitor<
         wasm
           .call(MAKE_CLOSURE_FX)
           .args(
+            i32.const(hasStarred ? 1 : 0),
             i32.const(tag),
             i32.const(arity),
             i32.const(newFrame.length),
@@ -482,16 +513,31 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
-    const arity = expr.parameters.length;
+    const arity = expr.parameters.filter((p) => !p.isStarred).length;
     const tag = this.userFunctions.length;
+    let hasStarred = false;
     this.userFunctions.push([]); // placeholder
+
+    if (expr.parameters.some((p) => p.isStarred)) {
+      if (expr.parameters.filter((p) => p.isStarred).length > 1) {
+        throw new Error("Only one starred parameter is allowed");
+      }
+      if (
+        expr.parameters.findIndex((p) => p.isStarred) !==
+        expr.parameters.length - 1
+      ) {
+        throw new Error("Starred parameter must be the last parameter");
+      }
+
+      hasStarred = true;
+    }
 
     // no statements allowed in lambdas, so there won't be any new local declarations
     // other than parameters
     const newFrame = this.collectDeclarations([], expr.parameters);
 
-    if (tag >= 1 << 16)
-      throw new Error("Tag cannot be above 16-bit integer limit");
+    if (tag >= 1 << 15)
+      throw new Error("Tag cannot be above 15-bit integer limit");
     if (arity >= 1 << 8)
       throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
@@ -506,6 +552,7 @@ export class BuilderGenerator implements BuilderVisitor<
     return wasm
       .call(MAKE_CLOSURE_FX)
       .args(
+        i32.const(hasStarred ? 1 : 0),
         i32.const(tag),
         i32.const(arity),
         i32.const(newFrame.length),
@@ -524,11 +571,19 @@ export class BuilderGenerator implements BuilderVisitor<
     // AND creates a new environment for the function call, but does not set CURR_ENV yet
     // this is so that we can set the arguments in the new environment first
 
+    // PRE_APPLY creates an environment the size of the function'call argument length
+
     // this means we can't use SET_LEX_ADDR_FX because it uses CURR_ENV internally
     // so we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
 
     // the SET_CONTIGUOUS_BLOCK function returns the env address after setting the parameter
     // so we can chain the calls together
+
+    // if has varargs, the list elements are set directly after the last parameter
+    // so we need to, in the APPLY_FX:
+    // 1. set HEAP_PTR to the end of the varargs list,
+    // 2. shift all the list elements over by 1 to make space for the varargs list
+    // 3. make the list variable
     return wasm.raw`
 ${global.get(CURR_ENV)}
 ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
@@ -540,6 +595,7 @@ ${args.map(
 )}
 
 (global.set ${CURR_ENV})
+(i32.const ${args.length})
 (call ${APPLY_FX_NAME})
 `;
   }
