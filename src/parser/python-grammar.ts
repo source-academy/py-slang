@@ -26,6 +26,7 @@ let ParserRules = [
     {"name": "stmts", "symbols": [], "postprocess": drop},
     {"name": "stmts", "symbols": ["stmts", "stmt"], "postprocess": ([xs, x]) => x ? [...xs, x] : xs},
     {"name": "stmts", "symbols": ["stmts", (pythonLexer.has("newline") ? {type: "newline"} : newline)], "postprocess": id},
+    {"name": "stmts", "symbols": ["stmts", (pythonLexer.has("ws") ? {type: "ws"} : ws)], "postprocess": id},
     {"name": "stmt", "symbols": ["simple_stmt"], "postprocess": id},
     {"name": "stmt", "symbols": ["compound_stmt"], "postprocess": id},
     {"name": "simple_stmt", "symbols": ["small_stmt", (pythonLexer.has("newline") ? {type: "newline"} : newline)], "postprocess": id},
@@ -80,10 +81,10 @@ let ParserRules = [
     {"name": "funcdef", "symbols": [(pythonLexer.has("kw_def") ? {type: "kw_def"} : kw_def), "_", (pythonLexer.has("identifier") ? {type: "identifier"} : identifier), "_", "params", "_", {"literal":":"}, "_", "suite"], "postprocess":  ([kw,, name,, params,,,, body]) =>
         new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
           toAstToken(name), params, body, []) },
-    {"name": "params", "symbols": [{"literal":"("}, "_", {"literal":")"}], "postprocess": drop},
-    {"name": "params", "symbols": [{"literal":"("}, "_", "param_list", "_", {"literal":")"}], "postprocess": ([,, ps]) => ps},
+    {"name": "params", "symbols": [{"literal":"("}, "_nl", {"literal":")"}], "postprocess": drop},
+    {"name": "params", "symbols": [{"literal":"("}, "_nl", "param_list", "_nl", {"literal":")"}], "postprocess": ([,, ps]) => ps},
     {"name": "param_list", "symbols": [(pythonLexer.has("identifier") ? {type: "identifier"} : identifier)], "postprocess": ([t]) => [toAstToken(t)]},
-    {"name": "param_list", "symbols": ["param_list", "_", {"literal":","}, "_", (pythonLexer.has("identifier") ? {type: "identifier"} : identifier)], "postprocess": ([ps,,,, t]) => [...ps, toAstToken(t)]},
+    {"name": "param_list", "symbols": ["param_list", "_nl", {"literal":","}, "_nl", (pythonLexer.has("identifier") ? {type: "identifier"} : identifier)], "postprocess": ([ps,,,, t]) => [...ps, toAstToken(t)]},
     {"name": "suite", "symbols": ["simple_stmt"], "postprocess": list},
     {"name": "suite", "symbols": [(pythonLexer.has("newline") ? {type: "newline"} : newline), (pythonLexer.has("indent") ? {type: "indent"} : indent), "suite_stmts", (pythonLexer.has("dedent") ? {type: "dedent"} : dedent)], "postprocess": ([,, stmts]) => stmts},
     {"name": "suite_stmts", "symbols": ["_", "stmt"], "postprocess": ([, s]) => [s]},
@@ -132,8 +133,8 @@ let ParserRules = [
     {"name": "power", "symbols": ["atom_expr", "_", (pythonLexer.has("doublestar") ? {type: "doublestar"} : doublestar), "_", "factor"], "postprocess": ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, toAstToken(op), right)},
     {"name": "power", "symbols": ["atom_expr"], "postprocess": id},
     {"name": "atom_expr", "symbols": ["atom_expr", (pythonLexer.has("lsqb") ? {type: "lsqb"} : lsqb), "_", "test", "_", (pythonLexer.has("rsqb") ? {type: "rsqb"} : rsqb)], "postprocess": ([obj, ,, idx,, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx)},
-    {"name": "atom_expr", "symbols": ["atom", {"literal":"("}, "_", "args", "_", {"literal":")"}], "postprocess": ([callee,,,  args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args)},
-    {"name": "atom_expr", "symbols": ["atom", {"literal":"("}, "_", {"literal":")"}], "postprocess": ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, [])},
+    {"name": "atom_expr", "symbols": ["atom_expr", {"literal":"("}, "_", "args", "_", {"literal":")"}], "postprocess": ([callee,,, args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args)},
+    {"name": "atom_expr", "symbols": ["atom_expr", {"literal":"("}, "_", {"literal":")"}], "postprocess": ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, [])},
     {"name": "atom_expr", "symbols": ["atom"], "postprocess": id},
     {"name": "args", "symbols": ["test"], "postprocess": list},
     {"name": "args", "symbols": ["args", "_", {"literal":","}, "_", "test"], "postprocess": ([as,,,, a]) => [...as, a]},
@@ -144,6 +145,9 @@ let ParserRules = [
     {"name": "atom", "symbols": [(pythonLexer.has("identifier") ? {type: "identifier"} : identifier)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Variable(tok, tok, tok); }},
     {"name": "atom", "symbols": [(pythonLexer.has("float") ? {type: "float"} : float)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); }},
     {"name": "atom", "symbols": [(pythonLexer.has("bigint") ? {type: "bigint"} : bigint)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 10)); }},
+    {"name": "atom", "symbols": [(pythonLexer.has("hex") ? {type: "hex"} : hex)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 16)); }},
+    {"name": "atom", "symbols": [(pythonLexer.has("octal") ? {type: "octal"} : octal)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 8)); }},
+    {"name": "atom", "symbols": [(pythonLexer.has("binary") ? {type: "binary"} : binary)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 2)); }},
     {"name": "atom", "symbols": [(pythonLexer.has("complex") ? {type: "complex"} : complex)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); }},
     {"name": "atom", "symbols": ["string"], "postprocess": id},
     {"name": "atom", "symbols": [(pythonLexer.has("kw_None") ? {type: "kw_None"} : kw_None)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.None(tok, tok); }},
@@ -155,7 +159,12 @@ let ParserRules = [
     {"name": "string", "symbols": [(pythonLexer.has("stringSingle") ? {type: "stringSingle"} : stringSingle)], "postprocess": ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, t.value); }},
     {"name": "_", "symbols": []},
     {"name": "_", "symbols": [(pythonLexer.has("ws") ? {type: "ws"} : ws)]},
-    {"name": "__", "symbols": [(pythonLexer.has("ws") ? {type: "ws"} : ws)]}
+    {"name": "__", "symbols": [(pythonLexer.has("ws") ? {type: "ws"} : ws)]},
+    {"name": "_nl", "symbols": [], "postprocess": id},
+    {"name": "_nl", "symbols": ["_nl", (pythonLexer.has("ws") ? {type: "ws"} : ws)], "postprocess": id},
+    {"name": "_nl", "symbols": ["_nl", (pythonLexer.has("newline") ? {type: "newline"} : newline)], "postprocess": id},
+    {"name": "_nl", "symbols": ["_nl", (pythonLexer.has("indent") ? {type: "indent"} : indent)], "postprocess": id},
+    {"name": "_nl", "symbols": ["_nl", (pythonLexer.has("dedent") ? {type: "dedent"} : dedent)], "postprocess": id}
 ];
 let ParserStart = "file";
 export default { Lexer, ParserRules, ParserStart };

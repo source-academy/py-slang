@@ -36,6 +36,7 @@ stmts ->
     null                                      {% drop %}
   | stmts stmt                                {% ([xs, x]) => x ? [...xs, x] : xs %}
   | stmts %newline                            {% id %}
+  | stmts %ws                                 {% id %}
 
 stmt -> simple_stmt {% id %} | compound_stmt {% id %}
 
@@ -146,12 +147,12 @@ funcdef ->
              toAstToken(name), params, body, []) %}
 
 params ->
-    "(" _ ")"                                 {% drop %}
-  | "(" _ param_list _ ")"                    {% ([,, ps]) => ps %}
+    "(" _nl ")"                               {% drop %}
+  | "(" _nl param_list _nl ")"               {% ([,, ps]) => ps %}
 
 param_list ->
     %identifier                               {% ([t]) => [toAstToken(t)] %}
-  | param_list _ "," _ %identifier            {% ([ps,,,, t]) => [...ps, toAstToken(t)] %}
+  | param_list _nl "," _nl %identifier       {% ([ps,,,, t]) => [...ps, toAstToken(t)] %}
 
 suite ->
     simple_stmt                               {% list %}
@@ -249,9 +250,9 @@ power ->
 atom_expr ->
     atom_expr %lsqb _ test _ %rsqb
       {% ([obj, ,, idx,, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
-  | atom "(" _ args _ ")"
-      {% ([callee,,,  args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
-  | atom "(" _ ")"
+  | atom_expr "(" _ args _ ")"
+      {% ([callee,,, args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+  | atom_expr "(" _ ")"
       {% ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
   | atom                                      {% id %}
 
@@ -273,6 +274,12 @@ atom ->
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
   | %bigint
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 10)); } %}
+  | %hex
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 16)); } %}
+  | %octal
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 8)); } %}
+  | %binary
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 2)); } %}
   | %complex
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); } %}
   | string                                    {% id %}
@@ -292,3 +299,10 @@ string ->
 # Whitespace
 _ -> null | %ws
 __ -> %ws
+
+# Whitespace including newlines, indents, dedents (for inside parentheses)
+_nl -> null          {% id %}
+  | _nl %ws          {% id %}
+  | _nl %newline     {% id %}
+  | _nl %indent      {% id %}
+  | _nl %dedent      {% id %}

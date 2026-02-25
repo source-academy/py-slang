@@ -59,6 +59,9 @@ const mooLexer = moo.compile({
   // Numbers — float and complex must come before bigint (longest-match ordering)
   complex:           /(?:\d+\.?\d*|\.\d+)[jJ]/,
   float:             /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
+  hex:               /0[xX][0-9a-fA-F]+/,
+  octal:             /0[oO][0-7]+/,
+  binary:            /0[bB][01]+/,
   bigint:            /\d+/,
 
   // Strings (triple-quoted must precede single-quoted)
