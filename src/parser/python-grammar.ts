@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
 function id(x) { return x[0]; }
@@ -85,8 +86,8 @@ let ParserRules = [
     {"name": "param_list", "symbols": ["param_list", "_", {"literal":","}, "_", (pythonLexer.has("identifier") ? {type: "identifier"} : identifier)], "postprocess": ([ps,,,, t]) => [...ps, toAstToken(t)]},
     {"name": "suite", "symbols": ["simple_stmt"], "postprocess": list},
     {"name": "suite", "symbols": [(pythonLexer.has("newline") ? {type: "newline"} : newline), (pythonLexer.has("indent") ? {type: "indent"} : indent), "suite_stmts", (pythonLexer.has("dedent") ? {type: "dedent"} : dedent)], "postprocess": ([,, stmts]) => stmts},
-    {"name": "suite_stmts", "symbols": ["stmt"], "postprocess": list},
-    {"name": "suite_stmts", "symbols": ["suite_stmts", "stmt"], "postprocess": cons},
+    {"name": "suite_stmts", "symbols": ["_", "stmt"], "postprocess": ([, s]) => [s]},
+    {"name": "suite_stmts", "symbols": ["suite_stmts", "_", "stmt"], "postprocess": ([xs,, s]) => [...xs, s]},
     {"name": "suite_stmts", "symbols": ["suite_stmts", (pythonLexer.has("newline") ? {type: "newline"} : newline)], "postprocess": id},
     {"name": "test", "symbols": ["or_test", "_", (pythonLexer.has("kw_if") ? {type: "kw_if"} : kw_if), "_", "or_test", "_", (pythonLexer.has("kw_else") ? {type: "kw_else"} : kw_else), "_", "test"], "postprocess": ([cons,,,, test,,,, alt]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt)},
     {"name": "test", "symbols": ["or_test"], "postprocess": id},

@@ -158,9 +158,9 @@ suite ->
   | %newline %indent suite_stmts %dedent      {% ([,, stmts]) => stmts %}
 
 suite_stmts ->
-    stmt                                      {% list %}
-  | suite_stmts stmt                          {% cons %}
-  | suite_stmts %newline                      {% id %}
+    _ stmt                          {% ([, s]) => [s] %}
+  | suite_stmts _ stmt              {% ([xs,, s]) => [...xs, s] %}
+  | suite_stmts %newline            {% id %}
 
 # ============================================================================
 # Expressions

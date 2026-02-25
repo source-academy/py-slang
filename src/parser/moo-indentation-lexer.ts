@@ -1,6 +1,7 @@
 // Updated moo-indentation-lexer to TypeScript
 // Original implementation here: https://github.com/aliclark/moo-indentation-lexer/tree/master
 import * as moo from 'moo';
+import MooPeekableLexer from 'moo-peekable-lexer';
 
 interface PeekableLexer extends moo.Lexer {
     peek(): moo.Token | undefined;
@@ -129,8 +130,7 @@ class IndentationLexer implements moo.Lexer {
     }
 
     private _makePeekableLexer(lexer: moo.Lexer): PeekableLexer {
-        const PeekableLexer = require('moo-peekable-lexer');
-        return new PeekableLexer({ lexer });
+        return new MooPeekableLexer({ lexer });
     }
 
     reset(data?: string, info?: IndentationLexerState): this {

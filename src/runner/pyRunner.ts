@@ -11,7 +11,7 @@ export interface IOptions {
   isPrelude: boolean;
   envSteps: number;
   stepLimit: number;
-  chapter: number;
+  chapter?: number;
 }
 
 function parsePythonToEstreeAst(

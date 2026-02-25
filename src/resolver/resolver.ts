@@ -300,12 +300,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment = oldEnv;
     }
 
-    visitIndentCreation(stmt: StmtNS.Indent): void {
+    visitIndentCreation(_stmt: StmtNS.Indent): void {
         // Create a new environment
         this.environment = new Environment(this.source, this.environment, new Map());
     }
 
-    visitDedentCreation(stmt: StmtNS.Dedent): void {
+    visitDedentCreation(_stmt: StmtNS.Dedent): void {
         // Switch to the previous environment.
         if (this.environment?.enclosing !== undefined) {
             this.environment = this.environment.enclosing;

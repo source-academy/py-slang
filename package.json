@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "regen": "npm run build && node dist/generate.js",
-    "compile-grammar": "nearleyc src/parser/python.ne -o src/parser/python-grammar.ts",
+    "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';fs.writeFileSync(f,'// @ts-nocheck\\n'+fs.readFileSync(f,'utf8'))\"",
     "build": "rollup -c --bundleConfigAsCjs",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest"
@@ -53,6 +53,7 @@
     "@sourceacademy/conductor": "^0.2.3",
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
-    "mathjs": "^14.4.0"
+    "mathjs": "^14.4.0",
+    "moo-peekable-lexer": "^1.1.2"
   }
 }
