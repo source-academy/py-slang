@@ -800,6 +800,7 @@ ${args.map(
 
     return wasm.raw`
 ${global.get(HEAP_PTR)}
+${global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(length * 12)))}
 
 ${elements.map(
   (element, i) =>
@@ -809,7 +810,6 @@ ${elements.map(
 
 (i32.const ${length})
 (call ${MAKE_LIST_FX.name})
-(global.set ${HEAP_PTR} (i32.add (global.get ${HEAP_PTR}) (i32.const ${length * 8})))
 `;
   }
 

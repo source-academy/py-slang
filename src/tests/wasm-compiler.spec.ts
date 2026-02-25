@@ -698,6 +698,234 @@ count
   });
 });
 
+describe("List semantics tests", () => {
+  it("list literal creation", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[0] + x[1] + x[2]
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+  });
+
+  it("list indexing", async () => {
+    const pythonCode = `
+x = [10, 20, 30]
+x[1]
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(20)]);
+  });
+
+  //   it("list index mutation", async () => {
+  //     const pythonCode = `
+  // x = [1, 2, 3]
+  // x[1] = 100
+  // x[0] + x[1] + x[2]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(104)]);
+  //   });
+
+  //   it("list length grows via append", async () => {
+  //     const pythonCode = `
+  // x = [1]
+  // x.append(2)
+  // x.append(3)
+  // x[2]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  //   });
+
+  it("nested lists indexing", async () => {
+    const pythonCode = `
+x = [[1, 2], [3, 4]]
+x[1][0]
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
+
+  //   it("nested list mutation", async () => {
+  //     const pythonCode = `
+  // x = [[1, 2], [3, 4]]
+  // x[0][1] = 9
+  // x[0][0] + x[0][1]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  //   });
+
+  //   it("lists are reference types (aliasing)", async () => {
+  //     const pythonCode = `
+  // x = [1, 2, 3]
+  // y = x
+  // y[0] = 100
+  // x[0]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
+  //   });
+
+  //   it("mutating through function affects caller", async () => {
+  //     const pythonCode = `
+  // def change(a):
+  //     a[0] = 42
+
+  // x = [1, 2]
+  // change(x)
+  // x[0]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(42)]);
+  //   });
+
+  it("reassigning parameter does not affect caller", async () => {
+    const pythonCode = `
+def change(a):
+    a = [9, 9]
+
+x = [1, 2]
+change(x)
+x[0]
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("list used inside for loop", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+sum = 0
+for i in range(3):
+    sum = sum + x[i]
+sum
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+  });
+
+  //   it("list mutation during loop", async () => {
+  //     const pythonCode = `
+  // x = [0, 0, 0]
+  // for i in range(3):
+  //     x[i] = i
+  // x[0] + x[1] + x[2]
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  //   });
+
+  it("expression inside list literal evaluated left to right", async () => {
+    const pythonCode = `
+def outer():
+    x = 0
+    def f():
+        nonlocal x
+        x = x + 1
+        return x
+
+    arr = [f(), f(), f()]
+    return x
+outer()
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
+
+  it("list can store mixed types", async () => {
+    const pythonCode = `
+x = [1, True, 3]
+x[0] + x[2]
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
+});
+
+describe("Function *args tests", () => {
+  //   it("no extra arguments: *args is empty", async () => {
+  //     const pythonCode = `
+  // def f(a, b, *c):
+  //     return len(c)
+
+  // f(1, 2)
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+  //   });
+
+  it("extra arguments are packed into *args", async () => {
+    const pythonCode = `
+def f(a, b, *c):
+    return c[0] + c[1]
+
+f(1, 2, 10, 20)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(30)]);
+  });
+
+  //   it("*args contains all extra arguments beyond defined params", async () => {
+  //     const pythonCode = `
+  // def f(a, *args):
+  //     sum = 0
+  //     for x in args:
+  //         sum = sum + x
+  //     return sum
+
+  // f(1, 2, 3, 4)
+  // `;
+  //     const result = await compileToWasmAndRun(pythonCode);
+  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  //   });
+
+  it("multiple positional parameters before *args", async () => {
+    const pythonCode = `
+def f(a, b, c, *rest):
+    return a + b + c + rest[0]
+
+f(1, 2, 3, 10)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(16)]);
+  });
+
+  it("*args can be indexed", async () => {
+    const pythonCode = `
+def f(*args):
+    return args[1]
+
+f(5, 10, 15)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("*args in function with no fixed parameters", async () => {
+    const pythonCode = `
+def f(*args):
+    return args[0] + args[1]
+
+f(7, 8)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(15)]);
+  });
+
+  it("*args with mixed types", async () => {
+    const pythonCode = `
+def f(a, *args):
+    return args[0] + args[1]
+
+f(0, 3, 4.5)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+  });
+});
+
 describe("Miscellaneous tests", () => {
   it("Temporal dead zone for local variables", async () => {
     const pythonCode = `

@@ -51,6 +51,10 @@ export async function compileToWasmAndRun(code: string) {
         throw new Error(Object.values(ERROR_MAP).at(tag) ?? "Unknown Error");
       },
       log_pair: () => console.log(),
+      log_list: (pointer: number, length: number) => {
+        const listItems = new Uint32Array(memory.buffer, pointer, length * 3);
+        console.log("List: ", Array.from(listItems));
+      },
     },
     js: { memory },
   });

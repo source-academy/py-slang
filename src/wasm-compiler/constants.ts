@@ -245,6 +245,7 @@ export const importedLogs = [
   wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
   wasm.import("console", "log_closure").func("$_log_closure").params(i32, i32, i32, i32),
   wasm.import("console", "log_none").func("$_log_none"),
+  wasm.import("console", "log_list").func("$_log_list").params(i32, i32),
   wasm.import("console", "log_error").func("$_log_error").params(i32),
 ];
 
@@ -294,11 +295,19 @@ export const LOG_FX = wasm
         wasm.return(),
       ),
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
+    // wasm
+    //   .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
+    //   .then(
+    //     wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
+    //     wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
+    //     wasm.return(),
+    //   ),
     wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
       .then(
-        wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
-        wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
+        wasm
+          .call("$_log_list")
+          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
         wasm.return(),
       ),
 
