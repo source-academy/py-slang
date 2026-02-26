@@ -147,12 +147,15 @@ export class BuilderGenerator implements BuilderVisitor<
     const findLexemes = (stmts: StmtNS.Stmt[], forDepth: number): string[] => {
       const found: string[] = [];
       for (const stmt of stmts) {
-        if (
-          stmt instanceof StmtNS.FunctionDef ||
-          stmt instanceof StmtNS.Assign
-        ) {
-          // base case: variable declaration
+        if (stmt instanceof StmtNS.FunctionDef) {
+          // base case: function declaration
           found.push(stmt.name.lexeme);
+        } else if (
+          stmt instanceof StmtNS.Assign &&
+          stmt.target instanceof ExprNS.Variable
+        ) {
+          // base case: variable declaration in assignment statement
+          found.push(stmt.target.name.lexeme);
         } else if (stmt instanceof StmtNS.If) {
           // recursively search if and else block
           found.push(...findLexemes(stmt.body, forDepth));
@@ -445,12 +448,22 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
-    const [depth, index] = this.getLexAddress(stmt.name.lexeme);
-    const expression = this.visit(stmt.value);
+    const target = stmt.target;
+    if (target instanceof ExprNS.Variable) {
+      const [depth, index] = this.getLexAddress(target.name.lexeme);
+      const expression = this.visit(stmt.value);
 
-    return wasm
-      .call(SET_LEX_ADDR_FX)
-      .args(i32.const(depth), i32.const(index), expression);
+      return wasm
+        .call(SET_LEX_ADDR_FX)
+        .args(i32.const(depth), i32.const(index), expression);
+    } else if (target instanceof ExprNS.Subscript) {
+      const value = this.visit(target.value);
+      const index = this.visit(target.index);
+      const expression = this.visit(stmt.value);
+
+      throw new Error("Subscript assignment is not supported yet");
+    }
+    throw new Error("Invalid assignment target");
   }
 
   visitVariableExpr(expr: ExprNS.Variable): WasmNumeric {

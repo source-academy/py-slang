@@ -237,9 +237,7 @@ export class Parser {
     private simple_stmt(): Stmt {
         const startToken = this.peek();
         let res = null;
-        if (this.match(TokenType.NAME)) {
-            res = this.assign_stmt();
-        } else if (this.match(TokenType.INDENT)) {
+        if (this.match(TokenType.INDENT)) {
             res = new StmtNS.Indent(startToken, startToken);
         } else if (this.match(TokenType.DEDENT)) {
             res = new StmtNS.Dedent(startToken, startToken);
@@ -259,33 +257,35 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
+        } else if (this.check(TokenType.NAME, TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
             TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
-            res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
+            const expr = this.test();
+
+            if (this.check(TokenType.COLON)) {
+                if (!(expr instanceof ExprNS.Variable)) {
+                    throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
+                }
+                this.advance();
+                const ann = this.test();
+                this.consume(TokenType.EQUAL, "Expect equal in annotated assignment");
+                const value = this.test();
+                res = new StmtNS.AnnAssign(startToken, this.previous(), expr, value, ann);
+            } else if (this.check(TokenType.EQUAL)) {
+                if (!(expr instanceof ExprNS.Variable || expr instanceof ExprNS.Subscript)) {
+                    throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
+                }
+                this.advance();
+                const value = this.test();
+                res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+            } else {
+                res = new StmtNS.SimpleExpr(startToken, this.previous(), expr);
+            }
+            // res = new StmtNS.SimpleExpr(startToken, startToken, expr);
         } else {
             throw new Error("Unreachable code path");
         }
         this.consume(TokenType.NEWLINE, "Expected newline");
         return res;
-    }
-
-    private assign_stmt(): Stmt {
-        const startToken = this.previous();
-        const name = this.previous();
-        if (this.check(TokenType.COLON)) {
-            const ann = this.test();
-            this.consume(TokenType.EQUAL, "Expect equal in assignment");
-            const expr = this.test();
-            return new StmtNS.AnnAssign(startToken, this.previous(), name, expr, ann);
-        } else if (this.check(TokenType.EQUAL)) {
-            this.advance();
-            const expr = this.test();
-            return new StmtNS.Assign(startToken, this.previous(), name, expr);
-        } else {
-            this.current--;
-            const expr = this.test();
-            return new StmtNS.SimpleExpr(startToken, this.previous(), expr);
-        }
     }
 
     private import_from(): Stmt {

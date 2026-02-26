@@ -3,6 +3,7 @@ import {Token} from "./tokenizer";
 import { PyComplexNumber } from "./types";
 
 export type FunctionParam = Token & { isStarred: boolean };
+export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;
 export namespace ExprNS {
     export interface Visitor<T> {
         visitBigIntLiteralExpr(expr: BigIntLiteral): T
@@ -275,11 +276,11 @@ export namespace StmtNS {
         }
     }
     export class Assign extends Stmt {
-        name: Token;
+        target: AssignTarget;
         value: ExprNS.Expr;
-        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr){
+        constructor(startToken: Token, endToken: Token, target: AssignTarget, value: ExprNS.Expr){
             super(startToken, endToken)
-            this.name = name;
+            this.target = target;
             this.value = value;
         }
         override accept(visitor: Visitor<any>): any {
@@ -287,12 +288,12 @@ export namespace StmtNS {
         }
     }
     export class AnnAssign extends Stmt {
-        name: Token;
+        target: ExprNS.Variable;
         value: ExprNS.Expr;
         ann: ExprNS.Expr;
-        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr, ann: ExprNS.Expr){
+        constructor(startToken: Token, endToken: Token, target: ExprNS.Variable, value: ExprNS.Expr, ann: ExprNS.Expr){
             super(startToken, endToken)
-            this.name = name;
+            this.target = target;
             this.value = value;
             this.ann = ann;
         }
