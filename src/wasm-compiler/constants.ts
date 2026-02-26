@@ -28,6 +28,7 @@ export const ERROR_MAP = {
   BOOL_UNKNOWN_TYPE: "Trying to convert an unknnown runtime type to a bool.",
   BOOL_UNKNOWN_OP: "Unknown boolean binary operator.",
   GET_ELEMENT_NOT_LIST: "Accessing an element of a non-list value.",
+  SET_ELEMENT_NOT_LIST: "Setting an element of a non-list value.",
   INDEX_NOT_INT: "Using a non-integer index to access a list element.",
   LIST_OUT_OF_RANGE: "List index out of range.",
 } as const;
@@ -233,6 +234,41 @@ export const GET_LIST_ELEMENT_FX = wasm
         i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
         i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
       ),
+    ),
+  );
+
+export const SET_LIST_ELEMENT_FX = wasm
+  .func("$_set_list_element")
+  .params({ $list_tag: i32, $list_val: i64, $index_tag: i32, $index_val: i64, $tag: i32, $val: i64 })
+  .body(
+    wasm
+      .if(i32.ne(local.get("$list_tag"), i32.const(TYPE_TAG.LIST)))
+      .then(
+        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.SET_ELEMENT_NOT_LIST))),
+        wasm.unreachable(),
+      ),
+
+    wasm
+      .if(i32.ne(local.get("$index_tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.INDEX_NOT_INT))), wasm.unreachable()),
+
+    wasm
+      .if(i32.ge_u(i32.wrap_i64(local.get("$index_val")), i32.wrap_i64(local.get("$list_val"))))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LIST_OUT_OF_RANGE))), wasm.unreachable()),
+
+    i32.store(
+      i32.add(
+        i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))),
+        i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
+      ),
+      local.get("$tag"),
+    ),
+    i64.store(
+      i32.add(
+        i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))),
+        i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
+      ),
+      local.get("$val"),
     ),
   );
 
@@ -983,6 +1019,7 @@ export const nativeFunctions = [
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
   GET_LIST_ELEMENT_FX,
+  SET_LIST_ELEMENT_FX,
   LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,

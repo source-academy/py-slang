@@ -735,15 +735,15 @@ x[1]
     expect(result).toEqual([TYPE_TAG.INT, BigInt(20)]);
   });
 
-  //   it("list index mutation", async () => {
-  //     const pythonCode = `
-  // x = [1, 2, 3]
-  // x[1] = 100
-  // x[0] + x[1] + x[2]
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(104)]);
-  //   });
+  it("list index mutation", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[1] = 100
+x[0] + x[1] + x[2]
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(104)]);
+  });
 
   //   it("list length grows via append", async () => {
   //     const pythonCode = `
@@ -765,39 +765,39 @@ x[1][0]
     expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
   });
 
-  //   it("nested list mutation", async () => {
-  //     const pythonCode = `
-  // x = [[1, 2], [3, 4]]
-  // x[0][1] = 9
-  // x[0][0] + x[0][1]
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
-  //   });
+  it("nested list mutation", async () => {
+    const pythonCode = `
+x = [[1, 2], [3, 4]]
+x[0][1] = 9
+x[0][0] + x[0][1]
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
 
-  //   it("lists are reference types (aliasing)", async () => {
-  //     const pythonCode = `
-  // x = [1, 2, 3]
-  // y = x
-  // y[0] = 100
-  // x[0]
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
-  //   });
+  it("lists are reference types (aliasing)", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+y = x
+y[0] = 100
+x[0]
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
+  });
 
-  //   it("mutating through function affects caller", async () => {
-  //     const pythonCode = `
-  // def change(a):
-  //     a[0] = 42
+  it("mutating through function affects caller", async () => {
+    const pythonCode = `
+def change(a):
+    a[0] = 42
 
-  // x = [1, 2]
-  // change(x)
-  // x[0]
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(42)]);
-  //   });
+x = [1, 2]
+change(x)
+x[0]
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(42)]);
+  });
 
   it("reassigning parameter does not affect caller", async () => {
     const pythonCode = `
@@ -824,16 +824,16 @@ sum
     expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
   });
 
-  //   it("list mutation during loop", async () => {
-  //     const pythonCode = `
-  // x = [0, 0, 0]
-  // for i in range(3):
-  //     x[i] = i
-  // x[0] + x[1] + x[2]
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
-  //   });
+  it("list mutation during loop", async () => {
+    const pythonCode = `
+x = [0, 0, 0]
+for i in range(3):
+    x[i] = i
+x[0] + x[1] + x[2]
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
 
   it("expression inside list literal evaluated left to right", async () => {
     const pythonCode = `

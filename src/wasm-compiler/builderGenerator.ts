@@ -33,6 +33,7 @@ import {
   RETURN_ENV_NAME,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
+  SET_LIST_ELEMENT_FX,
   SET_PAIR_HEAD_FX,
   SET_PAIR_TAIL_FX,
   TYPE_TAG,
@@ -45,26 +46,36 @@ import {
   local,
   mut,
   wasm,
+  WasmFunction,
   type WasmCall,
   type WasmInstruction,
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 
-const libFunc = (
+type TupleOf<
+  T,
+  N extends number,
+  R extends unknown[] = [],
+> = R["length"] extends N ? R : TupleOf<T, N, [...R, T]>;
+
+const libFunc = <Arity extends number>(
   name: string,
-  arity: number,
+  arity: Arity,
   isVoid?: boolean,
   hasVarArgs?: boolean,
 ) => ({
   body: (
-    mapper: (...args: WasmCall[]) => WasmInstruction | WasmInstruction[],
+    mapper: (
+      ...args: TupleOf<WasmCall, Arity>
+    ) => WasmInstruction | WasmInstruction[],
   ) => {
     let body = mapper(
-      ...[...Array(arity).keys()].map((i) =>
+      ...([...Array(arity).keys()].map((i) =>
         wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(i)),
-      ),
+      ) as TupleOf<WasmCall, Arity>),
     );
+
     body = Array.isArray(body) ? body : [body];
     return {
       name,
@@ -76,13 +87,7 @@ const libFunc = (
   },
 });
 
-const libraryFunctions: {
-  name: string;
-  arity: number;
-  body: WasmInstruction[];
-  isVoid: boolean;
-  hasVarArgs: boolean;
-}[] = [
+const libraryFunctions = [
   libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
   libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
   libFunc("head", 1).body((x) => wasm.call(GET_PAIR_HEAD_FX).args(x)),
@@ -117,7 +122,6 @@ export class BuilderGenerator implements BuilderVisitor<
 > {
   private strings: [string, number][] = [];
   private heapPointer = 0;
-
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
   private forDepth = 0;
@@ -461,7 +465,7 @@ export class BuilderGenerator implements BuilderVisitor<
       const index = this.visit(target.index);
       const expression = this.visit(stmt.value);
 
-      throw new Error("Subscript assignment is not supported yet");
+      return wasm.call(SET_LIST_ELEMENT_FX).args(value, index, expression);
     }
     throw new Error("Invalid assignment target");
   }
