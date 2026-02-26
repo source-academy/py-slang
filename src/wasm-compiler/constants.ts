@@ -30,6 +30,9 @@ export const ERROR_MAP = {
   SET_ELEMENT_NOT_LIST: "Setting an element of a non-list value.",
   INDEX_NOT_INT: "Using a non-integer index to access a list element.",
   LIST_OUT_OF_RANGE: "List index out of range.",
+  GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
+  MAKE_LINKED_LIST_NOT_LIST:
+    "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
 } as const;
 
 const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -203,6 +206,46 @@ export const SET_LIST_ELEMENT_FX = wasm
     ),
   );
 
+export const LIST_LENGTH_FX = wasm
+  .func("$_list_length")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_LENGTH_NOT_LIST))), wasm.unreachable()),
+    wasm.call(MAKE_INT_FX).args(i64.shr_u(local.get("$val"), i64.const(32))),
+  );
+
+export const MAKE_PAIR_FX = wasm
+  .func("$_make_pair")
+  .params({ $head_tag: i32, $head_val: i64, $tail_tag: i32, $tail_val: i64 })
+  .results(i32, i64)
+  .body(
+    i32.store(global.get(HEAP_PTR), local.get("$head_tag")),
+    i64.store(i32.add(global.get(HEAP_PTR), i32.const(4)), local.get("$head_val")),
+    i32.store(i32.add(global.get(HEAP_PTR), i32.const(12)), local.get("$tail_tag")),
+    i64.store(i32.add(global.get(HEAP_PTR), i32.const(16)), local.get("$tail_val")),
+
+    wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), i32.const(2)),
+    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24))),
+  );
+
+export const IS_PAIR_FX = wasm
+  .func("$_is_pair")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .call(MAKE_BOOL_FX)
+      .args(
+        i32.and(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+          i32.eq(i32.wrap_i64(local.get("$val")), i32.const(2)),
+        ),
+      ),
+  );
+
 // logging functions
 export const importedLogs = [
   wasm.import("console", "log").func("$_log_int").params(i64),
@@ -280,6 +323,56 @@ export const LOG_FX = wasm
 
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LOG_UNKNOWN_TYPE))),
     wasm.unreachable(),
+  );
+
+export const MAKE_LINKED_LIST_FX = wasm
+  .func("$_make_linked_list")
+  .params({ $tag: i32, $val: i64 })
+  .locals({ $i: i32, $acc_tag: i32, $acc_val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .then(
+        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAKE_LINKED_LIST_NOT_LIST))),
+        wasm.unreachable(),
+      ),
+
+    // start from the end of the list and keep pairing the last element with the accumulated linked list
+    local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
+
+    local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
+
+    wasm.loop("$loop").body(
+      wasm.if(i32.ge_s(local.get("$i"), i32.const(0))).then(
+        wasm
+          .call(MAKE_PAIR_FX)
+          .args(
+            i32.load(
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+                i32.mul(local.get("$i"), i32.const(12)),
+              ),
+            ),
+            i64.load(
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+                i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
+              ),
+            ),
+            local.get("$acc_tag"),
+            local.get("$acc_val"),
+          ),
+
+        wasm.raw`(local.set $acc_val) (local.set $acc_tag)`, // set acc to the new pair
+
+        local.set("$i", i32.sub(local.get("$i"), i32.const(1))),
+        wasm.br("$loop"),
+      ),
+    ),
+
+    local.get("$acc_tag"),
+    local.get("$acc_val"),
   );
 
 // unary operation functions
@@ -834,9 +927,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
-        wasm.raw`${wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), local.get("$list_len"))}
-        (local.set $list_val)
-        (local.set $list_tag)`,
+        wasm.raw`${wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), local.get("$list_len"))} (local.set $list_val) (local.set $list_tag)`,
         i32.store(i32.sub(global.get(HEAP_PTR), i32.const(12)), local.get("$list_tag")),
         i64.store(i32.sub(global.get(HEAP_PTR), i32.const(8)), local.get("$list_val")),
 
@@ -844,7 +935,10 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       ),
 
       ...wasm.buildBrTableBlocks(
-        wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
+        wasm.br_table(
+          i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), i32.const(32767)),
+          ...Array(bodies.length).keys(),
+        ),
         ...bodies.map((body) => [
           ...body,
           wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get(RETURN_ENV_NAME))),
@@ -946,6 +1040,10 @@ export const nativeFunctions = [
   MAKE_LIST_FX,
   GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,
+  LIST_LENGTH_FX,
+  MAKE_PAIR_FX,
+  IS_PAIR_FX,
+  MAKE_LINKED_LIST_FX,
   LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,

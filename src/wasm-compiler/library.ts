@@ -3,7 +3,6 @@ import {
   WasmInstruction,
   wasm,
   i32,
-  global,
   i64,
 } from "@sourceacademy/wasm-util";
 import {
@@ -11,12 +10,14 @@ import {
   LOG_FX,
   TYPE_TAG,
   BOOLISE_FX,
-  HEAP_PTR,
-  SET_CONTIGUOUS_BLOCK_FX,
-  MAKE_LIST_FX,
   GET_LIST_ELEMENT_FX,
   MAKE_INT_FX,
   SET_LIST_ELEMENT_FX,
+  MAKE_BOOL_FX,
+  IS_PAIR_FX,
+  LIST_LENGTH_FX,
+  MAKE_PAIR_FX,
+  MAKE_LINKED_LIST_FX,
 } from "./constants";
 
 type TupleOf<
@@ -25,21 +26,25 @@ type TupleOf<
   R extends unknown[] = [],
 > = R["length"] extends N ? R : TupleOf<T, N, [...R, T]>;
 
-const libFunc = <Arity extends number>(
+const libFunc = <Arity extends number, HasVarArgs extends boolean = false>(
   name: string,
   arity: Arity,
   isVoid?: boolean,
-  hasVarArgs?: boolean,
+  hasVarArgs?: HasVarArgs,
 ) => ({
   body: (
     mapper: (
-      ...args: TupleOf<WasmCall, Arity>
+      ...args: HasVarArgs extends true
+        ? [...TupleOf<WasmCall, Arity>, WasmCall]
+        : TupleOf<WasmCall, Arity>
     ) => WasmInstruction | WasmInstruction[],
   ) => {
     let body = mapper(
-      ...([...Array(arity).keys()].map((i) =>
+      ...([...Array(arity + (hasVarArgs ? 1 : 0)).keys()].map((i) =>
         wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(i)),
-      ) as TupleOf<WasmCall, Arity>),
+      ) as HasVarArgs extends true
+        ? [...TupleOf<WasmCall, Arity>, WasmCall]
+        : TupleOf<WasmCall, Arity>),
     );
 
     body = Array.isArray(body) ? body : [body];
@@ -49,15 +54,21 @@ const libFunc = <Arity extends number>(
 
 export const libraryFunctions = [
   libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
-  libFunc("pair", 2).body((x, y) => [
-    global.get(HEAP_PTR),
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24))),
 
-    wasm.raw`(i32.const 0) ${x} (i32.const 0) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
-    wasm.raw`(i32.const 1) ${y} (i32.const 0) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
+  // identification functions
+  libFunc("is_pair", 1).body((x) => wasm.call(IS_PAIR_FX).args(x)),
+  libFunc("is_none", 1).body(
+    (x) =>
+      wasm.raw`${x} (drop) (i32.const ${TYPE_TAG.NONE}) (i32.eq) (call ${MAKE_BOOL_FX.name})`,
+  ),
+  libFunc("is_list", 1).body(
+    (x) =>
+      wasm.raw`${x} (drop) (i32.const ${TYPE_TAG.LIST}) (i32.eq) (call ${MAKE_BOOL_FX.name})`,
+  ),
+  libFunc("list_length", 1).body((x) => wasm.call(LIST_LENGTH_FX).args(x)),
 
-    wasm.raw`(i32.const 2) (call ${MAKE_LIST_FX.name})`,
-  ]),
+  // pair functions
+  libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
   libFunc("head", 1).body((x) =>
     wasm
       .call(GET_LIST_ELEMENT_FX)
@@ -78,6 +89,12 @@ export const libraryFunctions = [
       .call(SET_LIST_ELEMENT_FX)
       .args(x, wasm.call(MAKE_INT_FX).args(i64.const(1)), y),
   ),
+
+  // linked list functions
+  libFunc("linked_list", 0, false, true).body((x) =>
+    wasm.call(MAKE_LINKED_LIST_FX).args(x),
+  ),
+
   libFunc("bool", 1).body((x) => [
     i32.const(TYPE_TAG.BOOL),
     wasm.call(BOOLISE_FX).args(x),

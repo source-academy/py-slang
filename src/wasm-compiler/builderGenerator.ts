@@ -208,7 +208,7 @@ export class BuilderGenerator implements BuilderVisitor<
                 i32.const(hasVarArgs ? 1 : 0),
                 i32.const(tag),
                 i32.const(arity),
-                i32.const(arity),
+                i32.const(arity + (hasVarArgs ? 1 : 0)),
                 global.get(CURR_ENV),
               ),
           );
