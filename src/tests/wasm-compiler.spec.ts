@@ -488,7 +488,6 @@ f()
 
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    console.log(result);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
   });
 });
