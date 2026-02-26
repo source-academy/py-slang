@@ -127,16 +127,15 @@ export class BuilderGenerator implements BuilderVisitor<
       const curr = this.environment[i];
       const index = curr.findIndex((b) => b.name === name);
 
-      if (index !== -1) {
-        // check if variable is used before nonlocal declaration
-        if (curr[index].tag === "nonlocal") {
-          throw new Error(
-            `Name ${curr[index].name} is used prior to nonlocal declaration`,
-          );
-        }
+      if (index === -1) continue;
 
-        return [this.environment.length - 1 - i, index];
+      if (curr[index].tag === "nonlocal") {
+        throw new Error(
+          `Name ${curr[index].name} is used prior to nonlocal declaration`,
+        );
       }
+
+      return [this.environment.length - 1 - i, index];
     }
     throw new Error(`Name ${name} not defined!`);
   }
@@ -612,10 +611,13 @@ ${args.map(
   visitNonLocalStmt(stmt: StmtNS.NonLocal): WasmInstruction {
     // because of this.collectDeclarations, this nonlocal declaration
     // is guaranteed to have a nonlocal (and not global) binding.
+
     // because of this.getLexAddress, it's also guaranteed to not have been
     // used illegally before this statement.
+
     // all that's left to do is remove the binding from the compile time environment
     // from here onwards (from the local frame).
+
     // if it doesn't exist in the local frame, do nothing as the statement has
     // no effect
 

@@ -472,6 +472,24 @@ b()
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]); // last expr => b()
   });
+
+  it("multiple levels of nesting with nonlocal select correct variable", async () => {
+    const pythonCode = `
+def f():
+    x = 0
+    def g():
+        x = 1
+        def h():
+            nonlocal x
+            return x
+        return h()
+    return g()
+f()
+
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
 });
 
 describe("Loop semantics tests", () => {
