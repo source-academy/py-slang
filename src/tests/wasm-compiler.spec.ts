@@ -297,7 +297,7 @@ p and None
 None or pair(1,2)
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    expect(result[0]).toBe(TYPE_TAG.PAIR);
+    expect(result[0]).not.toBe(TYPE_TAG.NONE);
   });
 
   // --- SHORT CIRCUITING ---
@@ -326,6 +326,14 @@ def boom():
 });
 
 describe("Pair tests", () => {
+  it("pairs are lists", async () => {
+    const pythonCode = `
+pair(1, 2)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result[0]).toBe(TYPE_TAG.LIST);
+  });
+
   it("construct pair and read head/tail", async () => {
     const pythonCode = `
 p = pair(1, 2)

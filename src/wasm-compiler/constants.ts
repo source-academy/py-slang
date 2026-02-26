@@ -10,7 +10,6 @@ export const TYPE_TAG = {
   CLOSURE: 5,
   NONE: 6,
   UNBOUND: 7,
-  PAIR: 8,
   LIST: 9,
 } as const;
 
@@ -132,74 +131,6 @@ export const MAKE_LIST_FX = wasm
   .body(
     i32.const(TYPE_TAG.LIST),
     i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
-  );
-
-// pair-related functions
-// upper 32: pointer to head; lower 32: pointer to tail
-export const MAKE_PAIR_FX = wasm
-  .func("$_make_pair")
-  .params({ $tag1: i32, $val1: i64, $tag2: i32, $val2: i64 })
-  .results(i32, i64)
-  .body(
-    i32.store(global.get(HEAP_PTR), local.get("$tag1")),
-    i64.store(i32.add(global.get(HEAP_PTR), i32.const(4)), local.get("$val1")),
-    i32.store(i32.add(global.get(HEAP_PTR), i32.const(12)), local.get("$tag2")),
-    i64.store(i32.add(global.get(HEAP_PTR), i32.const(16)), local.get("$val2")),
-
-    i32.const(TYPE_TAG.PAIR),
-    i64.extend_i32_u(global.get(HEAP_PTR)),
-
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24))),
-  );
-
-export const GET_PAIR_HEAD_FX = wasm
-  .func("$_get_pair_head")
-  .params({ $tag: i32, $val: i64 })
-  .results(i32, i64)
-  .body(
-    wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HEAD_NOT_PAIR))), wasm.unreachable()),
-
-    i32.load(i32.wrap_i64(local.get("$val"))),
-    i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(4))),
-  );
-
-export const GET_PAIR_TAIL_FX = wasm
-  .func("$_get_pair_tail")
-  .params({ $tag: i32, $val: i64 })
-  .results(i32, i64)
-  .body(
-    wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.TAIL_NOT_PAIR))), wasm.unreachable()),
-
-    i32.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(12))),
-    i64.load(i32.add(i32.wrap_i64(local.get("$val")), i32.const(16))),
-  );
-
-export const SET_PAIR_HEAD_FX = wasm
-  .func("$_set_pair_head")
-  .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
-  .body(
-    wasm
-      .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HEAD_NOT_PAIR))), wasm.unreachable()),
-
-    i32.store(i32.wrap_i64(local.get("$pair_val")), local.get("$tag")),
-    i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(4)), local.get("$val")),
-  );
-
-export const SET_PAIR_TAIL_FX = wasm
-  .func("$_set_pair_tail")
-  .params({ $pair_tag: i32, $pair_val: i64, $tag: i32, $val: i64 })
-  .body(
-    wasm
-      .if(i32.ne(local.get("$pair_tag"), i32.const(TYPE_TAG.PAIR)))
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.TAIL_NOT_PAIR))), wasm.unreachable()),
-
-    i32.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(12)), local.get("$tag")),
-    i64.store(i32.add(i32.wrap_i64(local.get("$pair_val")), i32.const(16)), local.get("$val")),
   );
 
 // list related functions
@@ -788,14 +719,14 @@ export const BOOLISE_FX = wasm
       .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
       .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.wrap_i64(local.get("$val"))))),
 
-    // closure/pair => True
+    // list => False if length is 0
     wasm
-      .if(
-        i32.or(
-          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)),
-          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)),
-        ),
-      )
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))))),
+
+    // closure => True
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
       .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1)))),
 
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.BOOL_UNKNOWN_TYPE))),
@@ -1012,12 +943,7 @@ export const nativeFunctions = [
   MAKE_STRING_FX,
   MAKE_CLOSURE_FX,
   MAKE_NONE_FX,
-  MAKE_PAIR_FX,
   MAKE_LIST_FX,
-  GET_PAIR_HEAD_FX,
-  GET_PAIR_TAIL_FX,
-  SET_PAIR_HEAD_FX,
-  SET_PAIR_TAIL_FX,
   GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,
   LOG_FX,

@@ -13,8 +13,6 @@ import {
   CURR_ENV,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
-  GET_PAIR_HEAD_FX,
-  GET_PAIR_TAIL_FX,
   HEAP_PTR,
   importedLogs,
   LOG_FX,
@@ -25,7 +23,6 @@ import {
   MAKE_INT_FX,
   MAKE_LIST_FX,
   MAKE_NONE_FX,
-  MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nativeFunctions,
   NEG_FX,
@@ -34,8 +31,6 @@ import {
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
-  SET_PAIR_HEAD_FX,
-  SET_PAIR_TAIL_FX,
   TYPE_TAG,
 } from "./constants";
 import {
@@ -52,57 +47,7 @@ import {
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
-
-type TupleOf<
-  T,
-  N extends number,
-  R extends unknown[] = [],
-> = R["length"] extends N ? R : TupleOf<T, N, [...R, T]>;
-
-const libFunc = <Arity extends number>(
-  name: string,
-  arity: Arity,
-  isVoid?: boolean,
-  hasVarArgs?: boolean,
-) => ({
-  body: (
-    mapper: (
-      ...args: TupleOf<WasmCall, Arity>
-    ) => WasmInstruction | WasmInstruction[],
-  ) => {
-    let body = mapper(
-      ...([...Array(arity).keys()].map((i) =>
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(i)),
-      ) as TupleOf<WasmCall, Arity>),
-    );
-
-    body = Array.isArray(body) ? body : [body];
-    return {
-      name,
-      arity,
-      isVoid: isVoid ?? false,
-      hasVarArgs: hasVarArgs ?? false,
-      body,
-    };
-  },
-});
-
-const libraryFunctions = [
-  libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
-  libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
-  libFunc("head", 1).body((x) => wasm.call(GET_PAIR_HEAD_FX).args(x)),
-  libFunc("tail", 1).body((x) => wasm.call(GET_PAIR_TAIL_FX).args(x)),
-  libFunc("set_head", 2, true).body((x, y) =>
-    wasm.call(SET_PAIR_HEAD_FX).args(x, y),
-  ),
-  libFunc("set_tail", 2, true).body((x, y) =>
-    wasm.call(SET_PAIR_TAIL_FX).args(x, y),
-  ),
-  libFunc("bool", 1).body((x) => [
-    i32.const(TYPE_TAG.BOOL),
-    wasm.call(BOOLISE_FX).args(x),
-  ]),
-];
+import { libraryFunctions } from "./library";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";
