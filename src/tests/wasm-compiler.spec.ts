@@ -1029,6 +1029,70 @@ x
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
   });
+
+  it("break only exits innermost loop", async () => {
+    const pythonCode = `
+x = 0
+for i in range(3):
+    for j in range(3):
+        if i == 1 and j == 1:
+            break
+        else:
+            pass
+        x = x + 1
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+  });
+
+  it("continue statement with while loops", async () => {
+    const pythonCode = `
+x = 0
+i = 0
+while i < 5:
+    i = i + 1
+    if i == 0:
+        continue
+    else:
+        pass
+    x = x + 1
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+  });
+
+  it("continue statement with for loops", async () => {
+    const pythonCode = `
+x = 0
+for i in range(5):
+    if i == 0:
+        continue
+    else:
+        pass
+    x = x + 1
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
+
+  it("continue only affects innermost loop", async () => {
+    const pythonCode = `
+x = 0
+for i in range(3):
+    for j in range(3):
+        if i == 1 and j == 1:
+            continue
+        else:
+            pass
+        x = x + 1
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(8)]);
+  });
 });
 
 describe("List semantics tests", () => {

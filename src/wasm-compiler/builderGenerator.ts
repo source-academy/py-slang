@@ -622,7 +622,7 @@ ${args.map(
       wasm.loop().body(
         wasm
           .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
-          .then(...body, wasm.br(1)), // 1 to jump to the beginning of the loop
+          .then(wasm.block("$continue").body(...body), wasm.br(1)), // 1 to jump to the beginning of the loop
       ),
     );
   }
@@ -704,8 +704,7 @@ ${args.map(
               wasm
                 .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
                 .then(
-                  setIter,
-                  ...body,
+                  wasm.block("$continue").body(setIter, ...body),
                   loopStep(wasm.call(MAKE_INT_FX).args(i64.const(1))),
                   wasm.br(1),
                 ),
@@ -743,8 +742,7 @@ ${args.map(
                   wasm
                     .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
                     .then(
-                      setIter,
-                      ...body,
+                      wasm.block("$continue").body(setIter, ...body),
                       loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
                       wasm.br(1),
                     ),
@@ -761,8 +759,7 @@ ${args.map(
                   wasm
                     .if(loopCondition(i32.const(COMPARISON_OP_TAG.GT)))
                     .then(
-                      setIter,
-                      ...body,
+                      wasm.block("$continue").body(setIter, ...body),
                       loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
                       wasm.br(1),
                     ),
@@ -774,6 +771,10 @@ ${args.map(
 
   visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
     return wasm.br("$exit");
+  }
+
+  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
+    return wasm.br("$continue");
   }
 
   visitListExpr(expr: ExprNS.List): WasmRaw {
@@ -813,9 +814,6 @@ ${elements.map(
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
