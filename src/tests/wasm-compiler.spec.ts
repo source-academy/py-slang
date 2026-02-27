@@ -340,7 +340,7 @@ p = pair(1, 2)
 head(p) + tail(p)
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([0, BigInt(3)]);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
   });
 
   it("set_head mutates pair", async () => {
@@ -350,7 +350,7 @@ set_head(p, 99)
 head(p)
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([0, BigInt(99)]);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(99)]);
   });
 
   it("set_tail mutates pair", async () => {
@@ -360,7 +360,7 @@ set_tail(p, 7)
 tail(p)
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([0, BigInt(7)]);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
   });
 
   it("nested pairs form linked list", async () => {
@@ -369,7 +369,107 @@ p = pair(1, pair(2, pair(3, None)))
 head(tail(tail(p)))
 `;
     const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([0, BigInt(3)]);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
+
+  it("is_pair identifies pairs correctly", async () => {
+    const pythonCode = `
+is_pair(pair(1, 2))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_pair identifies list of length 2 as pair", async () => {
+    const pythonCode = `
+is_pair([1, 2])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_pair identifies list of length != 2 as non-pair", async () => {
+    const pythonCode = `
+is_pair([1, 2, 3])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+  });
+
+  it("is_pair identifies non-pairs correctly", async () => {
+    const pythonCode = `
+is_pair(42)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+  });
+});
+
+describe("Linked list tests", () => {
+  it("linked_list constructs a linked list from a Python list", async () => {
+    const pythonCode = `
+head(tail(linked_list([1, 2, 3])))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+  });
+
+  it("set_head mutates linked list", async () => {
+    const pythonCode = `
+l = linked_list([10, 20, 30])
+set_head(l, 99)
+head(l)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(99)]);
+  });
+
+  it("is_none identifies None correctly", async () => {
+    const pythonCode = `
+is_none(None)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_none identifies non-None correctly", async () => {
+    const pythonCode = `
+is_none(42)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+  });
+
+  it("is_linked_list identifies linked list correctly", async () => {
+    const pythonCode = `
+is_linked_list(linked_list([1, 2, 3]))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_linked_list identifies linked lists created with nested pairs", async () => {
+    const pythonCode = `
+is_linked_list(pair(1, pair(2, pair(3, None))))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_linked_list identifies non-linked lists correctly", async () => {
+    const pythonCode = `
+is_linked_list([1, 2, 3])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+  });
+
+  it("is_linked_list identifies non-linked lists created with pairs correctly", async () => {
+    const pythonCode = `
+is_linked_list(pair(1, pair(2, pair(3, 4))))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
   });
 });
 
@@ -867,6 +967,30 @@ x[0] + x[2]
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
+
+  it("is_list identifies lists correctly", async () => {
+    const pythonCode = `
+is_list([1, 2, 3])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_list identifies pairs as lists", async () => {
+    const pythonCode = `
+is_list(pair(1, 2))
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+  });
+
+  it("is_list identifies non-lists correctly", async () => {
+    const pythonCode = `
+is_list(42)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
   });
 });
 

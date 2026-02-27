@@ -217,6 +217,7 @@ export const LIST_LENGTH_FX = wasm
     wasm.call(MAKE_INT_FX).args(i64.shr_u(local.get("$val"), i64.const(32))),
   );
 
+// pair related functions
 export const MAKE_PAIR_FX = wasm
   .func("$_make_pair")
   .params({ $head_tag: i32, $head_val: i64, $tail_tag: i32, $tail_val: i64 })
@@ -244,6 +245,34 @@ export const IS_PAIR_FX = wasm
           i32.eq(i32.wrap_i64(local.get("$val")), i32.const(2)),
         ),
       ),
+  );
+
+// linked list related functions
+export const IS_LINKED_LIST_FX = wasm
+  .func("$_is_list")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .loop("$loop")
+      .body(
+        wasm
+          .if(
+            i32.and(
+              i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+              i32.eq(i32.wrap_i64(local.get("$val")), i32.const(2)),
+            ),
+          )
+          .then(
+            wasm
+              .call(GET_LIST_ELEMENT_FX)
+              .args(local.get("$tag"), local.get("$val"), wasm.call(MAKE_INT_FX).args(i64.const(1))),
+            wasm.raw`(local.set $val) (local.set $tag)`,
+            wasm.br("$loop"),
+          ),
+      ),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))),
   );
 
 // logging functions
@@ -1044,6 +1073,7 @@ export const nativeFunctions = [
   MAKE_PAIR_FX,
   IS_PAIR_FX,
   MAKE_LINKED_LIST_FX,
+  IS_LINKED_LIST_FX,
   LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,
