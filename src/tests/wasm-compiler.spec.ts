@@ -1263,19 +1263,27 @@ is_list(42)
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
   });
+
+  it("list length function", async () => {
+    const pythonCode = `
+list_length([10, 20, 30])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
 });
 
 describe("Function *args tests", () => {
-  //   it("no extra arguments: *args is empty", async () => {
-  //     const pythonCode = `
-  // def f(a, b, *c):
-  //     return len(c)
+  it("no extra arguments: *args is empty", async () => {
+    const pythonCode = `
+def f(a, b, *c):
+    return list_length(c)
 
-  // f(1, 2)
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
-  //   });
+f(1, 2)
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+  });
 
   it("extra arguments are packed into *args", async () => {
     const pythonCode = `
@@ -1288,19 +1296,19 @@ f(1, 2, 10, 20)
     expect(result).toEqual([TYPE_TAG.INT, BigInt(30)]);
   });
 
-  //   it("*args contains all extra arguments beyond defined params", async () => {
-  //     const pythonCode = `
-  // def f(a, *args):
-  //     sum = 0
-  //     for x in args:
-  //         sum = sum + x
-  //     return sum
+  it("*args contains all extra arguments beyond defined params", async () => {
+    const pythonCode = `
+def f(a, *args):
+    sum = 0
+    for i in range(list_length(args)):
+        sum = sum + args[i]
+    return sum
 
-  // f(1, 2, 3, 4)
-  // `;
-  //     const result = await compileToWasmAndRun(pythonCode);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
-  //   });
+f(1, 2, 3, 4)
+  `;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+  });
 
   it("multiple positional parameters before *args", async () => {
     const pythonCode = `

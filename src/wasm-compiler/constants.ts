@@ -214,7 +214,7 @@ export const LIST_LENGTH_FX = wasm
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_LENGTH_NOT_LIST))), wasm.unreachable()),
-    wasm.call(MAKE_INT_FX).args(i64.shr_u(local.get("$val"), i64.const(32))),
+    wasm.call(MAKE_INT_FX).args(i64.and(local.get("$val"), i64.const(0xffffffff))),
   );
 
 // pair related functions
@@ -937,7 +937,7 @@ export const RETURN_ENV_NAME = "$return_env";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .locals({ $list_len: i32, $list_tag: i32, $list_val: i64 })
+    .locals({ $list_len: i32, $list_tag: i32, $list_val: i64, $env_size: i32 })
     .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64, $arg_len: i32 })
     .results(i32, i64)
     .body(
@@ -950,15 +950,33 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           ),
         ),
 
+        local.set(
+          "$env_size",
+          i32.sub(
+            i32.sub(
+              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
+              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+            ),
+            i32.const(1),
+          ),
+        ),
+
+        // HEAP_PTR is pointing to the space after all arguments + closure env, so copy arguments to the end of the env
         memory.copy(
           global.get(HEAP_PTR),
-          i32.sub(global.get(HEAP_PTR), i32.const(12)),
+          i32.sub(global.get(HEAP_PTR), i32.mul(i32.const(12), i32.add(i32.const(1), local.get("$env_size")))),
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
         wasm.raw`${wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), local.get("$list_len"))} (local.set $list_val) (local.set $list_tag)`,
-        i32.store(i32.sub(global.get(HEAP_PTR), i32.const(12)), local.get("$list_tag")),
-        i64.store(i32.sub(global.get(HEAP_PTR), i32.const(8)), local.get("$list_val")),
+        i32.store(
+          i32.sub(i32.sub(global.get(HEAP_PTR), i32.const(12)), i32.mul(i32.const(12), local.get("$env_size"))),
+          local.get("$list_tag"),
+        ),
+        i64.store(
+          i32.sub(i32.sub(global.get(HEAP_PTR), i32.const(8)), i32.mul(i32.const(12), local.get("$env_size"))),
+          local.get("$list_val"),
+        ),
 
         global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$list_len"), i32.const(12)))),
       ),
