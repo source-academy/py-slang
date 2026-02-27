@@ -618,10 +618,12 @@ ${args.map(
     const condition = this.visit(stmt.condition);
     const body = stmt.body.map((b) => this.visit(b));
 
-    return wasm.loop().body(
-      wasm
-        .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
-        .then(...body, wasm.br(1)), // 1 to jump to the beginning of the loop
+    return wasm.block("$exit").body(
+      wasm.loop().body(
+        wasm
+          .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
+          .then(...body, wasm.br(1)), // 1 to jump to the beginning of the loop
+      ),
     );
   }
 
@@ -694,15 +696,19 @@ ${args.map(
       ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? this.visit(rangeArgs[0]) : this.visit(rangeArgs[1]))}
       
       ${wasm
-        .loop()
+        .block("$exit")
         .body(
           wasm
-            .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
-            .then(
-              setIter,
-              ...body,
-              loopStep(wasm.call(MAKE_INT_FX).args(i64.const(1))),
-              wasm.br(1),
+            .loop()
+            .body(
+              wasm
+                .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+                .then(
+                  setIter,
+                  ...body,
+                  loopStep(wasm.call(MAKE_INT_FX).args(i64.const(1))),
+                  wasm.br(1),
+                ),
             ),
         )}`;
     } else {
@@ -729,33 +735,45 @@ ${args.map(
         )
         .then(
           wasm
-            .loop()
+            .block("$exit")
             .body(
               wasm
-                .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
-                .then(
-                  setIter,
-                  ...body,
-                  loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
-                  wasm.br(1),
+                .loop()
+                .body(
+                  wasm
+                    .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+                    .then(
+                      setIter,
+                      ...body,
+                      loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                      wasm.br(1),
+                    ),
                 ),
             ),
         )
         .else(
           wasm
-            .loop()
+            .block("$exit")
             .body(
               wasm
-                .if(loopCondition(i32.const(COMPARISON_OP_TAG.GT)))
-                .then(
-                  setIter,
-                  ...body,
-                  loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
-                  wasm.br(1),
+                .loop()
+                .body(
+                  wasm
+                    .if(loopCondition(i32.const(COMPARISON_OP_TAG.GT)))
+                    .then(
+                      setIter,
+                      ...body,
+                      loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                      wasm.br(1),
+                    ),
                 ),
             ),
         )}`;
     }
+  }
+
+  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
+    return wasm.br("$exit");
   }
 
   visitListExpr(expr: ExprNS.List): WasmRaw {
@@ -795,9 +813,6 @@ ${elements.map(
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {

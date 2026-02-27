@@ -822,6 +822,38 @@ count
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
   });
+
+  it("break statement with while loops", async () => {
+    const pythonCode = `
+x = 0
+i = 0
+while i < 10:
+    if i == 5:
+        break
+    else:
+        pass
+    x = i
+    i = i + 1
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
+
+  it("break statement with for loops", async () => {
+    const pythonCode = `
+x = 0
+for i in range(10):
+    if i == 5:
+        break
+    else:
+        pass
+    x = i
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+  });
 });
 
 describe("List semantics tests", () => {

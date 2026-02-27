@@ -248,6 +248,56 @@ export const IS_PAIR_FX = wasm
   );
 
 // linked list related functions
+export const MAKE_LINKED_LIST_FX = wasm
+  .func("$_make_linked_list")
+  .params({ $tag: i32, $val: i64 })
+  .locals({ $i: i32, $acc_tag: i32, $acc_val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .then(
+        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAKE_LINKED_LIST_NOT_LIST))),
+        wasm.unreachable(),
+      ),
+
+    // start from the end of the list and keep pairing the last element with the accumulated linked list
+    local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
+
+    local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
+
+    wasm.loop("$loop").body(
+      wasm.if(i32.ge_s(local.get("$i"), i32.const(0))).then(
+        wasm
+          .call(MAKE_PAIR_FX)
+          .args(
+            i32.load(
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+                i32.mul(local.get("$i"), i32.const(12)),
+              ),
+            ),
+            i64.load(
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+                i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
+              ),
+            ),
+            local.get("$acc_tag"),
+            local.get("$acc_val"),
+          ),
+
+        wasm.raw`(local.set $acc_val) (local.set $acc_tag)`, // set acc to the new pair
+
+        local.set("$i", i32.sub(local.get("$i"), i32.const(1))),
+        wasm.br("$loop"),
+      ),
+    ),
+
+    local.get("$acc_tag"),
+    local.get("$acc_val"),
+  );
+
 export const IS_LINKED_LIST_FX = wasm
   .func("$_is_list")
   .params({ $tag: i32, $val: i64 })
@@ -352,56 +402,6 @@ export const LOG_FX = wasm
 
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LOG_UNKNOWN_TYPE))),
     wasm.unreachable(),
-  );
-
-export const MAKE_LINKED_LIST_FX = wasm
-  .func("$_make_linked_list")
-  .params({ $tag: i32, $val: i64 })
-  .locals({ $i: i32, $acc_tag: i32, $acc_val: i64 })
-  .results(i32, i64)
-  .body(
-    wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
-      .then(
-        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAKE_LINKED_LIST_NOT_LIST))),
-        wasm.unreachable(),
-      ),
-
-    // start from the end of the list and keep pairing the last element with the accumulated linked list
-    local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
-
-    local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
-
-    wasm.loop("$loop").body(
-      wasm.if(i32.ge_s(local.get("$i"), i32.const(0))).then(
-        wasm
-          .call(MAKE_PAIR_FX)
-          .args(
-            i32.load(
-              i32.add(
-                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-                i32.mul(local.get("$i"), i32.const(12)),
-              ),
-            ),
-            i64.load(
-              i32.add(
-                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-                i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
-              ),
-            ),
-            local.get("$acc_tag"),
-            local.get("$acc_val"),
-          ),
-
-        wasm.raw`(local.set $acc_val) (local.set $acc_tag)`, // set acc to the new pair
-
-        local.set("$i", i32.sub(local.get("$i"), i32.const(1))),
-        wasm.br("$loop"),
-      ),
-    ),
-
-    local.get("$acc_tag"),
-    local.get("$acc_val"),
   );
 
 // unary operation functions
