@@ -593,10 +593,185 @@ def f():
         return h()
     return g()
 f()
-
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("lambda single parameter", async () => {
+    const pythonCode = `
+f = lambda x: x + 1
+f(5)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+  });
+
+  it("lambda multiple parameters", async () => {
+    const pythonCode = `
+f = lambda a, b: a + b
+f(3, 4)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+  });
+
+  it("lambda closure captures outer variable by reference", async () => {
+    const pythonCode = `
+x = 10
+f = lambda y: x + y
+x = 20
+f(5)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(25)]);
+  });
+
+  it("lambda used inline", async () => {
+    const pythonCode = `
+(lambda x: x * 2)(6)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(12)]);
+  });
+});
+
+describe("If statement tests", () => {
+  it("if true branch executes", async () => {
+    const pythonCode = `
+x = 0
+if True:
+    x = 5
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+  });
+
+  it("if false branch skips body", async () => {
+    const pythonCode = `
+x = 0
+if False:
+    x = 5
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+  });
+
+  it("if condition uses truthiness (nonzero int)", async () => {
+    const pythonCode = `
+x = 0
+if 10:
+    x = 7
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+  });
+
+  it("if condition uses truthiness (zero is false)", async () => {
+    const pythonCode = `
+x = 1
+if 0:
+    x = 9
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+  });
+
+  it("nested if statements", async () => {
+    const pythonCode = `
+x = 0
+if True:
+    if True:
+        x = 3
+    else:
+        pass
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  });
+
+  it("mutation inside if does not leak incorrectly", async () => {
+    const pythonCode = `
+x = 1
+if True:
+    x = x + 4
+else:
+    pass
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+  });
+});
+
+describe("Ternary operator tests", () => {
+  it("ternary true branch", async () => {
+    const pythonCode = `
+x = 5 if True else 10
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+  });
+
+  it("ternary false branch", async () => {
+    const pythonCode = `
+x = 5 if False else 10
+x
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("ternary uses truthiness", async () => {
+    const pythonCode = `
+x = 1
+y = 100 if x else 200
+y
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
+  });
+
+  it("does not evaluate else branch when condition is True", async () => {
+    const pythonCode = `
+def boom():
+    x = x + 1  # would error if executed
+    return 99
+
+result = 5 if True else boom()
+result
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+  });
+
+  it("does not evaluate true branch when condition is False", async () => {
+    const pythonCode = `
+def boom():
+    x = x + 1  # would error if executed
+    return 42
+
+result = boom() if False else 7
+result
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
   });
 });
 
