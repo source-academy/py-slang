@@ -26,7 +26,6 @@ export default abstract class PyCSEEvaluator extends BasicEvaluator {
     super(conductor);
     this.context = defaultContext;
     this.options = { ...defaultOptions, groups: groups, ...options };
-    console.log(this.options);
     this.chapter = chapter;
     this.groups = groups;
   }

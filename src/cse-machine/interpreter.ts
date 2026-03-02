@@ -84,18 +84,6 @@ export async function evaluate(code: string, program: StmtNS.Stmt, context: Cont
   }
   
   try {
-    if (!options.isPrelude && options.groups ) {
-      for (const group of options.groups as Group[]) { 
-        for (const [name, value] of group.builtins) {
-          context.nativeStorage.builtins.set(name, value);
-        }
-        console.log(context.nativeStorage.builtins);
-        const result = await runInContext(group.prelude, context, { ...options, isPrelude: true, groups: [] });
-        console.log(result.context);
-
-      }
-    }
-
     context.runtime.isRunning = true
     context.control = new Control(program);
     context.stash = new Stash();
@@ -175,8 +163,7 @@ export function runCSEMachine(
   stash: Stash,
   envSteps: number,
   stepLimit: number,
-  isPrelude: boolean = false,
-  groups: GroupName[] = []
+  isPrelude: boolean = false
 ): Value {
   const eceState = generateCSEMachineStateStream(
     code,
@@ -767,8 +754,8 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     const callable = stash.pop()
 
-    if (callable instanceof Closure) {
-      const closure = callable as Closure
+    if (callable?.type == "closure") {
+      const closure = callable.closure
       control.push(instrCreator.resetInstr(instr.srcNode))
 
       if (closure.node.constructor.name === 'FunctionDef') {

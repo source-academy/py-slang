@@ -68,7 +68,7 @@ export const createSimpleEnvironment = (
 };
 
 export const createProgramEnvironment = (context: Context, isPrelude: boolean): Environment => {
-  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment');
+  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment', isPrelude ? null : getPreludeEnvironment(context));
 };
 
 export const createBlockEnvironment = (
@@ -104,6 +104,11 @@ export const currentEnvironment = (context: Context): Environment => {
 export const getGlobalEnvironment = (context: Context): Environment | null => {
   const envs = context.runtime.environments;
   return envs.length > 0 ? envs[envs.length - 1] : null;
+};
+
+export const getPreludeEnvironment = (context: Context): Environment | null => {
+  const envs = context.runtime.environments;
+  return envs.length > 1 ? envs[envs.length - 2] : null;
 };
 
 export const popEnvironment = (context: Context) => context.runtime.environments.shift()

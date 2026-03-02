@@ -1,4 +1,5 @@
 import { StmtNS, ExprNS } from "../ast-types";
+import { Group } from "../stdlib/utils";
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 import { Token } from "../tokenizer/tokenizer";
@@ -155,7 +156,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // change the environment to be suite scope as in python
     environment: Environment | null;
     functionScope: Environment | null;
-    constructor(source: string, ast: Stmt) {
+    constructor(source: string, ast: Stmt, groups: Group[], preludeNames: string[] = []) {
         this.source = source;
         this.ast = ast;
         // The global environment
@@ -232,7 +233,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ["math_tan", new Token(TokenType.NAME, "math_tan", 0, 0, 0)],
             ["math_tanh", new Token(TokenType.NAME, "math_tanh", 0, 0, 0)],
             ["math_trunc", new Token(TokenType.NAME, "math_trunc", 0, 0, 0)],
-            ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)]   
+            ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)],
+            ...groups.flatMap(group => Array.from(group.builtins.entries()).map(([name, value]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token])),
+            ...preludeNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token])
         ]));
         this.functionScope = null;
     }

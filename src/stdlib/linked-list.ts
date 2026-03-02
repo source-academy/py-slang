@@ -24,7 +24,6 @@ class LinkedListBuiltins {
 }
 for (const builtin of Object.getOwnPropertyNames(LinkedListBuiltins)) {
     if (typeof LinkedListBuiltins[builtin as keyof typeof LinkedListBuiltins] === 'function') {
-        console.log(builtin);
         linkedListBuiltins.set(builtin, { type: 'builtin', func: LinkedListBuiltins[builtin as keyof typeof LinkedListBuiltins] as any, name: builtin }); // TODO: fix typing
     }
 }
