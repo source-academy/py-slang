@@ -5,11 +5,13 @@ import { Tokenizer } from "../tokenizer";
 import { Parser } from "../parser";
 import { Resolver } from "../resolver";
 import { StmtNS } from "../ast-types";
+import { Group } from "../stdlib/utils";
 
 type Stmt = StmtNS.Stmt
 
 export interface IOptions {
   isPrelude: boolean;
+  groups: Group[];
   envSteps: number;
   stepLimit: number;
 }
@@ -35,17 +37,17 @@ export async function runInContext(
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const pyAst = runPyAST(code, 1, true);
+  const pyAst = runPyAST(code, 1, false);
   const result = runCSEMachine(code, pyAst, context, options);
   return result;
 }
 
-export function runCSEMachine(
+export async function runCSEMachine(
   code: string,
   program: Stmt,
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
   const result = evaluate(code, program, context, options as IOptions);
-  return CSEResultPromise(context, result);
+  return CSEResultPromise(context, await result);
 }

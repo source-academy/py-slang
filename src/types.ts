@@ -245,7 +245,7 @@ export type RecursivePartial<T> =
         }>
       : T
 
-export type Result = Finished | Error | SuspendedCseEval // | Suspended
+export type Result = Finished | SuspendedCseEval // | CSEError | Suspended
 
 // TODO: should allow debug
 // export interface Suspended {
@@ -269,6 +269,12 @@ export interface Finished {
     // the display of the result will use the representation
     // field instead
 }
+
+// export interface CSEError {
+//     status: 'error'
+//     context: Context
+//     error: Error
+// }
 
 // export class Representation {
 //     constructor(public representation: string) {}

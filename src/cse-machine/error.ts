@@ -26,7 +26,7 @@ export class CseError implements SourceError {
   }
 }
 
-export function handleRuntimeError(context: Context, error: RuntimeSourceError) {
+export function handleRuntimeError(context: Context, error: RuntimeSourceError): never {
   context.errors.push(error)
   throw error
 }
