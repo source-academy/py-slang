@@ -1,6 +1,9 @@
 import { f64, global, i32, i64, local, memory, wasm, type WasmInstruction } from "@sourceacademy/wasm-util";
 
 // tags
+
+// NOTE: for starred args in function calls, we will set the highest bit of the tag to
+// indicate that it's starred, and the rest of the bits will indicate the actual type
 export const TYPE_TAG = {
   INT: 0,
   FLOAT: 1,
@@ -33,6 +36,7 @@ export const ERROR_MAP = {
   GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
   MAKE_LINKED_LIST_NOT_LIST:
     "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
+  STARRED_NOT_LIST: "Trying to unpack a non-list value.",
 } as const;
 
 const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -892,42 +896,26 @@ export const ALLOC_ENV_FX = wasm
 
 export const PRE_APPLY_FX = wasm
   .func("$_pre_apply")
-  .params({ $tag: i32, $val: i64, $arity: i32 })
+  .params({ $tag: i32, $val: i64, $arg_len: i32 })
   .results(i32, i64, i32)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.CALL_NOT_FX))), wasm.unreachable()),
 
-    // if varargs bit is true AND arity is greater than argument length, error
-    // if not varargs AND arity doesn't equal argument length, error
-    wasm
-      .if(
-        i32.or(
-          i32.and(
-            i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63))),
-            i32.gt_u(
-              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
-              local.get("$arity"),
-            ),
-          ),
-          i32.and(
-            i32.eqz(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63)))),
-            i32.ne(
-              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
-              local.get("$arity"),
-            ),
-          ),
-        ),
-      )
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.FUNC_WRONG_ARITY))), wasm.unreachable()),
-
     local.get("$tag"),
     local.get("$val"),
+
     wasm
       .call(ALLOC_ENV_FX)
       .args(
-        i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
+        i32.add(
+          local.get("$arg_len"),
+          i32.sub(
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
+            i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+          ),
+        ),
         i32.wrap_i64(local.get("$val")),
       ),
   );
@@ -937,48 +925,179 @@ export const RETURN_ENV_NAME = "$return_env";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .locals({ $list_len: i32, $list_tag: i32, $list_val: i64, $env_size: i32 })
     .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64, $arg_len: i32 })
+    .locals({
+      $list_len: i32,
+      $list_tag: i32,
+      $list_val: i64,
+      $has_starred: i32,
+      $i: i32,
+      $arg_ptr: i32,
+      $new_env: i32,
+      $arity: i32,
+      $env_size: i32,
+      $has_varargs: i32,
+    })
     .results(i32, i64)
     .body(
-      wasm.if(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63)))).then(
-        local.set(
-          "$list_len",
-          i32.sub(
-            local.get("$arg_len"),
-            i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
-          ),
-        ),
+      local.set("$arity", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255))),
+      local.set("$env_size", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255))),
+      local.set("$has_varargs", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63))), i32.const(1))),
 
-        local.set(
-          "$env_size",
-          i32.sub(
-            i32.sub(
-              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255)),
-              i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
+      // check if args have any starred arguments (unpack). if so, we need to construct a new env
+      wasm.loop("$loop").body(
+        wasm.if(i32.lt_s(local.get("$i"), local.get("$arg_len"))).then(
+          wasm
+            .if(
+              i32.shr_u(
+                i32.load(i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4))),
+                i32.const(31),
+              ),
+            )
+            .then(local.set("$has_starred", i32.const(1))),
+
+          local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+          wasm.br("$loop"),
+        ),
+      ),
+
+      wasm.if(local.get("$has_starred")).then(
+        // set the new CURR_ENV
+        local.set("$new_env", global.get(HEAP_PTR)),
+        i32.store(global.get(HEAP_PTR), i32.wrap_i64(local.get("$val"))),
+        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
+
+        // loop over the entire old environment, which = envSize
+        local.set("$i", i32.const(0)),
+        wasm.loop("$unpack_loop").body(
+          wasm
+            .if(
+              i32.lt_s(
+                local.get("$i"),
+                i32.add(local.get("$arg_len"), i32.sub(local.get("$env_size"), local.get("$arity"))),
+              ),
+            )
+            .then(
+              local.set(
+                "$arg_ptr",
+                i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4)),
+              ),
+              // if starred, remove the starred bit and prepare to unpack
+              wasm
+                .if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31)))
+                .then(
+                  i32.store(local.get("$arg_ptr"), i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff))),
+                  // check if it's a list, if not error (only lists can be unpacked)
+                  wasm
+                    .if(i32.ne(i32.load(local.get("$arg_ptr")), i32.const(TYPE_TAG.LIST)))
+                    .then(
+                      wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STARRED_NOT_LIST))),
+                      wasm.unreachable(),
+                    ),
+
+                  // copy over the list
+                  memory.copy(
+                    global.get(HEAP_PTR),
+                    i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
+                    i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
+                  ),
+                  // move HP
+                  global.set(
+                    HEAP_PTR,
+                    i32.add(
+                      global.get(HEAP_PTR),
+                      i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
+                    ),
+                  ),
+                  // add list length - 1 to arg_len
+                  local.set(
+                    "$arg_len",
+                    i32.add(
+                      local.get("$arg_len"),
+                      i32.sub(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(1)),
+                    ),
+                  ),
+                )
+                .else(
+                  // else not starred: just copy the element over
+                  i32.store(global.get(HEAP_PTR), i32.load(local.get("$arg_ptr"))),
+                  i64.store(
+                    i32.add(global.get(HEAP_PTR), i32.const(4)),
+                    i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))),
+                  ),
+                  global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
+                ),
+              local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+              wasm.br("$unpack_loop"),
             ),
-            i32.const(1),
-          ),
         ),
 
-        // HEAP_PTR is pointing to the space after all arguments + closure env, so copy arguments to the end of the env
+        global.set(CURR_ENV, local.get("$new_env")),
+      ),
+
+      // if varargs bit is true AND arity is greater than argument length, error
+      // if not varargs AND arity doesn't equal argument length, error
+      wasm
+        .if(
+          i32.or(
+            i32.and(local.get("$has_varargs"), i32.gt_u(local.get("$arity"), local.get("$arg_len"))),
+            i32.and(i32.eqz(local.get("$has_varargs")), i32.ne(local.get("$arity"), local.get("$arg_len"))),
+          ),
+        )
+        .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.FUNC_WRONG_ARITY))), wasm.unreachable()),
+
+      // if has varargs
+      wasm.if(local.get("$has_varargs")).then(
+        local.set("$list_len", i32.sub(local.get("$arg_len"), local.get("$arity"))),
+
         memory.copy(
-          global.get(HEAP_PTR),
-          i32.sub(global.get(HEAP_PTR), i32.mul(i32.const(12), i32.add(i32.const(1), local.get("$env_size")))),
+          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$env_size"), i32.const(12))),
+          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
-        wasm.raw`${wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), local.get("$list_len"))} (local.set $list_val) (local.set $list_tag)`,
+        // create list with pointer to start of the copied list
+        wasm.raw`${wasm
+          .call(MAKE_LIST_FX)
+          .args(
+            i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$env_size"), i32.const(12))),
+            local.get("$list_len"),
+          )} (local.set $list_val) (local.set $list_tag)`,
+
+        // store list value in the env where the varargs would be, which is right after the fixed arguments and before local declarations
         i32.store(
-          i32.sub(i32.sub(global.get(HEAP_PTR), i32.const(12)), i32.mul(i32.const(12), local.get("$env_size"))),
+          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
           local.get("$list_tag"),
         ),
         i64.store(
-          i32.sub(i32.sub(global.get(HEAP_PTR), i32.const(8)), i32.mul(i32.const(12), local.get("$env_size"))),
+          i32.add(
+            i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
+            i32.const(4),
+          ),
           local.get("$list_val"),
         ),
 
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.mul(local.get("$list_len"), i32.const(12)))),
+        // need to re-UNBOUND the local variables
+        local.set("$i", i32.const(0)),
+        wasm
+          .loop("$reunbound_loop")
+          .body(
+            wasm
+              .if(
+                i32.lt_s(local.get("$i"), i32.sub(i32.sub(local.get("$env_size"), local.get("$arity")), i32.const(1))),
+              )
+              .then(
+                i32.store(
+                  i32.add(
+                    i32.add(global.get(CURR_ENV), i32.const(4)),
+                    i32.mul(i32.add(i32.add(local.get("$arity"), i32.const(1)), local.get("$i")), i32.const(12)),
+                  ),
+                  i32.const(TYPE_TAG.UNBOUND),
+                ),
+                local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+                wasm.br("$reunbound_loop"),
+              ),
+          ),
       ),
 
       ...wasm.buildBrTableBlocks(
@@ -1058,18 +1177,15 @@ export const SET_LEX_ADDR_FX = wasm
 
 export const SET_CONTIGUOUS_BLOCK_FX = wasm
   .func("$_set_contiguous_block")
-  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $offset: i32 })
+  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
   .results(i32)
   .body(
     i32.store(
-      i32.add(i32.add(local.get("$addr"), local.get("$offset")), i32.mul(local.get("$index"), i32.const(12))),
-      local.get("$tag"),
+      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
+      i32.or(local.get("$tag"), i32.shl(local.get("$is_starred"), i32.const(31))),
     ),
     i64.store(
-      i32.add(
-        i32.add(local.get("$addr"), i32.add(local.get("$offset"), i32.const(4))),
-        i32.mul(local.get("$index"), i32.const(12)),
-      ),
+      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
       local.get("$value"),
     ),
 

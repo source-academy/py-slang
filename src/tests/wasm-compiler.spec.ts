@@ -1,6 +1,8 @@
 import { compileToWasmAndRun } from "../wasm-compiler";
 import { TYPE_TAG } from "../wasm-compiler/constants";
 
+it = it.concurrent;
+
 describe("Arithmetic operator tests (int, float, complex, string)", () => {
   // --- INT ARITHMETIC ---
   it("int addition", async () => {
@@ -408,7 +410,7 @@ is_pair(42)
 describe("Linked list tests", () => {
   it("linked_list constructs a linked list from a Python list", async () => {
     const pythonCode = `
-head(tail(linked_list([1, 2, 3])))
+head(tail(linked_list(1, 2, 3)))
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
@@ -416,7 +418,7 @@ head(tail(linked_list([1, 2, 3])))
 
   it("set_head mutates linked list", async () => {
     const pythonCode = `
-l = linked_list([10, 20, 30])
+l = linked_list(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
@@ -442,7 +444,7 @@ is_none(42)
 
   it("is_linked_list identifies linked list correctly", async () => {
     const pythonCode = `
-is_linked_list(linked_list([1, 2, 3]))
+is_linked_list(linked_list(1, 2, 3))
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
@@ -633,6 +635,30 @@ f(5)
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result).toEqual([TYPE_TAG.INT, BigInt(12)]);
+  });
+
+  it("function should error when given too few arguments", async () => {
+    const pythonCode = `
+def f(a, b):
+    return a + b
+
+f(1)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Calling function with wrong number of arguments."),
+    );
+  });
+
+  it("function should error when given too many arguments", async () => {
+    const pythonCode = `
+def f(a, b):
+    return a + b
+
+f(1, 2, 3)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Calling function with wrong number of arguments."),
+    );
   });
 });
 
@@ -1273,7 +1299,7 @@ list_length([10, 20, 30])
   });
 });
 
-describe("Function *args tests", () => {
+describe("Function *args & unpacking tests", () => {
   it("no extra arguments: *args is empty", async () => {
     const pythonCode = `
 def f(a, b, *c):
@@ -1310,28 +1336,6 @@ f(1, 2, 3, 4)
     expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
   });
 
-  it("multiple positional parameters before *args", async () => {
-    const pythonCode = `
-def f(a, b, c, *rest):
-    return a + b + c + rest[0]
-
-f(1, 2, 3, 10)
-`;
-    const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(16)]);
-  });
-
-  it("*args can be indexed", async () => {
-    const pythonCode = `
-def f(*args):
-    return args[1]
-
-f(5, 10, 15)
-`;
-    const result = await compileToWasmAndRun(pythonCode);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
-  });
-
   it("*args in function with no fixed parameters", async () => {
     const pythonCode = `
 def f(*args):
@@ -1352,6 +1356,139 @@ f(0, 3, 4.5)
 `;
     const result = await compileToWasmAndRun(pythonCode);
     expect(result[0]).toBe(TYPE_TAG.FLOAT);
+  });
+
+  it("*args must be last parameter", async () => {
+    const pythonCode = `
+def f(*args, a):
+    return a
+
+f(1, 2, 3)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Starred parameter must be the last parameter"),
+    );
+  });
+
+  it("function with *args must be called with at least the fixed parameters", async () => {
+    const pythonCode = `
+def f(a, b, *args):
+    return a + b
+
+f(1)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Calling function with wrong number of arguments."),
+    );
+  });
+
+  it("local declarations unbound should error even if *args is present", async () => {
+    const pythonCode = `
+def f(*args):
+    x = x + 1
+    return args[0]
+
+f(10, 20, 30)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Accessing an unbound value."),
+    );
+  });
+
+  it("lists can be unpacked into function arguments", async () => {
+    const pythonCode = `
+def f(a, b, c):
+    return a + b + c
+
+args = [2, 3]
+f(1, *args)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+  });
+
+  it("unpacking a non-list should error", async () => {
+    const pythonCode = `
+def f(a, b):
+    return a + b
+
+not_a_list = 42
+f(1, *not_a_list)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Trying to unpack a non-list value."),
+    );
+  });
+
+  it("multiple unpacking operators in call", async () => {
+    const pythonCode = `
+def f(a, b, c, d):
+    return a + b + c + d
+
+args1 = [2, 3]
+args2 = [4]
+f(1, *args1, *args2)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("arity check accounts for unpacked arguments (too few)", async () => {
+    const pythonCode = `
+def f(a, b, c):
+    return a + b + c
+
+args = [2]
+f(1, *args)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Calling function with wrong number of arguments."),
+    );
+  });
+
+  it("arity check accounts for unpacked arguments (too many)", async () => {
+    const pythonCode = `
+def f(a, b, c):
+    return a + b + c
+
+args = [2, 3]
+f(1, *args, 4)
+`;
+    await expect(compileToWasmAndRun(pythonCode)).rejects.toThrow(
+      new Error("Calling function with wrong number of arguments."),
+    );
+  });
+
+  it("unpacking operator with varargs", async () => {
+    const pythonCode = `
+def f(a, *args):
+    sum = a
+    for i in range(list_length(args)):
+        sum = sum + args[i]
+    return sum
+
+args = [2, 3, 4]
+f(1, *args)
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+  });
+
+  it("after copying environment for unpacking operator, should reserve space for locals", async () => {
+    const pythonCode = `
+def f(a, b):
+    test2 = 4
+    test = 5
+
+    def g():
+        pass
+
+    g()
+    return test
+f(*[1, 2])
+`;
+    const result = await compileToWasmAndRun(pythonCode);
+    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
   });
 });
 

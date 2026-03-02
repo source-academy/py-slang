@@ -488,8 +488,13 @@ export class Parser {
     private arglist(): Expr[] {
         let args = [];
         while (!this.check(TokenType.RPAR)) {
-            let arg = this.test();
-            args.push(arg);
+            const startToken = this.peek();
+            if (this.match(TokenType.STAR)) {
+                const arg = this.test();
+                args.push(new ExprNS.Starred(startToken, this.previous(), arg));
+            } else {
+                args.push(this.test());
+            }
             if (!this.match(TokenType.COMMA)) {
                 break;
             }

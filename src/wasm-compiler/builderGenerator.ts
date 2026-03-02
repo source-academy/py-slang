@@ -523,22 +523,29 @@ export class BuilderGenerator implements BuilderVisitor<
 
   visitCallExpr(expr: ExprNS.Call): WasmRaw {
     const callee = this.visit(expr.callee);
-    const args = expr.args.map((arg) => this.visit(arg));
+    const args = expr.args.map((arg) => ({
+      arg: this.visit(arg),
+      isStarred: arg instanceof ExprNS.Starred,
+    }));
 
-    // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
-    // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
+    // get the CURR_ENV first - this saves the current environment as the return env
+    // on the stack for APPLY later
 
     // we call PRE_APPLY first, which verifies the callee is a closure and arity matches
     // AND creates a new environment for the function call, but does not set CURR_ENV yet
     // this is so that we can set the arguments in the new environment first
-
     // PRE_APPLY creates an environment the size of the function'call argument length
+    // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
 
-    // this means we can't use SET_LEX_ADDR_FX because it uses CURR_ENV internally
     // so we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
-
+    // which takes in the pointer to the new env as its first parameter
     // the SET_CONTIGUOUS_BLOCK function returns the env address after setting the parameter
     // so we can chain the calls together
+
+    // we set CURR_ENV only after all arguments have been set to prevent overlapping
+    // environments in nested function calls
+
+    // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
 
     // if has varargs, the list elements are set directly after the last parameter
     // so we need to, in the APPLY_FX:
@@ -547,17 +554,17 @@ export class BuilderGenerator implements BuilderVisitor<
     // 3. make the list variable
     return wasm.raw`
 ${global.get(CURR_ENV)}
-${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 
+${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
+(i32.const 4) (i32.add)
 ${args.map(
-  (arg, i) =>
+  ({ arg, isStarred }, i) =>
     wasm.raw`
-(i32.const ${i}) ${arg} (i32.const 4) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
+(i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
 )}
 
-(global.set ${CURR_ENV})
-(i32.const ${args.length})
-(call ${APPLY_FX_NAME})
+(i32.const 4) (i32.sub) (global.set ${CURR_ENV})
+(i32.const ${args.length}) (call ${APPLY_FX_NAME})
 `;
   }
 
@@ -781,6 +788,8 @@ ${args.map(
     const length = expr.elements.length;
     const elements = expr.elements.map((el) => this.visit(el));
 
+    // repurposing SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // in the heap, and then make the list with MAKE_LIST_FX
     return wasm.raw`
 ${global.get(HEAP_PTR)}
 ${global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(length * 12)))}
@@ -801,6 +810,10 @@ ${elements.map(
     const index = this.visit(expr.index);
 
     return wasm.call(GET_LIST_ELEMENT_FX).args(value, index);
+  }
+
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+    return this.visit(expr.value);
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS
