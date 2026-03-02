@@ -7,7 +7,7 @@ import sourcemaps from 'rollup-plugin-sourcemaps';
 /**
  * @type {import('rollup').RollupOptions}
  */
-const config = [2].map(v => ({
+const config = [1, 2].map(v => ({
   input: `src/conductor/PyCSEEvaluator${v}.ts`,
   output: [{
     file: `dist/worker${v}.js`,
