@@ -2,6 +2,7 @@ import { Token } from '../tokenizer'
 import { Context } from '../cse-machine/context'
 import { ExprNS } from '../ast-types'
 import { operatorTranslator } from '../cse-machine/types'
+import { Value } from '../cse-machine/stash'
 
 export enum ErrorType {
   IMPORT = 'Import',
@@ -244,8 +245,8 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: Value[],
     variadic: boolean
   ) {
     super(node)
@@ -255,7 +256,7 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     if (variadic) {
       adverb = 'at least'
     }
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0
+    const index = node.startToken.indexInSource
     const { lineIndex, fullLine } = getFullLine(source, index)
     this.message = 'TypeError at line ' + lineIndex + '\n\n    ' + fullLine + '\n'
 
@@ -305,8 +306,8 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: Value[],
     variadic: boolean
   ) {
     super(node)
@@ -317,7 +318,7 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
       adverb = 'at most'
     }
 
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0
+    const index = node.startToken.indexInSource
     const { lineIndex, fullLine } = getFullLine(source, index)
     this.message = 'TypeError at line ' + lineIndex + '\n\n    ' + fullLine + '\n'
 
@@ -396,16 +397,16 @@ export class ZeroDivisionError extends RuntimeSourceError {
   }
 }
 
-// TODO: need to fix types for this class
 export class StepLimitExceededError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr) {
+  constructor(source: string, node: ExprNS.Binary | ExprNS.Expr) {
     super(node)
     this.type = ErrorType.RUNTIME
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0
+    const index = node.startToken.indexInSource
 
     const { lineIndex, fullLine } = getFullLine(source, index)
 
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource
+    const errorPos =
+      'operator' in node ? node.operator.indexInSource - node.startToken.indexInSource : 0
 
     const indicator = createErrorIndicator(fullLine, errorPos) // no target symbol
 

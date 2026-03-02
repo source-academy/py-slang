@@ -40,7 +40,7 @@ import {
 } from './operators'
 import * as error from '../errors/errors'
 import { CSEBreak, RecursivePartial, Representation, Result } from '../types'
-import { builtIns } from '../stdlib'
+import { builtIns, toPythonString } from '../stdlib'
 import { IOptions } from '../runner/pyRunner'
 import { ExprNS, StmtNS } from '../ast-types'
 import { handleRuntimeError } from './error'
@@ -77,7 +77,7 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
       const representation = new Representation(cseFinalPrint + msg)
       resolve({ status: 'finished', context, value, representation })
     } else {
-      const representation = new Representation(value)
+      const representation = new Representation(toPythonString(value))
       resolve({ status: 'finished', context, value, representation })
     }
   })
@@ -206,7 +206,7 @@ export function runCSEMachine(
 
   // Return the value at the top of the storage as the result
   const result = stash.peek()
-  return result !== undefined ? result : { type: 'undefined' }
+  return result !== undefined ? result : { type: 'none' }
 }
 
 /**
@@ -363,7 +363,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     } else if (typeof literal.value === 'string') {
       stash.push({ type: 'string', value: literal.value })
     } else {
-      stash.push({ type: 'undefined' })
+      stash.push({ type: 'none' })
     }
   },
 
@@ -454,7 +454,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     _isPrelude: boolean
   ) {
-    stash.push({ type: 'undefined' })
+    stash.push({ type: 'none' })
   },
 
   Variable: function (
@@ -537,7 +537,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables
     )
-    pyDefineVariable(context, functionDefNode.name.lexeme, closure)
+    pyDefineVariable(context, functionDefNode.name.lexeme, { type: 'closure', closure })
   },
 
   Lambda: function (
@@ -556,7 +556,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables
     )
-    stash.push(closure)
+    stash.push({ type: 'closure', closure })
   },
 
   Return: function (
@@ -582,7 +582,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       control.push(returnNode.value)
     } else {
       // implicit None return
-      stash.push({ type: 'undefined' })
+      stash.push({ type: 'none' })
     }
   },
 
@@ -762,9 +762,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as AppInstr
     const numOfArgs = instr.numOfArgs
 
-    const args = []
+    const args: Value[] = []
     for (let i = 0; i < numOfArgs; i++) {
-      args.unshift(stash.pop())
+      const arg = stash.pop()
+      if (arg) {
+        args.unshift(arg)
+      }
     }
 
     const callable = stash.pop()
@@ -792,10 +795,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       if (callable && callable.type === 'builtin') {
         const result = callable.func(args, code, instr.srcNode, context)
         stash.push(result)
-      } else {
-        // Fallback for any other callable types, though not expected
-        const result = callable(context, ...args)
-        stash.push(result)
       }
     }
   },
@@ -811,7 +810,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as BranchInstr
     const condition = stash.pop()
 
-    if (!isFalsy(condition)) {
+    if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent
       if (consequent && 'type' in consequent && consequent.type === 'StatementSequence') {
         control.push(...(consequent as StatementSequence).body.slice().reverse())
@@ -849,6 +848,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     _isPrelude: boolean
   ) {
-    stash.push({ type: undefined })
+    stash.push({ type: 'none' })
   }
 }

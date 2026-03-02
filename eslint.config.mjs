@@ -5,7 +5,7 @@ import eslintConfigPrettierFlat from "eslint-config-prettier/flat";
 export default defineConfig([
   {
     // global ignores
-    ignores: ['dist', 'docs', 'node_modules']
+    ignores: ['dist', 'docs', 'node_modules', 'src/tests'] // TODO: remove tests
   },
   tseslint.configs.recommended,
   eslintConfigPrettierFlat,

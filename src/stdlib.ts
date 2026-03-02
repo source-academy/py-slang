@@ -1,4 +1,3 @@
-import { Closure } from './cse-machine/closure'
 import { Value } from './cse-machine/stash'
 // npm install mathjs
 import { gamma, lgamma, erf } from 'mathjs'
@@ -193,7 +192,7 @@ export class BuiltInFunctions {
       )
     }
 
-    let str = strVal.value as string
+    let str = strVal.value
     str = str.trim()
     str = str.replace(/_/g, '')
 
@@ -227,7 +226,7 @@ export class BuiltInFunctions {
       case 'bigint': {
         const intVal = x.value
         const result: bigint = intVal < 0 ? -intVal : intVal
-        return { type: 'int', value: result }
+        return { type: 'bigint', value: result }
       }
       case 'number': {
         return { type: 'number', value: Math.abs(x.value) }
@@ -254,7 +253,7 @@ export class BuiltInFunctions {
   }
 
   static toStr(val: Value): string {
-    return String(val.value)
+    return toPythonString(val)
   }
 
   static error(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
@@ -306,14 +305,12 @@ export class BuiltInFunctions {
             context,
             new ValueError(source, command as ExprNS.Expr, context, 'isinstance')
           )
-          return
       }
     } else {
       handleRuntimeError(
         context,
         new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'string')
       )
-      return
     }
 
     const result = obj.type === expectedType
@@ -609,8 +606,14 @@ export class BuiltInFunctions {
       )
     }
 
-    const erfc = 1 - BuiltInFunctions.math_erf(args[0], source, command, context).value
-
+    const num = BuiltInFunctions.math_erf(args, source, command, context)
+    if (num.type !== 'number') {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, num.type, "float' or 'int")
+      )
+    }
+    const erfc = 1 - num.value
     return { type: 'number', value: erfc }
   }
 
@@ -634,7 +637,7 @@ export class BuiltInFunctions {
 
     const index = i.value
 
-    return { type: 'string', value: s.value[index] }
+    return { type: 'string', value: s.value[Number(index)] }
   }
 
   @Validate(2, 2, 'math_comb', false)
@@ -850,7 +853,7 @@ export class BuiltInFunctions {
     let k = n
     if (args.length === 2) {
       const kValObj = args[1]
-      if (kValObj.type === 'null' || kValObj.type === 'undefined') {
+      if (kValObj.type === 'none') {
         k = n
       } else if (kValObj.type === 'bigint') {
         k = BigInt(kValObj.value)
@@ -890,13 +893,7 @@ export class BuiltInFunctions {
     }
 
     if (x.type === 'number') {
-      const numVal = x.value as number
-      if (typeof numVal !== 'number') {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
-        )
-      }
+      const numVal = x.value
       const ceiled: bigint = BigInt(Math.ceil(numVal))
       return { type: 'bigint', value: ceiled }
     }
@@ -918,7 +915,7 @@ export class BuiltInFunctions {
     }
 
     if (x.type === 'number') {
-      const numVal: number = x.value as number
+      const numVal: number = x.value
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
@@ -944,7 +941,7 @@ export class BuiltInFunctions {
     }
 
     if (x.type === 'number') {
-      const numVal: number = x.value as number
+      const numVal: number = x.value
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
@@ -993,13 +990,12 @@ export class BuiltInFunctions {
     if (val.type === 'bigint') {
       return Number(val.value)
     } else if (val.type === 'number') {
-      return val.value as number
+      return val.value
     } else {
       handleRuntimeError(
         context,
         new TypeError(source, command as ExprNS.Expr, context, val.type, "float' or 'int")
       )
-      return 0
     }
   }
 
@@ -1076,26 +1072,24 @@ export class BuiltInFunctions {
     if (x.type === 'bigint') {
       xValue = Number(x.value)
     } else if (x.type === 'number') {
-      xValue = x.value as number
+      xValue = x.value
     } else {
       handleRuntimeError(
         context,
         new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int")
       )
-      return
     }
 
     let yValue: number
     if (y.type === 'bigint') {
       yValue = Number(y.value)
     } else if (y.type === 'number') {
-      yValue = y.value as number
+      yValue = y.value
     } else {
       handleRuntimeError(
         context,
         new TypeError(source, command as ExprNS.Expr, context, y.type, "float' or 'int")
       )
-      return
     }
 
     if (yValue === 0) {
@@ -1121,7 +1115,7 @@ export class BuiltInFunctions {
     }
 
     if (x.type === 'number') {
-      const numVal: number = x.value as number
+      const numVal: number = x.value
       if (typeof numVal !== 'number') {
         handleRuntimeError(
           context,
@@ -1282,10 +1276,9 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
-        return
       }
     } else {
-      x = xVal.value as number
+      x = xVal.value
     }
 
     const result = Math.cbrt(x)
@@ -1306,10 +1299,9 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
-        return
       }
     } else {
-      x = xVal.value as number
+      x = xVal.value
     }
 
     const result = Math.exp(x)
@@ -1329,10 +1321,9 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int")
         )
-        return
       }
     } else {
-      x = xVal.value as number
+      x = xVal.value
     }
 
     const result = Math.pow(2, x)
@@ -1730,18 +1721,44 @@ export class BuiltInFunctions {
     let maxIndex = 0
     if (isNumeric) {
       if (useFloat) {
+        if (args[0].type !== 'number' && args[0].type !== 'bigint') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int")
+          )
+        }
         let maxVal: number = Number(args[0].value)
         for (let i = 1; i < args.length; i++) {
-          const curr: number = Number(args[i].value)
+          const arg = args[i]
+          if (arg.type !== 'number' && arg.type !== 'bigint') {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "float' or 'int")
+            )
+          }
+          const curr: number = Number(arg.value)
           if (curr > maxVal) {
             maxVal = curr
             maxIndex = i
           }
         }
       } else {
+        if (args[0].type !== 'bigint') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'int')
+          )
+        }
         let maxVal: bigint = args[0].value
         for (let i = 1; i < args.length; i++) {
-          const curr: bigint = args[i].value
+          const arg = args[i]
+          if (arg.type !== 'bigint') {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, 'int')
+            )
+          }
+          const curr: bigint = arg.value
           if (curr > maxVal) {
             maxVal = curr
             maxIndex = i
@@ -1749,9 +1766,22 @@ export class BuiltInFunctions {
         }
       }
     } else if (isString) {
-      let maxVal = args[0].value as string
+      if (args[0].type !== 'string') {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'string')
+        )
+      }
+      let maxVal = args[0].value
       for (let i = 1; i < args.length; i++) {
-        const curr = args[i].value as string
+        const arg = args[i]
+        if (arg.type !== 'string') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, arg.type, 'string')
+          )
+        }
+        const curr = arg.value
         if (curr > maxVal) {
           maxVal = curr
           maxIndex = i
@@ -1815,18 +1845,44 @@ export class BuiltInFunctions {
     let maxIndex = 0
     if (isNumeric) {
       if (useFloat) {
+        if (args[0].type !== 'number' && args[0].type !== 'bigint') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int")
+          )
+        }
         let maxVal: number = Number(args[0].value)
         for (let i = 1; i < args.length; i++) {
-          const curr: number = Number(args[i].value)
+          const arg = args[i]
+          if (arg.type !== 'number' && arg.type !== 'bigint') {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "float' or 'int")
+            )
+          }
+          const curr: number = Number(arg.value)
           if (curr < maxVal) {
             maxVal = curr
             maxIndex = i
           }
         }
       } else {
+        if (args[0].type !== 'bigint') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'int')
+          )
+        }
         let maxVal: bigint = args[0].value
         for (let i = 1; i < args.length; i++) {
-          const curr: bigint = args[i].value
+          const arg = args[i]
+          if (arg.type !== 'bigint') {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, 'int')
+            )
+          }
+          const curr: bigint = arg.value
           if (curr < maxVal) {
             maxVal = curr
             maxIndex = i
@@ -1834,9 +1890,22 @@ export class BuiltInFunctions {
         }
       }
     } else if (isString) {
-      let maxVal = args[0].value as string
+      if (args[0].type !== 'string') {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[0].type, 'string')
+        )
+      }
+      let maxVal = args[0].value
       for (let i = 1; i < args.length; i++) {
-        const curr = args[i].value as string
+        const arg = args[i]
+        if (arg.type !== 'string') {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, arg.type, 'string')
+          )
+        }
+        const curr = arg.value
         if (curr < maxVal) {
           maxVal = curr
           maxIndex = i
@@ -1872,7 +1941,13 @@ export class BuiltInFunctions {
     }
 
     let ndigitsArg = { type: 'bigint', value: BigInt(0) }
-    if (args.length === 2 && args[1].type !== 'NoneType') {
+    if (args.length === 2 && args[1].type !== 'none') {
+      if (args[1].type !== 'bigint') {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[1].type, 'int')
+        )
+      }
       ndigitsArg = args[1]
     }
 
@@ -1914,6 +1989,7 @@ export class BuiltInFunctions {
 
   static input(_args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
     // TODO: : call conductor to receive user input
+    return { type: 'string', value: '' }
   }
 
   static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
@@ -2018,7 +2094,7 @@ export function toPythonFloat(num: number): string {
 }
 
 export function toPythonString(obj: Value): string {
-  let ret: string
+  let ret = ''
   if (!obj) {
     return 'None'
   }
@@ -2037,14 +2113,14 @@ export function toPythonString(obj: Value): string {
     }
   } else if (obj.type === 'error') {
     return obj.message
-  } else if (obj instanceof Closure) {
-    if (obj.node instanceof StmtNS.FunctionDef) {
-      return `<function ${obj.node.name.lexeme}>`
+  } else if (obj.type === 'closure') {
+    if (obj.closure.node instanceof StmtNS.FunctionDef) {
+      return `<function ${obj.closure.node.name.lexeme}>`
     }
     return '<function (anonymous)>'
-  } else if (obj === undefined || obj.value === undefined) {
+  } else if (obj.type === 'none') {
     ret = 'None'
-  } else {
+  } else if (obj.type === 'string') {
     ret = obj.value.toString()
   }
   return ret

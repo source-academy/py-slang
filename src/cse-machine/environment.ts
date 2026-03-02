@@ -84,18 +84,18 @@ export const createBlockEnvironment = (
   }
 }
 
-export const handleArrayCreation = (
-  context: Context,
-  array: Value[],
-  envOverride?: Environment
-): void => {
-  const environment = envOverride ?? currentEnvironment(context)
-  Object.defineProperties(array, {
-    id: { value: uniqueId(context) },
-    environment: { value: environment, writable: true }
-  })
-  environment.heap.add(array)
-}
+// export const handleArrayCreation = (
+//   context: Context,
+//   array: Value[],
+//   envOverride?: Environment
+// ): void => {
+//   const environment = envOverride ?? currentEnvironment(context)
+//   Object.defineProperties(array, {
+//     id: { value: uniqueId(context) },
+//     environment: { value: environment, writable: true }
+//   })
+//   environment.heap.add(array)
+// }
 
 export const currentEnvironment = (context: Context): Environment => {
   return context.runtime.environments[0]

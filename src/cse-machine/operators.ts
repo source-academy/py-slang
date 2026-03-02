@@ -105,10 +105,14 @@ export function evaluateBinaryExpression(
   // Handle Complex numbers
   if (left.type === 'complex' || right.type === 'complex') {
     if (
-      right.type !== 'complex' &&
-      right.type !== 'number' &&
-      right.type !== 'bigint' &&
-      right.type !== 'bool'
+      (right.type !== 'complex' &&
+        right.type !== 'number' &&
+        right.type !== 'bigint' &&
+        right.type !== 'string') ||
+      (left.type !== 'complex' &&
+        left.type !== 'number' &&
+        left.type !== 'bigint' &&
+        left.type !== 'string')
     ) {
       handleRuntimeError(
         context,
@@ -168,8 +172,8 @@ export function evaluateBinaryExpression(
     return { type: 'complex', value: result }
   }
 
-  // Handle comparisons with None (represented as 'undefined' type)
-  if (left.type === 'undefined' || right.type === 'undefined') {
+  // Handle comparisons with None (represented as 'none' type)
+  if (left.type === 'none' || right.type === 'none') {
     switch (operator) {
       case TokenType.DOUBLEEQUAL:
         // True only if both are None
@@ -189,7 +193,7 @@ export function evaluateBinaryExpression(
         )
         return {
           type: 'error',
-          message: 'Unreachable in evaluateBinaryExpression - undefined | undefined'
+          message: 'Unreachable in evaluateBinaryExpression - none | none'
         }
     }
   }
@@ -239,9 +243,23 @@ export function evaluateBinaryExpression(
         operatorTranslator(operator)
       )
     )
-    return { type: 'error', message: 'Unreachable in evaluateBinaryExpression - string | string' }
   }
 
+  if (
+    (left.type !== 'bool' && left.type !== 'number' && left.type !== 'bigint') ||
+    (right.type !== 'bool' && right.type !== 'number' && right.type !== 'bigint')
+  ) {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator)
+      )
+    )
+  }
   /**
    * Coerce boolean to a numeric value for all other arithmetic
    * Support for True - 1 or False + 1
@@ -284,7 +302,11 @@ export function evaluateBinaryExpression(
             if (r === 0) {
               handleRuntimeError(context, new ZeroDivisionError(code, command))
             }
-            return { type: 'number', value: pythonMod(l, r) }
+            const mod = pythonMod(l, r)
+            if (typeof mod === 'bigint') {
+              return { type: 'bigint', value: mod }
+            }
+            return { type: 'number', value: mod }
           case TokenType.DOUBLESTAR:
             if (l === 0 && r < 0) {
               handleRuntimeError(context, new ZeroDivisionError(code, command))
@@ -316,7 +338,11 @@ export function evaluateBinaryExpression(
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command))
             }
-            return { type: 'bigint', value: pythonMod(l, r) }
+            const mod = pythonMod(l, r)
+            if (typeof mod === 'bigint') {
+              return { type: 'bigint', value: mod }
+            }
+            return { type: 'number', value: mod }
           case TokenType.DOUBLESTAR:
             if (l === 0n && r < 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command))
@@ -565,7 +591,7 @@ export function isFalsy(value: Value): boolean {
       return value.value === ''
     case 'complex':
       return value.value.real === 0 && value.value.imag == 0
-    case 'undefined': // Represents None
+    case 'none': // Represents None
       return true
     default:
       // All other objects are considered truthy
