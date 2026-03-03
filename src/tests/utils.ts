@@ -14,7 +14,7 @@ import { RuntimeSourceError } from '../errors';
 type Class<T> = new (...args: any[]) => T;
 
 export type TestExpectedValue = bigint | number | boolean | string | null | Class<RuntimeSourceError> | Class<Error>;
-export type TestCases = Record<string, [string, TestExpectedValue][]>;
+export type TestCases = Record<string, ([string, TestExpectedValue, string | null])[]>;
 
 export function toPythonAst(text: string, chapter: number = 1): Stmt {
     const script = text + '\n'
@@ -45,7 +45,7 @@ export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
 
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
     for (const [funcName, tests] of Object.entries(testCases)) {
-        test.each(tests)(`${funcName}: %s should return %s`, async (code, expected) => {
+        test.each(tests)(`${funcName}: %s should return %s`, async (code, expected, output) => {
             const context = new Context();
             const result = await runInContext(code, context, { variant, groups });
             expect(result).toBeDefined();
@@ -61,7 +61,9 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
                 return;
             }
             expect(result.status).not.toHaveProperty('value.type', 'error');
-
+            if (output !== null) {
+                expect(context.output).toBe(output);
+            }
 
             if (expected === null) {
                 expect(context.stash.peek()).toHaveProperty('type', 'none');
@@ -88,6 +90,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 
             expect(context.stash.peek()).toHaveProperty('type', 'string');
             expect(context.stash.peek()).toHaveProperty('value', expected);
+
             return;
         });
     }
