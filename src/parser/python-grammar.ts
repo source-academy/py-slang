@@ -69,10 +69,10 @@ let ParserRules = [
         new StmtNS.If(toAstToken(kw),
           (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
           test, body, else_) },
-    {"name": "elif_chain", "symbols": [(pythonLexer.has("kw_elif") ? {type: "kw_elif"} : kw_elif), "_", "test", "_", {"literal":":"}, "_", "suite", "elif_chain"], "postprocess":  ([kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
+    {"name": "elif_chain", "symbols": ["_", (pythonLexer.has("kw_elif") ? {type: "kw_elif"} : kw_elif), "_", "test", "_", {"literal":":"}, "_", "suite", "elif_chain"], "postprocess":  ([, kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
         (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
         test, body, else_)] },
-    {"name": "elif_chain", "symbols": [(pythonLexer.has("kw_else") ? {type: "kw_else"} : kw_else), "_", {"literal":":"}, "_", "suite"], "postprocess": ([,,,, body]) => body},
+    {"name": "elif_chain", "symbols": ["_", (pythonLexer.has("kw_else") ? {type: "kw_else"} : kw_else), "_", {"literal":":"}, "_", "suite"], "postprocess": ([,,,,, body]) => body},
     {"name": "elif_chain", "symbols": [], "postprocess": nil},
     {"name": "while_stmt", "symbols": [(pythonLexer.has("kw_while") ? {type: "kw_while"} : kw_while), "_", "test", "_", {"literal":":"}, "_", "suite"], "postprocess":  ([kw,, test,,,, body]) =>
         new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) },

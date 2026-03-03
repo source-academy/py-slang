@@ -38,6 +38,37 @@ describe('FileInput', () => {
         expect(result.startToken).toBeDefined();
         expect(result.endToken).toBeDefined();
     });
+
+    test('multi-statement script', () => {
+        const text = `\
+from x import (y)
+x = 1 if 2 else 3
+
+1 is not 2
+3 not in 4
+y = lambda a:a
+
+def z(a, b, c, d):
+    pass
+
+while x:
+    pass
+
+for _ in range(10):
+    pass
+
+if x:
+    pass
+elif y:
+    pass
+elif z:
+    pass
+else:
+    pass
+`;
+        const ast = parse(text);
+        expect(ast).toBeDefined();
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -83,6 +114,26 @@ describe('Literal expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Complex);
         expect((expr as ExprNS.Complex).value).toBe('3j');
     });
+
+    test('large integer produces BigIntLiteral', () => {
+        const expr = parseExpr('1000000000');
+        expect(expr).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
+
+    test('binary number 0b101010', () => {
+        const expr = parseExpr('0b101010');
+        expect(expr).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
+
+    test('octal number 0o1234567', () => {
+        const expr = parseExpr('0o1234567');
+        expect(expr).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
+
+    test('hexadecimal number 0xabcdef', () => {
+        const expr = parseExpr('0xabcdef');
+        expect(expr).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -119,8 +170,18 @@ describe('Binary expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Binary);
     });
 
+    test('division: 1 / 1', () => {
+        const expr = parseExpr('1 / 1');
+        expect(expr).toBeInstanceOf(ExprNS.Binary);
+    });
+
     test('floor division: 7 // 2', () => {
         const expr = parseExpr('7 // 2');
+        expect(expr).toBeInstanceOf(ExprNS.Binary);
+    });
+
+    test('modulus: 1 % 1', () => {
+        const expr = parseExpr('1 % 1');
         expect(expr).toBeInstanceOf(ExprNS.Binary);
     });
 
@@ -132,6 +193,18 @@ describe('Binary expressions', () => {
     test('operator token has correct lexeme', () => {
         const expr = parseExpr('1 + 2') as ExprNS.Binary;
         expect(expr.operator.lexeme).toBe('+');
+    });
+
+    test('parenthesized: (1 + 2) * 3', () => {
+        const expr = parseExpr('(1 + 2) * 3');
+        expect(expr).toBeInstanceOf(ExprNS.Binary);
+        const b = expr as ExprNS.Binary;
+        expect(b.left).toBeInstanceOf(ExprNS.Grouping);
+    });
+
+    test('large exponentiation: 100000000 ** 100000000 + 1', () => {
+        const expr = parseExpr('100000000 ** 100000000 + 1');
+        expect(expr).toBeInstanceOf(ExprNS.Binary);
     });
 });
 
@@ -150,8 +223,33 @@ describe('Compare expressions', () => {
         expect((expr as ExprNS.Compare).operator.lexeme).toBe('<');
     });
 
+    test('x > y', () => {
+        const expr = parseExpr('x > y');
+        expect(expr).toBeInstanceOf(ExprNS.Compare);
+    });
+
+    test('x <= y', () => {
+        const expr = parseExpr('x <= y');
+        expect(expr).toBeInstanceOf(ExprNS.Compare);
+    });
+
+    test('x >= y', () => {
+        const expr = parseExpr('x >= y');
+        expect(expr).toBeInstanceOf(ExprNS.Compare);
+    });
+
     test('x != y', () => {
         const expr = parseExpr('x != y');
+        expect(expr).toBeInstanceOf(ExprNS.Compare);
+    });
+
+    test('x is y', () => {
+        const expr = parseExpr('1 is not 2');
+        expect(expr).toBeInstanceOf(ExprNS.Compare);
+    });
+
+    test('x not in y', () => {
+        const expr = parseExpr('3 not in 4');
         expect(expr).toBeInstanceOf(ExprNS.Compare);
     });
 });
@@ -165,10 +263,20 @@ describe('Unary expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Unary);
     });
 
+    test('negation: -1', () => {
+        const expr = parseExpr('-1');
+        expect(expr).toBeInstanceOf(ExprNS.Unary);
+    });
+
     test('not: not True', () => {
         const expr = parseExpr('not True');
         expect(expr).toBeInstanceOf(ExprNS.Unary);
         expect((expr as ExprNS.Unary).operator.lexeme).toBe('not');
+    });
+
+    test('not: not 1', () => {
+        const expr = parseExpr('not 1');
+        expect(expr).toBeInstanceOf(ExprNS.Unary);
     });
 });
 
@@ -187,6 +295,16 @@ describe('BoolOp expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.BoolOp);
         expect((expr as ExprNS.BoolOp).operator.lexeme).toBe('or');
     });
+
+    test('1 and 2', () => {
+        const expr = parseExpr('1 and 2');
+        expect(expr).toBeInstanceOf(ExprNS.BoolOp);
+    });
+
+    test('1 or 2', () => {
+        const expr = parseExpr('1 or 2');
+        expect(expr).toBeInstanceOf(ExprNS.BoolOp);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -200,6 +318,25 @@ describe('Ternary expressions', () => {
         expect(t.predicate).toBeInstanceOf(ExprNS.Literal);
         expect(t.consequent).toBeInstanceOf(ExprNS.BigIntLiteral);
         expect(t.alternative).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
+
+    test('x if y else 1', () => {
+        const expr = parseExpr('x if y else 1');
+        expect(expr).toBeInstanceOf(ExprNS.Ternary);
+    });
+
+    test('nested ternary: 1 if a else 2 if b else 3', () => {
+        const expr = parseExpr('1 if a else 2 if b else 3');
+        expect(expr).toBeInstanceOf(ExprNS.Ternary);
+        const t = expr as ExprNS.Ternary;
+        expect(t.alternative).toBeInstanceOf(ExprNS.Ternary);
+    });
+
+    test('assignment with ternary: x = 1 if 2 else 3', () => {
+        const stmts = parseStmts('x = 1 if 2 else 3');
+        expect(stmts[0]).toBeInstanceOf(StmtNS.Assign);
+        const a = stmts[0] as StmtNS.Assign;
+        expect(a.value).toBeInstanceOf(ExprNS.Ternary);
     });
 });
 
@@ -223,6 +360,11 @@ describe('Call expressions', () => {
         const expr = parseExpr('print(x)') as ExprNS.Call;
         expect(expr.callee).toBeInstanceOf(ExprNS.Variable);
         expect((expr.callee as ExprNS.Variable).name.lexeme).toBe('print');
+    });
+
+    test('nested call: f(g(1))', () => {
+        const expr = parseExpr('f(g(1))') as ExprNS.Call;
+        expect(expr.args[0]).toBeInstanceOf(ExprNS.Call);
     });
 });
 
@@ -270,10 +412,27 @@ describe('Lambda expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Lambda);
         expect((expr as ExprNS.Lambda).parameters).toHaveLength(0);
     });
+
+    test('nested lambda: lambda a: lambda b: b + a', () => {
+        const expr = parseExpr('lambda a: lambda b: b + a');
+        expect(expr).toBeInstanceOf(ExprNS.Lambda);
+        expect((expr as ExprNS.Lambda).body).toBeInstanceOf(ExprNS.Lambda);
+    });
+
+    test('complex lambda: increment_repeater', () => {
+        const expr = parseExpr('lambda repeater: lambda f: lambda x: f(repeater(f)(x))');
+        expect(expr).toBeInstanceOf(ExprNS.Lambda);
+    });
+
+    test('lambda assigned to variable', () => {
+        const stmts = parseStmts('y = lambda a:a');
+        expect(stmts[0]).toBeInstanceOf(StmtNS.Assign);
+        expect((stmts[0] as StmtNS.Assign).value).toBeInstanceOf(ExprNS.Lambda);
+    });
 });
 
 // ---------------------------------------------------------------------------
-// Statements
+// Assignment statements
 // ---------------------------------------------------------------------------
 describe('Assignment statements', () => {
     test('x = 1 produces Assign with Token name', () => {
@@ -290,6 +449,9 @@ describe('Assignment statements', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// Control flow statements
+// ---------------------------------------------------------------------------
 describe('Control flow statements', () => {
     test('pass produces Pass', () => {
         const stmts = parseStmts('pass');
@@ -322,6 +484,9 @@ describe('Control flow statements', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// If statement
+// ---------------------------------------------------------------------------
 describe('If statement', () => {
     test('if/else produces If with elseBlock', () => {
         const stmts = parseStmts('if True:\n    pass\nelse:\n    pass');
@@ -343,8 +508,99 @@ describe('If statement', () => {
         const ifStmt = stmts[0] as StmtNS.If;
         expect(ifStmt.elseBlock![0]).toBeInstanceOf(StmtNS.If);
     });
+
+    test('if-elif-else with expressions', () => {
+        const src = `\
+if x > 10:
+    print("x is greater than 10")
+elif x == 10:
+    print("x is equal to 10")
+else:
+    print("x is less than 10")`;
+        const stmts = parseStmts(src);
+        expect(stmts[0]).toBeInstanceOf(StmtNS.If);
+    });
+
+    test('nested if/else', () => {
+        const src = `\
+if True:
+    if True:
+        x = 1
+    else:
+        x = 2
+else:
+    x = 3`;
+        const stmts = parseStmts(src);
+        const outer = stmts[0] as StmtNS.If;
+        expect(outer.body[0]).toBeInstanceOf(StmtNS.If);
+        expect(outer.elseBlock).not.toBeNull();
+        const inner = outer.body[0] as StmtNS.If;
+        expect(inner.elseBlock).not.toBeNull();
+    });
+
+    test('nested if without inner else', () => {
+        const src = `\
+if True:
+    if True:
+        x = 1
+    y = 2
+z = 3`;
+        const stmts = parseStmts(src);
+        expect(stmts).toHaveLength(2); // if + z = 3
+        const outer = stmts[0] as StmtNS.If;
+        expect(outer.body).toHaveLength(2); // inner if + y = 2
+    });
+
+    test('inner if with else inside outer if', () => {
+        const src = `\
+if True:
+    if True:
+        x = 1
+    else:
+        x = 2`;
+        const stmts = parseStmts(src);
+        const outer = stmts[0] as StmtNS.If;
+        const inner = outer.body[0] as StmtNS.If;
+        expect(inner.elseBlock).not.toBeNull();
+    });
+
+    test('deeply nested if/else (branch_test pattern)', () => {
+        const src = `\
+def branch_test(a, b, c):
+    if a > 0:
+        if b < 0:
+            if c > 0:
+                return -3
+            else:
+                return -2
+        else:
+            if c > 0:
+                return -1
+            else:
+                return 0
+    else:
+        if b < 0:
+            if c > 0:
+                return 1
+            else:
+                return 2
+        else:
+            if c > 0:
+                return 3
+            else:
+                return 4`;
+        const stmts = parseStmts(src);
+        expect(stmts[0]).toBeInstanceOf(StmtNS.FunctionDef);
+        const fn = stmts[0] as StmtNS.FunctionDef;
+        const topIf = fn.body[0] as StmtNS.If;
+        expect(topIf).toBeInstanceOf(StmtNS.If);
+        expect(topIf.elseBlock).not.toBeNull();
+    });
 });
 
+// ---------------------------------------------------------------------------
+// While statement
+// ---------------------------------------------------------------------------
 describe('While statement', () => {
     test('while True: pass', () => {
         const stmts = parseStmts('while True:\n    pass');
@@ -353,8 +609,16 @@ describe('While statement', () => {
         expect(w.condition).toBeInstanceOf(ExprNS.Literal);
         expect(w.body[0]).toBeInstanceOf(StmtNS.Pass);
     });
+
+    test('while x: pass', () => {
+        const stmts = parseStmts('while x:\n    pass');
+        expect(stmts[0]).toBeInstanceOf(StmtNS.While);
+    });
 });
 
+// ---------------------------------------------------------------------------
+// For statement
+// ---------------------------------------------------------------------------
 describe('For statement', () => {
     test('for i in xs: pass', () => {
         const stmts = parseStmts('for i in xs:\n    pass');
@@ -362,8 +626,16 @@ describe('For statement', () => {
         const f = stmts[0] as StmtNS.For;
         expect(f.target.lexeme).toBe('i');
     });
+
+    test('for _ in range(10): pass', () => {
+        const stmts = parseStmts('for _ in range(10):\n    pass');
+        expect(stmts[0]).toBeInstanceOf(StmtNS.For);
+    });
 });
 
+// ---------------------------------------------------------------------------
+// FunctionDef statement
+// ---------------------------------------------------------------------------
 describe('FunctionDef statement', () => {
     test('def f(): pass produces FunctionDef', () => {
         const stmts = parseStmts('def f():\n    pass');
@@ -380,8 +652,47 @@ describe('FunctionDef statement', () => {
         expect(fn.parameters[0].lexeme).toBe('a');
         expect(fn.parameters[1].lexeme).toBe('b');
     });
+
+    test('def with multiple statements in body', () => {
+        const src = `\
+def y(a, b, c):
+    pass
+    pass`;
+        const stmts = parseStmts(src);
+        const fn = stmts[0] as StmtNS.FunctionDef;
+        expect(fn.body).toHaveLength(2);
+    });
+
+    test('nested function definition', () => {
+        const src = `\
+def y(a, b, c):
+    def z(d):
+        x = 2
+        return a + b + c + d
+    return z`;
+        const stmts = parseStmts(src);
+        const outer = stmts[0] as StmtNS.FunctionDef;
+        expect(outer.body[0]).toBeInstanceOf(StmtNS.FunctionDef);
+    });
+
+    test('nested function calls', () => {
+        const src = `\
+def f1(x, y):
+    return 1
+
+def f2(x, y):
+    return y
+
+f1(f2(1, 2), 2)`;
+        const stmts = parseStmts(src);
+        expect(stmts).toHaveLength(3);
+        expect(stmts[2]).toBeInstanceOf(StmtNS.SimpleExpr);
+    });
 });
 
+// ---------------------------------------------------------------------------
+// Import statement
+// ---------------------------------------------------------------------------
 describe('Import statement', () => {
     test('from math import sqrt produces FromImport', () => {
         const stmts = parseStmts('from math import sqrt');
@@ -390,8 +701,18 @@ describe('Import statement', () => {
         expect(imp.module.lexeme).toBe('math');
         expect(imp.names[0].lexeme).toBe('sqrt');
     });
+
+    test('from x import (a, b, c) produces FromImport with multiple names', () => {
+        const stmts = parseStmts('from x import (a, b, c)');
+        expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+        const imp = stmts[0] as StmtNS.FromImport;
+        expect(imp.names).toHaveLength(3);
+    });
 });
 
+// ---------------------------------------------------------------------------
+// Assert statement
+// ---------------------------------------------------------------------------
 describe('Assert statement', () => {
     test('assert True produces Assert', () => {
         const stmts = parseStmts('assert True');
@@ -400,7 +721,7 @@ describe('Assert statement', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Token shape: startToken / endToken on every node
+// Token tracking
 // ---------------------------------------------------------------------------
 describe('Token tracking', () => {
     test('every node has startToken and endToken', () => {

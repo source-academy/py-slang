@@ -123,11 +123,11 @@ if_stmt ->
              test, body, else_) %}
 
 elif_chain ->
-    %kw_elif _ test _ ":" _ suite elif_chain
-      {% ([kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
+    _ %kw_elif _ test _ ":" _ suite elif_chain
+      {% ([, kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
            (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
            test, body, else_)] %}
-  | %kw_else _ ":" _ suite                   {% ([,,,, body]) => body %}
+  | _ %kw_else _ ":" _ suite                   {% ([,,,,, body]) => body %}
   | null                                      {% nil %}
 
 while_stmt ->
