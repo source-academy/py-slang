@@ -1,13 +1,8 @@
-import { Context } from "../cse-machine/context";
-import { runInContext } from "../runner/pyRunner";
+import { generateTestCases, TestCases } from "./utils";
 
-type Class<T> = new (...args: any[]) => T;
-type MathTestType = {
-    [name: string]: [string, bigint | number | Class<Error>][]
-}
 describe('Standard Library Tests', () => {
     describe('Chapter 1 Builtins', () => {
-        const mathTests: MathTestType = {
+        const mathTests: TestCases = {
             'abs': [
                 ["abs(-5)", 5n],
                 ["abs(5)", 5n],
@@ -35,18 +30,42 @@ describe('Standard Library Tests', () => {
                 ["round(True)", TypeError],
                 ["round(33.14, -1)", 30.0],
                 ["round(33.14, 1.5)", TypeError],
+            ],
+            'math_sin': [
+                ["math_sin(0)", 0.0],
+                ["math_sin(3.141592653589793)", 1.2246467991473532e-16],
+                ["math_sin(-3.4)", 0.2555411020268312],
+                ["math_sin(0.0)", 0.0],
+                ["math_sin(lambda x : x)", TypeError],
+                ["math_sin(True)", TypeError],
+                ["math_sin(\"\")", TypeError],
+            ],
+            'math_cos': [
+                ["math_cos(0)", 1.0],
+                ["math_cos(3.141592653589793)", -1.0],
+                ["math_cos(-3.4)", -0.9667981925794611],
+                ["math_cos(0.0)", 1.0],
+                ["math_cos(lambda x : x)", TypeError],
+                ["math_cos(True)", TypeError],
+                ["math_cos(\"\")", TypeError],
             ]
+
         };
-        for (const [funcName, tests] of Object.entries(mathTests)) {
-            test.each(tests)(`${funcName}: %s should return %s`, (code, expected) => {
-                const context = new Context();
-                if (typeof expected === 'function' && (expected as Class<Error>).prototype instanceof Error) {
-                    expect(() => runInContext(code, context)).rejects;
-                } else {
-                    return expect(runInContext(code, context)).resolves.toHaveProperty('value', {'type': typeof expected === 'bigint' ? 'bigint' : 'number', 'value': expected});
-                }
-            });
+        const miscTests: TestCases = {
+            'equality': [
+                ["1 == 1", true],
+                ["1 == 2", false],
+                ["3.14 == 3.14", true],
+                ["1.0 == 1", true],
+                ["1.0 == 2", false],
+                ["True == True", true],
+                ["None == None", true],
+                ["[] == []", SyntaxError], // linked
+            ]
         }
+
+        generateTestCases(mathTests, 1, []);
+        generateTestCases(miscTests, 1, []);
         
     });
 

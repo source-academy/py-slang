@@ -1559,26 +1559,26 @@ export class BuiltInFunctions {
                 handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[1].type, 'int'));
             }
             ndigitsArg = args[1];
+        } else {
+            const shifted = Intl.NumberFormat("en-US", { roundingMode: "halfEven", useGrouping: false, maximumFractionDigits: 0 } as any).format(numArg.value);
+            return { type: 'bigint', value: BigInt(shifted) };
         }
 
         if (numArg.type === 'number') {
             let numberValue: number = numArg.value;
-            if (ndigitsArg.value > 0) {
-                const shifted = Number(numberValue.toFixed(Number(ndigitsArg.value)));
-                return { type: 'number', value: shifted };
-            } else if (ndigitsArg.value === BigInt(0)) {
-                const shifted = Math.round(numArg.value);
-                return { type: 'bigint', value: BigInt(shifted) };
+            if (ndigitsArg.value >= 0) {
+                const shifted = Intl.NumberFormat("en-US", { roundingMode: "halfEven", useGrouping: false, maximumFractionDigits: Number(ndigitsArg.value) } as any).format(numberValue);
+                return { type: 'number', value: Number(shifted) };
             } else {
-                const shifted = Math.round(numArg.value / (10 ** (-Number(ndigitsArg.value)))) * (10 ** (-Number(ndigitsArg.value)));
-                return { type: 'number', value: shifted };
+                const shifted = Intl.NumberFormat("en-US", { roundingMode: "halfEven", useGrouping: false, maximumFractionDigits: 0 } as any).format(numArg.value / (10 ** (-Number(ndigitsArg.value))));
+                return { type: 'number', value: Number(shifted) * (10 ** (-Number(ndigitsArg.value))) };
             }
         } else {
             if (ndigitsArg.value >= 0) {
                 return numArg;
             } else {
-                const shifted: bigint = numArg.value / (BigInt(10) ** (-ndigitsArg.value)) * (BigInt(10) ** (-ndigitsArg.value));
-                return { type: 'bigint', value: shifted };
+                const shifted = Intl.NumberFormat("en-US", { roundingMode: "halfEven", useGrouping: false, maximumFractionDigits: 0 } as any).format(Number(numArg.value) / (10 ** (-Number(ndigitsArg.value))));
+                return { type: 'bigint', value: BigInt(shifted) * (10n ** (-ndigitsArg.value)) };
             }
         }
     }
@@ -1600,7 +1600,7 @@ export class BuiltInFunctions {
         const obj = args[0];
         return { type: 'bool', value: obj.type === 'number' };
     }
-    
+
     @Validate(1, 1, 'is_string', true)
     static is_string(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
         const obj = args[0];
@@ -1617,6 +1617,12 @@ export class BuiltInFunctions {
     static is_int(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
         const obj = args[0];
         return { type: 'bool', value: obj.type === 'bigint' };
+    }
+
+    @Validate(1, 1, 'is_function', true)
+    static is_function(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'function' || obj.type === 'closure' || obj.type === 'builtin' };
     }
 
     static input(args: Value[], source: string, command: ControlItem, context: Context): StringValue {

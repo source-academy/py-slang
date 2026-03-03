@@ -45,7 +45,6 @@ export async function loadGroupsIntoContext(context: Context, groups: Group[], o
     }
     prelude += group.prelude + '\n';
   }
-  console.log(prelude);
   await runInContext(prelude, context, { ...options, isPrelude: true, groups: [] });
   
 }
@@ -56,7 +55,12 @@ export async function runInContext(
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
   await loadGroupsIntoContext(context, options.groups as Group[], options);
-  const pyAst = runPyAST(code, options.variant, !options.isPrelude, options.groups as Group[], Object.keys(context.runtime.environments[0].head));
+  let pyAst: Stmt;
+  try {
+    pyAst = runPyAST(code, options.variant, !options.isPrelude, options.groups as Group[], Object.keys(context.runtime.environments[0].head));
+  } catch (error) {
+    return CSEResultPromise(context, { type: 'error', message: String(error) });
+  }
   const result = runCSEMachine(code, pyAst, context, options);
   return result;
 }

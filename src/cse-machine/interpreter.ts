@@ -233,7 +233,6 @@ export function* generateCSEMachineStateStream(
     }
 
     control.pop()
-    console.log(command, stash)
     if (isNode(command)) {
       const node = command as Node
       const nodeType = node.constructor.name

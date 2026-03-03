@@ -7,8 +7,8 @@ def equal(xs, ys):
                 equal(tail(xs), tail(ys)))
     elif is_none(xs):
         return is_none(ys)
-    elif is_number(xs):
-        return is_number(ys) and xs == ys
+    elif is_int(xs) or is_float(xs):
+        return (is_int(ys) or is_float(ys)) and xs == ys
     elif is_boolean(xs):
         return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
     elif is_string(xs):
@@ -20,14 +20,14 @@ def equal(xs, ys):
 
 # returns the length of a given argument list
 def _length(xs, acc):
-    return acc if is_null(xs) else _length(tail(xs), acc + 1)
+    return acc if is_none(xs) else _length(tail(xs), acc + 1)
 
 def length(xs):
     return _length(xs, 0)
 
 # map applies first arg f to the elements of the second argument xs
 def _map(f, xs, acc):
-    return reverse(acc) if is_null(xs) else _map(f, tail(xs), pair(f(head(xs)), acc))
+    return reverse(acc) if is_none(xs) else _map(f, tail(xs), pair(f(head(xs)), acc))
 
 def map(f, xs):
     return _map(f, xs, None)
@@ -41,7 +41,7 @@ def build_list(fun, n):
 
 # for_each applies first arg fun to the elements of xs
 def for_each(fun, xs):
-    if is_null(xs):
+    if is_none(xs):
         return True
     else:
         fun(head(xs))
@@ -49,7 +49,7 @@ def for_each(fun, xs):
 
 # list_to_string returns a string that represents the argument list
 def _list_to_string(xs, cont):
-    if is_null(xs):
+    if is_none(xs):
         return cont("null")
     elif is_pair(xs):
         return _list_to_string(
@@ -60,28 +60,28 @@ def _list_to_string(xs, cont):
             )
         )
     else:
-        return cont(stringify(xs))
+        return cont(str(xs))
 
 def list_to_string(xs):
     return _list_to_string(xs, lambda x: x)
 
 # reverse reverses the argument, assumed to be a list
 def _reverse(original, reversed_list):
-    return reversed_list if is_null(original) else _reverse(tail(original), pair(head(original), reversed_list))
+    return reversed_list if is_none(original) else _reverse(tail(original), pair(head(original), reversed_list))
 
 def reverse(xs):
     return _reverse(xs, None)
 
 # append first argument to the second argument
 def _append(xs, ys, cont):
-    return cont(ys) if is_null(xs) else _append(tail(xs), ys, lambda zs: cont(pair(head(xs), zs)))
+    return cont(ys) if is_none(xs) else _append(tail(xs), ys, lambda zs: cont(pair(head(xs), zs)))
 
 def append(xs, ys):
     return _append(xs, ys, lambda x: x)
 
 # member looks for a given first-argument element in the second argument
 def member(v, xs):
-    if is_null(xs):
+    if is_none(xs):
         return None
     elif v == head(xs):
         return xs
@@ -92,7 +92,7 @@ def member(v, xs):
 def _remove(v, xs, acc):
     app = append
     rev = reverse
-    if is_null(xs):
+    if is_none(xs):
         return app(rev(acc), xs)
     elif v == head(xs):
         return app(rev(acc), tail(xs))
@@ -106,7 +106,7 @@ def remove(v, xs):
 def _remove_all(v, xs, acc):
     app = append
     rev = reverse
-    if is_null(xs):
+    if is_none(xs):
         return app(rev(acc), xs)
     elif v == head(xs):
         return _remove_all(v, tail(xs), acc)
@@ -118,7 +118,7 @@ def remove_all(v, xs):
 
 # filter returns the sublist of elements for which pred returns true
 def _filter(pred, xs, acc):
-    if is_null(xs):
+    if is_none(xs):
         return reverse(acc)
     elif pred(head(xs)):
         return _filter(pred, tail(xs), pair(head(xs), acc))
@@ -142,7 +142,7 @@ def list_ref(xs, n):
 
 # accumulate applies an operation op right-to-left
 def _accumulate(f, initial, xs, cont):
-    return cont(initial) if is_null(xs) else _accumulate(f, initial, tail(xs), lambda x: cont(f(head(xs), x)))
+    return cont(initial) if is_none(xs) else _accumulate(f, initial, tail(xs), lambda x: cont(f(head(xs), x)))
 
 def accumulate(f, initial, xs):
     return _accumulate(f, initial, xs, lambda x: x)

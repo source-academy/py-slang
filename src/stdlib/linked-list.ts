@@ -1,6 +1,9 @@
+import { ExprNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
+import { handleRuntimeError } from "../cse-machine/error";
 import { BoolValue, ListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
+import { TypeError } from "../errors";
 import { toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
@@ -31,7 +34,7 @@ class LinkedListBuiltins {
     @Validate(1, 1, 'head', true)
     static head(args: Value[], source: string, command: ControlItem, context: Context): Value {
         if (args[0].type !== 'list' || args[0].value.length !== 2) {
-            throw new Error('head expects a pair');
+            handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"));
         }
         return args[0].value[0];
     }
@@ -39,7 +42,7 @@ class LinkedListBuiltins {
     @Validate(1, 1, 'tail', true)
     static tail(args: Value[], source: string, command: ControlItem, context: Context): Value {
         if (args[0].type !== 'list' || args[0].value.length !== 2) {
-            throw new Error('tail expects a pair');
+            handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"));
         }
         return args[0].value[1];
     }
