@@ -1,3 +1,4 @@
+// IGNORE, not in use
 import type { SourceLocation } from './errors'
 
 //import type { AcornOptions } from './parser/types'
