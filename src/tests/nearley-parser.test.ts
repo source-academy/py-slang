@@ -44,10 +44,10 @@ describe('FileInput', () => {
 // Literals
 // ---------------------------------------------------------------------------
 describe('Literal expressions', () => {
-    test('integer produces Literal with number value', () => {
+    test('integer produces BigIntLiteral with bigint value', () => {
         const expr = parseExpr('42');
-        expect(expr).toBeInstanceOf(ExprNS.Literal);
-        expect((expr as ExprNS.Literal).value).toBe(42);
+        expect(expr).toBeInstanceOf(ExprNS.BigIntLiteral);
+        expect((expr as ExprNS.BigIntLiteral).value).toBe('42');
     });
 
     test('float produces Literal with float value', () => {
@@ -105,8 +105,8 @@ describe('Binary expressions', () => {
         const expr = parseExpr('1 + 2');
         expect(expr).toBeInstanceOf(ExprNS.Binary);
         const b = expr as ExprNS.Binary;
-        expect((b.left as ExprNS.Literal).value).toBe(1);
-        expect((b.right as ExprNS.Literal).value).toBe(2);
+        expect((b.left as ExprNS.BigIntLiteral).value).toBe('1');
+        expect((b.right as ExprNS.BigIntLiteral).value).toBe('2');
     });
 
     test('subtraction: 5 - 3', () => {
@@ -198,8 +198,8 @@ describe('Ternary expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Ternary);
         const t = expr as ExprNS.Ternary;
         expect(t.predicate).toBeInstanceOf(ExprNS.Literal);
-        expect(t.consequent).toBeInstanceOf(ExprNS.Literal);
-        expect(t.alternative).toBeInstanceOf(ExprNS.Literal);
+        expect(t.consequent).toBeInstanceOf(ExprNS.BigIntLiteral);
+        expect(t.alternative).toBeInstanceOf(ExprNS.BigIntLiteral);
     });
 });
 
@@ -249,7 +249,7 @@ describe('Subscript expressions', () => {
         expect(expr).toBeInstanceOf(ExprNS.Subscript);
         const s = expr as ExprNS.Subscript;
         expect(s.value).toBeInstanceOf(ExprNS.Variable);
-        expect(s.index).toBeInstanceOf(ExprNS.Literal);
+        expect(s.index).toBeInstanceOf(ExprNS.BigIntLiteral);
     });
 });
 
@@ -281,7 +281,7 @@ describe('Assignment statements', () => {
         expect(stmts[0]).toBeInstanceOf(StmtNS.Assign);
         const a = stmts[0] as StmtNS.Assign;
         expect(a.name.lexeme).toBe('x');
-        expect(a.value).toBeInstanceOf(ExprNS.Literal);
+        expect(a.value).toBeInstanceOf(ExprNS.BigIntLiteral);
     });
 
     test('x: num = 1 produces AnnAssign', () => {
@@ -308,11 +308,11 @@ describe('Control flow statements', () => {
         expect(body[0]).toBeInstanceOf(StmtNS.Continue);
     });
 
-    test('return 42 produces Return with Literal', () => {
+    test('return 42 produces Return with BigIntLiteral', () => {
         const stmts = parseStmts('def f():\n    return 42');
         const body = (stmts[0] as StmtNS.FunctionDef).body;
         expect(body[0]).toBeInstanceOf(StmtNS.Return);
-        expect((body[0] as StmtNS.Return).value).toBeInstanceOf(ExprNS.Literal);
+        expect((body[0] as StmtNS.Return).value).toBeInstanceOf(ExprNS.BigIntLiteral);
     });
 
     test('return without value produces Return(null)', () => {
