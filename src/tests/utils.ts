@@ -60,6 +60,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
                 expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
                 return;
             }
+            expect(result.status).not.toHaveProperty('value.type', 'error');
 
 
             if (expected === null) {

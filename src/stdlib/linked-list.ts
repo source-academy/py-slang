@@ -55,15 +55,16 @@ class LinkedListBuiltins {
 
     @Validate(1, 1, 'print_linked_list', true)
     static print_linked_list(args: Value[], source: string, command: ControlItem, context: Context): StringValue {
-        const isPairResult = LinkedListBuiltins.is_pair(args, source, command, context);
-        if (!isPairResult.value) {
-            return { 'type': 'string', 'value': toPythonString(args[0]) };
-        }
         if (!LinkedListBuiltins._is_linked_list(args[0])) {
+            const isPairResult = LinkedListBuiltins.is_pair(args, source, command, context);
+            if (!isPairResult.value) {
+                return { 'type': 'string', 'value': toPythonString(args[0]) };
+            }
             const string1 = LinkedListBuiltins.print_linked_list([(args[0] as ListValue).value[0]], source, command, context);
             const string2 = LinkedListBuiltins.print_linked_list([(args[0] as ListValue).value[1]], source, command, context);
             return { 'type': 'string', 'value': '[' + string1.value + ', ' + string2.value + ']' };
         }
+        
         let string = 'list(';
         let current = args[0];
 

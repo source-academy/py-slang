@@ -18,7 +18,7 @@ def equal(xs, ys):
     else:
         return False
 
-# returns the length of a given argument list
+# returns the length of a given argument linked_list
 def _length(xs, acc):
     return acc if is_none(xs) else _length(tail(xs), acc + 1)
 
@@ -32,12 +32,12 @@ def _map(f, xs, acc):
 def map(f, xs):
     return _map(f, xs, None)
 
-# build_list takes a function fun and a nonnegative integer n
-def _build_list(i, fun, already_built):
-    return already_built if i < 0 else _build_list(i - 1, fun, pair(fun(i), already_built))
+# build_linked_list takes a function fun and a nonnegative integer n
+def _build_linked_list(i, fun, already_built):
+    return already_built if i < 0 else _build_linked_list(i - 1, fun, pair(fun(i), already_built))
 
-def build_list(fun, n):
-    return _build_list(n - 1, fun, None)
+def build_linked_list(fun, n):
+    return _build_linked_list(n - 1, fun, None)
 
 # for_each applies first arg fun to the elements of xs
 def for_each(fun, xs):
@@ -47,14 +47,14 @@ def for_each(fun, xs):
         fun(head(xs))
         return for_each(fun, tail(xs))
 
-# list_to_string returns a string that represents the argument list
-def _list_to_string(xs, cont):
+# linked_list_to_string returns a string that represents the argument linked_list
+def _linked_list_to_string(xs, cont):
     if is_none(xs):
-        return cont("null")
+        return cont("None")
     elif is_pair(xs):
-        return _list_to_string(
+        return _linked_list_to_string(
             head(xs),
-            lambda x: _list_to_string(
+            lambda x: _linked_list_to_string(
                 tail(xs),
                 lambda y: cont("[" + str(x) + ", " + str(y) + "]")
             )
@@ -62,12 +62,12 @@ def _list_to_string(xs, cont):
     else:
         return cont(str(xs))
 
-def list_to_string(xs):
-    return _list_to_string(xs, lambda x: x)
+def linked_list_to_string(xs):
+    return _linked_list_to_string(xs, lambda x: x)
 
-# reverse reverses the argument, assumed to be a list
-def _reverse(original, reversed_list):
-    return reversed_list if is_none(original) else _reverse(tail(original), pair(head(original), reversed_list))
+# reverse reverses the argument, assumed to be a linked_list
+def _reverse(original, reversed_linked_list):
+    return reversed_linked_list if is_none(original) else _reverse(tail(original), pair(head(original), reversed_linked_list))
 
 def reverse(xs):
     return _reverse(xs, None)
@@ -116,7 +116,7 @@ def _remove_all(v, xs, acc):
 def remove_all(v, xs):
     return _remove_all(v, xs, None)
 
-# filter returns the sublist of elements for which pred returns true
+# filter returns the linked list of elements from xs for which pred returns true
 def _filter(pred, xs, acc):
     if is_none(xs):
         return reverse(acc)
@@ -129,16 +129,16 @@ def filter(pred, xs):
     return _filter(pred, xs, None)
 
 # enumerates numbers starting from start until end
-def _enum_list(start, end, acc):
+def _enum_linked_list(start, end, acc):
     rev = reverse
-    return rev(acc) if start > end else _enum_list(start + 1, end, pair(start, acc))
+    return rev(acc) if start > end else _enum_linked_list(start + 1, end, pair(start, acc))
 
-def enum_list(start, end):
-    return _enum_list(start, end, None)
+def enum_linked_list(start, end):
+    return _enum_linked_list(start, end, None)
 
 # Returns the item in xs at index n
-def list_ref(xs, n):
-    return head(xs) if n == 0 else list_ref(tail(xs), n - 1)
+def linked_list_ref(xs, n):
+    return head(xs) if n == 0 else linked_list_ref(tail(xs), n - 1)
 
 # accumulate applies an operation op right-to-left
 def _accumulate(f, initial, xs, cont):
