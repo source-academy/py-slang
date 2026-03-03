@@ -36,9 +36,9 @@ function runPyAST(
 }
 
 export async function loadGroupsIntoContext(context: Context, groups: Group[], options: RecursivePartial<IOptions> = {}) {
-  if (!options.isPrelude || !options.groups) 
+  if (options.isPrelude || !options.groups) 
     return;
-  
+
   for (const group of groups as Group[]) {
     for (const [name, value] of group.builtins) {
       context.nativeStorage.builtins.set(name, value);

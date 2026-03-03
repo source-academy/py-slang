@@ -1,5 +1,5 @@
 import { toPythonString } from './stdlib'
-import { Value } from './cse-machine/stash'
+import { BuiltinValue, Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
 import { SourceLocation } from './errors'
@@ -295,7 +295,7 @@ export class Representation {
 }
 
 export interface NativeStorage {
-    builtins: Map<string, Value>
+    builtins: Map<string, BuiltinValue>
     previousProgramsIdentifiers: Set<string>
     operators: Map<string, (...operands: Value[]) => Value>
     maxExecTime: number

@@ -3,7 +3,7 @@ import { Control, ControlItem } from './control';
 import { createProgramEnvironment, createSimpleEnvironment, Environment } from './environment';
 import { CseError } from './error';
 import { Heap } from './heap';
-import { Stash, Value } from './stash';
+import { BuiltinValue, Stash, Value } from './stash';
 import { Node } from './types';
 import { StmtNS } from '../ast-types';
 import { ModuleContext, NativeStorage } from '../types';
@@ -48,7 +48,7 @@ export class Context {
       this.runtime.environmentTree.insert(globalEnvironment)
     }
     this.nativeStorage = {
-      builtins: new Map<string, Value>(),
+      builtins: new Map<string, BuiltinValue>(),
       previousProgramsIdentifiers: new Set<string>(),
       operators: new Map<string, (...operands: Value[]) => Value>(),
       maxExecTime: 1000,

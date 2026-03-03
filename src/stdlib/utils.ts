@@ -1,4 +1,4 @@
-import { Value } from "../cse-machine/stash";
+import { BuiltinValue, Value } from "../cse-machine/stash";
 
 export enum GroupName {
     LINKED_LISTS = 'linked-list',
@@ -11,7 +11,7 @@ export enum GroupName {
 export type Group = {
     name: GroupName;
     prelude: string;
-    builtins: Map<string, Value>;
+    builtins: Map<string, BuiltinValue>;
 }
 
 
