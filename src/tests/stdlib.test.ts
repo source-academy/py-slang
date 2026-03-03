@@ -1,3 +1,5 @@
+import { TypeError } from "../errors";
+import { ParserErrors } from "../parser/errors";
 import { generateTestCases, TestCases } from "./utils";
 
 describe('Standard Library Tests', () => {
@@ -60,7 +62,7 @@ describe('Standard Library Tests', () => {
                 ["1.0 == 2", false],
                 ["True == True", true],
                 ["None == None", true],
-                ["[] == []", SyntaxError], // list literals are not supported
+                ["[] == []", ParserErrors.GenericUnexpectedSyntaxError], // list literals are not supported
             ]
         }
 

@@ -1,18 +1,19 @@
 import { expect, test } from '@jest/globals';
 
-import {Tokenizer} from '../tokenizer';
-import {Parser} from '../parser';
-import {Resolver} from '../resolver';
+import { Tokenizer } from '../tokenizer';
+import { Parser } from '../parser';
+import { Resolver } from '../resolver';
 // import {Translator} from '../translator';
-import {StmtNS} from "../ast-types";
+import { StmtNS } from "../ast-types";
 import Stmt = StmtNS.Stmt;
 import { Context } from "../cse-machine/context";
 import { runInContext } from "../runner/pyRunner";
 import { Group } from "../stdlib/utils";
+import { RuntimeSourceError } from '../errors';
 
 type Class<T> = new (...args: any[]) => T;
 
-export type TestExpectedValue = bigint | number | boolean | string | null | Class<Error>;
+export type TestExpectedValue = bigint | number | boolean | string | null | Class<RuntimeSourceError> | Class<Error>;
 export type TestCases = Record<string, [string, TestExpectedValue][]>;
 
 export function toPythonAst(text: string, chapter: number = 1): Stmt {
@@ -44,29 +45,49 @@ export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
 
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
     for (const [funcName, tests] of Object.entries(testCases)) {
-        test.each(tests)(`${funcName}: %s should return %s`, (code, expected) => {
+        test.each(tests)(`${funcName}: %s should return %s`, async (code, expected) => {
             const context = new Context();
-            if (typeof expected === 'function' && (expected as Class<Error>).prototype instanceof Error) {
-                return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value.message', expect.stringContaining((expected as Class<Error>).name));
+            const result = await runInContext(code, context, { variant, groups });
+            expect(result).toBeDefined();
+            expect(result.status).toBe('finished');
+
+            if (typeof expected === 'function' && expected.prototype instanceof RuntimeSourceError) {
+                expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
+                return;
             }
 
+            if (typeof expected === 'function' && expected.prototype instanceof Error) {
+                expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
+                return;
+            }
+
+
             if (expected === null) {
-                return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value', { type: 'none' });
+                expect(context.stash.peek()).toHaveProperty('type', 'none');
+                return;
             }
 
             if (typeof expected === 'bigint') {
-                return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value', { type: 'bigint', value: expected });
+                expect(context.stash.peek()).toHaveProperty('type', 'bigint');
+                expect(context.stash.peek()).toHaveProperty('value', expected);
+                return;
             }
 
             if (typeof expected === 'number') {
-                return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value', { type: 'number', value: expected });
+                expect(context.stash.peek()).toHaveProperty('type', 'number');
+                expect(context.stash.peek()).toHaveProperty('value', expected);
+                return;
             }
 
             if (typeof expected === 'boolean') {
-                return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value', { type: 'bool', value: expected });
+                expect(context.stash.peek()).toHaveProperty('type', 'bool');
+                expect(context.stash.peek()).toHaveProperty('value', expected);
+                return;
             }
 
-            return expect(runInContext(code, context, { variant, groups })).resolves.toHaveProperty('value', { type: 'string', value: expected });
+            expect(context.stash.peek()).toHaveProperty('type', 'string');
+            expect(context.stash.peek()).toHaveProperty('value', expected);
+            return;
         });
     }
 }
