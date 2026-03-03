@@ -10,7 +10,8 @@
     "build": "rollup -c --bundleConfigAsCjs",
     "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
-    "test": "jest"
+    "test": "jest",
+    "wasm": "ts-node src/wasm-compiler/index.ts"
   },
   "keywords": [
     "Python",
@@ -48,8 +49,10 @@
   },
   "dependencies": {
     "@sourceacademy/conductor": "^0.2.3",
+    "@sourceacademy/wasm-util": "^1.0.4",
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
-    "mathjs": "^14.9.1"
+    "mathjs": "^14.9.1",
+    "wabt": "^1.0.37"
   }
 }
