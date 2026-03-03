@@ -8,14 +8,16 @@ import { Node } from './types';
 import { StmtNS } from '../ast-types';
 import { ModuleContext, NativeStorage } from '../types';
 
-export class Context {
+export class Context <T = any>{
   public control: Control;
   public stash: Stash;
   public output: string = '';
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
-
+  public externalContext?: T;
+  public prelude: string | null = null;  
+  
   runtime: {
     break: boolean
     debuggerOn: boolean

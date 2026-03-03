@@ -6,6 +6,7 @@ import { runInContext, IOptions } from "../runner/pyRunner";
 import { Context } from "../cse-machine/context";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Finished } from "../types";
+import { Prelude } from "../stdlib/preludes";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {
@@ -17,7 +18,6 @@ const defaultOptions: IOptions = {
 export default class PyEvaluator extends BasicEvaluator {
   private context: Context;
   private options: IOptions;
-
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
     this.context = defaultContext;

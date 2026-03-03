@@ -307,3 +307,11 @@ export interface ModuleContext {
   state: null | any
   tabs: null | any[]
 }
+
+export interface CustomBuiltIns {
+  rawDisplay: (value: Value, str: string, externalContext: any) => Value
+  prompt: (value: Value, str: string, externalContext: any) => string | null
+  alert: (value: Value, str: string, externalContext: any) => void
+  /* Used for list visualisation. See #12 */
+  visualiseList: (list: any, externalContext: any) => void
+}
