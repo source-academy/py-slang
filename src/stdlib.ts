@@ -1731,7 +1731,7 @@ export function toPythonFloat(num: number): string {
     return num.toString();
 }
 
-export function toPythonString(obj: Value): string {
+export function toPythonString(obj: Value, repr: boolean = false): string {
     let ret: any;
     if (obj.type == 'builtin') {
         return `<built-in function ${(obj as any).name}>`
@@ -1756,12 +1756,12 @@ export function toPythonString(obj: Value): string {
     } else if (obj.type === 'none') {
         ret = 'None';
     } else if (obj.type === 'string') {
-        ret = obj.value;
+        ret = repr ? JSON.stringify(obj.value) : obj.value;
     } else if (obj.type === "function") {
         const funcName = obj.name || '(anonymous)';
         ret = `<function ${funcName}>`;
     } else if (obj.type === "list") {
-        ret = `[${obj.value.map(toPythonString).join(', ')}]`;
+        ret = `[${obj.value.map(v => toPythonString(v, true)).join(', ')}]`;
     } else {
         ret = `<${obj.type} object>`;
     }

@@ -286,7 +286,7 @@ export interface Finished {
 export class Representation {
     constructor(public representation: string) {}
   
-    toString(value: any): string {
+    toString(value: Value): string {
         // call str(value) in stdlib
         // TODO: mapping
         const result = toPythonString(value);

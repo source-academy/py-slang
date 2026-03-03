@@ -60,7 +60,7 @@ describe('Standard Library Tests', () => {
                 ["1.0 == 2", false],
                 ["True == True", true],
                 ["None == None", true],
-                ["[] == []", SyntaxError], // linked
+                ["[] == []", SyntaxError], // list literals are not supported
             ]
         }
 

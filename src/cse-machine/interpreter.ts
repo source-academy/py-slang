@@ -94,7 +94,7 @@ export async function evaluate(code: string, program: StmtNS.Stmt, context: Cont
       options.stepLimit!,
       options.isPrelude
     );
-    return context.output ? { type: "string", value: context.output } : result;
+    return { type: "string", value: context.output ? context.output : toPythonString(result, true) };
   } catch (error: any) {
     return { type: 'error', message: error.message };
   } finally {
