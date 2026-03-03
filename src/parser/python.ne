@@ -273,13 +273,13 @@ atom ->
   | %float
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
   | %bigint
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 10)); } %}
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
   | %hex
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 16)); } %}
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
   | %octal
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 8)); } %}
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
   | %binary
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseInt(t.value, 2)); } %}
+      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
   | %complex
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); } %}
   | string                                    {% id %}
