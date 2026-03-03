@@ -7,7 +7,6 @@ import { handleRuntimeError } from "./cse-machine/error";
 import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, ValueError, TypeError, ZeroDivisionError, SublanguageError } from "./errors/errors";
 import { ControlItem } from "./cse-machine/control";
 import { Context } from "./cse-machine/context";
-import * as es from 'estree';
 
 export function Validate<T extends Value>(
     minArgs: number | null,
