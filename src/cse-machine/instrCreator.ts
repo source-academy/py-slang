@@ -9,6 +9,7 @@ import {
   EnvInstr,
   Instr,
   InstrType,
+  ListInstr,
   Node,
   UnOpInstr 
 } from "./types";
@@ -64,6 +65,12 @@ export const branchInstr = (
   instrType: InstrType.BRANCH,
   consequent,
   alternate,
+  srcNode
+})
+
+export const listInstr = (numOfElements: number, srcNode: Node): ListInstr => ({
+  instrType: InstrType.LIST,
+  numOfElements,
   srcNode
 })
 

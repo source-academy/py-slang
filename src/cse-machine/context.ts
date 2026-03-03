@@ -1,12 +1,12 @@
 
-import { Control, ControlItem } from './control';
-import { createProgramEnvironment, createSimpleEnvironment, Environment } from './environment';
+import { StmtNS } from '../ast-types';
+import { ModuleContext, NativeStorage } from '../types';
+import { Control } from './control';
+import { Environment } from './environment';
 import { CseError } from './error';
 import { Heap } from './heap';
 import { BuiltinValue, Stash, Value } from './stash';
 import { Node } from './types';
-import { StmtNS } from '../ast-types';
-import { ModuleContext, NativeStorage } from '../types';
 
 export class Context <T = any>{
   public control: Control;

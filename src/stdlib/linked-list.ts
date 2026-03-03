@@ -1,11 +1,9 @@
-import { sourceMapsEnabled } from "process";
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { BoolValue, ListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
-import { BuiltInFunctions, toPythonString, Validate } from "../stdlib";
+import { toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
-import { stringify } from "querystring";
 
 const linkedListBuiltins = new Map<string, Value>();
 

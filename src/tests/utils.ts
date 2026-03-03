@@ -10,19 +10,19 @@ import {Resolver} from '../resolver';
 import {StmtNS} from "../ast-types";
 import Stmt = StmtNS.Stmt;
 
-export function toPythonAst(text: string): Stmt {
+export function toPythonAst(text: string, chapter: number = 1): Stmt {
     const script = text + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
-    const pyParser = new Parser(script, tokens)
+    const pyParser = new Parser(script, tokens, chapter)
     const ast = pyParser.parse()
     // console.dir(ast);
     return ast;
 }
 
-export function toPythonAstAndResolve(text: string): Stmt {
-    const ast = toPythonAst(text);
-    new Resolver(text, ast).resolve(ast);
+export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
+    const ast = toPythonAst(text, chapter);
+    new Resolver(text, ast, [], []).resolve(ast);
     return ast;
 }
 

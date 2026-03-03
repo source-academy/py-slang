@@ -1,12 +1,10 @@
-import { Closure } from "./cse-machine/closure";
 import { BigIntValue, BoolValue, BuiltinValue, NoneValue, NumberValue, StringValue, Value } from "./cse-machine/stash";
 // npm install mathjs
-import { gamma, lgamma, erf } from 'mathjs';
-import { addPrint } from "./cse-machine/interpreter";
-import { handleRuntimeError } from "./cse-machine/error";
-import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, ValueError, TypeError, ZeroDivisionError, SublanguageError } from "./errors/errors";
-import { ControlItem } from "./cse-machine/control";
+import { erf, gamma, lgamma } from 'mathjs';
 import { Context } from "./cse-machine/context";
+import { ControlItem } from "./cse-machine/control";
+import { handleRuntimeError } from "./cse-machine/error";
+import { MissingRequiredPositionalError, SublanguageError, TooManyPositionalArgumentsError, TypeError, ValueError } from "./errors/errors";
 
 export function Validate<T extends Value>(
     minArgs: number | null,
@@ -1591,7 +1589,35 @@ export class BuiltInFunctions {
         return { type: 'number', value: currentTime };
     }
 
+    @Validate(1, 1, 'is_none', true)
+    static is_none(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'none' };
+    }
 
+    @Validate(1, 1, 'is_float', true)
+    static is_float(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'number' };
+    }
+    
+    @Validate(1, 1, 'is_string', true)
+    static is_string(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'string' };
+    }
+
+    @Validate(1, 1, 'is_boolean', true)
+    static is_boolean(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'bool' };
+    }
+
+    @Validate(1, 1, 'is_int', true)
+    static is_int(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+        const obj = args[0];
+        return { type: 'bool', value: obj.type === 'bigint' };
+    }
 
     static input(args: Value[], source: string, command: ControlItem, context: Context): StringValue {
         // TODO: : call conductor to receive user input
@@ -1614,8 +1640,8 @@ export class BuiltInFunctions {
     }
 }
 
-import py_s1_constants from './stdlib/py_s1_constants.json';
 import { ExprNS } from "./ast-types";
+import py_s1_constants from './stdlib/py_s1_constants.json';
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
 //       just change the variable below to switch to the set.

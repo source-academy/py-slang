@@ -1,10 +1,9 @@
 // Value.ts
+import { StmtNS } from '../ast-types';
+import { PyComplexNumber } from '../types';
 import { Closure } from './closure';
 import { Environment } from './environment';
 import { Stack } from './stack';
-import { ExprNS, StmtNS } from '../ast-types';
-import { PyComplexNumber } from '../types';
-import { exp } from 'mathjs';
 
 /**
  * Value represents various runtime values in Python.

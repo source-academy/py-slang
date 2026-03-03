@@ -1,12 +1,12 @@
+import { ExprNS } from '../ast-types';
+import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
+import { TokenType } from '../tokens';
+import { PyComplexNumber } from '../types';
 import { Context } from './context';
 import { handleRuntimeError } from './error';
 import { Value } from './stash';
 import { operatorTranslator, typeTranslator } from './types';
 import { pythonMod } from './utils';
-import { ExprNS } from '../ast-types';
-import { TokenType } from '../tokens';
-import { PyComplexNumber } from '../types';
-import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
 
 
 export type BinaryOperator =
@@ -64,7 +64,7 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              '',
+              null,
               operatorTranslator(operator)
             )
           )
@@ -85,7 +85,7 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              '',
+              null,
               operatorTranslator(operator)
             )
           )
@@ -618,9 +618,9 @@ export function evaluateBoolExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
-        typeTranslator(left.type),
-        typeTranslator(right.type),
-        operatorTranslator(operator)
+        left.type,
+        right.type,
+        operator
       )
     )
     return { type: 'error', message: `Unreachable in evaluateBoolExpression}` }

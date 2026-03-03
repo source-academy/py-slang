@@ -1,12 +1,11 @@
+import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
-import { RecursivePartial, Result } from "../types";
-import { Tokenizer } from "../tokenizer";
 import { Parser } from "../parser";
 import { Resolver } from "../resolver";
-import { StmtNS } from "../ast-types";
 import { Group } from "../stdlib/utils";
-import { Environment } from "../cse-machine/environment";
+import { Tokenizer } from "../tokenizer";
+import { RecursivePartial, Result } from "../types";
 
 type Stmt = StmtNS.Stmt
 
@@ -15,6 +14,7 @@ export interface IOptions {
   groups: Group[];
   envSteps: number;
   stepLimit: number;
+  variant: number;
 }
 
 function runPyAST(
@@ -27,7 +27,7 @@ function runPyAST(
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
+  const pyParser = new Parser(script, tokens, variant);
   const ast = pyParser.parse();
   if (doValidate) {
     new Resolver(script, ast, groups, preludeNames).resolve(ast);
@@ -38,13 +38,16 @@ function runPyAST(
 export async function loadGroupsIntoContext(context: Context, groups: Group[], options: RecursivePartial<IOptions> = {}) {
   if (options.isPrelude || !options.groups) 
     return;
-
+  let prelude = '';
   for (const group of groups as Group[]) {
     for (const [name, value] of group.builtins) {
       context.nativeStorage.builtins.set(name, value);
     }
-    await runInContext(group.prelude, context, { ...options, isPrelude: true, groups: [] });
+    prelude += group.prelude + '\n';
   }
+  console.log(prelude);
+  await runInContext(prelude, context, { ...options, isPrelude: true, groups: [] });
+  
 }
 
 export async function runInContext(
@@ -53,7 +56,7 @@ export async function runInContext(
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
   await loadGroupsIntoContext(context, options.groups as Group[], options);
-  const pyAst = runPyAST(code, 1, !options.isPrelude, options.groups as Group[], Object.keys(context.runtime.environments[0].head));
+  const pyAst = runPyAST(code, options.variant, !options.isPrelude, options.groups as Group[], Object.keys(context.runtime.environments[0].head));
   const result = runCSEMachine(code, pyAst, context, options);
   return result;
 }

@@ -1,7 +1,7 @@
-import { Environment } from './environment';
 import { ExprNS, StmtNS } from '../ast-types';
 import { TokenType } from '../tokens';
-import { Statement } from 'estree';
+import { Environment } from './environment';
+import { Value } from './stash';
 
 export type Node = { isEnvDependent?: boolean } & (
     | StmtNS.Stmt
@@ -36,6 +36,7 @@ export enum InstrType {
     IF = 'If',
     FUNCTION_DEF = 'FunctionDef',
     LAMBDA = 'Lambda',
+    LIST = 'ListLiteral',
     MULTI_LAMBDA = 'MultiLambda',
     GROUPING = 'Grouping',
     LITERAL = 'Literal',
@@ -103,6 +104,11 @@ export interface BranchInstr extends BaseInstr {
   alternate: Node | null | undefined
 }
 
+export interface ListInstr extends BaseInstr {
+  instrType: InstrType.LIST
+  numOfElements: number
+}
+
 export interface EnvInstr extends BaseInstr {
   instrType: InstrType.ENVIRONMENT
   env: Environment
@@ -145,21 +151,19 @@ export type Instr =
   | PopInstr
   | BoolOpInstr
 
-export function typeTranslator(type: string): string {
+export function typeTranslator(type: Value["type"]): string {
   switch (type) {
     case 'bigint':
       return 'int'
     case 'number':
       return 'float'
-    case 'boolean':
-      return 'bool'
     case 'bool':
       return 'bool'
     case 'string':
       return 'str'
     case 'complex':
       return 'complex'
-    case 'undefined':
+    case 'none':
       return 'NoneType'
     default:
       return 'unknown'

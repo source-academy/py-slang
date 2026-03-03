@@ -2,6 +2,8 @@ import { Token } from '../tokenizer'
 import { Context } from '../cse-machine/context'
 import { ExprNS } from '../ast-types'
 import { operatorTranslator } from '../cse-machine/types'
+import { TokenType } from '../tokens'
+import { Value } from '../cse-machine/stash'
 
 export enum ErrorType {
   IMPORT = 'Import',
@@ -164,7 +166,7 @@ export class TypeConcatenateError extends RuntimeSourceError {
 }
 
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, wrongType1: string, wrongType2: string, operand: string) {
+    constructor(source: string, node: ExprNS.Expr, wrongType1: Value["type"], wrongType2: Value["type"] | null, operand: TokenType | string) {
         super(node);
         this.type = ErrorType.TYPE;
 
@@ -179,20 +181,20 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
         const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource
         const indicator = createErrorIndicator(snippet, errorPos);
         let suggestion: string
-        if (wrongType2 === '') {
-        // Format for Unary operators
-        hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`
-        suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`
-      } else {
-        // Format for Binary operators
-        const typeStr2 = typeTranslator(wrongType2)
-        hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`
-        suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`
-    }
+        if (wrongType2 === null) {
+          // Format for Unary operators
+          hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`
+          suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`
+        } else {
+          // Format for Binary operators
+          const typeStr2 = typeTranslator(wrongType2)
+          hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`
+          suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`
+        }
 
-    // Assemble the final multi-line message
-    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
-  }
+        // Assemble the final multi-line message
+        this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
+    }
 }
 
 export class MissingRequiredPositionalError extends RuntimeSourceError {

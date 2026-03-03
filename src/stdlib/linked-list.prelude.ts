@@ -13,8 +13,6 @@ def equal(xs, ys):
         return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
     elif is_string(xs):
         return is_string(ys) and xs == ys
-    elif is_undefined(xs):
-        return is_undefined(ys)
     elif is_function(xs):
         return is_function(ys) and xs == ys
     else:
@@ -38,7 +36,7 @@ def map(f, xs):
 def _build_list(i, fun, already_built):
     return already_built if i < 0 else _build_list(i - 1, fun, pair(fun(i), already_built))
 
-def build__list(fun, n):
+def build_list(fun, n):
     return _build_list(n - 1, fun, None)
 
 # for_each applies first arg fun to the elements of xs
@@ -58,7 +56,7 @@ def _list_to_string(xs, cont):
             head(xs),
             lambda x: _list_to_string(
                 tail(xs),
-                lambda y: cont(f"[{x},{y}]")
+                lambda y: cont("[" + str(x) + ", " + str(y) + "]")
             )
         )
     else:

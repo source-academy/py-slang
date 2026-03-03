@@ -6,26 +6,22 @@
 
 /* tslint:disable:max-classes-per-file */
 
-import { Stack } from './stack'
-import { Control, ControlItem } from './control';
-import { Stash, Value } from './stash';
-import { Environment, createBlockEnvironment, createEnvironment, createProgramEnvironment, currentEnvironment, popEnvironment, pushEnvironment } from './environment';
-import { Context } from './context';
-import { isNode, scanForAssignments } from './utils';
-import { envChanging, pyDefineVariable, pyGetVariable, checkStackOverFlow, isSimpleFunction, typeTranslator } from './utils';
-import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, Node, StatementSequence, UnOpInstr } from './types';
-import * as instr from './instrCreator'
-import { Closure } from './closure';
-import { evaluateBinaryExpression,evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
-import * as error from "../errors/errors"
-import { ComplexLiteral, CSEBreak, None, PyComplexNumber, RecursivePartial, Representation, Result } from '../types';
-import { builtIns, builtInConstants, toPythonString } from '../stdlib';
-import { IOptions, runInContext } from '../runner/pyRunner';
 import { ExprNS, StmtNS } from '../ast-types';
-import { handleRuntimeError } from './error';
-import * as instrCreator from './instrCreator'
+import * as error from "../errors/errors";
 import { BuiltinReassignmentError } from '../errors/errors';
-import { Group, GroupName } from '../stdlib/utils';
+import { IOptions } from '../runner/pyRunner';
+import { builtIns, toPythonString } from '../stdlib';
+import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
+import { Closure } from './closure';
+import { Context } from './context';
+import { Control, ControlItem } from './control';
+import { createEnvironment, createProgramEnvironment, currentEnvironment, popEnvironment, pushEnvironment } from './environment';
+import { handleRuntimeError } from './error';
+import * as instrCreator from './instrCreator';
+import { evaluateBinaryExpression, evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
+import { Stash, Value } from './stash';
+import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListInstr, Node, UnOpInstr } from './types';
+import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
   code: string,
@@ -82,12 +78,12 @@ export async function evaluate(code: string, program: StmtNS.Stmt, context: Cont
   } catch (error: any) {
     return { type: 'error', message: error.message };
   }
-  
+
   try {
     context.runtime.isRunning = true
     context.control = new Control(program);
     context.stash = new Stash();
-    
+
     // Adaptation for new feature
     const result = runCSEMachine(
       code,
@@ -179,7 +175,7 @@ export function runCSEMachine(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for (const value of eceState) {
   }
-  
+
   // Return the value at the top of the storage as the result
   const result = stash.peek();
   return result !== undefined ? result : { type: 'none' };
@@ -216,9 +212,9 @@ export function* generateCSEMachineStateStream(
   if (command && isNode(command)) {
     context.runtime.nodes.unshift(command)
   }
-  
+
   while (command) {
-    
+
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {
     //   yield { stash, control, steps }
@@ -237,15 +233,16 @@ export function* generateCSEMachineStateStream(
     }
 
     control.pop()
+    console.log(command, stash)
     if (isNode(command)) {
       const node = command as Node
       const nodeType = node.constructor.name
 
       context.runtime.nodes.shift()
       context.runtime.nodes.unshift(command)
-      
+
       cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude)
-      
+
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
         // We can put this under isNode since context.runtime.break
@@ -261,7 +258,7 @@ export function* generateCSEMachineStateStream(
     }
 
     command = control.peek()
-    
+
     steps += 1
     if (!isPrelude) {
       context.runtime.envStepsTotal = steps
@@ -293,7 +290,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     ) {
       popEnvironment(context)
     }
-    
+
 
     // if (hasDeclarations(command as es.BlockStatement) || hasImportDeclarations(command as es.BlockStatement)) {
     //   if (currentEnvironment(context).name != 'programEnvironment') {
@@ -312,7 +309,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     // Push the block body as a sequence of statements onto the control stack
     const seq = node.statements.slice().reverse();
     control.push(...seq);
-    
+
   },
 
   SimpleExpr: function (
@@ -581,17 +578,31 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
           ? // 'else' block
-            { type: 'StatementSequence', body: ifNode.elseBlock }
+          { type: 'StatementSequence', body: ifNode.elseBlock }
           : // 'elif' block
-            ifNode.elseBlock
+          ifNode.elseBlock
         : // 'else' block dont exist
-          null,
+        null,
       ifNode
     )
     control.push(branch)
     control.push(ifNode.condition)
   },
 
+  List: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.listInstr((command as ExprNS.List).elements.length, command as ExprNS.List))
+
+    for (let i = (command as ExprNS.List).elements.length - 1; i >= 0; i--) {
+      control.push((command as ExprNS.List).elements[i])
+    }
+  },
   Ternary: function (
     code: string,
     command: ControlItem,
@@ -732,6 +743,26 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     stash.pop();
   },
+
+  [InstrType.LIST]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListInstr
+    const elements: Value[] = []
+    for (let i = 0; i < instr.numOfElements; i++) {
+      const element = stash.pop()
+      if (element) {
+        elements.unshift(element)
+      }
+    }
+    stash.push({ type: 'list', value: elements })
+  },
+
 
   [InstrType.APPLICATION]: function (
     code: string,

@@ -1,29 +1,25 @@
 //MAY NOT USE
-
-import { createProgramEnvironment, pushEnvironment } from './cse-machine/environment';
+/*
 //import * as list from './stdlib/list'
-import { listPrelude } from './stdlib/list.prelude';
+import listPrelude from './stdlib/list.prelude';
 //import * as misc from './stdlib/misc'
-import { builtIns, builtInConstants } from './stdlib';
+import { builtInConstants, builtIns } from './stdlib';
 //import * as pylib from './stdlib/pylib'
-import { streamPrelude } from './stdlib/stream.prelude';
-import { createTypeEnvironment, tForAll, tVar } from './typeChecker/utils';
+import streamPrelude from './stdlib/stream.prelude';
 
 //import type { Context, CustomBuiltIns, Environment, NativeStorage, Value } from './types'
-import type { NativeStorage, CustomBuiltIns } from './types';
 import { Context } from './cse-machine/context';
-import type { Environment } from './cse-machine/environment';
-import { Heap } from './cse-machine/heap';
-import type { Node } from './cse-machine/types';
-import { Value } from './cse-machine/stash';
+import { BuiltinValue, Value } from './cse-machine/stash';
+import type { CustomBuiltIns } from './types';
 
+import { stringify } from './utils/stringify';
+import { GLOBAL } from './constants';
+import { Chapter, Variant, LanguageOptions } from './langs';
+*/
 
 //import * as operators from './utils/operators';
-import { EnvTree, EnvTreeNode } from './cse-machine/context';
-import { CseError } from './cse-machine/error';
 
 //import * as stringify from 'js-slang/dist/utils/stringify';
-import { stringify } from './utils/stringify';
 
 /*
 const createEmptyRuntime = () => ({
@@ -120,7 +116,16 @@ export const ensureGlobalEnvironmentExist = (context: Context) => {
 }
 */
 
-export const defineSymbol = (context: Context, name: string, value: Value) => {
+
+
+
+
+
+
+
+/*
+
+export const defineSymbol = (context: Context, name: string, value: BuiltinValue) => {
   const globalEnvironment = context.runtime.environments[0]
   Object.defineProperty(globalEnvironment.head, name, {
     value, writable: false, enumerable: true
@@ -132,7 +137,7 @@ export const defineSymbol = (context: Context, name: string, value: Value) => {
 export function defineBuiltin(
   context: Context,
   name: string,
-  value: Value,
+  value: BuiltinValue,
   minArgsNeeded: undefined | number = undefined
 ) {
   function extractName(name: string): string { return name.split('(')[0].trim() }
@@ -141,14 +146,13 @@ export function defineBuiltin(
     return name.split('(')[1].split(')')[0].split(',').map(s => s.trim())
   }
 
-  if (typeof value === 'function') {
+  if (value.type === 'builtin') {
     const funName = extractName(name)
     const funParameters = extractParameters(name)
     const repr = `function ${name} {\n\t[native py-slang builtin]\n}`
+    
     value.toString = () => repr
-    value.minArgsNeeded = minArgsNeeded
-    value.funName = funName
-    value.funParameters = funParameters
+    value.name = funName
     defineSymbol(context, funName, value)
   } else {
     defineSymbol(context, name, value)
@@ -168,7 +172,7 @@ export const importBuiltins = (context: Context, externalBuiltIns: CustomBuiltIn
   const rawDisplay = (v: Value, ...s: string[]) => externalBuiltIns.rawDisplay(v, s[0], context.externalContext)
   const display = (v: Value, ...s: string[]) => {
     if (s.length === 1 && s[0] !== undefined && typeof s[0] !== 'string') throw new TypeError('display expects the second argument to be a string')
-    return (rawDisplay(stringify(v), s[0]), v)
+    return (rawDisplay({'type': 'string', value: stringify(v)}, s[0]), v)
   }
   const prompt = (v: Value) => {
     const start = Date.now()
@@ -176,7 +180,7 @@ export const importBuiltins = (context: Context, externalBuiltIns: CustomBuiltIn
     context.nativeStorage.maxExecTime += Date.now() - start
     return promptResult
   }
-  const visualiseList = (...v: Value) => {
+  const visualiseList = (...v: Value[]) => {
     externalBuiltIns.visualiseList(v, context.externalContext)
     return v[0]
   }
@@ -206,9 +210,9 @@ function importPrelude(context: Context) {
 }
 
 const defaultBuiltIns: CustomBuiltIns = {
-  rawDisplay: misc.rawDisplay,
-  prompt: misc.rawDisplay,
-  alert: misc.rawDisplay,
+  rawDisplay: () => ({type: 'none'}),
+  prompt: () => "",
+  alert: () => ({type: 'none'}),
   visualiseList: (_v: Value) => { throw new Error('List visualizer is not enabled') }
 }
 
@@ -221,11 +225,10 @@ const createContext = <T>(
   externalBuiltIns: CustomBuiltIns = defaultBuiltIns
 ): Context => {
 
-  /*const context = createEmptyContext(
-    chapter, variant, languageOptions, externalSymbols, externalContext
-  )
-  */
-
+  // const context = createEmptyContext(
+  //  chapter, variant, languageOptions, externalSymbols, externalContext
+  // )
+  
   const context = new Context()
 
   importBuiltins(context, externalBuiltIns)
@@ -236,4 +239,4 @@ const createContext = <T>(
 }
 
 export default createContext
-
+*/
