@@ -448,9 +448,22 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitComplexExpr(expr: ExprNS.Complex): WasmNumeric {
+    // Parse complex number string format like "1+2j" or "3j"
+    const complexStr = expr.value.replace('j', '').trim();
+    let real = 0;
+    let imag = 0;
+
+    if (complexStr.includes('+') || (complexStr.includes('-') && complexStr.indexOf('-') > 0)) {
+      const parts = complexStr.split(/(?=[+-])/).map(s => s.trim()).filter(s => s);
+      real = parts.length > 0 ? parseFloat(parts[0]) : 0;
+      imag = parts.length > 1 ? parseFloat(parts[1]) : 0;
+    } else {
+      imag = parseFloat(complexStr);
+    }
+
     return wasm
       .call(MAKE_COMPLEX_FX)
-      .args(f64.const(expr.value.real), f64.const(expr.value.imag));
+      .args(f64.const(real), f64.const(imag));
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {

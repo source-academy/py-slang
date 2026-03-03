@@ -1,6 +1,6 @@
 import assert from "assert";
 import wabt from "wabt";
-import { Parser } from "../parser";
+import { NearleyParser } from "../parser/parser-adapter";
 import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
@@ -10,7 +10,7 @@ export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
+  const pyParser = new NearleyParser(script, tokens);
   const ast = pyParser.parse();
 
   const builderGenerator = new BuilderGenerator();
