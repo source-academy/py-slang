@@ -1,8 +1,8 @@
-import * as es from 'estree'
 import { toPythonString } from './stdlib'
 import { Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
+import { SourceLocation } from './errors'
 
 export class CSEBreak {}
 
@@ -217,18 +217,15 @@ export class PyComplexNumber {
     }
 }
 
-export interface None extends es.BaseNode {
+export interface None {
     type: 'NoneType';
-    loc?: es.SourceLocation;
+    loc?: SourceLocation | null;
 }
 
-export interface ComplexLiteral extends es.BaseNode {
+export interface ComplexLiteral {
     type: 'Literal';
-    complex: {
-        real: number;
-        imag: number;
-    }
-    loc?: es.SourceLocation;
+    complex: PyComplexNumber;
+    loc?: SourceLocation | null;
 }
 
 
@@ -304,4 +301,9 @@ export interface NativeStorage {
      */
     loadedModules: Record<string, ModuleFunctions>
     loadedModuleTypes: Record<string, Record<string, string>>
+}
+
+export interface ModuleContext {
+  state: null | any
+  tabs: null | any[]
 }

@@ -509,5 +509,4 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.resolve(expr.value);
         this.resolve(expr.index);
     }
-
 }
