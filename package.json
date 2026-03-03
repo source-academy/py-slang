@@ -6,9 +6,8 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "regen": "npm run build && node dist/generate.js",
-    "start:dev": "npx nodemon",
+    "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';fs.writeFileSync(f,'// @ts-nocheck\\n'+fs.readFileSync(f,'utf8'))\"",
     "build": "rollup -c --bundleConfigAsCjs",
-    "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh",
     "test": "jest",
     "wasm": "ts-node src/wasm-compiler/index.ts"
@@ -32,11 +31,16 @@
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
     "@types/mathjs": "^9.4.1",
+    "@types/moo": "^0.5.10",
+    "@types/nearley": "^2.11.5",
     "@types/node": "^18.19.84",
     "glob": "^11.1.0",
     "jest": "^29.7.0",
     "jsdoc": "^4.0.4",
+    "moo": "^0.5.2",
+    "nearley": "^2.20.1",
     "nodemon": "^3.1.10",
+    "peggy": "^5.0.6",
     "rimraf": "^3.0.2",
     "rollup": "^4.59.0",
     "rollup-plugin-modify": "^3.0.0",
@@ -53,6 +57,7 @@
     "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
+    "moo-peekable-lexer": "^1.1.2",
     "wabt": "^1.0.37"
   }
 }

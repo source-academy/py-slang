@@ -1,8 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
 import { RecursivePartial, Result } from "../types";
-import { Tokenizer } from "../tokenizer";
-import { Parser } from "../parser";
+import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import { StmtNS } from "../ast-types";
 
@@ -12,20 +11,19 @@ export interface IOptions {
   isPrelude: boolean;
   envSteps: number;
   stepLimit: number;
+  chapter?: number;
 }
 
 function runPyAST(
   code: string,
-  variant: number = 1,
+  chapter: number = 4,
   doValidate: boolean = false
 ): Stmt {
   const script = code + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
-  const ast = pyParser.parse();
+  const ast = parse(script);
   if (doValidate) {
-    new Resolver(script, ast).resolve(ast);
+    const resolver = new Resolver(script, ast);
+    resolver.resolve(ast);
   }
   return ast;
 }
@@ -35,7 +33,7 @@ export async function runInContext(
   context: Context,
   options: RecursivePartial<IOptions> = {}
 ): Promise<Result> {
-  const pyAst = runPyAST(code, 1, true);
+  const pyAst = runPyAST(code, options.chapter ?? 4, true);
   const result = runCSEMachine(code, pyAst, context, options);
   return result;
 }
