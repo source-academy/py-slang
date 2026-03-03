@@ -1,8 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
 import { RecursivePartial, Result } from "../types";
-import { Tokenizer } from "../tokenizer";
-import { NearleyParser } from "../parser/parser-adapter";
+import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import { StmtNS } from "../ast-types";
 
@@ -21,10 +20,7 @@ function runPyAST(
   doValidate: boolean = false
 ): Stmt {
   const script = code + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const parser = new NearleyParser(script, tokens);
-  const ast = parser.parse();
+  const ast = parse(script);
   if (doValidate) {
     const resolver = new Resolver(script, ast);
     resolver.resolve(ast);

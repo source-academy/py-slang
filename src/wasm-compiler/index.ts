@@ -1,17 +1,13 @@
 import assert from "assert";
 import wabt from "wabt";
-import { NearleyParser } from "../parser/parser-adapter";
-import { Tokenizer } from "../tokenizer";
+import { parse } from "../parser/parser-adapter";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 import { WatGenerator } from "@sourceacademy/wasm-util";
 
 export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const pyParser = new NearleyParser(script, tokens);
-  const ast = pyParser.parse();
+  const ast = parse(script);
 
   const builderGenerator = new BuilderGenerator();
   const watIR = builderGenerator.visit(ast);
