@@ -99,6 +99,7 @@ export class Tokenizer {
     private specialIdentifiers: Map<string, TokenType>;
     private forbiddenIdentifiers: Map<string, TokenType>;
     private parenthesesLevel: number;
+    private bracketsLevel: number;
 
     // forbiddenOperators: Set<TokenType>;
     constructor(source: string) {
@@ -141,6 +142,7 @@ export class Tokenizer {
         //     TokenType.DOUBLESLASHEQUAL,
         // ])
         this.parenthesesLevel = 0;
+        this.bracketsLevel = 0;
     }
 
     private isAtEnd() {
@@ -462,23 +464,12 @@ export class Tokenizer {
         if (specialIdent !== undefined) {
             /* Merge multi-token operators, like 'is not', 'not in' */
             const previousToken = this.tokens[this.tokens.length - 1];
-            switch (specialIdent) {
-                case TokenType.NOT:
-                    if (previousToken.type === TokenType.IS) {
-                        this.overwriteToken(TokenType.ISNOT);
-                    } else {
-                        this.addToken(specialIdent);
-                    }
-                    return;
-                case TokenType.IN:
-                    if (previousToken.type === TokenType.NOT) {
-                        this.overwriteToken(TokenType.NOTIN);
-                    } else {
-                        this.addToken(specialIdent);
-                    }
-                    return;
-                default:
-                    this.addToken(specialIdent);
+            if (specialIdent === TokenType.NOT && previousToken?.type === TokenType.IS) {
+                this.overwriteToken(TokenType.ISNOT);
+            } else if (specialIdent === TokenType.IN && previousToken?.type === TokenType.NOT) {
+                this.overwriteToken(TokenType.NOTIN);
+            } else {
+                this.addToken(specialIdent);
             }
         } else {
             this.addToken(TokenType.NAME);
@@ -752,6 +743,17 @@ export class Tokenizer {
                     throw new TokenizerErrors.NonMatchingParenthesesError(this.line, this.col, this.source, this.current);
                 }
                 this.parenthesesLevel--;
+                break;
+            case '[':
+                this.addToken(TokenType.LSQB);
+                this.bracketsLevel++;
+                break;
+            case ']':
+                this.addToken(TokenType.RSQB);
+                if (this.bracketsLevel === 0) {
+                    throw new TokenizerErrors.NonMatchingBracketsError(this.line, this.col, this.source, this.current);
+                }
+                this.bracketsLevel--;
                 break;
             case ',':
                 this.addToken(TokenType.COMMA);
