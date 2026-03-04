@@ -1,12 +1,26 @@
-import * as es from 'estree'
-import { Environment } from './environment'
-import { Context } from './context'
-import { StatementSequence } from './types'
-import { blockArrowFunction, blockStatement, hasReturnStatement, identifier, isBlockStatement, returnStatement } from './ast-helper'
-import { ControlItem } from './control'
+import { ExprNS, StmtNS } from '../ast-types';
+import { Context } from './context';
+import { ControlItem } from './control';
+import { Environment, uniqueId } from './environment';
+import { StatementSequence } from './types';
+import { Value } from './stash';
 
+/**
+ * Represents a python closure, the class is a runtime representation of a function.
+ * Bundles the function's code (AST node) with environment in which its defined.
+ * When Closure is called, a new environment will be created whose parent is the 'Environment' captured
+ */
 export class Closure {
-  public originalNode?: es.ArrowFunctionExpression
+  public readonly id: string
+  /** AST node for function, either a 'def' or 'lambda' */
+  public node: StmtNS.FunctionDef | ExprNS.Lambda
+  /** Environment captures at time of function's definition, key for lexical scoping */
+  public environment: Environment
+  public context: Context
+  public readonly predefined: boolean
+  public originalNode?: StmtNS.FunctionDef | ExprNS.Lambda
+  /** Stores local variables for scope check */
+  public localVariables: Set<string>
 
   /** Unique ID defined for closure */
   //public readonly id: string
@@ -15,40 +29,38 @@ export class Closure {
   public declaredName?: string
 
   constructor(
-    public node: es.ArrowFunctionExpression,
-    public environment: Environment,
-    public context: Context,
-    public predefined: boolean = false
+  node: StmtNS.FunctionDef | ExprNS.Lambda,
+  environment: Environment,
+  context: Context,
+  predefined: boolean = false,
+  localVariables: Set<string> = new Set()
 ) {
-      this.originalNode = node
-  } 
+  this.id = uniqueId(context)
+  this.node = node
+  this.environment = environment
+  this.context = context
+  this.predefined = predefined
+  this.originalNode = node
+  this.localVariables = localVariables
+}
 
-  static makeFromArrowFunction(
-    node: es.ArrowFunctionExpression,
+  static makeFromFunctionDef(
+    node: StmtNS.FunctionDef,
     environment: Environment,
     context: Context,
-    // TODO: Consider implementing a mechanism that more closely mimics Python’s implicit return (i.e., automatically inserting "return None")
-    dummyReturn: boolean = false,
-    predefined: boolean = false
+    localVariables: Set<string>
   ): Closure {
-    const functionBody: es.BlockStatement | StatementSequence =
-      !isBlockStatement(node.body) && !isStatementSequence(node.body)
-        ? blockStatement([returnStatement(node.body, node.body.loc)], node.body.loc)
-        : dummyReturn && !hasReturnStatement(node.body)
-        ? blockStatement(
-            [
-              ...node.body.body,
-              returnStatement(identifier('undefined', node.body.loc), node.body.loc)
-            ],
-            node.body.loc
-          )
-        : node.body
+    const closure = new Closure(node, environment, context, false, localVariables)
+    return closure
+  }
 
-    const closure = new Closure(blockArrowFunction(node.params as es.Identifier[], functionBody, node.loc), 
-      environment, context, predefined)
-
-    closure.originalNode = node
-
+  static makeFromLambda(
+    node: ExprNS.Lambda,
+    environment: Environment,
+    context: Context,
+    localVariables: Set<string>
+  ): Closure {
+    const closure = new Closure(node, environment, context, false, localVariables)
     return closure
   }
 }

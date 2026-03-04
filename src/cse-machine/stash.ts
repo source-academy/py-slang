@@ -1,8 +1,9 @@
 // Value.ts
-import { ExprNS, StmtNS } from '../ast-types';
 import { Closure } from './closure';
 import { Environment } from './environment';
 import { Stack } from './stack';
+import { ExprNS, StmtNS } from '../ast-types';
+import { PyComplexNumber } from '../types';
 
 /**
  * Value represents various runtime values in Python.
@@ -25,9 +26,20 @@ export interface pyClosureValue {
   closure: Closure;
 }
 
+export interface Builtin {
+  type: 'builtin';
+  name: string;
+  func: (...args: any[]) => any;
+}
+
 export interface BigIntValue {
   type: 'bigint';
   value: bigint;
+}
+
+export interface ComplexValue {
+  type: 'complex'
+  value: PyComplexNumber
 }
 
 export interface NumberValue {

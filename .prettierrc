@@ -1,0 +1,11 @@
+{
+  "printWidth": 80,
+  "overrides": [
+    {
+      "files": "constants.ts",
+      "options": {
+        "printWidth": 120
+      }
+    }
+  ]
+}

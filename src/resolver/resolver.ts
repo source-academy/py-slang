@@ -78,21 +78,21 @@ class Environment {
     }
     declareName(identifier: Token) {
         const lookup = this.lookupNameCurrentEnv(identifier);
-        if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) { 
-            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-                this.source,
-                identifier.indexInSource,
-                identifier.indexInSource + identifier.lexeme.length,
-                lookup);
-        }
-        if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
-            throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-                this.source,
-                identifier.indexInSource,
-                identifier.indexInSource + identifier.lexeme.length,
-                lookup);
+        // if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) { 
+        //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
+        //         this.source,
+        //         identifier.indexInSource,
+        //         identifier.indexInSource + identifier.lexeme.length,
+        //         lookup);
+        // }
+        // if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
+        //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
+        //         this.source,
+        //         identifier.indexInSource,
+        //         identifier.indexInSource + identifier.lexeme.length,
+        //         lookup);
 
-        }
+        // }
         this.names.set(identifier.lexeme, identifier);
         this.definedNames.add(identifier.lexeme);
     }
@@ -476,4 +476,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitComplexExpr(expr: ExprNS.Complex): void {
     }
 
+    visitListExpr(expr: ExprNS.List): void {
+        this.resolve(expr.elements);
+    }
+    visitSubscriptExpr(expr: ExprNS.Subscript): void {
+        this.resolve(expr.value);
+        this.resolve(expr.index);
+    }
 }
