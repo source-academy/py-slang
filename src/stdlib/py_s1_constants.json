@@ -67,6 +67,7 @@
     "round",
     "time_time",
     "str",
+    "repr",
     "print",
     "input"
     ], 

@@ -1644,6 +1644,13 @@ export class BuiltInFunctions {
         const result = toPythonString(obj);
         return { type: 'string', value: result };
     }
+    @Validate(1, 1, 'repr', true)
+    static repr(args: Value[], source: string, command: ControlItem, context: Context): StringValue {
+        const obj = args[0];
+        const result = toPythonString(obj, true);
+        return { type: 'string', value: result };
+    }
+    
 }
 
 import { ExprNS } from "./ast-types";

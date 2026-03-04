@@ -14,6 +14,12 @@ import { RuntimeSourceError } from '../errors';
 type Class<T> = new (...args: any[]) => T;
 
 export type TestExpectedValue = bigint | number | boolean | string | null | Class<RuntimeSourceError> | Class<Error>;
+/**
+ * TestCases is a mapping from arguments to `describe` blocks, which map to an array of tuples of the form [code, expected, output], where:
+ * - code is the code to be executed
+ * - expected is the expected value of the expression, which can be a primitive value, null (for None), or an error class (for expected errors)
+ * - output is the expected output to be printed to the console, or null if no output is expected
+ */
 export type TestCases = Record<string, ([string, TestExpectedValue, string | null])[]>;
 
 export function toPythonAst(text: string, chapter: number = 1): Stmt {
