@@ -45,7 +45,7 @@ def head(p):
 def tail(p):
     """
     PRIMITIVE
-    Returns tail (second component of given pair p.
+    Returns tail (second component) of given pair p.
 
     Parameters:
         p (pair): given pair
@@ -85,14 +85,14 @@ def is_linked_list(xs):
     pass
 
 
-def linked_list(value1, value2, *values):
+def linked_list(*values):
     """
     PRIMITIVE
     Given n values, returns a linked list of length n. The elements of
     the linked list are the given values in the given order.
 
     Parameters:
-        value1 (value1, value2, ...values): given values
+        value (value1, value2, ...values): given values
 
     Returns:
         linked list: linked list containing all values
@@ -125,14 +125,14 @@ def equal(xs, ys):
         )
     elif is_none(xs):
         return is_none(ys)
-    elif is_number(xs):
-        return is_number(ys) and xs == ys
+    elif is_int(xs):
+        return is_int(ys) and xs == ys
+    elif is_float(xs):
+        return is_float(ys) and xs == ys
     elif is_boolean(xs):
         return is_boolean(ys) and xs == ys
     elif is_string(xs):
         return is_string(ys) and xs == ys
-    elif is_undefined(xs):  # Catches None in Python
-        return is_undefined(ys)
     elif is_function(xs):
         return is_function(ys) and xs == ys
     else:
@@ -203,7 +203,7 @@ def linked_list_to_string(xs):
 
 def _linked_list_to_string(xs, cont):
     if is_none(xs):
-        return cont("null")
+        return cont("None")
     elif is_pair(xs):
         return _linked_list_to_string(
             head(xs),
@@ -249,7 +249,7 @@ def _append(xs, ys, cont):
 def member(v, xs):
     """
     Returns first postfix sub-linked list whose head is identical to v
-    (using ==). Returns null if the element does not occur in the linked
+    (using ==). Returns None if the element does not occur in the linked
     list.
     """
     if is_none(xs):
@@ -316,7 +316,7 @@ def list_ref(xs, n):
     if n == 0:
         if is_none(xs):
             raise IndexError(
-                "linked_list_ref: index out of bounds on null linked list"
+                "linked_list_ref: index out of bounds on None linked list"
             )
         return head(xs)
     else:
