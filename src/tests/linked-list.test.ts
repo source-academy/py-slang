@@ -15,10 +15,10 @@ describe('Linked List Tests', () => {
 			['is_pair(1)', false, null],
 			['head(1)', TypeError, null],
 			['tail(1)', TypeError, null],
-			['print_linked_list(linked_list(1, 2, 3))', 'list(1, 2, 3)', null],
-			['print_linked_list(pair(1, 2))', '[1, 2]', null],
-			['print_linked_list(None)', 'list()', null],
-			['print_linked_list(pair(1, pair(2, 3)))', '[1, [2, 3]]', null]
+			['print_linked_list(linked_list(1, 2, 3))', null, 'list(1, 2, 3)\n'],
+			['print_linked_list(pair(1, 2))', null, '[1, 2]\n'],
+			['print_linked_list(None)', null, 'list()\n'],
+			['print_linked_list(pair(1, pair(2, 3)))', null, '[1, [2, 3]]\n']
 		],
 		'structural operations': [
 			['equal(linked_list(1, 2), linked_list(1, 2))', true, null],

@@ -4,7 +4,7 @@ import { ControlItem } from "../cse-machine/control";
 import { handleRuntimeError } from "../cse-machine/error";
 import { BoolValue, ListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
 import { TypeError } from "../errors";
-import { toPythonString, Validate } from "../stdlib";
+import { BuiltInFunctions, builtIns, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
 
@@ -52,24 +52,22 @@ class LinkedListBuiltins {
         }
         return value.type === 'list' && value.value.length === 2 && LinkedListBuiltins._is_linked_list(value.value[1]);
     }
-
-    @Validate(1, 1, 'print_linked_list', true)
-    static print_linked_list(args: Value[], source: string, command: ControlItem, context: Context): StringValue {
-        if (!LinkedListBuiltins._is_linked_list(args[0])) {
-            const isPairResult = LinkedListBuiltins.is_pair(args, source, command, context);
+    static _print_linked_list(value: Value, source: string, command: ControlItem, context: Context): StringValue {
+        if (!LinkedListBuiltins._is_linked_list(value)) {
+            const isPairResult = LinkedListBuiltins.is_pair([value], source, command, context);
             if (!isPairResult.value) {
-                return { 'type': 'string', 'value': toPythonString(args[0]) };
+                return { type: 'string', value: toPythonString(value) };
             }
-            const string1 = LinkedListBuiltins.print_linked_list([(args[0] as ListValue).value[0]], source, command, context);
-            const string2 = LinkedListBuiltins.print_linked_list([(args[0] as ListValue).value[1]], source, command, context);
-            return { 'type': 'string', 'value': '[' + string1.value + ', ' + string2.value + ']' };
+            const string1 = LinkedListBuiltins._print_linked_list((value as ListValue).value[0], source, command, context);
+            const string2 = LinkedListBuiltins._print_linked_list((value as ListValue).value[1], source, command, context);
+            return { 'type': 'string', value: '[' + string1.value + ', ' + string2.value + ']' };
         }
         
         let string = 'list(';
-        let current = args[0];
+        let current = value;
 
         while (current.type == 'list' && current.value.length === 2) {
-            string += LinkedListBuiltins.print_linked_list([current.value[0]], source, command, context).value;
+            string += LinkedListBuiltins._print_linked_list(current.value[0], source, command, context).value;
             string += ', ';
             current = LinkedListBuiltins.tail([current], source, command, context);
         }
@@ -78,6 +76,12 @@ class LinkedListBuiltins {
         }
         string += ')';
         return { type: 'string', value: string };
+    }
+    @Validate(1, 1, 'print_linked_list', true)
+    static print_linked_list(args: Value[], source: string, command: ControlItem, context: Context): NoneValue {
+        const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
+        context.output += stringValue.value + '\n';
+        return { type: 'none' };
     }
 }
 for (const builtin of Object.getOwnPropertyNames(LinkedListBuiltins)) {
