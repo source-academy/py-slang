@@ -154,13 +154,14 @@ class Environment {
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     source: string;
     ast: Stmt;
-    // change the environment to be suite scope as in python
+    variant: number;
     environment: Environment | null;
     functionScope: Environment | null;
-    constructor(source: string, ast: Stmt, groups: Group[], preludeNames: string[] = []) {
+    constructor(source: string, ast: Stmt, variant: number, groups: Group[] = [], preludeNames: string[] = []) {
         
         this.source = source;
         this.ast = ast;
+        this.variant = variant;
         // The global environment
         this.environment = new Environment(source, null, new Map([
             // misc library
@@ -274,6 +275,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
+        if (this.variant <= 4) { // Only supported in a future sublanguage
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
         this.resolve(stmt.ann);
         this.resolve(stmt.value);
         this.functionVarConstraint(stmt.name);
@@ -412,9 +416,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitListExpr(expr: ExprNS.List): void {
+        if (this.variant <= 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.elements);
     }
     visitSubscriptExpr(expr: ExprNS.Subscript): void {
+        if (this.variant <= 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.value);
         this.resolve(expr.index);
     }

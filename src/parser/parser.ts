@@ -56,13 +56,11 @@ const PSEUD_NAMES = [
 export class Parser {
     private readonly source: string;
     private readonly tokens: Token[];
-    private readonly variant: number;
     private current: number;
 
-    constructor(source: string, tokens: Token[], variant: number) {
+    constructor(source: string, tokens: Token[]) {
         this.source = source;
         this.tokens = tokens;
-        this.variant = variant;
         this.current = 0;
     }
 
@@ -536,7 +534,7 @@ export class Parser {
             return new ExprNS.Grouping(startToken, this.previous(), expr);
         }
 
-        if (this.match(TokenType.LSQB) && this.variant >= 3) {
+        if (this.match(TokenType.LSQB)) {
             let elements = this.list_expr();
             return new ExprNS.List(startToken, this.previous(), elements);
         }

@@ -53,6 +53,7 @@ export enum InstrType {
     ENVIRONMENT = 'environment',
     MARKER = 'marker',
     END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+    LIST_ACCESS = 'ListAccess',
 }
 
 interface BaseInstr {
@@ -107,6 +108,10 @@ export interface BranchInstr extends BaseInstr {
 export interface ListInstr extends BaseInstr {
   instrType: InstrType.LIST
   numOfElements: number
+}
+
+export interface ListAccessInstr extends BaseInstr {
+  instrType: InstrType.LIST_ACCESS
 }
 
 export interface EnvInstr extends BaseInstr {

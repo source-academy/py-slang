@@ -10,7 +10,7 @@ export async function compileToWasmAndRun(code: string) {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens, 4);
+  const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
 
   const builderGenerator = new BuilderGenerator();

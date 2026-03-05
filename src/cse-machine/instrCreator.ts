@@ -9,6 +9,7 @@ import {
   EnvInstr,
   Instr,
   InstrType,
+  ListAccessInstr,
   ListInstr,
   Node,
   UnOpInstr 
@@ -83,6 +84,11 @@ export const unOpInstr = (symbol: TokenType, srcNode: Node): UnOpInstr => ({
 export const boolOpInstr = (symbol: TokenType, srcNode: Node): BoolOpInstr => ({
   instrType: InstrType.BOOL_OP,
   symbol,
+  srcNode
+})
+
+export const listAccessInstr = (srcNode: Node): ListAccessInstr => ({
+  instrType: InstrType.LIST_ACCESS,
   srcNode
 })
 

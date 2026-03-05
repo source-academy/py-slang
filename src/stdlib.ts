@@ -1737,7 +1737,13 @@ export function toPythonFloat(num: number): string {
     }
     return num.toString();
 }
-
+function escape(str: string): string {
+    let escaped = JSON.stringify(str);
+    if (!(str.includes("'") && !str.includes('"'))) {
+        escaped = `'${escaped.slice(1, -1).replace(/'/g, "\\'").replace(/\\"/g, '"')}'`;
+    }
+    return escaped;
+}
 export function toPythonString(obj: Value, repr: boolean = false): string {
     let ret: any;
     if (obj.type == 'builtin') {
@@ -1763,7 +1769,7 @@ export function toPythonString(obj: Value, repr: boolean = false): string {
     } else if (obj.type === 'none') {
         ret = 'None';
     } else if (obj.type === 'string') {
-        ret = repr ? JSON.stringify(obj.value) : obj.value;
+        ret = repr ? escape(obj.value) : obj.value;
     } else if (obj.type === "function") {
         const funcName = obj.name || '(anonymous)';
         ret = `<function ${funcName}>`;
@@ -1773,13 +1779,4 @@ export function toPythonString(obj: Value, repr: boolean = false): string {
         ret = `<${obj.type} object>`;
     }
     return ret;
-}
-
-export function str(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    if (args.length === 0) {
-        return { type: 'string', value: "" };
-    }
-    const obj = args[0];
-    const result = toPythonString(obj);
-    return { type: 'string', value: result };
 }

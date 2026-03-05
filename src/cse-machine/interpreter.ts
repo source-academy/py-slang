@@ -20,7 +20,7 @@ import { handleRuntimeError } from './error';
 import * as instrCreator from './instrCreator';
 import { evaluateBinaryExpression, evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
 import { Stash, Value } from './stash';
-import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListInstr, Node, UnOpInstr } from './types';
+import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListAccessInstr, ListInstr, Node, UnOpInstr } from './types';
 import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
@@ -94,7 +94,7 @@ export async function evaluate(code: string, program: StmtNS.Stmt, context: Cont
       options.stepLimit!,
       options.isPrelude
     );
-    return { type: "string", value: context.output ? context.output : toPythonString(result, true) };
+    return { type: "string", value: context.output };
   } catch (error: any) {
     return { type: 'error', message: error.message };
   } finally {
@@ -602,6 +602,21 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       control.push((command as ExprNS.List).elements[i])
     }
   },
+
+  Subscript: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const subscriptNode = command as ExprNS.Subscript
+    control.push(instrCreator.listAccessInstr(subscriptNode))
+    control.push(subscriptNode.index)
+    control.push(subscriptNode.value)
+  },
+
   Ternary: function (
     code: string,
     command: ControlItem,
@@ -813,6 +828,31 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         stash.push(result)
       }
     }
+  },
+
+  [InstrType.LIST_ACCESS]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListAccessInstr
+    const index = stash.pop()
+    const list = stash.pop()
+    console.log(index, list)
+    if (!list || list.type !== 'list') {
+      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (list as Value).type, 'list'))
+    }
+    if (!index || index.type !== 'bigint') {
+      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (index as Value).type, 'int'))
+    }
+    const idx = Number(index.value)
+    if (idx >= list.value.length) {
+      handleRuntimeError(context, new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length))
+    }
+    stash.push(list.value[idx])
   },
 
   [InstrType.BRANCH]: function (

@@ -108,12 +108,10 @@ export function evaluateBinaryExpression(
     if (
       (right.type !== 'complex' &&
       right.type !== 'number' &&
-      right.type !== 'bigint' &&
-      right.type !== 'string') || 
+      right.type !== 'bigint') || 
       (left.type !== 'complex' &&
       left.type !== 'number' &&
-      left.type !== 'bigint' &&
-      left.type !== 'string')
+      left.type !== 'bigint')
     ) {
       handleRuntimeError(
         context,
@@ -175,28 +173,16 @@ export function evaluateBinaryExpression(
 
   // Handle comparisons with None (represented as 'none' type)
   if (left.type === 'none' || right.type === 'none') {
-    switch (operator) {
-      case TokenType.DOUBLEEQUAL:
-        // True only if both are None
-        return { type: 'bool', value: left.type === right.type }
-      case TokenType.NOTEQUAL:
-        return { type: 'bool', value: left.type !== right.type }
-      default:
-        handleRuntimeError(
-          context,
-          new UnsupportedOperandTypeError(
-            code,
-            command,
-            left.type,
-            right.type,
-            operatorTranslator(operator)
-          )
-        )
-        return {
-          type: 'error',
-          message: 'Unreachable in evaluateBinaryExpression - none | none'
-        }
-    }
+   handleRuntimeError(
+    context,
+    new UnsupportedOperandTypeError(
+      code,
+      command,
+      left.type,
+      right.type,
+      operatorTranslator(operator)
+    )
+   )
   }
 
   // Handle string operations
@@ -246,7 +232,7 @@ export function evaluateBinaryExpression(
     )
   }
 
-  if ((left.type !== "bool" && left.type !== "number" && left.type !== "bigint") || (right.type !== "bool" && right.type !== "number" && right.type !== "bigint")) {
+  if ((left.type !== "number" && left.type !== "bigint") || (right.type !== "number" && right.type !== "bigint")) {
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
@@ -258,14 +244,11 @@ export function evaluateBinaryExpression(
       )
     )
   }
-  /**
-   * Coerce boolean to a numeric value for all other arithmetic
-   * Support for True - 1 or False + 1
-   */
-  const leftNum = left.type === 'bool' ? (left.value ? 1 : 0) : left.value
-  const rightNum = right.type === 'bool' ? (right.value ? 1 : 0) : right.value
-  const leftType = left.type === 'bool' ? 'number' : left.type
-  const rightType = right.type === 'bool' ? 'number' : right.type
+  
+  const leftNum = left.value
+  const rightNum = right.value
+  const leftType = left.type
+  const rightType = right.type
 
   // Numeric Operations (number or bigint)
   switch (operator) {
@@ -606,11 +589,23 @@ export function evaluateBoolExpression(
   left: Value,
   right: Value
 ): Value {
+  if (left.type !== 'bool') {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator)
+      )
+    )
+  }
   if (operator === TokenType.OR) {
-    // Python 'or': if the first value is truthy, return it. Otherwise, evaluate and return the second value.
-    return !isFalsy(left) ? left : right
+    // Python 'or': if the first value is true, return it. Otherwise, evaluate and return the second value.
+    return isFalsy(left) ? right : left
   } else if (operator === TokenType.AND) {
-    // Python 'and': if the first value is falsy, return it. Otherwise, evaluate and return the second value.
+    // Python 'and': if the first value is false, return it. Otherwise, evaluate and return the second value.
     return isFalsy(left) ? left : right
   } else {
     handleRuntimeError(

@@ -10,10 +10,12 @@ import { Context } from "../cse-machine/context";
 import { runInContext } from "../runner/pyRunner";
 import { Group } from "../stdlib/utils";
 import { RuntimeSourceError } from '../errors';
+import { PyComplexNumber } from '../types';
+import { executionAsyncId } from 'async_hooks';
 
 type Class<T> = new (...args: any[]) => T;
 
-export type TestExpectedValue = bigint | number | boolean | string | null | Class<RuntimeSourceError> | Class<Error>;
+export type TestExpectedValue = bigint | number | boolean | string | null | PyComplexNumber | Class<RuntimeSourceError> | Class<Error>;
 /**
  * TestCases is a mapping from arguments to `describe` blocks, which map to an array of tuples of the form [code, expected, output], where:
  * - code is the code to be executed
@@ -22,19 +24,19 @@ export type TestExpectedValue = bigint | number | boolean | string | null | Clas
  */
 export type TestCases = Record<string, ([string, TestExpectedValue, string | null])[]>;
 
-export function toPythonAst(text: string, chapter: number = 1): Stmt {
+export function toPythonAst(text: string): Stmt {
     const script = text + '\n'
     const tokenizer = new Tokenizer(script)
     const tokens = tokenizer.scanEverything()
-    const pyParser = new Parser(script, tokens, chapter)
+    const pyParser = new Parser(script, tokens)
     const ast = pyParser.parse()
     // console.dir(ast);
     return ast;
 }
 
 export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
-    const ast = toPythonAst(text, chapter);
-    new Resolver(text, ast, [], []).resolve(ast);
+    const ast = toPythonAst(text);
+    new Resolver(text, ast, chapter).resolve(ast);
     return ast;
 }
 
@@ -48,56 +50,80 @@ export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
 //     new Resolver(text, ast).resolve(ast);
 //     return new Translator(text).resolve(ast);
 // }
+type InternalTestCase = {
+    label: TestExpectedValue;
+    code: string;
+    expected: TestExpectedValue;
+    output: string | null;
+}
+
+export const createInternalTestCases = (tests: [string, TestExpectedValue, string | null][]): InternalTestCase[] => {
+    return tests.map(([code, expected, output]) => ({
+        label: expected instanceof Function && (expected.prototype instanceof RuntimeSourceError || expected.prototype instanceof Error) ? expected.name : expected,
+        code,
+        expected,
+        output
+    }));
+};
 
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
     for (const [funcName, tests] of Object.entries(testCases)) {
-        test.each(tests)(`${funcName}: %s should return %s`, async (code, expected, output) => {
-            const context = new Context();
-            const result = await runInContext(code, context, { variant, groups });
-            expect(result).toBeDefined();
-            expect(result.status).toBe('finished');
+        describe(funcName, () => {
+            test.concurrent.each(createInternalTestCases(tests))(`$code should return $label`, async ({code, expected, output}) => {
+                const context = new Context();
+                const result = await runInContext(code, context, { variant, groups });
+                expect(result).toBeDefined();
+                expect(result.status).toBe('finished');
 
-            if (typeof expected === 'function' && expected.prototype instanceof RuntimeSourceError) {
-                expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
-                return;
-            }
+                if (typeof expected === 'function' && expected.prototype instanceof RuntimeSourceError) {
+                    expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
+                    return;
+                }
 
-            if (typeof expected === 'function' && expected.prototype instanceof Error) {
-                expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
-                return;
-            }
-            expect(result.status).not.toHaveProperty('value.type', 'error');
-            if (output !== null) {
-                expect(context.output).toBe(output);
-            }
+                if (typeof expected === 'function' && expected.prototype instanceof Error) {
+                    expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
+                    return;
+                }
+                expect(result.status).not.toHaveProperty('value.type', 'error');
+                if (output !== null) {
+                    expect(context.output).toBe(output);
+                }
 
-            if (expected === null) {
-                expect(context.stash.peek()).toHaveProperty('type', 'none');
-                return;
-            }
+                if (expected === null) {
+                    expect(context.stash.peek()).toHaveProperty('type', 'none');
+                    return;
+                }
 
-            if (typeof expected === 'bigint') {
-                expect(context.stash.peek()).toHaveProperty('type', 'bigint');
+                if (typeof expected === 'bigint') {
+                    expect(context.stash.peek()).toHaveProperty('type', 'bigint');
+                    expect(context.stash.peek()).toHaveProperty('value', expected);
+                    return;
+                }
+
+                if (typeof expected === 'number') {
+                    expect(context.stash.peek()).toHaveProperty('type', 'number');
+                    expect(context.stash.peek()).toHaveProperty('value', expect.closeTo(expected));
+                    return;
+                }
+
+                if (typeof expected === 'boolean') {
+                    expect(context.stash.peek()).toHaveProperty('type', 'bool');
+                    expect(context.stash.peek()).toHaveProperty('value', expected);
+                    return;
+                }
+
+                if (expected instanceof PyComplexNumber) {
+                    expect(context.stash.peek()).toHaveProperty('type', 'complex');
+                    expect(context.stash.peek()).toHaveProperty('value.real', expect.closeTo(expected.real));
+                    expect(context.stash.peek()).toHaveProperty('value.imag', expect.closeTo(expected.imag));
+                    return;
+                }
+
+                expect(context.stash.peek()).toHaveProperty('type', 'string');
                 expect(context.stash.peek()).toHaveProperty('value', expected);
+
                 return;
-            }
-
-            if (typeof expected === 'number') {
-                expect(context.stash.peek()).toHaveProperty('type', 'number');
-                expect(context.stash.peek()).toHaveProperty('value', expected);
-                return;
-            }
-
-            if (typeof expected === 'boolean') {
-                expect(context.stash.peek()).toHaveProperty('type', 'bool');
-                expect(context.stash.peek()).toHaveProperty('value', expected);
-                return;
-            }
-
-            expect(context.stash.peek()).toHaveProperty('type', 'string');
-            expect(context.stash.peek()).toHaveProperty('value', expected);
-
-            return;
+            });
         });
     }
 }

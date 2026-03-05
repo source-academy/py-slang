@@ -31,8 +31,8 @@ describe('Linked List Tests', () => {
 			['linked_list_to_string(None)', 'None', null]
 		],
 		'transformations': [
-			['equal(map(lambda x: x + 1, linked_list(1, 2, 3)), linked_list(2, 3, 4))', true, null],
-			['equal(map(lambda x: x + 1, None), None)', true, null],
+			['equal(map_linked_list(lambda x: x + 1, linked_list(1, 2, 3)), linked_list(2, 3, 4))', true, null],
+			['equal(map_linked_list(lambda x: x + 1, None), None)', true, null],
 			['equal(build_linked_list(lambda i: i * i, 4), linked_list(0, 1, 4, 9))', true, null],
 			['equal(build_linked_list(lambda i: i, 0), None)', true, null],
 			['equal(reverse(linked_list(1, 2, 3)), linked_list(3, 2, 1))', true, null],
@@ -40,8 +40,8 @@ describe('Linked List Tests', () => {
 			['equal(append(linked_list(1, 2), linked_list(3, 4)), linked_list(1, 2, 3, 4))', true, null],
 			['equal(append(None, linked_list(3, 4)), linked_list(3, 4))', true, null],
 			['equal(append(linked_list(1, 2), None), linked_list(1, 2))', true, null],
-			['equal(filter(lambda x: x % 2 == 0, linked_list(1, 2, 3, 4)), linked_list(2, 4))', true, null],
-			['equal(filter(lambda x: x > 10, linked_list(1, 2, 3, 4)), None)', true, null],
+			['equal(filter_linked_list(lambda x: x % 2 == 0, linked_list(1, 2, 3, 4)), linked_list(2, 4))', true, null],
+			['equal(filter_linked_list(lambda x: x > 10, linked_list(1, 2, 3, 4)), None)', true, null],
 			['equal(enum_linked_list(3, 6), linked_list(3, 4, 5, 6))', true, null],
 			['equal(enum_linked_list(6, 3), None)', true, null]
 		],
@@ -57,8 +57,8 @@ describe('Linked List Tests', () => {
 		'indexing and reducing': [
 			['linked_list_ref(linked_list(10, 20, 30), 0)', 10n, null],
 			['linked_list_ref(linked_list(10, 20, 30), 1)', 20n, null],
-			['accumulate(lambda x, y: x + y, 10, None)', 10n, null],
-			['accumulate(lambda x, y: x + y, 0, linked_list(1, 2, 3, 4))', 10n, null],
+			['accumulate_linked_list(lambda x, y: x + y, 10, None)', 10n, null],
+			['accumulate_linked_list(lambda x, y: x + y, 0, linked_list(1, 2, 3, 4))', 10n, null],
 			['for_each(lambda x: x, None)', true, ""],
             ['for_each(print, linked_list(1, 2, 3))', true, "1\n2\n3\n"]
 		]

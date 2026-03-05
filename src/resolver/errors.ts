@@ -14,6 +14,20 @@ export namespace ResolverErrors {
             this.name = "BaseResolverError";
         }
     }
+    export class UnsupportedFeatureError extends BaseResolverError {
+        constructor(line: number, col: number, source: string, start: number,
+                    current: number) {
+            let { lineIndex, fullLine } = getFullLine(source, start);
+            fullLine = '\n' + fullLine + '\n';
+            let hint = ` This feature is not supported in this version of the interpreter.`;
+            const diff = (current - start);
+            hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+            hint = hint.padStart(hint.length + col - diff, " ");
+            const name = "UnsupportedFeatureError";
+            super(name, fullLine + hint, lineIndex, col);
+            this.name = "UnsupportedFeatureError";
+        }
+    }
     export class NameNotFoundError extends BaseResolverError {
         constructor(line: number, col: number, source: string, start: number,
                     current: number, suggestion: string | null) {

@@ -165,6 +165,14 @@ export class TypeConcatenateError extends RuntimeSourceError {
     }
 }
 
+export class IndexError extends RuntimeSourceError {
+    constructor(source: string, node: ExprNS.Expr, context: Context, index: number, length: number) {
+        super(node);
+        this.type = ErrorType.RUNTIME;
+        this.message = "IndexError: list index out of range. You tried to access index " + index + " but the list only has " + length + " elements.";
+    }
+}
+
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
     constructor(source: string, node: ExprNS.Expr, wrongType1: Value["type"], wrongType2: Value["type"] | null, operand: TokenType | string) {
         super(node);

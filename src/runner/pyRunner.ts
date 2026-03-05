@@ -27,10 +27,10 @@ function runPyAST(
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens, variant);
+  const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
   if (doValidate) {
-    new Resolver(script, ast, groups, preludeNames).resolve(ast);
+    new Resolver(script, ast, variant, groups, preludeNames).resolve(ast);
   }
   return ast;
 }
