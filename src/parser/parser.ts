@@ -41,7 +41,7 @@
 
 import { Token, SPECIAL_IDENTIFIER_TOKENS } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { ParserErrors } from "./errors";
 
 type Expr = ExprNS.Expr;
@@ -237,9 +237,7 @@ export class Parser {
     private simple_stmt(): Stmt {
         const startToken = this.peek();
         let res = null;
-        if (this.match(TokenType.NAME)) {
-            res = this.assign_stmt();
-        } else if (this.match(TokenType.INDENT)) {
+        if (this.match(TokenType.INDENT)) {
             res = new StmtNS.Indent(startToken, startToken);
         } else if (this.match(TokenType.DEDENT)) {
             res = new StmtNS.Dedent(startToken, startToken);
@@ -259,9 +257,30 @@ export class Parser {
             res = new StmtNS.NonLocal(startToken, startToken, this.advance());
         } else if (this.match(TokenType.ASSERT)) {
             res = new StmtNS.Assert(startToken, startToken, this.test());
-        } else if (this.check(TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
+        } else if (this.check(TokenType.NAME, TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
             TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
-            res = new StmtNS.SimpleExpr(startToken, startToken, this.test());
+            const expr = this.test();
+
+            if (this.check(TokenType.COLON)) {
+                if (!(expr instanceof ExprNS.Variable)) {
+                    throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
+                }
+                this.advance();
+                const ann = this.test();
+                this.consume(TokenType.EQUAL, "Expect equal in annotated assignment");
+                const value = this.test();
+                res = new StmtNS.AnnAssign(startToken, this.previous(), expr, value, ann);
+            } else if (this.check(TokenType.EQUAL)) {
+                if (!(expr instanceof ExprNS.Variable || expr instanceof ExprNS.Subscript)) {
+                    throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
+                }
+                this.advance();
+                const value = this.test();
+                res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+            } else {
+                res = new StmtNS.SimpleExpr(startToken, this.previous(), expr);
+            }
+            // res = new StmtNS.SimpleExpr(startToken, startToken, expr);
         } else {
             throw new Error("Unreachable code path");
         }
@@ -269,39 +288,20 @@ export class Parser {
         return res;
     }
 
-    private assign_stmt(): Stmt {
-        const startToken = this.previous();
-        const name = this.previous();
-        if (this.check(TokenType.COLON)) {
-            const ann = this.test();
-            this.consume(TokenType.EQUAL, "Expect equal in assignment");
-            const expr = this.test();
-            return new StmtNS.AnnAssign(startToken, this.previous(), name, expr, ann);
-        } else if (this.check(TokenType.EQUAL)) {
-            this.advance();
-            const expr = this.test();
-            return new StmtNS.Assign(startToken, this.previous(), name, expr);
-        } else {
-            this.current--;
-            const expr = this.test();
-            return new StmtNS.SimpleExpr(startToken, this.previous(), expr);
-        }
-    }
-
     private import_from(): Stmt {
         const startToken = this.previous();
         const module = this.advance();
         this.consume(TokenType.IMPORT, "Expected import keyword");
-        let params;
-        if (this.check(TokenType.NAME)) {
-            params = [this.advance()];
-        } else {
-            params = this.parameters();
+
+        const names: Token[] = [];
+        names.push(this.consume(TokenType.NAME, "Expected name to import"));
+        while (this.match(TokenType.COMMA)) {
+            names.push(this.consume(TokenType.NAME, "Expected name after comma"));
         }
-        return new StmtNS.FromImport(startToken, this.previous(), module, params);
+        return new StmtNS.FromImport(startToken, this.previous(), module, names);
     }
 
-    private parameters(): Token[] {
+    private parameters(): FunctionParam[] {
         this.consume(TokenType.LPAR, "Expected opening parentheses");
         let res = this.varparamslist();
         this.consume(TokenType.RPAR, "Expected closing parentheses");
@@ -349,11 +349,16 @@ export class Parser {
         return stmts;
     }
 
-    private varparamslist(): Token[] {
+    private varparamslist(): FunctionParam[] {
         let params = [];
         while (!this.check(TokenType.COLON) && !this.check(TokenType.RPAR)) {
-            let name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
-            params.push(name);
+            if (this.match(TokenType.STAR)) {
+                let name = this.consume(TokenType.NAME, "Expected a proper identifier after * in parameter");
+                params.push({ ...name, isStarred: true });
+            } else {
+                let name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
+                params.push({ ...name, isStarred: false });
+            }
             if (!this.match(TokenType.COMMA)) {
                 break;
             }
@@ -483,8 +488,13 @@ export class Parser {
     private arglist(): Expr[] {
         let args = [];
         while (!this.check(TokenType.RPAR)) {
-            let arg = this.test();
-            args.push(arg);
+            const startToken = this.peek();
+            if (this.match(TokenType.STAR)) {
+                const arg = this.test();
+                args.push(new ExprNS.Starred(startToken, this.previous(), arg));
+            } else {
+                args.push(this.test());
+            }
             if (!this.match(TokenType.COMMA)) {
                 break;
             }
