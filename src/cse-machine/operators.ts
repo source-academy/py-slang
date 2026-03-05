@@ -42,7 +42,19 @@ export function evaluateUnaryExpression(
 ): Value {
   switch (operator) {
     case TokenType.NOT:
-      return { type: 'bool', value: isFalsy(value) }
+      if (value.type === 'bool') {
+        return { type: 'bool', value: isFalsy(value) }
+      }
+      handleRuntimeError(
+        context,
+        new UnsupportedOperandTypeError(
+          code,
+          command,
+          value.type,
+          null,
+          operatorTranslator(operator)
+        )
+      )
 
     case TokenType.MINUS:
       switch (value.type) {
@@ -50,8 +62,6 @@ export function evaluateUnaryExpression(
           return { type: 'number', value: -value.value }
         case 'bigint':
           return { type: 'bigint', value: -value.value }
-        case 'bool':
-          return { type: 'bigint', value: value.value ? -1n : 0n }
         case 'complex':
           return {
             type: 'complex',
@@ -76,8 +86,6 @@ export function evaluateUnaryExpression(
         case 'bigint':
         case 'complex':
           return value
-        case 'bool':
-          return { type: 'bigint', value: value.value ? 1n : 0n }
         default:
           handleRuntimeError(
             context,

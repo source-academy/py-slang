@@ -126,7 +126,6 @@ describe('Standard Library Tests', () => {
                 ["True != 1", TypeError, null], // bool != int
                 ["None != 1", TypeError, null], // None != int
                 ["None != None", TypeError, null], // None != None
-                ["[] != []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) != (lambda x: x)", TypeError, null], // function != diff function
                 ["(1 != (lambda x: x))", TypeError, null], // int != function
                 ["def a():\n    return 2\na != a", TypeError, null], // function != function,
@@ -169,7 +168,6 @@ describe('Standard Library Tests', () => {
                 ["True > 1", TypeError, null], // bool > int
                 ["None > 1", TypeError, null], // None > int
                 ["None > None", TypeError, null], // None > None
-                ["[] > []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) > (lambda x: x)", TypeError, null], // function > diff function
                 ["(1 > (lambda x: x))", TypeError, null], // int > function
                 ["def a():\n    return 2\na > a", TypeError, null], // function > function,
@@ -214,7 +212,6 @@ describe('Standard Library Tests', () => {
                 ["True >= 1", TypeError, null], // bool >= int
                 ["None >= 1", TypeError, null], // None >= int
                 ["None >= None", TypeError, null], // None >= None
-                ["[] >= []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) >= (lambda x: x)", TypeError, null], // function >= diff function
                 ["(1 >= (lambda x: x))", TypeError, null], // int >= function
                 ["def a():\n    return 2\na >= a", TypeError, null], // function >= function,
@@ -259,7 +256,6 @@ describe('Standard Library Tests', () => {
                 ["True < 1", TypeError, null], // bool < int
                 ["None < 1", TypeError, null], // None < int
                 ["None < None", TypeError, null], // None < None
-                ["[] < []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) < (lambda x: x)", TypeError, null], // function < diff function
                 ["(1 < (lambda x: x))", TypeError, null], // int < function
                 ["def a():\n    return 2\na < a", TypeError, null], // function < function,
@@ -304,7 +300,6 @@ describe('Standard Library Tests', () => {
                 ["True <= 1", TypeError, null], // bool <= int
                 ["None <= 1", TypeError, null], // None <= int
                 ["None <= None", TypeError, null], // None <= None
-                ["[] <= []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) <= (lambda x: x)", TypeError, null], // function <= diff function
                 ["(1 <= (lambda x: x))", TypeError, null], // int <= function
                 ["def a():\n    return 2\na <= a", TypeError, null], // function <= function
@@ -322,7 +317,7 @@ describe('Standard Library Tests', () => {
                 ["'' <= 1.0", TypeError, null], // string <= float
                 ["'' <= 1+0j", TypeError, null], // string <= complex
             ],
-            "add, sub, mul, div": [
+            "add, sub, mul": [
                 ["1 + 1", 2n, null], // int + int
                 ["2 + 1", 3n, null], // int + diff int
                 ["1 + (1+0j)", PyComplexNumber.fromBigInt(2n), null], // int + complex
@@ -350,7 +345,6 @@ describe('Standard Library Tests', () => {
                 ["True + 1", TypeError, null], // bool + int
                 ["None + 1", TypeError, null], // None + int
                 ["None + None", TypeError, null], // None + None
-                ["[] + []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) + (lambda x: x)", TypeError, null], // function + diff function
                 ["(1 + (lambda x: x))", TypeError, null], // int + function
                 ["def a():\n    return 2\na + a", TypeError, null], // function + function,
@@ -395,7 +389,6 @@ describe('Standard Library Tests', () => {
                 ["True - 1", TypeError, null], // bool - int
                 ["None - 1", TypeError, null], // None - int
                 ["None - None", TypeError, null], // None - None
-                ["[] - []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
                 ["(lambda x: x) - (lambda x: x)", TypeError, null], // function - diff function
                 ["(1 - (lambda x: x))", TypeError, null], // int - function
                 ["def a():\n    return 2\na - a", TypeError, null], // function - function,
@@ -412,9 +405,234 @@ describe('Standard Library Tests', () => {
                 ["'' - (lambda x: x)", TypeError, null], // string - function
                 ["'' - 1.0", TypeError, null], // string - float
                 ["'' - 1+0j", TypeError, null], // string - complex
-                
+
+                ["1 * 1", 1n, null], // int * int
+                ["2 * 1", 2n, null], // int * int
+                ["1 * (1+0j)", new PyComplexNumber(1, 0), null], // int * complex
+                ["2 * (1.0+0j)", new PyComplexNumber(2, 0), null], // int * complex
+                ["3 * (1+1j)", new PyComplexNumber(3, 3), null], // int * complex
+                ["1 * 1.0", 1.0, null], // int * float
+                ["1 * 2.0", 2.0, null], // int * diff float
+                ["3.14 * 3.14", 9.8596, null], // float * float
+                ["3.15 * 3.14", 9.891, null], // float * diff float
+                ["1.0 * 1", 1.0, null], // float * int
+                ["1.0 * 2", 2.0, null], // float * diff int
+                ["1.0 * (1+0j)", PyComplexNumber.fromBigInt(1n), null], // float * complex
+                ["(1+0j) * (1+0j)", PyComplexNumber.fromBigInt(1n), null], // complex * complex
+                ["(1+0j) * (1+1j)", new PyComplexNumber(1, 1), null], // complex * complex with diff imaginary
+                ["(1.2+0j) * (1+0j)", new PyComplexNumber(1.2, 0), null], // complex * complex with diff real
+                ["(1.2+1j) * (1.2+1.2j)", new PyComplexNumber(0.24, 2.64), null], // complex * diff complex
+                ["(1+0j) * 1", new PyComplexNumber(1, 0), null], // complex * int
+                ["(1.0+0j) * 1", new PyComplexNumber(1.0, 0), null], // complex with float real * int
+                ["(1+0j) * 1.0", new PyComplexNumber(1.0, 0), null], // complex * float
+                ["(1.5+0j) * 1.5", new PyComplexNumber(2.25, 0), null], // complex with float real * float
+                ["(1.5+1j) * 1.5", new PyComplexNumber(2.25, 1.5), null], // complex * diff float
+                ["True * True", TypeError, null], // bool * bool
+                ["1 * True", TypeError, null], // int * bool
+                ["1 * None", TypeError, null], // int * None
+                ["True * 1", TypeError, null], // bool * int
+                ["None * 1", TypeError, null], // None * int
+                ["None * None", TypeError, null], // None * None
+                ["(lambda x: x) * (lambda x: x)", TypeError, null], // function * diff function
+                ["(1 * (lambda x: x))", TypeError, null], // int * function
+                ["def a():\n    return 2\na * a", TypeError, null], // function * function,
+                ["'' * ''", TypeError, null], // empty string * empty string
+                ["hello = 'hello'\nhello * 'hello'", TypeError, null], // string * string
+                ["hello = 'hello'\nhello * 'Hello'", TypeError, null], // string * diff string
+                ["'a' * 'abc'", TypeError, null], // string * longer string
+                ["'a' * 'A'", TypeError, null], // string * string with diff case
+                ["'#' * '$'", TypeError, null], // string * string with diff character
+                ["1 * ''", TypeError, null], // int * string
+                ["'' * 1", TypeError, null], // string * int
+                ["'' * True", TypeError, null], // string * bool
+                ["'' * None", TypeError, null], // string * None
+                ["'' * (lambda x: x)", TypeError, null], // string * function
+                ["'' * 1.0", TypeError, null], // string * float
+                ["'' * 1+0j", TypeError, null], // string * complex
+            ],
+            "div and mod": [
+                ["1 / 1", 1.0, null], // int / int
+                ["2 / 1", 2.0, null], // int / int
+                ["1 / (1+0j)", new PyComplexNumber(1, 0), null], // int / complex
+                ["2 / (1.0+0j)", new PyComplexNumber(2, 0), null], // int / complex
+                ["3 / (1+1j)", new PyComplexNumber(1.5, -1.5), null], // int / complex
+                ["1 / 1.0", 1.0, null], // int / float
+                ["1 / 2.0", 0.5, null], // int / diff float
+                ["3.14 / 3.14", 1.0, null], // float / float
+                ["3.15 / 3.14", 1.003184713375796, null], // float / diff float
+                ["1.0 / 1", 1.0, null], // float / int
+                ["1.0 / 2", 0.5, null], // float / diff int
+                ["1.0 / (1+0j)", PyComplexNumber.fromBigInt(1n), null], // float / complex
+                ["(1+0j) / (1+0j)", PyComplexNumber.fromBigInt(1n), null], // complex / complex
+                ["-(1+0j) / (1+1j)", new PyComplexNumber(-0.5, 0.5), null], // complex / complex with diff imaginary
+                ["(1.2+0j) / (1+0j)", new PyComplexNumber(1.2, 0), null], // complex / complex with diff real
+                ["(1.2+1j) / (1.2+1.2j)", new PyComplexNumber(11/12, -1/12), null], // complex / diff complex
+                ["(1+0j) / 1", new PyComplexNumber(1, 0), null], // complex / int
+                ["(1.0+0j) / 1", new PyComplexNumber(1.0, 0), null], // complex with float real / int
+                ["(1+0j) / 1.0", new PyComplexNumber(1.0, 0), null], // complex / float
+                ["(1.5+0j) / 1.5", new PyComplexNumber(1.0, 0), null], // complex with float real / float
+                ["(1.5+1j) / 1.5", new PyComplexNumber(1.0, 2/3), null], // complex / diff float
+                ["True / True", TypeError, null], // bool / bool
+                ["1 / True", TypeError, null], // int / bool
+                ["1 / None", TypeError, null], // int / None
+                ["True / 1", TypeError, null], // bool / int
+                ["None / 1", TypeError, null], // None / int
+                ["None / None", TypeError, null], // None / None
+                ["(lambda x: x) / (lambda x: x)", TypeError, null], // function / diff function
+                ["(1 / (lambda x: x))", TypeError, null], // int / function
+                ["def a():\n    return 2\na / a", TypeError, null], // function / function,
+                ["'' / ''", TypeError, null], // empty string / empty string
+                ["hello = 'hello'\nhello / 'hello'", TypeError, null], // string / string
+                ["hello = 'hello'\nhello / 'Hello'", TypeError, null], // string / diff string
+                ["'a' / 'abc'", TypeError, null], // string / longer string
+                ["'a' / 'A'", TypeError, null], // string / string with diff case
+                ["'#' / '$'", TypeError, null], // string / string with diff character
+                ["1 / ''", TypeError, null], // int / string
+                ["'' / 1", TypeError, null], // string / int
+                ["'' / True", TypeError, null], // string / bool
+                ["'' / None", TypeError, null], // string / None
+                ["'' / (lambda x: x)", TypeError, null], // string / function
+                ["'' / 1.0", TypeError, null], // string / float
+                ["'' / 1+0j", TypeError, null], // string / complex
+
+                ["1 % 1", 0n, null], // int % int
+                ["2 % 1", 0n, null], // int % int
+                ["1 % (1+0j)", TypeError, null], // int % complex
+                ["2 % (1.0+0j)", TypeError, null], // int % complex
+                ["3 % (1+1j)", TypeError, null], // int % complex
+                ["1 % 1.0", 0.0, null], // int % float
+                ["3.5 % 2.0", 1.5, null], // int % diff float
+                ["3.14 % 3.14", 0.0, null], // float % float
+                ["3.15 % 3.14", 0.01, null], // float % diff float
+                ["1.0 % 1", 0, null], // float % int
+                ["1.0 % 2", 1, null], // float % diff int
+                ["-4 % 3", 2n, null], // negative int % int
+                ["-4.0 % 3.0", 2.0, null], // negative float % float
+                ["1.0 % (1+0j)", TypeError, null], // float % complex
+                ["(1+0j) % (1+0j)", TypeError, null], // complex % complex
+                ["-(1+0j) % (1+1j)", TypeError, null], // complex % complex with diff imaginary
+                ["(1.2+0j) % (1+0j)", TypeError, null], // complex % complex with diff real
+                ["(1.2+1j) % (1.2+1.2j)", TypeError, null], // complex % diff complex
+                ["(1+0j) % 1", TypeError, null], // complex % int
+                ["(1.0+0j) % 1", TypeError, null], // complex with float real % int
+                ["(1+0j) % 1.0", TypeError, null], // complex % float
+                ["(1.5+0j) % 1.5", TypeError, null], // complex with float real % float
+                ["(1.5+1j) % 1.5", TypeError, null], // complex % diff float
+                ["True % True", TypeError, null], // bool % bool
+                ["1 % True", TypeError, null], // int % bool
+                ["1 % None", TypeError, null], // int % None
+                ["True % 1", TypeError, null], // bool % int
+                ["None % 1", TypeError, null], // None % int
+                ["None % None", TypeError, null], // None % None
+                ["(lambda x: x) % (lambda x: x)", TypeError, null], // function % diff function
+                ["(1 % (lambda x: x))", TypeError, null], // int % function
+                ["def a():\n    return 2\na % a", TypeError, null], // function % function,
+                ["'' % ''", TypeError, null], // empty string % empty string
+                ["hello = 'hello'\nhello % 'hello'", TypeError, null], // string % string
+                ["hello = 'hello'\nhello % 'Hello'", TypeError, null], // string % diff string
+                ["'a' % 'abc'", TypeError, null], // string % longer string
+                ["'a' % 'A'", TypeError, null], // string % string with diff case
+                ["'#' % '$'", TypeError, null], // string % string with diff character
+                ["1 % ''", TypeError, null], // int % string
+                ["'' % 1", TypeError, null], // string % int
+                ["'' % True", TypeError, null], // string % bool
+                ["'' % None", TypeError, null], // string % None
+                ["'' % (lambda x: x)", TypeError, null], // string % function
+                ["'' % 1.0", TypeError, null], // string % float
+                ["'' % 1+0j", TypeError, null], // string % complex
+            ],
+            "** operator": [
+                ["1 ** 1", 1n, null], // int ** int
+                ["2 ** 1", 2n, null], // int ** int
+                ["1 ** (1+0j)", new PyComplexNumber(1, 0), null], // int ** complex
+                ["2 ** (1.0+0j)", new PyComplexNumber(2, 0), null], // int ** complex
+                ["3 ** (1+1j)", new PyComplexNumber(1.364497268479829, 2.6717311250032414), null], // int ** complex
+                ["1 ** 1.0", 1.0, null], // int ** float
+                ["3.5 ** 2.0", 12.25, null], // int ** diff float
+                ["3.14 ** 3.14", 36.33783888017471, null], // float ** float
+                ["3.15 ** -3.14", 0.027246132299496836, null], // float ** diff float
+                ["1.0 ** 1", 1.0, null], // float ** int
+                ["1.0 ** 2", 1.0, null], // float ** diff int
+                ["-4 ** 3", -64n, null], // negative int ** int
+                ["4 ** -3", 0.015625, null], // int ** negative int
+                ["1 ** -1.0", 1.0, null], // int ** negative float
+                ["-4.0 ** 3.0", -64.0, null], // negative float ** float
+                ["1.0 ** (1+0j)", new PyComplexNumber(1, 0), null], // float ** complex
+                ["(1+0j) ** (1+0j)", new PyComplexNumber(1, 0), null], // complex ** complex
+                ["-(1+0j) ** (1+1j)", new PyComplexNumber(-1, -0), null], // complex ** complex with diff imaginary
+                ["(1.2+0j) ** (1+0j)", new PyComplexNumber(1.2, 0), null], // complex ** complex with diff real
+                ["(1.2+1j) ** (1.2+1.2j)", new PyComplexNumber(0.14879042300637976, 0.7268673514247604), null], // complex ** diff complex
+                ["(1+0j) ** 1", new PyComplexNumber(1, 0), null], // complex ** int
+                ["(1.0+0j) ** 1", new PyComplexNumber(1, 0), null], // complex with float real ** int
+                ["(1+0j) ** 1.0", new PyComplexNumber(1, 0), null], // complex ** float
+                ["(1.5+0j) ** 1.5", new PyComplexNumber(1.8371173070873836, 0), null], // complex with float real ** float
+                ["(1.5+1j) ** 1.5", new PyComplexNumber(1.538509152171183,1.8686921660119655), null], // complex ** diff float
+                ["(1.5+1j) ** -1.5", new PyComplexNumber(0.2625881011088203,-0.31894274189888794), null], // complex ** negative float
+                ["True ** True", TypeError, null], // bool ** bool
+                ["1 ** True", TypeError, null], // int ** bool
+                ["1 ** None", TypeError, null], // int ** None
+                ["True ** 1", TypeError, null], // bool ** int
+                ["None ** 1", TypeError, null], // None ** int
+                ["None ** None", TypeError, null], // None ** None
+                ["(lambda x: x) ** (lambda x: x)", TypeError, null], // function ** diff function
+                ["(1 ** (lambda x: x))", TypeError, null], // int ** function
+                ["def a():\n    return 2\na ** a", TypeError, null], // function ** function,
+                ["'' ** ''", TypeError, null], // empty string ** empty string
+                ["hello = 'hello'\nhello ** 'hello'", TypeError, null], // string ** string
+                ["hello = 'hello'\nhello ** 'Hello'", TypeError, null], // string ** diff string
+                ["'a' ** 'abc'", TypeError, null], // string ** longer string
+                ["'a' ** 'A'", TypeError, null], // string ** string with diff case
+                ["'#' ** '$'", TypeError, null], // string ** string with diff character
+                ["1 ** ''", TypeError, null], // int ** string
+                ["'' ** 1", TypeError, null], // string ** int
+                ["'' ** True", TypeError, null], // string ** bool
+                ["'' ** None", TypeError, null], // string ** None
+                ["'' ** (lambda x: x)", TypeError, null], // string ** function
+                ["'' ** 1.0", TypeError, null], // string ** float
+                ["'' ** 1+0j", TypeError, null], // string ** complex
             ],
 
+            "and, or, not": [
+                ["True and True", true, null], // bool and bool
+                ["True and False", false, null], // bool and bool
+                ["False and True", false, null], // bool and bool
+                ["False and False", false, null], // bool and bool
+                ["True or True", true, null], // bool or bool
+                ["True or False", true, null], // bool or bool
+                ["False or True", true, null], // bool or bool
+                ["False or False", false, null], // bool or bool
+                ["not True", false, null], // not bool
+                ["not False", true, null], // not bool
+                ["not 1", TypeError, null], // not int
+                ["not 1.0", TypeError, null], // not float
+                ["not (1+0j)", TypeError, null], // not complex
+                ["not None", TypeError, null], // not None
+                ["not (lambda x: x)", TypeError, null], // not function
+                ["not ''", TypeError, null], // not string
+                ["'abc' and 1", TypeError, null], // string and int
+                ["True and 1", 1n, null], // bool and int
+                ["False and 1", false, null], // bool and int
+                ["'abc' or 1", TypeError, null], // string or int
+                ["True or 1", true, null], // bool or int
+                ["False or 1", 1n, null], // bool or int
+                ["(lambda x: x) and 1", TypeError, null], // function and int
+                ["(lambda x: x) or 1", TypeError, null], // function or int
+                ["'' and 1", TypeError, null], // string and int
+                ["'' or 1", TypeError, null], // string or int
+                ["None and 1", TypeError, null], // None and int
+                ["None or 1", TypeError, null], // None or int
+                ["1 and 1", TypeError, null], // int and int
+                ["1 or 1", TypeError, null], // int or int
+            ],
+            "unary minus": [
+                ["-1", -1n, null], // unary minus int
+                ["-1.0", -1.0, null], // unary minus float
+                ["-(1+0j)", new PyComplexNumber(-1, 0), null], // unary minus complex
+                ["-True", TypeError, null], // unary minus bool
+                ["-None", TypeError, null], // unary minus None
+                ["-(lambda x: x)", TypeError, null], // unary minus function
+                ["-''", TypeError, null], // unary minus string
+            ],
 
             "str and repr": [
                 ["str(1)", "1", null],

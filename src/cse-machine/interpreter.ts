@@ -841,7 +841,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as ListAccessInstr
     const index = stash.pop()
     const list = stash.pop()
-    console.log(index, list)
     if (!list || list.type !== 'list') {
       handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (list as Value).type, 'list'))
     }
