@@ -130,13 +130,11 @@ def equal(xs, ys):
     elif is_float(xs):
         return is_float(ys) and xs == ys
     elif is_boolean(xs):
-        return is_boolean(ys) and xs == ys
+        return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
     elif is_string(xs):
         return is_string(ys) and xs == ys
-    elif is_function(xs):
-        return is_function(ys) and xs == ys
     else:
-        return xs == ys
+        return False
 
 
 def length(xs):

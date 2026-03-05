@@ -45,10 +45,8 @@ operator & argument 1 & argument 2 & result\\ \hline
 \texttt{\textbf{\%}} & int   & int   & int\\
 \texttt{\textbf{\%}} & int   & float   & float\\
 \texttt{\textbf{\%}} & float   & float   & float\\
-\texttt{\textbf{==}} & int,float,complex   & int,float,complex     & bool\\
-\texttt{\textbf{==}} & string   & string     & bool\\
-\texttt{\textbf{!=}} & int,float,complex   & int,float,complex     & bool\\
-\texttt{\textbf{!=}} & string   & string     & bool\\
+\texttt{\textbf{==}} & any   & any     & bool\\
+\texttt{\textbf{!=}} & any   & any     & bool\\
 \texttt{\textbf{>}} & int,float   & int,float     & bool\\
 \texttt{\textbf{>}} & string   & string     & bool\\
 \texttt{\textbf{<}} & int,float   & int,float     & bool\\
@@ -58,8 +56,8 @@ operator & argument 1 & argument 2 & result\\ \hline
 \texttt{\textbf{<=}}    & int,float   & int,float     & bool\\
 \texttt{\textbf{<=}} & string   & string     & bool\\
 \texttt{\textbf{and}} & bool & any & any\\
-\texttt{\textbf{or}}  & bool & any & any\\
-\texttt{\textbf{not}} & bool &     & bool\\
+\texttt{\textbf{or}}   & bool & any & any\\
+\texttt{\textbf{not}}    & bool &      & bool\\
 \texttt{\textbf{-}}    & int &    & int\\
 \texttt{\textbf{-}}    & float &    & float\\
 \texttt{\textbf{-}}    & complex &    & complex
@@ -67,4 +65,3 @@ operator & argument 1 & argument 2 & result\\ \hline
 \end{tabular}
 \end{center}
 
-Preceding \texttt{\textbf{?}} and following \texttt{\textbf{if}}, Python only allows boolean expressions.
