@@ -1,11 +1,11 @@
-import { Closure } from './closure';
-import { Context } from './context';
-import { Heap } from './heap';
-import { Value } from './stash';
-import { ExprNS, StmtNS } from '../ast-types';
+import { Closure } from './closure'
+import { Context } from './context'
+import { Heap } from './heap'
+import { Value } from './stash'
+import { ExprNS, StmtNS } from '../ast-types'
 
 export interface Frame {
-  [name: string]: any
+  [name: string]: Value
 }
 
 export interface Environment {
@@ -41,7 +41,7 @@ export const createEnvironment = (
     callExpression: callExpression,
     closure: closure
   }
-  
+
   // console.info('closure.node.params:', closure.node.params);
   // console.info('Number of params:', closure.node.params.length);
 
@@ -62,14 +62,14 @@ export const createSimpleEnvironment = (
     name,
     tail,
     head: {},
-    heap: new Heap(),
+    heap: new Heap()
     // TODO: callExpression and thisContext are optional and can be provided as needed.
-  };
-};
+  }
+}
 
 export const createProgramEnvironment = (context: Context, isPrelude: boolean): Environment => {
-  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment');
-};
+  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment')
+}
 
 export const createBlockEnvironment = (
   context: Context,
@@ -86,25 +86,25 @@ export const createBlockEnvironment = (
 
 export const handleArrayCreation = (
   context: Context,
-  array: any[],
+  array: Value[],
   envOverride?: Environment
 ): void => {
-  const environment = envOverride ?? currentEnvironment(context);
+  const environment = envOverride ?? currentEnvironment(context)
   Object.defineProperties(array, {
     id: { value: uniqueId(context) },
     environment: { value: environment, writable: true }
-  });
-  environment.heap.add(array as any);
-};
+  })
+  environment.heap.add(array)
+}
 
 export const currentEnvironment = (context: Context): Environment => {
-  return context.runtime.environments[0];
-};
+  return context.runtime.environments[0]
+}
 
 export const getGlobalEnvironment = (context: Context): Environment | null => {
-  const envs = context.runtime.environments;
-  return envs.length > 0 ? envs[envs.length - 1] : null;
-};
+  const envs = context.runtime.environments
+  return envs.length > 0 ? envs[envs.length - 1] : null
+}
 
 export const popEnvironment = (context: Context) => context.runtime.environments.shift()
 

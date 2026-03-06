@@ -1,13 +1,8 @@
-import { Environment } from './environment';
-import { ExprNS, StmtNS } from '../ast-types';
-import { TokenType } from '../tokens';
-import { Statement } from 'estree';
+import { Environment } from './environment'
+import { ExprNS, StmtNS } from '../ast-types'
+import { TokenType } from '../tokens'
 
-export type Node = { isEnvDependent?: boolean } & (
-    | StmtNS.Stmt
-    | ExprNS.Expr
-    | StatementSequence
-);
+export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence)
 
 export interface StatementSequence {
   type: 'StatementSequence'
@@ -19,39 +14,39 @@ export interface StatementSequence {
 }
 
 export enum InstrType {
-    RESET = 'Reset',
-    WHILE = 'While',
-    FOR = 'For',
-    ASSIGNMENT = 'Assignment',
-    ANN_ASSIGNMENT = 'AnnAssignment',
-    APPLICATION = 'Application',
-    UNARY_OP = 'UnaryOperation',
-    BINARY_OP = 'BinaryOperation',
-    BOOL_OP = 'BoolOperation',
-    COMPARE = 'Compare',
-    CALL = 'Call',
-    RETURN = 'Return',
-    BREAK = 'Break',
-    CONTINUE = 'Continue',
-    IF = 'If',
-    FUNCTION_DEF = 'FunctionDef',
-    LAMBDA = 'Lambda',
-    MULTI_LAMBDA = 'MultiLambda',
-    GROUPING = 'Grouping',
-    LITERAL = 'Literal',
-    VARIABLE = 'Variable',
-    TERNARY = 'Ternary',
-    PASS = 'Pass',
-    ASSERT = 'Assert',
-    IMPORT = 'Import',
-    GLOBAL = 'Global',
-    NONLOCAL = 'NonLocal',
-    Program = 'Program',
-    BRANCH = 'Branch',
-    POP = 'Pop',
-    ENVIRONMENT = 'environment',
-    MARKER = 'marker',
-    END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+  RESET = 'Reset',
+  WHILE = 'While',
+  FOR = 'For',
+  ASSIGNMENT = 'Assignment',
+  ANN_ASSIGNMENT = 'AnnAssignment',
+  APPLICATION = 'Application',
+  UNARY_OP = 'UnaryOperation',
+  BINARY_OP = 'BinaryOperation',
+  BOOL_OP = 'BoolOperation',
+  COMPARE = 'Compare',
+  CALL = 'Call',
+  RETURN = 'Return',
+  BREAK = 'Break',
+  CONTINUE = 'Continue',
+  IF = 'If',
+  FUNCTION_DEF = 'FunctionDef',
+  LAMBDA = 'Lambda',
+  MULTI_LAMBDA = 'MultiLambda',
+  GROUPING = 'Grouping',
+  LITERAL = 'Literal',
+  VARIABLE = 'Variable',
+  TERNARY = 'Ternary',
+  PASS = 'Pass',
+  ASSERT = 'Assert',
+  IMPORT = 'Import',
+  GLOBAL = 'Global',
+  NONLOCAL = 'NonLocal',
+  Program = 'Program',
+  BRANCH = 'Branch',
+  POP = 'Pop',
+  ENVIRONMENT = 'environment',
+  MARKER = 'marker',
+  END_OF_FUNCTION_BODY = 'EndOfFunctionBody'
 }
 
 interface BaseInstr {

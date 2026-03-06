@@ -1,4 +1,4 @@
-import { Environment } from "./environment";
+import { Environment } from './environment'
 import {
   AppInstr,
   AssmtInstr,
@@ -10,9 +10,9 @@ import {
   Instr,
   InstrType,
   Node,
-  UnOpInstr 
-} from "./types";
-import { TokenType } from "../tokens";
+  UnOpInstr
+} from './types'
+import { TokenType } from '../tokens'
 
 export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
 
@@ -29,7 +29,8 @@ export const assmtInstr = (
   srcNode
 })
 
-export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({ instrType: InstrType.APPLICATION,
+export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({
+  instrType: InstrType.APPLICATION,
   numOfArgs,
   srcNode
 })

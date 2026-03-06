@@ -50,4 +50,3 @@ export class Stack<T> implements IStack<T> {
     return this.storage.some(predicate)
   }
 }
-

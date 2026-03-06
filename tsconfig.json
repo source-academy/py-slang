@@ -4,8 +4,10 @@
     "jest.config.js",
     "node_modules",
     "dist",
+    "rollup.config.js",
     "src/tests",
-    "rollup.config.js"
+    ".prettierrc",
+    "eslint.config.mjs"
   ],
   "compilerOptions": {
     /* Visit https://aka.ms/tsconfig to read more about this file */

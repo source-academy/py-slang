@@ -1,19 +1,16 @@
-import { Context } from './context';
-import {
-  SourceError,
-  ErrorType,
-  ErrorSeverity,
-  SourceLocation,
-  UNKNOWN_LOCATION
-} from '../errors';
-import { RuntimeSourceError } from '../errors';
+import { Context } from './context'
+import { SourceError, ErrorType, ErrorSeverity, SourceLocation, UNKNOWN_LOCATION } from '../errors'
+import { RuntimeSourceError } from '../errors'
 
 export class CseError implements SourceError {
   public type = ErrorType.RUNTIME
   public severity = ErrorSeverity.ERROR
   public location: SourceLocation
 
-  constructor(public message: string, location?: SourceLocation) {
+  constructor(
+    public message: string,
+    location?: SourceLocation
+  ) {
     this.location = location ?? UNKNOWN_LOCATION
   }
 
@@ -30,7 +27,6 @@ export function handleRuntimeError(context: Context, error: RuntimeSourceError) 
   context.errors.push(error)
   throw error
 }
-
 
 export class AssertionError extends RuntimeSourceError {
   constructor(public readonly message: string) {

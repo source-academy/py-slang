@@ -1,9 +1,8 @@
-import { ExprNS, StmtNS } from '../ast-types';
-import { Context } from './context';
-import { ControlItem } from './control';
-import { Environment, uniqueId } from './environment';
-import { StatementSequence } from './types';
-import { Value } from './stash';
+import { ExprNS, StmtNS } from '../ast-types'
+import { Context } from './context'
+import { ControlItem } from './control'
+import { Environment, uniqueId } from './environment'
+import { StatementSequence } from './types'
 
 /**
  * Represents a python closure, the class is a runtime representation of a function.
@@ -29,20 +28,20 @@ export class Closure {
   public declaredName?: string
 
   constructor(
-  node: StmtNS.FunctionDef | ExprNS.Lambda,
-  environment: Environment,
-  context: Context,
-  predefined: boolean = false,
-  localVariables: Set<string> = new Set()
-) {
-  this.id = uniqueId(context)
-  this.node = node
-  this.environment = environment
-  this.context = context
-  this.predefined = predefined
-  this.originalNode = node
-  this.localVariables = localVariables
-}
+    node: StmtNS.FunctionDef | ExprNS.Lambda,
+    environment: Environment,
+    context: Context,
+    predefined: boolean = false,
+    localVariables: Set<string> = new Set()
+  ) {
+    this.id = uniqueId(context)
+    this.node = node
+    this.environment = environment
+    this.context = context
+    this.predefined = predefined
+    this.originalNode = node
+    this.localVariables = localVariables
+  }
 
   static makeFromFunctionDef(
     node: StmtNS.FunctionDef,
