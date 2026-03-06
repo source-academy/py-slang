@@ -485,7 +485,7 @@ export class BuiltInFunctions {
         return { type: 'number', value: erfnum };
     }
 
-    @Validate(1, 1, 'math_erfc', false)
+    @Validate(1, 1, 'math_efc', false)
     static math_erfc(args: Value[], source: string, command: ControlItem, context: Context): NumberValue {
         const x = args[0];
         if (x.type !== 'number' && x.type !== 'bigint') {
@@ -861,6 +861,7 @@ export class BuiltInFunctions {
     }
 
     static roundToEven(num: number): number {
+        //uses Banker's Rounding as per Python's Round() function
         const floorVal = Math.floor(num);
         const ceilVal = Math.ceil(num);
         const diffFloor = num - floorVal;
@@ -1431,7 +1432,7 @@ export class BuiltInFunctions {
                 handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"));
             }
             let maxVal = args[0].value as string;
-            for (let i = 1; i < args.length; i++) {
+             for (let i = 1; i < args.length; i++) {
                 const arg = args[i];
                 if (arg.type !== 'string') {
                     handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, arg.type, "string"));

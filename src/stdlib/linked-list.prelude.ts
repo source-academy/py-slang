@@ -146,4 +146,5 @@ def _accumulate_linked_list(f, initial, xs, cont):
 # accumulate applies an operation op right-to-left
 def accumulate_linked_list(f, initial, xs):
     return _accumulate_linked_list(f, initial, xs, lambda x: x)
+
 `
