@@ -3,7 +3,7 @@
 // Original author(s): Source Academy Team
 
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { compileToWasmAndRun } from "../wasm-compiler/compile";
+import { compileToWasmAndRun } from "../wasm-compiler";
 
 export default class PyEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {
@@ -13,10 +13,10 @@ export default class PyEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     try {
       const result = await compileToWasmAndRun(chunk);
-      this.conductor.sendOutput(result);
+      this.conductor.sendOutput(result.toString());
     } catch (error) {
       this.conductor.sendOutput(
-        `Error: ${error instanceof Error ? error.message : error}`
+        `Error: ${error instanceof Error ? error.message : error}`,
       );
     }
   }
