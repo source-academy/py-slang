@@ -20,8 +20,8 @@ export interface StatementSequence {
 
 export enum InstrType {
     RESET = 'Reset',
-    WHILE = 'While',
-    FOR = 'For',
+    WHILE = 'WhileInstr',
+    FOR = 'ForInstr',
     ASSIGNMENT = 'Assignment',
     ANN_ASSIGNMENT = 'AnnAssignment',
     APPLICATION = 'Application',
@@ -31,8 +31,8 @@ export enum InstrType {
     COMPARE = 'Compare',
     CALL = 'Call',
     RETURN = 'Return',
-    BREAK = 'Break',
-    CONTINUE = 'Continue',
+    BREAK = 'BreakInstr',
+    CONTINUE = 'ContinueInstr',
     IF = 'If',
     FUNCTION_DEF = 'FunctionDef',
     LAMBDA = 'Lambda',
@@ -70,10 +70,17 @@ export interface WhileInstr extends BaseInstr {
 
 export interface ForInstr extends BaseInstr {
   instrType: InstrType.FOR
-  init: ExprNS.Variable
-  test: ExprNS.Expr
-  update: Node
+  target: ExprNS.Expr,
+  iter: ExprNS.Expr,
   body: StatementSequence
+}
+
+export interface ContinueInstr extends BaseInstr {
+  instrType: InstrType.CONTINUE
+}
+
+export interface BreakInstr extends BaseInstr {
+  instrType: InstrType.BREAK
 }
 
 export interface AssmtInstr extends BaseInstr {

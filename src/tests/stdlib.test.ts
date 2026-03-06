@@ -718,8 +718,7 @@ describe('Standard Library Tests', () => {
                 ["is_string(print)", false, null],
                 ["is_string(\"\")", true, null],
                 ["is_string(\"abc\")", true, null],
-            ]
-            
+            ],
 
         }
 

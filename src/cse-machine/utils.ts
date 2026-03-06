@@ -180,9 +180,8 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
         const instr = item as ForInstr;
         item.isEnvDependent =
           isEnvDependent(instr.body) ||
-          isEnvDependent(instr.init) ||
-          isEnvDependent(instr.test) ||
-          isEnvDependent(instr.update);
+          isEnvDependent(instr.target) ||
+          isEnvDependent(instr.iter);
         return item;
       }
     ],
@@ -395,3 +394,4 @@ export function operandTranslator(type: string) {
       return type;
   }
 }
+

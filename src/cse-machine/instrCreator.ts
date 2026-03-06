@@ -5,16 +5,22 @@ import {
   BinOpInstr,
   BoolOpInstr,
   BranchInstr,
+  BreakInstr,
+  ContinueInstr,
   EndOfFunctionBodyInstr,
   EnvInstr,
+  ForInstr,
   Instr,
   InstrType,
   ListAccessInstr,
   ListInstr,
   Node,
-  UnOpInstr 
+  StatementSequence,
+  UnOpInstr, 
+  WhileInstr
 } from "./types";
 import { TokenType } from "../tokens";
+import { ExprNS, StmtNS } from "../ast-types";
 
 export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
 
@@ -36,6 +42,11 @@ export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({ instr
   srcNode
 })
 
+export const breakInstr = (srcNode: Node): BreakInstr => ({
+  instrType: InstrType.BREAK,
+  srcNode
+})
+  
 export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   instrType: InstrType.ENVIRONMENT,
   env,
@@ -46,6 +57,12 @@ export const markerInstr = (srcNode: Node): Instr => ({
   instrType: InstrType.MARKER,
   srcNode
 })
+
+export const continueInstr = (srcNode: Node): ContinueInstr => ({
+  instrType: InstrType.CONTINUE,
+  srcNode
+})
+
 
 export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   instrType: InstrType.BINARY_OP,
@@ -95,4 +112,19 @@ export const listAccessInstr = (srcNode: Node): ListAccessInstr => ({
 export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr => ({
   instrType: InstrType.END_OF_FUNCTION_BODY,
   srcNode
+})
+
+export const forInstr = (srcNode: Node,  target: ExprNS.Expr, iter: ExprNS.Expr, body: StatementSequence): ForInstr => ({
+  instrType: InstrType.FOR,
+  srcNode,
+  target,
+  iter,
+  body
+})
+
+export const whileInstr = (srcNode: Node, test: ExprNS.Expr, body: StatementSequence): WhileInstr => ({
+  instrType: InstrType.WHILE,
+  srcNode,
+  test,
+  body
 })

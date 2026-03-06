@@ -660,4 +660,8 @@ ${args.map(
   visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
     throw new Error("Method not implemented.");
   }
+  visitTupleExpr(expr: ExprNS.Tuple): WasmNumeric {
+    throw new Error("Method not implemented.");
+  }
+  
 }

@@ -20,7 +20,7 @@ import { handleRuntimeError } from './error';
 import * as instrCreator from './instrCreator';
 import { evaluateBinaryExpression, evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
 import { Stash, Value } from './stash';
-import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListAccessInstr, ListInstr, Node, UnOpInstr } from './types';
+import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListAccessInstr, ListInstr, Node, UnOpInstr, WhileInstr } from './types';
 import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
@@ -233,13 +233,13 @@ export function* generateCSEMachineStateStream(
     }
 
     control.pop()
+
     if (isNode(command)) {
       const node = command as Node
       const nodeType = node.constructor.name
 
       context.runtime.nodes.shift()
       context.runtime.nodes.unshift(command)
-
       cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude)
 
       if (context.runtime.break && context.runtime.debuggerOn) {
@@ -562,6 +562,60 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
   },
 
+  For: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const forNode = command as StmtNS.For
+    const instr = instrCreator.forInstr(forNode, forNode.target, forNode.iter,
+      { type: 'StatementSequence', body: forNode.body })
+    control.push(instr)
+  },
+
+  While: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const whileNode = command as StmtNS.While
+    const instr = instrCreator.whileInstr(
+      whileNode,
+      whileNode.condition,
+      { type: 'StatementSequence', body: whileNode.body },
+    )
+    control.push(instr)
+    control.push(whileNode.condition)
+
+  },
+
+  Break: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.breakInstr(command as StmtNS.Break))
+  },
+
+  Continue: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.continueInstr(command as StmtNS.Continue))
+  },
 
   If: function (
     code: string,
@@ -676,6 +730,49 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
   },
 
+  [InstrType.BREAK]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    let top = control.peek();
+    if (!top) {
+      return;
+    }
+    if (isNode(top) || ((top as Instr).instrType !== InstrType.WHILE && (top as Instr).instrType !== InstrType.FOR)) {
+      control.pop()
+      control.push(command)
+    }
+    control.pop();
+  },
+
+  [InstrType.CONTINUE]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    let top = control.pop();
+    let top2 = control.peek();
+    if (!top) {
+      return;
+    }
+    if (!top2) {
+      control.push(top);
+      return;
+    }
+    if (isNode(top2) || ((top2 as Instr).instrType !== InstrType.WHILE && (top2 as Instr).instrType !== InstrType.FOR)) {
+      control.push(command)
+      return;
+    }
+    control.push(top)
+  },
+
   [InstrType.UNARY_OP]: function (
     code: string,
     command: ControlItem,
@@ -777,7 +874,27 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash.push({ type: 'list', value: elements })
   },
 
+  [InstrType.WHILE]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as WhileInstr
+    const condition = stash.pop()
+    if (condition && !isFalsy(condition)) {
+      control.push(instr)
+      control.push(instr.test)
+      if (instr.body && 'type' in instr.body && instr.body.type === 'StatementSequence') {
+        control.push(...(instr.body as any).body.slice().reverse())
+      } else {
+        control.push(instr.body)
+      }
 
+    }
+  },
   [InstrType.APPLICATION]: function (
     code: string,
     command: ControlItem,

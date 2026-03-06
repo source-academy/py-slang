@@ -157,6 +157,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     variant: number;
     environment: Environment | null;
     functionScope: Environment | null;
+    loopDepth: number = 0;
     constructor(source: string, ast: Stmt, variant: number, groups: Group[] = [], preludeNames: string[] = []) {
         
         this.source = source;
@@ -172,6 +173,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ]));
         this.functionScope = null;
     }
+    
     resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
         if (stmt === null) {
             return;
@@ -293,10 +295,24 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitAssertStmt(stmt: StmtNS.Assert): void {
         this.resolve(stmt.value);
     }
+
+    _declareForTargetNames(target: Expr): void {
+        if (target instanceof ExprNS.Variable) {
+            this.environment?.declareName(target.name);
+        } else if (target instanceof ExprNS.Tuple) { 
+            for (const element of target.elements) {
+                this._declareForTargetNames(element);
+            }
+        } else {
+            throw new ResolverErrors.InvalidSyntaxError(target.startToken.line, target.startToken.col, this.source, target.startToken.indexInSource, target.startToken.indexInSource + target.startToken.lexeme.length, "Invalid assignment target.");
+        }
+    }
     visitForStmt(stmt: StmtNS.For): void {
-        this.environment?.declareName(stmt.target);
+        this._declareForTargetNames(stmt.target);
         this.resolve(stmt.iter);
+        this.loopDepth += 1;
         this.resolve(stmt.body);
+        this.loopDepth -= 1;
     }
 
     visitIfStmt(stmt: StmtNS.If): void {
@@ -324,7 +340,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
     visitWhileStmt(stmt: StmtNS.While): void {
         this.resolve(stmt.condition);
+        this.loopDepth += 1;
         this.resolve(stmt.body);
+        this.loopDepth -= 1;
     }
     visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
         this.resolve(stmt.expression);
@@ -338,11 +356,16 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitContinueStmt(stmt: StmtNS.Continue): void {
+        if (this.loopDepth === 0) {
+            throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'continue' outside of loop");
+        }
     }
     visitBreakStmt(stmt: StmtNS.Break): void {
+        if (this.loopDepth === 0) {
+            throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'break' outside of loop");
+        }
     }
-    visitPassStmt(stmt: StmtNS.Pass): void {
-    }
+    visitPassStmt(stmt: StmtNS.Pass): void {}
 
 
 
@@ -416,16 +439,24 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitListExpr(expr: ExprNS.List): void {
-        if (this.variant <= 3) {
+        if (this.variant < 3) {
             throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
         }
         this.resolve(expr.elements);
     }
     visitSubscriptExpr(expr: ExprNS.Subscript): void {
-        if (this.variant <= 3) {
+        if (this.variant < 3) {
             throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
         }
         this.resolve(expr.value);
         this.resolve(expr.index);
+    }
+    visitTupleExpr(expr: ExprNS.Tuple): void {
+        if (this.variant <= 4) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
+        for (const element of expr.elements) {
+            this.resolve(element);
+        }
     }
 }
