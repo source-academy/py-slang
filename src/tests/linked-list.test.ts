@@ -16,9 +16,39 @@ describe('Linked List Tests', () => {
 			['print_linked_list(pair(1, 2))', null, '[1, 2]\n'],
 			['print_linked_list(None)', null, 'list()\n'],
 			['print_linked_list(pair(1, pair(2, 3)))', null, '[1, [2, 3]]\n'],
-			['print_linked_list(pair(1, pair(2, 3)))', null, '[1, [2, 3]]\n'],
-			['print_linked_list(pair(1, pair(2, 3)))', null, '[1, [2, 3]]\n']
+			['print_linked_list(pair(1, pair(2, None)))', null, 'list(1, 2)\n'],
+			['print_linked_list(pair(linked_list(1, 2, 3), linked_list(4, 5, 6)))', null, 'list(list(1, 2, 3), 4, 5, 6)\n']
 		],
+		'empty list boundaries': [
+            ['equal(append(None, None), None)', true, null], 
+            ['length(linked_list())', 0n, null], 
+            ['equal(linked_list(), None)', true, null], 
+            ['equal(remove(1, None), None)', true, null], 
+            ['equal(remove_all(1, None), None)', true, null],
+            ['equal(build_linked_list(lambda x: x, -1), None)', true, null], 
+            ['equal(enum_linked_list(0, 0), linked_list(0))', true, null], 
+        ],
+		'error throwing limits': [
+            ['linked_list_ref(linked_list(10, 20), 2)', TypeError, null], 
+            ['linked_list_ref(linked_list(10, 20), -1)', TypeError, null], 
+            ['length(pair(1, 2))', TypeError, null],
+            ['map_linked_list(lambda x: x, pair(1, 2))', TypeError, null],
+            ['equal(append(linked_list(1), 2), pair(1, 2))', true, null],
+        ],
+		'extreme removal and filtering': [
+            ['equal(remove_all(1, linked_list(1, 1, 1, 1)), None)', true, null],
+            ['equal(remove(1, linked_list(1, 1, 1)), linked_list(1, 1))', true, null], 
+            ['equal(filter_linked_list(lambda x: False, linked_list(1, 2, 3)), None)', true, null],
+            ['equal(filter_linked_list(lambda x: True, linked_list(1, 2, 3)), linked_list(1, 2, 3))', true, null],
+        ],
+		'equality strictness': [
+            ['equal(linked_list(1, 2), 1)', false, null], // List vs Int
+            ['equal(None, False)', false, null], // None vs Boolean
+            ['equal(pair(1, 2), pair(1, 2))', true, null], // Pair vs Pair (same)
+            ['equal(pair(1, 2), pair(1, 3))', false, null], // Pair vs Pair (diff tail)
+            ['equal(pair(1, 2), pair(2, 2))', false, null], // Pair vs Pair (diff head)
+            ['equal(linked_list(1, 2, 3), pair(1, pair(2, pair(3, None))))', true, null] // List vs manually constructed Pair chain
+        ],
 		'validation checks': [
 			['is_pair(pair(1, 2))', true, null],
 			['is_pair(pair(1, pair(2, pair(3, 4))))', true, null],
@@ -76,6 +106,7 @@ describe('Linked List Tests', () => {
 		],
 		'search and removal': [
 			['equal(member(1, linked_list(1, 2, 3, 4)), linked_list(1, 2, 3, 4))', true, null],
+			['equal(linked_list(1, 2, 3), pair(1, pair(2, pair(3, None))))', true, null],
 			['equal(member(3, linked_list(1, 2, 3, 4)), linked_list(3, 4))', true, null],
 			['equal(member(9, linked_list(1, 2, 3, 4)), None)', true, null],
 			['equal(remove(9, linked_list(1, 2, 3, 2)), linked_list(1, 2, 3, 2))', true, null],
