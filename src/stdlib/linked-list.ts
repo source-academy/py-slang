@@ -73,7 +73,7 @@ class LinkedListBuiltins {
             return { 'type': 'string', value: '[' + string1.value + ', ' + string2.value + ']' };
         }
         
-        let string = 'list(';
+        let string = 'linked_list(';
         let current = value;
 
         while (current.type == 'list' && current.value.length === 2) {
