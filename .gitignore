@@ -123,6 +123,9 @@ build/
 *.cb2
 .*.lb
 
+## Generated PDF files:
+*.pdf
+
 ## Intermediate documents:
 *.dvi
 *.xdv
