@@ -15,7 +15,7 @@ export default defineConfig([
       parser: tseslint.parser,
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["src/tests/*.ts"]
+          allowDefaultProject: ['src/tests/*.ts']
         }
       }
     },
