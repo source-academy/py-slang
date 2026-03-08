@@ -2,7 +2,7 @@
 \section{Dynamic Type Checking}
 
 Expressions evaluate to integers, floats, complex numbers, boolean values, strings or function values. 
-Implementations of Source generate error messages when unexpected values are used as follows.
+Implementations of Source generated error messages when unexpected values are used as follows.
 
 Only function values can be applied using the syntax:
 
@@ -16,7 +16,7 @@ Only function values can be applied using the syntax:
 For compound functions, implementations need to check that the number of \textit{expressions}
 matches the number of parameters.
 
-The following table specifies what arguments Source's operators
+The following table specifies what arguments Python's operators
 take and what results they return. Implementations need to check the types of arguments and
 generate an error message when the types do not match.
 
@@ -45,10 +45,8 @@ operator & argument 1 & argument 2 & result\\ \hline
 \texttt{\textbf{\%}} & int   & int   & int\\
 \texttt{\textbf{\%}} & int   & float   & float\\
 \texttt{\textbf{\%}} & float   & float   & float\\
-\texttt{\textbf{==}} & int,float,complex   & int,float,complex     & bool\\
-\texttt{\textbf{==}} & string   & string     & bool\\
-\texttt{\textbf{!=}} & int,float,complex   & int,float,complex     & bool\\
-\texttt{\textbf{!=}} & string   & string     & bool\\
+\texttt{\textbf{==}} & any   & any     & bool\\
+\texttt{\textbf{!=}} & any   & any     & bool\\
 \texttt{\textbf{>}} & int,float   & int,float     & bool\\
 \texttt{\textbf{>}} & string   & string     & bool\\
 \texttt{\textbf{<}} & int,float   & int,float     & bool\\
@@ -58,13 +56,11 @@ operator & argument 1 & argument 2 & result\\ \hline
 \texttt{\textbf{<=}}    & int,float   & int,float     & bool\\
 \texttt{\textbf{<=}} & string   & string     & bool\\
 \texttt{\textbf{and}} & bool & any & any\\
-\texttt{\textbf{or}}  & bool & any & any\\
-\texttt{\textbf{not}} & bool &     & bool\\
+\texttt{\textbf{or}}   & bool & any & any\\
+\texttt{\textbf{not}}    & bool &      & bool\\
 \texttt{\textbf{-}}    & int &    & int\\
 \texttt{\textbf{-}}    & float &    & float\\
 \texttt{\textbf{-}}    & complex &    & complex
 
 \end{tabular}
 \end{center}
-
-Preceding \texttt{\textbf{?}} and following \texttt{\textbf{if}}, Python only allows boolean expressions.
