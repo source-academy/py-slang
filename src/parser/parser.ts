@@ -294,10 +294,22 @@ export class Parser {
         this.consume(TokenType.IMPORT, "Expected import keyword");
 
         const names: Token[] = [];
+        let useParens = false;
+
+        if (this.check(TokenType.LPAR)) {
+            this.consume(TokenType.LPAR, "Expected '(' after import");
+            useParens = true;
+        }
+
         names.push(this.consume(TokenType.NAME, "Expected name to import"));
         while (this.match(TokenType.COMMA)) {
             names.push(this.consume(TokenType.NAME, "Expected name after comma"));
         }
+
+        if (useParens) {
+            this.consume(TokenType.RPAR, "Expected ')' after import");
+        }
+
         return new StmtNS.FromImport(startToken, this.previous(), module, names);
     }
 
