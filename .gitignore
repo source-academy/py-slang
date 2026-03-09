@@ -109,6 +109,9 @@ dist
 # TypeScript build files
 build/
 
+# Documentation build output
+docs/python/
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
