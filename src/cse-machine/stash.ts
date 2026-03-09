@@ -19,16 +19,15 @@ export type Value = NumberValue
   | NoneValue
   | BigIntValue
   | ClosureValue
-  | LinkedListValue
-  | PythonListValue;
+  | ListValue;
 
 export interface ClosureValue {
   type: "closure";
   closure: Closure;
 }
 
-export interface LinkedListValue {
-  type: "linked_list";
+export interface ListValue {
+  type: "list";
   value: Value[];
 }
 
@@ -92,11 +91,6 @@ export interface BuiltinValue {
   type: 'builtin';
   name: string;
   func: (...args: any[]) => any;
-}
-
-export interface PythonListValue {
-  type: "py_list";
-  closure: Closure;
 }
 
 export class Stash extends Stack<Value> {

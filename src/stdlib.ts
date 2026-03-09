@@ -1774,7 +1774,7 @@ export function toPythonString(obj: Value, repr: boolean = false): string {
     } else if (obj.type === "function") {
         const funcName = obj.name || '(anonymous)';
         ret = `<function ${funcName}>`;
-    } else if (obj.type === "linked_list") {
+    } else if (obj.type === "list") {
         ret = `[${obj.value.map(v => toPythonString(v, true)).join(', ')}]`;
     } else {
         ret = `<${obj.type} object>`;

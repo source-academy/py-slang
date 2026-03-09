@@ -871,7 +871,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         elements.unshift(element)
       }
     }
-    stash.push({ type: 'linked_list', value: elements })
+    stash.push({ type: 'list', value: elements })
   },
 
   [InstrType.WHILE]: function (
@@ -946,7 +946,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       }
     }
   },
-  //TODO: for linked list or python list?
+
   [InstrType.LIST_ACCESS]: function (
     code: string,
     command: ControlItem,
@@ -958,8 +958,8 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as ListAccessInstr
     const index = stash.pop()
     const list = stash.pop()
-    if (!list || list.type !== 'linked_list') {
-      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (list as Value).type, 'linked_list'))
+    if (!list || list.type !== 'list') {
+      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (list as Value).type, 'list'))
     }
     if (!index || index.type !== 'bigint') {
       handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (index as Value).type, 'int'))

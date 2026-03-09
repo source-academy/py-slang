@@ -2,7 +2,7 @@ import { ExprNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { handleRuntimeError } from "../cse-machine/error";
-import { BoolValue, LinkedListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
+import { BoolValue, ListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
 import { TypeError } from "../errors";
 import { BuiltInFunctions, builtIns, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
@@ -12,28 +12,28 @@ const linkedListBuiltins = new Map<string, Value>();
 
 class LinkedListBuiltins {
     @Validate(2, 2, 'pair', true)
-    static pair(args: Value[], source: string, command: ControlItem, context: Context): LinkedListValue {
-        return { type: 'linked_list', value: args };
+    static pair(args: Value[], source: string, command: ControlItem, context: Context): ListValue {
+        return { type: 'list', value: args };
     }
 
     @Validate(0, null, 'linked_list', true)
-    static linked_list(args: Value[], source: string, command: ControlItem, context: Context): LinkedListValue | NoneValue{
+    static linked_list(args: Value[], source: string, command: ControlItem, context: Context): ListValue | NoneValue{
         if (args.length === 0) {
             return { type: 'none' };
         }
         const head = args[0];
         const tail = LinkedListBuiltins.linked_list(args.slice(1), source, command, context);
-        return { type: 'linked_list', value: [head, tail] };
+        return { type: 'list', value: [head, tail] };
     }
 
     @Validate(1, 1, 'is_pair', true)
     static is_pair(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
-        return { type: 'bool', value: args[0].type === 'linked_list' && args[0].value.length === 2 };
+        return { type: 'bool', value: args[0].type === 'list' && args[0].value.length === 2 };
     }
 
     @Validate(1, 1, 'head', true)
     static head(args: Value[], source: string, command: ControlItem, context: Context): Value {
-        if (args[0].type !== 'linked_list' || args[0].value.length !== 2) {
+        if (args[0].type !== 'list' || args[0].value.length !== 2) {
             handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"));
         }
         return args[0].value[0];
@@ -41,7 +41,7 @@ class LinkedListBuiltins {
 
     @Validate(1, 1, 'tail', true)
     static tail(args: Value[], source: string, command: ControlItem, context: Context): Value {
-        if (args[0].type !== 'linked_list' || args[0].value.length !== 2) {
+        if (args[0].type !== 'list' || args[0].value.length !== 2) {
             handleRuntimeError(context, new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"));
         }
         return args[0].value[1];
@@ -52,7 +52,7 @@ class LinkedListBuiltins {
         if (value.type === 'none') {
             return true;
         }
-        return value.type === 'linked_list' && value.value.length === 2 && LinkedListBuiltins._is_linked_list(value.value[1]);
+        return value.type === 'list' && value.value.length === 2 && LinkedListBuiltins._is_linked_list(value.value[1]);
     }
 
     @Validate(1, 1, 'is_linked_list', true)
@@ -68,15 +68,15 @@ class LinkedListBuiltins {
             if (!isPairResult.value) {
                 return { type: 'string', value: toPythonString(value) };
             }
-            const string1 = LinkedListBuiltins._print_linked_list((value as LinkedListValue).value[0], source, command, context);
-            const string2 = LinkedListBuiltins._print_linked_list((value as LinkedListValue).value[1], source, command, context);
+            const string1 = LinkedListBuiltins._print_linked_list((value as ListValue).value[0], source, command, context);
+            const string2 = LinkedListBuiltins._print_linked_list((value as ListValue).value[1], source, command, context);
             return { 'type': 'string', value: '[' + string1.value + ', ' + string2.value + ']' };
         }
         
-        let string = 'linked_list(';
+        let string = 'list(';
         let current = value;
 
-        while (current.type == 'linked_list' && current.value.length === 2) {
+        while (current.type == 'list' && current.value.length === 2) {
             string += LinkedListBuiltins._print_linked_list(current.value[0], source, command, context).value;
             string += ', ';
             current = LinkedListBuiltins.tail([current], source, command, context);
