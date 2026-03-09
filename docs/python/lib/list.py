@@ -59,8 +59,7 @@ def tail(p):
 def is_none(x):
     """
     PRIMITIVE
-    Returns true if x is the Python primitive None value or the primitive
-    linked list expression None, and false otherwise.
+    Returns true if x is the primitive value None.
 
     Parameters:
         x (value): given value
