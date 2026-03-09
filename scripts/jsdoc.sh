@@ -53,13 +53,20 @@ run() {
   # landing page                                                                                                                                                                                            
   run_jsdoc "Landing Page" "README_top.md" "" "$LIB/empty.js" 
 
+  # MISC
+  run_jsdoc "MISC" "README_MISC.md" "MISC" "$LIB/misc.js" &
+
+  # MATH
+  run_jsdoc "MATH" "README_MATH.md" "MATH" "$LIB/math.js" &
+
+  # LINKED LISTS
+  run_jsdoc "LINKED LISTS" "README_LINKED LISTS.md" "LINKED LISTS" "$LIB/linked_list.js" &
+
   # Python §1
   run_jsdoc "Python §1" "README_1.md" "python_1" "$LIB/misc.js" "$LIB/math.js" &
   
   # Python §2
-  if [ -f "$MD/README_2.md" ]; then
-    run_jsdoc "Python §2" "README_2.md" "python_2" "$LIB/misc.js" "$LIB/math.js" &
-  fi
+  run_jsdoc "Python §2" "README_2.md" "python_2" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" &
 
   wait
 }
