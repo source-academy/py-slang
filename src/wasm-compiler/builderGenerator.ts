@@ -188,10 +188,17 @@ export class BuilderGenerator implements BuilderVisitor<
       return found;
     };
 
-    const bindings: Binding[] = findInNestedBody(statements).map((s) => ({
-      name: s.name.lexeme,
-      tag: "local",
-    }));
+    const bindings: Binding[] = findInNestedBody(statements).map((s) => {
+      if (s instanceof StmtNS.FunctionDef) {
+        return { name: s.name.lexeme, tag: "local" };
+      }
+
+      if (s.target instanceof ExprNS.Subscript) {
+        throw new Error("Subscript assignment is not yet supported");
+      }
+
+      return { name: s.target.name.lexeme, tag: "local" };
+    });
 
     statements
       .filter((s) => s instanceof StmtNS.NonLocal)
@@ -454,7 +461,10 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
-    const [depth, index] = this.getLexAddress(stmt.name.lexeme);
+    if (stmt.target instanceof ExprNS.Subscript) {
+      throw new Error("Subscript assignment is not yet supported");
+    }
+    const [depth, index] = this.getLexAddress(stmt.target.name.lexeme);
     const expression = this.visit(stmt.value);
 
     return wasm
@@ -658,6 +668,9 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    throw new Error("Method not implemented.");
+  }
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
     throw new Error("Method not implemented.");
   }
 }
