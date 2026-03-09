@@ -1,3 +1,15 @@
+import {
+  f64,
+  global,
+  i32,
+  i64,
+  local,
+  mut,
+  wasm,
+  type WasmInstruction,
+  type WasmNumeric,
+  type WasmRaw,
+} from "@sourceacademy/wasm-util";
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import {
@@ -15,7 +27,6 @@ import {
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
-  LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
@@ -31,22 +42,7 @@ import {
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
-  TYPE_TAG,
 } from "./constants";
-import {
-  f64,
-  global,
-  i32,
-  i64,
-  local,
-  mut,
-  wasm,
-  WasmFunction,
-  type WasmCall,
-  type WasmInstruction,
-  type WasmNumeric,
-  type WasmRaw,
-} from "@sourceacademy/wasm-util";
 import { libraryFunctions } from "./library";
 
 const FOR_END_PREFIX = "_for_end_";

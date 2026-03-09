@@ -1,24 +1,24 @@
 import {
   WasmCall,
   WasmInstruction,
-  wasm,
   i32,
   i64,
+  wasm,
 } from "@sourceacademy/wasm-util";
 import {
-  GET_LEX_ADDR_FX,
-  LOG_FX,
-  TYPE_TAG,
   BOOLISE_FX,
+  GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
-  MAKE_INT_FX,
-  SET_LIST_ELEMENT_FX,
-  MAKE_BOOL_FX,
+  IS_LINKED_LIST_FX,
   IS_PAIR_FX,
   LIST_LENGTH_FX,
-  MAKE_PAIR_FX,
+  LOG_FX,
+  MAKE_BOOL_FX,
+  MAKE_INT_FX,
   MAKE_LINKED_LIST_FX,
-  IS_LINKED_LIST_FX,
+  MAKE_PAIR_FX,
+  SET_LIST_ELEMENT_FX,
+  TYPE_TAG,
 } from "./constants";
 
 type TupleOf<
