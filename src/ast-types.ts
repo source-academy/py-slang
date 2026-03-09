@@ -2,6 +2,8 @@
 import {Token} from "./tokenizer";
 import { PyComplexNumber } from "./types";
 
+export type FunctionParam = Token & { isStarred: boolean };
+export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;
 export namespace ExprNS {
     export interface Visitor<T> {
         visitBigIntLiteralExpr(expr: BigIntLiteral): T
@@ -20,6 +22,7 @@ export namespace ExprNS {
         visitNoneExpr(expr: None): T
         visitListExpr(expr: List): T
         visitSubscriptExpr(expr: Subscript): T
+        visitStarredExpr(expr: Starred): T
     }
     export abstract class Expr {
         startToken: Token;
@@ -147,9 +150,9 @@ export namespace ExprNS {
         }
     }
     export class Lambda extends Expr {
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: Expr;
-        constructor(startToken: Token, endToken: Token, parameters: Token[], body: Expr){
+        constructor(startToken: Token, endToken: Token, parameters: FunctionParam[], body: Expr){
             super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
@@ -159,10 +162,10 @@ export namespace ExprNS {
         }
     }
     export class MultiLambda extends Expr {
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: StmtNS.Stmt[];
         varDecls: Token[];
-        constructor(startToken: Token, endToken: Token, parameters: Token[], body: StmtNS.Stmt[], varDecls: Token[]){
+        constructor(startToken: Token, endToken: Token, parameters: FunctionParam[], body: StmtNS.Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.parameters = parameters;
             this.body = body;
@@ -216,6 +219,17 @@ export namespace ExprNS {
         }
         override accept(visitor: Visitor<any>): any {
             return visitor.visitSubscriptExpr(this)
+        }
+    }
+
+    export class Starred extends Expr {
+        value: Expr;
+        constructor(startToken: Token, endToken: Token, value: Expr){
+            super(startToken, endToken)
+            this.value = value;
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitStarredExpr(this)
         }
     }
 }
@@ -274,11 +288,11 @@ export namespace StmtNS {
         }
     }
     export class Assign extends Stmt {
-        name: Token;
+        target: AssignTarget;
         value: ExprNS.Expr;
-        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr){
+        constructor(startToken: Token, endToken: Token, target: AssignTarget, value: ExprNS.Expr){
             super(startToken, endToken)
-            this.name = name;
+            this.target = target;
             this.value = value;
         }
         override accept(visitor: Visitor<any>): any {
@@ -286,12 +300,12 @@ export namespace StmtNS {
         }
     }
     export class AnnAssign extends Stmt {
-        name: Token;
+        target: ExprNS.Variable;
         value: ExprNS.Expr;
         ann: ExprNS.Expr;
-        constructor(startToken: Token, endToken: Token, name: Token, value: ExprNS.Expr, ann: ExprNS.Expr){
+        constructor(startToken: Token, endToken: Token, target: ExprNS.Variable, value: ExprNS.Expr, ann: ExprNS.Expr){
             super(startToken, endToken)
-            this.name = name;
+            this.target = target;
             this.value = value;
             this.ann = ann;
         }
@@ -409,10 +423,10 @@ export namespace StmtNS {
     }
     export class FunctionDef extends Stmt {
         name: Token;
-        parameters: Token[];
+        parameters: FunctionParam[];
         body: Stmt[];
         varDecls: Token[];
-        constructor(startToken: Token, endToken: Token, name: Token, parameters: Token[], body: Stmt[], varDecls: Token[]){
+        constructor(startToken: Token, endToken: Token, name: Token, parameters: FunctionParam[], body: Stmt[], varDecls: Token[]){
             super(startToken, endToken)
             this.name = name;
             this.parameters = parameters;
