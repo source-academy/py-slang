@@ -14,4 +14,4 @@ all: $(PDFSPECS)
 	$(PDFLATEX) $*
 
 clean:
-	rm -f *~ *.dvi *.aux *.log *.ps *.out *.pdf
+	rm -f *~ *.dvi *.aux *.log *.ps *.out *.pdf *.fdb_latexmk *.fls
