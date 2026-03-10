@@ -31,24 +31,31 @@ export function Validate<T extends Value>(
             context: Context
         ): T {
             if (minArgs !== null && args.length < minArgs) {
-                throw new MissingRequiredPositionalError(
-                    source,
-                    command as ExprNS.Expr,
-                    functionName,
-                    minArgs,
-                    args,
-                    strict
+                handleRuntimeError(
+                    context,
+                    new MissingRequiredPositionalError(
+                        source,
+                        command as ExprNS.Expr,
+                        functionName,
+                        minArgs,
+                        args,
+                        strict
+                    )
                 )
+                
             }
 
             if (maxArgs !== null && args.length > maxArgs) {
-                throw new TooManyPositionalArgumentsError(
-                    source,
-                    command as ExprNS.Expr,
-                    functionName,
-                    maxArgs,
-                    args,
-                    strict
+                handleRuntimeError(
+                    context,
+                    new TooManyPositionalArgumentsError(
+                        source,
+                        command as ExprNS.Expr,
+                        functionName,
+                        maxArgs,
+                        args,
+                        strict
+                    )
                 )
             }
 

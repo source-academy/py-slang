@@ -151,7 +151,7 @@ export function evaluateBinaryExpression(
         result = leftComplex.mul(rightComplex)
         break
       case TokenType.SLASH:
-        result = leftComplex.div(rightComplex)
+        result = leftComplex.div(code, command, context, rightComplex)
         break
       case TokenType.DOUBLESTAR:
         result = leftComplex.pow(rightComplex)

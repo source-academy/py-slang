@@ -86,6 +86,18 @@ else:
         })
     });
 
+    describe('Assignments', () => {
+        test('Simple assignment', () => {
+            const text = `x = 1\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+
+        test('Annotated assignment', () => {
+            const text = `x: int = 1\n`;
+            expect(toPythonAst(text)).toMatchObject({})
+        });
+    });
+
     describe('Lambda', () => {
         test('Simple lambda', () => {
             const text = `lambda a:a\n`;
@@ -168,6 +180,14 @@ else:
 `;
             expect(toPythonAst(text)).toMatchObject({})
         });
+
+        test('If without else', () => {
+          const text = `
+if x > 10:
+    print("x is greater than 10")
+          `;
+          expect(() => toPythonAst(text)).toThrow()
+        })
     });
 
     describe('N-base numbers', () => {

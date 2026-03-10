@@ -254,6 +254,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
 
+        if (this.variant < 3 && stmt.parameters.some(param => param.isStarred)) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
+
         // Create a new environment.
         const oldEnv = this.environment;
         // Assign the parameters to the new environment.

@@ -1,4 +1,4 @@
-import { TypeError } from "../errors";
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, TypeError, UnsupportedOperandTypeError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import { generateTestCases, TestCases } from "./utils";
 
@@ -6,12 +6,17 @@ describe('Linked List Tests', () => {
 	const linkedListTests: TestCases = {
 		'constructor and selector': [
 			['head(pair(1, 2))', 1n, null],
+			['head()', MissingRequiredPositionalError, null],
+			['pair()', MissingRequiredPositionalError, null],
+			['tail()', MissingRequiredPositionalError, null],
+			['tail(1, 2)', TooManyPositionalArgumentsError, null],
             ['head(None)', TypeError, null],
             ['tail(None)', TypeError, null],
 			['tail(pair(1, 2))', 2n, null],
 			['linked_list()', null, null],
 			['head(1)', TypeError, null],
 			['tail(1)', TypeError, null],
+			['print_linked_list()', MissingRequiredPositionalError, null],
 			['print_linked_list(linked_list(1, 2, 3))', null, 'linked_list(1, 2, 3)\n'],
 			['print_linked_list(pair(1, 2))', null, '[1, 2]\n'],
 			['print_linked_list(None)', null, 'linked_list()\n'],
@@ -59,7 +64,9 @@ describe('Linked List Tests', () => {
 			['is_pair(linked_list(pair(1, 2), pair(3, 4), pair(5, 6)))', true, null], 
 			['is_pair(linked_list(linked_list(linked_list(1, 2), 3, 4), 5, 6))', true, null], 
 			['is_pair(1)', false, null],
-			['is_pair(None)', false, null],		//TODO: if None is the empty linked list, then this should return true    
+			['is_pair(None)', false, null],		
+			['is_pair()', MissingRequiredPositionalError, null], 
+			['is_pair(1, 2)', TooManyPositionalArgumentsError, null],
     		['is_pair("pair")', false, null],     
     		['is_pair(lambda x: x)', false, null], 
 			['is_linked_list(pair(1, 2))', false, null], 
@@ -74,6 +81,8 @@ describe('Linked List Tests', () => {
 			['is_linked_list(None)', true, null], 
 			['is_linked_list("linked_list")', false, null], 
 			['is_linked_list(lambda x: x)', false, null], 
+			['is_linked_list()', MissingRequiredPositionalError, null],
+			['is_linked_list(1, 2)', TooManyPositionalArgumentsError, null],	
 			['equal(linked_list(1, 2), linked_list(1, 2))', true, null],
 			['equal(linked_list(1, 2), linked_list(2, 1))', false, null],
 			['equal(linked_list(1, linked_list(2, 3)), linked_list(1, linked_list(2, 3)))', true, null],

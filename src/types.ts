@@ -2,7 +2,9 @@ import { toPythonString } from './stdlib'
 import { BuiltinValue, Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
-import { SourceLocation } from './errors'
+import { SourceLocation, ZeroDivisionError } from './errors'
+import { ExprNS } from './ast-types'
+import { handleRuntimeError } from './cse-machine/error'
 
 export class CSEBreak {}
 
@@ -102,11 +104,11 @@ export class PyComplexNumber {
     // It first compares the magnitudes of the dividend and divisor, and if some components are too large or too small, 
     // appropriate scaling is applied before performing the operation. 
     // This approach can significantly reduce overflow or underflow, thereby ensuring that the results remain more consistent with Python.
-    public div(other: PyComplexNumber): PyComplexNumber {
+    public div(source: string, node: ExprNS.Expr, context: Context, other: PyComplexNumber): PyComplexNumber {
         // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
         const denominator = other.real * other.real + other.imag * other.imag;
         if (denominator === 0) {
-            throw new Error(`Division by zero in complex number.`);
+            handleRuntimeError(context, new ZeroDivisionError(source, node, context));
         }
 
         const a = this.real;

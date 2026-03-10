@@ -9,7 +9,7 @@
 import { TokenType } from '../tokens';
 import { ExprNS, StmtNS } from '../ast-types';
 import * as error from "../errors/errors";
-import { BuiltinReassignmentError } from '../errors/errors';
+import { BuiltinReassignmentError, RuntimeSourceError } from '../errors/errors';
 import { IOptions } from '../runner/pyRunner';
 import { builtIns, toPythonString } from '../stdlib';
 import { Token } from '../tokenizer';
@@ -734,7 +734,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     if (value) {
       if (builtIns.has(instr.symbol)) {
-        throw new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr)
+        handleRuntimeError(context, new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr))
       }
       pyDefineVariable(context, instr.symbol, value)
     }

@@ -259,7 +259,7 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   const env = currentEnvironment(context)
   if (env.closure && env.closure.localVariables.has(name)) {
     if (!env.head.hasOwnProperty(name)) {
-      throw new UnboundLocalError(code, name, node as ExprNS.Variable)
+      handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable))
     }
   }
 
@@ -281,7 +281,7 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   if (context.nativeStorage.builtins.has(name)) {
     return context.nativeStorage.builtins.get(name)!
   }
-  throw new NameError(code, name, node as ExprNS.Variable)
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable))
 }
 
 export const checkStackOverFlow = (context: Context, control: Control) => {
@@ -319,9 +319,9 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
 }
 
 
-export default function assert(condition: boolean, message: string): asserts condition {
+export default function assert(context: Context, condition: boolean, message: string): asserts condition {
   if (!condition) {
-    throw new AssertionError(message)
+    handleRuntimeError(context, new AssertionError(message))
   }
 }
 

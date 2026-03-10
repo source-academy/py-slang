@@ -76,7 +76,8 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
                 expect(result.status).toBe('finished');
 
                 if (typeof expected === 'function' && expected.prototype instanceof RuntimeSourceError) {
-                    expect(result).toHaveProperty('value.message', expect.stringContaining(expected.name));
+                    expect(context.errors).toHaveLength(1)
+                    expect(context.errors[0]).toHaveProperty('constructor', expected);
                     return;
                 }
 
