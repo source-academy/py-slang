@@ -282,14 +282,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
         this.resolve(stmt.ann);
         this.resolve(stmt.value);
-        this.functionVarConstraint(stmt.name);
-        this.environment?.declareName(stmt.name);
+        this.functionVarConstraint(stmt.target.name);
+        this.environment?.declareName(stmt.target.name);
     }
 
     visitAssignStmt(stmt: StmtNS.Assign): void {
+        const target = stmt.target;
+        if (target instanceof ExprNS.Subscript) {
+            throw new Error("Subscript assignment is not supported in assignment");
+        }
         this.resolve(stmt.value);
-        this.functionVarConstraint(stmt.name);
-        this.environment?.declareName(stmt.name);
+        this.functionVarConstraint(target.name);
+        this.environment?.declareName(target.name);
     }
 
     visitAssertStmt(stmt: StmtNS.Assert): void {
@@ -458,5 +462,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         for (const element of expr.elements) {
             this.resolve(element);
         }
+    }
+    visitStarredExpr(expr: ExprNS.Starred): void {
+        throw new Error("Starred expressions are not yet supported");
     }
 }

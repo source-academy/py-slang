@@ -474,7 +474,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     isPrelude: boolean
   ) {
     const assignNode = command as StmtNS.Assign
-    const assmtInstr = instrCreator.assmtInstr(assignNode.name.lexeme, false, true, assignNode)
+
+    if (assignNode.target instanceof ExprNS.Subscript) {
+      throw new Error("Subscript assignment is not yet supported");
+    }
+
+    const assmtInstr = instrCreator.assmtInstr(assignNode.target.name.lexeme, false, true, assignNode)
 
     control.push(assmtInstr)
     control.push(assignNode.value)

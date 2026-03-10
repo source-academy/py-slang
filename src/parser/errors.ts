@@ -44,4 +44,15 @@ export namespace ParserErrors {
             this.name = "GenericUnexpectedSyntaxError";
         }
     }
+
+    export class InvalidAssignmentError extends BaseParserError {
+        constructor(source: string, current: Token) {
+            let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+            fullLine = '\n' + fullLine + '\n';
+            let hint = `^ Invalid assignment target.`;
+            hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
+            super(fullLine + hint, lineIndex, current.col);
+            this.name = "InvalidAssignmentError";
+        }
+    }
 }
