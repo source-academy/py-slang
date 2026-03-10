@@ -34,11 +34,6 @@ jobs:
         with:
           path: dist/
           
-      - name: Coveralls
-        uses: coverallsapp/github-action@v2
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
   deploy:
     needs: build
 
