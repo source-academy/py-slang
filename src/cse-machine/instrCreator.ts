@@ -13,6 +13,7 @@ import {
   Instr,
   InstrType,
   ListAccessInstr,
+  ListAssmtInstr,
   ListInstr,
   Node,
   StatementSequence,
@@ -106,6 +107,11 @@ export const boolOpInstr = (symbol: TokenType, srcNode: Node): BoolOpInstr => ({
 
 export const listAccessInstr = (srcNode: Node): ListAccessInstr => ({
   instrType: InstrType.LIST_ACCESS,
+  srcNode
+})
+
+export const listAssmtInstr = (srcNode: Node): ListAssmtInstr => ({
+  instrType: InstrType.LIST_ASSIGNMENT,
   srcNode
 })
 

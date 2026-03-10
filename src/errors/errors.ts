@@ -1,6 +1,6 @@
 import { Token } from '../tokenizer'
 import { Context } from '../cse-machine/context'
-import { ExprNS } from '../ast-types'
+import { ExprNS, StmtNS } from '../ast-types'
 import { operatorTranslator } from '../cse-machine/types'
 import { TokenType } from '../tokens'
 import { Value } from '../cse-machine/stash'
@@ -166,7 +166,7 @@ export class TypeConcatenateError extends RuntimeSourceError {
 }
 
 export class IndexError extends RuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, context: Context, index: number, length: number) {
+    constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, context: Context, index: number, length: number) {
         super(node);
         this.type = ErrorType.RUNTIME;
         this.message = "IndexError: list index out of range. You tried to access index " + index + " but the list only has " + length + " elements.";
@@ -392,7 +392,7 @@ export class ValueError extends RuntimeSourceError {
 }
 
 export class TypeError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context, originalType: string, targetType: string) {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, context: Context, originalType: string, targetType: string) {
     super(node);
     originalType = typeTranslator(originalType);
     this.type = ErrorType.TYPE;

@@ -1,6 +1,9 @@
+import { ExprNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
+import { handleRuntimeError } from "../cse-machine/error";
 import { Value, BigIntValue, BoolValue } from "../cse-machine/stash";
+import { TypeError } from "../errors";
 import { Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
 import { GroupName, Group } from "./utils";
@@ -21,6 +24,20 @@ class ListBuiltins {
     static is_list(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
         const list = args[0];
         return { type: 'bool', value: list.type === 'list' };
+    }
+
+    // A helper function to generate a list of a given length
+    @Validate(1, 1, '_gen_list', true)
+    static _gen_list(args: Value[], source: string, command: ControlItem, context: Context): Value {
+        const length = args[0];
+        if (length.type !== 'bigint') {
+            throw new Error('_gen_list expects a bigint as the first argument');
+        }
+        const list: Value[] = [];
+        for (let i = BigInt(0); i < length.value; i++) {
+            list.push({ type: 'none' });
+        }
+        return { type: 'list', value: list };
     }
 }
 for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {

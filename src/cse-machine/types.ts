@@ -24,6 +24,7 @@ export enum InstrType {
     FOR = 'ForInstr',
     ASSIGNMENT = 'Assignment',
     ANN_ASSIGNMENT = 'AnnAssignment',
+    LIST_ASSIGNMENT = 'ListAssignment',
     APPLICATION = 'Application',
     UNARY_OP = 'UnaryOperation',
     BINARY_OP = 'BinaryOperation',
@@ -121,6 +122,10 @@ export interface ListAccessInstr extends BaseInstr {
   instrType: InstrType.LIST_ACCESS
 }
 
+export interface ListAssmtInstr extends BaseInstr {
+  instrType: InstrType.LIST_ASSIGNMENT
+}
+
 export interface EnvInstr extends BaseInstr {
   instrType: InstrType.ENVIRONMENT
   env: Environment
@@ -177,6 +182,8 @@ export function typeTranslator(type: Value["type"]): string {
       return 'complex'
     case 'none':
       return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
       return 'unknown'
   }

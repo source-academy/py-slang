@@ -10,14 +10,20 @@ import {
     Node,
     StatementSequence
 } from './types'
-import { AssertionError } from './error';
+import { AssertionError, handleRuntimeError } from './error';
 import { Value } from './stash';
 import { ExprNS, StmtNS } from '../ast-types';
 import { builtIns, builtInConstants } from '../stdlib';
 import { 
+  IndexError,
+  MissingRequiredPositionalError,
   NameError,
-  UnboundLocalError
+  TooManyPositionalArgumentsError,
+  TypeError,
+  UnboundLocalError,
 } from '../errors/errors';
+import { Token } from '../tokenizer';
+import { TokenType } from '../tokens';
 
 export const isNode = (command: ControlItem): command is Node => {
   return !isInstr(command)
@@ -330,10 +336,9 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
 
     if (nodeType === "Assign") {
       const assignNode = curNode as StmtNS.Assign
-      if (assignNode.target instanceof ExprNS.Subscript) {
-        throw new Error("Subscript assignment is not yet supported")
+      if (assignNode.target instanceof ExprNS.Variable) {
+        assignments.add(assignNode.target.name.lexeme);
       }
-      assignments.add(assignNode.target.name.lexeme)
     } else if (nodeType === "FunctionDef" || nodeType === "Lambda") {
       // detach here, nested functions have their own scope
       return
@@ -399,3 +404,113 @@ export function operandTranslator(type: string) {
   }
 }
 
+
+export function evaluateListAssignment(code: string, assignNode: StmtNS.Assign, context: Context, list: Value | undefined, index: Value | undefined, value: Value | undefined) {
+  if (list === undefined || list.type !== 'list') {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        list?.type || "unknown",
+        "list"
+      )
+    )
+  }
+  if (index === undefined || index.type !== 'bigint') {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        index?.type || "unknown",
+        "int"
+      )
+    )
+  }
+  if (value === undefined) {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        "undefined",
+        "any"
+      )
+    )
+  }
+  let intIndex = Number(index.value)
+  if (intIndex < 0) {
+    intIndex = intIndex % list.value.length;
+  }
+  if (intIndex >= list.value.length) {
+    handleRuntimeError(
+      context,
+      new IndexError(
+        code,
+        assignNode,
+        context,
+        intIndex,
+        list.value.length
+      )
+    )
+  }
+  list.value[intIndex] = value;
+}
+
+
+export function evaluateForIterator(code: string, context: Context, forNode: StmtNS.For): {start: ExprNS.Expr, end: ExprNS.Expr, step: ExprNS.Expr} {
+  const rangeArguments = (forNode.iter as ExprNS.Call).args;
+  if (rangeArguments.length === 0) {
+    handleRuntimeError(
+      context,
+      new MissingRequiredPositionalError(
+        code,
+        forNode.iter,
+        "range",
+        0,
+        rangeArguments,
+        true
+      )
+    )
+  }
+  if (rangeArguments.length > 3) {
+    handleRuntimeError(
+      context,
+      new TooManyPositionalArgumentsError(
+        code,
+        forNode.iter,
+        "range",
+        3,
+        rangeArguments,
+        true
+      )
+    )
+  }
+  const tempTokenZero = new Token(TokenType.NUMBER, "0", 0, 0, 0);
+  const tempTokenOne = new Token(TokenType.NUMBER, "1", 0, 0, 0);
+  if (rangeArguments.length === 1) {
+    return {
+      start: new ExprNS.Literal(tempTokenZero, tempTokenZero, 0),
+      end: rangeArguments[0],
+      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1)
+    }
+  }
+
+  if (rangeArguments.length === 2) {
+    return {
+      start: rangeArguments[0],
+      end: rangeArguments[1],
+      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1)
+    }
+  }
+
+  return {
+    start: rangeArguments[0],
+    end: rangeArguments[1],
+    step: rangeArguments[2]
+  }
+}

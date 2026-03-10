@@ -12,6 +12,7 @@ import * as error from "../errors/errors";
 import { BuiltinReassignmentError } from '../errors/errors';
 import { IOptions } from '../runner/pyRunner';
 import { builtIns, toPythonString } from '../stdlib';
+import { Token } from '../tokenizer';
 import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
 import { Closure } from './closure';
 import { Context } from './context';
@@ -21,8 +22,8 @@ import { handleRuntimeError } from './error';
 import * as instrCreator from './instrCreator';
 import { evaluateBinaryExpression, evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
 import { Stash, Value } from './stash';
-import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, ListAccessInstr, ListInstr, Node, UnOpInstr, WhileInstr } from './types';
-import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
+import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, ForInstr, Instr, InstrType, ListAccessInstr, ListAssmtInstr, ListInstr, Node, UnOpInstr, WhileInstr } from './types';
+import { envChanging, evaluateForIterator, evaluateListAssignment, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
   code: string,
@@ -476,7 +477,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const assignNode = command as StmtNS.Assign
 
     if (assignNode.target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not yet supported");
+      control.push(instrCreator.listAssmtInstr(assignNode.target))
+      control.push(assignNode.value)
+      control.push(assignNode.target.index)
+      control.push(assignNode.target.value)
+      return;
     }
 
     const assmtInstr = instrCreator.assmtInstr(assignNode.target.name.lexeme, false, true, assignNode)
@@ -735,6 +740,24 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
   },
 
+  [InstrType.LIST_ASSIGNMENT]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListAssmtInstr
+    const value = stash.pop()
+    const index = stash.pop()
+    const list = stash.pop()
+    
+    evaluateListAssignment(code, instr.srcNode as StmtNS.Assign, context, list, index, value)
+  },
+
+    
+
   [InstrType.BREAK]: function (
     code: string,
     command: ControlItem,
@@ -939,7 +962,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode))
       }
 
-      const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call)
+      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode as ExprNS.Call)
       pushEnvironment(context, newEnv)
 
       const closureNode = closure.node

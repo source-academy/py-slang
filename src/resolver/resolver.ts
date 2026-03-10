@@ -288,8 +288,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
     visitAssignStmt(stmt: StmtNS.Assign): void {
         const target = stmt.target;
+        this.resolve(stmt.value);
         if (target instanceof ExprNS.Subscript) {
-            throw new Error("Subscript assignment is not supported in assignment");
+            if (this.variant < 3) {
+                throw new ResolverErrors.UnsupportedFeatureError(target.startToken.line, target.startToken.col, this.source, target.startToken.indexInSource, target.startToken.indexInSource + target.startToken.lexeme.length);
+            }
+            this.resolve(target.value);
+            this.resolve(target.index);
+            return;
         }
         this.resolve(stmt.value);
         this.functionVarConstraint(target.name);
@@ -382,10 +388,26 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitLambdaExpr(expr: ExprNS.Lambda): void {
         // Create a new environment.
         const oldEnv = this.environment;
+        
+        // Validate that there are no starred parameters, as those are not supported in the Python 2 and below.
+        if (this.variant < 3 && expr.parameters.some(param => param.isStarred)) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
+        let hasSeenStarred = false;
+        for (const param of expr.parameters) {
+            if (param.isStarred) {
+                if (hasSeenStarred) {
+                    throw new ResolverErrors.InvalidSyntaxError(param.line, param.col, this.source, param.indexInSource, param.indexInSource + param.lexeme.length, "Multiple starred parameters are not allowed.");
+                }
+                hasSeenStarred = true;
+            }
+        }
+
         // Assign the parameters to the new environment.
         const newEnv = new Map(
             expr.parameters.map(param => [param.lexeme, param])
         );
+        
         this.environment = new Environment(this.source, this.environment, newEnv);
         this.resolve(expr.body);
         // Restore old environment

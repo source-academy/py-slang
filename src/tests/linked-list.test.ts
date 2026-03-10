@@ -12,12 +12,12 @@ describe('Linked List Tests', () => {
 			['linked_list()', null, null],
 			['head(1)', TypeError, null],
 			['tail(1)', TypeError, null],
-			['print_linked_list(linked_list(1, 2, 3))', null, 'list(1, 2, 3)\n'],
+			['print_linked_list(linked_list(1, 2, 3))', null, 'linked_list(1, 2, 3)\n'],
 			['print_linked_list(pair(1, 2))', null, '[1, 2]\n'],
-			['print_linked_list(None)', null, 'list()\n'],
+			['print_linked_list(None)', null, 'linked_list()\n'],
 			['print_linked_list(pair(1, pair(2, 3)))', null, '[1, [2, 3]]\n'],
-			['print_linked_list(pair(1, pair(2, None)))', null, 'list(1, 2)\n'],
-			['print_linked_list(pair(linked_list(1, 2, 3), linked_list(4, 5, 6)))', null, 'list(list(1, 2, 3), 4, 5, 6)\n']
+			['print_linked_list(pair(1, pair(2, None)))', null, 'linked_list(1, 2)\n'],
+			['print_linked_list(pair(linked_list(1, 2, 3), linked_list(4, 5, 6)))', null, 'linked_list(linked_list(1, 2, 3), 4, 5, 6)\n']
 		],
 		'empty list boundaries': [
             ['equal(append(None, None), None)', true, null], 
