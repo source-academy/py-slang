@@ -7,24 +7,25 @@ names are provided by the MISC library:
     \href{https://sourceacademy.org/sicpjs/1.2.6\#ex_1.22}{\lstinline{get_time()}}:
     \textit{primitive}, returns number of milliseconds elapsed since
     January 1, 1970 00:00:00 UTC
-  \item \verb#parse_int#\texttt{(s, i)}: \textit{primitive},
-    interprets the \emph{string} \texttt{s} as an integer, using the
-    positive integer \texttt{i} as radix, and returns the respective value.
   \item \verb#int#\texttt{(x)}, \verb#float#\texttt{(x)},
     \verb#bool#\texttt{(x)}, \verb#str#\texttt{(x)}: \textit{primitive},
     converts the value \texttt{x} to an integer, a float, a boolean, or a string
-    representation of \texttt{x} respectively. For strings,
-    \verb#int# works the same as
-    \verb#parse_int# with radix 10.
+    representation of \texttt{x} respectively, and returns the
+    respective value. For \verb#int#\texttt{(x)}, if \texttt{x} is a string,
+    \texttt{x} is parsed
+    as an integer in base 10.
+  \item \verb#parse_int#\texttt{(s, i)}: \textit{primitive},
+    interprets the \emph{string} \texttt{s} as an integer, using the
+    positive integer \texttt{i} as radix, and returns the respective value.
   \item
-    \href{https://sourceacademy.org/sicpjs/2.4.3\#p6}{\texttt{None}},
+    \href{https://sourceacademy.org/sicpjs/2.4.3\#p6}{\texttt{None}}:
     refers to Python's None value. Also refers to the primitive
     linked list expression.
   \item
-    \href{https://sourceacademy.org/sicpjs/4.1.2\#p2}{\lstinline{is_boolean(x)}},
+    \href{https://sourceacademy.org/sicpjs/4.1.2\#p2}{\lstinline{is_bool(x)}},
     \href{https://sourceacademy.org/sicpjs/2.3.2\#p5}{\lstinline{is_int(x)}},
     \href{https://sourceacademy.org/sicpjs/2.3.2\#p5}{\lstinline{is_float(x)}},
-    \href{https://sourceacademy.org/sicpjs/2.3.2\#p7}{\lstinline{is_string(x)}},
+    \href{https://sourceacademy.org/sicpjs/2.3.2\#p7}{\lstinline{is_str(x)}},
     \href{https://sourceacademy.org/sicpjs/4.1.2\#p2}{\lstinline{is_none(x)}},
     \verb#is_function#\texttt{(x)}: \textit{primitive}, returns
     \texttt{true} if the type of \texttt{x} matches the function name

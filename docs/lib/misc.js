@@ -43,19 +43,6 @@ function error(...object) {}
 function time_time() {}
 
 /**
- * Return <CODE>True</CODE> if <CODE>object</CODE> is an instance of <CODE>classinfo</CODE>.
- * <CODE>classinfo</CODE> can be <CODE>None</CODE>, <CODE>int</CODE>, <CODE>float</CODE>, <CODE>string</CODE>,
- * <CODE>bool</CODE>, and <CODE>complex</CODE>.
- *
- * @param {any} <CODE>object</CODE> - The object to be checked, i.e. the one to determine whether it is an
- * instance of the specified type.
- * @param {string} <CODE>classinfo</CODE> - The name of a single class (<CODE>type</CODE>). The type information used to test
- * the object's type.
- * @returns {bool} indicating whether <CODE>object</CODE> is an instance of <CODE>classinfo</CODE>
- */
-function isinstance(object, classinfo) {}
-
-/**
  * Return the absolute value of <CODE>x</CODE>.
  * For an <CODE>int</CODE> input, it returns the non-negative integer equivalent.
  * For a <CODE>float</CODE> input, it returns the positive floating-point number representing its magnitude.
@@ -112,13 +99,42 @@ function random_random() {}
  * Return an integer object constructed from a <CODE>value</CODE>, or return <CODE>0</CODE>
  * if no arguments are given.
  *
- * @param {int | float | string} <CODE>value</CODE> - If <CODE>value</CODE> is an <CODE>int</CODE> or
+ * @param {int | float | string | bool} <CODE>value</CODE> - If <CODE>value</CODE> is an <CODE>int</CODE> or
  * a <CODE>float</CODE>, it is converted to an integer by truncating toward <CODE>0</CODE>.
  * If <CODE>value</CODE> is a <CODE>string</CODE>, it is parsed as an integer in base 10.
  * If omitted, it defaults to <CODE>0</CODE>.
  * @returns {int} an integer object constructed from the given <CODE>value</CODE>
  */
 function int(value = 0) {}
+
+/**
+ * Return a floating point number constructed from a <CODE>value</CODE>, or return <CODE>0.0</CODE>
+ * if no arguments are given.
+ *
+ * @param {int | float | string | bool} <CODE>value</CODE> - If possible, <CODE>value</CODE> is converted
+ * to a floating point number.  If omitted, it defaults to <CODE>0.0</CODE>.
+ * @returns {float} a floating point number constructed from the given <CODE>value</CODE>
+ */
+function float(value = 0) {}
+
+/**
+ * Return a boolean value constructed from a <CODE>value</CODE>, or return <CODE>False</CODE>
+ * if no arguments are given.
+ *
+ * @param {any} <CODE>value</CODE> - The value to be converted to a boolean.
+ * @returns {bool} a boolean value constructed from the given <CODE>value</CODE>
+ */
+function bool(value) {}
+
+/**
+ * Return a <CODE>string</CODE> version of <CODE>object</CODE>. If <CODE>object</CODE> is not provided, returns
+ * the empty <CODE>string</CODE>.
+ *
+ * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
+ * If not provided, an empty <CODE>string</CODE> is returned.
+ * @returns {string} the informal <CODE>string</CODE> representation of <CODE>object</CODE>
+ */
+function str(object = "") {}
 
 /**
  * Return an integer object constructed from a <CODE>string</CODE>. If <CODE>base</CODE> is given,
@@ -130,9 +146,10 @@ function int(value = 0) {}
  * The string may include optional whitespace, a leading sign, and underscores between digits.
  * @param {int} <CODE>base</CODE> - The base (radix) for conversion. It must be <CODE>0</CODE>
  * or an integer in the range <CODE>2</CODE>–<CODE>36</CODE>. The default is <CODE>10</CODE>.
- * @returns {int} an integer object parsed from the provided <CODE>string</CODE> using the specified <CODE>base</CODE>
+ * @returns {int} an integer object parsed from the provided <CODE>string</CODE> using the specified
+ * <CODE>base</CODE>
  */
-function int(string, base = 10) {}
+function parse_int(string, base = 10) {}
 
 /**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
@@ -146,11 +163,74 @@ function int(string, base = 10) {}
 function input(prompt) {}
 
 /**
- * Return a <CODE>string</CODE> version of <CODE>object</CODE>. If <CODE>object</CODE> is not provided, returns
- * the empty <CODE>string</CODE>.
+ * Returns True if x is an integer, and False otherwise.
  *
- * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
- * If not provided, an empty <CODE>string</CODE> is returned.
- * @returns {string} the informal <CODE>string</CODE> representation of <CODE>object</CODE>
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is an integer
  */
-function str(object = "") {}
+function is_int(x) {}
+
+/**
+ * Returns True if x is a floating-point number, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is a floating-point number
+ */
+function is_float(x) {}
+
+/**
+ * Returns True if x is a string, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is a string
+ */
+function is_string(x) {}
+
+/**
+ * Returns True if x is a boolean, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is a boolean
+ */
+function is_bool(x) {}
+
+/**
+ * Returns True if x is a function, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is a function
+ */
+function is_function(x) {}
+
+/**
+ * Returns True if x is the None value, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {boolean} whether x is the None value
+ */
+function is_none(x) {}
+
+/**
+ *
+ * An object frequently used to represent the absence of a value.
+ * See also <a href="https://docs.python.org/3.13/library/constants.html#None">Python 3.13 Documentation</a>.
+ * @const {NoneType}
+ *
+ */
+const None = undefined;
+
+/**
+ *
+ * The true value of the bool type.
+ * @const {bool}
+ *
+ */
+const True = true;
+
+/**
+ *
+ * The false value of the bool type.
+ * @const {bool}
+ *
+ */
+const False = false;

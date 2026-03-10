@@ -24,7 +24,7 @@ function pair(x, y) {}
 
 /**
  * PRIMITIVE
- * Returns true if x is a pair and false otherwise.
+ * Returns True if x is a pair and False otherwise.
  *
  * @param {value} <CODE>x</CODE> - given value
  * @returns {boolean} whether x is a pair
@@ -51,7 +51,7 @@ function tail(p) {}
 
 /**
  * PRIMITIVE
- * Returns true if x is the empty linked list None, and false otherwise.
+ * Returns True if x is the empty linked list None, and False otherwise.
  *
  * @param {value} <CODE>x</CODE> - given value
  * @returns {boolean} whether x is None
@@ -60,8 +60,8 @@ function is_none(x) {}
 
 /**
  * PRIMITIVE
- * Returns true if xs is a linked list as defined in the textbook, and
- * false otherwise.
+ * Returns True if xs is a linked list as defined in the textbook, and
+ * False otherwise.
  *
  * @param {value} <CODE>xs</CODE> - given value
  * @returns {boolean} whether xs is a linked list
@@ -88,7 +88,7 @@ function linked_list(...values) {}
 function draw_data(...values) {}
 
 /**
- * Returns true if both have the same structure (pairs) and identical values at corresponding leaf positions.
+ * Returns True if both have the same structure (pairs) and identical values at corresponding leaf positions.
  *
  * @param {value} <CODE>xs</CODE> - given value
  * @param {value} <CODE>ys</CODE> - given value
@@ -211,10 +211,10 @@ function list_ref(xs, n) {}
 function accumulate_linked_list(f, initial, xs) {}
 
 /**
- * Returns a linked list that contains only those elements for which the one-argument function pred returns true.
+ * Returns a linked list that contains only those elements for which the one-argument function pred returns True.
  *
  * @param {function} <CODE>pred</CODE> - given one-argument function
  * @param {linked_list} <CODE>xs</CODE> - given linked list
- * @returns {linked_list} linked list that contains only those elements of xs for which pred returns true
+ * @returns {linked_list} linked list that contains only those elements of xs for which pred returns True
  */
 function filter_linked_list(pred, xs) {}

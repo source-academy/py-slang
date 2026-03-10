@@ -17,7 +17,7 @@ def pair(x, y):
 def is_pair(x):
     """
     PRIMITIVE
-    Returns true if x is a pair and false otherwise.
+    Returns True if x is a pair and False otherwise.
 
     Parameters:
         x (value): given value
@@ -59,7 +59,7 @@ def tail(p):
 def is_none(x):
     """
     PRIMITIVE
-    Returns true if x is the empty linked list None, and false otherwise.
+    Returns True if x is the empty linked list None, and False otherwise.
 
     Parameters:
         x (value): given value
@@ -73,8 +73,8 @@ def is_none(x):
 def is_linked_list(xs):
     """
     PRIMITIVE
-    Returns true if xs is a linked list as defined in the textbook, and
-    false otherwise.
+    Returns True if xs is a linked list as defined in the textbook, and
+    False otherwise.
 
     Parameters:
         xs (value): given value
@@ -114,7 +114,7 @@ def draw_data(value1, value2, *values):
 
 def equal(xs, ys):
     """
-    Pure Function: Returns true if both have the same structure (pairs)
+    Pure Function: Returns True if both have the same structure (pairs)
     and identical values at corresponding leaf positions.
     """
     if is_pair(xs):
@@ -350,7 +350,7 @@ def _accumulate_linked_list(f, initial, xs, cont):
 def filter_linked_list(pred, xs):
     """
     Returns a linked list that contains only those elements for which the
-    one-argument function pred returns true.
+    one-argument function pred returns True.
     """
     return _filter_linked_list(pred, xs, None)
 
