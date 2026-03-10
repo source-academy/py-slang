@@ -318,6 +318,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
     }
     visitForStmt(stmt: StmtNS.For): void {
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
         this._declareForTargetNames(stmt.target);
         this.resolve(stmt.iter);
         this.loopDepth += 1;
@@ -349,6 +352,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitWhileStmt(stmt: StmtNS.While): void {
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
         this.resolve(stmt.condition);
         this.loopDepth += 1;
         this.resolve(stmt.body);
@@ -369,10 +375,16 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         if (this.loopDepth === 0) {
             throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'continue' outside of loop");
         }
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
     }
     visitBreakStmt(stmt: StmtNS.Break): void {
         if (this.loopDepth === 0) {
             throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'break' outside of loop");
+        }
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
         }
     }
     visitPassStmt(stmt: StmtNS.Pass): void {}
