@@ -13,6 +13,7 @@
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
+    "test-coverage": "jest --coverage",
     "wasm": "ts-node src/wasm-compiler/index.ts"
   },
   "keywords": [
