@@ -166,7 +166,7 @@ function input(prompt) {}
  * Returns True if x is an integer, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is an integer
+ * @returns {bool} whether x is an integer
  */
 function is_int(x) {}
 
@@ -174,7 +174,7 @@ function is_int(x) {}
  * Returns True if x is a floating-point number, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is a floating-point number
+ * @returns {bool} whether x is a floating-point number
  */
 function is_float(x) {}
 
@@ -182,7 +182,7 @@ function is_float(x) {}
  * Returns True if x is a string, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is a string
+ * @returns {bool} whether x is a string
  */
 function is_string(x) {}
 
@@ -190,7 +190,7 @@ function is_string(x) {}
  * Returns True if x is a boolean, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is a boolean
+ * @returns {bool} whether x is a boolean
  */
 function is_bool(x) {}
 
@@ -198,7 +198,7 @@ function is_bool(x) {}
  * Returns True if x is a function, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is a function
+ * @returns {bool} whether x is a function
  */
 function is_function(x) {}
 
@@ -206,7 +206,7 @@ function is_function(x) {}
  * Returns True if x is the None value, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
- * @returns {boolean} whether x is the None value
+ * @returns {bool} whether x is the None value
  */
 function is_none(x) {}
 
