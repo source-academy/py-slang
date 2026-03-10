@@ -58,7 +58,17 @@ else:
 
       expect(toPythonAst(text)).toMatchObject({})
     })
+    test('From imports: single binding with parentheses', () => {
+      const text = `from x import (y)\n`
+
+      expect(toPythonAst(text)).toMatchObject({})
+    })
     test('From imports: multiple binding', () => {
+      const text = `from x import a, b, c\n`
+
+      expect(toPythonAst(text)).toMatchObject({})
+    })
+    test('From imports: multiple binding with parentheses', () => {
       const text = `from x import (a, b, c)\n`
 
       expect(toPythonAst(text)).toMatchObject({})

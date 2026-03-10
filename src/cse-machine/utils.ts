@@ -327,7 +327,11 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
     const nodeType = curNode.constructor.name
 
     if (nodeType === 'Assign') {
-      assignments.add((curNode as StmtNS.Assign).name.lexeme)
+      const assignNode = curNode as StmtNS.Assign
+      if (assignNode.target instanceof ExprNS.Subscript) {
+        throw new Error('Subscript assignment is not yet supported')
+      }
+      assignments.add(assignNode.target.name.lexeme)
     } else if (nodeType === 'FunctionDef' || nodeType === 'Lambda') {
       // detach here, nested functions have their own scope
       return

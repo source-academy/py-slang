@@ -161,10 +161,17 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       return found
     }
 
-    const bindings: Binding[] = findInNestedBody(statements).map(s => ({
-      name: s.name.lexeme,
-      tag: 'local'
-    }))
+    const bindings: Binding[] = findInNestedBody(statements).map(s => {
+      if (s instanceof StmtNS.FunctionDef) {
+        return { name: s.name.lexeme, tag: 'local' }
+      }
+
+      if (s.target instanceof ExprNS.Subscript) {
+        throw new Error('Subscript assignment is not yet supported')
+      }
+
+      return { name: s.target.name.lexeme, tag: 'local' }
+    })
 
     statements
       .filter(s => s instanceof StmtNS.NonLocal)
@@ -407,7 +414,10 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
-    const [depth, index] = this.getLexAddress(stmt.name.lexeme)
+    if (stmt.target instanceof ExprNS.Subscript) {
+      throw new Error('Subscript assignment is not yet supported')
+    }
+    const [depth, index] = this.getLexAddress(stmt.target.name.lexeme)
     const expression = this.visit(stmt.value)
 
     return wasm.call(SET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index), expression)
@@ -591,6 +601,9 @@ ${args.map(
     throw new Error('Method not implemented.')
   }
   visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
+    throw new Error('Method not implemented.')
+  }
+  visitStarredExpr(_expr: ExprNS.Starred): WasmNumeric {
     throw new Error('Method not implemented.')
   }
 }
