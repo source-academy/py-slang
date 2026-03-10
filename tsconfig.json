@@ -1,6 +1,7 @@
 {
   "exclude": [
     "docs",
+    "coverage",
     "jest.config.js",
     "node_modules",
     "dist",
