@@ -2,7 +2,6 @@ import nodeResolve from "@rollup/plugin-node-resolve";
 import typescript from '@rollup/plugin-typescript';
 import json from '@rollup/plugin-json';
 import commonjs from '@rollup/plugin-commonjs';
-import sourcemaps from 'rollup-plugin-sourcemaps';
 
 /**
  * @type {import('rollup').RollupOptions}
@@ -26,8 +25,7 @@ const config = [...[1, 2, 3].map(v => ({
       include: /node_modules/
     }),
     json(),
-    typescript(),
-    sourcemaps()
+    typescript()
   ]
 })), {
   input: `src/conductor/PyWasmEvaluator.ts`,
@@ -48,8 +46,7 @@ const config = [...[1, 2, 3].map(v => ({
       include: /node_modules/
     }),
     json(),
-    typescript(),
-    sourcemaps()
+    typescript()
   ]
 }];
 
