@@ -2,7 +2,6 @@ import nodeResolve from "@rollup/plugin-node-resolve";
 import typescript from '@rollup/plugin-typescript';
 import json from '@rollup/plugin-json';
 import commonjs from '@rollup/plugin-commonjs';
-import sourcemaps from 'rollup-plugin-sourcemaps';
 
 /**
  * @type {import('rollup').RollupOptions}
@@ -21,8 +20,7 @@ const config = [{
       include: /node_modules/
     }),
     json(),
-    typescript(),
-    sourcemaps()
+    typescript()
   ]
 }, {
   input: 'src/index.ts',
@@ -38,8 +36,7 @@ const config = [{
       include: /node_modules/
     }),
     json(),
-    typescript(),
-    sourcemaps()
+    typescript()
   ]
 }];
 

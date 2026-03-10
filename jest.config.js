@@ -5,4 +5,5 @@ module.exports = {
   transformIgnorePatterns: [
     "/node_modules/(?!(@sourceacademy/wasm-util)/).+\\.js$",
   ],
+  coverageReporters: ["lcov"]
 };
