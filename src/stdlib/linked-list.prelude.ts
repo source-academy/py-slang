@@ -18,6 +18,17 @@ def equal(xs, ys):
     else:
         return False
 
+#recursively checks if the given argument is linked_list
+def is_linked_list(xs):
+    if is_none(xs):
+        return True
+    else: 
+        if is_pair(xs):
+            return is_linked_list(tail(xs))
+        else:
+            return False
+
+
 # returns the length of a given argument linked_list
 def _length(xs, acc):
     return acc if is_none(xs) else _length(tail(xs), acc + 1)
