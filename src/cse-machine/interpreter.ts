@@ -6,6 +6,7 @@
 
 /* tslint:disable:max-classes-per-file */
 
+import { TokenType } from '../tokens';
 import { ExprNS, StmtNS } from '../ast-types';
 import * as error from "../errors/errors";
 import { BuiltinReassignmentError } from '../errors/errors';
@@ -231,7 +232,6 @@ export function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1)
     }
-
     control.pop()
 
     if (isNode(command)) {
@@ -331,6 +331,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
+    
     const literal = command as ExprNS.Literal
     if (typeof literal.value === 'number') {
       stash.push({ type: 'number', value: literal.value })
@@ -394,8 +395,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const boolOp = command as ExprNS.BoolOp
     control.push(instrCreator.boolOpInstr(boolOp.operator.type, boolOp))
-    control.push(boolOp.right)
-    control.push(boolOp.left)
+    control.push(boolOp.left)    
   },
 
   Grouping: function (
@@ -827,20 +827,30 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
-    const instr = command as BoolOpInstr
-    const right = stash.pop()
-    const left = stash.pop()
-
-    if (left && right) {
+    const instr = command as BoolOpInstr;
+    const left = stash.pop();
+    const boolOpNode = instr.srcNode as any;
+    const right = boolOpNode.right
+    if (left) {
       const result = evaluateBoolExpression(
-        code,
-        instr.srcNode as ExprNS.Expr,
-        context,
-        instr.symbol,
-        left,
-        right
-      )
-      stash.push(result)
+              code,
+              instr.srcNode as ExprNS.Expr,
+              context,
+              instr.symbol,
+              left,
+              right
+            )
+      const falsy = isFalsy(left)
+      const operator = instr.symbol;
+      if (operator == TokenType.AND && falsy) {
+          stash.push(left)
+        } else if (operator == TokenType.AND && !falsy) {
+          control.push(right)
+        } else if (operator == TokenType.OR && falsy) {
+          control.push(right)
+        } else {
+          stash.push(result)
+        }
     }
   },
 
