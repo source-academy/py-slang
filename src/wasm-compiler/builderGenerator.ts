@@ -8,10 +8,12 @@ import {
   wasm,
   WasmCall,
   WasmData,
+  WasmExport,
   type WasmInstruction,
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
+import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import {
@@ -36,6 +38,7 @@ import {
   MAKE_INT_FX,
   MAKE_LIST_FX,
   MAKE_NONE_FX,
+  MAKE_PAIR_FX,
   MAKE_STRING_FX,
   nativeFunctions,
   NEG_FX,
@@ -166,7 +169,13 @@ export class BuilderGenerator implements BuilderVisitor<
     ];
   }
 
-  constructor(builtInFunctions: LibFuncType[], interactiveMode: boolean) {
+  constructor(
+    initialStrings: string[],
+    builtInFunctions: LibFuncType[],
+    interactiveMode: boolean,
+  ) {
+    this.strings = initialStrings;
+
     this.builtIns = builtInFunctions.map(
       ({ name, arity, body, isVoid, hasVarArgs }, i) => {
         this.environment[0].push({ name, tag: "local" });
@@ -233,12 +242,27 @@ export class BuilderGenerator implements BuilderVisitor<
       heapPointer += str.length;
     }
 
+    // exported functions for parse
+    const exports: { [key in keyof WasmExports]: WasmExport } = {
+      main: wasm.export("main").func("$main"),
+      makeInt: wasm.export("makeInt").func(MAKE_INT_FX.name),
+      makeFloat: wasm.export("makeFloat").func(MAKE_FLOAT_FX.name),
+      makeBool: wasm.export("makeBool").func(MAKE_BOOL_FX.name),
+      makeString: wasm.export("makeString").func(MAKE_STRING_FX.name),
+      makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
+      makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
+    };
+
     return wasm
       .module()
       .imports(
         wasm.import("js", "memory").memory(1),
         ...importedLogs,
-        wasm.import("parse", "parse").func("$_host_parse").params(i32, i32),
+        wasm
+          .import("parse", "parse")
+          .func("$_host_parse")
+          .params(i32, i32)
+          .results(i32, i64),
       )
       .globals(
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
@@ -266,7 +290,7 @@ export class BuilderGenerator implements BuilderVisitor<
             ...(hasLastInstr ? [...body.slice(0, -1), hasLastInstr] : body),
           ),
       )
-      .exports(wasm.export("main").func("$main"))
+      .exports(...Object.values(exports))
       .build();
   }
 
@@ -384,7 +408,7 @@ export class BuilderGenerator implements BuilderVisitor<
           i32.const(this.strings.reduce((acc, s) => acc + s.length, 0)),
           i32.const(expr.value.length),
         );
-      this.strings.push(expr.value);
+      this.strings.push(expr.value.replace(/"/g, '\\"'));
       return toReturn;
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);

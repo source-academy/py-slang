@@ -1196,7 +1196,7 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
 export const PARSE_FX = wasm
   .func("$_parse")
   .params({ $tag: i32, $val: i64 })
-  // .results(i32, i64)
+  .results(i32, i64)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.STRING)))

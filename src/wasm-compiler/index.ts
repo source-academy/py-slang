@@ -6,6 +6,23 @@ import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 import { libraryFunctions } from "./library";
+import { MetacircularGenerator } from "./metacircularGenerator";
+
+export type WasmExports = {
+  main: () => [number, number];
+  makeInt: (value: bigint) => [number, bigint];
+  makeFloat: (value: number) => [number, bigint];
+  makeBool: (value: number) => [number, bigint];
+  makeString: (offset: number, length: number) => [number, bigint];
+  makePair: (
+    tag1: number,
+    value1: bigint,
+    tag2: number,
+    value2: bigint,
+  ) => [number, bigint];
+  makeNone: () => [number, bigint];
+};
+export const PARSE_TREE_STRINGS = ["sequence", "literal"] as const;
 
 export async function compileToWasmAndRun(
   code: string,
@@ -26,6 +43,7 @@ export async function compileToWasmAndRun(
   const ast = pyParser.parse();
 
   const builderGenerator = new BuilderGenerator(
+    [...PARSE_TREE_STRINGS],
     libraryFunctions,
     interactiveMode,
   );
@@ -38,6 +56,8 @@ export async function compileToWasmAndRun(
   const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
   const memory = new WebAssembly.Memory({ initial: 1 });
+
+  let wasmExports: WasmExports | null = null;
 
   const result = await WebAssembly.instantiate(wasm, {
     console: {
@@ -67,31 +87,42 @@ export async function compileToWasmAndRun(
       },
       log_pair: () => console.log(),
       log_list: (pointer: number, length: number) => {
-        const listItems = new Uint32Array(memory.buffer, pointer, length * 3);
-        console.log("List: ", Array.from(listItems));
+        console.log(`List at pointer ${pointer} with length ${length}:`);
+        const listItems: number[] = [];
+        const dataView = new DataView(memory.buffer, pointer, length * 12);
+        for (let i = 0; i < length; i++) {
+          listItems.push(dataView.getUint32(i * 12, true));
+          listItems.push(Number(dataView.getBigUint64(i * 12 + 4, true)));
+        }
+
+        console.log("List: ", listItems);
       },
     },
     parse: {
-      parse: async (offset: number, length: number) => {
+      parse: (offset: number, length: number) => {
         const string = new TextDecoder("utf8").decode(
           new Uint8Array(memory.buffer, offset, length),
         );
-        const tokenizer = new Tokenizer(string);
+        const tokenizer = new Tokenizer(string + "\n");
         const tokens = tokenizer.scanEverything();
         const pyParser = new Parser(string, tokens);
         const ast = pyParser.parse();
 
-        const wat = watGenerator.visit(watIR);
+        if (!wasmExports) {
+          throw new Error("WASM exports not initialised");
+        }
 
-        const w = await wabt();
-        return w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
-        console.log("Parsed AST: ", ast);
+        const metacircularGenerator = new MetacircularGenerator(wasmExports);
+        return metacircularGenerator.visit(ast);
       },
     },
     js: { memory },
   });
 
+  wasmExports = result.instance.exports as WasmExports;
+
   // run the exported main function
-  assert(typeof result.instance.exports.main === "function");
-  return result.instance.exports.main() as [number, number];
+  assert(typeof wasmExports?.main === "function");
+
+  return wasmExports.main() as [number, number];
 }

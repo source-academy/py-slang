@@ -111,5 +111,5 @@ export const libraryFunctions: LibFuncType[] = [
     wasm.call(BOOLISE_FX).args(x),
   ]),
 
-  libFunc("parse", 1, true).body((x) => wasm.call(PARSE_FX).args(x)),
+  libFunc("parse", 1).body((x) => wasm.call(PARSE_FX).args(x)),
 ];
