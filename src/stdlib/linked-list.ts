@@ -55,13 +55,6 @@ class LinkedListBuiltins {
         return value.type === 'list' && value.value.length === 2 && LinkedListBuiltins._is_linked_list(value.value[1]);
     }
 
-    @Validate(1, 1, 'is_linked_list', true)
-    static is_linked_list(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
-        // Just call the internal helper and wrap the result in a BoolValue!
-        const result = LinkedListBuiltins._is_linked_list(args[0]);
-        return { type: 'bool', value: result };
-    }
-
     static _print_linked_list(value: Value, source: string, command: ControlItem, context: Context): StringValue {
         if (!LinkedListBuiltins._is_linked_list(value)) {
             const isPairResult = LinkedListBuiltins.is_pair([value], source, command, context);

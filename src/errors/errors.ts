@@ -101,14 +101,16 @@ function typeTranslator(type: string): string {
       return 'int'
     case 'number':
       return 'float'
-    case 'boolean':
-      return 'bool'
     case 'bool':
       return 'bool'
     case 'string':
-      return 'string'
+      return 'str'
     case 'complex':
       return 'complex'
+    case 'none':
+      return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
       return 'unknown'
   }
@@ -141,28 +143,6 @@ export function createErrorIndicator(snippet: string, errorPos: number): string 
     indicator += (i === errorPos ? "^" : "~");
   }
   return indicator;
-}
-
-export class TypeConcatenateError extends RuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, wrongType: string) {
-        super(node);
-        this.type = ErrorType.TYPE;
-
-        let index = node.startToken.indexInSource;
-        const { lineIndex, fullLine } = getFullLine(source, index);
-        const snippet = source.substring(node.startToken.indexInSource, node.endToken.indexInSource + node.endToken.lexeme.length)
-        
-        let hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
-        const offset = fullLine.indexOf(snippet);
-        const adjustedOffset = offset >= 0 ? offset : 0
-        const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource
-        const indicator = createErrorIndicator(snippet, errorPos);
-        
-        const name = "TypeError";
-        const suggestion = "You are trying to concatenate a string with an " + wrongType + ". To fix this, convert the " + wrongType + " to a string using str(), or ensure both operands are of the same type.";
-        const msg = name + " at line " + lineIndex + "\n\n    " + fullLine + "\n    " + " ".repeat(adjustedOffset) + indicator + "\n" + hint + "\n" + suggestion;
-        this.message = msg;
-    }
 }
 
 export class IndexError extends RuntimeSourceError {

@@ -366,22 +366,24 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
   return assignments
 }
 
-export function typeTranslator(type: string): string {
+export function typeTranslator(type: Value["type"]): string {
   switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "bool":
-      return "bool";
-    case "string":
-      return "string";
-    case "complex":
-      return "complex";
+    case 'bigint':
+      return 'int'
+    case 'number':
+      return 'float'
+    case 'bool':
+      return 'bool'
+    case 'string':
+      return 'str'
+    case 'complex':
+      return 'complex'
+    case 'none':
+      return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
-      return "unknown";
+      return 'unknown'
   }
 }
 
