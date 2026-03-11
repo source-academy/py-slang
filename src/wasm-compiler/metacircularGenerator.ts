@@ -79,16 +79,10 @@ export class MetacircularGenerator implements BuilderVisitor<
     const type = expr.operator.type;
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
-    if (type === TokenType.PLUS) op = "+";
-    else if (type === TokenType.MINUS) op = "-";
-    else if (type === TokenType.STAR) op = "*";
-    else if (type === TokenType.SLASH) op = "/";
-    else if (type === TokenType.DOUBLEEQUAL) op = "==";
-    else if (type === TokenType.NOTEQUAL) op = "!=";
-    else if (type === TokenType.LESS) op = "<";
-    else if (type === TokenType.LESSEQUAL) op = "<=";
-    else if (type === TokenType.GREATER) op = ">";
-    else if (type === TokenType.GREATEREQUAL) op = ">=";
+    if (type === TokenType.PLUS) op = '"+"';
+    else if (type === TokenType.MINUS) op = '"-"';
+    else if (type === TokenType.STAR) op = '"*"';
+    else if (type === TokenType.SLASH) op = '"/"';
     else {
       throw new Error(`Unsupported binary operator in parse tree: ${type}`);
     }
@@ -105,12 +99,12 @@ export class MetacircularGenerator implements BuilderVisitor<
     const type = expr.operator.type;
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
-    if (type === TokenType.DOUBLEEQUAL) op = "==";
-    else if (type === TokenType.NOTEQUAL) op = "!=";
-    else if (type === TokenType.LESS) op = "<";
-    else if (type === TokenType.LESSEQUAL) op = "<=";
-    else if (type === TokenType.GREATER) op = ">";
-    else if (type === TokenType.GREATEREQUAL) op = ">=";
+    if (type === TokenType.DOUBLEEQUAL) op = '"=="';
+    else if (type === TokenType.NOTEQUAL) op = '"!="';
+    else if (type === TokenType.LESS) op = '"<"';
+    else if (type === TokenType.LESSEQUAL) op = '"<="';
+    else if (type === TokenType.GREATER) op = '">"';
+    else if (type === TokenType.GREATEREQUAL) op = '">="';
     else {
       throw new Error(`Unsupported comparison operator in parse tree: ${type}`);
     }
@@ -127,8 +121,8 @@ export class MetacircularGenerator implements BuilderVisitor<
     const type = expr.operator.type;
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
-    if (type === TokenType.MINUS) op = "-";
-    else if (type === TokenType.NOT) op = "not";
+    if (type === TokenType.MINUS) op = '"-"';
+    else if (type === TokenType.NOT) op = '"not"';
     else {
       throw new Error(`Unsupported unary operator in parse tree: ${type}`);
     }
@@ -144,8 +138,8 @@ export class MetacircularGenerator implements BuilderVisitor<
     const type = expr.operator.type;
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
-    if (type === TokenType.AND) op = "and";
-    else if (type === TokenType.OR) op = "or";
+    if (type === TokenType.AND) op = '"and"';
+    else if (type === TokenType.OR) op = '"or"';
     else {
       throw new Error(`Unsupported boolean operator in parse tree: ${type}`);
     }
@@ -194,7 +188,10 @@ export class MetacircularGenerator implements BuilderVisitor<
         this.wasmExports.makeBool(expr.value ? 1 : 0),
       );
     else if (typeof expr.value === "string") {
-      return this.list(this.string("literal"), this.dynamicString(expr.value));
+      return this.list(
+        this.string("literal"),
+        this.dynamicString(`"${expr.value}"`),
+      );
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
     }
@@ -228,7 +225,10 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
-    return this.list(this.string("name"), this.dynamicString(expr.name.lexeme));
+    return this.list(
+      this.string("name"),
+      this.dynamicString(`"${expr.name.lexeme}"`),
+    );
   }
 
   visitBreakStmt(stmt: StmtNS.Break): [number, bigint] {

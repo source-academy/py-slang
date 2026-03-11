@@ -241,7 +241,12 @@ export class BuilderGenerator implements BuilderVisitor<
     let heapPointer = 0;
 
     for (const str of this.strings) {
-      strings.push(wasm.data(i32.const(heapPointer), str));
+      strings.push(
+        wasm.data(
+          i32.const(heapPointer),
+          str.replace(/"/g, '\\"').replace(/\n/g, "\\n"),
+        ),
+      );
       heapPointer += str.length;
     }
 
@@ -256,7 +261,9 @@ export class BuilderGenerator implements BuilderVisitor<
       makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
       makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
       getHeapPointer: wasm.export("getHeapPointer").func(GET_HEAP_PTR_FX.name),
-      incrementHeapPointer: wasm.export("incrementHeapPointer").func(INCREMENT_HEAP_PTR_FX.name),
+      incrementHeapPointer: wasm
+        .export("incrementHeapPointer")
+        .func(INCREMENT_HEAP_PTR_FX.name),
     };
 
     return wasm
@@ -414,7 +421,7 @@ export class BuilderGenerator implements BuilderVisitor<
           i32.const(this.strings.reduce((acc, s) => acc + s.length, 0)),
           i32.const(expr.value.length),
         );
-      this.strings.push(expr.value.replace(/"/g, '\\"'));
+      this.strings.push(expr.value);
       return toReturn;
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
