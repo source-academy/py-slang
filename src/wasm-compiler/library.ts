@@ -17,6 +17,7 @@ import {
   MAKE_INT_FX,
   MAKE_LINKED_LIST_FX,
   MAKE_PAIR_FX,
+  PARSE_FX,
   SET_LIST_ELEMENT_FX,
   TYPE_TAG,
 } from "./constants";
@@ -26,6 +27,14 @@ type TupleOf<
   N extends number,
   R extends unknown[] = [],
 > = R["length"] extends N ? R : TupleOf<T, N, [...R, T]>;
+
+export type LibFuncType = {
+  name: string;
+  arity: number;
+  isVoid: boolean;
+  hasVarArgs: boolean;
+  body: WasmInstruction[];
+};
 
 const libFunc = <Arity extends number, HasVarArgs extends boolean = false>(
   name: string,
@@ -53,7 +62,7 @@ const libFunc = <Arity extends number, HasVarArgs extends boolean = false>(
   },
 });
 
-export const libraryFunctions = [
+export const libraryFunctions: LibFuncType[] = [
   libFunc("print", 1, true).body((x) => wasm.call(LOG_FX).args(x)),
 
   // pair & linked list functions
@@ -101,4 +110,6 @@ export const libraryFunctions = [
     i32.const(TYPE_TAG.BOOL),
     wasm.call(BOOLISE_FX).args(x),
   ]),
+
+  libFunc("parse", 1, true).body((x) => wasm.call(PARSE_FX).args(x)),
 ];

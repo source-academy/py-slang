@@ -5,15 +5,30 @@ import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
+import { libraryFunctions } from "./library";
 
-export async function compileToWasmAndRun(code: string) {
+export async function compileToWasmAndRun(
+  code: string,
+  interactiveMode?: false,
+): Promise<void>;
+export async function compileToWasmAndRun(
+  code: string,
+  interactiveMode: true,
+): Promise<[number, number]>;
+export async function compileToWasmAndRun(
+  code: string,
+  interactiveMode: boolean = false,
+): Promise<void | [number, number]> {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
   const pyParser = new Parser(script, tokens);
   const ast = pyParser.parse();
 
-  const builderGenerator = new BuilderGenerator();
+  const builderGenerator = new BuilderGenerator(
+    libraryFunctions,
+    interactiveMode,
+  );
   const watIR = builderGenerator.visit(ast);
 
   const watGenerator = new WatGenerator();
@@ -54,6 +69,23 @@ export async function compileToWasmAndRun(code: string) {
       log_list: (pointer: number, length: number) => {
         const listItems = new Uint32Array(memory.buffer, pointer, length * 3);
         console.log("List: ", Array.from(listItems));
+      },
+    },
+    parse: {
+      parse: async (offset: number, length: number) => {
+        const string = new TextDecoder("utf8").decode(
+          new Uint8Array(memory.buffer, offset, length),
+        );
+        const tokenizer = new Tokenizer(string);
+        const tokens = tokenizer.scanEverything();
+        const pyParser = new Parser(string, tokens);
+        const ast = pyParser.parse();
+
+        const wat = watGenerator.visit(watIR);
+
+        const w = await wabt();
+        return w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
+        console.log("Parsed AST: ", ast);
       },
     },
     js: { memory },

@@ -37,6 +37,7 @@ export const ERROR_MAP = {
   MAKE_LINKED_LIST_NOT_LIST:
     "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
   STARRED_NOT_LIST: "Trying to unpack a non-list value.",
+  PARSE_NOT_STRING: "Trying to parse a non-string value.",
 } as const;
 
 const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -1192,6 +1193,20 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
     local.get("$addr"),
   );
 
+export const PARSE_FX = wasm
+  .func("$_parse")
+  .params({ $tag: i32, $val: i64 })
+  // .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.PARSE_NOT_STRING))), wasm.unreachable()),
+
+    wasm
+      .call("$_host_parse")
+      .args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.wrap_i64(local.get("$val"))),
+  );
+
 export const nativeFunctions = [
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
@@ -1220,4 +1235,5 @@ export const nativeFunctions = [
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
   SET_CONTIGUOUS_BLOCK_FX,
+  PARSE_FX,
 ];

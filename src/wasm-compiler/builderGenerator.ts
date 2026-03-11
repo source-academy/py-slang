@@ -6,6 +6,8 @@ import {
   local,
   mut,
   wasm,
+  WasmCall,
+  WasmData,
   type WasmInstruction,
   type WasmNumeric,
   type WasmRaw,
@@ -43,7 +45,7 @@ import {
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
 } from "./constants";
-import { libraryFunctions } from "./library";
+import { LibFuncType } from "./library";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";
@@ -61,8 +63,10 @@ export class BuilderGenerator implements BuilderVisitor<
   WasmInstruction,
   WasmNumeric
 > {
-  private strings: [string, number][] = [];
-  private heapPointer = 0;
+  private strings: string[] = [];
+  private builtIns: WasmCall[];
+  private interactiveMode = false;
+
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
   private forDepth = 0;
@@ -132,55 +136,38 @@ export class BuilderGenerator implements BuilderVisitor<
     statements
       .filter((s) => s instanceof StmtNS.NonLocal)
       .map((s) => s.name.lexeme)
-      .forEach((name) => {
+      .forEach((l) => {
         // nonlocal declaration must exist in a nonlocal scope
         if (
           !this.environment.find(
-            (frame, i) =>
-              i !== 0 && frame.find((binding) => binding.name === name),
+            (frame, i) => i !== 0 && frame.find(({ name }) => name === l),
           )
-        )
-          throw new Error(`No binding for nonlocal ${name} found!`);
+        ) {
+          throw new Error(`No binding for nonlocal ${l} found!`);
+        }
 
         // cannot declare parameter name as nonlocal
-        if (parameters && parameters.map((p) => p.lexeme).includes(name)) {
-          throw new Error(`${name} is parameter and nonlocal`);
+        if (parameters && parameters.map((p) => p.lexeme).includes(l)) {
+          throw new Error(`${l} is parameter and nonlocal`);
         }
 
-        for (let i = 0; i < bindings.length; i++) {
-          const binding = bindings[i];
-          if (binding.name === name) {
-            // tag this binding as nonlocal so
-            // if it's accessed before its nonlocal statement,
-            // throw error
-            bindings[i].tag = "nonlocal";
-          }
-        }
+        // tag this binding as nonlocal so
+        // if it's accessed before its nonlocal statement,
+        // throw error
+        bindings.forEach((binding) => {
+          if (binding.name === l) binding.tag = "nonlocal";
+        });
       });
 
     return [
-      ...(parameters?.map((p) => ({
-        name: p.lexeme,
-        tag: "local" as const,
-      })) ?? []),
+      ...(parameters?.map((p) => ({ name: p.lexeme, tag: "local" as const })) ??
+        []),
       ...bindings,
     ];
   }
 
-  visit(stmt: StmtNS.Stmt): WasmInstruction;
-  visit(stmt: ExprNS.Expr): WasmNumeric;
-  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmNumeric {
-    return stmt.accept(this);
-  }
-
-  visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
-    if (stmt.statements.length <= 0) {
-      console.log("No statements found");
-      throw new Error("No statements found");
-    }
-
-    // declare built-in functions in the global environment before user code
-    const builtInFuncsDeclarations = libraryFunctions.map(
+  constructor(builtInFunctions: LibFuncType[], interactiveMode: boolean) {
+    this.builtIns = builtInFunctions.map(
       ({ name, arity, body, isVoid, hasVarArgs }, i) => {
         this.environment[0].push({ name, tag: "local" });
         const tag = this.userFunctions.length;
@@ -210,6 +197,20 @@ export class BuilderGenerator implements BuilderVisitor<
           );
       },
     );
+    this.interactiveMode = interactiveMode;
+  }
+
+  visit(stmt: StmtNS.Stmt): WasmInstruction;
+  visit(stmt: ExprNS.Expr): WasmNumeric;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmNumeric {
+    return stmt.accept(this);
+  }
+
+  visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
+    if (stmt.statements.length <= 0) {
+      console.log("No statements found");
+      throw new Error("No statements found");
+    }
 
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
@@ -217,47 +218,52 @@ export class BuilderGenerator implements BuilderVisitor<
 
     // this matches the format of drop in visitSimpleExpr
     const lastInstr = body.at(-1);
-    const undroppedInstr =
+    const hasLastInstr =
+      this.interactiveMode &&
       lastInstr?.op === "drop" &&
       lastInstr.value?.op === "drop" &&
       lastInstr.value.value;
 
-    // collect all strings, native functions used and user functions
-    const strings = this.strings.map(([str, add]) =>
-      wasm.data(i32.const(add), str),
-    );
+    // collect all strings
+    const strings: WasmData[] = [];
+    let heapPointer = 0;
 
-    const applyFunction = applyFuncFactory(this.userFunctions);
-
-    // because each variable has a tag and payload = 3 words
-    const globalEnvLength = this.environment[0].length;
+    for (const str of this.strings) {
+      strings.push(wasm.data(i32.const(heapPointer), str));
+      heapPointer += str.length;
+    }
 
     return wasm
       .module()
-      .imports(wasm.import("js", "memory").memory(1), ...importedLogs)
+      .imports(
+        wasm.import("js", "memory").memory(1),
+        ...importedLogs,
+        wasm.import("parse", "parse").func("$_host_parse").params(i32, i32),
+      )
       .globals(
-        wasm.global(HEAP_PTR, mut.i32).init(i32.const(this.heapPointer)),
+        wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
       )
       .datas(...strings)
       .funcs(
         ...nativeFunctions,
-        applyFunction,
+        applyFuncFactory(this.userFunctions),
 
         wasm
           .func("$main")
-          .results(...(undroppedInstr ? [i32, i64] : []))
+          .results(...(hasLastInstr ? [i32, i64] : []))
           .body(
             global.set(
               CURR_ENV,
               wasm
                 .call(ALLOC_ENV_FX)
-                .args(i32.const(globalEnvLength), i32.const(0)),
+                .args(i32.const(this.environment[0].length), i32.const(0)),
             ),
 
-            ...builtInFuncsDeclarations,
+            // declare built-in constants/functions in the global environment before user code
+            ...this.builtIns,
 
-            ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body),
+            ...(hasLastInstr ? [...body.slice(0, -1), hasLastInstr] : body),
           ),
       )
       .exports(wasm.export("main").func("$main"))
@@ -372,14 +378,13 @@ export class BuilderGenerator implements BuilderVisitor<
     else if (typeof expr.value === "boolean")
       return wasm.call(MAKE_BOOL_FX).args(i32.const(expr.value ? 1 : 0));
     else if (typeof expr.value === "string") {
-      const str = expr.value;
-      const len = str.length;
       const toReturn = wasm
         .call(MAKE_STRING_FX)
-        .args(i32.const(this.heapPointer), i32.const(len));
-
-      this.strings.push([str, this.heapPointer]);
-      this.heapPointer += len;
+        .args(
+          i32.const(this.strings.reduce((acc, s) => acc + s.length, 0)),
+          i32.const(expr.value.length),
+        );
+      this.strings.push(expr.value);
       return toReturn;
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
