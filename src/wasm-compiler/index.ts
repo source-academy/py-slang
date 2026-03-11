@@ -21,8 +21,48 @@ export type WasmExports = {
     value2: bigint,
   ) => [number, bigint];
   makeNone: () => [number, bigint];
+  getHeapPointer: () => number;
+  incrementHeapPointer: (amount: number) => void;
 };
-export const PARSE_TREE_STRINGS = ["sequence", "literal"] as const;
+export const PARSE_TREE_STRINGS = [
+  // node / construct tags
+  "sequence",
+  "assignment",
+  "function_declaration",
+  "return_statement",
+  "while_loop",
+  "for_loop",
+  "break_statement",
+  "continue_statement",
+  "conditional_statement",
+  "block",
+  "object_assignment",
+  "literal",
+  "name",
+  "logical_composition",
+  "binary_operator_combination",
+  "unary_operator_combination",
+  "application",
+  "lambda_expression",
+  "conditional_expression",
+  "object_access",
+  "list_expression",
+  "pass_statement",
+  // operator / keyword tags
+  "+",
+  "-",
+  "*",
+  "/",
+  "==",
+  "!=",
+  "<",
+  "<=",
+  ">",
+  ">=",
+  "and",
+  "or",
+  "not",
+] as const;
 
 export async function compileToWasmAndRun(
   code: string,
@@ -112,7 +152,10 @@ export async function compileToWasmAndRun(
           throw new Error("WASM exports not initialised");
         }
 
-        const metacircularGenerator = new MetacircularGenerator(wasmExports);
+        const metacircularGenerator = new MetacircularGenerator(
+          wasmExports,
+          memory,
+        );
         return metacircularGenerator.visit(ast);
       },
     },

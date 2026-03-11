@@ -27,10 +27,12 @@ import {
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
+  GET_HEAP_PTR_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
+  INCREMENT_HEAP_PTR_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
@@ -251,6 +253,8 @@ export class BuilderGenerator implements BuilderVisitor<
       makeString: wasm.export("makeString").func(MAKE_STRING_FX.name),
       makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
       makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
+      getHeapPointer: wasm.export("getHeapPointer").func(GET_HEAP_PTR_FX.name),
+      incrementHeapPointer: wasm.export("incrementHeapPointer").func(INCREMENT_HEAP_PTR_FX.name),
     };
 
     return wasm

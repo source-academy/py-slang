@@ -1,5 +1,6 @@
 import { PARSE_TREE_STRINGS, WasmExports } from ".";
 import { ExprNS, StmtNS } from "../ast-types";
+import { TokenType } from "../tokens";
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt): S;
@@ -12,6 +13,8 @@ export class MetacircularGenerator implements BuilderVisitor<
   [number, bigint]
 > {
   private wasmExports: WasmExports;
+  private memory: WebAssembly.Memory;
+  private static readonly encoder = new TextEncoder();
 
   private list(...elements: [number, bigint][]): [number, bigint] {
     return elements.reduceRight(([tailTag, tailValue], [tag, value]) => {
@@ -34,8 +37,20 @@ export class MetacircularGenerator implements BuilderVisitor<
     return this.wasmExports.makeString(offset, str.length);
   }
 
-  constructor(wasmExports: WasmExports) {
+  private dynamicString(str: string): [number, bigint] {
+    const bytes = MetacircularGenerator.encoder.encode(str);
+    const offset = this.wasmExports.getHeapPointer();
+
+    const dataView = new DataView(this.memory.buffer, offset, bytes.length);
+    bytes.forEach((byte, i) => dataView.setUint8(i, byte));
+
+    this.wasmExports.incrementHeapPointer(bytes.length);
+    return this.wasmExports.makeString(offset, str.length);
+  }
+
+  constructor(wasmExports: WasmExports, memory: WebAssembly.Memory) {
     this.wasmExports = wasmExports;
+    this.memory = memory;
   }
 
   visit(stmt: StmtNS.Stmt): [number, bigint];
@@ -45,11 +60,115 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
+    // const statementsList = this.list(
+    //   ...stmt.statements.map((s) => this.visit(s)),
+    // );
+    // return this.list(this.string("sequence"), statementsList);
     return this.visit(stmt.statements[0]);
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): [number, bigint] {
     return this.visit(stmt.expression);
+  }
+
+  visitGroupingExpr(expr: ExprNS.Grouping): [number, bigint] {
+    return this.visit(expr.expression);
+  }
+
+  visitBinaryExpr(expr: ExprNS.Binary): [number, bigint] {
+    const type = expr.operator.type;
+    let op: (typeof PARSE_TREE_STRINGS)[number];
+
+    if (type === TokenType.PLUS) op = "+";
+    else if (type === TokenType.MINUS) op = "-";
+    else if (type === TokenType.STAR) op = "*";
+    else if (type === TokenType.SLASH) op = "/";
+    else if (type === TokenType.DOUBLEEQUAL) op = "==";
+    else if (type === TokenType.NOTEQUAL) op = "!=";
+    else if (type === TokenType.LESS) op = "<";
+    else if (type === TokenType.LESSEQUAL) op = "<=";
+    else if (type === TokenType.GREATER) op = ">";
+    else if (type === TokenType.GREATEREQUAL) op = ">=";
+    else {
+      throw new Error(`Unsupported binary operator in parse tree: ${type}`);
+    }
+
+    return this.list(
+      this.string("binary_operator_combination"),
+      this.string(op),
+      this.visit(expr.left),
+      this.visit(expr.right),
+    );
+  }
+
+  visitCompareExpr(expr: ExprNS.Compare): [number, bigint] {
+    const type = expr.operator.type;
+    let op: (typeof PARSE_TREE_STRINGS)[number];
+
+    if (type === TokenType.DOUBLEEQUAL) op = "==";
+    else if (type === TokenType.NOTEQUAL) op = "!=";
+    else if (type === TokenType.LESS) op = "<";
+    else if (type === TokenType.LESSEQUAL) op = "<=";
+    else if (type === TokenType.GREATER) op = ">";
+    else if (type === TokenType.GREATEREQUAL) op = ">=";
+    else {
+      throw new Error(`Unsupported comparison operator in parse tree: ${type}`);
+    }
+
+    return this.list(
+      this.string("binary_operator_combination"),
+      this.string(op),
+      this.visit(expr.left),
+      this.visit(expr.right),
+    );
+  }
+
+  visitUnaryExpr(expr: ExprNS.Unary): [number, bigint] {
+    const type = expr.operator.type;
+    let op: (typeof PARSE_TREE_STRINGS)[number];
+
+    if (type === TokenType.MINUS) op = "-";
+    else if (type === TokenType.NOT) op = "not";
+    else {
+      throw new Error(`Unsupported unary operator in parse tree: ${type}`);
+    }
+
+    return this.list(
+      this.string("unary_operator_combination"),
+      this.string(op),
+      this.visit(expr.right),
+    );
+  }
+
+  visitBoolOpExpr(expr: ExprNS.BoolOp): [number, bigint] {
+    const type = expr.operator.type;
+    let op: (typeof PARSE_TREE_STRINGS)[number];
+
+    if (type === TokenType.AND) op = "and";
+    else if (type === TokenType.OR) op = "or";
+    else {
+      throw new Error(`Unsupported boolean operator in parse tree: ${type}`);
+    }
+
+    return this.list(
+      this.string("logical_composition"),
+      this.string(op),
+      this.visit(expr.left),
+      this.visit(expr.right),
+    );
+  }
+
+  visitTernaryExpr(expr: ExprNS.Ternary): [number, bigint] {
+    return this.list(
+      this.string("conditional_expression"),
+      this.visit(expr.predicate),
+      this.visit(expr.consequent),
+      this.visit(expr.alternative),
+    );
+  }
+
+  visitNoneExpr(expr: ExprNS.None): [number, bigint] {
+    return this.list(this.string("literal"), this.wasmExports.makeNone());
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): [number, bigint] {
@@ -75,50 +194,119 @@ export class MetacircularGenerator implements BuilderVisitor<
         this.wasmExports.makeBool(expr.value ? 1 : 0),
       );
     else if (typeof expr.value === "string") {
-      throw new Error(
-        "String literals are not yet supported in the metacircular generator.",
-      );
-      // return this.list(
-      //   this.string("literal"),
-      //   this.wasmExports.makeString(expr.value.length, expr.value.length),
-      // );
+      return this.list(this.string("literal"), this.dynamicString(expr.value));
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
     }
   }
 
-  // UNSUPPORTED NODES
+  visitListExpr(expr: ExprNS.List): [number, bigint] {
+    const elementsList = this.list(...expr.elements.map((e) => this.visit(e)));
+    return this.list(this.string("list_expression"), elementsList);
+  }
+
+  visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
+    return this.list(
+      this.string("object_access"),
+      this.visit(expr.value),
+      this.visit(expr.index),
+    );
+  }
+
+  visitStarredExpr(expr: ExprNS.Starred): [number, bigint] {
+    return this.visit(expr.value);
+  }
+
+  visitAssignStmt(stmt: StmtNS.Assign): [number, bigint] {
+    return this.list(
+      stmt.target instanceof ExprNS.Variable
+        ? this.string("assignment")
+        : this.string("object_assignment"),
+      this.visit(stmt.target),
+      this.visit(stmt.value),
+    );
+  }
+
+  visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
+    return this.list(this.string("name"), this.dynamicString(expr.name.lexeme));
+  }
+
+  visitBreakStmt(stmt: StmtNS.Break): [number, bigint] {
+    return this.list(this.string("break_statement"));
+  }
+
+  visitContinueStmt(stmt: StmtNS.Continue): [number, bigint] {
+    return this.list(this.string("continue_statement"));
+  }
+
+  visitReturnStmt(stmt: StmtNS.Return): [number, bigint] {
+    const valueTree =
+      stmt.value != null
+        ? this.visit(stmt.value)
+        : this.list(this.string("literal"), this.wasmExports.makeNone());
+
+    return this.list(this.string("return_statement"), valueTree);
+  }
+
+  visitIfStmt(stmt: StmtNS.If): [number, bigint] {
+    const condition = this.visit(stmt.condition);
+    const thenStatements = this.list(...stmt.body.map((s) => this.visit(s)));
+    const thenBlock = this.list(this.string("block"), thenStatements);
+
+    const elseBlock =
+      stmt.elseBlock && stmt.elseBlock.length > 0
+        ? this.list(
+            this.string("block"),
+            this.list(...stmt.elseBlock.map((s) => this.visit(s))),
+          )
+        : this.list(this.string("block"), this.wasmExports.makeNone());
+
+    return this.list(
+      this.string("conditional_statement"),
+      condition,
+      thenBlock,
+      elseBlock,
+    );
+  }
+
+  visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
+    const condition = this.visit(stmt.condition);
+    const bodyStatements = this.list(...stmt.body.map((s) => this.visit(s)));
+    const bodyBlock = this.list(this.string("block"), bodyStatements);
+
+    return this.list(this.string("while_loop"), condition, bodyBlock);
+  }
+
+  visitForStmt(stmt: StmtNS.For): [number, bigint] {
+    const iter = this.visit(stmt.iter);
+    const bodyStatements = this.list(...stmt.body.map((s) => this.visit(s)));
+    const bodyBlock = this.list(this.string("block"), bodyStatements);
+
+    const placeholderTarget = this.list(
+      this.string("name"),
+      this.wasmExports.makeNone(),
+    );
+
+    return this.list(
+      this.string("for_loop"),
+      placeholderTarget,
+      iter,
+      bodyBlock,
+    );
+  }
+
+  visitCallExpr(expr: ExprNS.Call): [number, bigint] {
+    const callee = this.visit(expr.callee);
+    const argsList = this.list(...expr.args.map((a) => this.visit(a)));
+
+    return this.list(this.string("application"), callee, argsList);
+  }
+
+  // UNSUPPORTED / NAME- OR STRING-DEPENDENT NODES
   visitIndentCreation(stmt: StmtNS.Indent): [number, bigint] {
     throw new Error("Method not implemented.");
   }
   visitDedentCreation(stmt: StmtNS.Dedent): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitListExpr(expr: ExprNS.List): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitStarredExpr(expr: ExprNS.Starred): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitPassStmt(stmt: StmtNS.Pass): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitAssignStmt(stmt: StmtNS.Assign): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitBreakStmt(stmt: StmtNS.Break): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitContinueStmt(stmt: StmtNS.Continue): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitReturnStmt(stmt: StmtNS.Return): [number, bigint] {
     throw new Error("Method not implemented.");
   }
   visitFromImportStmt(stmt: StmtNS.FromImport): [number, bigint] {
@@ -130,37 +318,7 @@ export class MetacircularGenerator implements BuilderVisitor<
   visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitAssertStmt(stmt: StmtNS.Assert): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitIfStmt(stmt: StmtNS.If): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitForStmt(stmt: StmtNS.For): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitBinaryExpr(expr: ExprNS.Binary): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitCompareExpr(expr: ExprNS.Compare): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitBoolOpExpr(expr: ExprNS.BoolOp): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitGroupingExpr(expr: ExprNS.Grouping): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitUnaryExpr(expr: ExprNS.Unary): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitTernaryExpr(expr: ExprNS.Ternary): [number, bigint] {
     throw new Error("Method not implemented.");
   }
   visitLambdaExpr(expr: ExprNS.Lambda): [number, bigint] {
@@ -169,16 +327,16 @@ export class MetacircularGenerator implements BuilderVisitor<
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitCallExpr(expr: ExprNS.Call): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
   visitComplexExpr(expr: ExprNS.Complex): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitNoneExpr(expr: ExprNS.None): [number, bigint] {
+  visitAssertStmt(stmt: StmtNS.Assert): [number, bigint] {
+    throw new Error("Method not implemented.");
+  }
+  visitPassStmt(stmt: StmtNS.Pass): [number, bigint] {
+    throw new Error("Method not implemented.");
+  }
+  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): [number, bigint] {
     throw new Error("Method not implemented.");
   }
 }

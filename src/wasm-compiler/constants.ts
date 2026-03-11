@@ -1207,7 +1207,16 @@ export const PARSE_FX = wasm
       .args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.wrap_i64(local.get("$val"))),
   );
 
+export const GET_HEAP_PTR_FX = wasm.func("$_get_heap_pointer").results(i32).body(global.get(HEAP_PTR));
+
+export const INCREMENT_HEAP_PTR_FX = wasm
+  .func("$_increment_heap_pointer")
+  .params({ $amount: i32 })
+  .body(global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$amount"))));
+
 export const nativeFunctions = [
+  GET_HEAP_PTR_FX,
+  INCREMENT_HEAP_PTR_FX,
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
   MAKE_COMPLEX_FX,
