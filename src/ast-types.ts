@@ -251,6 +251,7 @@ export namespace StmtNS {
         visitDedentCreation(stmt: Dedent): T
         visitPassStmt(stmt: Pass): T
         visitAssignStmt(stmt: Assign): T
+        visitAugAssignStmt(stmt: AugAssign): T
         visitAnnAssignStmt(stmt: AnnAssign): T
         visitBreakStmt(stmt: Break): T
         visitContinueStmt(stmt: Continue): T
@@ -309,6 +310,20 @@ export namespace StmtNS {
         }
         override accept(visitor: Visitor<any>): any {
             return visitor.visitAssignStmt(this)
+        }
+    }
+    export class AugAssign extends Stmt {
+        target: AssignTarget;
+        operator: Token;
+        value: ExprNS.Expr;
+        constructor(startToken: Token, endToken: Token, target: AssignTarget, operator: Token, value: ExprNS.Expr){
+            super(startToken, endToken)
+            this.target = target;
+            this.operator = operator;
+            this.value = value;
+        }
+        override accept(visitor: Visitor<any>): any {
+            return visitor.visitAugAssignStmt(this)
         }
     }
     export class AnnAssign extends Stmt {

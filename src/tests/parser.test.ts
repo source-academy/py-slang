@@ -2,6 +2,8 @@
 // import {ExprNS, StmtNS} from "../ast-types";
 // import {TokenType} from "../tokens";
 
+import { ParserErrors } from "../parser/errors";
+import { TokenizerErrors } from "../tokenizer/errors";
 import {toPythonAst} from "./utils";
 // import FileInput = StmtNS.FileInput;
 // import FromImport = StmtNS.FromImport;
@@ -349,4 +351,39 @@ f1(f2(1, 2), 2)
             expect(toPythonAst(text)).toMatchObject({})
         });
     });
+
+    describe('Broken syntax', () => {
+        test('Unmatched opening parenthesis', () => {
+            const text = `(1 + 2\n`;
+            expect(() => toPythonAst(text)).toThrow(ParserErrors.ExpectedTokenError)
+        })
+
+        test('Unmatched closing parenthesis', () => {
+            const text = `1 + 2)\n`;
+            expect(() => toPythonAst(text)).toThrow(TokenizerErrors.NonMatchingParenthesesError)
+        })
+        
+        test('Invalid operator', () => {
+            const text = `1 $ 2\n`;
+            expect(() => toPythonAst(text)).toThrow(TokenizerErrors.UnknownTokenError)
+        })
+
+        test('Inconsistent indentation', () => {
+            const text = `
+if x > 10:
+  print("x is greater than 10")
+`;
+            const text2 = `
+    print("Hello, World!")            
+`
+            expect(() => toPythonAst(text)).toThrow(TokenizerErrors.NonFourIndentError)
+            expect(() => toPythonAst(text2)).toThrow(ParserErrors.ExpectedTokenError)
+        })
+      
+        test('Non-matching parentheses', () => {
+            const text = `([1 + 2)]\n`;
+            expect(() => toPythonAst(text)).toThrow(ParserErrors.ExpectedTokenError)
+        })
+
+    })
 });

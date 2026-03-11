@@ -643,6 +643,9 @@ ${args.map(
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");
   }
+  visitAugAssignStmt(stmt: StmtNS.AugAssign): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
   visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
     throw new Error("Method not implemented.");
   }

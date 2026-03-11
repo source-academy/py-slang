@@ -173,6 +173,20 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ]));
         this.functionScope = null;
     }
+    visitAugAssignStmt(stmt: StmtNS.AugAssign): void {
+        if (this.variant <= 4) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
+        const target = stmt.target;
+        this.resolve(stmt.value);
+        if (target instanceof ExprNS.Subscript) {
+            this.resolve(target.value);
+            this.resolve(target.index);
+            return;
+        } else {
+            this.resolve(target);
+        }
+    }
     
     resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
         if (stmt === null) {
@@ -450,6 +464,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.resolve(expr.expression);
     }
     visitBinaryExpr(expr: ExprNS.Binary): void {
+        if (this.variant <= 4 && [TokenType.CIRCUMFLEX, TokenType.VBAR, TokenType.AT, TokenType.TILDE, TokenType.AMPER].includes(expr.operator.type)) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.left);
         this.resolve(expr.right);
     }

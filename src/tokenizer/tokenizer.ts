@@ -761,31 +761,36 @@ export class Tokenizer {
             //// OPERATORS
             case '-':
                 if (this.matches('=')) {
-                    this.raiseForbiddenOperator();
+                    this.addToken(TokenType.MINEQUAL)
+                    break;
                 }
                 this.addToken(TokenType.MINUS);
                 break;
             case '+':
                 if (this.matches('=')) {
-                    this.raiseForbiddenOperator();
+                    this.addToken(TokenType.PLUSEQUAL)
+                    break;
                 }
                 this.addToken(TokenType.PLUS);
                 break;
             case '*':
                 if (this.matches('=')) {
-                    this.raiseForbiddenOperator();
+                    this.addToken(TokenType.STAREQUAL);
+                    break;
                 }
                 this.addToken(this.matches('*') ? TokenType.DOUBLESTAR : TokenType.STAR);
                 break;
             case '/':
                 if (this.matches('=')) {
-                    this.raiseForbiddenOperator();
+                    this.addToken(TokenType.SLASHEQUAL);
+                    break;
                 }
                 this.addToken(this.matches('/') ? TokenType.DOUBLESLASH : TokenType.SLASH);
                 break;
             case '%':
                 if (this.matches('=')) {
-                    this.raiseForbiddenOperator();
+                    this.addToken(TokenType.PERCENTEQUAL);
+                    break;
                 }
                 this.addToken(TokenType.PERCENT);
                 break;
@@ -809,22 +814,44 @@ export class Tokenizer {
                     break;
                 }
                 this.matchForbiddenOperator(c);
-                throw new TokenizerErrors.UnknownTokenError(c, this.line, this.col, this.source, this.current);
         }
     }
 
     private matchForbiddenOperator(ch: string) {
         switch (ch) {
             case '@':
+                if (this.matches('=')) {
+                    this.addToken(TokenType.ATEQUAL);
+                    break;
+                }
+                this.addToken(TokenType.AT);
+                break;
             case '|':
+                if (this.matches('=')) {
+                    this.addToken(TokenType.VBAREQUAL);
+                    break;
+                }
+                this.addToken(TokenType.VBAR);
+                break;
             case '&':
+                if (this.matches('=')) {
+                    this.addToken(TokenType.AMPEREQUAL);
+                    break;
+                }
+                this.addToken(TokenType.AMPER);
+                break;
             case '~':
+                this.addToken(TokenType.TILDE);
+                break;
             case '^':
-                this.matches('=');
-                this.raiseForbiddenOperator();
+                if (this.matches('=')) {
+                    this.addToken(TokenType.CIRCUMFLEXEQUAL);
+                    break;
+                }
+                this.addToken(TokenType.CIRCUMFLEX);
                 break;
             default:
-                break;
+                throw new TokenizerErrors.UnknownTokenError(ch, this.line, this.col, this.source, this.current);
         }
     }
 
@@ -847,10 +874,6 @@ export class Tokenizer {
             console.log(`${token.indexInSource}:${token.line}-${token.line},${token.indexInSource + token.lexeme.length}\t\t\t\
             ${TokenType[token.type]}\t\t\t'${token.lexeme}'`);
         }
-    }
-
-    private raiseForbiddenOperator() {
-        throw new TokenizerErrors.ForbiddenOperatorError(this.line, this.col, this.source, this.start, this.current);
     }
 }
 

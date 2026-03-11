@@ -260,7 +260,6 @@ export class Parser {
         } else if (this.check(TokenType.NAME, TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
             TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
             const expr = this.test();
-
             if (this.check(TokenType.COLON)) {
                 if (!(expr instanceof ExprNS.Variable)) {
                     throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
@@ -270,13 +269,17 @@ export class Parser {
                 this.consume(TokenType.EQUAL, "Expect equal in annotated assignment");
                 const value = this.test();
                 res = new StmtNS.AnnAssign(startToken, this.previous(), expr, value, ann);
-            } else if (this.check(TokenType.EQUAL)) {
+            } else if (this.check(TokenType.EQUAL, TokenType.PLUSEQUAL, TokenType.MINEQUAL, TokenType.STAREQUAL, TokenType.SLASHEQUAL, TokenType.PERCENTEQUAL, TokenType.CIRCUMFLEXEQUAL, TokenType.VBAREQUAL, TokenType.AMPEREQUAL, TokenType.ATEQUAL)) {
                 if (!(expr instanceof ExprNS.Variable || expr instanceof ExprNS.Subscript)) {
                     throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
                 }
-                this.advance();
+                const op = this.advance();
                 const value = this.test();
-                res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+                if (op.type === TokenType.EQUAL) {
+                    res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+                } else {
+                    res = new StmtNS.AugAssign(startToken, this.previous(), expr, op, value);
+                }
             } else {
                 res = new StmtNS.SimpleExpr(startToken, this.previous(), expr);
             }
@@ -446,7 +449,7 @@ export class Parser {
     private term(): Expr {
         const startToken = this.peek();
         let expr = this.factor();
-        while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH)) {
+        while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH, TokenType.AT, TokenType.CIRCUMFLEX, TokenType.AMPER, TokenType.VBAR)) {
             const token = this.previous();
             const right = this.factor();
             expr = new ExprNS.Binary(startToken, this.previous(), expr, token, right);
