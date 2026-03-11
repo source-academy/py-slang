@@ -1,5 +1,4 @@
 import { WatGenerator } from "@sourceacademy/wasm-util";
-import assert from "assert";
 import wabt from "wabt";
 import { Parser } from "../parser";
 import { Tokenizer } from "../tokenizer";
@@ -65,28 +64,30 @@ export const PARSE_TREE_STRINGS = [
   "not",
 ] as const;
 
-export type WasmCapturedRunResult = {
+type WasmRunResult = {
   prints: string[];
-  rawResult: [number, bigint] | null;
-  renderedResult: string | null;
+  rawResult: null;
+  renderedResult: null;
 };
-// export async function compileToWasmAndRun(
-//   code: string,
-//   interactiveMode?: false,
-// ): Promise<void>;
-// export async function compileToWasmAndRun(
-//   code: string,
-//   interactiveMode: true,
-// ): Promise<[number, number]>;
-// export async function compileToWasmAndRun(
-//   code: string,
-//   interactiveMode: boolean = false,
-// ): Promise<void | [number, number]> {
+
+type WasmInteractiveRunResult = {
+  prints: string[];
+  rawResult: [number, bigint];
+  renderedResult: string;
+};
 
 export async function compileToWasmAndRun(
   code: string,
+  interactiveMode?: false,
+): Promise<WasmRunResult>;
+export async function compileToWasmAndRun(
+  code: string,
+  interactiveMode: true,
+): Promise<WasmInteractiveRunResult>;
+export async function compileToWasmAndRun(
+  code: string,
   interactiveMode: boolean = false,
-): Promise<WasmCapturedRunResult> {
+): Promise<WasmRunResult | WasmInteractiveRunResult> {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
@@ -190,16 +191,18 @@ export async function compileToWasmAndRun(
 
   wasmExports = instantiated.instance.exports as WasmExports;
 
-  assert(typeof wasmExports.main === "function");
-
   if (!interactiveMode) {
     wasmExports.main();
     return { prints: output, rawResult: null, renderedResult: null };
   }
 
   const rawResult = wasmExports.main();
+
   wasmExports.log(rawResult[0], rawResult[1]);
-  const renderedResult = output.pop() ?? null;
+  const renderedResult = output.pop();
+  if (!renderedResult) {
+    throw new Error("Main function did not produce any output");
+  }
 
   return { prints: output, rawResult, renderedResult };
 }
