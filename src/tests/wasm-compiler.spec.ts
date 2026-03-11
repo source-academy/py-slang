@@ -7,41 +7,63 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
   // --- INT ARITHMETIC ---
   it("int addition", async () => {
     const pythonCode = `1 + 2`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("mixed int arithmetic with precedence", async () => {
     const pythonCode = `2 + 3 * 4 - 5`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("int division (floor div semantics unsupported -> float?)", async () => {
     const pythonCode = `5 / 2`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+    expect(renderedResult).toBe("2.5");
   });
 
   // --- FLOAT ARITHMETIC ---
   it("float addition", async () => {
     const pythonCode = `1.5 + 2.25`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-
-    // expect float tag + stored f64 bits
-    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+    expect(renderedResult).toBe("3.75");
   });
 
   it("mixed int + float -> float", async () => {
     const pythonCode = `3 + 2.5`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+    expect(renderedResult).toBe("5.5");
   });
 
   it("float multiplication", async () => {
     const pythonCode = `1.2 * 3.4`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+    expect(renderedResult).toBe("4.08");
   });
 
   // --- COMPLEX ARITHMETIC ---
@@ -49,42 +71,53 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     const pythonCode = `
 (1+2j) + (3+4j)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-
-    expect(result[0]).toBe(TYPE_TAG.COMPLEX);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("4 + 6j");
   });
 
   it("complex multiplication", async () => {
     const pythonCode = `
 (2+3j) * (4+5j)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-
-    expect(result[0]).toBe(TYPE_TAG.COMPLEX);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("-7 + 22j");
   });
 
   it("complex with real (int) -> complex", async () => {
     const pythonCode = `
 (1+2j) + 10
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-
-    expect(result[0]).toBe(TYPE_TAG.COMPLEX);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("11 + 2j");
   });
 
   // --- STRING ARITHMETIC ---
   it("string concatenation with +", async () => {
     const pythonCode = `"hello" + " world"`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-
-    expect(result[0]).toBe(TYPE_TAG.STRING);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("hello world");
   });
 
   //   it("string repetition with *", async () => {
   //     const pythonCode = `"ab" * 3`;
-  //     const result = await compileToWasmAndRun(pythonCode, true);
-
-  //     expect(result[0]).toBe(TYPE_TAG.STRING);
+  //     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+  //     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
   //   });
 
   it("string + int should error (type mismatch)", async () => {
@@ -97,34 +130,54 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
   // --- INT COMPARE ---
   it("int eq true", async () => {
     const pythonCode = `3 == 3`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("int lt false", async () => {
     const pythonCode = `5 < 1`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   // --- FLOAT COMPARE ---
   it("float == float", async () => {
     const pythonCode = `1.25 == 1.25`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("float < int", async () => {
     const pythonCode = `1.5 < 2`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   // --- COMPLEX COMPARE ---
   it("complex == complex (Python: only equal works)", async () => {
     const pythonCode = `(1+2j) == (1+2j)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("complex ordering (<, >, etc.) must error", async () => {
@@ -135,14 +188,22 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
   // --- STRING COMPARE ---
   it("string equality true", async () => {
     const pythonCode = `"abc" == "abc"`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("string ordering lexicographically", async () => {
     const pythonCode = `"apple" < "banana"`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("string compare with non-string errors", async () => {
@@ -155,50 +216,82 @@ describe("Boolean tests", () => {
   // --- BASIC BOOL() SEMANTICS ---
   it("bool(0) -> False", async () => {
     const pythonCode = `bool(0)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("bool(5) -> True", async () => {
     const pythonCode = `bool(5)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("bool(0.0) -> False", async () => {
     const pythonCode = `bool(0.0)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("bool(nonzero float) -> True", async () => {
     const pythonCode = `bool(3.14)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("bool(0+0j) -> False", async () => {
     const pythonCode = `bool(0+0j)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("bool(complex with nonzero part) -> True", async () => {
     const pythonCode = `bool(1+0j)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("bool('') -> False", async () => {
     const pythonCode = `bool("")`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("bool(non-empty string) -> True", async () => {
     const pythonCode = `bool("x")`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("bool(pair) -> always True", async () => {
@@ -206,64 +299,104 @@ describe("Boolean tests", () => {
 p = pair(1, 2)
 bool(p)
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("bool(None) -> False", async () => {
     const pythonCode = `bool(None)`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   // --- NOT OPERATOR ---
   it("not True", async () => {
     const pythonCode = `not True`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("not 0", async () => {
     const pythonCode = `not 0`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("not nonzero", async () => {
     const pythonCode = `not 5`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   // --- AND ---
   it("0 and 5 -> 0 (first falsy)", async () => {
     const pythonCode = `0 and 5`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("0");
   });
 
   it("5 and 0 -> 0", async () => {
     const pythonCode = `5 and 0`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("0");
   });
 
   it("5 and 3 -> 3 (last truthy)", async () => {
     const pythonCode = `5 and 3`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("'hello' and 10 -> 10", async () => {
     const pythonCode = `"hello" and 10`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("'hello' and '' -> ''", async () => {
     const pythonCode = `"hello" and ""`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.STRING);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("");
   });
 
   it("pair and None -> None", async () => {
@@ -271,35 +404,55 @@ bool(p)
 p = pair(1,2)
 p and None
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.NONE);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.NONE);
+    expect(renderedResult).toBe("None");
   });
 
   // --- OR ---
   it("0 or 5 -> 5 (first truthy)", async () => {
     const pythonCode = `0 or 5`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 
   it("'' or 'abc' -> 'abc'", async () => {
     const pythonCode = `"" or "abc"`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.STRING);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("abc");
   });
 
   it("'x' or 100 -> 'x'", async () => {
     const pythonCode = `"x" or 100`;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.STRING);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("x");
   });
 
   it("None or pair(1,2) -> pair", async () => {
     const pythonCode = `
 None or pair(1,2)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).not.toBe(TYPE_TAG.NONE);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).not.toBe(TYPE_TAG.NONE);
+    expect(renderedResult).toBe("[1, 2]");
   });
 
   // --- SHORT CIRCUITING ---
@@ -310,9 +463,13 @@ def boom():
     x = x + 1  # would error if executed
 0 and boom()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
     // must return 0 (falsy) without calling boom()
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("0");
   });
 
   it("or short-circuits (second expr not evaluated)", async () => {
@@ -322,8 +479,12 @@ def boom():
     x = x + 1  # would error if executed
 1 or boom()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 });
 
@@ -332,8 +493,12 @@ describe("Pair tests", () => {
     const pythonCode = `
 pair(1, 2)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.LIST);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.LIST);
+    expect(renderedResult).toBe("[1, 2]");
   });
 
   it("construct pair and read head/tail", async () => {
@@ -341,8 +506,12 @@ pair(1, 2)
 p = pair(1, 2)
 head(p) + tail(p)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("set_head mutates pair", async () => {
@@ -351,8 +520,12 @@ p = pair(10, 20)
 set_head(p, 99)
 head(p)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(99)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("99");
   });
 
   it("set_tail mutates pair", async () => {
@@ -361,8 +534,12 @@ p = pair(10, 20)
 set_tail(p, 7)
 tail(p)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("7");
   });
 
   it("nested pairs form linked list", async () => {
@@ -370,40 +547,60 @@ tail(p)
 p = pair(1, pair(2, pair(3, None)))
 head(tail(tail(p)))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("is_pair identifies pairs correctly", async () => {
     const pythonCode = `
 is_pair(pair(1, 2))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_pair identifies list of length 2 as pair", async () => {
     const pythonCode = `
 is_pair([1, 2])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_pair identifies list of length != 2 as non-pair", async () => {
     const pythonCode = `
 is_pair([1, 2, 3])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("is_pair identifies non-pairs correctly", async () => {
     const pythonCode = `
 is_pair(42)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 });
 
@@ -412,8 +609,12 @@ describe("Linked list tests", () => {
     const pythonCode = `
 head(tail(linked_list(1, 2, 3)))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("2");
   });
 
   it("set_head mutates linked list", async () => {
@@ -422,56 +623,84 @@ l = linked_list(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(99)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("99");
   });
 
   it("is_none identifies None correctly", async () => {
     const pythonCode = `
 is_none(None)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_none identifies non-None correctly", async () => {
     const pythonCode = `
 is_none(42)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("is_linked_list identifies linked list correctly", async () => {
     const pythonCode = `
 is_linked_list(linked_list(1, 2, 3))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_linked_list identifies linked lists created with nested pairs", async () => {
     const pythonCode = `
 is_linked_list(pair(1, pair(2, pair(3, None))))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_linked_list identifies non-linked lists correctly", async () => {
     const pythonCode = `
 is_linked_list([1, 2, 3])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("is_linked_list identifies non-linked lists created with pairs correctly", async () => {
     const pythonCode = `
 is_linked_list(pair(1, pair(2, pair(3, 4))))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 });
 
@@ -486,8 +715,12 @@ def outer():
     return inner()
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("2");
   });
 
   it("nested closures capture correct lexical frame", async () => {
@@ -502,8 +735,12 @@ def outer():
     return mid()
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(30)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("30");
   });
 
   it("multiple inner functions share same captured variable (mutation reflected)", async () => {
@@ -519,8 +756,12 @@ def outer():
     return a()
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("nonlocal used before declaration throws error", async () => {
@@ -559,8 +800,12 @@ def f():
     return x
 f()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("2");
   });
 
   it("multiple function calls preserve each own environment", async () => {
@@ -579,8 +824,12 @@ a()
 a()
 b()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]); // last expr => b()
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT); // last expr => b()
+    expect(renderedResult).toBe("1");
   });
 
   it("multiple levels of nesting with nonlocal select correct variable", async () => {
@@ -596,8 +845,12 @@ def f():
     return g()
 f()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("lambda single parameter", async () => {
@@ -605,8 +858,12 @@ f()
 f = lambda x: x + 1
 f(5)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("6");
   });
 
   it("lambda multiple parameters", async () => {
@@ -614,8 +871,12 @@ f(5)
 f = lambda a, b: a + b
 f(3, 4)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("7");
   });
 
   it("lambda closure captures outer variable by reference", async () => {
@@ -625,16 +886,24 @@ f = lambda y: x + y
 x = 20
 f(5)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(25)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("25");
   });
 
   it("lambda used inline", async () => {
     const pythonCode = `
 (lambda x: x * 2)(6)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(12)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("12");
   });
 
   it("function should error when given too few arguments", async () => {
@@ -672,8 +941,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 
   it("if false branch skips body", async () => {
@@ -685,8 +958,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("0");
   });
 
   it("if condition uses truthiness (nonzero int)", async () => {
@@ -698,8 +975,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("7");
   });
 
   it("if condition uses truthiness (zero is false)", async () => {
@@ -711,8 +992,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("nested if statements", async () => {
@@ -727,8 +1012,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("mutation inside if does not leak incorrectly", async () => {
@@ -740,8 +1029,12 @@ else:
     pass
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 });
 
@@ -751,8 +1044,12 @@ describe("Ternary operator tests", () => {
 x = 5 if True else 10
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 
   it("ternary false branch", async () => {
@@ -760,8 +1057,12 @@ x
 x = 5 if False else 10
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("ternary uses truthiness", async () => {
@@ -770,8 +1071,12 @@ x = 1
 y = 100 if x else 200
 y
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("100");
   });
 
   it("does not evaluate else branch when condition is True", async () => {
@@ -783,8 +1088,12 @@ def boom():
 result = 5 if True else boom()
 result
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 
   it("does not evaluate true branch when condition is False", async () => {
@@ -796,8 +1105,12 @@ def boom():
 result = boom() if False else 7
 result
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("7");
   });
 });
 
@@ -809,8 +1122,12 @@ for i in range(5):
     sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("for loop: range(start, stop)", async () => {
@@ -820,8 +1137,12 @@ for i in range(2, 5):
     sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("for loop: range(start, stop, step) positive step", async () => {
@@ -831,8 +1152,12 @@ for i in range(1, 6, 2):
     sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("for loop: range(start, stop, step) negative step", async () => {
@@ -842,8 +1167,12 @@ for i in range(5, 0, -2):
     sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("for loop: loop variable mutation does not affect iteration", async () => {
@@ -854,8 +1183,12 @@ for i in range(5):
     sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(500)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("500");
   });
 
   it("for loop: loop variable reassignment does not leak across iterations", async () => {
@@ -866,8 +1199,12 @@ for i in range(3):
     i = 999
 last
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(2)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("2");
   });
 
   it("for loop: range expression evaluated once", async () => {
@@ -884,8 +1221,12 @@ def outer():
     return x
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("for loop: start and stop expressions evaluated once", async () => {
@@ -902,8 +1243,12 @@ def outer():
     return x
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("for loop: step expression evaluated once", async () => {
@@ -920,8 +1265,12 @@ def outer():
     return x
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("while loop: basic iteration", async () => {
@@ -933,8 +1282,12 @@ while i < 5:
     i = i + 1
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("while loop: condition re-evaluated every iteration", async () => {
@@ -951,8 +1304,12 @@ def outer():
     return x
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("4");
   });
 
   it("nested for loops: independent loop variables", async () => {
@@ -963,8 +1320,12 @@ for i in range(3):
         sum = sum + i + j
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("nested for loops: mutating inner loop variable does not affect iteration", async () => {
@@ -976,8 +1337,12 @@ for i in range(3):
         sum = sum + j
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(900)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("900");
   });
 
   it("nested for loops: mutating outer loop variable inside inner loop does not affect outer iteration", async () => {
@@ -989,8 +1354,12 @@ for i in range(3):
         sum = sum + i
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(300)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("300");
   });
 
   it("nested loops: while inside for with loop variable mutation", async () => {
@@ -1004,8 +1373,12 @@ for i in range(3):
         j = j + 1
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(60)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("60");
   });
 
   it("nested loops: while loop re-evaluates condition using mutated variable", async () => {
@@ -1020,8 +1393,12 @@ while i < 3:
     i = i + 1
 count
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("break statement with while loops", async () => {
@@ -1037,8 +1414,12 @@ while i < 10:
     i = i + 1
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("4");
   });
 
   it("break statement with for loops", async () => {
@@ -1052,8 +1433,12 @@ for i in range(10):
     x = i
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("4");
   });
 
   it("break only exits innermost loop", async () => {
@@ -1068,8 +1453,12 @@ for i in range(3):
         x = x + 1
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(7)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("7");
   });
 
   it("continue statement with while loops", async () => {
@@ -1085,8 +1474,12 @@ while i < 5:
     x = x + 1
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 
   it("continue statement with for loops", async () => {
@@ -1100,8 +1493,12 @@ for i in range(5):
     x = x + 1
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("4");
   });
 
   it("continue only affects innermost loop", async () => {
@@ -1116,8 +1513,12 @@ for i in range(3):
         x = x + 1
 x
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(8)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("8");
   });
 });
 
@@ -1127,8 +1528,12 @@ describe("List semantics tests", () => {
 x = [1, 2, 3]
 x[0] + x[1] + x[2]
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("6");
   });
 
   it("list indexing", async () => {
@@ -1136,8 +1541,12 @@ x[0] + x[1] + x[2]
 x = [10, 20, 30]
 x[1]
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(20)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("20");
   });
 
   it("list index mutation", async () => {
@@ -1146,8 +1555,12 @@ x = [1, 2, 3]
 x[1] = 100
 x[0] + x[1] + x[2]
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(104)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("104");
   });
 
   //   it("list length grows via append", async () => {
@@ -1157,8 +1570,9 @@ x[0] + x[1] + x[2]
   // x.append(3)
   // x[2]
   // `;
-  //     const result = await compileToWasmAndRun(pythonCode, true);
-  //     expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+  //     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+  //     expect(rawResult[0]).toBe(TYPE_TAG.INT);
+  //     expect(renderedResult).toBe("3");
   //   });
 
   it("nested lists indexing", async () => {
@@ -1166,8 +1580,12 @@ x[0] + x[1] + x[2]
 x = [[1, 2], [3, 4]]
 x[1][0]
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("nested list mutation", async () => {
@@ -1176,8 +1594,12 @@ x = [[1, 2], [3, 4]]
 x[0][1] = 9
 x[0][0] + x[0][1]
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("lists are reference types (aliasing)", async () => {
@@ -1187,8 +1609,12 @@ y = x
 y[0] = 100
 x[0]
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(100)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("100");
   });
 
   it("mutating through function affects caller", async () => {
@@ -1200,8 +1626,12 @@ x = [1, 2]
 change(x)
 x[0]
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(42)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("42");
   });
 
   it("reassigning parameter does not affect caller", async () => {
@@ -1213,8 +1643,12 @@ x = [1, 2]
 change(x)
 x[0]
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("1");
   });
 
   it("list used inside for loop", async () => {
@@ -1225,8 +1659,12 @@ for i in range(3):
     sum = sum + x[i]
 sum
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("6");
   });
 
   it("list mutation during loop", async () => {
@@ -1236,8 +1674,12 @@ for i in range(3):
     x[i] = i
 x[0] + x[1] + x[2]
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("expression inside list literal evaluated left to right", async () => {
@@ -1253,8 +1695,12 @@ def outer():
     return x
 outer()
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 
   it("list can store mixed types", async () => {
@@ -1262,40 +1708,60 @@ outer()
 x = [1, True, 3]
 x[0] + x[2]
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(4)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("4");
   });
 
   it("is_list identifies lists correctly", async () => {
     const pythonCode = `
 is_list([1, 2, 3])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_list identifies pairs as lists", async () => {
     const pythonCode = `
 is_list(pair(1, 2))
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(1)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("is_list identifies non-lists correctly", async () => {
     const pythonCode = `
 is_list(42)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.BOOL, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("list length function", async () => {
     const pythonCode = `
 list_length([10, 20, 30])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(3)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("3");
   });
 });
 
@@ -1307,8 +1773,12 @@ def f(a, b, *c):
 
 f(1, 2)
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(0)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("0");
   });
 
   it("extra arguments are packed into *args", async () => {
@@ -1318,8 +1788,12 @@ def f(a, b, *c):
 
 f(1, 2, 10, 20)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(30)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("30");
   });
 
   it("*args contains all extra arguments beyond defined params", async () => {
@@ -1332,8 +1806,12 @@ def f(a, *args):
 
 f(1, 2, 3, 4)
   `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(9)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("9");
   });
 
   it("*args in function with no fixed parameters", async () => {
@@ -1343,8 +1821,12 @@ def f(*args):
 
 f(7, 8)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(15)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("15");
   });
 
   it("*args with mixed types", async () => {
@@ -1354,8 +1836,12 @@ def f(a, *args):
 
 f(0, 3, 4.5)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result[0]).toBe(TYPE_TAG.FLOAT);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+    expect(renderedResult).toBe("7.5");
   });
 
   it("*args must be last parameter", async () => {
@@ -1403,8 +1889,12 @@ def f(a, b, c):
 args = [2, 3]
 f(1, *args)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(6)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("6");
   });
 
   it("unpacking a non-list should error", async () => {
@@ -1429,8 +1919,12 @@ args1 = [2, 3]
 args2 = [4]
 f(1, *args1, *args2)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("arity check accounts for unpacked arguments (too few)", async () => {
@@ -1470,8 +1964,12 @@ def f(a, *args):
 args = [2, 3, 4]
 f(1, *args)
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(10)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("10");
   });
 
   it("after copying environment for unpacking operator, should reserve space for locals", async () => {
@@ -1487,8 +1985,12 @@ def f(a, b):
     return test
 f(*[1, 2])
 `;
-    const result = await compileToWasmAndRun(pythonCode, true);
-    expect(result).toEqual([TYPE_TAG.INT, BigInt(5)]);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(
+      pythonCode,
+      true,
+    );
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("5");
   });
 });
 

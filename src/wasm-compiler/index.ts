@@ -200,7 +200,7 @@ export async function compileToWasmAndRun(
 
   wasmExports.log(rawResult[0], rawResult[1]);
   const renderedResult = output.pop();
-  if (!renderedResult) {
+  if (renderedResult == null) {
     throw new Error("Main function did not produce any output");
   }
 
