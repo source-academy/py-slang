@@ -9,7 +9,8 @@ import { libraryFunctions } from "./library";
 import { MetacircularGenerator } from "./metacircularGenerator";
 
 export type WasmExports = {
-  main: () => [number, number];
+  main: () => [number, bigint];
+  log: (tag: number, value: bigint) => void;
   makeInt: (value: bigint) => [number, bigint];
   makeFloat: (value: number) => [number, bigint];
   makeBool: (value: number) => [number, bigint];
@@ -64,18 +65,28 @@ export const PARSE_TREE_STRINGS = [
   "not",
 ] as const;
 
-export async function compileToWasmAndRun(
-  code: string,
-  interactiveMode?: false,
-): Promise<void>;
-export async function compileToWasmAndRun(
-  code: string,
-  interactiveMode: true,
-): Promise<[number, number]>;
+export type WasmCapturedRunResult = {
+  prints: string[];
+  rawResult: [number, bigint] | null;
+  renderedResult: string | null;
+};
+// export async function compileToWasmAndRun(
+//   code: string,
+//   interactiveMode?: false,
+// ): Promise<void>;
+// export async function compileToWasmAndRun(
+//   code: string,
+//   interactiveMode: true,
+// ): Promise<[number, number]>;
+// export async function compileToWasmAndRun(
+//   code: string,
+//   interactiveMode: boolean = false,
+// ): Promise<void | [number, number]> {
+
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode: boolean = false,
-): Promise<void | [number, number]> {
+): Promise<WasmCapturedRunResult> {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
@@ -99,15 +110,18 @@ export async function compileToWasmAndRun(
 
   let wasmExports: WasmExports | null = null;
 
-  const result = await WebAssembly.instantiate(wasm, {
+  const output: string[] = [];
+  const capture = (value: string) => void output.push(value);
+
+  const instantiated = await WebAssembly.instantiate(wasm, {
     console: {
-      log: console.log,
+      log: (value: bigint) => capture(value.toString()),
       log_complex: (real: number, imag: number) =>
-        console.log(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
+        capture(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
       log_bool: (value: bigint) =>
-        console.log(value === BigInt(0) ? "False" : "True"),
+        capture(value === BigInt(0) ? "False" : "True"),
       log_string: (offset: number, length: number) =>
-        console.log(
+        capture(
           new TextDecoder("utf8").decode(
             new Uint8Array(memory.buffer, offset, length),
           ),
@@ -118,24 +132,36 @@ export async function compileToWasmAndRun(
         envSize: number,
         parentEnv: number,
       ) =>
-        console.log(
+        capture(
           `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`,
         ),
-      log_none: () => console.log("None"),
+      log_none: () => capture("None"),
       log_error: (tag: number) => {
         throw new Error(Object.values(ERROR_MAP).at(tag) ?? "Unknown Error");
       },
-      log_pair: () => console.log(),
       log_list: (pointer: number, length: number) => {
-        console.log(`List at pointer ${pointer} with length ${length}:`);
-        const listItems: number[] = [];
-        const dataView = new DataView(memory.buffer, pointer, length * 12);
-        for (let i = 0; i < length; i++) {
-          listItems.push(dataView.getUint32(i * 12, true));
-          listItems.push(Number(dataView.getBigUint64(i * 12 + 4, true)));
+        if (!wasmExports) {
+          throw new Error("WASM exports not initialised");
         }
 
-        console.log("List: ", listItems);
+        const renderedItems: string[] = [];
+        const dataView = new DataView(memory.buffer, pointer, length * 12);
+
+        for (let i = 0; i < length; i++) {
+          const itemTag = dataView.getUint32(i * 12, true);
+          const itemValue = dataView.getBigUint64(i * 12 + 4, true);
+          wasmExports.log(itemTag, itemValue);
+
+          const renderedItem = output.pop();
+          if (renderedItem === undefined) {
+            throw new Error(
+              "List item logging did not produce a rendered value",
+            );
+          }
+          renderedItems.push(renderedItem);
+        }
+
+        capture(`[${renderedItems.join(", ")}]`);
       },
     },
     parse: {
@@ -162,10 +188,18 @@ export async function compileToWasmAndRun(
     js: { memory },
   });
 
-  wasmExports = result.instance.exports as WasmExports;
+  wasmExports = instantiated.instance.exports as WasmExports;
 
-  // run the exported main function
-  assert(typeof wasmExports?.main === "function");
+  assert(typeof wasmExports.main === "function");
 
-  return wasmExports.main() as [number, number];
+  if (!interactiveMode) {
+    wasmExports.main();
+    return { prints: output, rawResult: null, renderedResult: null };
+  }
+
+  const rawResult = wasmExports.main();
+  wasmExports.log(rawResult[0], rawResult[1]);
+  const renderedResult = output.pop() ?? null;
+
+  return { prints: output, rawResult, renderedResult };
 }

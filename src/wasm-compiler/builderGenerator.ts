@@ -33,6 +33,7 @@ import {
   HEAP_PTR,
   importedLogs,
   INCREMENT_HEAP_PTR_FX,
+  LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
@@ -247,6 +248,7 @@ export class BuilderGenerator implements BuilderVisitor<
     // exported functions for parse
     const exports: { [key in keyof WasmExports]: WasmExport } = {
       main: wasm.export("main").func("$main"),
+      log: wasm.export("log").func(LOG_FX.name),
       makeInt: wasm.export("makeInt").func(MAKE_INT_FX.name),
       makeFloat: wasm.export("makeFloat").func(MAKE_FLOAT_FX.name),
       makeBool: wasm.export("makeBool").func(MAKE_BOOL_FX.name),
