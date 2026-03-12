@@ -32,10 +32,11 @@ export const PARSE_TREE_STRINGS = [
   "return_statement",
   "while_loop",
   "for_loop",
+  "range_args",
   "break_statement",
   "continue_statement",
   "conditional_statement",
-  "block",
+  // "block",
   "object_assignment",
   "literal",
   "name",
@@ -48,6 +49,7 @@ export const PARSE_TREE_STRINGS = [
   "object_access",
   "list_expression",
   "pass_statement",
+  "nonlocal_declaration",
   // operator / keyword tags
   '"+"',
   '"-"',
@@ -61,6 +63,7 @@ export const PARSE_TREE_STRINGS = [
   '">="',
   '"and"',
   '"or"',
+  '"-unary"',
   '"not"',
 ] as const;
 

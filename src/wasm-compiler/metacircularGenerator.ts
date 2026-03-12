@@ -60,11 +60,10 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
-    // const statementsList = this.list(
-    //   ...stmt.statements.map((s) => this.visit(s)),
-    // );
-    // return this.list(this.string("sequence"), statementsList);
-    return this.visit(stmt.statements[0]);
+    const statementsList = this.list(
+      ...stmt.statements.map((s) => this.visit(s)),
+    );
+    return this.list(this.string("sequence"), statementsList);
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): [number, bigint] {
@@ -121,7 +120,7 @@ export class MetacircularGenerator implements BuilderVisitor<
     const type = expr.operator.type;
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
-    if (type === TokenType.MINUS) op = '"-"';
+    if (type === TokenType.MINUS) op = '"-unary"';
     else if (type === TokenType.NOT) op = '"not"';
     else {
       throw new Error(`Unsupported unary operator in parse tree: ${type}`);
@@ -231,6 +230,43 @@ export class MetacircularGenerator implements BuilderVisitor<
     );
   }
 
+  visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
+    return this.list(
+      this.string("function_declaration"),
+      this.dynamicString(`"${stmt.name.lexeme}"`),
+      this.list(
+        ...stmt.parameters.map((p) => {
+          if (p.isStarred) {
+            throw new Error(
+              "Starred parameters are not supported in parse tree generation",
+            );
+          }
+          return this.dynamicString(`"${p.lexeme}"`);
+        }),
+      ),
+      this.visitFileInputStmt(
+        new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
+      ),
+    );
+  }
+
+  visitLambdaExpr(expr: ExprNS.Lambda): [number, bigint] {
+    return this.list(
+      this.string("lambda_expression"),
+      this.list(
+        ...expr.parameters.map((p) => {
+          if (p.isStarred) {
+            throw new Error(
+              "Starred parameters are not supported in parse tree generation",
+            );
+          }
+          return this.dynamicString(`"${p.lexeme}"`);
+        }),
+      ),
+      this.list(this.string("return_statement"), this.visit(expr.body)),
+    );
+  }
+
   visitBreakStmt(stmt: StmtNS.Break): [number, bigint] {
     return this.list(this.string("break_statement"));
   }
@@ -250,48 +286,62 @@ export class MetacircularGenerator implements BuilderVisitor<
 
   visitIfStmt(stmt: StmtNS.If): [number, bigint] {
     const condition = this.visit(stmt.condition);
-    const thenStatements = this.list(...stmt.body.map((s) => this.visit(s)));
-    const thenBlock = this.list(this.string("block"), thenStatements);
+    const thenBody = this.visitFileInputStmt(
+      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
+    );
 
-    const elseBlock =
+    const elseBody =
       stmt.elseBlock && stmt.elseBlock.length > 0
-        ? this.list(
-            this.string("block"),
-            this.list(...stmt.elseBlock.map((s) => this.visit(s))),
+        ? this.visitFileInputStmt(
+            new StmtNS.FileInput(
+              stmt.startToken,
+              stmt.endToken,
+              stmt.elseBlock,
+              [],
+            ),
           )
-        : this.list(this.string("block"), this.wasmExports.makeNone());
+        : this.wasmExports.makeNone();
 
     return this.list(
       this.string("conditional_statement"),
       condition,
-      thenBlock,
-      elseBlock,
+      thenBody,
+      elseBody,
     );
   }
 
   visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
     const condition = this.visit(stmt.condition);
-    const bodyStatements = this.list(...stmt.body.map((s) => this.visit(s)));
-    const bodyBlock = this.list(this.string("block"), bodyStatements);
+    const body = this.visitFileInputStmt(
+      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
+    );
 
-    return this.list(this.string("while_loop"), condition, bodyBlock);
+    return this.list(this.string("while_loop"), condition, body);
   }
 
   visitForStmt(stmt: StmtNS.For): [number, bigint] {
-    const iter = this.visit(stmt.iter);
-    const bodyStatements = this.list(...stmt.body.map((s) => this.visit(s)));
-    const bodyBlock = this.list(this.string("block"), bodyStatements);
-
-    const placeholderTarget = this.list(
-      this.string("name"),
-      this.wasmExports.makeNone(),
-    );
+    if (
+      !(stmt.iter instanceof ExprNS.Call) ||
+      !(stmt.iter.callee instanceof ExprNS.Variable) ||
+      stmt.iter.callee.name.lexeme !== "range"
+    ) {
+      throw new Error("Only range() is supported in for loops");
+    } else if (stmt.iter.args.length === 0) {
+      throw new Error("range() requires at least one argument");
+    } else if (stmt.iter.args.length > 3) {
+      throw new Error("range() accepts at most 3 arguments");
+    }
 
     return this.list(
       this.string("for_loop"),
-      placeholderTarget,
-      iter,
-      bodyBlock,
+      this.dynamicString(`"${stmt.target.lexeme}"`),
+      this.list(
+        this.string("range_args"),
+        ...stmt.iter.args.map((a) => this.visit(a)),
+      ),
+      this.visitFileInputStmt(
+        new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
+      ),
     );
   }
 
@@ -300,6 +350,20 @@ export class MetacircularGenerator implements BuilderVisitor<
     const argsList = this.list(...expr.args.map((a) => this.visit(a)));
 
     return this.list(this.string("application"), callee, argsList);
+  }
+
+  visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
+    return this.list(
+      this.string("nonlocal_declaration"),
+      this.list(
+        this.string("name"),
+        this.dynamicString(`"${stmt.name.lexeme}"`),
+      ),
+    );
+  }
+
+  visitPassStmt(stmt: StmtNS.Pass): [number, bigint] {
+    return this.list(this.string("pass_statement"));
   }
 
   // UNSUPPORTED / NAME- OR STRING-DEPENDENT NODES
@@ -315,15 +379,6 @@ export class MetacircularGenerator implements BuilderVisitor<
   visitGlobalStmt(stmt: StmtNS.Global): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitLambdaExpr(expr: ExprNS.Lambda): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): [number, bigint] {
     throw new Error("Method not implemented.");
   }
@@ -331,9 +386,6 @@ export class MetacircularGenerator implements BuilderVisitor<
     throw new Error("Method not implemented.");
   }
   visitAssertStmt(stmt: StmtNS.Assert): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitPassStmt(stmt: StmtNS.Pass): [number, bigint] {
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): [number, bigint] {

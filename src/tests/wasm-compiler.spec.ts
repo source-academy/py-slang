@@ -2003,19 +2003,23 @@ describe("parse function tests", () => {
     return expected;
   };
 
+  // Every parsed program is wrapped in a top-level sequence node.
+  const seqOf = (...stmt: string[]) =>
+    linkedListBuilder("sequence", linkedListBuilder(...stmt));
+
   it("integer literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", "42")));
   });
 
   it("float literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("3.5")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("literal", "3.5"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", "3.5")));
   });
 
   it("bool literal True", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("True")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("literal", "True"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", "True")));
   });
 
   it("bool literal False", async () => {
@@ -2023,12 +2027,12 @@ describe("parse function tests", () => {
       `parse("False")`,
       true,
     );
-    expect(renderedResult).toBe(linkedListBuilder("literal", "False"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", "False")));
   });
 
   it("None literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("None")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("literal", "None"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", "None")));
   });
 
   it("string literal", async () => {
@@ -2036,12 +2040,29 @@ describe("parse function tests", () => {
       `parse('"hello"')`,
       true,
     );
-    expect(renderedResult).toBe(linkedListBuilder("literal", '"hello"'));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("literal", '"hello"')));
   });
 
   it("name", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("x")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("name", '"x"'));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("name", '"x"')));
+  });
+
+  it("multiple top-level statements", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("x = 1\\ny")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "assignment",
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("literal", "1"),
+        ),
+        linkedListBuilder("name", '"y"'),
+      ),
+    );
   });
 
   it("binary addition", async () => {
@@ -2050,11 +2071,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"+"',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"+"',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2065,11 +2088,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"-"',
-        linkedListBuilder("literal", "5"),
-        linkedListBuilder("literal", "3"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"-"',
+          linkedListBuilder("literal", "5"),
+          linkedListBuilder("literal", "3"),
+        ),
       ),
     );
   });
@@ -2080,11 +2105,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"*"',
-        linkedListBuilder("literal", "5"),
-        linkedListBuilder("literal", "3"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"*"',
+          linkedListBuilder("literal", "5"),
+          linkedListBuilder("literal", "3"),
+        ),
       ),
     );
   });
@@ -2095,11 +2122,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"/"',
-        linkedListBuilder("literal", "5"),
-        linkedListBuilder("literal", "3"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"/"',
+          linkedListBuilder("literal", "5"),
+          linkedListBuilder("literal", "3"),
+        ),
       ),
     );
   });
@@ -2110,11 +2139,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"=="',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"=="',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2125,11 +2156,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"!="',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"!="',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2140,11 +2173,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"<"',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"<"',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2155,11 +2190,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '"<="',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '"<="',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2170,11 +2207,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '">"',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '">"',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2185,11 +2224,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "binary_operator_combination",
-        '">="',
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "binary_operator_combination",
+          '">="',
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2200,10 +2241,12 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "unary_operator_combination",
-        '"not"',
-        linkedListBuilder("literal", "True"),
+      seqOf(
+        linkedListBuilder(
+          "unary_operator_combination",
+          '"not"',
+          linkedListBuilder("literal", "True"),
+        ),
       ),
     );
   });
@@ -2211,10 +2254,12 @@ describe("parse function tests", () => {
   it("unary negation", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("-x")`, true);
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "unary_operator_combination",
-        '"-"',
-        linkedListBuilder("name", '"x"'),
+      seqOf(
+        linkedListBuilder(
+          "unary_operator_combination",
+          '"-unary"',
+          linkedListBuilder("name", '"x"'),
+        ),
       ),
     );
   });
@@ -2225,11 +2270,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "logical_composition",
-        '"and"',
-        linkedListBuilder("literal", "True"),
-        linkedListBuilder("literal", "False"),
+      seqOf(
+        linkedListBuilder(
+          "logical_composition",
+          '"and"',
+          linkedListBuilder("literal", "True"),
+          linkedListBuilder("literal", "False"),
+        ),
       ),
     );
   });
@@ -2240,11 +2287,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "logical_composition",
-        '"or"',
-        linkedListBuilder("literal", "True"),
-        linkedListBuilder("literal", "False"),
+      seqOf(
+        linkedListBuilder(
+          "logical_composition",
+          '"or"',
+          linkedListBuilder("literal", "True"),
+          linkedListBuilder("literal", "False"),
+        ),
       ),
     );
   });
@@ -2255,11 +2304,13 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "conditional_expression",
-        linkedListBuilder("literal", "True"),
-        linkedListBuilder("literal", "1"),
-        linkedListBuilder("literal", "2"),
+      seqOf(
+        linkedListBuilder(
+          "conditional_expression",
+          linkedListBuilder("literal", "True"),
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "2"),
+        ),
       ),
     );
   });
@@ -2270,10 +2321,12 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "assignment",
-        linkedListBuilder("name", '"x"'),
-        linkedListBuilder("literal", "5"),
+      seqOf(
+        linkedListBuilder(
+          "assignment",
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("literal", "5"),
+        ),
       ),
     );
   });
@@ -2284,14 +2337,66 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "object_assignment",
+      seqOf(
         linkedListBuilder(
-          "object_access",
-          linkedListBuilder("name", '"x"'),
-          linkedListBuilder("literal", "0"),
+          "object_assignment",
+          linkedListBuilder(
+            "object_access",
+            linkedListBuilder("name", '"x"'),
+            linkedListBuilder("literal", "0"),
+          ),
+          linkedListBuilder("literal", "5"),
         ),
-        linkedListBuilder("literal", "5"),
+      ),
+    );
+  });
+
+  it("function declaration", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("def f(x, y):\\n    return x\\n    return y")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "function_declaration",
+          '"f"',
+          linkedListBuilder('"x"', '"y"'),
+          seqOf(
+            linkedListBuilder(
+              "return_statement",
+              linkedListBuilder("name", '"x"'),
+            ),
+            linkedListBuilder(
+              "return_statement",
+              linkedListBuilder("name", '"y"'),
+            ),
+          ),
+        ),
+      ),
+    );
+  });
+
+  it("lambda expression", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("lambda x, y: x + y")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "lambda_expression",
+          linkedListBuilder('"x"', '"y"'),
+          linkedListBuilder(
+            "return_statement",
+            linkedListBuilder(
+              "binary_operator_combination",
+              '"+"',
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("name", '"y"'),
+            ),
+          ),
+        ),
       ),
     );
   });
@@ -2302,7 +2407,12 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder("return_statement", linkedListBuilder("literal", "1")),
+      seqOf(
+        linkedListBuilder(
+          "return_statement",
+          linkedListBuilder("literal", "1"),
+        ),
+      ),
     );
   });
 
@@ -2311,7 +2421,7 @@ describe("parse function tests", () => {
       `parse("break")`,
       true,
     );
-    expect(renderedResult).toBe(linkedListBuilder("break_statement"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("break_statement")));
   });
 
   it("continue statement", async () => {
@@ -2319,7 +2429,27 @@ describe("parse function tests", () => {
       `parse("continue")`,
       true,
     );
-    expect(renderedResult).toBe(linkedListBuilder("continue_statement"));
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("continue_statement")));
+  });
+
+  it("pass statement", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("pass")`, true);
+    expect(renderedResult).toBe(seqOf(linkedListBuilder("pass_statement")));
+  });
+
+  it("nonlocal declaration", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("nonlocal x")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "nonlocal_declaration",
+          linkedListBuilder("name", '"x"'),
+        ),
+      ),
+    );
   });
 
   it("list expression", async () => {
@@ -2328,12 +2458,14 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "list_expression",
+      seqOf(
         linkedListBuilder(
-          linkedListBuilder("literal", "1"),
-          linkedListBuilder("literal", "2"),
-          linkedListBuilder("literal", "3"),
+          "list_expression",
+          linkedListBuilder(
+            linkedListBuilder("literal", "1"),
+            linkedListBuilder("literal", "2"),
+            linkedListBuilder("literal", "3"),
+          ),
         ),
       ),
     );
@@ -2342,10 +2474,12 @@ describe("parse function tests", () => {
   it("subscript (object access)", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("x[0]")`, true);
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "object_access",
-        linkedListBuilder("name", '"x"'),
-        linkedListBuilder("literal", "0"),
+      seqOf(
+        linkedListBuilder(
+          "object_access",
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("literal", "0"),
+        ),
       ),
     );
   });
@@ -2356,34 +2490,18 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "application",
-        linkedListBuilder("name", '"f"'),
+      seqOf(
         linkedListBuilder(
-          linkedListBuilder("literal", "1"),
-          linkedListBuilder("literal", "2"),
+          "application",
+          linkedListBuilder("name", '"f"'),
+          linkedListBuilder(
+            linkedListBuilder("literal", "1"),
+            linkedListBuilder("literal", "2"),
+          ),
         ),
       ),
     );
   });
-
-  // it("if statement without else (empty else block holds None)", async () => {
-  //   const { renderedResult } = await compileToWasmAndRun(
-  //     `parse("if True:\\n    1")`,
-  //     true,
-  //   );
-  //   expect(renderedResult).toBe(
-  //     linkedListBuilder(
-  //       "conditional_statement",
-  //       linkedListBuilder("literal", "True"),
-  //       linkedListBuilder(
-  //         "block",
-  //         linkedListBuilder(linkedListBuilder("literal", "1")),
-  //       ),
-  //       linkedListBuilder("block", "None"),
-  //     ),
-  //   );
-  // });
 
   it("if-else statement", async () => {
     const { renderedResult } = await compileToWasmAndRun(
@@ -2391,16 +2509,39 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "conditional_statement",
-        linkedListBuilder("literal", "True"),
+      seqOf(
         linkedListBuilder(
-          "block",
-          linkedListBuilder(linkedListBuilder("literal", "1")),
+          "conditional_statement",
+          linkedListBuilder("literal", "True"),
+          seqOf(linkedListBuilder("literal", "1")),
+          seqOf(linkedListBuilder("literal", "2")),
         ),
+      ),
+    );
+  });
+
+  it("if-else statement with multiple statements per branch", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("if True:\\n    x = 1\\n    y\\nelse:\\n    pass\\n    z")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
         linkedListBuilder(
-          "block",
-          linkedListBuilder(linkedListBuilder("literal", "2")),
+          "conditional_statement",
+          linkedListBuilder("literal", "True"),
+          seqOf(
+            linkedListBuilder(
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "1"),
+            ),
+            linkedListBuilder("name", '"y"'),
+          ),
+          seqOf(
+            linkedListBuilder("pass_statement"),
+            linkedListBuilder("name", '"z"'),
+          ),
         ),
       ),
     );
@@ -2412,34 +2553,118 @@ describe("parse function tests", () => {
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "while_loop",
-        linkedListBuilder("literal", "True"),
+      seqOf(
         linkedListBuilder(
-          "block",
-          linkedListBuilder(linkedListBuilder("literal", "1")),
+          "while_loop",
+          linkedListBuilder("literal", "True"),
+          seqOf(linkedListBuilder("literal", "1")),
         ),
       ),
     );
   });
 
-  it("for loop (placeholder target is a name node with None value)", async () => {
+  it("while loop with multiple statements", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("while True:\\n    x = 1\\n    x")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "while_loop",
+          linkedListBuilder("literal", "True"),
+          seqOf(
+            linkedListBuilder(
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "1"),
+            ),
+            linkedListBuilder("name", '"x"'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  it("for loop: range(stop)", async () => {
     const { renderedResult } = await compileToWasmAndRun(
       `parse("for i in range(5):\\n    1")`,
       true,
     );
     expect(renderedResult).toBe(
-      linkedListBuilder(
-        "for_loop",
-        linkedListBuilder("name", "None"),
+      seqOf(
         linkedListBuilder(
-          "application",
-          linkedListBuilder("name", '"range"'),
-          linkedListBuilder(linkedListBuilder("literal", "5")),
+          "for_loop",
+          '"i"',
+          linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
+          seqOf(linkedListBuilder("literal", "1")),
         ),
+      ),
+    );
+  });
+
+  it("for loop: range(start, stop)", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("for i in range(2, 5):\\n    1")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
         linkedListBuilder(
-          "block",
-          linkedListBuilder(linkedListBuilder("literal", "1")),
+          "for_loop",
+          '"i"',
+          linkedListBuilder(
+            "range_args",
+            linkedListBuilder("literal", "2"),
+            linkedListBuilder("literal", "5"),
+          ),
+          seqOf(linkedListBuilder("literal", "1")),
+        ),
+      ),
+    );
+  });
+
+  it("for loop: range(start, stop, step)", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("for i in range(1, 10, 2):\\n    1")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "for_loop",
+          '"i"',
+          linkedListBuilder(
+            "range_args",
+            linkedListBuilder("literal", "1"),
+            linkedListBuilder("literal", "10"),
+            linkedListBuilder("literal", "2"),
+          ),
+          seqOf(linkedListBuilder("literal", "1")),
+        ),
+      ),
+    );
+  });
+
+  it("for loop with multiple statements in body", async () => {
+    const { renderedResult } = await compileToWasmAndRun(
+      `parse("for i in range(5):\\n    x = 1\\n    i")`,
+      true,
+    );
+    expect(renderedResult).toBe(
+      seqOf(
+        linkedListBuilder(
+          "for_loop",
+          '"i"',
+          linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
+          seqOf(
+            linkedListBuilder(
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "1"),
+            ),
+            linkedListBuilder("name", '"i"'),
+          ),
         ),
       ),
     );
