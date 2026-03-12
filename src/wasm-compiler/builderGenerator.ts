@@ -272,7 +272,12 @@ export class BuilderGenerator implements BuilderVisitor<
         wasm.import("js", "memory").memory(1),
         ...importedLogs,
         wasm
-          .import("parse", "parse")
+          .import("metacircular", "tokenize")
+          .func("$_host_tokenize")
+          .params(i32, i32)
+          .results(i32, i64),
+        wasm
+          .import("metacircular", "parse")
           .func("$_host_parse")
           .params(i32, i32)
           .results(i32, i64),

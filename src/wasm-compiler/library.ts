@@ -19,6 +19,7 @@ import {
   MAKE_PAIR_FX,
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
+  TOKENIZE_FX,
   TYPE_TAG,
 } from "./constants";
 
@@ -111,5 +112,6 @@ export const libraryFunctions: LibFuncType[] = [
     wasm.call(BOOLISE_FX).args(x),
   ]),
 
+  libFunc("tokenize", 1).body((x) => wasm.call(TOKENIZE_FX).args(x)),
   libFunc("parse", 1).body((x) => wasm.call(PARSE_FX).args(x)),
 ];

@@ -168,8 +168,58 @@ export async function compileToWasmAndRun(
         capture(`[${renderedItems.join(", ")}]`);
       },
     },
-    parse: {
+    metacircular: {
+      tokenize: (offset: number, length: number) => {
+        if (!wasmExports) throw new Error("WASM exports not initialised");
+
+        const tokenizer = new Tokenizer(
+          new TextDecoder("utf8").decode(
+            new Uint8Array(memory.buffer, offset, length),
+          ),
+        );
+        const tokens = tokenizer
+          .scanEverything()
+          .filter((x) => x.lexeme !== "");
+
+        const encoder = new TextEncoder();
+        const dataView = new DataView(memory.buffer);
+
+        let heapPointer = wasmExports.getHeapPointer();
+        const strings = tokens.map(({ lexeme }) => {
+          if (!wasmExports) throw new Error("WASM exports not initialised");
+
+          encoder
+            .encode(lexeme)
+            .forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+
+          const string = wasmExports.makeString(heapPointer, lexeme.length);
+
+          heapPointer += lexeme.length;
+          return string;
+        });
+
+        wasmExports.incrementHeapPointer(
+          heapPointer - wasmExports.getHeapPointer(),
+        );
+
+        return strings.reduceRight(([tailTag, tailValue], [tag, value]) => {
+          if (!wasmExports) throw new Error("WASM exports not initialised");
+
+          const pair = wasmExports.makePair(
+            tag,
+            BigInt(value),
+            tailTag,
+            BigInt(tailValue),
+          );
+          return pair;
+        }, wasmExports.makeNone());
+      },
+
       parse: (offset: number, length: number) => {
+        if (!wasmExports) {
+          throw new Error("WASM exports not initialised");
+        }
+
         const string = new TextDecoder("utf8").decode(
           new Uint8Array(memory.buffer, offset, length),
         );
@@ -177,10 +227,6 @@ export async function compileToWasmAndRun(
         const tokens = tokenizer.scanEverything();
         const pyParser = new Parser(string, tokens);
         const ast = pyParser.parse();
-
-        if (!wasmExports) {
-          throw new Error("WASM exports not initialised");
-        }
 
         const metacircularGenerator = new MetacircularGenerator(
           wasmExports,
