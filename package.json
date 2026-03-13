@@ -61,6 +61,7 @@
     "fast-levenshtein": "^3.0.0",
     "globals": "^17.4.0",
     "mathjs": "^14.9.1",
+    "rollup-plugin-sourcemaps": "^0.6.3",
     "typedoc": "^0.28.17",
     "wabt": "^1.0.37"
   }
