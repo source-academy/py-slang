@@ -9,7 +9,9 @@
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
     "start": "npm run build && node dist/index.js",
-    "jsdoc": "./scripts/jsdoc.sh",
+    "jsdoc": "./scripts/jsdoc.sh prepare",
+    "jsdoc:run": "./scripts/jsdoc.sh run",
+    "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
     "test-coverage": "jest --coverage",
     "wasm": "ts-node src/wasm-compiler/index.ts"
@@ -48,6 +50,7 @@
     "@sourceacademy/wasm-util": "^1.0.4",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
+    "typedoc": "^0.28.17",
     "wabt": "^1.0.37"
   }
 }
