@@ -9,7 +9,9 @@
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
     "start": "npm run build && node dist/index.js",
-    "jsdoc": "./scripts/jsdoc.sh",
+    "jsdoc": "./scripts/jsdoc.sh prepare",
+    "jsdoc:run": "./scripts/jsdoc.sh run",
+    "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
@@ -35,7 +37,6 @@
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
-    "@types/mathjs": "^9.4.1",
     "@types/node": "^18.19.84",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
@@ -47,8 +48,6 @@
     "prettier": "^3.8.1",
     "rimraf": "^3.0.2",
     "rollup": "^4.59.0",
-    "rollup-plugin-modify": "^3.0.0",
-    "rollup-plugin-sourcemaps": "^0.6.3",
     "taffydb": "^2.7.3",
     "ts-jest": "^29.0.5",
     "ts-node": "^10.9.1",
@@ -59,10 +58,10 @@
   "dependencies": {
     "@sourceacademy/conductor": "^0.2.3",
     "@sourceacademy/wasm-util": "^1.0.4",
-    "@types/estree": "^1.0.0",
     "fast-levenshtein": "^3.0.0",
     "globals": "^17.4.0",
     "mathjs": "^14.9.1",
+    "typedoc": "^0.28.17",
     "wabt": "^1.0.37"
   }
 }

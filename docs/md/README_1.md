@@ -1,0 +1,146 @@
+Python §1 is a small programming language, designed for the first chapter
+of the textbook
+<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
+of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+
+## What names are predeclared in Python §1?
+
+On the right, you see all predeclared names of Python §1, in alphabetical
+order. Click on a name to see how it is defined and used.
+They come in these groups:
+  <ul>
+    <li>
+      <a href="../MISC/index.html">MISC</a>: Miscellaneous constants and functions
+    </li>
+    <li>
+      <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
+    </li>
+  </ul>
+
+## What can you do in Python §1?
+
+You can use all features that are introduced in
+<a href="https://sourceacademy.org/sicpjs/1">chapter 1</a> of the
+textbook. Below is the list of features, each with a link to the
+textbook section that introduces it and a small example.
+
+### Literal values
+
+Literal values are simple expressions that directly evaluate to values. These
+include numbers in the usual decimal notation, the two boolean values
+`True` and `False`, and the predeclared names `None`.
+More on literal values in <a href="https://sourceacademy.org/sicpjs/1.1">section
+1.1 The Elements of Programming</a> of the textbook.
+
+### Variable declarations
+
+Variable declarations are done in Python § with <PRE><CODE>my_name = x + 2</CODE></PRE>
+Variables are created the moment a value is assigned to them using the `=` operator.
+In this statement, the variable `my_name` is bound to the result
+of evaluating `x + 2`. 
+You can read more about the <EM>scope of names</EM> in
+<a href="https://sourceacademy.org/sicpjs/1.1.8">section 1.1.8
+Functions as Black-Box Abstractions</a>.
+
+### Conditional statements and conditional expressions
+
+Within expressions, you can let a <EM>predicate</EM> determine whether
+a <EM>consequent expression</EM>
+gets evaluated or an <EM>alternative expression</EM>. This is done by writing,
+for example
+<PRE><CODE>return 7 if p() else f(y)</CODE></PRE>
+Read more on conditional expressions in
+<a href="https://sourceacademy.org/sicpjs/1.1.6">section 1.1.6
+Conditional Expressions and Predicates</a>.
+<EM>Conditional evaluation</EM> is also possible within statements, for
+example the body of a function declaration. For that, you can use <EM>conditional
+statements</EM>, for example:
+<PRE><CODE>if p(x):
+    return 7
+else:
+    return f(y)
+</CODE></PRE>
+Read about <EM>conditional statements</EM> in
+<a href="https://sourceacademy.org/sicpjs/1.3.2">section 1.3.2
+Function Definition Expressions</a>.
+
+### Function declarations and function definitions
+
+A function declaration is a statement that declares a name and binds it
+to a function. For example
+<PRE><CODE>def square(x):
+    return x * x
+</CODE>
+</PRE>
+declares the name `square` and binds it to a squaring function, so that it can be applied
+as in `square(5)`. You can read about function declaration statements in textbook
+<a href="https://sourceacademy.org/sicpjs/1.1.4">section 1.1.4 Functions</a>.
+
+Sometimes, it's not necessary to give a name to a function: You may
+want to create a function only to pass it to some other function as argument.
+For that, Python §
+supports function definition expressions. For example
+<PRE><CODE>(lambda x: x * x)(3) // returns 9</CODE>
+</PRE>
+creates a square function just like the function declaration above,
+but does not give it a name.
+Its only purpose it to be applied to the number 3. See also
+textbook
+<a href="https://sourceacademy.org/sicpjs/1.3.2">section 1.3.2 Function Definition Expressions</a>.
+
+### Scope of declaration
+
+A variable declared outside a function, the variable has a global scope. If you want to 
+declare a variable local to a specific scope, you can declare it in a function.
+For example in this program
+<PRE><CODE>a = 1
+
+def local_scope():
+    a = 2
+    print(a)
+local_scope()
+print(a)</CODE>
+</PRE>
+the first application of `print` shows the value 2, because the
+<B>assignment</B> `a = 2` re-declares the variable `a`.
+However, the second application
+of `print` shows the value 1, because
+the <B>assignment</B> `a = 2` is limited in local scope by defining it in the function.
+You can read more about <EM>scope</EM> in
+<a href="https://sourceacademy.org/sicpjs/1.1.8">section 1.1.8
+Functions as Black-Box Abstractions</a>.
+
+### Boolean operators
+
+Boolean operators in Python § have a special meaning. Usually, an operator combination
+evaluates all its arguments and then applies the operation to which the operator refers.
+For example, `(2 * 3) + (4 * 5)` evaluates to `2 * 3` and `4 * 5` first, before the addition
+is carried out. However, the operator <B>and</B> works differently. An expression
+`e1 and e2` should be seen as an abbreviation for `e2 if e1 else False`. The expression
+`e2` only gets evaluated if `e1` evaluates to `True`. The behaviour of <B>or</B> operator is similar:
+`e1 or e2` should be seen as an abbreviation for `True if e1 else e2`. More on these
+two boolean operators in textbook
+<a href="https://sourceacademy.org/sicpjs/1.1.6">section 1.1.6 Conditional
+Expressions and Predicates</a>.
+
+### Sequences
+
+A program or the body of a block does not need to consist of a single statement.
+You can write multiple statements in a row. In the REPL ("Read-Eval-Print-Loop")
+of a Python § implementation, you can write
+<PRE><CODE>cube(7)
+square(5)</CODE></PRE>
+The statements in such a sequence are evaluated in the given order. The
+result of evaluating the sequence is the result of evaluating the last
+statement in the sequence, in this case `square(5)`.
+Read more about sequences in
+<a href="https://sourceacademy.org/sicpjs/1.1.2">section 1.1.2
+Naming and the Environment</a> of the textbook.
+
+## You want the definitive specs?
+
+For our development team, we are maintaining a definitive description
+of the language, called the
+<a href="../python_1.pdf">Specification of Python §1</a>. Feel free to
+take a peek.
+
