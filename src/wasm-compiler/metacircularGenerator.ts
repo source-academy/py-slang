@@ -60,6 +60,17 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
+    if (stmt.statements.length === 0) {
+      return this.list(
+        this.string("sequence"),
+        this.list(this.wasmExports.makeNone()),
+      );
+    }
+
+    if (stmt.statements.length === 1) {
+      return this.visit(stmt.statements[0]);
+    }
+
     const statementsList = this.list(
       ...stmt.statements.map((s) => this.visit(s)),
     );
@@ -231,9 +242,32 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
+    // find any variable declarations in the function body which are not declared as nonlocal
+    const hasVarDecls =
+      stmt.body.filter((stmt, _, arr) => {
+        if (!(stmt instanceof StmtNS.Assign)) return false;
+
+        const { target } = stmt;
+        return (
+          target instanceof ExprNS.Variable &&
+          !arr.some(
+            (s) =>
+              s instanceof StmtNS.NonLocal &&
+              s.name.lexeme === target.name.lexeme,
+          )
+        );
+      }).length > 0;
+
+    const body = this.visitFileInputStmt(
+      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
+    );
+
     return this.list(
       this.string("function_declaration"),
-      this.dynamicString(`"${stmt.name.lexeme}"`),
+      this.list(
+        this.string("name"),
+        this.dynamicString(`"${stmt.name.lexeme}"`),
+      ),
       this.list(
         ...stmt.parameters.map((p) => {
           if (p.isStarred) {
@@ -244,9 +278,7 @@ export class MetacircularGenerator implements BuilderVisitor<
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      this.visitFileInputStmt(
-        new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
-      ),
+      hasVarDecls ? this.list(this.string("block"), body) : body,
     );
   }
 
@@ -334,7 +366,10 @@ export class MetacircularGenerator implements BuilderVisitor<
 
     return this.list(
       this.string("for_loop"),
-      this.dynamicString(`"${stmt.target.lexeme}"`),
+      this.list(
+        this.string("name"),
+        this.dynamicString(`"${stmt.target.lexeme}"`),
+      ),
       this.list(
         this.string("range_args"),
         ...stmt.iter.args.map((a) => this.visit(a)),

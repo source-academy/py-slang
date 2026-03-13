@@ -36,7 +36,7 @@ export const PARSE_TREE_STRINGS = [
   "break_statement",
   "continue_statement",
   "conditional_statement",
-  // "block",
+  "block",
   "object_assignment",
   "literal",
   "name",
