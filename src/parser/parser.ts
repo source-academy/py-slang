@@ -215,13 +215,13 @@ export class Parser {
 
     private for_stmt(): Stmt {
         const startToken = this.peek();
-        let target = this.advance();
+        let targets = this.for_target();
         this.consume(TokenType.IN, "Expected in after for");
         let iter = this.test();
         this.consume(TokenType.COLON, "Expected ':' after for");
         let block = this.suite();
         const endToken = this.previous();
-        return new StmtNS.For(startToken, endToken, target, iter, block);
+        return new StmtNS.For(startToken, endToken, targets, iter, block);
     }
 
     private funcdef(): Stmt {
@@ -260,7 +260,6 @@ export class Parser {
         } else if (this.check(TokenType.NAME, TokenType.LPAR, TokenType.LSQB, TokenType.NUMBER, TokenType.STRING,
             TokenType.BIGINT, TokenType.MINUS, TokenType.PLUS, ...SPECIAL_IDENTIFIER_TOKENS)) {
             const expr = this.test();
-
             if (this.check(TokenType.COLON)) {
                 if (!(expr instanceof ExprNS.Variable)) {
                     throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
@@ -270,13 +269,17 @@ export class Parser {
                 this.consume(TokenType.EQUAL, "Expect equal in annotated assignment");
                 const value = this.test();
                 res = new StmtNS.AnnAssign(startToken, this.previous(), expr, value, ann);
-            } else if (this.check(TokenType.EQUAL)) {
+            } else if (this.check(TokenType.EQUAL, TokenType.PLUSEQUAL, TokenType.MINEQUAL, TokenType.STAREQUAL, TokenType.SLASHEQUAL, TokenType.PERCENTEQUAL, TokenType.CIRCUMFLEXEQUAL, TokenType.VBAREQUAL, TokenType.AMPEREQUAL, TokenType.ATEQUAL)) {
                 if (!(expr instanceof ExprNS.Variable || expr instanceof ExprNS.Subscript)) {
                     throw new ParserErrors.InvalidAssignmentError(this.source, startToken);
                 }
-                this.advance();
+                const op = this.advance();
                 const value = this.test();
-                res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+                if (op.type === TokenType.EQUAL) {
+                    res = new StmtNS.Assign(startToken, this.previous(), expr, value);
+                } else {
+                    res = new StmtNS.AugAssign(startToken, this.previous(), expr, op, value);
+                }
             } else {
                 res = new StmtNS.SimpleExpr(startToken, this.previous(), expr);
             }
@@ -446,7 +449,7 @@ export class Parser {
     private term(): Expr {
         const startToken = this.peek();
         let expr = this.factor();
-        while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH)) {
+        while (this.match(TokenType.STAR, TokenType.SLASH, TokenType.PERCENT, TokenType.DOUBLESLASH, TokenType.AT, TokenType.CIRCUMFLEX, TokenType.AMPER, TokenType.VBAR)) {
             const token = this.previous();
             const right = this.factor();
             expr = new ExprNS.Binary(startToken, this.previous(), expr, token, right);
@@ -515,6 +518,59 @@ export class Parser {
         return args;
     }
 
+    private for_target(): Expr {
+        const startToken = this.peek();
+        if (this.check(TokenType.NAME)) {
+            let params = [];
+            let hasComma = false;
+            while (!this.check(TokenType.IN)) {
+                let name = this.consume(TokenType.NAME, "Expected a proper identifier in for loop target");
+                params.push(new ExprNS.Variable(startToken, name, name));
+                if (!this.match(TokenType.COMMA)) {
+                    break;
+                }
+                hasComma = true;
+            }
+            if (params.length === 1 && !hasComma) {
+                return params[0];
+            }
+            return new ExprNS.Tuple(startToken, this.previous(), params);
+        }
+
+        let params = [];
+        let hasComma = false;
+        while (!this.check(TokenType.RPAR)) {
+            let name = this.consume(TokenType.NAME, "Expected a proper identifier in for loop target");
+            params.push(new ExprNS.Variable(startToken, name, name));
+            if (!this.match(TokenType.COMMA)) {
+                break;
+            }
+            hasComma = true;
+        }
+        if (params.length === 1 && !hasComma) {
+            return params[0];
+        }
+        return new ExprNS.Tuple(startToken, this.previous(), params);
+    }
+
+    private tuple_expr(): Expr {
+        const startToken = this.peek();
+        let elements: Expr[] = [];
+        let isGrouping = true;
+        while (!this.check(TokenType.RPAR)) {
+            let element = this.test();
+            elements.push(element);
+            if (!this.match(TokenType.COMMA)) {
+                break;
+            }
+            isGrouping = false;
+        }
+        this.consume(TokenType.RPAR, "Expected closing ')' after tuple expression");
+        if (isGrouping && elements.length === 1) {
+            return new ExprNS.Grouping(startToken, this.previous(), elements[0]);
+        }
+        return new ExprNS.Tuple(startToken, this.previous(), elements);
+    }
     private list_expr(): Expr[] {
         let elements: Expr[] = [];
         while (!this.check(TokenType.RSQB)) {
@@ -551,9 +607,7 @@ export class Parser {
         }
 
         if (this.match(TokenType.LPAR)) {
-            let expr = this.test();
-            this.consume(TokenType.RPAR, "Expected closing ')'");
-            return new ExprNS.Grouping(startToken, this.previous(), expr);
+            return this.tuple_expr();
         }
 
         if (this.match(TokenType.LSQB)) {

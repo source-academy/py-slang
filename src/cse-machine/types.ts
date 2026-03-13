@@ -1,7 +1,7 @@
-import { Environment } from './environment';
 import { ExprNS, StmtNS } from '../ast-types';
 import { TokenType } from '../tokens';
-import { Statement } from 'estree';
+import { Environment } from './environment';
+import { Value } from './stash';
 
 export type Node = { isEnvDependent?: boolean } & (
     | StmtNS.Stmt
@@ -20,10 +20,11 @@ export interface StatementSequence {
 
 export enum InstrType {
     RESET = 'Reset',
-    WHILE = 'While',
-    FOR = 'For',
+    WHILE = 'WhileInstr',
+    FOR = 'ForInstr',
     ASSIGNMENT = 'Assignment',
     ANN_ASSIGNMENT = 'AnnAssignment',
+    LIST_ASSIGNMENT = 'ListAssignment',
     APPLICATION = 'Application',
     UNARY_OP = 'UnaryOperation',
     BINARY_OP = 'BinaryOperation',
@@ -31,11 +32,12 @@ export enum InstrType {
     COMPARE = 'Compare',
     CALL = 'Call',
     RETURN = 'Return',
-    BREAK = 'Break',
-    CONTINUE = 'Continue',
+    BREAK = 'BreakInstr',
+    CONTINUE = 'ContinueInstr',
     IF = 'If',
     FUNCTION_DEF = 'FunctionDef',
     LAMBDA = 'Lambda',
+    LIST = 'ListLiteral',
     MULTI_LAMBDA = 'MultiLambda',
     GROUPING = 'Grouping',
     LITERAL = 'Literal',
@@ -52,6 +54,7 @@ export enum InstrType {
     ENVIRONMENT = 'environment',
     MARKER = 'marker',
     END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+    LIST_ACCESS = 'ListAccess',
 }
 
 interface BaseInstr {
@@ -68,10 +71,17 @@ export interface WhileInstr extends BaseInstr {
 
 export interface ForInstr extends BaseInstr {
   instrType: InstrType.FOR
-  init: ExprNS.Variable
-  test: ExprNS.Expr
-  update: Node
+  target: ExprNS.Expr,
+  iter: ExprNS.Expr,
   body: StatementSequence
+}
+
+export interface ContinueInstr extends BaseInstr {
+  instrType: InstrType.CONTINUE
+}
+
+export interface BreakInstr extends BaseInstr {
+  instrType: InstrType.BREAK
 }
 
 export interface AssmtInstr extends BaseInstr {
@@ -101,6 +111,19 @@ export interface BranchInstr extends BaseInstr {
   instrType: InstrType.BRANCH
   consequent: Node
   alternate: Node | null | undefined
+}
+
+export interface ListInstr extends BaseInstr {
+  instrType: InstrType.LIST
+  numOfElements: number
+}
+
+export interface ListAccessInstr extends BaseInstr {
+  instrType: InstrType.LIST_ACCESS
+}
+
+export interface ListAssmtInstr extends BaseInstr {
+  instrType: InstrType.LIST_ASSIGNMENT
 }
 
 export interface EnvInstr extends BaseInstr {
@@ -145,22 +168,22 @@ export type Instr =
   | PopInstr
   | BoolOpInstr
 
-export function typeTranslator(type: string): string {
+export function typeTranslator(type: Value["type"]): string {
   switch (type) {
     case 'bigint':
       return 'int'
     case 'number':
       return 'float'
-    case 'boolean':
-      return 'bool'
     case 'bool':
       return 'bool'
     case 'string':
       return 'str'
     case 'complex':
       return 'complex'
-    case 'undefined':
+    case 'none':
       return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
       return 'unknown'
   }

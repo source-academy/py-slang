@@ -1,29 +1,34 @@
 // Value.ts
+import { StmtNS } from '../ast-types';
+import { PyComplexNumber } from '../types';
 import { Closure } from './closure';
 import { Environment } from './environment';
 import { Stack } from './stack';
-import { ExprNS, StmtNS } from '../ast-types';
-import { PyComplexNumber } from '../types';
 
 /**
  * Value represents various runtime values in Python.
  */
-export type Value = any
-//   | NumberValue
-//   | BoolValue
-//   | StringValue
-//   | FunctionValue
-//   | LambdaValue
-//   | MultiLambdaValue
-//   | ErrorValue
-//   | UndefinedValue
-//   | string
-//   | BigIntValue
-//   | pyClosureValue;
+export type Value = NumberValue 
+  | BuiltinValue
+  | BoolValue
+  | ComplexValue
+  | StringValue
+  | FunctionValue
+  | MultiLambdaValue
+  | ErrorValue
+  | NoneValue
+  | BigIntValue
+  | ClosureValue
+  | ListValue;
 
-export interface pyClosureValue {
+export interface ClosureValue {
   type: "closure";
   closure: Closure;
+}
+
+export interface ListValue {
+  type: "list";
+  value: Value[];
 }
 
 export interface Builtin {
@@ -65,13 +70,6 @@ export interface FunctionValue {
   env: Environment;
 }
 
-export interface LambdaValue {
-  type: 'lambda';
-  parameters: string[];
-  body: ExprNS.Expr;
-  env: Environment;
-}
-
 export interface MultiLambdaValue {
   type: 'multi_lambda';
   parameters: string[];
@@ -85,9 +83,14 @@ export interface ErrorValue {
   message: string;
 }
 
-// TODO: Merge undefined and None.
-export interface UndefinedValue {
-  type: 'undefined';
+export interface NoneValue {
+  type: 'none';
+}
+
+export interface BuiltinValue {
+  type: 'builtin';
+  name: string;
+  func: (...args: any[]) => any;
 }
 
 export class Stash extends Stack<Value> {

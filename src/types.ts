@@ -1,8 +1,10 @@
 import { toPythonString } from './stdlib'
-import { Value } from './cse-machine/stash'
+import { BuiltinValue, Value } from './cse-machine/stash'
 import { Context } from './cse-machine/context'
 import { ModuleFunctions } from './modules/moduleTypes'
-import { SourceLocation } from './errors'
+import { SourceLocation, ZeroDivisionError } from './errors'
+import { ExprNS } from './ast-types'
+import { handleRuntimeError } from './cse-machine/error'
 
 export class CSEBreak {}
 
@@ -102,11 +104,11 @@ export class PyComplexNumber {
     // It first compares the magnitudes of the dividend and divisor, and if some components are too large or too small, 
     // appropriate scaling is applied before performing the operation. 
     // This approach can significantly reduce overflow or underflow, thereby ensuring that the results remain more consistent with Python.
-    public div(other: PyComplexNumber): PyComplexNumber {
+    public div(source: string, node: ExprNS.Expr, context: Context, other: PyComplexNumber): PyComplexNumber {
         // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
         const denominator = other.real * other.real + other.imag * other.imag;
         if (denominator === 0) {
-            throw new Error(`Division by zero in complex number.`);
+            handleRuntimeError(context, new ZeroDivisionError(source, node, context));
         }
 
         const a = this.real;
@@ -245,7 +247,7 @@ export type RecursivePartial<T> =
         }>
       : T
 
-export type Result = Finished | Error | SuspendedCseEval // | Suspended
+export type Result = Finished | SuspendedCseEval // | CSEError | Suspended
 
 // TODO: should allow debug
 // export interface Suspended {
@@ -270,6 +272,12 @@ export interface Finished {
     // field instead
 }
 
+// export interface CSEError {
+//     status: 'error'
+//     context: Context
+//     error: Error
+// }
+
 // export class Representation {
 //     constructor(public representation: string) {}
 //     toString() {
@@ -280,7 +288,7 @@ export interface Finished {
 export class Representation {
     constructor(public representation: string) {}
   
-    toString(value: any): string {
+    toString(value: Value): string {
         // call str(value) in stdlib
         // TODO: mapping
         const result = toPythonString(value);
@@ -289,7 +297,7 @@ export class Representation {
 }
 
 export interface NativeStorage {
-    builtins: Map<string, Value>
+    builtins: Map<string, BuiltinValue>
     previousProgramsIdentifiers: Set<string>
     operators: Map<string, (...operands: Value[]) => Value>
     maxExecTime: number
@@ -306,4 +314,12 @@ export interface NativeStorage {
 export interface ModuleContext {
   state: null | any
   tabs: null | any[]
+}
+
+export interface CustomBuiltIns {
+  rawDisplay: (value: Value, str: string, externalContext: any) => Value
+  prompt: (value: Value, str: string, externalContext: any) => string | null
+  alert: (value: Value, str: string, externalContext: any) => void
+  /* Used for list visualisation. See #12 */
+  visualiseList: (list: any, externalContext: any) => void
 }

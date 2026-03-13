@@ -1,21 +1,23 @@
 
-import { Control, ControlItem } from './control';
-import { createProgramEnvironment, createSimpleEnvironment, Environment } from './environment';
-import { CseError } from './error';
-import { Heap } from './heap';
-import { Stash, Value } from './stash';
-import { Node } from './types';
 import { StmtNS } from '../ast-types';
 import { ModuleContext, NativeStorage } from '../types';
+import { Control } from './control';
+import { Environment } from './environment';
+import { CseError } from './error';
+import { Heap } from './heap';
+import { BuiltinValue, Stash, Value } from './stash';
+import { Node } from './types';
 
-export class Context {
+export class Context <T = any>{
   public control: Control;
   public stash: Stash;
   public output: string = '';
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
-
+  public externalContext?: T;
+  public prelude: string | null = null;  
+  
   runtime: {
     break: boolean
     debuggerOn: boolean
@@ -48,7 +50,7 @@ export class Context {
       this.runtime.environmentTree.insert(globalEnvironment)
     }
     this.nativeStorage = {
-      builtins: new Map<string, Value>(),
+      builtins: new Map<string, BuiltinValue>(),
       previousProgramsIdentifiers: new Set<string>(),
       operators: new Map<string, (...operands: Value[]) => Value>(),
       maxExecTime: 1000,

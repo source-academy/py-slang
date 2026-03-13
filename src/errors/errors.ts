@@ -1,7 +1,9 @@
 import { Token } from '../tokenizer'
 import { Context } from '../cse-machine/context'
-import { ExprNS } from '../ast-types'
+import { ExprNS, StmtNS } from '../ast-types'
 import { operatorTranslator } from '../cse-machine/types'
+import { TokenType } from '../tokens'
+import { Value } from '../cse-machine/stash'
 
 export enum ErrorType {
   IMPORT = 'Import',
@@ -99,14 +101,16 @@ function typeTranslator(type: string): string {
       return 'int'
     case 'number':
       return 'float'
-    case 'boolean':
-      return 'bool'
     case 'bool':
       return 'bool'
     case 'string':
-      return 'string'
+      return 'str'
     case 'complex':
       return 'complex'
+    case 'none':
+      return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
       return 'unknown'
   }
@@ -141,30 +145,16 @@ export function createErrorIndicator(snippet: string, errorPos: number): string 
   return indicator;
 }
 
-export class TypeConcatenateError extends RuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, wrongType: string) {
+export class IndexError extends RuntimeSourceError {
+    constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, context: Context, index: number, length: number) {
         super(node);
-        this.type = ErrorType.TYPE;
-
-        let index = node.startToken.indexInSource;
-        const { lineIndex, fullLine } = getFullLine(source, index);
-        const snippet = source.substring(node.startToken.indexInSource, node.endToken.indexInSource + node.endToken.lexeme.length)
-        
-        let hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
-        const offset = fullLine.indexOf(snippet);
-        const adjustedOffset = offset >= 0 ? offset : 0
-        const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource
-        const indicator = createErrorIndicator(snippet, errorPos);
-        
-        const name = "TypeError";
-        const suggestion = "You are trying to concatenate a string with an " + wrongType + ". To fix this, convert the " + wrongType + " to a string using str(), or ensure both operands are of the same type.";
-        const msg = name + " at line " + lineIndex + "\n\n    " + fullLine + "\n    " + " ".repeat(adjustedOffset) + indicator + "\n" + hint + "\n" + suggestion;
-        this.message = msg;
+        this.type = ErrorType.RUNTIME;
+        this.message = "IndexError: list index out of range. You tried to access index " + index + " but the list only has " + length + " elements.";
     }
 }
 
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
-    constructor(source: string, node: ExprNS.Expr, wrongType1: string, wrongType2: string, operand: string) {
+    constructor(source: string, node: ExprNS.Expr, wrongType1: Value["type"], wrongType2: Value["type"] | null, operand: TokenType | string) {
         super(node);
         this.type = ErrorType.TYPE;
 
@@ -179,20 +169,20 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
         const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource
         const indicator = createErrorIndicator(snippet, errorPos);
         let suggestion: string
-        if (wrongType2 === '') {
-        // Format for Unary operators
-        hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`
-        suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`
-      } else {
-        // Format for Binary operators
-        const typeStr2 = typeTranslator(wrongType2)
-        hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`
-        suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`
-    }
+        if (wrongType2 === null) {
+          // Format for Unary operators
+          hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`
+          suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`
+        } else {
+          // Format for Binary operators
+          const typeStr2 = typeTranslator(wrongType2)
+          hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`
+          suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`
+        }
 
-    // Assemble the final multi-line message
-    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
-  }
+        // Assemble the final multi-line message
+        this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`
+    }
 }
 
 export class MissingRequiredPositionalError extends RuntimeSourceError {
@@ -382,7 +372,7 @@ export class ValueError extends RuntimeSourceError {
 }
 
 export class TypeError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context, originalType: string, targetType: string) {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, context: Context, originalType: string, targetType: string) {
     super(node);
     originalType = typeTranslator(originalType);
     this.type = ErrorType.TYPE;

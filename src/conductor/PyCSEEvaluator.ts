@@ -6,22 +6,29 @@ import { runInContext, IOptions } from "../runner/pyRunner";
 import { Context } from "../cse-machine/context";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Finished } from "../types";
+import { Group } from "../stdlib/utils";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {
   isPrelude: false,
+  groups: [],
   envSteps: 100000,
   stepLimit: 100000,
+  variant: 1
 };
 
-export default class PyEvaluator extends BasicEvaluator {
+export default abstract class PyCSEEvaluator extends BasicEvaluator {
   private context: Context;
   private options: IOptions;
+  readonly chapter: number; // AM: do we want to re-create the JS-Slang chapter enum?
+  readonly groups: Group[];
 
-  constructor(conductor: IRunnerPlugin) {
+  constructor(conductor: IRunnerPlugin, options: Partial<IOptions> = {}, chapter: number, groups: Group[]) {
     super(conductor);
     this.context = defaultContext;
-    this.options = defaultOptions;
+    this.options = { ...defaultOptions, groups: groups, variant: chapter, ...options };
+    this.chapter = chapter;
+    this.groups = groups;
   }
 
   async evaluateChunk(chunk: string): Promise<void> {

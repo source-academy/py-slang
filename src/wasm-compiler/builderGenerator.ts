@@ -643,6 +643,9 @@ ${args.map(
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");
   }
+  visitAugAssignStmt(stmt: StmtNS.AugAssign): WasmInstruction {
+    throw new Error("Method not implemented.");
+  }
   visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
     throw new Error("Method not implemented.");
   }
@@ -668,6 +671,9 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    throw new Error("Method not implemented.");
+  }
+  visitTupleExpr(expr: ExprNS.Tuple): WasmNumeric {
     throw new Error("Method not implemented.");
   }
   visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {

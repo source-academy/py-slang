@@ -3,9 +3,11 @@ import { Context } from './context';
 import { Heap } from './heap';
 import { Value } from './stash';
 import { ExprNS, StmtNS } from '../ast-types';
+import { handleRuntimeError } from './error';
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, TypeError } from '../errors';
 
 export interface Frame {
-  [name: string]: any
+  [name: string]: Value
 }
 
 export interface Environment {
@@ -24,6 +26,7 @@ export const uniqueId = (context: Context): string => {
 }
 
 export const createEnvironment = (
+  source: string,
   context: Context,
   closure: Closure,
   args: Value[],
@@ -44,11 +47,27 @@ export const createEnvironment = (
   
   // console.info('closure.node.params:', closure.node.params);
   // console.info('Number of params:', closure.node.params.length);
-
+  const isVariadic = closure.node.parameters.some(param => param.isStarred);
+  let consumed = false;
   closure.node.parameters.forEach((paramToken, index) => {
     const paramName = paramToken.lexeme
-    environment.head[paramName] = args[index]
+    if (paramToken.isStarred) {
+      environment.head[paramName] = { type: "list", value: args.slice(index) };
+      consumed = true;
+    }
+    if (index >= args.length) {
+      handleRuntimeError(context, 
+          new MissingRequiredPositionalError(source, callExpression, environment.name, isVariadic ? index + 1 : closure.node.parameters.length, args, isVariadic));
+    }
+    if (!consumed) { // If we have already consumed the rest argument, the remaining are keyword-only arguments
+      environment.head[paramName] = args[index];
+    }
   })
+  if (!isVariadic && args.length > closure.node.parameters.length) {
+    handleRuntimeError(context, 
+        new TooManyPositionalArgumentsError(source, callExpression, environment.name, closure.node.parameters.length, args, isVariadic));
+  }
+
   return environment
 }
 
@@ -68,7 +87,7 @@ export const createSimpleEnvironment = (
 };
 
 export const createProgramEnvironment = (context: Context, isPrelude: boolean): Environment => {
-  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment');
+  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment', isPrelude ? null : getPreludeEnvironment(context));
 };
 
 export const createBlockEnvironment = (
@@ -104,6 +123,11 @@ export const currentEnvironment = (context: Context): Environment => {
 export const getGlobalEnvironment = (context: Context): Environment | null => {
   const envs = context.runtime.environments;
   return envs.length > 0 ? envs[envs.length - 1] : null;
+};
+
+export const getPreludeEnvironment = (context: Context): Environment | null => {
+  const envs = context.runtime.environments;
+  return envs.length > 1 ? envs[envs.length - 2] : null;
 };
 
 export const popEnvironment = (context: Context) => context.runtime.environments.shift()

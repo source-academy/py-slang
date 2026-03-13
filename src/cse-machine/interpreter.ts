@@ -6,25 +6,24 @@
 
 /* tslint:disable:max-classes-per-file */
 
-import { Stack } from './stack'
-import { Control, ControlItem } from './control';
-import { Stash, Value } from './stash';
-import { Environment, createBlockEnvironment, createEnvironment, createProgramEnvironment, currentEnvironment, popEnvironment, pushEnvironment } from './environment';
-import { Context } from './context';
-import { isNode, scanForAssignments } from './utils';
-import { envChanging, pyDefineVariable, pyGetVariable, checkStackOverFlow, isSimpleFunction, typeTranslator } from './utils';
-import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, Instr, InstrType, Node, StatementSequence, UnOpInstr } from './types';
-import * as instr from './instrCreator'
-import { Closure } from './closure';
-import { evaluateBinaryExpression,evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
-import * as error from "../errors/errors"
-import { ComplexLiteral, CSEBreak, None, PyComplexNumber, RecursivePartial, Representation, Result } from '../types';
-import { builtIns, builtInConstants } from '../stdlib';
-import { IOptions } from '../runner/pyRunner';
+import { TokenType } from '../tokens';
 import { ExprNS, StmtNS } from '../ast-types';
+import * as error from "../errors/errors";
+import { BuiltinReassignmentError, RuntimeSourceError } from '../errors/errors';
+import { IOptions } from '../runner/pyRunner';
+import { builtIns, toPythonString } from '../stdlib';
+import { Token } from '../tokenizer';
+import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
+import { Closure } from './closure';
+import { Context } from './context';
+import { Control, ControlItem } from './control';
+import { createEnvironment, createProgramEnvironment, currentEnvironment, popEnvironment, pushEnvironment } from './environment';
 import { handleRuntimeError } from './error';
-import * as instrCreator from './instrCreator'
-import { BuiltinReassignmentError } from '../errors/errors';
+import * as instrCreator from './instrCreator';
+import { evaluateBinaryExpression, evaluateBoolExpression, evaluateUnaryExpression, isFalsy } from './operators';
+import { Stash, Value } from './stash';
+import { AppInstr, AssmtInstr, BinOpInstr, BoolOpInstr, BranchInstr, EnvInstr, ForInstr, Instr, InstrType, ListAccessInstr, ListAssmtInstr, ListInstr, Node, UnOpInstr, WhileInstr } from './types';
+import { envChanging, evaluateForIterator, evaluateListAssignment, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
   code: string,
@@ -56,7 +55,7 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
       const representation = new Representation(cseFinalPrint + msg);
       resolve({ status: 'finished', context, value, representation })
     } else {
-      const representation = new Representation(value);
+      const representation = new Representation(toPythonString(value));
       resolve({ status: 'finished', context, value, representation })
     }
   })
@@ -73,7 +72,7 @@ let source = "";
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
-export function evaluate(code: string, program: StmtNS.Stmt, context: Context, options: RecursivePartial<IOptions> = {}): Value {
+export async function evaluate(code: string, program: StmtNS.Stmt, context: Context, options: RecursivePartial<IOptions> = {}): Promise<Value> {
   source = code;
   try {
     // TODO: is undefined variables check necessary for Python?
@@ -86,6 +85,7 @@ export function evaluate(code: string, program: StmtNS.Stmt, context: Context, o
     context.runtime.isRunning = true
     context.control = new Control(program);
     context.stash = new Stash();
+
     // Adaptation for new feature
     const result = runCSEMachine(
       code,
@@ -96,7 +96,7 @@ export function evaluate(code: string, program: StmtNS.Stmt, context: Context, o
       options.stepLimit!,
       options.isPrelude
     );
-    return context.output ? { type: "string", value: context.output } : result;
+    return { type: "string", value: context.output };
   } catch (error: any) {
     return { type: 'error', message: error.message };
   } finally {
@@ -177,10 +177,10 @@ export function runCSEMachine(
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for (const value of eceState) {
   }
-  
+
   // Return the value at the top of the storage as the result
   const result = stash.peek();
-  return result !== undefined ? result : { type: 'undefined' };
+  return result !== undefined ? result : { type: 'none' };
 }
 
 /**
@@ -214,9 +214,9 @@ export function* generateCSEMachineStateStream(
   if (command && isNode(command)) {
     context.runtime.nodes.unshift(command)
   }
-  
+
   while (command) {
-    
+
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {
     //   yield { stash, control, steps }
@@ -233,17 +233,16 @@ export function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1)
     }
-
     control.pop()
+
     if (isNode(command)) {
       const node = command as Node
       const nodeType = node.constructor.name
 
       context.runtime.nodes.shift()
       context.runtime.nodes.unshift(command)
-      
       cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude)
-      
+
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
         // We can put this under isNode since context.runtime.break
@@ -259,7 +258,7 @@ export function* generateCSEMachineStateStream(
     }
 
     command = control.peek()
-    
+
     steps += 1
     if (!isPrelude) {
       context.runtime.envStepsTotal = steps
@@ -291,7 +290,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     ) {
       popEnvironment(context)
     }
-    
+
 
     // if (hasDeclarations(command as es.BlockStatement) || hasImportDeclarations(command as es.BlockStatement)) {
     //   if (currentEnvironment(context).name != 'programEnvironment') {
@@ -310,7 +309,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     // Push the block body as a sequence of statements onto the control stack
     const seq = node.statements.slice().reverse();
     control.push(...seq);
-    
+
   },
 
   SimpleExpr: function (
@@ -333,6 +332,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
+    
     const literal = command as ExprNS.Literal
     if (typeof literal.value === 'number') {
       stash.push({ type: 'number', value: literal.value })
@@ -341,7 +341,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     } else if (typeof literal.value === 'string') {
       stash.push({ type: 'string', value: literal.value })
     } else {
-      stash.push({ type: 'undefined' })
+      stash.push({ type: 'none' })
     }
   },
 
@@ -396,8 +396,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const boolOp = command as ExprNS.BoolOp
     control.push(instrCreator.boolOpInstr(boolOp.operator.type, boolOp))
-    control.push(boolOp.right)
-    control.push(boolOp.left)
+    control.push(boolOp.left)    
   },
 
   Grouping: function (
@@ -432,7 +431,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
-    stash.push({ type: 'undefined' })
+    stash.push({ type: 'none' })
   },
 
   Variable: function (
@@ -478,7 +477,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const assignNode = command as StmtNS.Assign
 
     if (assignNode.target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not yet supported");
+      control.push(instrCreator.listAssmtInstr(assignNode.target))
+      control.push(assignNode.value)
+      control.push(assignNode.target.index)
+      control.push(assignNode.target.value)
+      return;
     }
 
     const assmtInstr = instrCreator.assmtInstr(assignNode.target.name.lexeme, false, true, assignNode)
@@ -520,7 +523,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables
     )
-    pyDefineVariable(context, functionDefNode.name.lexeme, closure)
+    pyDefineVariable(context, functionDefNode.name.lexeme, { type: 'closure', closure })
   },
 
   Lambda: function (
@@ -539,7 +542,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables
     )
-    stash.push(closure)
+    stash.push({ type: 'closure', closure })
   },
 
   Return: function (
@@ -565,10 +568,64 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       control.push(returnNode.value)
     } else {
       // implicit None return
-      stash.push({ type: 'undefined' })
+      stash.push({ type: 'none' })
     }
   },
 
+  For: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const forNode = command as StmtNS.For
+    const instr = instrCreator.forInstr(forNode, forNode.target, forNode.iter,
+      { type: 'StatementSequence', body: forNode.body })
+    control.push(instr)
+  },
+
+  While: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const whileNode = command as StmtNS.While
+    const instr = instrCreator.whileInstr(
+      whileNode,
+      whileNode.condition,
+      { type: 'StatementSequence', body: whileNode.body },
+    )
+    control.push(instr)
+    control.push(whileNode.condition)
+
+  },
+
+  Break: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.breakInstr(command as StmtNS.Break))
+  },
+
+  Continue: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.continueInstr(command as StmtNS.Continue))
+  },
 
   If: function (
     code: string,
@@ -584,15 +641,44 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
           ? // 'else' block
-            { type: 'StatementSequence', body: ifNode.elseBlock }
+          { type: 'StatementSequence', body: ifNode.elseBlock }
           : // 'elif' block
-            ifNode.elseBlock
+          ifNode.elseBlock
         : // 'else' block dont exist
-          null,
+        null,
       ifNode
     )
     control.push(branch)
     control.push(ifNode.condition)
+  },
+
+  List: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    control.push(instrCreator.listInstr((command as ExprNS.List).elements.length, command as ExprNS.List))
+
+    for (let i = (command as ExprNS.List).elements.length - 1; i >= 0; i--) {
+      control.push((command as ExprNS.List).elements[i])
+    }
+  },
+
+  Subscript: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const subscriptNode = command as ExprNS.Subscript
+    control.push(instrCreator.listAccessInstr(subscriptNode))
+    control.push(subscriptNode.index)
+    control.push(subscriptNode.value)
   },
 
   Ternary: function (
@@ -648,10 +734,71 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     if (value) {
       if (builtIns.has(instr.symbol)) {
-        throw new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr)
+        handleRuntimeError(context, new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr))
       }
       pyDefineVariable(context, instr.symbol, value)
     }
+  },
+
+  [InstrType.LIST_ASSIGNMENT]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListAssmtInstr
+    const value = stash.pop()
+    const index = stash.pop()
+    const list = stash.pop()
+    
+    evaluateListAssignment(code, instr.srcNode as StmtNS.Assign, context, list, index, value)
+  },
+
+    
+
+  [InstrType.BREAK]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    let top = control.peek();
+    if (!top) {
+      return;
+    }
+    if (isNode(top) || ((top as Instr).instrType !== InstrType.WHILE && (top as Instr).instrType !== InstrType.FOR)) {
+      control.pop()
+      control.push(command)
+    }
+    control.pop();
+  },
+
+  [InstrType.CONTINUE]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    let top = control.pop();
+    let top2 = control.peek();
+    if (!top) {
+      return;
+    }
+    if (!top2) {
+      control.push(top);
+      return;
+    }
+    if (isNode(top2) || ((top2 as Instr).instrType !== InstrType.WHILE && (top2 as Instr).instrType !== InstrType.FOR)) {
+      control.push(command)
+      return;
+    }
+    control.push(top)
   },
 
   [InstrType.UNARY_OP]: function (
@@ -708,20 +855,30 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
-    const instr = command as BoolOpInstr
-    const right = stash.pop()
-    const left = stash.pop()
-
-    if (left && right) {
+    const instr = command as BoolOpInstr;
+    const left = stash.pop();
+    const boolOpNode = instr.srcNode as any;
+    const right = boolOpNode.right
+    if (left) {
       const result = evaluateBoolExpression(
-        code,
-        instr.srcNode as ExprNS.Expr,
-        context,
-        instr.symbol,
-        left,
-        right
-      )
-      stash.push(result)
+              code,
+              instr.srcNode as ExprNS.Expr,
+              context,
+              instr.symbol,
+              left,
+              right
+            )
+      const falsy = isFalsy(left)
+      const operator = instr.symbol;
+      if (operator == TokenType.AND && falsy) {
+          stash.push(left)
+        } else if (operator == TokenType.AND && !falsy) {
+          control.push(right)
+        } else if (operator == TokenType.OR && falsy) {
+          control.push(right)
+        } else {
+          stash.push(result)
+        }
     }
   },
 
@@ -736,6 +893,46 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash.pop();
   },
 
+  [InstrType.LIST]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListInstr
+    const elements: Value[] = []
+    for (let i = 0; i < instr.numOfElements; i++) {
+      const element = stash.pop()
+      if (element) {
+        elements.unshift(element)
+      }
+    }
+    stash.push({ type: 'list', value: elements })
+  },
+
+  [InstrType.WHILE]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as WhileInstr
+    const condition = stash.pop()
+    if (condition && !isFalsy(condition)) {
+      control.push(instr)
+      control.push(instr.test)
+      if (instr.body && 'type' in instr.body && instr.body.type === 'StatementSequence') {
+        control.push(...(instr.body as any).body.slice().reverse())
+      } else {
+        control.push(instr.body)
+      }
+
+    }
+  },
   [InstrType.APPLICATION]: function (
     code: string,
     command: ControlItem,
@@ -747,22 +944,25 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as AppInstr
     const numOfArgs = instr.numOfArgs
 
-    const args = []
+    const args: Value[] = []
     for (let i = 0; i < numOfArgs; i++) {
-      args.unshift(stash.pop())
+      const arg = stash.pop()
+      if (arg) {
+        args.unshift(arg)
+      }
     }
 
     const callable = stash.pop()
 
-    if (callable instanceof Closure) {
-      const closure = callable as Closure
+    if (callable?.type == "closure") {
+      const closure = callable.closure
       control.push(instrCreator.resetInstr(instr.srcNode))
 
       if (closure.node.constructor.name === 'FunctionDef') {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode))
       }
 
-      const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call)
+      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode as ExprNS.Call)
       pushEnvironment(context, newEnv)
 
       const closureNode = closure.node
@@ -785,6 +985,30 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
   },
 
+  [InstrType.LIST_ACCESS]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    isPrelude: boolean
+  ) {
+    const instr = command as ListAccessInstr
+    const index = stash.pop()
+    const list = stash.pop()
+    if (!list || list.type !== 'list') {
+      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (list as Value).type, 'list'))
+    }
+    if (!index || index.type !== 'bigint') {
+      handleRuntimeError(context, new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, (index as Value).type, 'int'))
+    }
+    const idx = Number(index.value)
+    if (idx >= list.value.length) {
+      handleRuntimeError(context, new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length))
+    }
+    stash.push(list.value[idx])
+  },
+
   [InstrType.BRANCH]: function (
     code: string,
     command: ControlItem,
@@ -796,7 +1020,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as BranchInstr
     const condition = stash.pop()
 
-    if (!isFalsy(condition)) {
+    if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent
       if (consequent && 'type' in consequent && consequent.type === 'StatementSequence') {
         control.push(...(consequent as any).body.slice().reverse())
@@ -834,6 +1058,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     isPrelude: boolean
   ) {
-    stash.push({ type: undefined });
+    stash.push({ type: 'none' });
   }
 };

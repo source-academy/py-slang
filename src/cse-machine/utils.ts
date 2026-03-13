@@ -10,14 +10,20 @@ import {
     Node,
     StatementSequence
 } from './types'
-import { AssertionError } from './error';
+import { AssertionError, handleRuntimeError } from './error';
 import { Value } from './stash';
 import { ExprNS, StmtNS } from '../ast-types';
 import { builtIns, builtInConstants } from '../stdlib';
 import { 
+  IndexError,
+  MissingRequiredPositionalError,
   NameError,
-  UnboundLocalError
+  TooManyPositionalArgumentsError,
+  TypeError,
+  UnboundLocalError,
 } from '../errors/errors';
+import { Token } from '../tokenizer';
+import { TokenType } from '../tokens';
 
 export const isNode = (command: ControlItem): command is Node => {
   return !isInstr(command)
@@ -180,9 +186,8 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
         const instr = item as ForInstr;
         item.isEnvDependent =
           isEnvDependent(instr.body) ||
-          isEnvDependent(instr.init) ||
-          isEnvDependent(instr.test) ||
-          isEnvDependent(instr.update);
+          isEnvDependent(instr.target) ||
+          isEnvDependent(instr.iter);
         return item;
       }
     ],
@@ -254,7 +259,7 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   const env = currentEnvironment(context)
   if (env.closure && env.closure.localVariables.has(name)) {
     if (!env.head.hasOwnProperty(name)) {
-      throw new UnboundLocalError(code, name, node as ExprNS.Variable)
+      handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable))
     }
   }
 
@@ -272,7 +277,11 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   if (builtInConstants.has(name)) {
     return builtInConstants.get(name)!
   }
-  throw new NameError(code, name, node as ExprNS.Variable)
+
+  if (context.nativeStorage.builtins.has(name)) {
+    return context.nativeStorage.builtins.get(name)!
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable))
 }
 
 export const checkStackOverFlow = (context: Context, control: Control) => {
@@ -310,9 +319,9 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
 }
 
 
-export default function assert(condition: boolean, message: string): asserts condition {
+export default function assert(context: Context, condition: boolean, message: string): asserts condition {
   if (!condition) {
-    throw new AssertionError(message)
+    handleRuntimeError(context, new AssertionError(message))
   }
 }
 
@@ -327,10 +336,9 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
 
     if (nodeType === "Assign") {
       const assignNode = curNode as StmtNS.Assign
-      if (assignNode.target instanceof ExprNS.Subscript) {
-        throw new Error("Subscript assignment is not yet supported")
+      if (assignNode.target instanceof ExprNS.Variable) {
+        assignments.add(assignNode.target.name.lexeme);
       }
-      assignments.add(assignNode.target.name.lexeme)
     } else if (nodeType === "FunctionDef" || nodeType === "Lambda") {
       // detach here, nested functions have their own scope
       return
@@ -358,22 +366,24 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
   return assignments
 }
 
-export function typeTranslator(type: string): string {
+export function typeTranslator(type: Value["type"]): string {
   switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "bool":
-      return "bool";
-    case "string":
-      return "string";
-    case "complex":
-      return "complex";
+    case 'bigint':
+      return 'int'
+    case 'number':
+      return 'float'
+    case 'bool':
+      return 'bool'
+    case 'string':
+      return 'str'
+    case 'complex':
+      return 'complex'
+    case 'none':
+      return 'NoneType'
+    case 'closure':
+      return 'function'
     default:
-      return "unknown";
+      return 'unknown'
   }
 }
 
@@ -393,5 +403,116 @@ export function operandTranslator(type: string) {
       return "**";
     default:
       return type;
+  }
+}
+
+
+export function evaluateListAssignment(code: string, assignNode: StmtNS.Assign, context: Context, list: Value | undefined, index: Value | undefined, value: Value | undefined) {
+  if (list === undefined || list.type !== 'list') {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        list?.type || "unknown",
+        "list"
+      )
+    )
+  }
+  if (index === undefined || index.type !== 'bigint') {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        index?.type || "unknown",
+        "int"
+      )
+    )
+  }
+  if (value === undefined) {
+    handleRuntimeError(
+      context,
+      new TypeError(
+        code,
+        assignNode,
+        context,
+        "undefined",
+        "any"
+      )
+    )
+  }
+  let intIndex = Number(index.value)
+  if (intIndex < 0) {
+    intIndex = intIndex % list.value.length;
+  }
+  if (intIndex >= list.value.length) {
+    handleRuntimeError(
+      context,
+      new IndexError(
+        code,
+        assignNode,
+        context,
+        intIndex,
+        list.value.length
+      )
+    )
+  }
+  list.value[intIndex] = value;
+}
+
+
+export function evaluateForIterator(code: string, context: Context, forNode: StmtNS.For): {start: ExprNS.Expr, end: ExprNS.Expr, step: ExprNS.Expr} {
+  const rangeArguments = (forNode.iter as ExprNS.Call).args;
+  if (rangeArguments.length === 0) {
+    handleRuntimeError(
+      context,
+      new MissingRequiredPositionalError(
+        code,
+        forNode.iter,
+        "range",
+        0,
+        rangeArguments,
+        true
+      )
+    )
+  }
+  if (rangeArguments.length > 3) {
+    handleRuntimeError(
+      context,
+      new TooManyPositionalArgumentsError(
+        code,
+        forNode.iter,
+        "range",
+        3,
+        rangeArguments,
+        true
+      )
+    )
+  }
+  const tempTokenZero = new Token(TokenType.NUMBER, "0", 0, 0, 0);
+  const tempTokenOne = new Token(TokenType.NUMBER, "1", 0, 0, 0);
+  if (rangeArguments.length === 1) {
+    return {
+      start: new ExprNS.Literal(tempTokenZero, tempTokenZero, 0),
+      end: rangeArguments[0],
+      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1)
+    }
+  }
+
+  if (rangeArguments.length === 2) {
+    return {
+      start: rangeArguments[0],
+      end: rangeArguments[1],
+      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1)
+    }
+  }
+
+  return {
+    start: rangeArguments[0],
+    end: rangeArguments[1],
+    step: rangeArguments[2]
   }
 }

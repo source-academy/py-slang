@@ -1,12 +1,12 @@
+import { ExprNS } from '../ast-types';
+import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
+import { TokenType } from '../tokens';
+import { PyComplexNumber } from '../types';
 import { Context } from './context';
 import { handleRuntimeError } from './error';
 import { Value } from './stash';
 import { operatorTranslator, typeTranslator } from './types';
 import { pythonMod } from './utils';
-import { ExprNS } from '../ast-types';
-import { TokenType } from '../tokens';
-import { PyComplexNumber } from '../types';
-import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
 
 
 export type BinaryOperator =
@@ -42,7 +42,19 @@ export function evaluateUnaryExpression(
 ): Value {
   switch (operator) {
     case TokenType.NOT:
-      return { type: 'bool', value: isFalsy(value) }
+      if (value.type === 'bool') {
+        return { type: 'bool', value: isFalsy(value) }
+      }
+      handleRuntimeError(
+        context,
+        new UnsupportedOperandTypeError(
+          code,
+          command,
+          value.type,
+          null,
+          operatorTranslator(operator)
+        )
+      )
 
     case TokenType.MINUS:
       switch (value.type) {
@@ -50,8 +62,6 @@ export function evaluateUnaryExpression(
           return { type: 'number', value: -value.value }
         case 'bigint':
           return { type: 'bigint', value: -value.value }
-        case 'bool':
-          return { type: 'bigint', value: value.value ? -1n : 0n }
         case 'complex':
           return {
             type: 'complex',
@@ -64,7 +74,7 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              '',
+              null,
               operatorTranslator(operator)
             )
           )
@@ -76,8 +86,6 @@ export function evaluateUnaryExpression(
         case 'bigint':
         case 'complex':
           return value
-        case 'bool':
-          return { type: 'bigint', value: value.value ? 1n : 0n }
         default:
           handleRuntimeError(
             context,
@@ -85,7 +93,7 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              '',
+              null,
               operatorTranslator(operator)
             )
           )
@@ -106,10 +114,12 @@ export function evaluateBinaryExpression(
   // Handle Complex numbers
   if (left.type === 'complex' || right.type === 'complex') {
     if (
-      right.type !== 'complex' &&
+      (right.type !== 'complex' &&
       right.type !== 'number' &&
-      right.type !== 'bigint' &&
-      right.type !== 'bool'
+      right.type !== 'bigint') || 
+      (left.type !== 'complex' &&
+      left.type !== 'number' &&
+      left.type !== 'bigint')
     ) {
       handleRuntimeError(
         context,
@@ -141,7 +151,7 @@ export function evaluateBinaryExpression(
         result = leftComplex.mul(rightComplex)
         break
       case TokenType.SLASH:
-        result = leftComplex.div(rightComplex)
+        result = leftComplex.div(code, command, context, rightComplex)
         break
       case TokenType.DOUBLESTAR:
         result = leftComplex.pow(rightComplex)
@@ -169,30 +179,18 @@ export function evaluateBinaryExpression(
     return { type: 'complex', value: result }
   }
 
-  // Handle comparisons with None (represented as 'undefined' type)
-  if (left.type === 'undefined' || right.type === 'undefined') {
-    switch (operator) {
-      case TokenType.DOUBLEEQUAL:
-        // True only if both are None
-        return { type: 'bool', value: left.type === right.type }
-      case TokenType.NOTEQUAL:
-        return { type: 'bool', value: left.type !== right.type }
-      default:
-        handleRuntimeError(
-          context,
-          new UnsupportedOperandTypeError(
-            code,
-            command,
-            left.type,
-            right.type,
-            operatorTranslator(operator)
-          )
-        )
-        return {
-          type: 'error',
-          message: 'Unreachable in evaluateBinaryExpression - undefined | undefined'
-        }
-    }
+  // Handle comparisons with None (represented as 'none' type)
+  if (left.type === 'none' || right.type === 'none') {
+   handleRuntimeError(
+    context,
+    new UnsupportedOperandTypeError(
+      code,
+      command,
+      left.type,
+      right.type,
+      operatorTranslator(operator)
+    )
+   )
   }
 
   // Handle string operations
@@ -240,17 +238,25 @@ export function evaluateBinaryExpression(
         operatorTranslator(operator)
       )
     )
-    return { type: 'error', message: 'Unreachable in evaluateBinaryExpression - string | string' }
   }
 
-  /**
-   * Coerce boolean to a numeric value for all other arithmetic
-   * Support for True - 1 or False + 1
-   */
-  const leftNum = left.type === 'bool' ? (left.value ? 1 : 0) : left.value
-  const rightNum = right.type === 'bool' ? (right.value ? 1 : 0) : right.value
-  const leftType = left.type === 'bool' ? 'number' : left.type
-  const rightType = right.type === 'bool' ? 'number' : right.type
+  if ((left.type !== "number" && left.type !== "bigint") || (right.type !== "number" && right.type !== "bigint")) {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator)
+      )
+    )
+  }
+  
+  const leftNum = left.value
+  const rightNum = right.value
+  const leftType = left.type
+  const rightType = right.type
 
   // Numeric Operations (number or bigint)
   switch (operator) {
@@ -285,7 +291,11 @@ export function evaluateBinaryExpression(
             if (r === 0) {
               handleRuntimeError(context, new ZeroDivisionError(code, command, context))
             }
-            return { type: 'number', value: pythonMod(l, r) }
+            const mod = pythonMod(l, r);
+            if (typeof mod === 'bigint') {
+              return { type: 'bigint', value: mod }
+            }
+            return { type: 'number', value: mod }
           case TokenType.DOUBLESTAR:
             if (l === 0 && r < 0) {
               handleRuntimeError(context, new ZeroDivisionError(code, command, context))
@@ -317,7 +327,11 @@ export function evaluateBinaryExpression(
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command, context))
             }
-            return { type: 'bigint', value: pythonMod(l, r) }
+            const mod = pythonMod(l, r);
+            if (typeof mod === 'bigint') {
+              return { type: 'bigint', value: mod }
+            }
+            return { type: 'number', value: mod }
           case TokenType.DOUBLESTAR:
             if (l === 0n && r < 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command, context))
@@ -567,7 +581,7 @@ export function isFalsy(value: Value): boolean {
       return value.value === ''
     case 'complex':
       return value.value.real === 0 && value.value.imag == 0
-    case 'undefined': // Represents None
+    case 'none': // Represents None
       return true
     default:
       // All other objects are considered truthy
@@ -583,11 +597,23 @@ export function evaluateBoolExpression(
   left: Value,
   right: Value
 ): Value {
+  if (left.type !== 'bool') {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator)
+      )
+    )
+  }
   if (operator === TokenType.OR) {
-    // Python 'or': if the first value is truthy, return it. Otherwise, evaluate and return the second value.
-    return !isFalsy(left) ? left : right
+    // Python 'or': if the first value is true, return it. Otherwise, evaluate and return the second value.
+    return isFalsy(left) ? right : left
   } else if (operator === TokenType.AND) {
-    // Python 'and': if the first value is falsy, return it. Otherwise, evaluate and return the second value.
+    // Python 'and': if the first value is false, return it. Otherwise, evaluate and return the second value.
     return isFalsy(left) ? left : right
   } else {
     handleRuntimeError(
@@ -595,9 +621,9 @@ export function evaluateBoolExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
-        typeTranslator(left.type),
-        typeTranslator(right.type),
-        operatorTranslator(operator)
+        left.type,
+        right.type,
+        operator
       )
     )
     return { type: 'error', message: `Unreachable in evaluateBoolExpression}` }

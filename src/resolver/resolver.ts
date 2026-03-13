@@ -1,4 +1,5 @@
 import { StmtNS, ExprNS } from "../ast-types";
+import { Group } from "../stdlib/utils";
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 import { Token } from "../tokenizer/tokenizer";
@@ -6,6 +7,7 @@ import { TokenType } from "../tokens";
 import { ResolverErrors } from "./errors";
 
 import levenshtein from 'fast-levenshtein';
+import constants from '../stdlib/py_s1_constants.json'
 // const levenshtein = require('fast-levenshtein');
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
@@ -152,90 +154,40 @@ class Environment {
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     source: string;
     ast: Stmt;
-    // change the environment to be suite scope as in python
+    variant: number;
     environment: Environment | null;
     functionScope: Environment | null;
-    constructor(source: string, ast: Stmt) {
+    loopDepth: number = 0;
+    constructor(source: string, ast: Stmt, variant: number, groups: Group[] = [], preludeNames: string[] = []) {
+        
         this.source = source;
         this.ast = ast;
+        this.variant = variant;
         // The global environment
         this.environment = new Environment(source, null, new Map([
             // misc library
-            ["_int", new Token(TokenType.NAME, "_int", 0, 0, 0)],
-            ["_int_from_string", new Token(TokenType.NAME, "_int_from_string", 0, 0, 0)],
-            ["abs", new Token(TokenType.NAME, "abs", 0, 0, 0)],
-            ["char_at", new Token(TokenType.NAME, "char_at", 0, 0, 0)],
-            ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
-            ["input", new Token(TokenType.NAME, "input", 0, 0, 0)],
-            ["isinstance", new Token(TokenType.NAME, "isinstance", 0, 0, 0)],
-            ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
-            ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
-            ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
-            ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
-            ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
-            ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
-            ["time_time", new Token(TokenType.NAME, "time_time", 0, 0, 0)],            
-            
-            // math constants
-            ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
-            ["math_e", new Token(TokenType.NAME, "math_e", 0, 0, 0)],
-            ["math_inf", new Token(TokenType.NAME, "math_inf", 0, 0, 0)],
-            ["math_nan", new Token(TokenType.NAME, "math_nan", 0, 0, 0)],
-            ["math_tau", new Token(TokenType.NAME, "math_tau", 0, 0, 0)],
-            
-            // math library
-            ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],
-            ["math_acosh", new Token(TokenType.NAME, "math_acosh", 0, 0, 0)],
-            ["math_asin", new Token(TokenType.NAME, "math_asin", 0, 0, 0)],
-            ["math_asinh", new Token(TokenType.NAME, "math_asinh", 0, 0, 0)],
-            ["math_atan", new Token(TokenType.NAME, "math_atan", 0, 0, 0)],
-            ["math_atan2", new Token(TokenType.NAME, "math_atan2", 0, 0, 0)],
-            ["math_atanh", new Token(TokenType.NAME, "math_atanh", 0, 0, 0)],
-            ["math_cbrt", new Token(TokenType.NAME, "math_cbrt", 0, 0, 0)],
-            ["math_ceil", new Token(TokenType.NAME, "math_ceil", 0, 0, 0)],
-            ["math_comb", new Token(TokenType.NAME, "math_comb", 0, 0, 0)],
-            ["math_copysign", new Token(TokenType.NAME, "math_copysign", 0, 0, 0)],
-            ["math_cos", new Token(TokenType.NAME, "math_cos", 0, 0, 0)],
-            ["math_cosh", new Token(TokenType.NAME, "math_cosh", 0, 0, 0)],
-            ["math_degrees", new Token(TokenType.NAME, "math_degrees", 0, 0, 0)],
-            ["math_erf", new Token(TokenType.NAME, "math_erf", 0, 0, 0)],
-            ["math_erfc", new Token(TokenType.NAME, "math_erfc", 0, 0, 0)],
-            ["math_exp", new Token(TokenType.NAME, "math_exp", 0, 0, 0)],
-            ["math_exp2", new Token(TokenType.NAME, "math_exp2", 0, 0, 0)],
-            ["math_expm1", new Token(TokenType.NAME, "math_expm1", 0, 0, 0)],
-            ["math_fabs", new Token(TokenType.NAME, "math_fabs", 0, 0, 0)],
-            ["math_factorial", new Token(TokenType.NAME, "math_factorial", 0, 0, 0)],
-            ["math_floor", new Token(TokenType.NAME, "math_floor", 0, 0, 0)],
-            ["math_fma", new Token(TokenType.NAME, "math_fma", 0, 0, 0)],
-            ["math_fmod", new Token(TokenType.NAME, "math_fmod", 0, 0, 0)],
-            ["math_gamma", new Token(TokenType.NAME, "math_gamma", 0, 0, 0)],
-            ["math_gcd", new Token(TokenType.NAME, "math_gcd", 0, 0, 0)],
-            ["math_isfinite", new Token(TokenType.NAME, "math_isfinite", 0, 0, 0)],
-            ["math_isinf", new Token(TokenType.NAME, "math_isinf", 0, 0, 0)],
-            ["math_isnan", new Token(TokenType.NAME, "math_isnan", 0, 0, 0)],
-            ["math_isqrt", new Token(TokenType.NAME, "math_isqrt", 0, 0, 0)],
-            ["math_lcm", new Token(TokenType.NAME, "math_lcm", 0, 0, 0)],
-            ["math_ldexp", new Token(TokenType.NAME, "math_ldexp", 0, 0, 0)],
-            ["math_lgamma", new Token(TokenType.NAME, "math_lgamma", 0, 0, 0)],
-            ["math_log", new Token(TokenType.NAME, "math_log", 0, 0, 0)],
-            ["math_log10", new Token(TokenType.NAME, "math_log10", 0, 0, 0)],
-            ["math_log1p", new Token(TokenType.NAME, "math_log1p", 0, 0, 0)],
-            ["math_log2", new Token(TokenType.NAME, "math_log2", 0, 0, 0)],
-            ["math_nextafter", new Token(TokenType.NAME, "math_nextafter", 0, 0, 0)],
-            ["math_perm", new Token(TokenType.NAME, "math_perm", 0, 0, 0)],
-            ["math_pow", new Token(TokenType.NAME, "math_pow", 0, 0, 0)],
-            ["math_radians", new Token(TokenType.NAME, "math_radians", 0, 0, 0)],
-            ["math_remainder", new Token(TokenType.NAME, "math_remainder", 0, 0, 0)],
-            ["math_sin", new Token(TokenType.NAME, "math_sin", 0, 0, 0)],
-            ["math_sinh", new Token(TokenType.NAME, "math_sinh", 0, 0, 0)],
-            ["math_sqrt", new Token(TokenType.NAME, "math_sqrt", 0, 0, 0)],
-            ["math_tan", new Token(TokenType.NAME, "math_tan", 0, 0, 0)],
-            ["math_tanh", new Token(TokenType.NAME, "math_tanh", 0, 0, 0)],
-            ["math_trunc", new Token(TokenType.NAME, "math_trunc", 0, 0, 0)],
-            ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)]   
+            ...constants.builtInFuncs.map((name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token]),
+            ...constants.constants.map((name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token]),
+            ...groups.flatMap(group => Array.from(group.builtins.entries()).map(([name, value]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token])),
+            ...preludeNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token])
         ]));
         this.functionScope = null;
     }
+    visitAugAssignStmt(stmt: StmtNS.AugAssign): void {
+        if (this.variant <= 4) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
+        const target = stmt.target;
+        this.resolve(stmt.value);
+        if (target instanceof ExprNS.Subscript) {
+            this.resolve(target.value);
+            this.resolve(target.index);
+            return;
+        } else {
+            this.resolve(target);
+        }
+    }
+    
     resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
         if (stmt === null) {
             return;
@@ -316,6 +268,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.environment?.declareName(stmt.name);
         this.environment?.functions.add(stmt.name.lexeme);
 
+        if (this.variant < 3 && stmt.parameters.some(param => param.isStarred)) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
+
         // Create a new environment.
         const oldEnv = this.environment;
         // Assign the parameters to the new environment.
@@ -339,6 +295,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
+        if (this.variant <= 4) { // Only supported in a future sublanguage
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
         this.resolve(stmt.ann);
         this.resolve(stmt.value);
         this.functionVarConstraint(stmt.target.name);
@@ -347,8 +306,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
     visitAssignStmt(stmt: StmtNS.Assign): void {
         const target = stmt.target;
+        this.resolve(stmt.value);
         if (target instanceof ExprNS.Subscript) {
-            throw new Error("Subscript assignment is not supported in assignment");
+            if (this.variant < 3) {
+                throw new ResolverErrors.UnsupportedFeatureError(target.startToken.line, target.startToken.col, this.source, target.startToken.indexInSource, target.startToken.indexInSource + target.startToken.lexeme.length);
+            }
+            this.resolve(target.value);
+            this.resolve(target.index);
+            return;
         }
         this.resolve(stmt.value);
         this.functionVarConstraint(target.name);
@@ -358,10 +323,27 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitAssertStmt(stmt: StmtNS.Assert): void {
         this.resolve(stmt.value);
     }
+
+    _declareForTargetNames(target: Expr): void {
+        if (target instanceof ExprNS.Variable) {
+            this.environment?.declareName(target.name);
+        } else if (target instanceof ExprNS.Tuple) { 
+            for (const element of target.elements) {
+                this._declareForTargetNames(element);
+            }
+        } else {
+            throw new ResolverErrors.InvalidSyntaxError(target.startToken.line, target.startToken.col, this.source, target.startToken.indexInSource, target.startToken.indexInSource + target.startToken.lexeme.length, "Invalid assignment target.");
+        }
+    }
     visitForStmt(stmt: StmtNS.For): void {
-        this.environment?.declareName(stmt.target);
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
+        this._declareForTargetNames(stmt.target);
         this.resolve(stmt.iter);
+        this.loopDepth += 1;
         this.resolve(stmt.body);
+        this.loopDepth -= 1;
     }
 
     visitIfStmt(stmt: StmtNS.If): void {
@@ -388,8 +370,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitWhileStmt(stmt: StmtNS.While): void {
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
         this.resolve(stmt.condition);
+        this.loopDepth += 1;
         this.resolve(stmt.body);
+        this.loopDepth -= 1;
     }
     visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
         this.resolve(stmt.expression);
@@ -403,11 +390,22 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitContinueStmt(stmt: StmtNS.Continue): void {
+        if (this.loopDepth === 0) {
+            throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'continue' outside of loop");
+        }
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
     }
     visitBreakStmt(stmt: StmtNS.Break): void {
+        if (this.loopDepth === 0) {
+            throw new ResolverErrors.InvalidSyntaxError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length, "'break' outside of loop");
+        }
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(stmt.startToken.line, stmt.startToken.col, this.source, stmt.startToken.indexInSource, stmt.startToken.indexInSource + stmt.startToken.lexeme.length);
+        }
     }
-    visitPassStmt(stmt: StmtNS.Pass): void {
-    }
+    visitPassStmt(stmt: StmtNS.Pass): void {}
 
 
 
@@ -420,10 +418,26 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     visitLambdaExpr(expr: ExprNS.Lambda): void {
         // Create a new environment.
         const oldEnv = this.environment;
+        
+        // Validate that there are no starred parameters, as those are not supported in the Python 2 and below.
+        if (this.variant < 3 && expr.parameters.some(param => param.isStarred)) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
+        let hasSeenStarred = false;
+        for (const param of expr.parameters) {
+            if (param.isStarred) {
+                if (hasSeenStarred) {
+                    throw new ResolverErrors.InvalidSyntaxError(param.line, param.col, this.source, param.indexInSource, param.indexInSource + param.lexeme.length, "Multiple starred parameters are not allowed.");
+                }
+                hasSeenStarred = true;
+            }
+        }
+
         // Assign the parameters to the new environment.
         const newEnv = new Map(
             expr.parameters.map(param => [param.lexeme, param])
         );
+        
         this.environment = new Environment(this.source, this.environment, newEnv);
         this.resolve(expr.body);
         // Restore old environment
@@ -450,6 +464,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         this.resolve(expr.expression);
     }
     visitBinaryExpr(expr: ExprNS.Binary): void {
+        if (this.variant <= 4 && [TokenType.CIRCUMFLEX, TokenType.VBAR, TokenType.AT, TokenType.TILDE, TokenType.AMPER].includes(expr.operator.type)) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.left);
         this.resolve(expr.right);
     }
@@ -481,11 +498,25 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     visitListExpr(expr: ExprNS.List): void {
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.elements);
     }
     visitSubscriptExpr(expr: ExprNS.Subscript): void {
+        if (this.variant < 3) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
         this.resolve(expr.value);
         this.resolve(expr.index);
+    }
+    visitTupleExpr(expr: ExprNS.Tuple): void {
+        if (this.variant <= 4) {
+            throw new ResolverErrors.UnsupportedFeatureError(expr.startToken.line, expr.startToken.col, this.source, expr.startToken.indexInSource, expr.startToken.indexInSource + expr.startToken.lexeme.length);
+        }
+        for (const element of expr.elements) {
+            this.resolve(element);
+        }
     }
     visitStarredExpr(expr: ExprNS.Starred): void {
         throw new Error("Starred expressions are not yet supported");
