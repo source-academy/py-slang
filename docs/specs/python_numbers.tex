@@ -1,0 +1,25 @@
+\subsection*{\href{https://sourceacademy.org/sicpjs/1.1.1\#p3}{Numbers}}
+
+Python supports three numeric types: integers (\texttt{int}), floats (\texttt{float}), and complex numbers (\texttt{complex}).
+
+\subsubsection*{Integers (\texttt{int})}
+
+Integers can be represented in decimal notation, optionally prefixed with a sign (\texttt{+} or \texttt{-}).
+Additional base notations are supported, such as binary (\texttt{0b1010} or \texttt{0B1010}), octal (\texttt{0o777} or \texttt{0O777}), and 
+hexadecimal (\texttt{0x1A3F} or \texttt{0X1A3F}). 
+Underscores (\verb|_|) may be used for readability (e.g., \verb|1_000_000|).
+Examples include \texttt{42}, \texttt{-0b1101}, and \verb|0x_FF_00|.
+
+\subsubsection*{Floats (\texttt{float})}
+Floats use decimal notation with an optional decimal dot. Scientific notation (multiplying the number by 
+$10^x$) is indicated with the letter \texttt{e} or \texttt{E}, followed by the exponent 
+\texttt{x}. 
+Special values inf (infinity), -inf, and nan (not a number) are allowed.
+Examples include \texttt{3.14}, \texttt{-0.001e+05}, and \texttt{6.022E23}.
+
+\subsubsection*{Complex Numbers (\texttt{complex})}
+Complex numbers are written as \texttt{<real>±<imag>j}, where \texttt{j} (or \texttt{J}) denotes the imaginary unit. 
+Both the real and imaginary parts are stored as floats. The imaginary part is mandatory 
+(e.g., \texttt{5j}, \texttt{0j}, and \texttt{0 + 3j} is valid, \texttt{5} alone is real).
+
+Examples include \texttt{2+3j}, \texttt{-4.5J}, \texttt{0j}, and \texttt{1e3-6.2E2J}.

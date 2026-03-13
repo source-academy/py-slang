@@ -1,0 +1,41 @@
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Install dependencies (apt)
+        run: |
+          sudo apt-get update && \
+          sudo apt-get install -y --no-install-recommends \
+          texlive texlive-fonts-extra texlive-lang-cjk latexmk latex-cjk-all
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+      - name: Install npm dependencies
+        run: npm install
+      - name: Build py-slang Doc
+        run: |
+          chmod +x scripts/jsdoc.sh
+          ./scripts/jsdoc.sh prepare
+      - name: Deploy to Branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.DOCS_DEPLOY_SSH_KEY }}
+          publish_dir: docs/python
+          external_repository: source-academy/docs.sourceacademy.org
+          publish_branch: deploy-py-slang
+          force_orphan: true
+
