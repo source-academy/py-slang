@@ -1,8 +1,8 @@
-import nodeResolve from '@rollup/plugin-node-resolve'
-import typescript from '@rollup/plugin-typescript'
-import json from '@rollup/plugin-json'
-import commonjs from '@rollup/plugin-commonjs'
-import sourcemaps from 'rollup-plugin-sourcemaps'
+import nodeResolve from '@rollup/plugin-node-resolve';
+import typescript from '@rollup/plugin-typescript';
+import json from '@rollup/plugin-json';
+import commonjs from '@rollup/plugin-commonjs';
+import sourcemaps from 'rollup-plugin-sourcemaps';
 
 /**
  * @type {import('rollup').RollupOptions}
@@ -14,17 +14,17 @@ const config = [
       file: 'dist/python-evaluator.cjs',
       format: 'cjs',
       name: 'PySlangEvaluator',
-      sourcemap: true
+      sourcemap: true,
     },
     plugins: [
       nodeResolve({ browser: true }),
       commonjs({
-        include: /node_modules/
+        include: /node_modules/,
       }),
       json(),
       typescript(),
-      sourcemaps()
-    ]
+      sourcemaps(),
+    ],
   },
   {
     input: 'src/index.ts',
@@ -32,18 +32,18 @@ const config = [
       file: 'dist/worker.js',
       format: 'iife',
       name: 'PySlangWorker',
-      sourcemap: true
+      sourcemap: true,
     },
     plugins: [
       nodeResolve({ browser: true }),
       commonjs({
-        include: /node_modules/
+        include: /node_modules/,
       }),
       json(),
       typescript(),
-      sourcemaps()
-    ]
-  }
-]
+      sourcemaps(),
+    ],
+  },
+];
 
-export default config
+export default config;

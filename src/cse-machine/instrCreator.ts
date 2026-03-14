@@ -1,4 +1,4 @@
-import { Environment } from './environment'
+import { Environment } from './environment';
 import {
   AppInstr,
   AssmtInstr,
@@ -10,77 +10,77 @@ import {
   Instr,
   InstrType,
   Node,
-  UnOpInstr
-} from './types'
-import { TokenType } from '../tokens'
+  UnOpInstr,
+} from './types';
+import { TokenType } from '../tokens';
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
+export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
 
 export const assmtInstr = (
   symbol: string,
   constant: boolean,
   declaration: boolean,
-  srcNode: Node
+  srcNode: Node,
 ): AssmtInstr => ({
   instrType: InstrType.ASSIGNMENT,
   symbol,
   constant,
   declaration,
-  srcNode
-})
+  srcNode,
+});
 
 export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({
   instrType: InstrType.APPLICATION,
   numOfArgs,
-  srcNode
-})
+  srcNode,
+});
 
 export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   instrType: InstrType.ENVIRONMENT,
   env,
-  srcNode
-})
+  srcNode,
+});
 
 export const markerInstr = (srcNode: Node): Instr => ({
   instrType: InstrType.MARKER,
-  srcNode
-})
+  srcNode,
+});
 
 export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   instrType: InstrType.BINARY_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const resetInstr = (srcNode: Node): Instr => ({
   instrType: InstrType.RESET,
-  srcNode
-})
+  srcNode,
+});
 
 export const branchInstr = (
   consequent: Node,
   alternate: Node | null | undefined,
-  srcNode: Node
+  srcNode: Node,
 ): BranchInstr => ({
   instrType: InstrType.BRANCH,
   consequent,
   alternate,
-  srcNode
-})
+  srcNode,
+});
 
 export const unOpInstr = (symbol: TokenType, srcNode: Node): UnOpInstr => ({
   instrType: InstrType.UNARY_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const boolOpInstr = (symbol: TokenType, srcNode: Node): BoolOpInstr => ({
   instrType: InstrType.BOOL_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr => ({
   instrType: InstrType.END_OF_FUNCTION_BODY,
-  srcNode
-})
+  srcNode,
+});

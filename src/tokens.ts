@@ -104,5 +104,5 @@ export enum TokenType {
   TRY,
   EXCEPT,
   FINALLY,
-  RAISE
+  RAISE,
 }

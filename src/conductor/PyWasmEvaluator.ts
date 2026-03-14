@@ -2,20 +2,20 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { BasicEvaluator, IRunnerPlugin } from '@sourceacademy/conductor/runner'
-import { compileToWasmAndRun } from '../wasm-compiler'
+import { BasicEvaluator, IRunnerPlugin } from '@sourceacademy/conductor/runner';
+import { compileToWasmAndRun } from '../wasm-compiler';
 
 export default class PyEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor)
+    super(conductor);
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      const result = await compileToWasmAndRun(chunk)
-      this.conductor.sendOutput(result.toString())
+      const result = await compileToWasmAndRun(chunk);
+      this.conductor.sendOutput(result.toString());
     } catch (error) {
-      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`)
+      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }
   }
 }

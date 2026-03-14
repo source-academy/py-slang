@@ -1,5 +1,5 @@
-import { f64, global, i32, i64, local, memory, wasm } from '@sourceacademy/wasm-util'
-import { WasmInstruction } from '@sourceacademy/wasm-util'
+import { f64, global, i32, i64, local, memory, wasm } from '@sourceacademy/wasm-util';
+import { WasmInstruction } from '@sourceacademy/wasm-util';
 
 // tags
 export const TYPE_TAG = {
@@ -11,8 +11,8 @@ export const TYPE_TAG = {
   CLOSURE: 5,
   NONE: 6,
   UNBOUND: 7,
-  PAIR: 8
-} as const
+  PAIR: 8,
+} as const;
 
 export const ERROR_MAP = {
   NEG_NOT_SUPPORT: [0, 'Unary minus operator used on unsupported operand.'],
@@ -26,11 +26,11 @@ export const ERROR_MAP = {
   HEAD_NOT_PAIR: [8, 'Accessing the head of a non-pair value.'],
   TAIL_NOT_PAIR: [9, 'Accessing the tail of a non-pair value.'],
   BOOL_UNKNOWN_TYPE: [10, 'Trying to convert an unknnown runtime type to a bool.'],
-  BOOL_UNKNOWN_OP: [11, 'Unknown boolean binary operator.']
-} as const
+  BOOL_UNKNOWN_OP: [11, 'Unknown boolean binary operator.'],
+} as const;
 
-export const HEAP_PTR = '$_heap_pointer'
-export const CURR_ENV = '$_current_env'
+export const HEAP_PTR = '$_heap_pointer';
+export const CURR_ENV = '$_current_env';
 
 // boxing functions
 
@@ -39,14 +39,14 @@ export const MAKE_INT_FX = wasm
   .func('$_make_int')
   .params({ $value: i64 })
   .results(i32, i64)
-  .body(i32.const(TYPE_TAG.INT), local.get('$value'))
+  .body(i32.const(TYPE_TAG.INT), local.get('$value'));
 
 // reinterpret bits as int
 export const MAKE_FLOAT_FX = wasm
   .func('$_make_float')
   .params({ $value: f64 })
   .results(i32, i64)
-  .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get('$value')))
+  .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get('$value')));
 
 // upper 32: pointer to f64 real part; lower 32: pointer to f64 imaginary part
 export const MAKE_COMPLEX_FX = wasm
@@ -60,8 +60,8 @@ export const MAKE_COMPLEX_FX = wasm
     i32.const(TYPE_TAG.COMPLEX),
     i64.extend_i32_u(global.get(HEAP_PTR)),
 
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16)))
-  )
+    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
+  );
 
 // store directly as i32
 export const MAKE_BOOL_FX = wasm
@@ -74,8 +74,8 @@ export const MAKE_BOOL_FX = wasm
       .if(i32.eqz(local.get('$value')))
       .results(i64)
       .then(i64.const(0))
-      .else(i64.const(1))
-  )
+      .else(i64.const(1)),
+  );
 
 // upper 32: pointer; lower 32: length
 export const MAKE_STRING_FX = wasm
@@ -84,11 +84,8 @@ export const MAKE_STRING_FX = wasm
   .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.STRING),
-    i64.or(
-      i64.shl(i64.extend_i32_u(local.get('$ptr')), i64.const(32)),
-      i64.extend_i32_u(local.get('$len'))
-    )
-  )
+    i64.or(i64.shl(i64.extend_i32_u(local.get('$ptr')), i64.const(32)), i64.extend_i32_u(local.get('$len'))),
+  );
 
 // upper 16: tag; upperMid 8: arity; lowerMid 8: envSize; lower 32: parentEnv
 export const MAKE_CLOSURE_FX = wasm
@@ -102,18 +99,15 @@ export const MAKE_CLOSURE_FX = wasm
       i64.or(
         i64.or(
           i64.shl(i64.extend_i32_u(local.get('$tag')), i64.const(48)),
-          i64.shl(i64.extend_i32_u(local.get('$arity')), i64.const(40))
+          i64.shl(i64.extend_i32_u(local.get('$arity')), i64.const(40)),
         ),
-        i64.shl(i64.extend_i32_u(local.get('$env_size')), i64.const(32))
+        i64.shl(i64.extend_i32_u(local.get('$env_size')), i64.const(32)),
       ),
-      i64.extend_i32_u(local.get('$parent_env'))
-    )
-  )
+      i64.extend_i32_u(local.get('$parent_env')),
+    ),
+  );
 
-export const MAKE_NONE_FX = wasm
-  .func('$_make_none')
-  .results(i32, i64)
-  .body(i32.const(TYPE_TAG.NONE), i64.const(0))
+export const MAKE_NONE_FX = wasm.func('$_make_none').results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
 
 // pair-related functions
 
@@ -131,8 +125,8 @@ export const MAKE_PAIR_FX = wasm
     i32.const(TYPE_TAG.PAIR),
     i64.extend_i32_u(global.get(HEAP_PTR)),
 
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24)))
-  )
+    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24))),
+  );
 
 export const GET_PAIR_HEAD_FX = wasm
   .func('$_get_pair_head')
@@ -141,14 +135,11 @@ export const GET_PAIR_HEAD_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get('$tag'), i32.const(TYPE_TAG.PAIR)))
-      .then(
-        wasm.call('$_log_error').args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])),
-        wasm.unreachable()
-      ),
+      .then(wasm.call('$_log_error').args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])), wasm.unreachable()),
 
     i32.load(i32.wrap_i64(local.get('$val'))),
-    i64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(4)))
-  )
+    i64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(4))),
+  );
 
 export const GET_PAIR_TAIL_FX = wasm
   .func('$_get_pair_tail')
@@ -157,14 +148,11 @@ export const GET_PAIR_TAIL_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get('$tag'), i32.const(TYPE_TAG.PAIR)))
-      .then(
-        wasm.call('$_log_error').args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])),
-        wasm.unreachable()
-      ),
+      .then(wasm.call('$_log_error').args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])), wasm.unreachable()),
 
     i32.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(12))),
-    i64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(16)))
-  )
+    i64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(16))),
+  );
 
 export const SET_PAIR_HEAD_FX = wasm
   .func('$_set_pair_head')
@@ -172,14 +160,11 @@ export const SET_PAIR_HEAD_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get('$pair_tag'), i32.const(TYPE_TAG.PAIR)))
-      .then(
-        wasm.call('$_log_error').args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])),
-        wasm.unreachable()
-      ),
+      .then(wasm.call('$_log_error').args(i32.const(ERROR_MAP.HEAD_NOT_PAIR[0])), wasm.unreachable()),
 
     i32.store(i32.wrap_i64(local.get('$pair_val')), local.get('$tag')),
-    i64.store(i32.add(i32.wrap_i64(local.get('$pair_val')), i32.const(4)), local.get('$val'))
-  )
+    i64.store(i32.add(i32.wrap_i64(local.get('$pair_val')), i32.const(4)), local.get('$val')),
+  );
 
 export const SET_PAIR_TAIL_FX = wasm
   .func('$_set_pair_tail')
@@ -187,14 +172,11 @@ export const SET_PAIR_TAIL_FX = wasm
   .body(
     wasm
       .if(i32.ne(local.get('$pair_tag'), i32.const(TYPE_TAG.PAIR)))
-      .then(
-        wasm.call('$_log_error').args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])),
-        wasm.unreachable()
-      ),
+      .then(wasm.call('$_log_error').args(i32.const(ERROR_MAP.TAIL_NOT_PAIR[0])), wasm.unreachable()),
 
     i32.store(i32.add(i32.wrap_i64(local.get('$pair_val')), i32.const(12)), local.get('$tag')),
-    i64.store(i32.add(i32.wrap_i64(local.get('$pair_val')), i32.const(16)), local.get('$val'))
-  )
+    i64.store(i32.add(i32.wrap_i64(local.get('$pair_val')), i32.const(16)), local.get('$val')),
+  );
 
 // logging functions
 export const importedLogs = [
@@ -205,8 +187,8 @@ export const importedLogs = [
   wasm.import('console', 'log_string').func('$_log_string').params(i32, i32),
   wasm.import('console', 'log_closure').func('$_log_closure').params(i32, i32, i32, i32),
   wasm.import('console', 'log_none').func('$_log_none'),
-  wasm.import('console', 'log_error').func('$_log_error').params(i32)
-]
+  wasm.import('console', 'log_error').func('$_log_error').params(i32),
+];
 
 export const LOG_FX = wasm
   .func('$_log')
@@ -225,9 +207,9 @@ export const LOG_FX = wasm
           .call('$_log_complex')
           .args(
             f64.load(i32.wrap_i64(local.get('$value'))),
-            f64.load(i32.add(i32.wrap_i64(local.get('$value')), i32.const(8)))
+            f64.load(i32.add(i32.wrap_i64(local.get('$value')), i32.const(8))),
           ),
-        wasm.return()
+        wasm.return(),
       ),
     wasm
       .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.BOOL)))
@@ -237,11 +219,8 @@ export const LOG_FX = wasm
       .then(
         wasm
           .call('$_log_string')
-          .args(
-            i32.wrap_i64(i64.shr_u(local.get('$value'), i64.const(32))),
-            i32.wrap_i64(local.get('$value'))
-          ),
-        wasm.return()
+          .args(i32.wrap_i64(i64.shr_u(local.get('$value'), i64.const(32))), i32.wrap_i64(local.get('$value'))),
+        wasm.return(),
       ),
     wasm
       .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.CLOSURE)))
@@ -252,28 +231,22 @@ export const LOG_FX = wasm
             i32.and(i32.wrap_i64(i64.shr_u(local.get('$value'), i64.const(48))), i32.const(65535)),
             i32.and(i32.wrap_i64(i64.shr_u(local.get('$value'), i64.const(40))), i32.const(255)),
             i32.and(i32.wrap_i64(i64.shr_u(local.get('$value'), i64.const(32))), i32.const(255)),
-            i32.wrap_i64(local.get('$value'))
+            i32.wrap_i64(local.get('$value')),
           ),
-        wasm.return()
+        wasm.return(),
       ),
-    wasm
-      .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.NONE)))
-      .then(wasm.call('$_log_none'), wasm.return()),
+    wasm.if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.NONE))).then(wasm.call('$_log_none'), wasm.return()),
     wasm
       .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.PAIR)))
       .then(
-        wasm
-          .call('$_log')
-          .args(wasm.call(GET_PAIR_HEAD_FX).args(local.get('$tag'), local.get('$value'))),
-        wasm
-          .call('$_log')
-          .args(wasm.call(GET_PAIR_TAIL_FX).args(local.get('$tag'), local.get('$value'))),
-        wasm.return()
+        wasm.call('$_log').args(wasm.call(GET_PAIR_HEAD_FX).args(local.get('$tag'), local.get('$value'))),
+        wasm.call('$_log').args(wasm.call(GET_PAIR_TAIL_FX).args(local.get('$tag'), local.get('$value'))),
+        wasm.return(),
       ),
 
     wasm.call('$_log_error').args(i32.const(ERROR_MAP.LOG_UNKNOWN_TYPE[0])),
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 // unary operation functions
 export const NEG_FX = wasm
@@ -284,20 +257,12 @@ export const NEG_FX = wasm
     wasm
       .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.INT)))
       .then(
-        wasm.return(
-          wasm
-            .call(MAKE_INT_FX)
-            .args(i64.add(i64.xor(local.get('$x_val'), i64.const(-1)), i64.const(1)))
-        )
+        wasm.return(wasm.call(MAKE_INT_FX).args(i64.add(i64.xor(local.get('$x_val'), i64.const(-1)), i64.const(1)))),
       ),
 
     wasm
       .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.FLOAT)))
-      .then(
-        wasm.return(
-          wasm.call(MAKE_FLOAT_FX).args(f64.neg(f64.reinterpret_i64(local.get('$x_val'))))
-        )
-      ),
+      .then(wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.neg(f64.reinterpret_i64(local.get('$x_val')))))),
 
     wasm
       .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.COMPLEX)))
@@ -307,16 +272,16 @@ export const NEG_FX = wasm
             .call(MAKE_COMPLEX_FX)
             .args(
               f64.neg(f64.load(i32.wrap_i64(local.get('$x_val')))),
-              f64.neg(f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8))))
-            )
-        )
+              f64.neg(f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8)))),
+            ),
+        ),
       ),
 
     wasm.call('$_log_error').args(i32.const(ERROR_MAP.NEG_NOT_SUPPORT[0])),
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
-export const ARITHMETIC_OP_TAG = { ADD: 0, SUB: 1, MUL: 2, DIV: 3 } as const
+export const ARITHMETIC_OP_TAG = { ADD: 0, SUB: 1, MUL: 2, DIV: 3 } as const;
 // binary operation function
 export const ARITHMETIC_OP_FX = wasm
   .func('$_py_arith_op')
@@ -331,9 +296,9 @@ export const ARITHMETIC_OP_FX = wasm
           i32.eq(local.get('$op'), i32.const(ARITHMETIC_OP_TAG.ADD)),
           i32.and(
             i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.STRING)),
-            i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.STRING))
-          )
-        )
+            i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.STRING)),
+          ),
+        ),
       )
       .then(
         global.get(HEAP_PTR), // starting address of new string
@@ -341,76 +306,55 @@ export const ARITHMETIC_OP_FX = wasm
         memory.copy(
           global.get(HEAP_PTR),
           i32.wrap_i64(i64.shr_u(local.get('$x_val'), i64.const(32))),
-          i32.wrap_i64(local.get('$x_val'))
+          i32.wrap_i64(local.get('$x_val')),
         ),
         global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.wrap_i64(local.get('$x_val')))),
         memory.copy(
           global.get(HEAP_PTR),
           i32.wrap_i64(i64.shr_u(local.get('$y_val'), i64.const(32))),
-          i32.wrap_i64(local.get('$y_val'))
+          i32.wrap_i64(local.get('$y_val')),
         ),
         global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.wrap_i64(local.get('$y_val')))),
         i32.add(i32.wrap_i64(local.get('$x_val')), i32.wrap_i64(local.get('$y_val'))),
 
-        wasm.return(wasm.call(MAKE_STRING_FX).args())
+        wasm.return(wasm.call(MAKE_STRING_FX).args()),
       ),
 
     // if either's bool, convert to int
-    wasm
-      .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.BOOL)))
-      .then(local.set('$x_tag', i32.const(TYPE_TAG.INT))),
-    wasm
-      .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.BOOL)))
-      .then(local.set('$y_tag', i32.const(TYPE_TAG.INT))),
+    wasm.if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.BOOL))).then(local.set('$x_tag', i32.const(TYPE_TAG.INT))),
+    wasm.if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.BOOL))).then(local.set('$y_tag', i32.const(TYPE_TAG.INT))),
 
     // if both int, use int instr (except for division: use float)
     wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.INT)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT)),
+        ),
       )
       .then(
         ...wasm.buildBrTableBlocks(
           wasm.br_table(local.get('$op'), '$add', '$sub', '$mul', '$div'),
-          wasm.return(
-            wasm.call(MAKE_INT_FX).args(i64.add(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_INT_FX).args(i64.sub(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_INT_FX).args(i64.mul(local.get('$x_val'), local.get('$y_val')))
-          ),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.add(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.sub(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_INT_FX).args(i64.mul(local.get('$x_val'), local.get('$y_val')))),
           wasm.return(
             wasm
               .call(MAKE_FLOAT_FX)
-              .args(
-                f64.div(
-                  f64.convert_i64_s(local.get('$x_val')),
-                  f64.convert_i64_s(local.get('$y_val'))
-                )
-              )
-          )
-        )
+              .args(f64.div(f64.convert_i64_s(local.get('$x_val')), f64.convert_i64_s(local.get('$y_val')))),
+          ),
+        ),
       ),
 
     // else, if either's int, convert to float and set float locals
     wasm
       .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.INT)))
-      .then(
-        local.set('$a', f64.convert_i64_s(local.get('$x_val'))),
-        local.set('$x_tag', i32.const(TYPE_TAG.FLOAT))
-      )
+      .then(local.set('$a', f64.convert_i64_s(local.get('$x_val'))), local.set('$x_tag', i32.const(TYPE_TAG.FLOAT)))
       .else(local.set('$a', f64.reinterpret_i64(local.get('$x_val')))),
 
     wasm
       .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT)))
-      .then(
-        local.set('$c', f64.convert_i64_s(local.get('$y_val'))),
-        local.set('$y_tag', i32.const(TYPE_TAG.FLOAT))
-      )
+      .then(local.set('$c', f64.convert_i64_s(local.get('$y_val'))), local.set('$y_tag', i32.const(TYPE_TAG.FLOAT)))
       .else(local.set('$c', f64.reinterpret_i64(local.get('$y_val')))),
 
     // if both float, use float instr
@@ -418,8 +362,8 @@ export const ARITHMETIC_OP_FX = wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.FLOAT)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT)),
+        ),
       )
       .then(
         ...wasm.buildBrTableBlocks(
@@ -427,8 +371,8 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.add(local.get('$a'), local.get('$c')))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.sub(local.get('$a'), local.get('$c')))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.mul(local.get('$a'), local.get('$c')))),
-          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get('$a'), local.get('$c'))))
-        )
+          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get('$a'), local.get('$c')))),
+        ),
       ),
 
     // else, if either's complex, load from mem, set locals (default 0)
@@ -437,14 +381,14 @@ export const ARITHMETIC_OP_FX = wasm
       .then(local.set('$x_tag', i32.const(TYPE_TAG.COMPLEX)))
       .else(
         local.set('$a', f64.load(i32.wrap_i64(local.get('$x_val')))),
-        local.set('$b', f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8))))
+        local.set('$b', f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8)))),
       ),
     wasm
       .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT)))
       .then(local.set('$y_tag', i32.const(TYPE_TAG.COMPLEX)))
       .else(
         local.set('$c', f64.load(i32.wrap_i64(local.get('$y_val')))),
-        local.set('$d', f64.load(i32.add(i32.wrap_i64(local.get('$y_val')), i32.const(8))))
+        local.set('$d', f64.load(i32.add(i32.wrap_i64(local.get('$y_val')), i32.const(8)))),
       ),
 
     // if both complex, perform complex operations
@@ -452,8 +396,8 @@ export const ARITHMETIC_OP_FX = wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.COMPLEX)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.COMPLEX))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.COMPLEX)),
+        ),
       )
       .then(
         ...wasm.buildBrTableBlocks(
@@ -461,33 +405,21 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(
             wasm
               .call(MAKE_COMPLEX_FX)
-              .args(
-                f64.add(local.get('$a'), local.get('$c')),
-                f64.add(local.get('$b'), local.get('$d'))
-              )
+              .args(f64.add(local.get('$a'), local.get('$c')), f64.add(local.get('$b'), local.get('$d'))),
           ),
           wasm.return(
             wasm
               .call(MAKE_COMPLEX_FX)
-              .args(
-                f64.sub(local.get('$a'), local.get('$c')),
-                f64.sub(local.get('$b'), local.get('$d'))
-              )
+              .args(f64.sub(local.get('$a'), local.get('$c')), f64.sub(local.get('$b'), local.get('$d'))),
           ),
           // (a+bi)*(c+di) = (ac-bd) + (ad+bc)i
           wasm.return(
             wasm
               .call(MAKE_COMPLEX_FX)
               .args(
-                f64.sub(
-                  f64.mul(local.get('$a'), local.get('$c')),
-                  f64.mul(local.get('$b'), local.get('$d'))
-                ),
-                f64.add(
-                  f64.mul(local.get('$b'), local.get('$c')),
-                  f64.mul(local.get('$a'), local.get('$d'))
-                )
-              )
+                f64.sub(f64.mul(local.get('$a'), local.get('$c')), f64.mul(local.get('$b'), local.get('$d'))),
+                f64.add(f64.mul(local.get('$b'), local.get('$c')), f64.mul(local.get('$a'), local.get('$d'))),
+              ),
           ),
           // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
           wasm.return(
@@ -497,31 +429,22 @@ export const ARITHMETIC_OP_FX = wasm
                 local.tee(
                   '$denom',
                   f64.div(
-                    f64.add(
-                      f64.mul(local.get('$a'), local.get('$c')),
-                      f64.mul(local.get('$b'), local.get('$d'))
-                    ),
-                    f64.add(
-                      f64.mul(local.get('$c'), local.get('$c')),
-                      f64.mul(local.get('$d'), local.get('$d'))
-                    )
-                  )
+                    f64.add(f64.mul(local.get('$a'), local.get('$c')), f64.mul(local.get('$b'), local.get('$d'))),
+                    f64.add(f64.mul(local.get('$c'), local.get('$c')), f64.mul(local.get('$d'), local.get('$d'))),
+                  ),
                 ),
                 f64.div(
-                  f64.sub(
-                    f64.mul(local.get('$b'), local.get('$c')),
-                    f64.mul(local.get('$a'), local.get('$d'))
-                  ),
-                  local.get('$denom')
-                )
-              )
-          )
-        )
+                  f64.sub(f64.mul(local.get('$b'), local.get('$c')), f64.mul(local.get('$a'), local.get('$d'))),
+                  local.get('$denom'),
+                ),
+              ),
+          ),
+        ),
       ),
 
     wasm.call('$_log_error').args(i32.const(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE[0])),
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 export const COMPARISON_OP_TAG = {
   EQ: 0,
@@ -529,8 +452,8 @@ export const COMPARISON_OP_TAG = {
   LT: 2,
   LTE: 3,
   GT: 4,
-  GTE: 5
-} as const
+  GTE: 5,
+} as const;
 // comparison function
 export const STRING_COMPARE_FX = wasm
   .func('$_py_string_cmp')
@@ -540,11 +463,7 @@ export const STRING_COMPARE_FX = wasm
   .body(
     local.set(
       '$min_len',
-      wasm.select(
-        local.get('$x_len'),
-        local.get('$y_len'),
-        i32.lt_s(local.get('$x_len'), local.get('$y_len'))
-      )
+      wasm.select(local.get('$x_len'), local.get('$y_len'), i32.lt_s(local.get('$x_len'), local.get('$y_len'))),
     ),
 
     wasm.loop('$loop').body(
@@ -558,12 +477,12 @@ export const STRING_COMPARE_FX = wasm
 
         local.set('$i', i32.add(local.get('$i'), i32.const(1))),
 
-        wasm.br('$loop')
-      )
+        wasm.br('$loop'),
+      ),
     ),
 
-    wasm.return(i32.sub(local.get('$y_len'), local.get('$x_len')))
-  )
+    wasm.return(i32.sub(local.get('$y_len'), local.get('$x_len'))),
+  );
 
 export const COMPARISON_OP_FX = wasm
   .func('$_py_compare_op')
@@ -576,8 +495,8 @@ export const COMPARISON_OP_FX = wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.STRING)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.STRING))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.STRING)),
+        ),
       )
       .then(
         local.set(
@@ -588,8 +507,8 @@ export const COMPARISON_OP_FX = wasm
               i32.wrap_i64(i64.shr_u(local.get('$x_val'), i64.const(32))),
               i32.wrap_i64(local.get('$x_val')),
               i32.wrap_i64(i64.shr_u(local.get('$y_val'), i64.const(32))),
-              i32.wrap_i64(local.get('$y_val'))
-            )
+              i32.wrap_i64(local.get('$y_val')),
+            ),
         ),
 
         ...wasm.buildBrTableBlocks(
@@ -599,64 +518,42 @@ export const COMPARISON_OP_FX = wasm
           wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.lt_s(local.get('$x_tag'), i32.const(0)))),
           wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.le_s(local.get('$x_tag'), i32.const(0)))),
           wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.gt_s(local.get('$x_tag'), i32.const(0)))),
-          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ge_s(local.get('$x_tag'), i32.const(0))))
-        )
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.ge_s(local.get('$x_tag'), i32.const(0)))),
+        ),
       ),
 
     // if either are bool, convert to int
-    wasm
-      .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.BOOL)))
-      .then(local.set('$x_tag', i32.const(TYPE_TAG.INT))),
-    wasm
-      .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.BOOL)))
-      .then(local.set('$y_tag', i32.const(TYPE_TAG.INT))),
+    wasm.if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.BOOL))).then(local.set('$x_tag', i32.const(TYPE_TAG.INT))),
+    wasm.if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.BOOL))).then(local.set('$y_tag', i32.const(TYPE_TAG.INT))),
 
     // if both int, use int comparison
     wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.INT)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT)),
+        ),
       )
       .then(
         ...wasm.buildBrTableBlocks(
           wasm.br_table(local.get('$op'), '$eq', '$neq', '$lt', '$lte', '$gt', '$gte'),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.eq(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.ne(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.lt_s(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.le_s(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.gt_s(local.get('$x_val'), local.get('$y_val')))
-          ),
-          wasm.return(
-            wasm.call(MAKE_BOOL_FX).args(i64.ge_s(local.get('$x_val'), local.get('$y_val')))
-          )
-        )
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.eq(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.ne(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.lt_s(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.le_s(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.gt_s(local.get('$x_val'), local.get('$y_val')))),
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(i64.ge_s(local.get('$x_val'), local.get('$y_val')))),
+        ),
       ),
 
     // else, if either are int, convert to float and set float locals
     wasm
       .if(i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.INT)))
-      .then(
-        local.set('$a', f64.convert_i64_s(local.get('$x_val'))),
-        local.set('$x_tag', i32.const(TYPE_TAG.FLOAT))
-      )
+      .then(local.set('$a', f64.convert_i64_s(local.get('$x_val'))), local.set('$x_tag', i32.const(TYPE_TAG.FLOAT)))
       .else(local.set('$a', f64.reinterpret_i64(local.get('$x_val')))),
     wasm
       .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.INT)))
-      .then(
-        local.set('$c', f64.convert_i64_s(local.get('$y_val'))),
-        local.set('$y_tag', i32.const(TYPE_TAG.FLOAT))
-      )
+      .then(local.set('$c', f64.convert_i64_s(local.get('$y_val'))), local.set('$y_tag', i32.const(TYPE_TAG.FLOAT)))
       .else(local.set('$c', f64.reinterpret_i64(local.get('$y_val')))),
 
     // if both float, use float comparison
@@ -664,8 +561,8 @@ export const COMPARISON_OP_FX = wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.FLOAT)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT)),
+        ),
       )
       .then(
         ...wasm.buildBrTableBlocks(
@@ -675,8 +572,8 @@ export const COMPARISON_OP_FX = wasm
           wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.lt(local.get('$a'), local.get('$c')))),
           wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.le(local.get('$a'), local.get('$c')))),
           wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.gt(local.get('$a'), local.get('$c')))),
-          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ge(local.get('$a'), local.get('$c'))))
-        )
+          wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ge(local.get('$a'), local.get('$c')))),
+        ),
       ),
 
     // else, if either are complex, load complex from memory and set float locals (default 0)
@@ -685,14 +582,14 @@ export const COMPARISON_OP_FX = wasm
       .then(local.set('$x_tag', i32.const(TYPE_TAG.COMPLEX)))
       .else(
         local.set('$a', f64.load(i32.wrap_i64(local.get('$x_val')))),
-        local.set('$b', f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8))))
+        local.set('$b', f64.load(i32.add(i32.wrap_i64(local.get('$x_val')), i32.const(8)))),
       ),
     wasm
       .if(i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.FLOAT)))
       .then(local.set('$y_tag', i32.const(TYPE_TAG.COMPLEX)))
       .else(
         local.set('$c', f64.load(i32.wrap_i64(local.get('$y_val')))),
-        local.set('$d', f64.load(i32.add(i32.wrap_i64(local.get('$y_val')), i32.const(8))))
+        local.set('$d', f64.load(i32.add(i32.wrap_i64(local.get('$y_val')), i32.const(8)))),
       ),
 
     // if both complex, compare real and imaginary parts. only ==, !=
@@ -700,8 +597,8 @@ export const COMPARISON_OP_FX = wasm
       .if(
         i32.and(
           i32.eq(local.get('$x_tag'), i32.const(TYPE_TAG.COMPLEX)),
-          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.COMPLEX))
-        )
+          i32.eq(local.get('$y_tag'), i32.const(TYPE_TAG.COMPLEX)),
+        ),
       )
       .then(
         wasm
@@ -710,13 +607,8 @@ export const COMPARISON_OP_FX = wasm
             wasm.return(
               wasm
                 .call(MAKE_BOOL_FX)
-                .args(
-                  i32.and(
-                    f64.eq(local.get('$a'), local.get('$c')),
-                    f64.eq(local.get('$b'), local.get('$d'))
-                  )
-                )
-            )
+                .args(i32.and(f64.eq(local.get('$a'), local.get('$c')), f64.eq(local.get('$b'), local.get('$d')))),
+            ),
           )
           .else(
             wasm
@@ -725,19 +617,11 @@ export const COMPARISON_OP_FX = wasm
                 wasm.return(
                   wasm
                     .call(MAKE_BOOL_FX)
-                    .args(
-                      i32.or(
-                        f64.ne(local.get('$a'), local.get('$c')),
-                        f64.ne(local.get('$b'), local.get('$d'))
-                      )
-                    )
-                )
+                    .args(i32.or(f64.ne(local.get('$a'), local.get('$c')), f64.ne(local.get('$b'), local.get('$d')))),
+                ),
               )
-              .else(
-                wasm.call('$_log_error').args(i32.const(ERROR_MAP.COMPLEX_COMPARISON[0])),
-                wasm.unreachable()
-              )
-          )
+              .else(wasm.call('$_log_error').args(i32.const(ERROR_MAP.COMPLEX_COMPARISON[0])), wasm.unreachable()),
+          ),
       ),
 
     // else, default to not equal
@@ -747,13 +631,13 @@ export const COMPARISON_OP_FX = wasm
       .else(
         wasm
           .if(i32.eq(local.get('$op'), i32.const(COMPARISON_OP_TAG.NEQ)))
-          .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1))))
+          .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1)))),
       ),
 
     // other operators: unreachable
     wasm.call('$_log_error').args(i32.const(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE[0])),
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 // bool related functions
 
@@ -770,21 +654,14 @@ export const BOOLISE_FX = wasm
     // bool or int => return bool with value (False if 0)
     wasm
       .if(
-        i32.or(
-          i32.eq(local.get('$tag'), i32.const(TYPE_TAG.INT)),
-          i32.eq(local.get('$tag'), i32.const(TYPE_TAG.BOOL))
-        )
+        i32.or(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.INT)), i32.eq(local.get('$tag'), i32.const(TYPE_TAG.BOOL))),
       )
       .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.wrap_i64(local.get('$val'))))),
 
     // float/complex => False if equivalent of 0
     wasm
       .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.FLOAT)))
-      .then(
-        wasm.return(
-          wasm.call(MAKE_BOOL_FX).args(f64.ne(f64.reinterpret_i64(local.get('$val')), f64.const(0)))
-        )
-      ),
+      .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(f64.ne(f64.reinterpret_i64(local.get('$val')), f64.const(0))))),
     wasm
       .if(i32.eq(local.get('$tag'), i32.const(TYPE_TAG.COMPLEX)))
       .then(
@@ -793,14 +670,11 @@ export const BOOLISE_FX = wasm
             .call(MAKE_BOOL_FX)
             .args(
               i32.or(
-                f64.ne(
-                  f64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(8))),
-                  f64.const(0)
-                ),
-                f64.ne(f64.load(i32.wrap_i64(local.get('$val'))), f64.const(0))
-              )
-            )
-        )
+                f64.ne(f64.load(i32.add(i32.wrap_i64(local.get('$val')), i32.const(8))), f64.const(0)),
+                f64.ne(f64.load(i32.wrap_i64(local.get('$val'))), f64.const(0)),
+              ),
+            ),
+        ),
       ),
 
     // string => False if length is 0
@@ -813,14 +687,14 @@ export const BOOLISE_FX = wasm
       .if(
         i32.or(
           i32.eq(local.get('$tag'), i32.const(TYPE_TAG.CLOSURE)),
-          i32.eq(local.get('$tag'), i32.const(TYPE_TAG.PAIR))
-        )
+          i32.eq(local.get('$tag'), i32.const(TYPE_TAG.PAIR)),
+        ),
       )
       .then(wasm.return(wasm.call(MAKE_BOOL_FX).args(i32.const(1)))),
 
     wasm.call('$_log_error').args(i32.const(ERROR_MAP.BOOL_UNKNOWN_TYPE[0])),
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 export const BOOL_NOT_FX = wasm
   .func('$_bool_not')
@@ -828,10 +702,10 @@ export const BOOL_NOT_FX = wasm
   .results(i32, i64)
   .body(
     i32.const(TYPE_TAG.BOOL),
-    i64.extend_i32_u(i64.eqz(wasm.call(BOOLISE_FX).args(local.get('$tag'), local.get('$val'))))
-  )
+    i64.extend_i32_u(i64.eqz(wasm.call(BOOLISE_FX).args(local.get('$tag'), local.get('$val')))),
+  );
 
-export const BOOL_BINARY_OP_TAG = { AND: 0, OR: 1 }
+export const BOOL_BINARY_OP_TAG = { AND: 0, OR: 1 };
 
 // *3*4 because each variable has a tag and payload = 3 words = 12 bytes; +4 because parentEnv is stored at start of env
 // we initialise only local variables to UNBOUND, NOT parameters.
@@ -854,10 +728,10 @@ export const ALLOC_ENV_FX = wasm
             i32.store(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND)),
             global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
             local.set('$size', i32.sub(local.get('$size'), i32.const(1))),
-            wasm.br('$loop')
-          )
-      )
-  )
+            wasm.br('$loop'),
+          ),
+      ),
+  );
 
 export const PRE_APPLY_FX = wasm
   .func('$_pre_apply')
@@ -870,15 +744,9 @@ export const PRE_APPLY_FX = wasm
 
     wasm
       .if(
-        i32.ne(
-          i32.and(i32.wrap_i64(i64.shr_u(local.get('$val'), i64.const(40))), i32.const(255)),
-          local.get('$arity')
-        )
+        i32.ne(i32.and(i32.wrap_i64(i64.shr_u(local.get('$val'), i64.const(40))), i32.const(255)), local.get('$arity')),
       )
-      .then(
-        wasm.call('$_log_error').args(i32.const(ERROR_MAP.FUNC_WRONG_ARITY[0])),
-        wasm.unreachable()
-      ),
+      .then(wasm.call('$_log_error').args(i32.const(ERROR_MAP.FUNC_WRONG_ARITY[0])), wasm.unreachable()),
 
     local.get('$tag'),
     local.get('$val'),
@@ -887,11 +755,11 @@ export const PRE_APPLY_FX = wasm
       .args(
         i32.and(i32.wrap_i64(i64.shr_u(local.get('$val'), i64.const(32))), i32.const(255)),
         i32.wrap_i64(local.get('$val')),
-        local.get('$arity')
-      )
-  )
+        local.get('$arity'),
+      ),
+  );
 
-export const APPLY_FX_NAME = '$_apply'
+export const APPLY_FX_NAME = '$_apply';
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
@@ -899,16 +767,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .results(i32, i64)
     .body(
       ...wasm.buildBrTableBlocks(
-        wasm.br_table(
-          i32.wrap_i64(i64.shr_u(local.get('$val'), i64.const(48))),
-          ...Array(bodies.length).keys()
-        ),
+        wasm.br_table(i32.wrap_i64(i64.shr_u(local.get('$val'), i64.const(48))), ...Array(bodies.length).keys()),
         ...bodies.map(body => [
           ...body,
-          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get('$return_env')))
-        ])
-      )
-    )
+          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get('$return_env'))),
+        ]),
+      ),
+    );
 
 export const GET_LEX_ADDR_FX = wasm
   .func('$_get_lex_addr')
@@ -922,12 +787,7 @@ export const GET_LEX_ADDR_FX = wasm
       wasm.if(i32.eqz(local.get('$depth'))).then(
         local.set(
           '$tag',
-          i32.load(
-            i32.add(
-              i32.add(local.get('$env'), i32.const(4)),
-              i32.mul(local.get('$index'), i32.const(12))
-            )
-          )
+          i32.load(i32.add(i32.add(local.get('$env'), i32.const(4)), i32.mul(local.get('$index'), i32.const(12)))),
         ),
 
         wasm
@@ -936,22 +796,17 @@ export const GET_LEX_ADDR_FX = wasm
 
         wasm.return(
           local.get('$tag'),
-          i64.load(
-            i32.add(
-              i32.add(local.get('$env'), i32.const(8)),
-              i32.mul(local.get('$index'), i32.const(12))
-            )
-          )
-        )
+          i64.load(i32.add(i32.add(local.get('$env'), i32.const(8)), i32.mul(local.get('$index'), i32.const(12)))),
+        ),
       ),
 
       local.set('$env', i32.load(local.get('$env'))),
       local.set('$depth', i32.sub(local.get('$depth'), i32.const(1))),
-      wasm.br('$loop')
+      wasm.br('$loop'),
     ),
 
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 export const SET_LEX_ADDR_FX = wasm
   .func('$_set_lex_addr')
@@ -965,29 +820,23 @@ export const SET_LEX_ADDR_FX = wasm
         .if(i32.eqz(local.get('$depth')))
         .then(
           i32.store(
-            i32.add(
-              i32.add(local.get('$env'), i32.const(4)),
-              i32.mul(local.get('$index'), i32.const(12))
-            ),
-            local.get('$tag')
+            i32.add(i32.add(local.get('$env'), i32.const(4)), i32.mul(local.get('$index'), i32.const(12))),
+            local.get('$tag'),
           ),
           i64.store(
-            i32.add(
-              i32.add(local.get('$env'), i32.const(8)),
-              i32.mul(local.get('$index'), i32.const(12))
-            ),
-            local.get('$value')
+            i32.add(i32.add(local.get('$env'), i32.const(8)), i32.mul(local.get('$index'), i32.const(12))),
+            local.get('$value'),
           ),
-          wasm.return()
+          wasm.return(),
         ),
 
       local.set('$env', i32.load(local.get('$env'))),
       local.set('$depth', i32.sub(local.get('$depth'), i32.const(1))),
-      wasm.br('$loop')
+      wasm.br('$loop'),
     ),
 
-    wasm.unreachable()
-  )
+    wasm.unreachable(),
+  );
 
 export const SET_PARAM_FX = wasm
   .func('$_set_param')
@@ -995,22 +844,16 @@ export const SET_PARAM_FX = wasm
   .results(i32)
   .body(
     i32.store(
-      i32.add(
-        i32.add(local.get('$addr'), i32.const(4)),
-        i32.mul(local.get('$index'), i32.const(12))
-      ),
-      local.get('$tag')
+      i32.add(i32.add(local.get('$addr'), i32.const(4)), i32.mul(local.get('$index'), i32.const(12))),
+      local.get('$tag'),
     ),
     i64.store(
-      i32.add(
-        i32.add(local.get('$addr'), i32.const(8)),
-        i32.mul(local.get('$index'), i32.const(12))
-      ),
-      local.get('$value')
+      i32.add(i32.add(local.get('$addr'), i32.const(8)), i32.mul(local.get('$index'), i32.const(12))),
+      local.get('$value'),
     ),
 
-    local.get('$addr')
-  )
+    local.get('$addr'),
+  );
 
 export const nativeFunctions = [
   MAKE_INT_FX,
@@ -1036,5 +879,5 @@ export const nativeFunctions = [
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
-  SET_PARAM_FX
-]
+  SET_PARAM_FX,
+];
