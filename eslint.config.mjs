@@ -5,7 +5,7 @@ import tseslint from 'typescript-eslint';
 export default defineConfig([
   {
     // global ignores
-    ignores: ['dist', 'docs', 'node_modules'],
+    ignores: ['dist', 'docs', 'coverage', 'node_modules'],
   },
   tseslint.configs.recommended,
   eslintConfigPrettierFlat,
