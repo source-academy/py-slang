@@ -23,7 +23,7 @@ jobs:
           node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
-      - run: yarn run build --if-present
+      - run: yarn run build
       - run: yarn run format:ci
       - run: yarn run lint
       - run: yarn run test-coverage
