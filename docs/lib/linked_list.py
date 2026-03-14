@@ -137,15 +137,15 @@ def equal(xs, ys):
         return False
 
 
-def length(xs):
+def length_linked_list(xs):
     """
     Returns the length of the linked list xs.
     """
-    return _length(xs, 0)
+    return _length_linked_list(xs, 0)
 
 
-def _length(xs, acc):
-    return acc if is_none(xs) else _length(tail(xs), acc + 1)
+def _length_linked_list(xs, acc):
+    return acc if is_none(xs) else _length_linked_list(tail(xs), acc + 1)
 
 
 def map_linked_list(f, xs):
@@ -158,7 +158,7 @@ def map_linked_list(f, xs):
 
 def _map_linked_list(f, xs, acc):
     return (
-        reverse(acc)
+        reverse_linked_list(acc)
         if is_none(xs)
         else _map_linked_list(f, tail(xs), pair(f(head(xs)), acc))
     )
@@ -180,7 +180,7 @@ def _build_linked_list(i, fun, already_built):
     )
 
 
-def for_each(fun, xs):
+def for_each_linked_list(fun, xs):
     """
     Applies the unary function fun to every element of the linked list xs.
     """
@@ -188,7 +188,7 @@ def for_each(fun, xs):
         return True
     else:
         fun(head(xs))  # Side effect happens here if fun is not pure
-        return for_each(fun, tail(xs))
+        return for_each_linked_list(fun, tail(xs))
 
 
 def linked_list_to_string(xs):
@@ -213,38 +213,42 @@ def _linked_list_to_string(xs, cont):
         return cont(stringify(xs))
 
 
-def reverse(xs):
+def reverse_linked_list(xs):
     """
     Returns linked list xs in reverse order.
     """
-    return _reverse(xs, None)
+    return _reverse_linked_list(xs, None)
 
 
-def _reverse(original, reversed_acc):
+def _reverse_linked_list(original, reversed_acc):
     return (
         reversed_acc
         if is_none(original)
-        else _reverse(tail(original), pair(head(original), reversed_acc))
+        else _reverse_linked_list(
+            tail(original), pair(head(original), reversed_acc)
+        )
     )
 
 
-def append(xs, ys):
+def append_linked_list(xs, ys):
     """
     Returns a linked list that results from appending the linked list ys
     to the linked list xs.
     """
-    return _append(xs, ys, lambda x: x)
+    return _append_linked_list(xs, ys, lambda x: x)
 
 
-def _append(xs, ys, cont):
+def _append_linked_list(xs, ys, cont):
     return (
         cont(ys)
         if is_none(xs)
-        else _append(tail(xs), ys, lambda zs: cont(pair(head(xs), zs)))
+        else _append_linked_list(
+            tail(xs), ys, lambda zs: cont(pair(head(xs), zs))
+        )
     )
 
 
-def member(v, xs):
+def member_linked_list(v, xs):
     """
     Returns first postfix sub-linked list whose head is identical to v
     (using ==). Returns None if the element does not occur in the linked
@@ -255,41 +259,41 @@ def member(v, xs):
     elif v == head(xs):
         return xs
     else:
-        return member(v, tail(xs))
+        return member_linked_list(v, tail(xs))
 
 
-def remove(v, xs):
+def remove_linked_list(v, xs):
     """
     Returns a linked list that results from xs by removing the first item
     from xs that is identical (==) to v.
     """
-    return _remove(v, xs, None)
+    return _remove_linked_list(v, xs, None)
 
 
-def _remove(v, xs, acc):
+def _remove_linked_list(v, xs, acc):
     if is_none(xs):
-        return append(reverse(acc), xs)
+        return append_linked_list(reverse_linked_list(acc), xs)
     elif v == head(xs):
-        return append(reverse(acc), tail(xs))
+        return append_linked_list(reverse_linked_list(acc), tail(xs))
     else:
-        return _remove(v, tail(xs), pair(head(xs), acc))
+        return _remove_linked_list(v, tail(xs), pair(head(xs), acc))
 
 
-def remove_all(v, xs):
+def remove_all_linked_list(v, xs):
     """
     Returns a linked list that results from xs by removing all items from
     xs that are identical (==) to v.
     """
-    return _remove_all(v, xs, None)
+    return _remove_all_linked_list(v, xs, None)
 
 
-def _remove_all(v, xs, acc):
+def _remove_all_linked_list(v, xs, acc):
     if is_none(xs):
-        return append(reverse(acc), xs)
+        return append_linked_list(reverse_linked_list(acc), xs)
     elif v == head(xs):
-        return _remove_all(v, tail(xs), acc)
+        return _remove_all_linked_list(v, tail(xs), acc)
     else:
-        return _remove_all(v, tail(xs), pair(head(xs), acc))
+        return _remove_all_linked_list(v, tail(xs), pair(head(xs), acc))
 
 
 def enum_linked_list(start, end):
@@ -301,13 +305,13 @@ def enum_linked_list(start, end):
 
 def _enum_linked_list(start, end, acc):
     return (
-        reverse(acc)
+        reverse_linked_list(acc)
         if start > end
         else _enum_linked_list(start + 1, end, pair(start, acc))
     )
 
 
-def list_ref(xs, n):
+def ref_linked_list(xs, n):
     """
     Returns the element of linked list xs at position n (0-indexed).
     """
@@ -320,7 +324,7 @@ def list_ref(xs, n):
     else:
         if is_none(xs):
             raise IndexError("linked_list_ref: index out of bounds")
-        return list_ref(tail(xs), n - 1)
+        return ref_linked_list(tail(xs), n - 1)
 
 
 def accumulate_linked_list(f, initial, xs):
@@ -357,7 +361,7 @@ def filter_linked_list(pred, xs):
 
 def _filter_linked_list(pred, xs, acc):
     if is_none(xs):
-        return reverse(acc)
+        return reverse_linked_list(acc)
     else:
         if pred(head(xs)):
             return _filter_linked_list(pred, tail(xs), pair(head(xs), acc))

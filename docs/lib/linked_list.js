@@ -88,7 +88,7 @@ function equal(xs, ys) {}
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  * @returns {int} length of xs
  */
-function length(xs) {}
+function length_linked_list(xs) {}
 
 /**
  * Returns a linked list that results from linked list xs by element-wise application of unary function f.
@@ -114,7 +114,7 @@ function build_linked_list(fun, n) {}
  * @param {function} <CODE>fun</CODE> - given unary function
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  */
-function for_each(fun, xs) {}
+function for_each_linked_list(fun, xs) {}
 
 /**
  * Returns a string that represents linked list xs using the text-based box-and-pointer notation.
@@ -130,7 +130,7 @@ function linked_list_to_string(xs) {}
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  * @returns {linked_list} linked list xs in reverse order
  */
-function reverse(xs) {}
+function reverse_linked_list(xs) {}
 
 /**
  * Returns a linked list that results from appending the linked list ys to the linked list xs.
@@ -139,7 +139,7 @@ function reverse(xs) {}
  * @param {linked_list} <CODE>ys</CODE> - given linked list
  * @returns {linked_list} linked list that results from appending ys to xs
  */
-function append(xs, ys) {}
+function append_linked_list(xs, ys) {}
 
 /**
  * Returns first postfix sub-linked list whose head is identical to v (using ==). Returns None if the element does not occur in the linked list.
@@ -148,7 +148,7 @@ function append(xs, ys) {}
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  * @returns {linked_list} first postfix sub-linked list of xs whose head is identical to v, or None if no such sub-linked list exists
  */
-function member(v, xs) {}
+function member_linked_list(v, xs) {}
 
 /**
  * Returns a linked list that results from xs by removing the first item from xs that is identical (==) to v.
@@ -157,7 +157,7 @@ function member(v, xs) {}
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  * @returns {linked_list} linked list that results from removing the first item from xs that is identical to v
  */
-function remove(v, xs) {}
+function remove_linked_list(v, xs) {}
 
 /**
  * Returns a linked list that results from xs by removing all items from xs that are identical (==) to v.
@@ -166,7 +166,7 @@ function remove(v, xs) {}
  * @param {linked_list} <CODE>xs</CODE> - given linked list
  * @returns {linked_list} linked list that results from removing all items from xs that are identical to v
  */
-function remove_all(v, xs) {}
+function remove_all_linked_list(v, xs) {}
 
 /**
  * Makes a linked list with elements from start to end (inclusive).
@@ -184,7 +184,7 @@ function enum_linked_list(start, end) {}
  * @param {int} <CODE>n</CODE> - index of the element to return
  * @returns {value} element of xs at position n
  */
-function list_ref(xs, n) {}
+function ref_linked_list(xs, n) {}
 
 /**
  * Applies binary function f to the elements of xs from right-to-left order.
