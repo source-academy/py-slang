@@ -1,132 +1,127 @@
-import { Environment } from './environment';
 import { ExprNS, StmtNS } from '../ast-types';
 import { TokenType } from '../tokens';
-import { Statement } from 'estree';
+import { Environment } from './environment';
 
-export type Node = { isEnvDependent?: boolean } & (
-    | StmtNS.Stmt
-    | ExprNS.Expr
-    | StatementSequence
-);
+export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
 
 export interface StatementSequence {
-  type: 'StatementSequence'
-  body: StmtNS.Stmt[]
+  type: 'StatementSequence';
+  body: StmtNS.Stmt[];
   loc?: {
-    start: { line: number; column: number }
-    end: { line: number; column: number }
-  }
+    start: { line: number; column: number };
+    end: { line: number; column: number };
+  };
 }
 
 export enum InstrType {
-    RESET = 'Reset',
-    WHILE = 'While',
-    FOR = 'For',
-    ASSIGNMENT = 'Assignment',
-    ANN_ASSIGNMENT = 'AnnAssignment',
-    APPLICATION = 'Application',
-    UNARY_OP = 'UnaryOperation',
-    BINARY_OP = 'BinaryOperation',
-    BOOL_OP = 'BoolOperation',
-    COMPARE = 'Compare',
-    CALL = 'Call',
-    RETURN = 'Return',
-    BREAK = 'Break',
-    CONTINUE = 'Continue',
-    IF = 'If',
-    FUNCTION_DEF = 'FunctionDef',
-    LAMBDA = 'Lambda',
-    MULTI_LAMBDA = 'MultiLambda',
-    GROUPING = 'Grouping',
-    LITERAL = 'Literal',
-    VARIABLE = 'Variable',
-    TERNARY = 'Ternary',
-    PASS = 'Pass',
-    ASSERT = 'Assert',
-    IMPORT = 'Import',
-    GLOBAL = 'Global',
-    NONLOCAL = 'NonLocal',
-    Program = 'Program',
-    BRANCH = 'Branch',
-    POP = 'Pop',
-    ENVIRONMENT = 'environment',
-    MARKER = 'marker',
-    END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+  RESET = 'Reset',
+  WHILE = 'While',
+  FOR = 'For',
+  ASSIGNMENT = 'Assignment',
+  ANN_ASSIGNMENT = 'AnnAssignment',
+  APPLICATION = 'Application',
+  UNARY_OP = 'UnaryOperation',
+  BINARY_OP = 'BinaryOperation',
+  BOOL_OP = 'BoolOperation',
+  COMPARE = 'Compare',
+  CALL = 'Call',
+  RETURN = 'Return',
+  BREAK = 'Break',
+  CONTINUE = 'Continue',
+  IF = 'If',
+  FUNCTION_DEF = 'FunctionDef',
+  LAMBDA = 'Lambda',
+  MULTI_LAMBDA = 'MultiLambda',
+  GROUPING = 'Grouping',
+  LITERAL = 'Literal',
+  VARIABLE = 'Variable',
+  TERNARY = 'Ternary',
+  PASS = 'Pass',
+  ASSERT = 'Assert',
+  IMPORT = 'Import',
+  GLOBAL = 'Global',
+  NONLOCAL = 'NonLocal',
+  Program = 'Program',
+  BRANCH = 'Branch',
+  POP = 'Pop',
+  ENVIRONMENT = 'environment',
+  MARKER = 'marker',
+  END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
 }
 
 interface BaseInstr {
-  instrType: InstrType
-  srcNode: Node
-  isEnvDependent?: boolean
+  instrType: InstrType;
+  srcNode: Node;
+  isEnvDependent?: boolean;
 }
 
 export interface WhileInstr extends BaseInstr {
-  instrType: InstrType.WHILE
-  test: ExprNS.Expr
-  body: StatementSequence
+  instrType: InstrType.WHILE;
+  test: ExprNS.Expr;
+  body: StatementSequence;
 }
 
 export interface ForInstr extends BaseInstr {
-  instrType: InstrType.FOR
-  init: ExprNS.Variable
-  test: ExprNS.Expr
-  update: Node
-  body: StatementSequence
+  instrType: InstrType.FOR;
+  init: ExprNS.Variable;
+  test: ExprNS.Expr;
+  update: Node;
+  body: StatementSequence;
 }
 
 export interface AssmtInstr extends BaseInstr {
-  instrType: InstrType.ASSIGNMENT
-  symbol: string
-  constant: boolean
-  declaration: boolean
+  instrType: InstrType.ASSIGNMENT;
+  symbol: string;
+  constant: boolean;
+  declaration: boolean;
 }
 
 export interface UnOpInstr extends BaseInstr {
-  instrType: InstrType.UNARY_OP
-  symbol: TokenType
+  instrType: InstrType.UNARY_OP;
+  symbol: TokenType;
 }
 
 export interface BinOpInstr extends BaseInstr {
-  instrType: InstrType.BINARY_OP
-  symbol: TokenType
+  instrType: InstrType.BINARY_OP;
+  symbol: TokenType;
 }
 
 export interface AppInstr extends BaseInstr {
-  instrType: InstrType.APPLICATION
-  numOfArgs: number
-  srcNode: Node
+  instrType: InstrType.APPLICATION;
+  numOfArgs: number;
+  srcNode: Node;
 }
 
 export interface BranchInstr extends BaseInstr {
-  instrType: InstrType.BRANCH
-  consequent: Node
-  alternate: Node | null | undefined
+  instrType: InstrType.BRANCH;
+  consequent: Node;
+  alternate: Node | null | undefined;
 }
 
 export interface EnvInstr extends BaseInstr {
-  instrType: InstrType.ENVIRONMENT
-  env: Environment
+  instrType: InstrType.ENVIRONMENT;
+  env: Environment;
 }
 
 export interface ArrLitInstr extends BaseInstr {
-  arity: number
+  arity: number;
 }
 
 export interface EndOfFunctionBodyInstr extends BaseInstr {
-  instrType: InstrType.END_OF_FUNCTION_BODY
+  instrType: InstrType.END_OF_FUNCTION_BODY;
 }
 
 export interface ResetInstr extends BaseInstr {
-  instrType: InstrType.RESET
+  instrType: InstrType.RESET;
 }
 
 export interface PopInstr extends BaseInstr {
-  instrType: InstrType.POP
+  instrType: InstrType.POP;
 }
 
 export interface BoolOpInstr extends BaseInstr {
-  instrType: InstrType.BOOL_OP
-  symbol: TokenType
+  instrType: InstrType.BOOL_OP;
+  symbol: TokenType;
 }
 
 export type Instr =
@@ -143,64 +138,64 @@ export type Instr =
   | EndOfFunctionBodyInstr
   | ResetInstr
   | PopInstr
-  | BoolOpInstr
+  | BoolOpInstr;
 
 export function typeTranslator(type: string): string {
   switch (type) {
     case 'bigint':
-      return 'int'
+      return 'int';
     case 'number':
-      return 'float'
+      return 'float';
     case 'boolean':
-      return 'bool'
+      return 'bool';
     case 'bool':
-      return 'bool'
+      return 'bool';
     case 'string':
-      return 'str'
+      return 'str';
     case 'complex':
-      return 'complex'
+      return 'complex';
     case 'undefined':
-      return 'NoneType'
+      return 'NoneType';
     default:
-      return 'unknown'
+      return 'unknown';
   }
 }
 
 export function operatorTranslator(operator: TokenType | string) {
   switch (operator) {
     case TokenType.PLUS:
-      return '+'
+      return '+';
     case TokenType.MINUS:
-      return '-'
+      return '-';
     case TokenType.STAR:
-      return '*'
+      return '*';
     case TokenType.SLASH:
-      return '/'
+      return '/';
     case TokenType.DOUBLESLASH:
-      return '//'
+      return '//';
     case TokenType.PERCENT:
-      return '%'
+      return '%';
     case TokenType.DOUBLESTAR:
-      return '**'
+      return '**';
     case TokenType.LESS:
-      return '<'
+      return '<';
     case TokenType.GREATER:
-      return '>'
+      return '>';
     case TokenType.DOUBLEEQUAL:
-      return '=='
+      return '==';
     case TokenType.NOTEQUAL:
-      return '!='
+      return '!=';
     case TokenType.LESSEQUAL:
-      return '<='
+      return '<=';
     case TokenType.GREATEREQUAL:
-      return '>='
+      return '>=';
     case TokenType.NOT:
-      return 'not'
+      return 'not';
     case TokenType.AND:
-      return 'and'
+      return 'and';
     case TokenType.OR:
-      return 'or'
+      return 'or';
     default:
-      return String(operator)
+      return String(operator);
   }
 }

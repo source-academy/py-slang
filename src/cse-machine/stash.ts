@@ -1,35 +1,31 @@
 // Value.ts
+import { StmtNS } from '../ast-types';
+import { PyComplexNumber } from '../types';
 import { Closure } from './closure';
+import { Context } from './context';
+import { ControlItem } from './control';
 import { Environment } from './environment';
 import { Stack } from './stack';
-import { ExprNS, StmtNS } from '../ast-types';
-import { PyComplexNumber } from '../types';
 
 /**
  * Value represents various runtime values in Python.
  */
-export type Value = any
-//   | NumberValue
-//   | BoolValue
-//   | StringValue
-//   | FunctionValue
-//   | LambdaValue
-//   | MultiLambdaValue
-//   | ErrorValue
-//   | UndefinedValue
-//   | string
-//   | BigIntValue
-//   | pyClosureValue;
+export type Value =
+  | NumberValue
+  | BuiltinValue
+  | BoolValue
+  | ComplexValue
+  | StringValue
+  | FunctionValue
+  | MultiLambdaValue
+  | ErrorValue
+  | NoneValue
+  | BigIntValue
+  | ClosureValue;
 
-export interface pyClosureValue {
-  type: "closure";
+export interface ClosureValue {
+  type: 'closure';
   closure: Closure;
-}
-
-export interface Builtin {
-  type: 'builtin';
-  name: string;
-  func: (...args: any[]) => any;
 }
 
 export interface BigIntValue {
@@ -38,8 +34,8 @@ export interface BigIntValue {
 }
 
 export interface ComplexValue {
-  type: 'complex'
-  value: PyComplexNumber
+  type: 'complex';
+  value: PyComplexNumber;
 }
 
 export interface NumberValue {
@@ -65,13 +61,6 @@ export interface FunctionValue {
   env: Environment;
 }
 
-export interface LambdaValue {
-  type: 'lambda';
-  parameters: string[];
-  body: ExprNS.Expr;
-  env: Environment;
-}
-
 export interface MultiLambdaValue {
   type: 'multi_lambda';
   parameters: string[];
@@ -85,9 +74,14 @@ export interface ErrorValue {
   message: string;
 }
 
-// TODO: Merge undefined and None.
-export interface UndefinedValue {
-  type: 'undefined';
+export interface NoneValue {
+  type: 'none';
+}
+
+export interface BuiltinValue {
+  type: 'builtin';
+  name: string;
+  func: (args: Value[], code: string, command: ControlItem, context: Context) => Value;
 }
 
 export class Stash extends Stack<Value> {

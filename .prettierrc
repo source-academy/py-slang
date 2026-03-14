@@ -1,5 +1,8 @@
 {
-  "printWidth": 80,
+  "singleQuote": true,
+  "printWidth": 100,
+  "arrowParens": "avoid",
+  "endOfLine": "auto",
   "overrides": [
     {
       "files": "constants.ts",
