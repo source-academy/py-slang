@@ -15,9 +15,7 @@ export default class PyEvaluator extends BasicEvaluator {
       const result = await compileToWasmAndRun(chunk);
       this.conductor.sendOutput(result.toString());
     } catch (error) {
-      this.conductor.sendOutput(
-        `Error: ${error instanceof Error ? error.message : error}`,
-      );
+      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }
   }
 }

@@ -1,5 +1,5 @@
 {
-    "builtInFuncs": [
+  "builtInFuncs": [
     "_int",
     "_int_from_string",
     "abs",
@@ -63,12 +63,6 @@
     "str",
     "print",
     "input"
-    ], 
-    "constants": [
-    "math_e",
-    "math_inf",
-    "math_nan",
-    "math_pi",
-    "math_tau"
-    ]
+  ],
+  "constants": ["math_e", "math_inf", "math_nan", "math_pi", "math_tau"]
 }
