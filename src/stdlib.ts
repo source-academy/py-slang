@@ -1,9 +1,8 @@
-import { Value } from './cse-machine/stash';
-// npm install mathjs
 import { erf, gamma, lgamma } from 'mathjs';
 import { Context } from './cse-machine/context';
 import { ControlItem } from './cse-machine/control';
 import { handleRuntimeError } from './cse-machine/error';
+import { Value } from './cse-machine/stash';
 import {
   MissingRequiredPositionalError,
   SublanguageError,
