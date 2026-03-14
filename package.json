@@ -50,7 +50,6 @@
     "@sourceacademy/wasm-util": "^1.0.4",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
-    "typedoc": "^0.28.17",
     "wabt": "^1.0.37"
   }
 }
