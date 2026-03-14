@@ -1,3 +1,15 @@
+import {
+  f64,
+  global,
+  i32,
+  i64,
+  local,
+  mut,
+  wasm,
+  WasmInstruction,
+  WasmNumeric,
+  WasmRaw,
+} from '@sourceacademy/wasm-util';
 import { ExprNS, StmtNS } from '../ast-types';
 import { TokenType } from '../tokens';
 import {
@@ -34,8 +46,6 @@ import {
   SET_PARAM_FX,
   TYPE_TAG,
 } from './constants';
-import { f64, global, i32, i64, local, mut, wasm } from '@sourceacademy/wasm-util';
-import { WasmInstruction, WasmNumeric, WasmRaw } from '@sourceacademy/wasm-util';
 
 const builtInFunctions: {
   name: string;

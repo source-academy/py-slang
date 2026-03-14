@@ -1,11 +1,11 @@
 // Value.ts
-import { Closure } from './closure';
-import { Environment } from './environment';
-import { Stack } from './stack';
 import { StmtNS } from '../ast-types';
 import { PyComplexNumber } from '../types';
-import { ControlItem } from './control';
+import { Closure } from './closure';
 import { Context } from './context';
+import { ControlItem } from './control';
+import { Environment } from './environment';
+import { Stack } from './stack';
 
 /**
  * Value represents various runtime values in Python.

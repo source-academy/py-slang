@@ -1,10 +1,10 @@
+import { WatGenerator } from '@sourceacademy/wasm-util';
 import assert from 'assert';
 import wabt from 'wabt';
 import { Parser } from '../parser';
 import { Tokenizer } from '../tokenizer';
 import { BuilderGenerator } from './builderGenerator';
 import { ERROR_MAP } from './constants';
-import { WatGenerator } from '@sourceacademy/wasm-util';
 
 export async function compileToWasmAndRun(code: string) {
   const script = code + '\n';

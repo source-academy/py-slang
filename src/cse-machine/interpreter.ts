@@ -6,8 +6,15 @@
 
 /* tslint:disable:max-classes-per-file */
 
+import { ExprNS, StmtNS } from '../ast-types';
+import * as error from '../errors/errors';
+import { BuiltinReassignmentError } from '../errors/errors';
+import { IOptions } from '../runner/pyRunner';
+import { builtIns, toPythonString } from '../stdlib';
+import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
+import { Closure } from './closure';
+import { Context } from './context';
 import { Control, ControlItem } from './control';
-import { Stash, Value } from './stash';
 import {
   createEnvironment,
   createProgramEnvironment,
@@ -15,9 +22,15 @@ import {
   popEnvironment,
   pushEnvironment,
 } from './environment';
-import { Context } from './context';
-import { isNode, scanForAssignments } from './utils';
-import { envChanging, pyDefineVariable, pyGetVariable } from './utils';
+import { handleRuntimeError } from './error';
+import * as instrCreator from './instrCreator';
+import {
+  evaluateBinaryExpression,
+  evaluateBoolExpression,
+  evaluateUnaryExpression,
+  isFalsy,
+} from './operators';
+import { Stash, Value } from './stash';
 import {
   AppInstr,
   AssmtInstr,
@@ -31,21 +44,7 @@ import {
   StatementSequence,
   UnOpInstr,
 } from './types';
-import { Closure } from './closure';
-import {
-  evaluateBinaryExpression,
-  evaluateBoolExpression,
-  evaluateUnaryExpression,
-  isFalsy,
-} from './operators';
-import * as error from '../errors/errors';
-import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
-import { builtIns, toPythonString } from '../stdlib';
-import { IOptions } from '../runner/pyRunner';
-import { ExprNS, StmtNS } from '../ast-types';
-import { handleRuntimeError } from './error';
-import * as instrCreator from './instrCreator';
-import { BuiltinReassignmentError } from '../errors/errors';
+import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
 
 type CmdEvaluator = (
   code: string,

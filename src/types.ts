@@ -1,8 +1,8 @@
-import { toPythonString } from './stdlib';
-import { Value } from './cse-machine/stash';
 import { Context } from './cse-machine/context';
-import { ModuleFunctions } from './modules/moduleTypes';
+import { Value } from './cse-machine/stash';
 import { SourceLocation } from './errors';
+import { ModuleFunctions } from './modules/moduleTypes';
+import { toPythonString } from './stdlib';
 
 export class CSEBreak {}
 

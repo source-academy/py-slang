@@ -1,8 +1,8 @@
-import { Token } from '../tokenizer';
-import { Context } from '../cse-machine/context';
 import { ExprNS } from '../ast-types';
-import { operatorTranslator } from '../cse-machine/types';
+import { Context } from '../cse-machine/context';
 import { Value } from '../cse-machine/stash';
+import { operatorTranslator } from '../cse-machine/types';
+import { Token } from '../tokenizer';
 
 export enum ErrorType {
   IMPORT = 'Import',

@@ -1,12 +1,12 @@
+import { ExprNS } from '../ast-types';
+import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
+import { TokenType } from '../tokens';
+import { PyComplexNumber } from '../types';
 import { Context } from './context';
 import { handleRuntimeError } from './error';
 import { Value } from './stash';
 import { operatorTranslator, typeTranslator } from './types';
 import { pythonMod } from './utils';
-import { ExprNS } from '../ast-types';
-import { TokenType } from '../tokens';
-import { PyComplexNumber } from '../types';
-import { UnsupportedOperandTypeError, ZeroDivisionError } from '../errors/errors';
 
 export type BinaryOperator =
   | '=='

@@ -1,9 +1,10 @@
-import { StmtNS, ExprNS } from '../ast-types';
-type Expr = ExprNS.Expr;
-type Stmt = StmtNS.Stmt;
+import { ExprNS, StmtNS } from '../ast-types';
 import { Token } from '../tokenizer/tokenizer';
 import { TokenType } from '../tokens';
 import { ResolverErrors } from './errors';
+
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 
 import levenshtein from 'fast-levenshtein';
 // const levenshtein = require('fast-levenshtein');

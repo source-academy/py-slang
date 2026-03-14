@@ -1,20 +1,20 @@
+import { ExprNS, StmtNS } from '../ast-types';
+import { NameError, UnboundLocalError } from '../errors/errors';
+import { builtInConstants, builtIns } from '../stdlib';
 import { Context } from './context';
 import { Control, ControlItem } from './control';
 import { currentEnvironment, Environment } from './environment';
-import {
-  Instr,
-  InstrType,
-  BranchInstr,
-  WhileInstr,
-  ForInstr,
-  Node,
-  StatementSequence,
-} from './types';
 import { AssertionError } from './error';
 import { Value } from './stash';
-import { ExprNS, StmtNS } from '../ast-types';
-import { builtIns, builtInConstants } from '../stdlib';
-import { NameError, UnboundLocalError } from '../errors/errors';
+import {
+  BranchInstr,
+  ForInstr,
+  Instr,
+  InstrType,
+  Node,
+  StatementSequence,
+  WhileInstr,
+} from './types';
 
 export const isNode = (command: ControlItem): command is Node => {
   return !isInstr(command);

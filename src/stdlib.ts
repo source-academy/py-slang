@@ -1,16 +1,16 @@
 import { Value } from './cse-machine/stash';
 // npm install mathjs
-import { gamma, lgamma, erf } from 'mathjs';
+import { erf, gamma, lgamma } from 'mathjs';
+import { Context } from './cse-machine/context';
+import { ControlItem } from './cse-machine/control';
 import { handleRuntimeError } from './cse-machine/error';
 import {
   MissingRequiredPositionalError,
-  TooManyPositionalArgumentsError,
-  ValueError,
-  TypeError,
   SublanguageError,
+  TooManyPositionalArgumentsError,
+  TypeError,
+  ValueError,
 } from './errors/errors';
-import { ControlItem } from './cse-machine/control';
-import { Context } from './cse-machine/context';
 
 export function Validate(
   minArgs: number | null,
@@ -2008,8 +2008,8 @@ export class BuiltInFunctions {
   }
 }
 
-import py_s1_constants from './stdlib/py_s1_constants.json';
 import { ExprNS, StmtNS } from './ast-types';
+import py_s1_constants from './stdlib/py_s1_constants.json';
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
 //       just change the variable below to switch to the set.

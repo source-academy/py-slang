@@ -1,8 +1,8 @@
+import { ExprNS, StmtNS } from '../ast-types';
 import { Closure } from './closure';
 import { Context } from './context';
 import { Heap } from './heap';
 import { Value } from './stash';
-import { ExprNS, StmtNS } from '../ast-types';
 
 export interface Frame {
   [name: string]: Value;

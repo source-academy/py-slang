@@ -1,6 +1,6 @@
-import { Tokenizer } from '../tokenizer';
 import { Parser } from '../parser';
 import { Resolver } from '../resolver';
+import { Tokenizer } from '../tokenizer';
 // import {Translator} from '../translator';
 import { StmtNS } from '../ast-types';
 import Stmt = StmtNS.Stmt;

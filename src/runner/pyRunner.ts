@@ -1,10 +1,10 @@
+import { StmtNS } from '../ast-types';
 import { Context } from '../cse-machine/context';
 import { CSEResultPromise, evaluate } from '../cse-machine/interpreter';
-import { RecursivePartial, Result } from '../types';
-import { Tokenizer } from '../tokenizer';
 import { Parser } from '../parser';
 import { Resolver } from '../resolver';
-import { StmtNS } from '../ast-types';
+import { Tokenizer } from '../tokenizer';
+import { RecursivePartial, Result } from '../types';
 
 type Stmt = StmtNS.Stmt;
 

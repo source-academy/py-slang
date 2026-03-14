@@ -39,9 +39,9 @@
     IN THE SOFTWARE.
 **/
 
-import { Token, SPECIAL_IDENTIFIER_TOKENS } from '../tokenizer/tokenizer';
-import { TokenType } from '../tokens';
 import { ExprNS, FunctionParam, StmtNS } from '../ast-types';
+import { SPECIAL_IDENTIFIER_TOKENS, Token } from '../tokenizer/tokenizer';
+import { TokenType } from '../tokens';
 import { ParserErrors } from './errors';
 
 type Expr = ExprNS.Expr;

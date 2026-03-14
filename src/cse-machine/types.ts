@@ -1,6 +1,6 @@
-import { Environment } from './environment';
 import { ExprNS, StmtNS } from '../ast-types';
 import { TokenType } from '../tokens';
+import { Environment } from './environment';
 
 export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
 
