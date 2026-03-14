@@ -1,5 +1,5 @@
 {
-  "exclude": ["docs", "jest.config.js", "node_modules", "dist", "src/tests"],
+  "exclude": ["docs", "coverage", "jest.config.js", "node_modules", "dist", "src/tests"],
   "include": ["src"],
   "compilerOptions": {
     /* Language and Environment */
