@@ -14,12 +14,9 @@ names are provided by the MISC library:
     respective value. For \verb#int#\texttt{(x)}, if \texttt{x} is a string,
     \texttt{x} is parsed
     as an integer in base 10.
-  \item \verb#parse_int#\texttt{(s, i)}: \textit{primitive},
+  \item \verb#int#\texttt{(s, i)}: \textit{primitive},
     interprets the \emph{string} \texttt{s} as an integer, using the
     positive integer \texttt{i} as radix, and returns the respective value.
-  \item
-    \href{https://sourceacademy.org/sicpjs/2.4.3\#p6}{\texttt{None}}:
-    refers to Python's None value.
   \item
     \href{https://sourceacademy.org/sicpjs/4.1.2\#p2}{\lstinline{is_boolean(x)}},
     \href{https://sourceacademy.org/sicpjs/2.3.2\#p5}{\lstinline{is_int(x)}},
@@ -29,15 +26,15 @@ names are provided by the MISC library:
     \verb#is_function#\texttt{(x)}: \textit{primitive}, returns
     \texttt{true} if the type of \texttt{x} matches the function name
     and \texttt{false} if it does not.
-  \item \texttt{prompt(s)}: \textit{primitive}, pops up a window that
+  \item \texttt{input(s)}: \textit{primitive}, pops up a window that
     displays the \emph{string} \texttt{s}, provides
     an input line for the user to enter a text, a ``Cancel'' button
-    and an ``OK'' button. The call of \texttt{prompt}
+    and an ``OK'' button. The call of \texttt{input}
     suspends execution of the program until one of the two buttons is
     pressed. If
-    the ``OK'' button is pressed, \texttt{prompt} returns the entered
+    the ``OK'' button is pressed, \texttt{input} returns the entered
     text as a string.
-    If the ``Cancel'' button is pressed, \texttt{prompt} returns a
+    If the ``Cancel'' button is pressed, \texttt{input} returns a
     non-string value.
   \item
     \href{https://sourceacademy.org/sicpjs/1.2.6\#footnote-7}{\texttt{print(x)}}:
