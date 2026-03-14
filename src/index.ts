@@ -1,4 +1,4 @@
-import { initialise } from '@sourceacademy/conductor/runner';
-import PyEvaluator from './conductor/PyEvaluator';
+import { initialise } from "@sourceacademy/conductor/runner";
+import PyEvaluator from "./conductor/PyEvaluator";
 
-initialise(PyEvaluator);
+const { runnerPlugin, conduit } = initialise(PyEvaluator);

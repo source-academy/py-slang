@@ -1,10 +1,10 @@
-import { StmtNS } from '../ast-types';
-import { Context } from '../cse-machine/context';
-import { CSEResultPromise, evaluate } from '../cse-machine/interpreter';
-import { Parser } from '../parser';
-import { Resolver } from '../resolver';
-import { Tokenizer } from '../tokenizer';
-import { RecursivePartial, Result } from '../types';
+import { StmtNS } from "../ast-types";
+import { Context } from "../cse-machine/context";
+import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
+import { Parser } from "../parser";
+import { Resolver } from "../resolver";
+import { Tokenizer } from "../tokenizer";
+import { RecursivePartial, Result } from "../types";
 
 type Stmt = StmtNS.Stmt;
 
@@ -14,8 +14,8 @@ export interface IOptions {
   stepLimit: number;
 }
 
-function runPyAST(code: string, _variant: number = 1, doValidate: boolean = false): Stmt {
-  const script = code + '\n';
+function runPyAST(code: string, variant: number = 1, doValidate: boolean = false): Stmt {
+  const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
   const pyParser = new Parser(script, tokens);
@@ -42,6 +42,6 @@ export function runCSEMachine(
   context: Context,
   options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options);
+  const result = evaluate(code, program, context, options as IOptions);
   return CSEResultPromise(context, result);
 }

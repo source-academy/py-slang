@@ -1,12 +1,11 @@
-import { Closure } from './closure';
-import { Environment } from './environment';
-import { Value } from './stash';
+import { Closure } from "./closure";
+import { Environment } from "./environment";
 
 // Every array also has the properties `id` and `environment` for use in the frontend CSE Machine
-export type EnvArray = (Value & {
+export type EnvArray = any[] & {
   readonly id: string;
   environment: Environment;
-})[];
+};
 
 // Objects in the heap can only store arrays or closures
 export type HeapObject = EnvArray | Closure;
@@ -14,20 +13,20 @@ export type HeapObject = EnvArray | Closure;
 /**
  * The heap stores all objects in each environment.
  */
-export class Heap<T extends HeapObject = HeapObject> {
-  private storage: Set<T> | null = null;
+export class Heap {
+  private storage: Set<HeapObject> | null = null;
 
   public constructor() {}
 
-  add(...items: T[]): void {
-    this.storage ??= new Set<T>();
+  add(...items: HeapObject[]): void {
+    this.storage ??= new Set<HeapObject>();
     for (const item of items) {
       this.storage.add(item);
     }
   }
 
   /** Checks the existence of `item` in the heap. */
-  contains(item: T): boolean {
+  contains(item: any): boolean {
     return this.storage?.has(item) ?? false;
   }
 
@@ -41,7 +40,7 @@ export class Heap<T extends HeapObject = HeapObject> {
    * If the current heap does not contain `item`, nothing happens.
    * @returns whether the item transfer is successful
    */
-  move(item: T, otherHeap: Heap<T>): boolean {
+  move(item: HeapObject, otherHeap: Heap): boolean {
     if (!this.contains(item)) return false;
     this.storage!.delete(item);
     otherHeap.add(item);
@@ -49,7 +48,7 @@ export class Heap<T extends HeapObject = HeapObject> {
   }
 
   /** Returns a copy of the heap's contents. */
-  getHeap(): Set<T> {
+  getHeap(): Set<HeapObject> {
     return new Set(this.storage);
   }
 }

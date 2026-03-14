@@ -1,8 +1,8 @@
-import { ExprNS, StmtNS } from '../ast-types';
-import { Context } from './context';
-import { ControlItem } from './control';
-import { Environment, uniqueId } from './environment';
-import { StatementSequence } from './types';
+import { ExprNS, StmtNS } from "../ast-types";
+import { Context } from "./context";
+import { ControlItem } from "./control";
+import { Environment, uniqueId } from "./environment";
+import { StatementSequence } from "./types";
 
 /**
  * Represents a python closure, the class is a runtime representation of a function.
@@ -65,5 +65,5 @@ export class Closure {
 }
 
 export const isStatementSequence = (node: ControlItem): node is StatementSequence => {
-  return (node as StatementSequence).type == 'StatementSequence';
+  return (node as StatementSequence).type == "StatementSequence";
 };

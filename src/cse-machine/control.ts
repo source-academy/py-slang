@@ -1,7 +1,7 @@
-import { StmtNS } from '../ast-types';
-import { Stack } from './stack';
-import { Instr, Node } from './types';
-import { isEnvDependent } from './utils';
+import { StmtNS } from "../ast-types";
+import { Stack } from "./stack";
+import { Instr, Node } from "./types";
+import { isEnvDependent } from "./utils";
 
 export type ControlItem = (Node | Instr) & {
   isEnvDependent?: boolean;
@@ -14,7 +14,7 @@ export class Control extends Stack<ControlItem> {
     super();
     this.numEnvDependentItems = 0;
     // Load program into control stack
-    if (program) this.push(program);
+    program ? this.push(program) : null;
   }
 
   public canAvoidEnvInstr(): boolean {

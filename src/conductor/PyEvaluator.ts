@@ -2,10 +2,10 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { BasicEvaluator, IRunnerPlugin } from '@sourceacademy/conductor/runner';
-import { Context } from '../cse-machine/context';
-import { IOptions, runInContext } from '../runner/pyRunner';
-import { Finished } from '../types';
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { Context } from "../cse-machine/context";
+import { IOptions, runInContext } from "../runner/pyRunner";
+import { Finished } from "../types";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {

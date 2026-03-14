@@ -1,11 +1,11 @@
-import { ExprNS, StmtNS } from '../ast-types';
-import { TokenType } from '../tokens';
-import { Environment } from './environment';
+import { ExprNS, StmtNS } from "../ast-types";
+import { TokenType } from "../tokens";
+import { Environment } from "./environment";
 
 export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
 
 export interface StatementSequence {
-  type: 'StatementSequence';
+  type: "StatementSequence";
   body: StmtNS.Stmt[];
   loc?: {
     start: { line: number; column: number };
@@ -14,39 +14,39 @@ export interface StatementSequence {
 }
 
 export enum InstrType {
-  RESET = 'Reset',
-  WHILE = 'While',
-  FOR = 'For',
-  ASSIGNMENT = 'Assignment',
-  ANN_ASSIGNMENT = 'AnnAssignment',
-  APPLICATION = 'Application',
-  UNARY_OP = 'UnaryOperation',
-  BINARY_OP = 'BinaryOperation',
-  BOOL_OP = 'BoolOperation',
-  COMPARE = 'Compare',
-  CALL = 'Call',
-  RETURN = 'Return',
-  BREAK = 'Break',
-  CONTINUE = 'Continue',
-  IF = 'If',
-  FUNCTION_DEF = 'FunctionDef',
-  LAMBDA = 'Lambda',
-  MULTI_LAMBDA = 'MultiLambda',
-  GROUPING = 'Grouping',
-  LITERAL = 'Literal',
-  VARIABLE = 'Variable',
-  TERNARY = 'Ternary',
-  PASS = 'Pass',
-  ASSERT = 'Assert',
-  IMPORT = 'Import',
-  GLOBAL = 'Global',
-  NONLOCAL = 'NonLocal',
-  Program = 'Program',
-  BRANCH = 'Branch',
-  POP = 'Pop',
-  ENVIRONMENT = 'environment',
-  MARKER = 'marker',
-  END_OF_FUNCTION_BODY = 'EndOfFunctionBody',
+  RESET = "Reset",
+  WHILE = "While",
+  FOR = "For",
+  ASSIGNMENT = "Assignment",
+  ANN_ASSIGNMENT = "AnnAssignment",
+  APPLICATION = "Application",
+  UNARY_OP = "UnaryOperation",
+  BINARY_OP = "BinaryOperation",
+  BOOL_OP = "BoolOperation",
+  COMPARE = "Compare",
+  CALL = "Call",
+  RETURN = "Return",
+  BREAK = "Break",
+  CONTINUE = "Continue",
+  IF = "If",
+  FUNCTION_DEF = "FunctionDef",
+  LAMBDA = "Lambda",
+  MULTI_LAMBDA = "MultiLambda",
+  GROUPING = "Grouping",
+  LITERAL = "Literal",
+  VARIABLE = "Variable",
+  TERNARY = "Ternary",
+  PASS = "Pass",
+  ASSERT = "Assert",
+  IMPORT = "Import",
+  GLOBAL = "Global",
+  NONLOCAL = "NonLocal",
+  Program = "Program",
+  BRANCH = "Branch",
+  POP = "Pop",
+  ENVIRONMENT = "environment",
+  MARKER = "marker",
+  END_OF_FUNCTION_BODY = "EndOfFunctionBody",
 }
 
 interface BaseInstr {
@@ -142,59 +142,59 @@ export type Instr =
 
 export function typeTranslator(type: string): string {
   switch (type) {
-    case 'bigint':
-      return 'int';
-    case 'number':
-      return 'float';
-    case 'boolean':
-      return 'bool';
-    case 'bool':
-      return 'bool';
-    case 'string':
-      return 'str';
-    case 'complex':
-      return 'complex';
-    case 'undefined':
-      return 'NoneType';
+    case "bigint":
+      return "int";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "bool":
+      return "bool";
+    case "string":
+      return "str";
+    case "complex":
+      return "complex";
+    case "undefined":
+      return "NoneType";
     default:
-      return 'unknown';
+      return "unknown";
   }
 }
 
 export function operatorTranslator(operator: TokenType | string) {
   switch (operator) {
     case TokenType.PLUS:
-      return '+';
+      return "+";
     case TokenType.MINUS:
-      return '-';
+      return "-";
     case TokenType.STAR:
-      return '*';
+      return "*";
     case TokenType.SLASH:
-      return '/';
+      return "/";
     case TokenType.DOUBLESLASH:
-      return '//';
+      return "//";
     case TokenType.PERCENT:
-      return '%';
+      return "%";
     case TokenType.DOUBLESTAR:
-      return '**';
+      return "**";
     case TokenType.LESS:
-      return '<';
+      return "<";
     case TokenType.GREATER:
-      return '>';
+      return ">";
     case TokenType.DOUBLEEQUAL:
-      return '==';
+      return "==";
     case TokenType.NOTEQUAL:
-      return '!=';
+      return "!=";
     case TokenType.LESSEQUAL:
-      return '<=';
+      return "<=";
     case TokenType.GREATEREQUAL:
-      return '>=';
+      return ">=";
     case TokenType.NOT:
-      return 'not';
+      return "not";
     case TokenType.AND:
-      return 'and';
+      return "and";
     case TokenType.OR:
-      return 'or';
+      return "or";
     default:
       return String(operator);
   }

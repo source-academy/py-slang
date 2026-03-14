@@ -1,16 +1,16 @@
-import { StmtNS } from '../ast-types';
-import { ModuleContext, NativeStorage } from '../types';
-import { Control } from './control';
-import { Environment } from './environment';
-import { CseError } from './error';
-import { Heap } from './heap';
-import { Stash, Value } from './stash';
-import { Node } from './types';
+import { StmtNS } from "../ast-types";
+import { ModuleContext, NativeStorage } from "../types";
+import { Control } from "./control";
+import { Environment } from "./environment";
+import { CseError } from "./error";
+import { Heap } from "./heap";
+import { Stash, Value } from "./stash";
+import { Node } from "./types";
 
 export class Context {
   public control: Control;
   public stash: Stash;
-  public output: string = '';
+  public output: string = "";
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
@@ -35,7 +35,7 @@ export class Context {
    */
   nativeStorage: NativeStorage;
 
-  constructor(program?: StmtNS.Stmt) {
+  constructor(program?: StmtNS.Stmt, context?: Context) {
     this.control = new Control(program);
     this.stash = new Stash();
     this.runtime = this.createEmptyRuntime();
@@ -59,10 +59,10 @@ export class Context {
 
   createGlobalEnvironment = (): Environment => ({
     tail: null,
-    name: 'global',
+    name: "global",
     head: {},
     heap: new Heap(),
-    id: '-1',
+    id: "-1",
   });
 
   createEmptyRuntime = () => ({

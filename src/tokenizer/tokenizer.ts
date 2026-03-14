@@ -40,34 +40,34 @@
     IN THE SOFTWARE.
 * */
 
-import { TokenType } from '../tokens';
-import { TokenizerErrors } from './errors';
+import { TokenType } from "../tokens";
+import { TokenizerErrors } from "./errors";
 
 const specialIdentifiers = new Map([
-  ['and', TokenType.AND],
-  ['or', TokenType.OR],
-  ['while', TokenType.WHILE],
-  ['for', TokenType.FOR],
-  ['None', TokenType.NONE],
-  ['is', TokenType.IS],
-  ['not', TokenType.NOT],
-  ['pass', TokenType.PASS],
-  ['def', TokenType.DEF],
-  ['lambda', TokenType.LAMBDA],
-  ['from', TokenType.FROM],
-  ['True', TokenType.TRUE],
-  ['False', TokenType.FALSE],
-  ['break', TokenType.BREAK],
-  ['continue', TokenType.CONTINUE],
-  ['return', TokenType.RETURN],
-  ['assert', TokenType.ASSERT],
-  ['import', TokenType.IMPORT],
-  ['global', TokenType.GLOBAL],
-  ['nonlocal', TokenType.NONLOCAL],
-  ['if', TokenType.IF],
-  ['elif', TokenType.ELIF],
-  ['else', TokenType.ELSE],
-  ['in', TokenType.IN],
+  ["and", TokenType.AND],
+  ["or", TokenType.OR],
+  ["while", TokenType.WHILE],
+  ["for", TokenType.FOR],
+  ["None", TokenType.NONE],
+  ["is", TokenType.IS],
+  ["not", TokenType.NOT],
+  ["pass", TokenType.PASS],
+  ["def", TokenType.DEF],
+  ["lambda", TokenType.LAMBDA],
+  ["from", TokenType.FROM],
+  ["True", TokenType.TRUE],
+  ["False", TokenType.FALSE],
+  ["break", TokenType.BREAK],
+  ["continue", TokenType.CONTINUE],
+  ["return", TokenType.RETURN],
+  ["assert", TokenType.ASSERT],
+  ["import", TokenType.IMPORT],
+  ["global", TokenType.GLOBAL],
+  ["nonlocal", TokenType.NONLOCAL],
+  ["if", TokenType.IF],
+  ["elif", TokenType.ELIF],
+  ["else", TokenType.ELSE],
+  ["in", TokenType.IN],
 ]);
 
 export const SPECIAL_IDENTIFIER_TOKENS = Array.from(specialIdentifiers.values());
@@ -113,15 +113,15 @@ export class Tokenizer {
     this.specialIdentifiers = specialIdentifiers;
     // Not used by us, but should be kept reserved as per Python spec
     this.forbiddenIdentifiers = new Map([
-      ['async', TokenType.ASYNC],
-      ['await', TokenType.AWAIT],
-      ['yield', TokenType.YIELD],
-      ['with', TokenType.WITH],
-      ['del', TokenType.DEL],
-      ['try', TokenType.TRY],
-      ['except', TokenType.EXCEPT],
-      ['finally', TokenType.FINALLY],
-      ['raise', TokenType.RAISE],
+      ["async", TokenType.ASYNC],
+      ["await", TokenType.AWAIT],
+      ["yield", TokenType.YIELD],
+      ["with", TokenType.WITH],
+      ["del", TokenType.DEL],
+      ["try", TokenType.TRY],
+      ["except", TokenType.EXCEPT],
+      ["finally", TokenType.FINALLY],
+      ["raise", TokenType.RAISE],
     ]);
     // Operators that are valid in Python, but invalid for our use case.
     // this.forbiddenOperators = new Set([
@@ -151,7 +151,7 @@ export class Tokenizer {
 
   private advance() {
     const res = this.source[this.current];
-    if (this.peek() == '\n') {
+    if (this.peek() == "\n") {
       this.line += 1;
     }
     this.current += 1;
@@ -159,11 +159,11 @@ export class Tokenizer {
     return res;
   }
 
-  private lexemeBuffer: string = '';
+  private lexemeBuffer: string = "";
 
   private advanceString(record: boolean) {
     const res = this.source[this.current];
-    if (this.peek() == '\n') {
+    if (this.peek() == "\n") {
       this.line += 1;
     }
     this.current += 1;
@@ -193,7 +193,7 @@ export class Tokenizer {
 
   /* Single character lookahead. */
   private peek(): string {
-    return this.isAtEnd() ? '\0' : this.source[this.current];
+    return this.isAtEnd() ? "\0" : this.source[this.current];
   }
 
   /* Double character lookahead. */
@@ -224,7 +224,7 @@ export class Tokenizer {
     // Ensures that string is parsed properly
     const lexeme = this.source.slice(this.start + 1, this.current - 1);
     this.tokens.push(new Token(type, this.lexemeBuffer, line, col, this.current - lexeme.length));
-    this.lexemeBuffer = '';
+    this.lexemeBuffer = "";
   }
 
   private addMultiLineStringToken(type: TokenType) {
@@ -233,7 +233,7 @@ export class Tokenizer {
     // Remove three starting and ending quotes when slicing
     const lexeme = this.source.slice(this.start + 3, this.current - 3);
     this.tokens.push(new Token(type, this.lexemeBuffer, line, col, this.current - lexeme.length));
-    this.lexemeBuffer = '';
+    this.lexemeBuffer = "";
   }
   // Checks that the current character matches a pattern. If so the character is consumed, else nothing is consumed.
   private matches(pattern: string): boolean {
@@ -281,7 +281,7 @@ export class Tokenizer {
     if (/\s/.test(c)) {
       return false;
     }
-    return c === '_' || this.isAlpha(c) || this.isDigit(c) || this.isLegalUnicode(c);
+    return c === "_" || this.isAlpha(c) || this.isDigit(c) || this.isLegalUnicode(c);
   }
 
   private isDelimiter(c: string): boolean {
@@ -290,7 +290,7 @@ export class Tokenizer {
 
   private baseNumber() {
     switch (this.peek()) {
-      case 'x':
+      case "x":
         this.advance();
         if (!this.isHexa(this.peek())) {
           throw new TokenizerErrors.InvalidNumberError(
@@ -306,7 +306,7 @@ export class Tokenizer {
         }
         this.addToken(TokenType.BIGINT);
         break;
-      case 'o':
+      case "o":
         this.advance();
         if (!this.isOcta(this.peek())) {
           throw new TokenizerErrors.InvalidNumberError(
@@ -322,7 +322,7 @@ export class Tokenizer {
         }
         this.addToken(TokenType.BIGINT);
         break;
-      case 'b':
+      case "b":
         this.advance();
         if (!this.isBinary(this.peek())) {
           throw new TokenizerErrors.InvalidNumberError(
@@ -343,9 +343,9 @@ export class Tokenizer {
           this.advance();
         }
 
-        if (this.peek() !== '.' && this.peek() !== 'e') {
+        if (this.peek() !== "." && this.peek() !== "e") {
           // if ends with j and J then complex number
-          if (this.peek() === 'j' || this.peek() === 'J') {
+          if (this.peek() === "j" || this.peek() === "J") {
             this.advance();
             this.addToken(TokenType.COMPLEX);
             return;
@@ -355,28 +355,28 @@ export class Tokenizer {
           return;
         }
 
-        if (this.peek() === '.') {
+        if (this.peek() === ".") {
           this.advance();
-          if (this.peek() === '_') {
+          if (this.peek() === "_") {
             // TODO:
             // throw new error
-            throw new Error('_ after .');
+            throw new Error("_ after .");
           }
           while (this.isDigit(this.peek())) {
             this.advance();
           }
         }
 
-        if (this.peek() === '_') {
+        if (this.peek() === "_") {
           this.advance();
         }
 
-        if (this.peek() === 'e') {
+        if (this.peek() === "e") {
           this.advance();
-          if (this.peek() === '-') {
+          if (this.peek() === "-") {
             this.advance();
           }
-          if (this.peek() === '+') {
+          if (this.peek() === "+") {
             this.advance();
           }
           if (!this.isDigit(this.peek())) {
@@ -394,7 +394,7 @@ export class Tokenizer {
         }
 
         // if ends with j and J then complex number
-        if (this.peek() === 'j' || this.peek() === 'J') {
+        if (this.peek() === "j" || this.peek() === "J") {
           this.advance();
           this.addToken(TokenType.COMPLEX);
         } else {
@@ -404,20 +404,20 @@ export class Tokenizer {
   }
 
   private number(c: string) {
-    while ((this.isDigit(this.peek()) || this.peek() === '_') && c !== '.') {
-      if (this.peek() === '_') {
+    while ((this.isDigit(this.peek()) || this.peek() === "_") && c !== ".") {
+      if (this.peek() === "_") {
         this.advance();
         if (!this.isDigit(this.peek())) {
-          throw new Error('Invalid use of underscore in number');
+          throw new Error("Invalid use of underscore in number");
         }
       } else {
         this.advance();
       }
     }
 
-    if (this.peek() !== '.' && this.peek() !== 'e' && c !== '.') {
+    if (this.peek() !== "." && this.peek() !== "e" && c !== ".") {
       // if ends with j and J then complex number
-      if (this.peek() === 'j' || this.peek() === 'J') {
+      if (this.peek() === "j" || this.peek() === "J") {
         this.advance();
         this.addToken(TokenType.COMPLEX);
         return;
@@ -428,18 +428,18 @@ export class Tokenizer {
     }
 
     // Fractional part
-    if ((this.peek() === '.' && c !== '.') || (this.peek() !== '.' && c === '.')) {
+    if ((this.peek() === "." && c !== ".") || (this.peek() !== "." && c === ".")) {
       this.advance();
-      if (this.peek() === '_') {
+      if (this.peek() === "_") {
         // TODO:
         // throw new error
-        throw new Error('_ after .');
+        throw new Error("_ after .");
       }
-      while (this.isDigit(this.peek()) || this.peek() === '_') {
-        if (this.peek() === '_') {
+      while (this.isDigit(this.peek()) || this.peek() === "_") {
+        if (this.peek() === "_") {
           this.advance();
           if (!this.isDigit(this.peek())) {
-            throw new Error('Invalid use of underscore in number');
+            throw new Error("Invalid use of underscore in number");
           }
         } else {
           this.advance();
@@ -448,12 +448,12 @@ export class Tokenizer {
     }
 
     // Exponent part
-    if (this.peek() === 'e') {
+    if (this.peek() === "e") {
       this.advance();
-      if (this.peek() === '-') {
+      if (this.peek() === "-") {
         this.advance();
       }
-      if (this.peek() === '+') {
+      if (this.peek() === "+") {
         this.advance();
       }
       if (!this.isDigit(this.peek())) {
@@ -465,11 +465,11 @@ export class Tokenizer {
           this.current,
         );
       }
-      while (this.isDigit(this.peek()) || this.peek() === '_') {
-        if (this.peek() === '_') {
+      while (this.isDigit(this.peek()) || this.peek() === "_") {
+        if (this.peek() === "_") {
           this.advance();
           if (!this.isDigit(this.peek())) {
-            throw new Error('Invalid use of underscore in number');
+            throw new Error("Invalid use of underscore in number");
           }
         } else {
           this.advance();
@@ -478,7 +478,7 @@ export class Tokenizer {
     }
 
     // if ends with j and J then complex number
-    if (this.peek() === 'j' || this.peek() === 'J') {
+    if (this.peek() === "j" || this.peek() === "J") {
       this.advance();
       this.addToken(TokenType.COMPLEX);
     } else {
@@ -522,25 +522,25 @@ export class Tokenizer {
     switch (c) {
       //// SPECIAL MARKERS
       // Comment -- advance to end of line.
-      case '#':
-        while (this.peek() !== '\n' && this.peek() !== '\r' && !this.isAtEnd()) {
+      case "#":
+        while (this.peek() !== "\n" && this.peek() !== "\r" && !this.isAtEnd()) {
           this.advance();
         }
         break;
-      case ':':
-        this.addToken(this.matches(':') ? TokenType.DOUBLECOLON : TokenType.COLON);
+      case ":":
+        this.addToken(this.matches(":") ? TokenType.DOUBLECOLON : TokenType.COLON);
         break;
       // All non-significant whitespace
-      case ' ':
+      case " ":
         break;
       // CR LF on Windows
-      case '\r':
-        if (this.matches('\n')) {
+      case "\r":
+        if (this.matches("\n")) {
           // fall through
         } else {
           break;
         }
-      case '\n':
+      case "\n":
         if (this.parenthesesLevel > 0) {
           this.line += 1;
           this.col = 0;
@@ -551,14 +551,14 @@ export class Tokenizer {
         this.col = 0;
         let accLeadingWhiteSpace = 0;
         // Detect significant whitespace
-        while (this.peek() === ' ' && !this.isAtEnd()) {
+        while (this.peek() === " " && !this.isAtEnd()) {
           accLeadingWhiteSpace += 1;
           // Consume the rest of the line's leading whitespace.
           this.advance();
         }
         // Handles comments
-        if (this.peek() === '#') {
-          while (this.peek() !== '\n' && this.peek() !== '\r' && !this.isAtEnd()) {
+        if (this.peek() === "#") {
+          while (this.peek() !== "\n" && this.peek() !== "\r" && !this.isAtEnd()) {
             this.advance();
           }
         }
@@ -569,11 +569,11 @@ export class Tokenizer {
                              <---- this newline should be zapped
                     pass     <---- this should be part of the block
                  */
-        while ((this.peek() === '\n' || this.peek() === '\r') && !this.isAtEnd()) {
+        while ((this.peek() === "\n" || this.peek() === "\r") && !this.isAtEnd()) {
           // Handle \r\n on Windows
-          if (this.peek() === '\r') {
+          if (this.peek() === "\r") {
             this.advance();
-            if (this.peek() === '\n') {
+            if (this.peek() === "\n") {
               this.advance();
             }
           } else {
@@ -583,7 +583,7 @@ export class Tokenizer {
           this.col = 0;
           accLeadingWhiteSpace = 0;
           // Detect significant whitespace
-          while (this.peek() === ' ' && !this.isAtEnd()) {
+          while (this.peek() === " " && !this.isAtEnd()) {
             accLeadingWhiteSpace += 1;
             // Consume the rest of the line's leading whitespace.
             this.advance();
@@ -646,13 +646,13 @@ export class Tokenizer {
           while (true) {
             while (this.peek() != quote && !this.isAtEnd()) {
               quote_sum = 0;
-              if (this.peek() === '\\') {
+              if (this.peek() === "\\") {
                 this.advanceString(false);
                 switch (this.peek()) {
-                  case '\n':
+                  case "\n":
                     break;
-                  case '\\':
-                    this.addBuffer('\\');
+                  case "\\":
+                    this.addBuffer("\\");
                     break;
                   case "'":
                     this.addBuffer("'");
@@ -660,29 +660,29 @@ export class Tokenizer {
                   case '\"':
                     this.addBuffer('\"');
                     break;
-                  case 'a':
-                    this.addBuffer('\a');
+                  case "a":
+                    this.addBuffer("\a");
                     break;
-                  case 'b':
-                    this.addBuffer('\b');
+                  case "b":
+                    this.addBuffer("\b");
                     break;
-                  case 'f':
-                    this.addBuffer('\f');
+                  case "f":
+                    this.addBuffer("\f");
                     break;
-                  case 'n':
-                    this.addBuffer('\n');
+                  case "n":
+                    this.addBuffer("\n");
                     break;
-                  case 'r':
-                    this.addBuffer('\r');
+                  case "r":
+                    this.addBuffer("\r");
                     break;
-                  case 't':
-                    this.addBuffer('\t');
+                  case "t":
+                    this.addBuffer("\t");
                     break;
-                  case 'v':
-                    this.addBuffer('\v');
+                  case "v":
+                    this.addBuffer("\v");
                     break;
                   default:
-                    throw new Error('SyntaxWarning: invalid escape sequence');
+                    throw new Error("SyntaxWarning: invalid escape sequence");
                 }
                 this.advanceString(false);
               } else {
@@ -726,14 +726,14 @@ export class Tokenizer {
           this.addMultiLineStringToken(TokenType.STRING);
         } else {
           // other case, single-line string
-          while (this.peek() !== quote && this.peek() !== '\n' && !this.isAtEnd()) {
-            if (this.peek() === '\\') {
+          while (this.peek() !== quote && this.peek() !== "\n" && !this.isAtEnd()) {
+            if (this.peek() === "\\") {
               this.advanceString(false);
               switch (this.peek()) {
-                case '\n':
+                case "\n":
                   break;
-                case '\\':
-                  this.addBuffer('\\');
+                case "\\":
+                  this.addBuffer("\\");
                   break;
                 case "'":
                   this.addBuffer("'");
@@ -741,29 +741,29 @@ export class Tokenizer {
                 case '\"':
                   this.addBuffer('\"');
                   break;
-                case 'a':
-                  this.addBuffer('\a');
+                case "a":
+                  this.addBuffer("\a");
                   break;
-                case 'b':
-                  this.addBuffer('\b');
+                case "b":
+                  this.addBuffer("\b");
                   break;
-                case 'f':
-                  this.addBuffer('\f');
+                case "f":
+                  this.addBuffer("\f");
                   break;
-                case 'n':
-                  this.addBuffer('\n');
+                case "n":
+                  this.addBuffer("\n");
                   break;
-                case 'r':
-                  this.addBuffer('\r');
+                case "r":
+                  this.addBuffer("\r");
                   break;
-                case 't':
-                  this.addBuffer('\t');
+                case "t":
+                  this.addBuffer("\t");
                   break;
-                case 'v':
-                  this.addBuffer('\v');
+                case "v":
+                  this.addBuffer("\v");
                   break;
                 default:
-                  throw new Error('SyntaxWarning: invalid escape sequence');
+                  throw new Error("SyntaxWarning: invalid escape sequence");
               }
               this.advanceString(false);
             } else {
@@ -771,7 +771,7 @@ export class Tokenizer {
             }
           }
           // should look for \\
-          if (this.peek() === '\n' || this.isAtEnd()) {
+          if (this.peek() === "\n" || this.isAtEnd()) {
             throw new TokenizerErrors.UnterminatedStringError(
               this.line,
               this.col,
@@ -786,27 +786,27 @@ export class Tokenizer {
         }
         break;
       // Number... I wish JS had match statements :(
-      case '0':
+      case "0":
         this.baseNumber();
         break;
-      case '1':
-      case '2':
-      case '3':
-      case '4':
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9':
-      case '.':
+      case "1":
+      case "2":
+      case "3":
+      case "4":
+      case "5":
+      case "6":
+      case "7":
+      case "8":
+      case "9":
+      case ".":
         this.number(c);
         break;
       //// Everything else
-      case '(':
+      case "(":
         this.addToken(TokenType.LPAR);
         this.parenthesesLevel++;
         break;
-      case ')':
+      case ")":
         this.addToken(TokenType.RPAR);
         if (this.parenthesesLevel === 0) {
           throw new TokenizerErrors.NonMatchingParenthesesError(
@@ -818,11 +818,11 @@ export class Tokenizer {
         }
         this.parenthesesLevel--;
         break;
-      case '[':
+      case "[":
         this.addToken(TokenType.LSQB);
         this.bracketsLevel++;
         break;
-      case ']':
+      case "]":
         this.addToken(TokenType.RSQB);
         if (this.bracketsLevel === 0) {
           throw new TokenizerErrors.NonMatchingBracketsError(
@@ -834,56 +834,56 @@ export class Tokenizer {
         }
         this.bracketsLevel--;
         break;
-      case ',':
+      case ",":
         this.addToken(TokenType.COMMA);
         break;
       //// OPERATORS
-      case '-':
-        if (this.matches('=')) {
+      case "-":
+        if (this.matches("=")) {
           this.raiseForbiddenOperator();
         }
         this.addToken(TokenType.MINUS);
         break;
-      case '+':
-        if (this.matches('=')) {
+      case "+":
+        if (this.matches("=")) {
           this.raiseForbiddenOperator();
         }
         this.addToken(TokenType.PLUS);
         break;
-      case '*':
-        if (this.matches('=')) {
+      case "*":
+        if (this.matches("=")) {
           this.raiseForbiddenOperator();
         }
-        this.addToken(this.matches('*') ? TokenType.DOUBLESTAR : TokenType.STAR);
+        this.addToken(this.matches("*") ? TokenType.DOUBLESTAR : TokenType.STAR);
         break;
-      case '/':
-        if (this.matches('=')) {
+      case "/":
+        if (this.matches("=")) {
           this.raiseForbiddenOperator();
         }
-        this.addToken(this.matches('/') ? TokenType.DOUBLESLASH : TokenType.SLASH);
+        this.addToken(this.matches("/") ? TokenType.DOUBLESLASH : TokenType.SLASH);
         break;
-      case '%':
-        if (this.matches('=')) {
+      case "%":
+        if (this.matches("=")) {
           this.raiseForbiddenOperator();
         }
         this.addToken(TokenType.PERCENT);
         break;
-      case '!':
-        this.addToken(this.matches('=') ? TokenType.NOTEQUAL : TokenType.BANG);
+      case "!":
+        this.addToken(this.matches("=") ? TokenType.NOTEQUAL : TokenType.BANG);
         break;
-      case '=':
-        this.addToken(this.matches('=') ? TokenType.DOUBLEEQUAL : TokenType.EQUAL);
+      case "=":
+        this.addToken(this.matches("=") ? TokenType.DOUBLEEQUAL : TokenType.EQUAL);
         break;
-      case '<':
-        this.addToken(this.matches('=') ? TokenType.LESSEQUAL : TokenType.LESS);
+      case "<":
+        this.addToken(this.matches("=") ? TokenType.LESSEQUAL : TokenType.LESS);
         break;
-      case '>':
-        this.addToken(this.matches('=') ? TokenType.GREATEREQUAL : TokenType.GREATER);
+      case ">":
+        this.addToken(this.matches("=") ? TokenType.GREATEREQUAL : TokenType.GREATER);
         break;
       default:
         // Identifier start
         // TODO: unicode
-        if (c === '_' || this.isAlpha(c) || this.isLegalUnicode(c)) {
+        if (c === "_" || this.isAlpha(c) || this.isLegalUnicode(c)) {
           this.name();
           break;
         }
@@ -900,12 +900,12 @@ export class Tokenizer {
 
   private matchForbiddenOperator(ch: string) {
     switch (ch) {
-      case '@':
-      case '|':
-      case '&':
-      case '~':
-      case '^':
-        this.matches('=');
+      case "@":
+      case "|":
+      case "&":
+      case "~":
+      case "^":
+        this.matches("=");
         this.raiseForbiddenOperator();
         break;
       default:
@@ -923,7 +923,7 @@ export class Tokenizer {
       this.indentStack.pop();
       this.addToken(TokenType.DEDENT);
     }
-    this.tokens.push(new Token(TokenType.ENDMARKER, '', this.line, this.col, this.current));
+    this.tokens.push(new Token(TokenType.ENDMARKER, "", this.line, this.col, this.current));
     return this.tokens;
   }
 

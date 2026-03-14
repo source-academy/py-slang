@@ -9,9 +9,9 @@ import {
   WasmInstruction,
   WasmNumeric,
   WasmRaw,
-} from '@sourceacademy/wasm-util';
-import { ExprNS, StmtNS } from '../ast-types';
-import { TokenType } from '../tokens';
+} from "@sourceacademy/wasm-util";
+import { ExprNS, StmtNS } from "../ast-types";
+import { TokenType } from "../tokens";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
@@ -45,7 +45,7 @@ import {
   SET_PAIR_TAIL_FX,
   SET_PARAM_FX,
   TYPE_TAG,
-} from './constants';
+} from "./constants";
 
 const builtInFunctions: {
   name: string;
@@ -54,13 +54,13 @@ const builtInFunctions: {
   isVoid: boolean;
 }[] = [
   {
-    name: 'print',
+    name: "print",
     arity: 1,
     body: wasm.call(LOG_FX).args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     isVoid: true,
   },
   {
-    name: 'pair',
+    name: "pair",
     arity: 2,
     body: wasm
       .call(MAKE_PAIR_FX)
@@ -71,7 +71,7 @@ const builtInFunctions: {
     isVoid: false,
   },
   {
-    name: 'head',
+    name: "head",
     arity: 1,
     body: wasm
       .call(GET_PAIR_HEAD_FX)
@@ -79,7 +79,7 @@ const builtInFunctions: {
     isVoid: false,
   },
   {
-    name: 'tail',
+    name: "tail",
     arity: 1,
     body: wasm
       .call(GET_PAIR_TAIL_FX)
@@ -87,7 +87,7 @@ const builtInFunctions: {
     isVoid: false,
   },
   {
-    name: 'set_head',
+    name: "set_head",
     arity: 2,
     body: wasm
       .call(SET_PAIR_HEAD_FX)
@@ -98,7 +98,7 @@ const builtInFunctions: {
     isVoid: true,
   },
   {
-    name: 'set_tail',
+    name: "set_tail",
     arity: 2,
     body: wasm
       .call(SET_PAIR_TAIL_FX)
@@ -109,7 +109,7 @@ const builtInFunctions: {
     isVoid: true,
   },
   {
-    name: 'bool',
+    name: "bool",
     arity: 1,
     body: [
       i32.const(TYPE_TAG.BOOL),
@@ -119,7 +119,7 @@ const builtInFunctions: {
   },
 ];
 
-type Binding = { name: string; tag: 'local' | 'nonlocal' };
+type Binding = { name: string; tag: "local" | "nonlocal" };
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt): S;
@@ -141,7 +141,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
       if (index === -1) continue;
 
-      if (curr[index].tag === 'nonlocal') {
+      if (curr[index].tag === "nonlocal") {
         throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration`);
       }
 
@@ -152,7 +152,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   private collectDeclarations(
     statements: StmtNS.Stmt[],
-    parameters?: StmtNS.FunctionDef['parameters'],
+    parameters?: StmtNS.FunctionDef["parameters"],
   ): Binding[] {
     const findInNestedBody = (stmts: StmtNS.Stmt[]): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
       const found: (StmtNS.FunctionDef | StmtNS.Assign)[] = [];
@@ -173,14 +173,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     const bindings: Binding[] = findInNestedBody(statements).map(s => {
       if (s instanceof StmtNS.FunctionDef) {
-        return { name: s.name.lexeme, tag: 'local' };
+        return { name: s.name.lexeme, tag: "local" };
       }
 
       if (s.target instanceof ExprNS.Subscript) {
-        throw new Error('Subscript assignment is not yet supported');
+        throw new Error("Subscript assignment is not yet supported");
       }
 
-      return { name: s.target.name.lexeme, tag: 'local' };
+      return { name: s.target.name.lexeme, tag: "local" };
     });
 
     statements
@@ -206,13 +206,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
             // tag this binding as nonlocal so
             // if it's accessed before its nonlocal statement,
             // throw error
-            bindings[i].tag = 'nonlocal';
+            bindings[i].tag = "nonlocal";
           }
         }
       });
 
     return [
-      ...(parameters?.map(p => ({ name: p.lexeme, tag: 'local' as const })) ?? []),
+      ...(parameters?.map(p => ({ name: p.lexeme, tag: "local" as const })) ?? []),
       ...bindings,
     ];
   }
@@ -225,19 +225,19 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
     if (stmt.statements.length <= 0) {
-      console.log('No statements found');
-      throw new Error('No statements found');
+      console.log("No statements found");
+      throw new Error("No statements found");
     }
 
     // declare built-in functions in the global environment before user code
     const builtInFuncsDeclarations = builtInFunctions.map(({ name, arity, body, isVoid }, i) => {
-      this.environment[0].push({ name, tag: 'local' });
+      this.environment[0].push({ name, tag: "local" });
       const tag = this.userFunctions.length;
       const newBody = [
         ...(Array.isArray(body) ? body : [body]),
         wasm.return(
           ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-          global.set(CURR_ENV, local.get('$return_env')),
+          global.set(CURR_ENV, local.get("$return_env")),
         ),
       ];
       this.userFunctions.push(newBody);
@@ -260,7 +260,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // this matches the format of drop in visitSimpleExpr
     const lastInstr = body.at(-1);
     const undroppedInstr =
-      lastInstr?.op === 'drop' && lastInstr.value?.op === 'drop' && lastInstr.value.value;
+      lastInstr?.op === "drop" && lastInstr.value?.op === "drop" && lastInstr.value.value;
 
     // collect all strings, native functions used and user functions
     const strings = this.strings.map(([str, add]) => wasm.data(i32.const(add), str));
@@ -272,7 +272,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     return wasm
       .module()
-      .imports(wasm.import('js', 'memory').memory(1), ...importedLogs)
+      .imports(wasm.import("js", "memory").memory(1), ...importedLogs)
       .globals(
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(this.heapPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
@@ -283,7 +283,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         applyFunction,
 
         wasm
-          .func('$main')
+          .func("$main")
           .results(...(undroppedInstr ? [i32, i64] : []))
           .body(
             global.set(
@@ -296,7 +296,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
             ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body),
           ),
       )
-      .exports(wasm.export('main').func('$main'))
+      .exports(wasm.export("main").func("$main"))
       .build();
   }
 
@@ -387,14 +387,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       .else(alternative) as unknown as WasmNumeric;
   }
 
-  visitNoneExpr(_expr: ExprNS.None): WasmNumeric {
+  visitNoneExpr(expr: ExprNS.None): WasmNumeric {
     return wasm.call(MAKE_NONE_FX);
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmNumeric {
     const value = BigInt(expr.value);
-    const min = BigInt('-9223372036854775808'); // -(2^63)
-    const max = BigInt('9223372036854775807'); // (2^63) - 1
+    const min = BigInt("-9223372036854775808"); // -(2^63)
+    const max = BigInt("9223372036854775807"); // (2^63) - 1
     if (value < min || value > max) {
       throw new Error(`BigInt literal out of bounds: ${expr.value}`);
     }
@@ -403,10 +403,10 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitLiteralExpr(expr: ExprNS.Literal): WasmNumeric {
-    if (typeof expr.value === 'number') return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
-    else if (typeof expr.value === 'boolean')
+    if (typeof expr.value === "number") return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
+    else if (typeof expr.value === "boolean")
       return wasm.call(MAKE_BOOL_FX).args(i32.const(expr.value ? 1 : 0));
-    else if (typeof expr.value === 'string') {
+    else if (typeof expr.value === "string") {
       const str = expr.value;
       const len = str.length;
       const toReturn = wasm.call(MAKE_STRING_FX).args(i32.const(this.heapPointer), i32.const(len));
@@ -425,7 +425,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
     if (stmt.target instanceof ExprNS.Subscript) {
-      throw new Error('Subscript assignment is not yet supported');
+      throw new Error("Subscript assignment is not yet supported");
     }
     const [depth, index] = this.getLexAddress(stmt.target.name.lexeme);
     const expression = this.visit(stmt.value);
@@ -446,10 +446,10 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
-    if (tag >= 1 << 16) throw new Error('Tag cannot be above 16-bit integer limit');
-    if (arity >= 1 << 8) throw new Error('Arity cannot be above 8-bit integer limit');
+    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
-      throw new Error('Environment length cannot be above 8-bit integer limit');
+      throw new Error("Environment length cannot be above 8-bit integer limit");
 
     this.environment.push(newFrame);
     const body = stmt.body.map(s => this.visit(s));
@@ -477,10 +477,10 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // other than parameters
     const newFrame = this.collectDeclarations([], expr.parameters);
 
-    if (tag >= 1 << 16) throw new Error('Tag cannot be above 16-bit integer limit');
-    if (arity >= 1 << 8) throw new Error('Arity cannot be above 8-bit integer limit');
+    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
-      throw new Error('Environment length cannot be above 8-bit integer limit');
+      throw new Error("Environment length cannot be above 8-bit integer limit");
 
     this.environment.push(newFrame);
     const body = this.visit(expr.body);
@@ -529,7 +529,7 @@ ${args.map(
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get('$return_env')),
+      global.set(CURR_ENV, local.get("$return_env")),
     );
   }
 
@@ -569,51 +569,51 @@ ${args.map(
       : wasm.if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition))).then(...body);
   }
 
-  visitPassStmt(_stmt: StmtNS.Pass): WasmInstruction {
+  visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {
     return wasm.nop();
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS
-  visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
-    throw new Error('Method not implemented.');
+  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
+    throw new Error("Method not implemented.");
   }
-  visitIndentCreation(_stmt: StmtNS.Indent): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitIndentCreation(stmt: StmtNS.Indent): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitDedentCreation(_stmt: StmtNS.Dedent): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitDedentCreation(stmt: StmtNS.Dedent): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitBreakStmt(_stmt: StmtNS.Break): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitContinueStmt(_stmt: StmtNS.Continue): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitFromImportStmt(_stmt: StmtNS.FromImport): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitGlobalStmt(_stmt: StmtNS.Global): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitGlobalStmt(stmt: StmtNS.Global): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitAssertStmt(_stmt: StmtNS.Assert): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitWhileStmt(_stmt: StmtNS.While): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitForStmt(_stmt: StmtNS.For): WasmInstruction {
-    throw new Error('Method not implemented.');
+  visitForStmt(stmt: StmtNS.For): WasmInstruction {
+    throw new Error("Method not implemented.");
   }
-  visitListExpr(_expr: ExprNS.List): WasmNumeric {
-    throw new Error('Method not implemented.');
+  visitListExpr(expr: ExprNS.List): WasmNumeric {
+    throw new Error("Method not implemented.");
   }
-  visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
-    throw new Error('Method not implemented.');
+  visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    throw new Error("Method not implemented.");
   }
-  visitStarredExpr(_expr: ExprNS.Starred): WasmNumeric {
-    throw new Error('Method not implemented.');
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+    throw new Error("Method not implemented.");
   }
 }

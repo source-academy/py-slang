@@ -1,5 +1,5 @@
-import { createErrorIndicator, getFullLine, MAGIC_OFFSET } from '../errors';
-import { Token } from '../tokenizer';
+import { createErrorIndicator, getFullLine, MAGIC_OFFSET } from "../errors";
+import { Token } from "../tokenizer";
 
 export namespace ParserErrors {
   export class BaseParserError extends SyntaxError {
@@ -11,46 +11,51 @@ export namespace ParserErrors {
                    ${message}`);
       this.line = line;
       this.col = col;
-      this.name = 'BaseParserError';
+      this.name = "BaseParserError";
     }
   }
   export class ExpectedTokenError extends BaseParserError {
     constructor(source: string, current: Token, expected: string) {
-      const { lineIndex, fullLine } = getFullLine(
+      let { lineIndex, fullLine } = getFullLine(
         source,
         current.indexInSource - current.lexeme.length,
       );
+      fullLine = "\n" + fullLine + "\n";
       let hint = `^ ${expected}. Found '${current.lexeme}'.`;
-      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, ' ');
-      super('\n' + fullLine + '\n' + hint, lineIndex, current.col);
-      this.name = 'ExpectedTokenError';
+      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
+      super(fullLine + hint, lineIndex, current.col);
+      this.name = "ExpectedTokenError";
     }
   }
   export class NoElseBlockError extends BaseParserError {
     constructor(source: string, current: Token) {
-      const { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+      let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+      fullLine = "\n" + fullLine + "\n";
       let hint = `^ Expected else block after this if block.`;
-      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, ' ');
-      super('\n' + fullLine + '\n' + hint, lineIndex, current.col);
-      this.name = 'NoElseBlockError';
+      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
+      super(fullLine + hint, lineIndex, current.col);
+      this.name = "NoElseBlockError";
     }
   }
   export class GenericUnexpectedSyntaxError extends BaseParserError {
-    constructor(line: number, col: number, source: string, start: number) {
-      const { lineIndex, fullLine } = getFullLine(source, start);
+    constructor(line: number, col: number, source: string, start: number, current: number) {
+      let { lineIndex, fullLine } = getFullLine(source, start);
+      fullLine = "\n" + fullLine + "\n";
       const hint = ` Detected invalid syntax.`;
       const indicator = createErrorIndicator(fullLine, -1);
-      super('\n' + fullLine + '\n' + indicator + hint, lineIndex, col);
-      this.name = 'GenericUnexpectedSyntaxError';
+      super(fullLine + indicator + hint, lineIndex, col);
+      this.name = "GenericUnexpectedSyntaxError";
     }
   }
+
   export class InvalidAssignmentError extends BaseParserError {
     constructor(source: string, current: Token) {
-      const { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+      let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
+      fullLine = "\n" + fullLine + "\n";
       let hint = `^ Invalid assignment target.`;
-      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, ' ');
-      super('\n' + fullLine + '\n' + hint, lineIndex, current.col);
-      this.name = 'InvalidAssignmentError';
+      hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
+      super(fullLine + hint, lineIndex, current.col);
+      this.name = "InvalidAssignmentError";
     }
   }
 }
