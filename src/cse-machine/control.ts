@@ -14,7 +14,7 @@ export class Control extends Stack<ControlItem> {
     super();
     this.numEnvDependentItems = 0;
     // Load program into control stack
-    program ? this.push(program) : null;
+    if (program) this.push(program);
   }
 
   public canAvoidEnvInstr(): boolean {

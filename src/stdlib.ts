@@ -1,10 +1,8 @@
-import { Closure } from "./cse-machine/closure";
-import { Value } from "./cse-machine/stash";
-// npm install mathjs
 import { erf, gamma, lgamma } from "mathjs";
 import { Context } from "./cse-machine/context";
 import { ControlItem } from "./cse-machine/control";
 import { handleRuntimeError } from "./cse-machine/error";
+import { Value } from "./cse-machine/stash";
 import {
   MissingRequiredPositionalError,
   SublanguageError,
@@ -20,8 +18,8 @@ export function Validate(
   strict: boolean,
 ) {
   return function (
-    target: any,
-    propertyKey: string,
+    _target: unknown,
+    _propertyKey: string,
     descriptor: TypedPropertyDescriptor<
       (args: Value[], source: string, command: ControlItem, context: Context) => Value
     >,
@@ -227,7 +225,7 @@ export class BuiltInFunctions {
       case "bigint": {
         const intVal = x.value;
         const result: bigint = intVal < 0 ? -intVal : intVal;
-        return { type: "int", value: result };
+        return { type: "bigint", value: result };
       }
       case "number": {
         return { type: "number", value: Math.abs(x.value) };
@@ -254,10 +252,10 @@ export class BuiltInFunctions {
   }
 
   static toStr(val: Value): string {
-    return String(val.value);
+    return toPythonString(val);
   }
 
-  static error(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static error(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
     const output = "Error: " + args.map(arg => BuiltInFunctions.toStr(arg)).join(" ") + "\n";
     throw new Error(output);
   }
@@ -306,14 +304,12 @@ export class BuiltInFunctions {
             context,
             new ValueError(source, command as ExprNS.Expr, context, "isinstance"),
           );
-          return;
       }
     } else {
       handleRuntimeError(
         context,
         new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
       );
-      return;
     }
 
     const result = obj.type === expectedType;
@@ -609,8 +605,14 @@ export class BuiltInFunctions {
       );
     }
 
-    const erfc = 1 - BuiltInFunctions.math_erf(args[0], source, command, context).value;
-
+    const num = BuiltInFunctions.math_erf(args, source, command, context);
+    if (num.type !== "number") {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, num.type, "float' or 'int"),
+      );
+    }
+    const erfc = 1 - num.value;
     return { type: "number", value: erfc };
   }
 
@@ -634,7 +636,7 @@ export class BuiltInFunctions {
 
     const index = i.value;
 
-    return { type: "string", value: s.value[index] };
+    return { type: "string", value: s.value[Number(index)] };
   }
 
   @Validate(2, 2, "math_comb", false)
@@ -721,7 +723,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: BigInt(0) };
     }
 
-    const values = args.map((v, idx) => {
+    const values = args.map((v, _idx) => {
       if (v.type !== "bigint") {
         handleRuntimeError(
           context,
@@ -802,7 +804,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: BigInt(1) };
     }
 
-    const values = args.map((val, idx) => {
+    const values = args.map((val, _idx) => {
       if (val.type !== "bigint") {
         handleRuntimeError(
           context,
@@ -850,7 +852,7 @@ export class BuiltInFunctions {
     let k = n;
     if (args.length === 2) {
       const kValObj = args[1];
-      if (kValObj.type === "null" || kValObj.type === "undefined") {
+      if (kValObj.type === "none") {
         k = n;
       } else if (kValObj.type === "bigint") {
         k = BigInt(kValObj.value);
@@ -891,12 +893,6 @@ export class BuiltInFunctions {
 
     if (x.type === "number") {
       const numVal = x.value;
-      if (typeof numVal !== "number") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int"),
-        );
-      }
       const ceiled: bigint = BigInt(Math.ceil(numVal));
       return { type: "bigint", value: ceiled };
     }
@@ -999,7 +995,6 @@ export class BuiltInFunctions {
         context,
         new TypeError(source, command as ExprNS.Expr, context, val.type, "float' or 'int"),
       );
-      return 0;
     }
   }
 
@@ -1082,7 +1077,6 @@ export class BuiltInFunctions {
         context,
         new TypeError(source, command as ExprNS.Expr, context, x.type, "float' or 'int"),
       );
-      return;
     }
 
     let yValue: number;
@@ -1095,7 +1089,6 @@ export class BuiltInFunctions {
         context,
         new TypeError(source, command as ExprNS.Expr, context, y.type, "float' or 'int"),
       );
-      return;
     }
 
     if (yValue === 0) {
@@ -1250,16 +1243,21 @@ export class BuiltInFunctions {
   }
 
   static math_nextafter(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context,
+    _args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
   ): Value {
     // TODO: Implement math_nextafter using proper bit-level manipulation and handling special cases (NaN, Infinity, steps, etc.)
     throw new Error("math_nextafter not implemented");
   }
 
-  static math_ulp(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static math_ulp(
+    _args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
+  ): Value {
     // TODO: Implement math_ulp to return the unit in the last place (ULP) of the given floating-point number.
     throw new Error("math_ulp not implemented");
   }
@@ -1277,7 +1275,6 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int"),
         );
-        return;
       }
     } else {
       x = xVal.value;
@@ -1301,7 +1298,6 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int"),
         );
-        return;
       }
     } else {
       x = xVal.value;
@@ -1324,7 +1320,6 @@ export class BuiltInFunctions {
           context,
           new TypeError(source, command as ExprNS.Expr, context, xVal.type, "float' or 'int"),
         );
-        return;
       }
     } else {
       x = xVal.value;
@@ -1725,18 +1720,44 @@ export class BuiltInFunctions {
     let maxIndex = 0;
     if (isNumeric) {
       if (useFloat) {
+        if (args[0].type !== "number" && args[0].type !== "bigint") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int"),
+          );
+        }
         let maxVal: number = Number(args[0].value);
         for (let i = 1; i < args.length; i++) {
-          const curr: number = Number(args[i].value);
+          const arg = args[i];
+          if (arg.type !== "number" && arg.type !== "bigint") {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "float' or 'int"),
+            );
+          }
+          const curr: number = Number(arg.value);
           if (curr > maxVal) {
             maxVal = curr;
             maxIndex = i;
           }
         }
       } else {
+        if (args[0].type !== "bigint") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "int"),
+          );
+        }
         let maxVal: bigint = args[0].value;
         for (let i = 1; i < args.length; i++) {
-          const curr: bigint = args[i].value;
+          const arg = args[i];
+          if (arg.type !== "bigint") {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "int"),
+            );
+          }
+          const curr: bigint = arg.value;
           if (curr > maxVal) {
             maxVal = curr;
             maxIndex = i;
@@ -1744,9 +1765,22 @@ export class BuiltInFunctions {
         }
       }
     } else if (isString) {
-      let maxVal = args[0].value as string;
+      if (args[0].type !== "string") {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
+        );
+      }
+      let maxVal = args[0].value;
       for (let i = 1; i < args.length; i++) {
-        const curr = args[i].value as string;
+        const arg = args[i];
+        if (arg.type !== "string") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, arg.type, "string"),
+          );
+        }
+        const curr = arg.value;
         if (curr > maxVal) {
           maxVal = curr;
           maxIndex = i;
@@ -1810,18 +1844,44 @@ export class BuiltInFunctions {
     let maxIndex = 0;
     if (isNumeric) {
       if (useFloat) {
+        if (args[0].type !== "number" && args[0].type !== "bigint") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "float' or 'int"),
+          );
+        }
         let maxVal: number = Number(args[0].value);
         for (let i = 1; i < args.length; i++) {
-          const curr: number = Number(args[i].value);
+          const arg = args[i];
+          if (arg.type !== "number" && arg.type !== "bigint") {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "float' or 'int"),
+            );
+          }
+          const curr: number = Number(arg.value);
           if (curr < maxVal) {
             maxVal = curr;
             maxIndex = i;
           }
         }
       } else {
+        if (args[0].type !== "bigint") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, args[0].type, "int"),
+          );
+        }
         let maxVal: bigint = args[0].value;
         for (let i = 1; i < args.length; i++) {
-          const curr: bigint = args[i].value;
+          const arg = args[i];
+          if (arg.type !== "bigint") {
+            handleRuntimeError(
+              context,
+              new TypeError(source, command as ExprNS.Expr, context, arg.type, "int"),
+            );
+          }
+          const curr: bigint = arg.value;
           if (curr < maxVal) {
             maxVal = curr;
             maxIndex = i;
@@ -1829,9 +1889,22 @@ export class BuiltInFunctions {
         }
       }
     } else if (isString) {
-      let maxVal = args[0].value as string;
+      if (args[0].type !== "string") {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
+        );
+      }
+      let maxVal = args[0].value;
       for (let i = 1; i < args.length; i++) {
-        const curr = args[i].value as string;
+        const arg = args[i];
+        if (arg.type !== "string") {
+          handleRuntimeError(
+            context,
+            new TypeError(source, command as ExprNS.Expr, context, arg.type, "string"),
+          );
+        }
+        const curr = arg.value;
         if (curr < maxVal) {
           maxVal = curr;
           maxIndex = i;
@@ -1847,10 +1920,10 @@ export class BuiltInFunctions {
 
   @Validate(null, 0, "random_random", true)
   static random_random(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context,
+    _args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
   ): Value {
     const result = Math.random();
     return { type: "number", value: result };
@@ -1867,7 +1940,13 @@ export class BuiltInFunctions {
     }
 
     let ndigitsArg = { type: "bigint", value: BigInt(0) };
-    if (args.length === 2 && args[1].type !== "NoneType") {
+    if (args.length === 2 && args[1].type !== "none") {
+      if (args[1].type !== "bigint") {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, args[1].type, "int"),
+        );
+      }
       ndigitsArg = args[1];
     }
 
@@ -1897,22 +1976,28 @@ export class BuiltInFunctions {
   }
 
   @Validate(null, 0, "time_time", true)
-  static time_time(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static time_time(
+    _args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
+  ): Value {
     const currentTime = Date.now();
     return { type: "number", value: currentTime };
   }
 
-  static input(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static input(_args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
     // TODO: : call conductor to receive user input
+    return { type: "string", value: "" };
   }
 
-  static print(args: Value[], source: string, command: ControlItem, context: Context) {
+  static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
     const output = args.map(arg => toPythonString(arg)).join(" ");
     context.output += output + "\n";
     return { type: "undefined" };
   }
 
-  static str(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static str(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
     if (args.length === 0) {
       return { type: "string", value: "" };
     }
@@ -1922,7 +2007,7 @@ export class BuiltInFunctions {
   }
 }
 
-import { ExprNS } from "./ast-types";
+import { ExprNS, StmtNS } from "./ast-types";
 import py_s1_constants from "./stdlib/py_s1_constants.json";
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
@@ -1933,7 +2018,7 @@ const constants = py_s1_constants;
     Create a map to hold built-in constants.
     Each constant is stored with a string key and its corresponding value object.
 */
-export const builtInConstants = new Map<string, any>();
+export const builtInConstants = new Map<string, Value>();
 
 const constantMap = {
   math_e: { type: "number", value: Math.E },
@@ -1957,7 +2042,7 @@ for (const name of constants.constants) {
 */
 export const builtIns = new Map<string, Value>();
 for (const name of constants.builtInFuncs) {
-  const impl = (BuiltInFunctions as any)[name];
+  const impl = BuiltInFunctions[name as keyof BuiltInFunctions];
   if (typeof impl !== "function") {
     throw new Error(`BuiltInFunctions.${name} is not implemented`);
   }
@@ -2008,12 +2093,12 @@ export function toPythonFloat(num: number): string {
 }
 
 export function toPythonString(obj: Value): string {
-  let ret: any;
+  let ret = "";
   if (!obj) {
     return "None";
   }
   if (obj.type == "builtin") {
-    return `<built-in function ${(obj as any).name}>`;
+    return `<built-in function ${obj.name}>`;
   }
   if (obj.type === "bigint" || obj.type === "complex") {
     ret = obj.value.toString();
@@ -2027,20 +2112,25 @@ export function toPythonString(obj: Value): string {
     }
   } else if (obj.type === "error") {
     return obj.message;
-  } else if (obj instanceof Closure) {
-    if (obj.node) {
-      const funcName = (obj.node as any).name?.lexeme || "(anonymous)";
-      return `<function ${funcName}>`;
+  } else if (obj.type === "closure") {
+    if (obj.closure.node instanceof StmtNS.FunctionDef) {
+      return `<function ${obj.closure.node.name.lexeme}>`;
     }
-  } else if (obj === undefined || obj.value === undefined) {
+    return "<function (anonymous)>";
+  } else if (obj.type === "none") {
     ret = "None";
-  } else {
+  } else if (obj.type === "string") {
     ret = obj.value.toString();
   }
   return ret;
 }
 
-export function str(args: Value[], source: string, command: ControlItem, context: Context): Value {
+export function str(
+  args: Value[],
+  _source: string,
+  _command: ControlItem,
+  _context: Context,
+): Value {
   if (args.length === 0) {
     return { type: "string", value: "" };
   }
