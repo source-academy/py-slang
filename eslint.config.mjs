@@ -26,14 +26,10 @@ export default defineConfig([
       "@typescript-eslint/no-namespace": "off",
       "@typescript-eslint/ban-ts-comment": "warn",
       "@typescript-eslint/no-import-type-side-effects": "error",
-      "@typescript-eslint/no-unnecessary-type-assertion": "off", // TODO: Enable in the future
+      "@typescript-eslint/no-unnecessary-type-assertion": "error",
       "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
       "@typescript-eslint/require-await": "error",
       "@typescript-eslint/return-await": ["error", "in-try-catch"],
-      "@typescript-eslint/no-explicit-any": "off", // TODO: Enable in the future
-      "@typescript-eslint/no-unused-expressions": "off", // TODO: Enable in the future
-      "@typescript-eslint/no-this-alias": "off", // TODO: Enable in the future
-      "prefer-const": "off", // TODO: Enable in the future
     },
   },
   {
