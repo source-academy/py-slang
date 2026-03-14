@@ -1,8 +1,8 @@
-import { ExprNS, StmtNS } from '../ast-types';
-import { Closure } from './closure';
-import { Context } from './context';
-import { Heap } from './heap';
-import { Value } from './stash';
+import { ExprNS, StmtNS } from "../ast-types";
+import { Closure } from "./closure";
+import { Context } from "./context";
+import { Heap } from "./heap";
+import { Value } from "./stash";
 
 export interface Frame {
   [name: string]: Value;
@@ -31,9 +31,9 @@ export const createEnvironment = (
 ): Environment => {
   const environment: Environment = {
     name:
-      closure.node.constructor.name === 'FunctionDef'
+      closure.node.constructor.name === "FunctionDef"
         ? (closure.node as StmtNS.FunctionDef).name.lexeme
-        : 'lambda',
+        : "lambda",
     tail: closure.environment,
     head: {},
     heap: new Heap(),
@@ -68,12 +68,12 @@ export const createSimpleEnvironment = (
 };
 
 export const createProgramEnvironment = (context: Context, isPrelude: boolean): Environment => {
-  return createSimpleEnvironment(context, isPrelude ? 'prelude' : 'programEnvironment');
+  return createSimpleEnvironment(context, isPrelude ? "prelude" : "programEnvironment");
 };
 
 export const createBlockEnvironment = (
   context: Context,
-  name = 'blockEnvironment',
+  name = "blockEnvironment",
 ): Environment => {
   return {
     name,

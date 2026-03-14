@@ -1,5 +1,5 @@
-import { getFullLine, MAGIC_OFFSET } from '../errors';
-import { Token } from '../tokenizer';
+import { getFullLine, MAGIC_OFFSET } from "../errors";
+import { Token } from "../tokenizer";
 
 export namespace ResolverErrors {
   export class BaseResolverError extends SyntaxError {
@@ -11,7 +11,7 @@ export namespace ResolverErrors {
                    ${message}`);
       this.line = line;
       this.col = col;
-      this.name = 'BaseResolverError';
+      this.name = "BaseResolverError";
     }
   }
   export class NameNotFoundError extends BaseResolverError {
@@ -26,17 +26,17 @@ export namespace ResolverErrors {
       const { lineIndex, fullLine } = getFullLine(source, start);
       let hint = ` This name is not found in the current or enclosing environment(s).`;
       const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, '^');
-      hint = hint.padStart(hint.length + col - diff, ' ');
+      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+      hint = hint.padStart(hint.length + col - diff, " ");
       if (suggestion !== null) {
         let sugg = ` Perhaps you meant to type '${suggestion}'?`;
-        sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, ' ');
-        sugg = '\n' + sugg;
+        sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");
+        sugg = "\n" + sugg;
         hint += sugg;
       }
-      const name = 'NameNotFoundError';
-      super(name, '\n' + fullLine + '\n' + hint, lineIndex, col);
-      this.name = 'NameNotFoundError';
+      const name = "NameNotFoundError";
+      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      this.name = "NameNotFoundError";
     }
   }
 
@@ -52,22 +52,22 @@ export namespace ResolverErrors {
       const { lineIndex, fullLine } = getFullLine(source, start);
       let hint = ` A name has been declared here.`;
       const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, '^');
-      hint = hint.padStart(hint.length + col - diff, ' ');
+      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+      hint = hint.padStart(hint.length + col - diff, " ");
       const { lineIndex: oldLine, fullLine: oldUnpaddedNameLine } = getFullLine(
         source,
         oldName.indexInSource,
       );
-      const oldNameLine = '\n' + oldUnpaddedNameLine + '\n';
+      const oldNameLine = "\n" + oldUnpaddedNameLine + "\n";
       let sugg = ` However, it has already been declared in the same environment at line ${oldLine}, here: `;
-      sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, ' ');
-      sugg = '\n' + sugg;
+      sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");
+      sugg = "\n" + sugg;
       hint += sugg;
-      oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, ' ');
+      oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, " ");
       hint += oldNameLine;
-      const name = 'NameReassignmentError';
-      super(name, '\n' + fullLine + '\n' + hint, lineIndex, col);
-      this.name = 'NameReassignmentError';
+      const name = "NameReassignmentError";
+      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      this.name = "NameReassignmentError";
     }
   }
 }

@@ -5,8 +5,8 @@ import {
   SourceError,
   SourceLocation,
   UNKNOWN_LOCATION,
-} from '../errors';
-import { Context } from './context';
+} from "../errors";
+import { Context } from "./context";
 
 export class CseError implements SourceError {
   public type = ErrorType.RUNTIME;
@@ -25,7 +25,7 @@ export class CseError implements SourceError {
   }
 
   public elaborate() {
-    return 'There is an error in the CSE machine.';
+    return "There is an error in the CSE machine.";
   }
 }
 
@@ -44,6 +44,6 @@ export class AssertionError extends RuntimeSourceError {
   }
 
   public elaborate(): string {
-    return 'Please contact the administrators to let them know that this error has occurred';
+    return "Please contact the administrators to let them know that this error has occurred";
   }
 }

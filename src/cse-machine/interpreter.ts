@@ -6,31 +6,31 @@
 
 /* tslint:disable:max-classes-per-file */
 
-import { ExprNS, StmtNS } from '../ast-types';
-import * as error from '../errors/errors';
-import { BuiltinReassignmentError } from '../errors/errors';
-import { IOptions } from '../runner/pyRunner';
-import { builtIns, toPythonString } from '../stdlib';
-import { CSEBreak, RecursivePartial, Representation, Result } from '../types';
-import { Closure } from './closure';
-import { Context } from './context';
-import { Control, ControlItem } from './control';
+import { ExprNS, StmtNS } from "../ast-types";
+import * as error from "../errors/errors";
+import { BuiltinReassignmentError } from "../errors/errors";
+import { IOptions } from "../runner/pyRunner";
+import { builtIns, toPythonString } from "../stdlib";
+import { CSEBreak, RecursivePartial, Representation, Result } from "../types";
+import { Closure } from "./closure";
+import { Context } from "./context";
+import { Control, ControlItem } from "./control";
 import {
   createEnvironment,
   createProgramEnvironment,
   currentEnvironment,
   popEnvironment,
   pushEnvironment,
-} from './environment';
-import { handleRuntimeError } from './error';
-import * as instrCreator from './instrCreator';
+} from "./environment";
+import { handleRuntimeError } from "./error";
+import * as instrCreator from "./instrCreator";
 import {
   evaluateBinaryExpression,
   evaluateBoolExpression,
   evaluateUnaryExpression,
   isFalsy,
-} from './operators';
-import { Stash, Value } from './stash';
+} from "./operators";
+import { Stash, Value } from "./stash";
 import {
   AppInstr,
   AssmtInstr,
@@ -43,8 +43,8 @@ import {
   Node,
   StatementSequence,
   UnOpInstr,
-} from './types';
-import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from './utils';
+} from "./types";
+import { envChanging, isNode, pyDefineVariable, pyGetVariable, scanForAssignments } from "./utils";
 
 type CmdEvaluator = (
   code: string,
@@ -55,9 +55,9 @@ type CmdEvaluator = (
   isPrelude: boolean,
 ) => void;
 
-let cseFinalPrint = '';
+let cseFinalPrint = "";
 export function addPrint(str: string) {
-  cseFinalPrint = cseFinalPrint + str + '\n';
+  cseFinalPrint = cseFinalPrint + str + "\n";
 }
 
 /**
@@ -70,19 +70,19 @@ export function addPrint(str: string) {
 export function CSEResultPromise(context: Context, value: Value): Promise<Result> {
   return new Promise((resolve, _reject) => {
     if (value instanceof CSEBreak) {
-      resolve({ status: 'suspended-cse-eval', context });
-    } else if (value.type === 'error') {
+      resolve({ status: "suspended-cse-eval", context });
+    } else if (value.type === "error") {
       const msg = value.message;
       const representation = new Representation(cseFinalPrint + msg);
-      resolve({ status: 'finished', context, value, representation });
+      resolve({ status: "finished", context, value, representation });
     } else {
       const representation = new Representation(toPythonString(value));
-      resolve({ status: 'finished', context, value, representation });
+      resolve({ status: "finished", context, value, representation });
     }
   });
 }
 
-let source = '';
+let source = "";
 
 /**
  * Function to be called when a program is to be interpreted using
@@ -104,7 +104,7 @@ export function evaluate(
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error: unknown) {
-    return { type: 'error', message: (error as Error).message };
+    return { type: "error", message: (error as Error).message };
   }
 
   try {
@@ -121,9 +121,9 @@ export function evaluate(
       options.stepLimit!,
       options.isPrelude,
     );
-    return context.output ? { type: 'string', value: context.output } : result;
+    return context.output ? { type: "string", value: context.output } : result;
   } catch (error: unknown) {
-    return { type: 'error', message: (error as Error).message };
+    return { type: "error", message: (error as Error).message };
   } finally {
     context.runtime.isRunning = false;
   }
@@ -205,7 +205,7 @@ export function runCSEMachine(
 
   // Return the value at the top of the storage as the result
   const result = stash.peek();
-  return result !== undefined ? result : { type: 'none' };
+  return result !== undefined ? result : { type: "none" };
 }
 
 /**
@@ -308,9 +308,9 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const node = command as StmtNS.FileInput;
     // Clean up non-global, non-program, and non-preparation environments
     while (
-      currentEnvironment(context).name !== 'global' &&
-      currentEnvironment(context).name !== 'programEnvironment' &&
-      currentEnvironment(context).name !== 'prelude'
+      currentEnvironment(context).name !== "global" &&
+      currentEnvironment(context).name !== "programEnvironment" &&
+      currentEnvironment(context).name !== "prelude"
     ) {
       popEnvironment(context);
     }
@@ -325,7 +325,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     //   declareFunctionsAndVariables(context, command as es.BlockStatement, environment)
     // }
 
-    if (node.statements.length > 0 && currentEnvironment(context).name !== 'programEnvironment') {
+    if (node.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment") {
       const programEnv = createProgramEnvironment(context, isPrelude);
       pushEnvironment(context, programEnv);
     }
@@ -355,14 +355,14 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const literal = command as ExprNS.Literal;
-    if (typeof literal.value === 'number') {
-      stash.push({ type: 'number', value: literal.value });
-    } else if (typeof literal.value === 'boolean') {
-      stash.push({ type: 'bool', value: literal.value });
-    } else if (typeof literal.value === 'string') {
-      stash.push({ type: 'string', value: literal.value });
+    if (typeof literal.value === "number") {
+      stash.push({ type: "number", value: literal.value });
+    } else if (typeof literal.value === "boolean") {
+      stash.push({ type: "bool", value: literal.value });
+    } else if (typeof literal.value === "string") {
+      stash.push({ type: "string", value: literal.value });
     } else {
-      stash.push({ type: 'none' });
+      stash.push({ type: "none" });
     }
   },
 
@@ -375,7 +375,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const literal = command as ExprNS.BigIntLiteral;
-    stash.push({ type: 'bigint', value: BigInt(literal.value) });
+    stash.push({ type: "bigint", value: BigInt(literal.value) });
   },
 
   Unary: function (
@@ -442,7 +442,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const complexNode = command as ExprNS.Complex;
-    stash.push({ type: 'complex', value: complexNode.value });
+    stash.push({ type: "complex", value: complexNode.value });
   },
 
   None: function (
@@ -453,7 +453,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    stash.push({ type: 'none' });
+    stash.push({ type: "none" });
   },
 
   Variable: function (
@@ -499,7 +499,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const assignNode = command as StmtNS.Assign;
 
     if (assignNode.target instanceof ExprNS.Subscript) {
-      throw new Error('Subscript assignment is not yet supported');
+      throw new Error("Subscript assignment is not yet supported");
     }
 
     const assmtInstr = instrCreator.assmtInstr(
@@ -546,7 +546,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables,
     );
-    pyDefineVariable(context, functionDefNode.name.lexeme, { type: 'closure', closure });
+    pyDefineVariable(context, functionDefNode.name.lexeme, { type: "closure", closure });
   },
 
   Lambda: function (
@@ -565,7 +565,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       context,
       localVariables,
     );
-    stash.push({ type: 'closure', closure });
+    stash.push({ type: "closure", closure });
   },
 
   Return: function (
@@ -580,7 +580,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || ('instrType' in head && head.instrType === InstrType.RESET)) {
+      if (!head || ("instrType" in head && head.instrType === InstrType.RESET)) {
         break;
       }
     }
@@ -591,7 +591,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       control.push(returnNode.value);
     } else {
       // implicit None return
-      stash.push({ type: 'none' });
+      stash.push({ type: "none" });
     }
   },
 
@@ -605,11 +605,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const ifNode = command as StmtNS.If;
     const branch = instrCreator.branchInstr(
-      { type: 'StatementSequence', body: ifNode.body },
+      { type: "StatementSequence", body: ifNode.body },
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
           ? // 'else' block
-            { type: 'StatementSequence', body: ifNode.elseBlock }
+            { type: "StatementSequence", body: ifNode.elseBlock }
           : // 'elif' block
             ifNode.elseBlock
         : // 'else' block dont exist
@@ -785,7 +785,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       const closure = callable;
       control.push(instrCreator.resetInstr(instr.srcNode));
 
-      if (closure.node.constructor.name === 'FunctionDef') {
+      if (closure.node.constructor.name === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
 
@@ -793,7 +793,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       pushEnvironment(context, newEnv);
 
       const closureNode = closure.node;
-      if (closureNode.constructor.name === 'FunctionDef') {
+      if (closureNode.constructor.name === "FunctionDef") {
         const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
         control.push(...bodyStmts);
       } else {
@@ -801,7 +801,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(bodyExpr);
       }
     } else {
-      if (callable && callable.type === 'builtin') {
+      if (callable && callable.type === "builtin") {
         const result = callable.func(args, code, instr.srcNode, context);
         stash.push(result);
       }
@@ -821,14 +821,14 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;
-      if (consequent && 'type' in consequent && consequent.type === 'StatementSequence') {
+      if (consequent && "type" in consequent && consequent.type === "StatementSequence") {
         control.push(...(consequent as StatementSequence).body.slice().reverse());
       } else if (consequent) {
         control.push(consequent);
       }
     } else if (instr.alternate) {
       const alternate = instr.alternate;
-      if (alternate && 'type' in alternate && alternate.type === 'StatementSequence') {
+      if (alternate && "type" in alternate && alternate.type === "StatementSequence") {
         control.push(...(alternate as StatementSequence).body.slice().reverse());
       } else if (alternate) {
         control.push(alternate);
@@ -857,6 +857,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    stash.push({ type: 'none' });
+    stash.push({ type: "none" });
   },
 };

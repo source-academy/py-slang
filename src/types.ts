@@ -1,8 +1,8 @@
-import { Context } from './cse-machine/context';
-import { Value } from './cse-machine/stash';
-import { SourceLocation } from './errors';
-import { ModuleFunctions } from './modules/moduleTypes';
-import { toPythonString } from './stdlib';
+import { Context } from "./cse-machine/context";
+import { Value } from "./cse-machine/stash";
+import { SourceLocation } from "./errors";
+import { ModuleFunctions } from "./modules/moduleTypes";
+import { toPythonString } from "./stdlib";
 
 export class CSEBreak {}
 
@@ -37,10 +37,10 @@ export class PyComplexNumber {
     }
 
     const lower = str.toLowerCase();
-    if (lower.endsWith('j')) {
+    if (lower.endsWith("j")) {
       const numericPart = str.substring(0, str.length - 1);
-      if (numericPart === '' || numericPart === '+' || numericPart === '-') {
-        const sign = numericPart === '-' ? -1 : 1;
+      if (numericPart === "" || numericPart === "+" || numericPart === "-") {
+        const sign = numericPart === "-" ? -1 : 1;
         return new PyComplexNumber(0, sign * 1);
       }
 
@@ -72,10 +72,10 @@ export class PyComplexNumber {
     if (value instanceof PyComplexNumber) {
       return new PyComplexNumber(value.real, value.imag);
     }
-    if (typeof value === 'number') {
+    if (typeof value === "number") {
       return PyComplexNumber.fromNumber(value);
     }
-    if (typeof value === 'bigint') {
+    if (typeof value === "bigint") {
       return PyComplexNumber.fromBigInt(value);
     }
     return PyComplexNumber.fromString(value);
@@ -153,7 +153,7 @@ export class PyComplexNumber {
       // In Python, raising 0 to a negative or complex power raises an error.
       // For example, 0**(1j) in CPython directly raises ValueError: complex power.
       if (A < 0 || B !== 0) {
-        throw new Error('0 cannot be raised to a negative or complex power');
+        throw new Error("0 cannot be raised to a negative or complex power");
       }
       // Otherwise, 0**(positive number) = 0.
       return new PyComplexNumber(0, 0);
@@ -182,7 +182,7 @@ export class PyComplexNumber {
     //     return `${this.real}`;
     // }
 
-    const sign = this.imag >= 0 ? '+' : '';
+    const sign = this.imag >= 0 ? "+" : "";
 
     // return `(${this.real}${sign}${this.imag}j)`;
     return `(${this.toPythonComplexFloat(this.real)}${sign}${this.toPythonComplexFloat(this.imag)}j)`;
@@ -201,15 +201,15 @@ export class PyComplexNumber {
    */
   private toPythonComplexFloat(num: number) {
     if (num === Infinity) {
-      return 'inf';
+      return "inf";
     }
     if (num === -Infinity) {
-      return '-inf';
+      return "-inf";
     }
 
     // Force scientific notation for values < 1e-4 or ≥ 1e16 to mimic Python's float formatting behavior.
     if (Math.abs(num) >= 1e16 || (num !== 0 && Math.abs(num) < 1e-4)) {
-      return num.toExponential().replace(/e([+-])(\d)$/, 'e$10$2');
+      return num.toExponential().replace(/e([+-])(\d)$/, "e$10$2");
     }
     return num.toString();
   }
@@ -220,12 +220,12 @@ export class PyComplexNumber {
 }
 
 export interface None {
-  type: 'NoneType';
+  type: "NoneType";
   loc?: SourceLocation | null;
 }
 
 export interface ComplexLiteral {
-  type: 'Literal';
+  type: "Literal";
   complex: PyComplexNumber;
   loc?: SourceLocation | null;
 }
@@ -257,12 +257,12 @@ export type Result = Finished | Error | SuspendedCseEval; // | Suspended
 // }
 
 export interface SuspendedCseEval {
-  status: 'suspended-cse-eval';
+  status: "suspended-cse-eval";
   context: Context;
 }
 
 export interface Finished {
-  status: 'finished';
+  status: "finished";
   context: Context;
   value: Value;
   representation: Representation; // if the returned value needs a unique representation,

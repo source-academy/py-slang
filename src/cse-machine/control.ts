@@ -1,7 +1,7 @@
-import { StmtNS } from '../ast-types';
-import { Stack } from './stack';
-import { Instr, Node } from './types';
-import { isEnvDependent } from './utils';
+import { StmtNS } from "../ast-types";
+import { Stack } from "./stack";
+import { Instr, Node } from "./types";
+import { isEnvDependent } from "./utils";
 
 export type ControlItem = (Node | Instr) & {
   isEnvDependent?: boolean;

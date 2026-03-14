@@ -1,6 +1,6 @@
-import { Closure } from './closure';
-import { Environment } from './environment';
-import { Value } from './stash';
+import { Closure } from "./closure";
+import { Environment } from "./environment";
+import { Value } from "./stash";
 
 // Every array also has the properties `id` and `environment` for use in the frontend CSE Machine
 export type EnvArray = (Value & {

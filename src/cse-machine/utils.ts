@@ -1,11 +1,11 @@
-import { ExprNS, StmtNS } from '../ast-types';
-import { NameError, UnboundLocalError } from '../errors/errors';
-import { builtInConstants, builtIns } from '../stdlib';
-import { Context } from './context';
-import { Control, ControlItem } from './control';
-import { currentEnvironment, Environment } from './environment';
-import { AssertionError } from './error';
-import { Value } from './stash';
+import { ExprNS, StmtNS } from "../ast-types";
+import { NameError, UnboundLocalError } from "../errors/errors";
+import { builtInConstants, builtIns } from "../stdlib";
+import { Context } from "./context";
+import { Control, ControlItem } from "./control";
+import { currentEnvironment, Environment } from "./environment";
+import { AssertionError } from "./error";
+import { Value } from "./stash";
 import {
   BranchInstr,
   ForInstr,
@@ -14,7 +14,7 @@ import {
   Node,
   StatementSequence,
   WhileInstr,
-} from './types';
+} from "./types";
 
 export const isNode = (command: ControlItem): command is Node => {
   return !isInstr(command);
@@ -36,18 +36,18 @@ const setToFalse = (item: ControlItem): ControlItem => {
 const propertySetter: PropertySetter = new Map<string, Transformer>([
   // AST Nodes
   [
-    'FileInput',
+    "FileInput",
     (item: ControlItem) => {
       const node = item as StmtNS.FileInput;
       item.isEnvDependent = node.statements.some(stmt => isEnvDependent(stmt));
       return item;
     },
   ],
-  ['FunctionDef', setToTrue],
-  ['Lambda', setToFalse],
-  ['Assign', setToTrue],
+  ["FunctionDef", setToTrue],
+  ["Lambda", setToFalse],
+  ["Assign", setToTrue],
   [
-    'Return',
+    "Return",
     (item: ControlItem) => {
       const node = item as StmtNS.Return;
       item.isEnvDependent = node.value ? isEnvDependent(node.value) : false;
@@ -55,7 +55,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'SimpleExpr',
+    "SimpleExpr",
     (item: ControlItem) => {
       const node = item as StmtNS.SimpleExpr;
       item.isEnvDependent = isEnvDependent(node.expression);
@@ -63,7 +63,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'If',
+    "If",
     (item: ControlItem) => {
       const node = item as StmtNS.If;
       const elseIsDependent = node.elseBlock ? node.elseBlock.some(isEnvDependent) : false;
@@ -74,13 +74,13 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
       return item;
     },
   ],
-  ['FromImport', setToTrue],
-  ['Pass', setToFalse],
-  ['Break', setToFalse],
-  ['Continue', setToFalse],
-  ['Variable', setToFalse],
+  ["FromImport", setToTrue],
+  ["Pass", setToFalse],
+  ["Break", setToFalse],
+  ["Continue", setToFalse],
+  ["Variable", setToFalse],
   [
-    'Call',
+    "Call",
     (item: ControlItem) => {
       const node = item as ExprNS.Call;
       item.isEnvDependent =
@@ -88,12 +88,12 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
       return item;
     },
   ],
-  ['Literal', setToFalse],
-  ['BigIntLiteral', setToFalse],
-  ['None', setToFalse],
-  ['Complex', setToFalse],
+  ["Literal", setToFalse],
+  ["BigIntLiteral", setToFalse],
+  ["None", setToFalse],
+  ["Complex", setToFalse],
   [
-    'Call',
+    "Call",
     (item: ControlItem) => {
       const node = item as ExprNS.Grouping;
       item.isEnvDependent = isEnvDependent(node.expression);
@@ -101,7 +101,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'Binary',
+    "Binary",
     (item: ControlItem) => {
       const node = item as ExprNS.Binary;
       item.isEnvDependent = isEnvDependent(node.left) || isEnvDependent(node.right);
@@ -109,7 +109,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'Unary',
+    "Unary",
     (item: ControlItem) => {
       const node = item as ExprNS.Unary;
       item.isEnvDependent = isEnvDependent(node.right);
@@ -117,7 +117,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'Compare',
+    "Compare",
     (item: ControlItem) => {
       const node = item as ExprNS.Compare;
       item.isEnvDependent = isEnvDependent(node.left) || isEnvDependent(node.right);
@@ -125,7 +125,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'Ternary',
+    "Ternary",
     (item: ControlItem) => {
       const node = item as ExprNS.Ternary;
       item.isEnvDependent =
@@ -136,7 +136,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'List',
+    "List",
     (item: ControlItem) => {
       const node = item as ExprNS.List;
       item.isEnvDependent = node.elements.some(elem => isEnvDependent(elem));
@@ -144,7 +144,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'Subscript',
+    "Subscript",
     (item: ControlItem) => {
       const node = item as ExprNS.Subscript;
       item.isEnvDependent = isEnvDependent(node.value) || isEnvDependent(node.index);
@@ -152,7 +152,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'StatementSequence',
+    "StatementSequence",
     (item: ControlItem) => {
       const node = item as StatementSequence;
       item.isEnvDependent = node.body.some(stmt => isEnvDependent(stmt));
@@ -178,7 +178,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'InstrType.FOR',
+    "InstrType.FOR",
     (item: ControlItem) => {
       const instr = item as ForInstr;
       item.isEnvDependent =
@@ -190,7 +190,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   [
-    'InstrType.WHILE',
+    "InstrType.WHILE",
     (item: ControlItem) => {
       const instr = item as WhileInstr;
       item.isEnvDependent = isEnvDependent(instr.body) || isEnvDependent(instr.test);
@@ -218,7 +218,7 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
   }
   let setter: Transformer | undefined;
   if (isNode(item)) {
-    const key = 'type' in item && typeof item.type === 'string' ? item.type : item.constructor.name;
+    const key = "type" in item && typeof item.type === "string" ? item.type : item.constructor.name;
     setter = propertySetter.get(key);
   } else if (isInstr(item)) {
     setter = propertySetter.get(item.instrType);
@@ -291,7 +291,7 @@ export const checkStackOverFlow = (_context: Context, _control: Control) => {
 // }
 
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
-  if (typeof a === 'bigint' || typeof b === 'bigint') {
+  if (typeof a === "bigint" || typeof b === "bigint") {
     const big_a = BigInt(a);
     const big_b = BigInt(b);
     const mod = big_a % big_b;
@@ -320,19 +320,19 @@ export default function assert(condition: boolean, message: string): asserts con
 export function scanForAssignments(node: Node | Node[]): Set<string> {
   const assignments = new Set<string>();
   const visitor = (curNode: Node) => {
-    if (!curNode || typeof curNode !== 'object') {
+    if (!curNode || typeof curNode !== "object") {
       return;
     }
 
     const nodeType = curNode.constructor.name;
 
-    if (nodeType === 'Assign') {
+    if (nodeType === "Assign") {
       const assignNode = curNode as StmtNS.Assign;
       if (assignNode.target instanceof ExprNS.Subscript) {
-        throw new Error('Subscript assignment is not yet supported');
+        throw new Error("Subscript assignment is not yet supported");
       }
       assignments.add(assignNode.target.name.lexeme);
-    } else if (nodeType === 'FunctionDef' || nodeType === 'Lambda') {
+    } else if (nodeType === "FunctionDef" || nodeType === "Lambda") {
       // detach here, nested functions have their own scope
       return;
     }
@@ -343,7 +343,7 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
         const child = (curNode as unknown as Record<string, unknown>)[key];
         if (Array.isArray(child)) {
           child.forEach(visitor);
-        } else if (child && typeof child === 'object' && child.hasOwnProperty('type')) {
+        } else if (child && typeof child === "object" && child.hasOwnProperty("type")) {
           visitor(child as Node);
         }
       }
@@ -361,37 +361,37 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
 
 export function typeTranslator(type: string): string {
   switch (type) {
-    case 'bigint':
-      return 'int';
-    case 'number':
-      return 'float';
-    case 'boolean':
-      return 'bool';
-    case 'bool':
-      return 'bool';
-    case 'string':
-      return 'string';
-    case 'complex':
-      return 'complex';
+    case "bigint":
+      return "int";
+    case "number":
+      return "float";
+    case "boolean":
+      return "bool";
+    case "bool":
+      return "bool";
+    case "string":
+      return "string";
+    case "complex":
+      return "complex";
     default:
-      return 'unknown';
+      return "unknown";
   }
 }
 
 export function operandTranslator(type: string) {
   switch (type) {
-    case '__py_adder':
-      return '+';
-    case '__py_minuser':
-      return '-';
-    case '__py_multiplier':
-      return '*';
-    case '__py_divider':
-      return '/';
-    case '__py_modder':
-      return '%';
-    case '__py_powerer':
-      return '**';
+    case "__py_adder":
+      return "+";
+    case "__py_minuser":
+      return "-";
+    case "__py_multiplier":
+      return "*";
+    case "__py_divider":
+      return "/";
+    case "__py_modder":
+      return "%";
+    case "__py_powerer":
+      return "**";
     default:
       return type;
   }

@@ -39,10 +39,10 @@
     IN THE SOFTWARE.
 **/
 
-import { ExprNS, FunctionParam, StmtNS } from '../ast-types';
-import { SPECIAL_IDENTIFIER_TOKENS, Token } from '../tokenizer/tokenizer';
-import { TokenType } from '../tokens';
-import { ParserErrors } from './errors';
+import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
+import { SPECIAL_IDENTIFIER_TOKENS, Token } from "../tokenizer/tokenizer";
+import { TokenType } from "../tokens";
+import { ParserErrors } from "./errors";
 
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
@@ -208,7 +208,7 @@ export class Parser {
     } else if (this.match(TokenType.DEF)) {
       return this.funcdef();
     }
-    throw new Error('Unreachable code path');
+    throw new Error("Unreachable code path");
   }
 
   private if_stmt(): Stmt {
@@ -242,7 +242,7 @@ export class Parser {
   private for_stmt(): Stmt {
     const startToken = this.peek();
     const target = this.advance();
-    this.consume(TokenType.IN, 'Expected in after for');
+    this.consume(TokenType.IN, "Expected in after for");
     const iter = this.test();
     this.consume(TokenType.COLON, "Expected ':' after for");
     const block = this.suite();
@@ -308,7 +308,7 @@ export class Parser {
         }
         this.advance();
         const ann = this.test();
-        this.consume(TokenType.EQUAL, 'Expect equal in annotated assignment');
+        this.consume(TokenType.EQUAL, "Expect equal in annotated assignment");
         const value = this.test();
         res = new StmtNS.AnnAssign(startToken, this.previous(), expr, value, ann);
       } else if (this.check(TokenType.EQUAL)) {
@@ -323,16 +323,16 @@ export class Parser {
       }
       // res = new StmtNS.SimpleExpr(startToken, startToken, expr);
     } else {
-      throw new Error('Unreachable code path');
+      throw new Error("Unreachable code path");
     }
-    this.consume(TokenType.NEWLINE, 'Expected newline');
+    this.consume(TokenType.NEWLINE, "Expected newline");
     return res;
   }
 
   private import_from(): Stmt {
     const startToken = this.previous();
     const module = this.advance();
-    this.consume(TokenType.IMPORT, 'Expected import keyword');
+    this.consume(TokenType.IMPORT, "Expected import keyword");
 
     const names: Token[] = [];
     let useParens = false;
@@ -342,9 +342,9 @@ export class Parser {
       useParens = true;
     }
 
-    names.push(this.consume(TokenType.NAME, 'Expected name to import'));
+    names.push(this.consume(TokenType.NAME, "Expected name to import"));
     while (this.match(TokenType.COMMA)) {
-      names.push(this.consume(TokenType.NAME, 'Expected name after comma'));
+      names.push(this.consume(TokenType.NAME, "Expected name after comma"));
     }
 
     if (useParens) {
@@ -355,9 +355,9 @@ export class Parser {
   }
 
   private parameters(): FunctionParam[] {
-    this.consume(TokenType.LPAR, 'Expected opening parentheses');
+    this.consume(TokenType.LPAR, "Expected opening parentheses");
     const res = this.varparamslist();
-    this.consume(TokenType.RPAR, 'Expected closing parentheses');
+    this.consume(TokenType.RPAR, "Expected closing parentheses");
     return res;
   }
 
@@ -369,7 +369,7 @@ export class Parser {
       const consequent = this.or_test();
       if (this.match(TokenType.IF)) {
         const predicate = this.or_test();
-        this.consume(TokenType.ELSE, 'Expected else');
+        this.consume(TokenType.ELSE, "Expected else");
         const alternative = this.test();
         return new ExprNS.Ternary(startToken, this.previous(), predicate, consequent, alternative);
       }
@@ -388,13 +388,13 @@ export class Parser {
       return new ExprNS.MultiLambda(startToken, this.previous(), args, block, []);
     }
     this.consume(TokenType.COLON, "Expected ':' after lambda");
-    throw new Error('unreachable code path');
+    throw new Error("unreachable code path");
   }
 
   private suite(): Stmt[] {
     const stmts = [];
     if (this.match(TokenType.NEWLINE)) {
-      this.consume(TokenType.INDENT, 'Expected indent');
+      this.consume(TokenType.INDENT, "Expected indent");
       while (!this.match(TokenType.DEDENT)) {
         stmts.push(this.stmt());
       }
@@ -408,11 +408,11 @@ export class Parser {
       if (this.match(TokenType.STAR)) {
         const name = this.consume(
           TokenType.NAME,
-          'Expected a proper identifier after * in parameter',
+          "Expected a proper identifier after * in parameter",
         );
         params.push({ ...name, isStarred: true });
       } else {
-        const name = this.consume(TokenType.NAME, 'Expected a proper identifier in parameter');
+        const name = this.consume(TokenType.NAME, "Expected a proper identifier in parameter");
         params.push({ ...name, isStarred: false });
       }
       if (!this.match(TokenType.COMMA)) {
@@ -585,7 +585,7 @@ export class Parser {
       return new ExprNS.Literal(
         startToken,
         this.previous(),
-        Number(this.previous().lexeme.replace(/_/g, '')),
+        Number(this.previous().lexeme.replace(/_/g, "")),
       );
     }
     if (this.match(TokenType.BIGINT)) {
