@@ -1,14 +1,15 @@
-import { ExprNS, StmtNS } from "../ast-types";
-import { Token } from "../tokenizer/tokenizer";
-import { TokenType } from "../tokens";
-import { ResolverErrors } from "./errors";
+import { ExprNS, StmtNS } from '../ast-types';
+import { Token } from '../tokenizer/tokenizer';
+import { TokenType } from '../tokens';
+import { ResolverErrors } from './errors';
+
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 
-import levenshtein from "fast-levenshtein";
+import levenshtein from 'fast-levenshtein';
 // const levenshtein = require('fast-levenshtein');
 
-const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
+const RedefineableTokenSentinel = new Token(TokenType.AT, '', 0, 0, 0);
 
 class Environment {
   source: string;
@@ -39,6 +40,7 @@ class Environment {
   lookupName(identifier: Token): number {
     const name = identifier.lexeme;
     let distance = 0;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       if (curr.names.has(name)) {
@@ -82,7 +84,7 @@ class Environment {
     }
   }
   declareName(identifier: Token) {
-    const lookup = this.lookupNameCurrentEnv(identifier);
+    // const lookup = this.lookupNameCurrentEnv(identifier)
     // if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) {
     //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
     //         this.source,
@@ -137,6 +139,7 @@ class Environment {
     const name = identifier.lexeme;
     let minDistance = Infinity;
     let minName = null;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       for (const declName of curr.names.keys()) {
@@ -170,78 +173,78 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       null,
       new Map([
         // misc library
-        ["_int", new Token(TokenType.NAME, "_int", 0, 0, 0)],
-        ["_int_from_string", new Token(TokenType.NAME, "_int_from_string", 0, 0, 0)],
-        ["abs", new Token(TokenType.NAME, "abs", 0, 0, 0)],
-        ["char_at", new Token(TokenType.NAME, "char_at", 0, 0, 0)],
-        ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
-        ["input", new Token(TokenType.NAME, "input", 0, 0, 0)],
-        ["isinstance", new Token(TokenType.NAME, "isinstance", 0, 0, 0)],
-        ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
-        ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
-        ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
-        ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
-        ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
-        ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
-        ["time_time", new Token(TokenType.NAME, "time_time", 0, 0, 0)],
+        ['_int', new Token(TokenType.NAME, '_int', 0, 0, 0)],
+        ['_int_from_string', new Token(TokenType.NAME, '_int_from_string', 0, 0, 0)],
+        ['abs', new Token(TokenType.NAME, 'abs', 0, 0, 0)],
+        ['char_at', new Token(TokenType.NAME, 'char_at', 0, 0, 0)],
+        ['error', new Token(TokenType.NAME, 'error', 0, 0, 0)],
+        ['input', new Token(TokenType.NAME, 'input', 0, 0, 0)],
+        ['isinstance', new Token(TokenType.NAME, 'isinstance', 0, 0, 0)],
+        ['max', new Token(TokenType.NAME, 'max', 0, 0, 0)],
+        ['min', new Token(TokenType.NAME, 'min', 0, 0, 0)],
+        ['print', new Token(TokenType.NAME, 'print', 0, 0, 0)],
+        ['random_random', new Token(TokenType.NAME, 'random_random', 0, 0, 0)],
+        ['round', new Token(TokenType.NAME, 'round', 0, 0, 0)],
+        ['str', new Token(TokenType.NAME, 'str', 0, 0, 0)],
+        ['time_time', new Token(TokenType.NAME, 'time_time', 0, 0, 0)],
 
         // math constants
-        ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
-        ["math_e", new Token(TokenType.NAME, "math_e", 0, 0, 0)],
-        ["math_inf", new Token(TokenType.NAME, "math_inf", 0, 0, 0)],
-        ["math_nan", new Token(TokenType.NAME, "math_nan", 0, 0, 0)],
-        ["math_tau", new Token(TokenType.NAME, "math_tau", 0, 0, 0)],
+        ['math_pi', new Token(TokenType.NAME, 'math_pi', 0, 0, 0)],
+        ['math_e', new Token(TokenType.NAME, 'math_e', 0, 0, 0)],
+        ['math_inf', new Token(TokenType.NAME, 'math_inf', 0, 0, 0)],
+        ['math_nan', new Token(TokenType.NAME, 'math_nan', 0, 0, 0)],
+        ['math_tau', new Token(TokenType.NAME, 'math_tau', 0, 0, 0)],
 
         // math library
-        ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],
-        ["math_acosh", new Token(TokenType.NAME, "math_acosh", 0, 0, 0)],
-        ["math_asin", new Token(TokenType.NAME, "math_asin", 0, 0, 0)],
-        ["math_asinh", new Token(TokenType.NAME, "math_asinh", 0, 0, 0)],
-        ["math_atan", new Token(TokenType.NAME, "math_atan", 0, 0, 0)],
-        ["math_atan2", new Token(TokenType.NAME, "math_atan2", 0, 0, 0)],
-        ["math_atanh", new Token(TokenType.NAME, "math_atanh", 0, 0, 0)],
-        ["math_cbrt", new Token(TokenType.NAME, "math_cbrt", 0, 0, 0)],
-        ["math_ceil", new Token(TokenType.NAME, "math_ceil", 0, 0, 0)],
-        ["math_comb", new Token(TokenType.NAME, "math_comb", 0, 0, 0)],
-        ["math_copysign", new Token(TokenType.NAME, "math_copysign", 0, 0, 0)],
-        ["math_cos", new Token(TokenType.NAME, "math_cos", 0, 0, 0)],
-        ["math_cosh", new Token(TokenType.NAME, "math_cosh", 0, 0, 0)],
-        ["math_degrees", new Token(TokenType.NAME, "math_degrees", 0, 0, 0)],
-        ["math_erf", new Token(TokenType.NAME, "math_erf", 0, 0, 0)],
-        ["math_erfc", new Token(TokenType.NAME, "math_erfc", 0, 0, 0)],
-        ["math_exp", new Token(TokenType.NAME, "math_exp", 0, 0, 0)],
-        ["math_exp2", new Token(TokenType.NAME, "math_exp2", 0, 0, 0)],
-        ["math_expm1", new Token(TokenType.NAME, "math_expm1", 0, 0, 0)],
-        ["math_fabs", new Token(TokenType.NAME, "math_fabs", 0, 0, 0)],
-        ["math_factorial", new Token(TokenType.NAME, "math_factorial", 0, 0, 0)],
-        ["math_floor", new Token(TokenType.NAME, "math_floor", 0, 0, 0)],
-        ["math_fma", new Token(TokenType.NAME, "math_fma", 0, 0, 0)],
-        ["math_fmod", new Token(TokenType.NAME, "math_fmod", 0, 0, 0)],
-        ["math_gamma", new Token(TokenType.NAME, "math_gamma", 0, 0, 0)],
-        ["math_gcd", new Token(TokenType.NAME, "math_gcd", 0, 0, 0)],
-        ["math_isfinite", new Token(TokenType.NAME, "math_isfinite", 0, 0, 0)],
-        ["math_isinf", new Token(TokenType.NAME, "math_isinf", 0, 0, 0)],
-        ["math_isnan", new Token(TokenType.NAME, "math_isnan", 0, 0, 0)],
-        ["math_isqrt", new Token(TokenType.NAME, "math_isqrt", 0, 0, 0)],
-        ["math_lcm", new Token(TokenType.NAME, "math_lcm", 0, 0, 0)],
-        ["math_ldexp", new Token(TokenType.NAME, "math_ldexp", 0, 0, 0)],
-        ["math_lgamma", new Token(TokenType.NAME, "math_lgamma", 0, 0, 0)],
-        ["math_log", new Token(TokenType.NAME, "math_log", 0, 0, 0)],
-        ["math_log10", new Token(TokenType.NAME, "math_log10", 0, 0, 0)],
-        ["math_log1p", new Token(TokenType.NAME, "math_log1p", 0, 0, 0)],
-        ["math_log2", new Token(TokenType.NAME, "math_log2", 0, 0, 0)],
-        ["math_nextafter", new Token(TokenType.NAME, "math_nextafter", 0, 0, 0)],
-        ["math_perm", new Token(TokenType.NAME, "math_perm", 0, 0, 0)],
-        ["math_pow", new Token(TokenType.NAME, "math_pow", 0, 0, 0)],
-        ["math_radians", new Token(TokenType.NAME, "math_radians", 0, 0, 0)],
-        ["math_remainder", new Token(TokenType.NAME, "math_remainder", 0, 0, 0)],
-        ["math_sin", new Token(TokenType.NAME, "math_sin", 0, 0, 0)],
-        ["math_sinh", new Token(TokenType.NAME, "math_sinh", 0, 0, 0)],
-        ["math_sqrt", new Token(TokenType.NAME, "math_sqrt", 0, 0, 0)],
-        ["math_tan", new Token(TokenType.NAME, "math_tan", 0, 0, 0)],
-        ["math_tanh", new Token(TokenType.NAME, "math_tanh", 0, 0, 0)],
-        ["math_trunc", new Token(TokenType.NAME, "math_trunc", 0, 0, 0)],
-        ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)],
+        ['math_acos', new Token(TokenType.NAME, 'math_acos', 0, 0, 0)],
+        ['math_acosh', new Token(TokenType.NAME, 'math_acosh', 0, 0, 0)],
+        ['math_asin', new Token(TokenType.NAME, 'math_asin', 0, 0, 0)],
+        ['math_asinh', new Token(TokenType.NAME, 'math_asinh', 0, 0, 0)],
+        ['math_atan', new Token(TokenType.NAME, 'math_atan', 0, 0, 0)],
+        ['math_atan2', new Token(TokenType.NAME, 'math_atan2', 0, 0, 0)],
+        ['math_atanh', new Token(TokenType.NAME, 'math_atanh', 0, 0, 0)],
+        ['math_cbrt', new Token(TokenType.NAME, 'math_cbrt', 0, 0, 0)],
+        ['math_ceil', new Token(TokenType.NAME, 'math_ceil', 0, 0, 0)],
+        ['math_comb', new Token(TokenType.NAME, 'math_comb', 0, 0, 0)],
+        ['math_copysign', new Token(TokenType.NAME, 'math_copysign', 0, 0, 0)],
+        ['math_cos', new Token(TokenType.NAME, 'math_cos', 0, 0, 0)],
+        ['math_cosh', new Token(TokenType.NAME, 'math_cosh', 0, 0, 0)],
+        ['math_degrees', new Token(TokenType.NAME, 'math_degrees', 0, 0, 0)],
+        ['math_erf', new Token(TokenType.NAME, 'math_erf', 0, 0, 0)],
+        ['math_erfc', new Token(TokenType.NAME, 'math_erfc', 0, 0, 0)],
+        ['math_exp', new Token(TokenType.NAME, 'math_exp', 0, 0, 0)],
+        ['math_exp2', new Token(TokenType.NAME, 'math_exp2', 0, 0, 0)],
+        ['math_expm1', new Token(TokenType.NAME, 'math_expm1', 0, 0, 0)],
+        ['math_fabs', new Token(TokenType.NAME, 'math_fabs', 0, 0, 0)],
+        ['math_factorial', new Token(TokenType.NAME, 'math_factorial', 0, 0, 0)],
+        ['math_floor', new Token(TokenType.NAME, 'math_floor', 0, 0, 0)],
+        ['math_fma', new Token(TokenType.NAME, 'math_fma', 0, 0, 0)],
+        ['math_fmod', new Token(TokenType.NAME, 'math_fmod', 0, 0, 0)],
+        ['math_gamma', new Token(TokenType.NAME, 'math_gamma', 0, 0, 0)],
+        ['math_gcd', new Token(TokenType.NAME, 'math_gcd', 0, 0, 0)],
+        ['math_isfinite', new Token(TokenType.NAME, 'math_isfinite', 0, 0, 0)],
+        ['math_isinf', new Token(TokenType.NAME, 'math_isinf', 0, 0, 0)],
+        ['math_isnan', new Token(TokenType.NAME, 'math_isnan', 0, 0, 0)],
+        ['math_isqrt', new Token(TokenType.NAME, 'math_isqrt', 0, 0, 0)],
+        ['math_lcm', new Token(TokenType.NAME, 'math_lcm', 0, 0, 0)],
+        ['math_ldexp', new Token(TokenType.NAME, 'math_ldexp', 0, 0, 0)],
+        ['math_lgamma', new Token(TokenType.NAME, 'math_lgamma', 0, 0, 0)],
+        ['math_log', new Token(TokenType.NAME, 'math_log', 0, 0, 0)],
+        ['math_log10', new Token(TokenType.NAME, 'math_log10', 0, 0, 0)],
+        ['math_log1p', new Token(TokenType.NAME, 'math_log1p', 0, 0, 0)],
+        ['math_log2', new Token(TokenType.NAME, 'math_log2', 0, 0, 0)],
+        ['math_nextafter', new Token(TokenType.NAME, 'math_nextafter', 0, 0, 0)],
+        ['math_perm', new Token(TokenType.NAME, 'math_perm', 0, 0, 0)],
+        ['math_pow', new Token(TokenType.NAME, 'math_pow', 0, 0, 0)],
+        ['math_radians', new Token(TokenType.NAME, 'math_radians', 0, 0, 0)],
+        ['math_remainder', new Token(TokenType.NAME, 'math_remainder', 0, 0, 0)],
+        ['math_sin', new Token(TokenType.NAME, 'math_sin', 0, 0, 0)],
+        ['math_sinh', new Token(TokenType.NAME, 'math_sinh', 0, 0, 0)],
+        ['math_sqrt', new Token(TokenType.NAME, 'math_sqrt', 0, 0, 0)],
+        ['math_tan', new Token(TokenType.NAME, 'math_tan', 0, 0, 0)],
+        ['math_tanh', new Token(TokenType.NAME, 'math_tanh', 0, 0, 0)],
+        ['math_trunc', new Token(TokenType.NAME, 'math_trunc', 0, 0, 0)],
+        ['math_ulp', new Token(TokenType.NAME, 'math_ulp', 0, 0, 0)],
       ]),
     );
     this.functionScope = null;
@@ -287,7 +290,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
         const token = curr.names.get(identifier.lexeme);
         if (token === undefined) {
-          throw new Error("placeholder error");
+          throw new Error('placeholder error');
         }
         throw new ResolverErrors.NameReassignmentError(
           identifier.line,
@@ -313,12 +316,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
 
-  visitIndentCreation(stmt: StmtNS.Indent): void {
+  visitIndentCreation(_stmt: StmtNS.Indent): void {
     // Create a new environment
     this.environment = new Environment(this.source, this.environment, new Map());
   }
 
-  visitDedentCreation(stmt: StmtNS.Dedent): void {
+  visitDedentCreation(_stmt: StmtNS.Dedent): void {
     // Switch to the previous environment.
     if (this.environment?.enclosing !== undefined) {
       this.environment = this.environment.enclosing;
@@ -359,7 +362,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitAssignStmt(stmt: StmtNS.Assign): void {
     const target = stmt.target;
     if (target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not supported in assignment");
+      throw new Error('Subscript assignment is not supported in assignment');
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
@@ -382,7 +385,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   // @TODO we need to treat all global statements as variable declarations in the global
   // scope.
-  visitGlobalStmt(stmt: StmtNS.Global): void {
+  visitGlobalStmt(_stmt: StmtNS.Global): void {
     // Do nothing because global can also be declared in our
     // own scope.
   }
@@ -413,9 +416,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): void {}
-  visitBreakStmt(stmt: StmtNS.Break): void {}
-  visitPassStmt(stmt: StmtNS.Pass): void {}
+  visitContinueStmt(_stmt: StmtNS.Continue): void {}
+  visitBreakStmt(_stmt: StmtNS.Break): void {}
+  visitPassStmt(_stmt: StmtNS.Pass): void {}
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
@@ -471,10 +474,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.consequent);
     this.resolve(expr.alternative);
   }
-  visitNoneExpr(expr: ExprNS.None): void {}
-  visitLiteralExpr(expr: ExprNS.Literal): void {}
-  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {}
-  visitComplexExpr(expr: ExprNS.Complex): void {}
+  visitNoneExpr(_expr: ExprNS.None): void {}
+  visitLiteralExpr(_expr: ExprNS.Literal): void {}
+  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
+  visitComplexExpr(_expr: ExprNS.Complex): void {}
 
   visitListExpr(expr: ExprNS.List): void {
     this.resolve(expr.elements);
@@ -483,7 +486,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.value);
     this.resolve(expr.index);
   }
-  visitStarredExpr(expr: ExprNS.Starred): void {
-    throw new Error("Starred expressions are not yet supported");
+  visitStarredExpr(_expr: ExprNS.Starred): void {
+    throw new Error('Starred expressions are not yet supported');
   }
 }

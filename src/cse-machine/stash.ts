@@ -1,79 +1,68 @@
 // Value.ts
-import { ExprNS, StmtNS } from "../ast-types";
-import { PyComplexNumber } from "../types";
-import { Closure } from "./closure";
-import { Environment } from "./environment";
-import { Stack } from "./stack";
+import { StmtNS } from '../ast-types';
+import { PyComplexNumber } from '../types';
+import { Closure } from './closure';
+import { Context } from './context';
+import { ControlItem } from './control';
+import { Environment } from './environment';
+import { Stack } from './stack';
 
 /**
  * Value represents various runtime values in Python.
  */
-export type Value = any;
-//   | NumberValue
-//   | BoolValue
-//   | StringValue
-//   | FunctionValue
-//   | LambdaValue
-//   | MultiLambdaValue
-//   | ErrorValue
-//   | UndefinedValue
-//   | string
-//   | BigIntValue
-//   | pyClosureValue;
+export type Value =
+  | NumberValue
+  | BuiltinValue
+  | BoolValue
+  | ComplexValue
+  | StringValue
+  | FunctionValue
+  | MultiLambdaValue
+  | ErrorValue
+  | NoneValue
+  | BigIntValue
+  | ClosureValue;
 
-export interface pyClosureValue {
-  type: "closure";
+export interface ClosureValue {
+  type: 'closure';
   closure: Closure;
 }
 
-export interface Builtin {
-  type: "builtin";
-  name: string;
-  func: (...args: any[]) => any;
-}
-
 export interface BigIntValue {
-  type: "bigint";
+  type: 'bigint';
   value: bigint;
 }
 
 export interface ComplexValue {
-  type: "complex";
+  type: 'complex';
   value: PyComplexNumber;
 }
 
 export interface NumberValue {
-  type: "number";
+  type: 'number';
   value: number;
 }
 
 export interface BoolValue {
-  type: "bool";
+  type: 'bool';
   value: boolean;
 }
 
 export interface StringValue {
-  type: "string";
+  type: 'string';
   value: string;
 }
 
 export interface FunctionValue {
-  type: "function";
+  type: 'function';
   name: string;
   params: string[];
   body: StmtNS.Stmt[];
   env: Environment;
 }
 
-export interface LambdaValue {
-  type: "lambda";
-  parameters: string[];
-  body: ExprNS.Expr;
-  env: Environment;
-}
-
 export interface MultiLambdaValue {
-  type: "multi_lambda";
+  type: 'multi_lambda';
   parameters: string[];
   body: StmtNS.Stmt[];
   varDecls: string[];
@@ -81,13 +70,18 @@ export interface MultiLambdaValue {
 }
 
 export interface ErrorValue {
-  type: "error";
+  type: 'error';
   message: string;
 }
 
-// TODO: Merge undefined and None.
-export interface UndefinedValue {
-  type: "undefined";
+export interface NoneValue {
+  type: 'none';
+}
+
+export interface BuiltinValue {
+  type: 'builtin';
+  name: string;
+  func: (args: Value[], code: string, command: ControlItem, context: Context) => Value;
 }
 
 export class Stash extends Stack<Value> {

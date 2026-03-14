@@ -1,18 +1,19 @@
-import { ExprNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
-import { operatorTranslator } from "../cse-machine/types";
-import { Token } from "../tokenizer";
+import { ExprNS } from '../ast-types';
+import { Context } from '../cse-machine/context';
+import { Value } from '../cse-machine/stash';
+import { operatorTranslator } from '../cse-machine/types';
+import { Token } from '../tokenizer';
 
 export enum ErrorType {
-  IMPORT = "Import",
-  RUNTIME = "Runtime",
-  SYNTAX = "Syntax",
-  TYPE = "Type",
+  IMPORT = 'Import',
+  RUNTIME = 'Runtime',
+  SYNTAX = 'Syntax',
+  TYPE = 'Type',
 }
 
 export enum ErrorSeverity {
-  WARNING = "Warning",
-  ERROR = "Error",
+  WARNING = 'Warning',
+  ERROR = 'Error',
 }
 
 export interface Locatable {
@@ -64,7 +65,7 @@ export class RuntimeSourceError implements SourceError {
   public type = ErrorType.RUNTIME;
   public severity = ErrorSeverity.ERROR;
   public location: SourceLocation;
-  public message = "Error";
+  public message = 'Error';
 
   constructor(node?: Locatable) {
     if (node) {
@@ -84,7 +85,7 @@ export class RuntimeSourceError implements SourceError {
   }
 
   public explain() {
-    return "";
+    return '';
   }
 
   public elaborate() {
@@ -95,20 +96,20 @@ export class RuntimeSourceError implements SourceError {
 // Local copy to avoid circular import from utils
 function typeTranslator(type: string): string {
   switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "boolean":
-      return "bool";
-    case "bool":
-      return "bool";
-    case "string":
-      return "string";
-    case "complex":
-      return "complex";
+    case 'bigint':
+      return 'int';
+    case 'number':
+      return 'float';
+    case 'boolean':
+      return 'bool';
+    case 'bool':
+      return 'bool';
+    case 'string':
+      return 'string';
+    case 'complex':
+      return 'complex';
     default:
-      return "unknown";
+      return 'unknown';
   }
 }
 
@@ -120,32 +121,32 @@ export function getFullLine(
   let back: number = current;
   let forward: number = current;
 
-  while (back > 0 && source[back] != "\n") {
+  while (back > 0 && source[back] != '\n') {
     back--;
   }
-  if (source[back] === "\n") {
+  if (source[back] === '\n') {
     back++;
   }
-  while (forward < source.length && source[forward] != "\n") {
+  while (forward < source.length && source[forward] != '\n') {
     forward++;
   }
 
-  const lineIndex = source.slice(0, back).split("\n").length;
+  const lineIndex = source.slice(0, back).split('\n').length;
   const fullLine = source.slice(back, forward);
 
   return { lineIndex, fullLine };
 }
 
 export function createErrorIndicator(snippet: string, errorPos: number): string {
-  let indicator = "";
+  let indicator = '';
   for (let i = 0; i < snippet.length; i++) {
-    indicator += i === errorPos ? "^" : "~";
+    indicator += i === errorPos ? '^' : '~';
   }
   return indicator;
 }
 
 export class TypeConcatenateError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, wrongType: string) {
+  constructor(source: string, node: ExprNS.Binary, wrongType: string) {
     super(node);
     this.type = ErrorType.TYPE;
 
@@ -159,28 +160,28 @@ export class TypeConcatenateError extends RuntimeSourceError {
     const hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
 
-    const name = "TypeError";
+    const name = 'TypeError';
     const suggestion =
-      "You are trying to concatenate a string with an " +
+      'You are trying to concatenate a string with an ' +
       wrongType +
-      ". To fix this, convert the " +
+      '. To fix this, convert the ' +
       wrongType +
-      " to a string using str(), or ensure both operands are of the same type.";
+      ' to a string using str(), or ensure both operands are of the same type.';
     const msg =
       name +
-      " at line " +
+      ' at line ' +
       lineIndex +
-      "\n\n    " +
+      '\n\n    ' +
       fullLine +
-      "\n    " +
-      " ".repeat(adjustedOffset) +
+      '\n    ' +
+      ' '.repeat(adjustedOffset) +
       indicator +
-      "\n" +
+      '\n' +
       hint +
-      "\n" +
+      '\n' +
       suggestion;
     this.message = msg;
   }
@@ -189,7 +190,7 @@ export class TypeConcatenateError extends RuntimeSourceError {
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
   constructor(
     source: string,
-    node: ExprNS.Expr,
+    node: ExprNS.Binary | ExprNS.BoolOp | ExprNS.Unary,
     wrongType1: string,
     wrongType2: string,
     operand: string,
@@ -206,7 +207,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
     let hint =
-      "TypeError: unsupported operand type(s) for " +
+      'TypeError: unsupported operand type(s) for ' +
       operand +
       ": '" +
       wrongType1 +
@@ -215,10 +216,10 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
       "'";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
     let suggestion: string;
-    if (wrongType2 === "") {
+    if (wrongType2 === '') {
       // Format for Unary operators
       hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`;
       suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
@@ -230,10 +231,11 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
     }
 
     // Assemble the final multi-line message
-    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
   }
 }
 
+// TODO: fix this class, since it doesn't seem to be functional
 export class MissingRequiredPositionalError extends RuntimeSourceError {
   private functionName: string;
   private missingParamCnt: number;
@@ -243,24 +245,24 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: Value[],
     variadic: boolean,
   ) {
     super(node);
     this.type = ErrorType.TYPE;
     this.functionName = functionName;
-    let adverb: string = "exactly";
+    let adverb: string = 'exactly';
     if (variadic) {
-      adverb = "at least";
+      adverb = 'at least';
     }
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
+    this.message = 'TypeError at line ' + lineIndex + '\n\n    ' + fullLine + '\n';
 
-    if (typeof params === "number") {
+    if (typeof params === 'number') {
       this.missingParamCnt = params;
-      this.missingParamName = "";
+      this.missingParamName = '';
       const givenParamCnt = args.length;
       if (this.missingParamCnt === 1 || this.missingParamCnt === 0) {
       }
@@ -283,14 +285,14 @@ You called ${this.functionName}() without providing the required positional argu
 
   private joinWithCommasAndAnd(names: string[]): string {
     if (names.length === 0) {
-      return "";
+      return '';
     } else if (names.length === 1) {
       return names[0];
     } else if (names.length === 2) {
       return `${names[0]} and ${names[1]}`;
     } else {
       const last = names.pop();
-      return `${names.join(", ")} and ${last}`;
+      return `${names.join(', ')} and ${last}`;
     }
   }
 }
@@ -304,23 +306,23 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: Value[],
     variadic: boolean,
   ) {
     super(node);
     this.type = ErrorType.TYPE;
     this.functionName = functionName;
-    let adverb: string = "exactly";
+    let adverb: string = 'exactly';
     if (variadic) {
-      adverb = "at most";
+      adverb = 'at most';
     }
 
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
+    this.message = 'TypeError at line ' + lineIndex + '\n\n    ' + fullLine + '\n';
 
-    if (typeof params === "number") {
+    if (typeof params === 'number') {
       this.expectedCount = params;
       this.givenCount = args.length;
       if (this.expectedCount === 1 || this.expectedCount === 0) {
@@ -343,7 +345,7 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
 }
 
 export class ZeroDivisionError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context) {
+  constructor(source: string, node: ExprNS.Binary) {
     super(node);
     this.type = ErrorType.TYPE;
     const index = node.startToken.indexInSource;
@@ -353,78 +355,74 @@ export class ZeroDivisionError extends RuntimeSourceError {
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
 
-    let hint = "ZeroDivisionError: division by zero.";
+    let hint = 'ZeroDivisionError: division by zero.';
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
-    const name = "ZeroDivisionError";
-    const operator = (node as any).operator.lexeme;
+    const name = 'ZeroDivisionError';
+    const operator = node.operator.lexeme;
     switch (operator) {
-      case "/":
-        hint = "ZeroDivisionError: division by zero.";
+      case '/':
+        hint = 'ZeroDivisionError: division by zero.';
         break;
-      case "//":
-        hint = "ZeroDivisionError: integer division or modulo by zero.";
+      case '//':
+        hint = 'ZeroDivisionError: integer division or modulo by zero.';
         break;
-      case "%":
-        hint = "ZeroDivisionError: integer modulo by zero.";
+      case '%':
+        hint = 'ZeroDivisionError: integer modulo by zero.';
         break;
-      case "**":
-        hint = "ZeroDivisionError: 0.0 cannot be raised to a negative power.";
+      case '**':
+        hint = 'ZeroDivisionError: 0.0 cannot be raised to a negative power.';
         break;
       default:
-        hint = "ZeroDivisionError: division by zero.";
+        hint = 'ZeroDivisionError: division by zero.';
     }
     const suggestion =
-      "You attempted to divide by zero. Division or modulo operations cannot be performed with a divisor of zero. Please ensure that the divisor is non-zero before performing the operation.";
+      'You attempted to divide by zero. Division or modulo operations cannot be performed with a divisor of zero. Please ensure that the divisor is non-zero before performing the operation.';
     const msg =
       name +
-      " at line " +
+      ' at line ' +
       lineIndex +
-      "\n\n    " +
+      '\n\n    ' +
       fullLine +
-      "\n    " +
-      " ".repeat(adjustedOffset) +
+      '\n    ' +
+      ' '.repeat(adjustedOffset) +
       indicator +
-      "\n" +
+      '\n' +
       hint +
-      "\n" +
+      '\n' +
       suggestion;
     this.message = msg;
   }
 }
 
 export class StepLimitExceededError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context) {
+  constructor(source: string, node: ExprNS.Binary | ExprNS.Expr) {
     super(node);
     this.type = ErrorType.RUNTIME;
-
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
 
     const { lineIndex, fullLine } = getFullLine(source, index);
 
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos =
+      'operator' in node ? node.operator.indexInSource - node.startToken.indexInSource : 0;
 
     const indicator = createErrorIndicator(fullLine, errorPos); // no target symbol
 
-    const name = "StepLimitExceededError";
-    const hint = "The evaluation has exceeded the maximum step limit.";
+    const name = 'StepLimitExceededError';
+    const hint = 'The evaluation has exceeded the maximum step limit.';
 
     const offset = fullLine.indexOf(fullLine);
     const adjustedOffset = offset >= 0 ? offset : 0;
 
     const msg = [
       `${name} at line ${lineIndex}`,
-      "",
-      "    " + fullLine,
-      "    " + " ".repeat(adjustedOffset) + indicator,
+      '',
+      '    ' + fullLine,
+      '    ' + ' '.repeat(adjustedOffset) + indicator,
       hint,
-    ].join("\n");
+    ].join('\n');
 
     this.message = msg;
   }
@@ -440,22 +438,22 @@ export class ValueError extends RuntimeSourceError {
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const hint = "ValueError: math domain error. ";
+    const hint = 'ValueError: math domain error. ';
     const offset = fullLine.indexOf(snippet);
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
-    const name = "ValueError";
+    const name = 'ValueError';
     const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
     const msg =
       name +
-      " at line " +
+      ' at line ' +
       lineIndex +
-      "\n\n    " +
+      '\n\n    ' +
       fullLine +
-      "\n    " +
-      " ".repeat(offset) +
+      '\n    ' +
+      ' '.repeat(offset) +
       indicator +
-      "\n" +
+      '\n' +
       hint +
       suggestion;
     this.message = msg;
@@ -485,18 +483,18 @@ export class TypeError extends RuntimeSourceError {
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
-    const name = "TypeError";
-    const suggestion = " Make sure the value you are passing is compatible with the expected type.";
+    const name = 'TypeError';
+    const suggestion = ' Make sure the value you are passing is compatible with the expected type.';
     const msg =
       name +
-      " at line " +
+      ' at line ' +
       lineIndex +
-      "\n\n    " +
+      '\n\n    ' +
       fullLine +
-      "\n    " +
-      " ".repeat(adjustedOffset) +
+      '\n    ' +
+      ' '.repeat(adjustedOffset) +
       indicator +
-      "\n" +
+      '\n' +
       hint +
       suggestion;
     this.message = msg;
@@ -526,11 +524,11 @@ export class SublanguageError extends RuntimeSourceError {
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
 
-    const name = "SublanguageError";
-    const hint = "Feature not supported in Python §" + chapter + ". ";
-    const suggestion = `The call to '${functionName}()' relies on behaviour that is valid in full Python but outside the Python §1 sublanguage${details ? ": " + details : ""}.`;
+    const name = 'SublanguageError';
+    const hint = 'Feature not supported in Python §' + chapter + '. ';
+    const suggestion = `The call to '${functionName}()' relies on behaviour that is valid in full Python but outside the Python §1 sublanguage${details ? ': ' + details : ''}.`;
 
-    this.message = `${name} at line ${lineIndex}\n\n ${fullLine}\n ${" ".repeat(offset)}${indicator}\n${hint}${suggestion}`;
+    this.message = `${name} at line ${lineIndex}\n\n ${fullLine}\n ${' '.repeat(offset)}${indicator}\n${hint}${suggestion}`;
   }
 }
 
@@ -550,7 +548,7 @@ export class UnboundLocalError extends RuntimeSourceError {
 
     const hint = `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`;
     const suggestion = `The variable '${name}' is used in the current function, so it's considered a local variable. However, you tried to access it before a value was assigned to it in the local scope. Assign a value to '${name}' before you use it.`;
-    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -571,7 +569,7 @@ export class NameError extends RuntimeSourceError {
     const indicator = createErrorIndicator(snippet, errorPos);
     const hint = `NameError: name '${name}' is not defined`;
     const suggestion = `The name '${name}' is not defined in the current scope. Check for typos or make sure the variable is assigned a value before being used.`;
-    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -592,7 +590,7 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
 
     const hint = `TypeError: cannot reassign built-in function '${name}'`;
     const suggestion = `You are trying to assign a value to '${name}', which is a built-in function. This is not allowed.`;
-    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${' '.repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -603,9 +601,9 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
 */
 export const MAGIC_OFFSET = 1;
 
-export const SPECIAL_CHARS = new RegExp("[\\\\$'\"]", "g");
+export const SPECIAL_CHARS = new RegExp('[\\\\$\'"]', 'g');
 
 function escape(unsafe: string): string {
   // @TODO escape newlines
-  return unsafe.replace(SPECIAL_CHARS, "\\$&");
+  return unsafe.replace(SPECIAL_CHARS, '\\$&');
 }

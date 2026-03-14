@@ -1,5 +1,5 @@
-import { TokenType } from "../tokens";
-import { Environment } from "./environment";
+import { TokenType } from '../tokens';
+import { Environment } from './environment';
 import {
   AppInstr,
   AssmtInstr,
@@ -12,7 +12,7 @@ import {
   InstrType,
   Node,
   UnOpInstr,
-} from "./types";
+} from './types';
 
 export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
 
