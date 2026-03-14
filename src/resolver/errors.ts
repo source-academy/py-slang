@@ -23,7 +23,8 @@ export namespace ResolverErrors {
       current: number,
       suggestion: string | null,
     ) {
-      const { lineIndex, fullLine } = getFullLine(source, start);
+      let { lineIndex, fullLine } = getFullLine(source, start);
+      fullLine = "\n" + fullLine + "\n";
       let hint = ` This name is not found in the current or enclosing environment(s).`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
@@ -35,7 +36,7 @@ export namespace ResolverErrors {
         hint += sugg;
       }
       const name = "NameNotFoundError";
-      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      super(name, fullLine + hint, lineIndex, col);
       this.name = "NameNotFoundError";
     }
   }
@@ -49,16 +50,17 @@ export namespace ResolverErrors {
       current: number,
       oldName: Token,
     ) {
-      const { lineIndex, fullLine } = getFullLine(source, start);
+      let { lineIndex, fullLine } = getFullLine(source, start);
+      fullLine = "\n" + fullLine + "\n";
       let hint = ` A name has been declared here.`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
       hint = hint.padStart(hint.length + col - diff, " ");
-      const { lineIndex: oldLine, fullLine: oldUnpaddedNameLine } = getFullLine(
+      let { lineIndex: oldLine, fullLine: oldNameLine } = getFullLine(
         source,
         oldName.indexInSource,
       );
-      const oldNameLine = "\n" + oldUnpaddedNameLine + "\n";
+      oldNameLine = "\n" + oldNameLine + "\n";
       let sugg = ` However, it has already been declared in the same environment at line ${oldLine}, here: `;
       sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");
       sugg = "\n" + sugg;
@@ -66,7 +68,7 @@ export namespace ResolverErrors {
       oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, " ");
       hint += oldNameLine;
       const name = "NameReassignmentError";
-      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      super(name, fullLine + hint, lineIndex, col);
       this.name = "NameReassignmentError";
     }
   }

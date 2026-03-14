@@ -195,6 +195,7 @@ export class Parser {
       startToken.col,
       this.source,
       startToken.indexInSource,
+      endToken.indexInSource,
     );
   }
 
@@ -611,16 +612,18 @@ export class Parser {
     }
     const startTokenInvalid = this.peek();
     this.synchronize();
+    const endTokenInvalid = this.peek();
     throw new ParserErrors.GenericUnexpectedSyntaxError(
       startToken.line,
       startToken.col,
       this.source,
       startTokenInvalid.indexInSource,
+      endTokenInvalid.indexInSource,
     );
   }
 
   //// INVALID RULES
-  private parse_invalid(_startToken: Token, _endToken: Token) {
+  private parse_invalid(startToken: Token, endToken: Token) {
     // @TODO invalid rules
   }
 }

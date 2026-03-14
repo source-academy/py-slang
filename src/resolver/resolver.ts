@@ -2,7 +2,6 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { Token } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
 import { ResolverErrors } from "./errors";
-
 type Expr = ExprNS.Expr;
 type Stmt = StmtNS.Stmt;
 
@@ -40,7 +39,6 @@ class Environment {
   lookupName(identifier: Token): number {
     const name = identifier.lexeme;
     let distance = 0;
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       if (curr.names.has(name)) {
@@ -84,7 +82,7 @@ class Environment {
     }
   }
   declareName(identifier: Token) {
-    // const lookup = this.lookupNameCurrentEnv(identifier)
+    const lookup = this.lookupNameCurrentEnv(identifier);
     // if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) {
     //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
     //         this.source,
@@ -139,7 +137,6 @@ class Environment {
     const name = identifier.lexeme;
     let minDistance = Infinity;
     let minName = null;
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       for (const declName of curr.names.keys()) {
@@ -316,12 +313,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
 
-  visitIndentCreation(_stmt: StmtNS.Indent): void {
+  visitIndentCreation(stmt: StmtNS.Indent): void {
     // Create a new environment
     this.environment = new Environment(this.source, this.environment, new Map());
   }
 
-  visitDedentCreation(_stmt: StmtNS.Dedent): void {
+  visitDedentCreation(stmt: StmtNS.Dedent): void {
     // Switch to the previous environment.
     if (this.environment?.enclosing !== undefined) {
       this.environment = this.environment.enclosing;
@@ -385,7 +382,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   // @TODO we need to treat all global statements as variable declarations in the global
   // scope.
-  visitGlobalStmt(_stmt: StmtNS.Global): void {
+  visitGlobalStmt(stmt: StmtNS.Global): void {
     // Do nothing because global can also be declared in our
     // own scope.
   }
@@ -416,9 +413,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
   }
 
-  visitContinueStmt(_stmt: StmtNS.Continue): void {}
-  visitBreakStmt(_stmt: StmtNS.Break): void {}
-  visitPassStmt(_stmt: StmtNS.Pass): void {}
+  visitContinueStmt(stmt: StmtNS.Continue): void {}
+  visitBreakStmt(stmt: StmtNS.Break): void {}
+  visitPassStmt(stmt: StmtNS.Pass): void {}
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
@@ -474,10 +471,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.consequent);
     this.resolve(expr.alternative);
   }
-  visitNoneExpr(_expr: ExprNS.None): void {}
-  visitLiteralExpr(_expr: ExprNS.Literal): void {}
-  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
-  visitComplexExpr(_expr: ExprNS.Complex): void {}
+  visitNoneExpr(expr: ExprNS.None): void {}
+  visitLiteralExpr(expr: ExprNS.Literal): void {}
+  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {}
+  visitComplexExpr(expr: ExprNS.Complex): void {}
 
   visitListExpr(expr: ExprNS.List): void {
     this.resolve(expr.elements);
@@ -486,7 +483,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.value);
     this.resolve(expr.index);
   }
-  visitStarredExpr(_expr: ExprNS.Starred): void {
+  visitStarredExpr(expr: ExprNS.Starred): void {
     throw new Error("Starred expressions are not yet supported");
   }
 }

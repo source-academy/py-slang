@@ -31,13 +31,13 @@ export namespace ExprNS {
       this.startToken = startToken;
       this.endToken = endToken;
     }
-    abstract accept<T>(visitor: Visitor<T>): T;
+    abstract accept(visitor: Visitor<any>): any;
   }
   export class None extends Expr {
-    constructor(startToken: Token, endToken: Token) {
+    constructor(startToken: Token, endToken: Token, value: string = "None") {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitNoneExpr(this);
     }
   }
@@ -47,7 +47,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitBigIntLiteralExpr(this);
     }
   }
@@ -71,7 +71,7 @@ export namespace ExprNS {
       this.operator = operator;
       this.right = right;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitBinaryExpr(this);
     }
   }
@@ -85,7 +85,7 @@ export namespace ExprNS {
       this.operator = operator;
       this.right = right;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitCompareExpr(this);
     }
   }
@@ -99,7 +99,7 @@ export namespace ExprNS {
       this.operator = operator;
       this.right = right;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitBoolOpExpr(this);
     }
   }
@@ -109,7 +109,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.expression = expression;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitGroupingExpr(this);
     }
   }
@@ -119,7 +119,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitLiteralExpr(this);
     }
   }
@@ -131,7 +131,7 @@ export namespace ExprNS {
       this.operator = operator;
       this.right = right;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitUnaryExpr(this);
     }
   }
@@ -151,7 +151,7 @@ export namespace ExprNS {
       this.consequent = consequent;
       this.alternative = alternative;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitTernaryExpr(this);
     }
   }
@@ -163,7 +163,7 @@ export namespace ExprNS {
       this.parameters = parameters;
       this.body = body;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitLambdaExpr(this);
     }
   }
@@ -183,7 +183,7 @@ export namespace ExprNS {
       this.body = body;
       this.varDecls = varDecls;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitMultiLambdaExpr(this);
     }
   }
@@ -193,7 +193,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.name = name;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitVariableExpr(this);
     }
   }
@@ -205,7 +205,7 @@ export namespace ExprNS {
       this.callee = callee;
       this.args = args;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitCallExpr(this);
     }
   }
@@ -216,7 +216,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.elements = elements;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitListExpr(this);
     }
   }
@@ -229,7 +229,7 @@ export namespace ExprNS {
       this.value = value;
       this.index = index;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitSubscriptExpr(this);
     }
   }
@@ -240,7 +240,7 @@ export namespace ExprNS {
       super(startToken, endToken);
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitStarredExpr(this);
     }
   }
@@ -273,13 +273,13 @@ export namespace StmtNS {
       this.startToken = startToken;
       this.endToken = endToken;
     }
-    abstract accept<T>(visitor: Visitor<T>): T;
+    abstract accept(visitor: Visitor<any>): any;
   }
   export class Indent extends Stmt {
     constructor(startToken: Token, endToken: Token) {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitIndentCreation(this);
     }
   }
@@ -287,7 +287,7 @@ export namespace StmtNS {
     constructor(startToken: Token, endToken: Token) {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitDedentCreation(this);
     }
   }
@@ -295,7 +295,7 @@ export namespace StmtNS {
     constructor(startToken: Token, endToken: Token) {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitPassStmt(this);
     }
   }
@@ -307,7 +307,7 @@ export namespace StmtNS {
       this.target = target;
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitAssignStmt(this);
     }
   }
@@ -327,7 +327,7 @@ export namespace StmtNS {
       this.value = value;
       this.ann = ann;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitAnnAssignStmt(this);
     }
   }
@@ -335,7 +335,7 @@ export namespace StmtNS {
     constructor(startToken: Token, endToken: Token) {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitBreakStmt(this);
     }
   }
@@ -343,7 +343,7 @@ export namespace StmtNS {
     constructor(startToken: Token, endToken: Token) {
       super(startToken, endToken);
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitContinueStmt(this);
     }
   }
@@ -353,7 +353,7 @@ export namespace StmtNS {
       super(startToken, endToken);
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitReturnStmt(this);
     }
   }
@@ -365,7 +365,7 @@ export namespace StmtNS {
       this.module = module;
       this.names = names;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitFromImportStmt(this);
     }
   }
@@ -375,7 +375,7 @@ export namespace StmtNS {
       super(startToken, endToken);
       this.name = name;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitGlobalStmt(this);
     }
   }
@@ -385,7 +385,7 @@ export namespace StmtNS {
       super(startToken, endToken);
       this.name = name;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitNonLocalStmt(this);
     }
   }
@@ -395,7 +395,7 @@ export namespace StmtNS {
       super(startToken, endToken);
       this.value = value;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitAssertStmt(this);
     }
   }
@@ -415,7 +415,7 @@ export namespace StmtNS {
       this.body = body;
       this.elseBlock = elseBlock;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitIfStmt(this);
     }
   }
@@ -427,7 +427,7 @@ export namespace StmtNS {
       this.condition = condition;
       this.body = body;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitWhileStmt(this);
     }
   }
@@ -447,7 +447,7 @@ export namespace StmtNS {
       this.iter = iter;
       this.body = body;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitForStmt(this);
     }
   }
@@ -470,7 +470,7 @@ export namespace StmtNS {
       this.body = body;
       this.varDecls = varDecls;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitFunctionDefStmt(this);
     }
   }
@@ -480,7 +480,7 @@ export namespace StmtNS {
       super(startToken, endToken);
       this.expression = expression;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitSimpleExprStmt(this);
     }
   }
@@ -492,7 +492,7 @@ export namespace StmtNS {
       this.statements = statements;
       this.varDecls = varDecls;
     }
-    override accept<T>(visitor: Visitor<T>): T {
+    override accept(visitor: Visitor<any>): any {
       return visitor.visitFileInputStmt(this);
     }
   }

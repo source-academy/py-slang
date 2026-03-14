@@ -34,7 +34,7 @@ export type BinaryOperator =
 
 export function evaluateUnaryExpression(
   code: string,
-  command: ExprNS.Unary,
+  command: ExprNS.Expr,
   context: Context,
   operator: TokenType,
   value: Value,
@@ -96,7 +96,7 @@ export function evaluateUnaryExpression(
 
 export function evaluateBinaryExpression(
   code: string,
-  command: ExprNS.Binary,
+  command: ExprNS.Expr,
   context: Context,
   operator: TokenType,
   left: Value,
@@ -105,14 +105,10 @@ export function evaluateBinaryExpression(
   // Handle Complex numbers
   if (left.type === "complex" || right.type === "complex") {
     if (
-      (right.type !== "complex" &&
-        right.type !== "number" &&
-        right.type !== "bigint" &&
-        right.type !== "string") ||
-      (left.type !== "complex" &&
-        left.type !== "number" &&
-        left.type !== "bigint" &&
-        left.type !== "string")
+      right.type !== "complex" &&
+      right.type !== "number" &&
+      right.type !== "bigint" &&
+      right.type !== "bool"
     ) {
       handleRuntimeError(
         context,
@@ -172,8 +168,8 @@ export function evaluateBinaryExpression(
     return { type: "complex", value: result };
   }
 
-  // Handle comparisons with None (represented as 'none' type)
-  if (left.type === "none" || right.type === "none") {
+  // Handle comparisons with None (represented as 'undefined' type)
+  if (left.type === "undefined" || right.type === "undefined") {
     switch (operator) {
       case TokenType.DOUBLEEQUAL:
         // True only if both are None
@@ -193,7 +189,7 @@ export function evaluateBinaryExpression(
         );
         return {
           type: "error",
-          message: "Unreachable in evaluateBinaryExpression - none | none",
+          message: "Unreachable in evaluateBinaryExpression - undefined | undefined",
         };
     }
   }
@@ -243,23 +239,9 @@ export function evaluateBinaryExpression(
         operatorTranslator(operator),
       ),
     );
+    return { type: "error", message: "Unreachable in evaluateBinaryExpression - string | string" };
   }
 
-  if (
-    (left.type !== "bool" && left.type !== "number" && left.type !== "bigint") ||
-    (right.type !== "bool" && right.type !== "number" && right.type !== "bigint")
-  ) {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(
-        code,
-        command,
-        left.type,
-        right.type,
-        operatorTranslator(operator),
-      ),
-    );
-  }
   /**
    * Coerce boolean to a numeric value for all other arithmetic
    * Support for True - 1 or False + 1
@@ -290,26 +272,22 @@ export function evaluateBinaryExpression(
             return { type: "number", value: l * r };
           case TokenType.SLASH:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             return { type: "number", value: l / r };
           case TokenType.DOUBLESLASH:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             return { type: "number", value: Math.floor(l / r) };
           case TokenType.PERCENT:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
-            const mod = pythonMod(l, r);
-            if (typeof mod === "bigint") {
-              return { type: "bigint", value: mod };
-            }
-            return { type: "number", value: mod };
+            return { type: "number", value: pythonMod(l, r) };
           case TokenType.DOUBLESTAR:
             if (l === 0 && r < 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             return { type: "number", value: l ** r };
         }
@@ -326,26 +304,22 @@ export function evaluateBinaryExpression(
             return { type: "bigint", value: l * r };
           case TokenType.SLASH:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             return { type: "number", value: Number(l) / Number(r) };
           case TokenType.DOUBLESLASH:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             return { type: "bigint", value: (l - (pythonMod(l, r) as bigint)) / r };
           case TokenType.PERCENT:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
-            const mod = pythonMod(l, r);
-            if (typeof mod === "bigint") {
-              return { type: "bigint", value: mod };
-            }
-            return { type: "number", value: mod };
+            return { type: "bigint", value: pythonMod(l, r) };
           case TokenType.DOUBLESTAR:
             if (l === 0n && r < 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
+              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
             }
             if (r < 0n) return { type: "number", value: Number(l) ** Number(r) };
             return { type: "bigint", value: l ** r };
@@ -591,7 +565,7 @@ export function isFalsy(value: Value): boolean {
       return value.value === "";
     case "complex":
       return value.value.real === 0 && value.value.imag == 0;
-    case "none": // Represents None
+    case "undefined": // Represents None
       return true;
     default:
       // All other objects are considered truthy
@@ -601,7 +575,7 @@ export function isFalsy(value: Value): boolean {
 
 export function evaluateBoolExpression(
   code: string,
-  command: ExprNS.BoolOp,
+  command: ExprNS.Expr,
   context: Context,
   operator: TokenType,
   left: Value,

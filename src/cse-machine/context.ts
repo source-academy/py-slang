@@ -35,7 +35,7 @@ export class Context {
    */
   nativeStorage: NativeStorage;
 
-  constructor(program?: StmtNS.Stmt) {
+  constructor(program?: StmtNS.Stmt, context?: Context) {
     this.control = new Control(program);
     this.stash = new Stash();
     this.runtime = this.createEmptyRuntime();

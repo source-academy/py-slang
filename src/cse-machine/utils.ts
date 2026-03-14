@@ -66,7 +66,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     "If",
     (item: ControlItem) => {
       const node = item as StmtNS.If;
-      const elseIsDependent = node.elseBlock ? node.elseBlock.some(isEnvDependent) : false;
+      const elseIsDependent = node.elseBlock ? node.elseBlock.some(stmt => isEnvDependent) : false;
       item.isEnvDependent =
         isEnvDependent(node.condition) ||
         node.body.some(stmt => isEnvDependent(stmt)) ||
@@ -218,7 +218,8 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
   }
   let setter: Transformer | undefined;
   if (isNode(item)) {
-    const key = "type" in item && typeof item.type === "string" ? item.type : item.constructor.name;
+    const key =
+      "type" in item && typeof item.type === "string" ? item.type : (item as any).constructor.name;
     setter = propertySetter.get(key);
   } else if (isInstr(item)) {
     setter = propertySetter.get(item.instrType);
@@ -277,18 +278,18 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   throw new NameError(code, name, node as ExprNS.Variable);
 }
 
-export const checkStackOverFlow = (_context: Context, _control: Control) => {
+export const checkStackOverFlow = (context: Context, control: Control) => {
   // TODO
 };
 
-// export const isSimpleFunction = (node: ) => {
-//   if (node.body.type !== 'BlockStatement' && node.body.type !== 'StatementSequence') {
-//     return true
-//   } else {
-//     const block = node.body
-//     return block.body.length === 1 && block.body[0].type === 'ReturnStatement'
-//   }
-// }
+export const isSimpleFunction = (node: any) => {
+  if (node.body.type !== "BlockStatement" && node.body.type !== "StatementSequence") {
+    return true;
+  } else {
+    const block = node.body;
+    return block.body.length === 1 && block.body[0].type === "ReturnStatement";
+  }
+};
 
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
   if (typeof a === "bigint" || typeof b === "bigint") {
@@ -340,11 +341,11 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
     // Recurse through all other properties of the node
     for (const key in curNode) {
       if (Object.prototype.hasOwnProperty.call(curNode, key)) {
-        const child = (curNode as unknown as Record<string, unknown>)[key];
+        const child = (curNode as any)[key];
         if (Array.isArray(child)) {
           child.forEach(visitor);
         } else if (child && typeof child === "object" && child.hasOwnProperty("type")) {
-          visitor(child as Node);
+          visitor(child);
         }
       }
     }

@@ -104,7 +104,7 @@ export class AstWriter {
     this.fp?.close();
   }
 
-  private convertToReadableForm(definitions: string[]): [string, [string, string][]][] {
+  private convertToReadableForm(definitions: string[]) {
     /*
      * Converts to the form:
      * [Name, [[attribute, type], [attribute, type], ...]
@@ -112,14 +112,11 @@ export class AstWriter {
      * */
     return definitions
       .map(s => s.split("->"))
-      .map(pair => [
-        pair[0].trim(),
-        pair[1].split(",").map(s => s.split(":").map(s => s.trim()) as [string, string]),
-      ]);
+      .map(pair => [pair[0].trim(), pair[1].split(",").map(s => s.split(":").map(s => s.trim()))]);
   }
 
-  private defineAst(baseClass: string, rawDefinitions: string[]) {
-    const definitions = this.convertToReadableForm(rawDefinitions);
+  private defineAst(baseClass: string, definitions: any) {
+    definitions = this.convertToReadableForm(definitions);
     this.writeSingleLine(`export namespace ${baseClass}NS {`);
     this.defineVisitorInterface(baseClass, definitions);
 
@@ -145,12 +142,7 @@ export class AstWriter {
     this.writeSingleLine("}");
   }
 
-  private classDef(
-    baseClass: string,
-    name: string,
-    attributes: [string, string][],
-    isEmpty: boolean,
-  ) {
+  private classDef(baseClass: string, name: string, attributes: string[], isEmpty: boolean) {
     this.writeSingleLine(`export class ${name} extends ${baseClass} {`);
     if (!isEmpty) {
       for (const [name, type] of attributes) {
@@ -177,7 +169,7 @@ export class AstWriter {
     this.writeSingleLine("}");
   }
 
-  private defineVisitorInterface(baseClass: string, definitions: [string, [string, string][]][]) {
+  private defineVisitorInterface(baseClass: string, definitions: any) {
     this.writeSingleLine(`export interface Visitor<T> {`);
     for (const classDefinition of definitions) {
       const className = classDefinition[0];

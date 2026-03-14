@@ -14,7 +14,7 @@ export interface IOptions {
   stepLimit: number;
 }
 
-function runPyAST(code: string, _variant: number = 1, doValidate: boolean = false): Stmt {
+function runPyAST(code: string, variant: number = 1, doValidate: boolean = false): Stmt {
   const script = code + "\n";
   const tokenizer = new Tokenizer(script);
   const tokens = tokenizer.scanEverything();
@@ -42,6 +42,6 @@ export function runCSEMachine(
   context: Context,
   options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options);
+  const result = evaluate(code, program, context, options as IOptions);
   return CSEResultPromise(context, result);
 }
