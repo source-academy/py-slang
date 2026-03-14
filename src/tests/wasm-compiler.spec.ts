@@ -1,5 +1,5 @@
 import { compileToWasmAndRun } from "../wasm-compiler";
-import { TYPE_TAG } from "../wasm-compiler/constants";
+import { ERROR_MAP, TYPE_TAG } from "../wasm-compiler/constants";
 
 it = it.concurrent;
 
@@ -122,7 +122,16 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
 
   it("string + int should error (type mismatch)", async () => {
     const pythonCode = `"a" + 1`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow();
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE),
+    );
+  });
+
+  it("unary minus on string should error", async () => {
+    const pythonCode = `-"a"`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.NEG_NOT_SUPPORT),
+    );
   });
 });
 
@@ -182,7 +191,9 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
 
   it("complex ordering (<, >, etc.) must error", async () => {
     const pythonCode = `(1+1j) < (2+2j)`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow();
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.COMPLEX_COMPARISON),
+    );
   });
 
   // --- STRING COMPARE ---
@@ -208,7 +219,9 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
 
   it("string compare with non-string errors", async () => {
     const pythonCode = `"x" < 3`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow();
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE),
+    );
   });
 });
 
@@ -602,6 +615,24 @@ is_pair(42)
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
+
+  it("head on non-list should error", async () => {
+    const pythonCode = `
+head(42)
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.HEAD_NOT_PAIR),
+    );
+  });
+
+  it("tail on non-list should error", async () => {
+    const pythonCode = `
+tail(42)
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.TAIL_NOT_PAIR),
+    );
+  });
 });
 
 describe("Linked list tests", () => {
@@ -906,6 +937,16 @@ f(5)
     expect(renderedResult).toBe("12");
   });
 
+  it("calling a non-function value should error", async () => {
+    const pythonCode = `
+x = 42
+x()
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.CALL_NOT_FX),
+    );
+  });
+
   it("function should error when given too few arguments", async () => {
     const pythonCode = `
 def f(a, b):
@@ -914,7 +955,7 @@ def f(a, b):
 f(1)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Calling function with wrong number of arguments."),
+      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
     );
   });
 
@@ -926,7 +967,7 @@ def f(a, b):
 f(1, 2, 3)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Calling function with wrong number of arguments."),
+      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
     );
   });
 });
@@ -1563,6 +1604,46 @@ x[0] + x[1] + x[2]
     expect(renderedResult).toBe("104");
   });
 
+  it("indexing a non-list should error", async () => {
+    const pythonCode = `
+x = 42
+x[0]
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.GET_ELEMENT_NOT_LIST),
+    );
+  });
+
+  it("setting an element on a non-list should error", async () => {
+    const pythonCode = `
+x = 42
+x[0] = 1
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.SET_ELEMENT_NOT_LIST),
+    );
+  });
+
+  it("list indexing with a non-integer index should error", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[1.5]
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.INDEX_NOT_INT),
+    );
+  });
+
+  it("list indexing out of range should error", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[3]
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.LIST_OUT_OF_RANGE),
+    );
+  });
+
   //   it("list length grows via append", async () => {
   //     const pythonCode = `
   // x = [1]
@@ -1763,6 +1844,15 @@ list_length([10, 20, 30])
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
+
+  it("list length on non-list should error", async () => {
+    const pythonCode = `
+list_length(42)
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.GET_LENGTH_NOT_LIST),
+    );
+  });
 });
 
 describe("Function *args & unpacking tests", () => {
@@ -1864,7 +1954,7 @@ def f(a, b, *args):
 f(1)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Calling function with wrong number of arguments."),
+      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
     );
   });
 
@@ -1877,7 +1967,7 @@ def f(*args):
 f(10, 20, 30)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Accessing an unbound value."),
+      new Error(ERROR_MAP.UNBOUND),
     );
   });
 
@@ -1906,7 +1996,7 @@ not_a_list = 42
 f(1, *not_a_list)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Trying to unpack a non-list value."),
+      new Error(ERROR_MAP.STARRED_NOT_LIST),
     );
   });
 
@@ -1936,7 +2026,7 @@ args = [2]
 f(1, *args)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Calling function with wrong number of arguments."),
+      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
     );
   });
 
@@ -1949,7 +2039,7 @@ args = [2, 3]
 f(1, *args, 4)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Calling function with wrong number of arguments."),
+      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
     );
   });
 
@@ -2041,6 +2131,12 @@ describe("tokenize function tests", () => {
       linkedListBuilder("f", "(", "x", ",", "y", "[", "0", "]", ")"),
     );
   });
+
+  it("tokenize on non-string should error", async () => {
+    await expect(compileToWasmAndRun(`tokenize(42)`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.PARSE_NOT_STRING),
+    );
+  });
 });
 
 describe("parse function tests", () => {
@@ -2051,6 +2147,12 @@ describe("parse function tests", () => {
   it("integer literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
     expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
+  });
+
+  it("parse on non-string should error", async () => {
+    await expect(compileToWasmAndRun(`parse(42)`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.PARSE_NOT_STRING),
+    );
   });
 
   it("float literal", async () => {
@@ -2776,7 +2878,7 @@ def f(x):
 f(4)
 `;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Accessing an unbound value."),
+      new Error(ERROR_MAP.UNBOUND),
     );
   });
 });

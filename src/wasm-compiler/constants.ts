@@ -28,7 +28,6 @@ export const ERROR_MAP = {
   HEAD_NOT_PAIR: "Accessing the head of a non-pair value.",
   TAIL_NOT_PAIR: "Accessing the tail of a non-pair value.",
   BOOL_UNKNOWN_TYPE: "Trying to convert an unknnown runtime type to a bool.",
-  BOOL_UNKNOWN_OP: "Unknown boolean binary operator.",
   GET_ELEMENT_NOT_LIST: "Accessing an element of a non-list value.",
   SET_ELEMENT_NOT_LIST: "Setting an element of a non-list value.",
   INDEX_NOT_INT: "Using a non-integer index to access a list element.",
@@ -40,7 +39,7 @@ export const ERROR_MAP = {
   PARSE_NOT_STRING: "Trying to parse a non-string value.",
 } as const;
 
-const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
+export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
   Object.values(ERROR_MAP).findIndex((v) => v === errorKey);
 
 export const HEAP_PTR = "$_heap_pointer";
@@ -389,13 +388,6 @@ export const LOG_FX = wasm
         wasm.return(),
       ),
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
-    // wasm
-    //   .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.PAIR)))
-    //   .then(
-    //     wasm.call("$_log").args(wasm.call(GET_PAIR_HEAD_FX).args(local.get("$tag"), local.get("$value"))),
-    //     wasm.call("$_log").args(wasm.call(GET_PAIR_TAIL_FX).args(local.get("$tag"), local.get("$value"))),
-    //     wasm.return(),
-    //   ),
     wasm
       .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
       .then(
@@ -869,8 +861,6 @@ export const BOOL_NOT_FX = wasm
     i64.extend_i32_u(i64.eqz(wasm.call(BOOLISE_FX).args(local.get("$tag"), local.get("$val")))),
   );
 
-export const BOOL_BINARY_OP_TAG = { AND: 0, OR: 1 };
-
 // +4 because parentEnv is stored at start of env
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
@@ -948,14 +938,20 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       // check if args have any starred arguments (unpack). if so, we need to construct a new env
       wasm.loop("$loop").body(
         wasm.if(i32.lt_s(local.get("$i"), local.get("$arg_len"))).then(
-          wasm
-            .if(
-              i32.shr_u(
-                i32.load(i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4))),
-                i32.const(31),
+          local.set(
+            "$arg_ptr",
+            i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4)),
+          ),
+          wasm.if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31))).then(
+            local.set("$has_starred", i32.const(1)),
+            // check if it's a list, if not error (only lists can be unpacked)
+            wasm
+              .if(i32.ne(i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff)), i32.const(TYPE_TAG.LIST)))
+              .then(
+                wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STARRED_NOT_LIST))),
+                wasm.unreachable(),
               ),
-            )
-            .then(local.set("$has_starred", i32.const(1))),
+          ),
 
           local.set("$i", i32.add(local.get("$i"), i32.const(1))),
           wasm.br("$loop"),
@@ -988,14 +984,6 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
                 .if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31)))
                 .then(
                   i32.store(local.get("$arg_ptr"), i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff))),
-                  // check if it's a list, if not error (only lists can be unpacked)
-                  wasm
-                    .if(i32.ne(i32.load(local.get("$arg_ptr")), i32.const(TYPE_TAG.LIST)))
-                    .then(
-                      wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STARRED_NOT_LIST))),
-                      wasm.unreachable(),
-                    ),
-
                   // copy over the list
                   memory.copy(
                     global.get(HEAP_PTR),

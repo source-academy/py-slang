@@ -1,14 +1,16 @@
 import {
-  WasmCall,
-  WasmInstruction,
   i32,
   i64,
   wasm,
+  WasmCall,
+  WasmInstruction,
 } from "@sourceacademy/wasm-util";
 import {
   BOOLISE_FX,
+  ERROR_MAP,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
+  getErrorIndex,
   IS_LINKED_LIST_FX,
   IS_PAIR_FX,
   LIST_LENGTH_FX,
@@ -69,16 +71,34 @@ export const libraryFunctions: LibFuncType[] = [
   // pair & linked list functions
   libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
   libFunc("is_pair", 1).body((x) => wasm.call(IS_PAIR_FX).args(x)),
-  libFunc("head", 1).body((x) =>
+  libFunc("head", 1).body((x) => [
+    wasm
+      .if(i32.eqz(wasm.raw`${wasm.call(IS_PAIR_FX).args(x)} (i32.wrap_i64)`))
+      .then(
+        wasm
+          .call("$_log_error")
+          .args(i32.const(getErrorIndex(ERROR_MAP.HEAD_NOT_PAIR))),
+        wasm.unreachable(),
+      ),
+
     wasm
       .call(GET_LIST_ELEMENT_FX)
       .args(x, wasm.call(MAKE_INT_FX).args(i64.const(0))),
-  ),
-  libFunc("tail", 1).body((x) =>
+  ]),
+  libFunc("tail", 1).body((x) => [
+    wasm
+      .if(i32.eqz(wasm.raw`${wasm.call(IS_PAIR_FX).args(x)} (i32.wrap_i64)`))
+      .then(
+        wasm
+          .call("$_log_error")
+          .args(i32.const(getErrorIndex(ERROR_MAP.TAIL_NOT_PAIR))),
+        wasm.unreachable(),
+      ),
+
     wasm
       .call(GET_LIST_ELEMENT_FX)
       .args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
-  ),
+  ]),
   libFunc("is_none", 1).body(
     (x) =>
       wasm.raw`${x} (drop) (i32.const ${TYPE_TAG.NONE}) (i32.eq) (call ${MAKE_BOOL_FX.name})`,
