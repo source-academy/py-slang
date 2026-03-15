@@ -14,12 +14,7 @@ export type WasmExports = {
   makeFloat: (value: number) => [number, bigint];
   makeBool: (value: number) => [number, bigint];
   makeString: (offset: number, length: number) => [number, bigint];
-  makePair: (
-    tag1: number,
-    value1: bigint,
-    tag2: number,
-    value2: bigint,
-  ) => [number, bigint];
+  makePair: (tag1: number, value1: bigint, tag2: number, value2: bigint) => [number, bigint];
   makeNone: () => [number, bigint];
   getHeapPointer: () => number;
   incrementHeapPointer: (amount: number) => void;
@@ -122,20 +117,10 @@ export async function compileToWasmAndRun(
       log: (value: bigint) => capture(value.toString()),
       log_complex: (real: number, imag: number) =>
         capture(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
-      log_bool: (value: bigint) =>
-        capture(value === BigInt(0) ? "False" : "True"),
+      log_bool: (value: bigint) => capture(value === BigInt(0) ? "False" : "True"),
       log_string: (offset: number, length: number) =>
-        capture(
-          new TextDecoder("utf8").decode(
-            new Uint8Array(memory.buffer, offset, length),
-          ),
-        ),
-      log_closure: (
-        tag: number,
-        arity: number,
-        envSize: number,
-        parentEnv: number,
-      ) =>
+        capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
+      log_closure: (tag: number, arity: number, envSize: number, parentEnv: number) =>
         capture(
           `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`,
         ),
@@ -158,9 +143,7 @@ export async function compileToWasmAndRun(
 
           const renderedItem = output.pop();
           if (renderedItem === undefined) {
-            throw new Error(
-              "List item logging did not produce a rendered value",
-            );
+            throw new Error("List item logging did not produce a rendered value");
           }
           renderedItems.push(renderedItem);
         }
@@ -173,13 +156,9 @@ export async function compileToWasmAndRun(
         if (!wasmExports) throw new Error("WASM exports not initialised");
 
         const tokenizer = new Tokenizer(
-          new TextDecoder("utf8").decode(
-            new Uint8Array(memory.buffer, offset, length),
-          ),
+          new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length)),
         );
-        const tokens = tokenizer
-          .scanEverything()
-          .filter((x) => x.lexeme !== "");
+        const tokens = tokenizer.scanEverything().filter(x => x.lexeme !== "");
 
         const encoder = new TextEncoder();
         const dataView = new DataView(memory.buffer);
@@ -188,9 +167,7 @@ export async function compileToWasmAndRun(
         const strings = tokens.map(({ lexeme }) => {
           if (!wasmExports) throw new Error("WASM exports not initialised");
 
-          encoder
-            .encode(lexeme)
-            .forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+          encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
 
           const string = wasmExports.makeString(heapPointer, lexeme.length);
 
@@ -198,19 +175,12 @@ export async function compileToWasmAndRun(
           return string;
         });
 
-        wasmExports.incrementHeapPointer(
-          heapPointer - wasmExports.getHeapPointer(),
-        );
+        wasmExports.incrementHeapPointer(heapPointer - wasmExports.getHeapPointer());
 
         return strings.reduceRight(([tailTag, tailValue], [tag, value]) => {
           if (!wasmExports) throw new Error("WASM exports not initialised");
 
-          const pair = wasmExports.makePair(
-            tag,
-            BigInt(value),
-            tailTag,
-            BigInt(tailValue),
-          );
+          const pair = wasmExports.makePair(tag, BigInt(value), tailTag, BigInt(tailValue));
           return pair;
         }, wasmExports.makeNone());
       },
@@ -228,10 +198,7 @@ export async function compileToWasmAndRun(
         const pyParser = new Parser(string, tokens);
         const ast = pyParser.parse();
 
-        const metacircularGenerator = new MetacircularGenerator(
-          wasmExports,
-          memory,
-        );
+        const metacircularGenerator = new MetacircularGenerator(wasmExports, memory);
         return metacircularGenerator.visit(ast);
       },
     },

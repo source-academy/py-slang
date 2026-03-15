@@ -1,14 +1,14 @@
 // Value.ts
-import { Closure } from './closure';
-import { Environment } from './environment';
-import { Stack } from './stack';
-import { ExprNS, StmtNS } from '../ast-types';
-import { PyComplexNumber } from '../types';
+import { ExprNS, StmtNS } from "../ast-types";
+import { PyComplexNumber } from "../types";
+import { Closure } from "./closure";
+import { Environment } from "./environment";
+import { Stack } from "./stack";
 
 /**
  * Value represents various runtime values in Python.
  */
-export type Value = any
+export type Value = any;
 //   | NumberValue
 //   | BoolValue
 //   | StringValue
@@ -27,38 +27,38 @@ export interface pyClosureValue {
 }
 
 export interface Builtin {
-  type: 'builtin';
+  type: "builtin";
   name: string;
   func: (...args: any[]) => any;
 }
 
 export interface BigIntValue {
-  type: 'bigint';
+  type: "bigint";
   value: bigint;
 }
 
 export interface ComplexValue {
-  type: 'complex'
-  value: PyComplexNumber
+  type: "complex";
+  value: PyComplexNumber;
 }
 
 export interface NumberValue {
-  type: 'number';
+  type: "number";
   value: number;
 }
 
 export interface BoolValue {
-  type: 'bool';
+  type: "bool";
   value: boolean;
 }
 
 export interface StringValue {
-  type: 'string';
+  type: "string";
   value: string;
 }
 
 export interface FunctionValue {
-  type: 'function';
+  type: "function";
   name: string;
   params: string[];
   body: StmtNS.Stmt[];
@@ -66,14 +66,14 @@ export interface FunctionValue {
 }
 
 export interface LambdaValue {
-  type: 'lambda';
+  type: "lambda";
   parameters: string[];
   body: ExprNS.Expr;
   env: Environment;
 }
 
 export interface MultiLambdaValue {
-  type: 'multi_lambda';
+  type: "multi_lambda";
   parameters: string[];
   body: StmtNS.Stmt[];
   varDecls: string[];
@@ -81,13 +81,13 @@ export interface MultiLambdaValue {
 }
 
 export interface ErrorValue {
-  type: 'error';
+  type: "error";
   message: string;
 }
 
 // TODO: Merge undefined and None.
 export interface UndefinedValue {
-  type: 'undefined';
+  type: "undefined";
 }
 
 export class Stash extends Stack<Value> {

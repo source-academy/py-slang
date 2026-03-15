@@ -1,3 +1,3 @@
 export type ModuleFunctions = {
-    [name: string]: any
-}
+  [name: string]: any;
+};

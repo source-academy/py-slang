@@ -40,7 +40,7 @@ export const ERROR_MAP = {
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
-  Object.values(ERROR_MAP).findIndex((v) => v === errorKey);
+  Object.values(ERROR_MAP).findIndex(v => v === errorKey);
 
 export const HEAP_PTR = "$_heap_pointer";
 export const CURR_ENV = "$_current_env";
@@ -1094,7 +1094,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), i32.const(32767)),
           ...Array(bodies.length).keys(),
         ),
-        ...bodies.map((body) => [
+        ...bodies.map(body => [
           ...body,
           wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get(RETURN_ENV_NAME))),
         ]),

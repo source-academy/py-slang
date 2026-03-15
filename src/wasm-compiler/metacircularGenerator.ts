@@ -8,32 +8,21 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): S | E;
 }
 
-export class MetacircularGenerator implements BuilderVisitor<
-  [number, bigint],
-  [number, bigint]
-> {
+export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [number, bigint]> {
   private wasmExports: WasmExports;
   private memory: WebAssembly.Memory;
   private static readonly encoder = new TextEncoder();
 
   private list(...elements: [number, bigint][]): [number, bigint] {
     return elements.reduceRight(([tailTag, tailValue], [tag, value]) => {
-      const pair = this.wasmExports.makePair(
-        tag,
-        BigInt(value),
-        tailTag,
-        BigInt(tailValue),
-      );
+      const pair = this.wasmExports.makePair(tag, BigInt(value), tailTag, BigInt(tailValue));
       return pair;
     }, this.wasmExports.makeNone());
   }
 
   private string(str: (typeof PARSE_TREE_STRINGS)[number]): [number, bigint] {
     const index = PARSE_TREE_STRINGS.indexOf(str);
-    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce(
-      (acc, s) => acc + s.length,
-      0,
-    );
+    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce((acc, s) => acc + s.length, 0);
     return this.wasmExports.makeString(offset, str.length);
   }
 
@@ -61,19 +50,14 @@ export class MetacircularGenerator implements BuilderVisitor<
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
     if (stmt.statements.length === 0) {
-      return this.list(
-        this.string("sequence"),
-        this.list(this.wasmExports.makeNone()),
-      );
+      return this.list(this.string("sequence"), this.list(this.wasmExports.makeNone()));
     }
 
     if (stmt.statements.length === 1) {
       return this.visit(stmt.statements[0]);
     }
 
-    const statementsList = this.list(
-      ...stmt.statements.map((s) => this.visit(s)),
-    );
+    const statementsList = this.list(...stmt.statements.map(s => this.visit(s)));
     return this.list(this.string("sequence"), statementsList);
   }
 
@@ -188,36 +172,23 @@ export class MetacircularGenerator implements BuilderVisitor<
 
   visitLiteralExpr(expr: ExprNS.Literal): [number, bigint] {
     if (typeof expr.value === "number")
-      return this.list(
-        this.string("literal"),
-        this.wasmExports.makeFloat(expr.value),
-      );
+      return this.list(this.string("literal"), this.wasmExports.makeFloat(expr.value));
     else if (typeof expr.value === "boolean")
-      return this.list(
-        this.string("literal"),
-        this.wasmExports.makeBool(expr.value ? 1 : 0),
-      );
+      return this.list(this.string("literal"), this.wasmExports.makeBool(expr.value ? 1 : 0));
     else if (typeof expr.value === "string") {
-      return this.list(
-        this.string("literal"),
-        this.dynamicString(`"${expr.value}"`),
-      );
+      return this.list(this.string("literal"), this.dynamicString(`"${expr.value}"`));
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
     }
   }
 
   visitListExpr(expr: ExprNS.List): [number, bigint] {
-    const elementsList = this.list(...expr.elements.map((e) => this.visit(e)));
+    const elementsList = this.list(...expr.elements.map(e => this.visit(e)));
     return this.list(this.string("list_expression"), elementsList);
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
-    return this.list(
-      this.string("object_access"),
-      this.visit(expr.value),
-      this.visit(expr.index),
-    );
+    return this.list(this.string("object_access"), this.visit(expr.value), this.visit(expr.index));
   }
 
   visitStarredExpr(expr: ExprNS.Starred): [number, bigint] {
@@ -235,10 +206,7 @@ export class MetacircularGenerator implements BuilderVisitor<
   }
 
   visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
-    return this.list(
-      this.string("name"),
-      this.dynamicString(`"${expr.name.lexeme}"`),
-    );
+    return this.list(this.string("name"), this.dynamicString(`"${expr.name.lexeme}"`));
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
@@ -250,11 +218,7 @@ export class MetacircularGenerator implements BuilderVisitor<
         const { target } = stmt;
         return (
           target instanceof ExprNS.Variable &&
-          !arr.some(
-            (s) =>
-              s instanceof StmtNS.NonLocal &&
-              s.name.lexeme === target.name.lexeme,
-          )
+          !arr.some(s => s instanceof StmtNS.NonLocal && s.name.lexeme === target.name.lexeme)
         );
       }).length > 0;
 
@@ -264,16 +228,11 @@ export class MetacircularGenerator implements BuilderVisitor<
 
     return this.list(
       this.string("function_declaration"),
+      this.list(this.string("name"), this.dynamicString(`"${stmt.name.lexeme}"`)),
       this.list(
-        this.string("name"),
-        this.dynamicString(`"${stmt.name.lexeme}"`),
-      ),
-      this.list(
-        ...stmt.parameters.map((p) => {
+        ...stmt.parameters.map(p => {
           if (p.isStarred) {
-            throw new Error(
-              "Starred parameters are not supported in parse tree generation",
-            );
+            throw new Error("Starred parameters are not supported in parse tree generation");
           }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
@@ -286,11 +245,9 @@ export class MetacircularGenerator implements BuilderVisitor<
     return this.list(
       this.string("lambda_expression"),
       this.list(
-        ...expr.parameters.map((p) => {
+        ...expr.parameters.map(p => {
           if (p.isStarred) {
-            throw new Error(
-              "Starred parameters are not supported in parse tree generation",
-            );
+            throw new Error("Starred parameters are not supported in parse tree generation");
           }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
@@ -325,21 +282,11 @@ export class MetacircularGenerator implements BuilderVisitor<
     const elseBody =
       stmt.elseBlock && stmt.elseBlock.length > 0
         ? this.visitFileInputStmt(
-            new StmtNS.FileInput(
-              stmt.startToken,
-              stmt.endToken,
-              stmt.elseBlock,
-              [],
-            ),
+            new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.elseBlock, []),
           )
         : this.wasmExports.makeNone();
 
-    return this.list(
-      this.string("conditional_statement"),
-      condition,
-      thenBody,
-      elseBody,
-    );
+    return this.list(this.string("conditional_statement"), condition, thenBody, elseBody);
   }
 
   visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
@@ -366,23 +313,15 @@ export class MetacircularGenerator implements BuilderVisitor<
 
     return this.list(
       this.string("for_loop"),
-      this.list(
-        this.string("name"),
-        this.dynamicString(`"${stmt.target.lexeme}"`),
-      ),
-      this.list(
-        this.string("range_args"),
-        ...stmt.iter.args.map((a) => this.visit(a)),
-      ),
-      this.visitFileInputStmt(
-        new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
-      ),
+      this.list(this.string("name"), this.dynamicString(`"${stmt.target.lexeme}"`)),
+      this.list(this.string("range_args"), ...stmt.iter.args.map(a => this.visit(a))),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
     );
   }
 
   visitCallExpr(expr: ExprNS.Call): [number, bigint] {
     const callee = this.visit(expr.callee);
-    const argsList = this.list(...expr.args.map((a) => this.visit(a)));
+    const argsList = this.list(...expr.args.map(a => this.visit(a)));
 
     return this.list(this.string("application"), callee, argsList);
   }
@@ -390,10 +329,7 @@ export class MetacircularGenerator implements BuilderVisitor<
   visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
     return this.list(
       this.string("nonlocal_declaration"),
-      this.list(
-        this.string("name"),
-        this.dynamicString(`"${stmt.name.lexeme}"`),
-      ),
+      this.list(this.string("name"), this.dynamicString(`"${stmt.name.lexeme}"`)),
     );
   }
 

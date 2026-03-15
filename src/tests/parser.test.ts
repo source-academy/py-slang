@@ -24,7 +24,7 @@ describe("Tests for Python language constructs", () => {
   describe("Script", () => {
     test("An entire Python script", () => {
       const text = `
-from x import y
+from x import (y)
 x = 1 if 2 else 3
 
 1 is not 2
