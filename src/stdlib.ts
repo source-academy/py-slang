@@ -723,7 +723,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: BigInt(0) };
     }
 
-    const values = args.map((v, _idx) => {
+    const values = args.map((v) => {
       if (v.type !== "bigint") {
         handleRuntimeError(
           context,
@@ -804,7 +804,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: BigInt(1) };
     }
 
-    const values = args.map((val, _idx) => {
+    const values = args.map((val) => {
       if (val.type !== "bigint") {
         handleRuntimeError(
           context,
