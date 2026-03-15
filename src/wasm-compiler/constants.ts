@@ -1,5 +1,4 @@
-import { f64, global, i32, i64, local, memory, wasm } from "@sourceacademy/wasm-util";
-import { WasmInstruction } from "@sourceacademy/wasm-util";
+import { f64, global, i32, i64, local, memory, wasm, WasmInstruction } from "@sourceacademy/wasm-util";
 
 // tags
 export const TYPE_TAG = {
@@ -768,7 +767,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .body(
       ...wasm.buildBrTableBlocks(
         wasm.br_table(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), ...Array(bodies.length).keys()),
-        ...bodies.map((body) => [
+        ...bodies.map(body => [
           ...body,
           wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get("$return_env"))),
         ]),
