@@ -5,14 +5,5 @@
       "source.organizeImports": "always"
     }
   },
-  "files.insertFinalNewline": true,
-  "search.exclude": {
-    "**/.yarn": true,
-    "**/.pnp.*": true
-  },
-  "eslint.nodePath": ".yarn/sdks",
-  "prettier.prettierPath": ".yarn/sdks/prettier/index.cjs",
-  "typescript.tsdk": ".yarn/sdks/typescript/lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "js/ts.tsdk.path": ".yarn/sdks/typescript/lib"
+  "files.insertFinalNewline": true
 }
