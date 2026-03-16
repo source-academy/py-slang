@@ -17,12 +17,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+      - run: corepack enable
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: yarn
-      - run: corepack enable
       - run: yarn install --frozen-lockfile
       - run: yarn run build
       - run: yarn run format:ci
