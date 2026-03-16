@@ -1166,7 +1166,7 @@ __metadata:
 "@sourceacademy/conductor@npm:^0.2.3":
   version: 0.2.3
   resolution: "@sourceacademy/conductor@npm:0.2.3"
-  checksum: 10c0/3bd05664ae229681a708e397efdc5768c77025ba4e837211f409acc45f39cbfa3a8f8810e93aa0d02c8a2a3cc002172bd8331af1846cef123f650d454505e172
+  checksum: 10c0/f6251017a6ed95ea4854a67f6b302934e1023bb256e15f93da8b1a55a95df082d88ba93813b5476445f4f82825dd2b7f44cdb1b20ae7815f9f8a8e6eb7816621
   languageName: node
   linkType: hard
 
@@ -4444,12 +4444,30 @@ __metadata:
   languageName: node
   linkType: hard
 
-"semver@npm:^7.3.5, semver@npm:^7.5.3, semver@npm:^7.5.4, semver@npm:^7.7.2, semver@npm:^7.7.3":
+"semver@npm:^7.3.5, semver@npm:^7.7.3":
   version: 7.7.4
   resolution: "semver@npm:7.7.4"
   bin:
     semver: bin/semver.js
   checksum: 10c0/5215ad0234e2845d4ea5bb9d836d42b03499546ddafb12075566899fc617f68794bb6f146076b6881d755de17d6c6cc73372555879ec7dce2c2feee947866ad2
+  languageName: node
+  linkType: hard
+
+"semver@npm:^7.5.3":
+  version: 7.7.3
+  resolution: "semver@npm:7.7.3"
+  bin:
+    semver: bin/semver.js
+  checksum: 10c0/4afe5c986567db82f44c8c6faef8fe9df2a9b1d98098fc1721f57c696c4c21cebd572f297fc21002f81889492345b8470473bc6f4aff5fb032a6ea59ea2bc45e
+  languageName: node
+  linkType: hard
+
+"semver@npm:^7.5.4, semver@npm:^7.7.2":
+  version: 7.7.2
+  resolution: "semver@npm:7.7.2"
+  bin:
+    semver: bin/semver.js
+  checksum: 10c0/aca305edfbf2383c22571cb7714f48cadc7ac95371b4b52362fb8eeffdfbc0de0669368b82b2b15978f8848f01d7114da65697e56cd8c37b0dab8c58e543f9ea
   languageName: node
   linkType: hard
 
