@@ -29,6 +29,7 @@
     "url": "https://github.com/source-academy/"
   },
   "license": "Apache-2.0",
+  "packageManager": "yarn@4.13.0+sha512.5c20ba010c99815433e5c8453112165e673f1c7948d8d2b267f4b5e52097538658388ebc9f9580656d9b75c5cc996f990f611f99304a2197d4c56d21eea370e7",
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
@@ -57,6 +58,5 @@
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
     "wabt": "^1.0.37"
-  },
-  "packageManager": "yarn@4.13.0+sha512.5c20ba010c99815433e5c8453112165e673f1c7948d8d2b267f4b5e52097538658388ebc9f9580656d9b75c5cc996f990f611f99304a2197d4c56d21eea370e7"
+  }
 }
