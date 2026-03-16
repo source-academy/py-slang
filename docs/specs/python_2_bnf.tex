@@ -23,7 +23,7 @@ as follows:
 && \textit{import-as-name}  && \quad ::= \quad & \textit{name}\ [\ \textbf{\texttt{as}}\ \textit{name}\ ]                                                          && \textrm{clause name and alias}            \\[1mm]
 && \textit{statement}       && \quad ::= \quad & \textit{name}\ \textbf{\texttt{=}}\ \textit{expression}                                                           && \textrm{variable declaration}             \\
 &&                          &&         | \quad & \textbf{\texttt{def}}\ \textit{name}\ \textbf{\texttt{(}}\ \textit{names}\ \textbf{\texttt{)}}
-                                                 \ \textbf{\texttt{:}}\ \textit{block}\ \quad && \textrm{function declaration}                                                                                  \\
+                                                 \ \textbf{\texttt{:}}\ \textit{block}\ \quad                                                                      && \textrm{function declaration}         \\
 &&                          &&         | \quad & \textbf{\texttt{return}}\ \textit{expression}                                                                     && \textrm{return statement}                 \\
 &&                          &&         | \quad & \textit{if-statement}\ \quad                                                                                      && \textrm{conditional statement}            \\
 &&                          &&         | \quad & \textit{expression}                                                                                               && \textrm{expression statement}             \\[1mm]
@@ -49,7 +49,7 @@ as follows:
 && \textit{binary-operator} && \quad ::= \quad & \textbf{\texttt{+}}\ |\ \textbf{\texttt{-}}\ |\ \textbf{\texttt{*}}\ |
                                                  \ \textbf{\texttt{/}}\ |\ \textbf{\texttt{**}}\ |\ \textbf{\texttt{\%}}\ |                                                                                     \\
 &&                          &&         | \quad & \textbf{\texttt{==}}\ |\ \textbf{\texttt{!=}}\ |\ \texttt{\textbf{>}}\ |
-                                                 \ \texttt{\textbf{<}}\ |\ \texttt{\textbf{>=}}\ |\ \texttt{\textbf{<=}} && \textrm{binary operator}                                                            \\[1mm]
+                                                 \ \texttt{\textbf{<}}\ |\ \texttt{\textbf{>=}}\ |\ \texttt{\textbf{<=}}                                           && \textrm{binary operator}                  \\[1mm]
 && \textit{unary-operator}  && \quad ::= \quad & \textbf{\texttt{not}}\ |\ \textbf{\texttt{-}}                                                                     && \textrm{unary operator}                   \\[1mm]
 && \textit{binary-logical}  && \quad ::= \quad & \textbf{\texttt{and}}\ |\ \texttt{\textbf{or}}                                                                    && \textrm{logical composition symbol}       \\[1mm]
 && \textit{expressions}     && \quad ::= \quad & \epsilon\ |\ \textit{expression}\ (\ \textbf{\texttt{,}}\ \textit{expression}\ ) ...                              && \textrm{argument expressions}
