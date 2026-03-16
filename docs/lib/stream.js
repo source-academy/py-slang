@@ -9,8 +9,8 @@
  * Laziness: Yes: {stream_tail} only forces the direct tail
  * stream, but not the rest of the stream, i.e. not the tail
  * of the tail, etc.
- * @param {Stream} <CODE>xs</CODE> - given value
- * @returns {Stream} result stream (if stream discipline is used)
+ * @param {stream} <CODE>xs</CODE> - given value
+ * @returns {stream} result stream (if stream discipline is used)
  */
 
 function stream_tail(xs) {

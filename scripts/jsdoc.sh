@@ -62,11 +62,22 @@ run() {
   # LINKED LISTS
   run_jsdoc "LINKED LISTS" "README_LINKED LISTS.md" "LINKED LISTS" "$LIB/linked_list.js" &
 
+  # PAIR MUTATOR
+  run_jsdoc "PAIR MUTATOR" "README_PAIR MUTATOR.md" "PAIR MUTATOR" "$LIB/pairmutator.js" &
+
+  # LISTS
+  run_jsdoc "LISTS" "README_LISTS.md" "LISTS" "$LIB/list.js" &
+
+  # STREAMS
+  run_jsdoc "STREAMS" "README_STREAMS.md" "STREAMS" "$LIB/stream.js" &
+
   # Python §1
   run_jsdoc "Python §1" "README_1.md" "python_1" "$LIB/misc.js" "$LIB/math.js" &
   
   # Python §2
   run_jsdoc "Python §2" "README_2.md" "python_2" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" &
+
+  run_jsdoc "Python §3" "README_3.md" "python_3" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" &
 
   wait
 }
