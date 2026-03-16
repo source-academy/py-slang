@@ -104,7 +104,7 @@ export function evaluate(
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error) {
-    return { type: "error", message: (error instanceof Error) ? error.message : String(error) };
+    return { type: "error", message: error instanceof Error ? error.message : String(error) };
   }
 
   try {
@@ -123,7 +123,7 @@ export function evaluate(
     );
     return context.output ? { type: "string", value: context.output } : result;
   } catch (error) {
-    return { type: "error", message: (error instanceof Error) ? error.message : String(error) };
+    return { type: "error", message: error instanceof Error ? error.message : String(error) };
   } finally {
     context.runtime.isRunning = false;
   }
