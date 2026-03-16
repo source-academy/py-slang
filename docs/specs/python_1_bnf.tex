@@ -5,7 +5,7 @@ A Python program is a \emph{program}, defined using Backus-Naur Form\footnote{
   \emph{A human engineered variant of BNF}, ACM SIGPLAN Notices,
   Volume 15 Issue 10,
   October 1980, Pages 57-62. In our grammars, we use
-  \textbf{\texttt{bold}} font for keywords,
+  \term{bold} font for keywords,
   {\it italics} for syntactic variables, $\epsilon$ for nothing,
   $x\ |\ y$ for $x$ or $y$, $[\ x\ ]$ for an optional $x$,
   $ x ...$ for zero or more repetitions of $x$, and $(\ x\ )$ for
@@ -13,44 +13,42 @@ clarifying the structure of BNF expressions.}
 as follows:
 
 % tex-fmt: off
-\begin{alignat*}{9}
-&& \textit{program}         && \quad ::= \quad & \textit{import-stmt} ... \ \textit{block}                                                                         && \textrm{program}                      \\[1mm]
-&& \textit{import-stmt}     && \quad ::= \quad & \textbf{\texttt{from}}\ \textit{dotted-name} \ \textbf{\texttt{import}}\ \textit{import-clause} \quad             && \textrm{import statement}             \\[1mm]
-&& \textit{dotted-name}     && \quad ::= \quad & \textit{name}\ (\textbf{\texttt{.}} \ \textit{name}\ )...                                                         && \textrm{dotted identifier chain}      \\[1mm]
-&& \textit{import-clause}   && \quad ::= \quad & \textit{import-as-names}                                                                                                                                   \\
-&&                          &&         | \quad & \textbf{\texttt{(}}\ \textit{import-as-names}\ \textbf{\texttt{)}}                                                && \textrm{wildcard or name list}        \\[1mm]
-&& \textit{import-as-names} && \quad ::= \quad & \textit{import-as-name}\ (\textit{\texttt{,}}\ \textit{import-as-name}\ ) ...                                     && \textrm{clause name list}             \\[1mm]
-&& \textit{import-as-name}  && \quad ::= \quad & \textit{name}\ [\ \textbf{\texttt{as}}\ \textit{name}\ ]                                                          && \textrm{clause name and alias}        \\[1mm]
-&& \textit{statement}       && \quad ::= \quad & \textit{name}\ \textbf{\texttt{=}}\ \textit{expression}                                                           && \textrm{variable declaration}         \\
-&&                          &&         | \quad & \textbf{\texttt{def}}\ \textit{name}\ \textbf{\texttt{(}}\ \textit{names}\ \textbf{\texttt{)}}
-                                                 \ \textbf{\texttt{:}}\ \textit{block}\ \quad                                                                      && \textrm{function declaration}         \\
-&&                          &&         | \quad & \textbf{\texttt{return}}\ \textit{expression}                                                                     && \textrm{return statement}             \\
-&&                          &&         | \quad & \textit{if-statement}\ \quad                                                                                      && \textrm{conditional statement}        \\
-&&                          &&         | \quad & \textit{expression}                                                                                               && \textrm{expression statement}         \\[1mm]
-% &&                          &&         | \quad & \textbf{\texttt{debugger()}}                                                                                      && \textrm{breakpoint}                   \\[1mm]
-&& \textit{names}           && \quad ::= \quad & \epsilon\ |\ \textit{name}\ (\ \textbf{\texttt{,}}\ \textit{name}\ ) ...                                          && \textrm{name list}                    \\[1mm]
-&& \textit{if-statement}    && \quad ::= \quad & \textbf{\texttt{if}}\ \textit{expression}\ \textbf{\texttt{:}}\ \textit{block}                                                                             \\
-&&                          &&         | \quad & (\ \textbf{\texttt{elif}}\ \textit{expression}\ \textbf{\texttt{:}}\ \textit{block}\ )...                                                                  \\
-&&                          &&         | \quad & \textbf{\texttt{else}}\ \textbf{\texttt{:}}\ \textit{block}                                                       && \textrm{conditional statement}        \\[1mm]
-&& \textit{block}           && \quad ::= \quad & \textit{statement}...\ \quad                                                                                      && \textrm{block statement}              \\[1mm]
-&& \textit{expression}      && \quad ::= \quad & \textit{number}                                                                                                   && \textrm{primitive number expression}  \\
-&&                          &&         | \quad & \textbf{\texttt{True}}\ |\ \textbf{\texttt{False}}                                                                && \textrm{primitive boolean expression} \\
-&&                          &&         | \quad & \textbf{\texttt{None}}                                                                                            && \textrm{primitive None expression}    \\
-&&                          &&         | \quad & \textit{string}                                                                                                   && \textrm{primitive string expression}  \\
-&&                          &&         | \quad & \textit{name}                                                                                                     && \textrm{name expression}              \\
-&&                          &&         | \quad & \textit{expression}\ \textit{binary-operator}\ \textit{expression}\ \qquad                                        && \textrm{binary operator combination}  \\
-&&                          &&         | \quad & \textit{unary-operator}\ \textit{expression}                                                                      && \textrm{unary operator combination}   \\
-&&                          &&         | \quad & \textit{expression}\ \textit{binary-logical}\ \textit{expression}\ \qquad                                         && \textrm{logical composition}          \\
-&&                          &&         | \quad & \textit{expression}\ \textbf{\texttt{(}}\ \textit{expressions}\ \textbf{\texttt{)}}                               && \textrm{function application}         \\
-&&                          &&         | \quad & \textbf{\texttt{lambda}}\ (\ \textit{name}\ |\ \textit{names}\ )\ \texttt{\textbf{:}}\ \textit{expression}        && \textrm{lambda expression}            \\
-&&                          &&         | \quad & \textit{expression}\ \textbf{\texttt{if}}\ \textit{expression}\ \textbf{\texttt{else}}\ \textit{expression} \quad && \textrm{conditional expression}       \\
-&&                          &&         | \quad & \textbf{\texttt{(}}\ \textit{expression}\ \textbf{\texttt{)}}                                                     && \textrm{parenthesised expression}     \\[1mm]
-&& \textit{binary-operator} && \quad ::= \quad & \textbf{\texttt{+}}\ |\ \textbf{\texttt{-}}\ |\ \textbf{\texttt{*}}\ |
-                                                 \ \textbf{\texttt{/}}\ |\ \textbf{\texttt{**}}\ |\ \textbf{\texttt{\%}}\ |                                                                                 \\
-&&                          &&         | \quad & \textbf{\texttt{==}}\ |\ \textbf{\texttt{!=}}\ |\ \texttt{\textbf{>}}\ |
-                                                 \ \texttt{\textbf{<}}\ |\ \texttt{\textbf{>=}}\ |\ \texttt{\textbf{<=}}                                           && \textrm{binary operator}                  \\[1mm]
-&& \textit{unary-operator}  && \quad ::= \quad & \textbf{\texttt{not}}\ |\ \textbf{\texttt{-}}                                                                     && \textrm{unary operator}               \\[1mm]
-&& \textit{binary-logical}  && \quad ::= \quad & \textbf{\texttt{and}}\ |\ \texttt{\textbf{or}}                                                                    && \textrm{logical composition symbol}   \\[1mm]
-&& \textit{expressions}     && \quad ::= \quad & \epsilon\ |\ \textit{expression}\ (\ \textbf{\texttt{,}}\ \textit{expression}\ ) ...                              && \textrm{argument expressions}
-\end{alignat*}
+\[\begin{array}{rcll}
+
+\textit{program}         & ::= & \textit{import-stmt} ... \ \textit{block}                                               & \text{program}                          \\[1mm]
+\textit{import-stmt}     & ::= & \term{from}\ \textit{dotted-name}\ \term{import}\ \textit{import-clause}                & \text{import statement}                 \\[1mm]
+\textit{dotted-name}     & ::= & \textit{name}\ (\ \term{.}\ \textit{name}\ )...                                         & \text{dotted identifier chain}          \\[1mm]
+\textit{import-clause}   & ::= & \textit{import-as-names}                                                                &                                         \\
+                         & |   & \term{(}\ \textit{import-as-names}\ \term{)}                                            & \text{wildcard or name list}            \\[1mm]
+\textit{import-as-names} & ::= & \textit{import-as-name}\ (\ \term{,}\ \textit{import-as-name}\ )...                     & \text{clause name list}                 \\[1mm]
+\textit{import-as-name}  & ::= & \textit{name}\ [\ \term{as}\ \textit{name}\ ]                                           & \text{clause name and alias}            \\[1mm]
+\textit{statement}       & ::= & \textit{name}\ \term{=}\ \textit{expression}                                            & \text{variable declaration}             \\
+                         & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block} & \text{function declaration}             \\
+                         & |   & \term{return}\ \textit{expression}                                                      & \text{return statement}                 \\
+                         & |   & \textit{if-statement}                                                                   & \text{conditional statement}            \\
+                         & |   & \textit{expression}                                                                     & \text{expression statement}             \\[1mm]
+\textit{names}           & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...                            & \text{name list}                        \\[1mm]
+\textit{if-statement}    & ::= & \term{if}\ \textit{expression}\ \term{:}\ \textit{block}                                &                                         \\
+                         & |   & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                     &                                         \\
+                         & |   & \term{else}\ \term{:}\ \textit{block}                                                   & \text{conditional statement}            \\[1mm]
+\textit{block}           & ::= & \textit{statement}...                                                                   & \text{block statement}                  \\[1mm]
+\textit{expression}      & ::= & \textit{number}                                                                         & \text{primitive number expression}      \\
+                         & |   & \term{True}\ |\ \term{False}                                                            & \text{primitive boolean expression}     \\
+                         & |   & \term{None}                                                                             & \text{primitive None expression}        \\
+                         & |   & \textit{string}                                                                         & \text{primitive string expression}      \\
+                         & |   & \textit{name}                                                                           & \text{name expression}                  \\
+                         & |   & \textit{expression}\ \textit{binary-operator}\ \textit{expression}                      & \text{binary operator combination}      \\
+                         & |   & \textit{unary-operator}\ \textit{expression}                                            & \text{unary operator combination}       \\
+                         & |   & \textit{expression}\ \textit{binary-logical}\ \textit{expression}                       & \text{logical composition}              \\
+                         & |   & \textit{expression}\ \term{(}\ \textit{expressions}\ \term{)}                           & \text{function application}             \\
+                         & |   & \term{lambda}\ (\textit{name}\ |\ \textit{names})\ \term{:}\ \textit{expression}        & \text{lambda expression}                \\
+                         & |   & \textit{expression}\ \term{if}\ \textit{expression}\ \term{else}\ \textit{expression}   & \text{conditional expression}           \\
+                         & |   & \term{(}\ \textit{expression}\ \term{)}                                                 & \text{parenthesised expression}         \\[1mm]
+\textit{binary-operator} & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%}             &                                         \\
+                         & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}           & \text{binary operator}                  \\[1mm]
+\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}                                                                 & \text{unary operator}                   \\[1mm]
+\textit{binary-logical}  & ::= & \term{and}\ |\ \term{or}                                                                & \text{logical composition symbol}       \\[1mm]
+\textit{expressions}     & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                & \text{argument expressions}             \\
+
+\end{array}\]
 % tex-fmt: on
