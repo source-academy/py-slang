@@ -3,7 +3,7 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-JSDOC="node_modules/.bin/jsdoc"
+JSDOC="$(yarn bin jsdoc)"
 TMPL="docs/jsdoc/templates/template"
 DST="docs/python"
 MD="docs/md"

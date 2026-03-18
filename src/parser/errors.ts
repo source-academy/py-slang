@@ -16,45 +16,40 @@ export namespace ParserErrors {
   }
   export class ExpectedTokenError extends BaseParserError {
     constructor(source: string, current: Token, expected: string) {
-      let { lineIndex, fullLine } = getFullLine(
+      const { lineIndex, fullLine } = getFullLine(
         source,
         current.indexInSource - current.lexeme.length,
       );
-      fullLine = "\n" + fullLine + "\n";
       let hint = `^ ${expected}. Found '${current.lexeme}'.`;
       hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
-      super(fullLine + hint, lineIndex, current.col);
+      super("\n" + fullLine + "\n" + hint, lineIndex, current.col);
       this.name = "ExpectedTokenError";
     }
   }
   export class NoElseBlockError extends BaseParserError {
     constructor(source: string, current: Token) {
-      let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
-      fullLine = "\n" + fullLine + "\n";
+      const { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
       let hint = `^ Expected else block after this if block.`;
       hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
-      super(fullLine + hint, lineIndex, current.col);
+      super("\n" + fullLine + "\n" + hint, lineIndex, current.col);
       this.name = "NoElseBlockError";
     }
   }
   export class GenericUnexpectedSyntaxError extends BaseParserError {
-    constructor(line: number, col: number, source: string, start: number, current: number) {
-      let { lineIndex, fullLine } = getFullLine(source, start);
-      fullLine = "\n" + fullLine + "\n";
+    constructor(line: number, col: number, source: string, start: number) {
+      const { lineIndex, fullLine } = getFullLine(source, start);
       const hint = ` Detected invalid syntax.`;
       const indicator = createErrorIndicator(fullLine, -1);
-      super(fullLine + indicator + hint, lineIndex, col);
+      super("\n" + fullLine + "\n" + indicator + hint, lineIndex, col);
       this.name = "GenericUnexpectedSyntaxError";
     }
   }
-
   export class InvalidAssignmentError extends BaseParserError {
     constructor(source: string, current: Token) {
-      let { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
-      fullLine = "\n" + fullLine + "\n";
+      const { lineIndex, fullLine } = getFullLine(source, current.indexInSource);
       let hint = `^ Invalid assignment target.`;
       hint = hint.padStart(hint.length + current.col - MAGIC_OFFSET, " ");
-      super(fullLine + hint, lineIndex, current.col);
+      super("\n" + fullLine + "\n" + hint, lineIndex, current.col);
       this.name = "InvalidAssignmentError";
     }
   }
