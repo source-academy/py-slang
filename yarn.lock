@@ -4226,7 +4226,6 @@ __metadata:
     nodemon: "npm:^3.1.10"
     prettier: "npm:^3.8.1"
     rollup: "npm:^4.59.0"
-    taffydb: "npm:^2.7.3"
     ts-jest: "npm:^29.0.5"
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.8.1"
@@ -4669,13 +4668,6 @@ __metadata:
   version: 1.0.0
   resolution: "supports-preserve-symlinks-flag@npm:1.0.0"
   checksum: 10c0/6c4032340701a9950865f7ae8ef38578d8d7053f5e10518076e6554a9381fa91bd9c6850193695c141f32b21f979c985db07265a758867bac95de05f7d8aeb39
-  languageName: node
-  linkType: hard
-
-"taffydb@npm:^2.7.3":
-  version: 2.7.3
-  resolution: "taffydb@npm:2.7.3"
-  checksum: 10c0/4c0f6f2818491ed560553f12c06a49ee43fd40d504fc95b24e61e07d70496f34428ec638457e5738e9b0416b06fc67ebcf920c5b46e442834a9c20b95841dd55
   languageName: node
   linkType: hard
 
