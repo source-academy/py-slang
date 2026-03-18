@@ -5,7 +5,7 @@ import { Heap } from "./heap";
 import { Value } from "./stash";
 
 export interface Frame {
-  [name: string]: any;
+  [name: string]: Value;
 }
 
 export interface Environment {
@@ -84,18 +84,18 @@ export const createBlockEnvironment = (
   };
 };
 
-export const handleArrayCreation = (
-  context: Context,
-  array: any[],
-  envOverride?: Environment,
-): void => {
-  const environment = envOverride ?? currentEnvironment(context);
-  Object.defineProperties(array, {
-    id: { value: uniqueId(context) },
-    environment: { value: environment, writable: true },
-  });
-  environment.heap.add(array as any);
-};
+// export const handleArrayCreation = (
+//   context: Context,
+//   array: Value[],
+//   envOverride?: Environment
+// ): void => {
+//   const environment = envOverride ?? currentEnvironment(context)
+//   Object.defineProperties(array, {
+//     id: { value: uniqueId(context) },
+//     environment: { value: environment, writable: true }
+//   })
+//   environment.heap.add(array)
+// }
 
 export const currentEnvironment = (context: Context): Environment => {
   return context.runtime.environments[0];

@@ -111,3 +111,9 @@ build/
 
 # test file
 test.py
+
+# Yarn files
+.pnp.*
+.yarn/*
+.pnp.cjs
+.pnp.loader.mjs
