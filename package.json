@@ -5,10 +5,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "regen": "npm run build && node dist/generate.js",
+    "regen": "yarn run build && node dist/generate.js",
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
-    "start": "npm run build && node dist/index.js",
+    "start": "yarn run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
