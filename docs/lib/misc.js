@@ -211,6 +211,14 @@ function is_function(x) {}
 function is_none(x) {}
 
 /**
+ * Returns the number of parameters the given function <CODE>f</CODE> expects, excluding the rest parameter.
+ *
+ * @param {function} <CODE>f</CODE> - given function
+ * @returns {int} the number of arguments accepted by <CODE>f</CODE>
+ */
+function arity(f) {}
+
+/**
  *
  * An object frequently used to represent the absence of a value.
  * See also <a href="https://docs.python.org/3.13/library/constants.html#None">Python 3.13 Documentation</a>.
