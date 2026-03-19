@@ -238,9 +238,9 @@ export interface ComplexLiteral {
  * transformed to Array<Partial<T>> instead
  */
 export type RecursivePartial<T> =
-  T extends Array<any>
-    ? Array<RecursivePartial<T[number]>>
-    : T extends Record<any, any>
+  T extends Array<infer U>
+    ? Array<RecursivePartial<U>>
+    : T extends object
       ? Partial<{
           [K in keyof T]: RecursivePartial<T[K]>;
         }>
@@ -281,7 +281,7 @@ export interface Finished {
 export class Representation {
   constructor(public representation: string) {}
 
-  toString(value: any): string {
+  toString(value: Value): string {
     // call str(value) in stdlib
     // TODO: mapping
     const result = toPythonString(value);
@@ -305,6 +305,6 @@ export interface NativeStorage {
 }
 
 export interface ModuleContext {
-  state: null | any;
-  tabs: null | any[];
+  state: null | unknown;
+  tabs: null | unknown[];
 }
