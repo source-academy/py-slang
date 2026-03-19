@@ -5,10 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "regen": "yarn run build && node dist/generate.js",
+    "regen": "npm run build && node dist/generate.js",
+    "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';fs.writeFileSync(f,'// @ts-nocheck\\n'+fs.readFileSync(f,'utf8'))\"",
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
-    "start": "yarn run build && node dist/index.js",
+    "start": "npm run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
@@ -37,6 +38,9 @@
     "@rollup/plugin-typescript": "^12.1.2",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
+
+    "@types/moo": "^0.5.10",
+    "@types/nearley": "^2.11.5",
     "@types/node": "^18.19.84",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
@@ -56,6 +60,9 @@
     "@sourceacademy/wasm-util": "^1.0.4",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
+    "moo": "^0.5.2",
+    "moo-peekable-lexer": "^1.1.2",
+    "nearley": "^2.20.1",
     "wabt": "^1.0.37"
   }
 }
