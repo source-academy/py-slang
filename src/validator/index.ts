@@ -14,3 +14,4 @@ export { NoLambdaValidator } from "./features/no-lambda";
 export { NoBreakContinueValidator } from "./features/no-break-continue";
 export { NoNonlocalValidator } from "./features/no-nonlocal";
 export { ForRangeOnlyValidator } from "./features/for-range-only";
+export { NoRestParamsValidator } from "./features/no-rest-params";
