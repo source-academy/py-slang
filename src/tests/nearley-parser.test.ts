@@ -1165,3 +1165,27 @@ describe("Parse errors", () => {
     expect(result.statements).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Rest parameters
+// ---------------------------------------------------------------------------
+describe("Rest parameters", () => {
+  test("def f(*args) parses with starred param", () => {
+    const stmts = parseStmts("def f(*args):\n    pass");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FunctionDef);
+    const func = stmts[0] as StmtNS.FunctionDef;
+    expect(func.parameters).toHaveLength(1);
+    expect(func.parameters[0].isStarred).toBe(true);
+    expect(func.parameters[0].lexeme).toBe("args");
+  });
+
+  test("def f(a, b, *rest) parses mixed params", () => {
+    const stmts = parseStmts("def f(a, b, *rest):\n    pass");
+    const func = stmts[0] as StmtNS.FunctionDef;
+    expect(func.parameters).toHaveLength(3);
+    expect(func.parameters[0].isStarred).toBe(false);
+    expect(func.parameters[1].isStarred).toBe(false);
+    expect(func.parameters[2].isStarred).toBe(true);
+    expect(func.parameters[2].lexeme).toBe("rest");
+  });
+});

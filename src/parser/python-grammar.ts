@@ -122,8 +122,12 @@ let ParserRules = [
     {"name": "compound_statement", "symbols": [{"literal":"def"}, "_", (pythonLexer.has("name") ? {type: "name"} : name), "_", "params", "_", {"literal":":"}, "_", "block"], "postprocess":  ([kw,, name,, params,,,, body]) =>
         new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
           toAstToken(name), params, body, []) },
+    {"name": "rest_names", "symbols": [(pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([t]) => { const tok = toAstToken(t); tok.isStarred = false; return [tok]; }},
+    {"name": "rest_names", "symbols": [{"literal":"*"}, (pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [tok]; }},
+    {"name": "rest_names", "symbols": ["rest_names", "_nl", {"literal":","}, "_nl", (pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([params,,,, t]) => { const tok = toAstToken(t); tok.isStarred = false; return [...params, tok]; }},
+    {"name": "rest_names", "symbols": ["rest_names", "_nl", {"literal":","}, "_nl", {"literal":"*"}, (pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([params,,,,, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [...params, tok]; }},
     {"name": "params", "symbols": [{"literal":"("}, "_nl", {"literal":")"}], "postprocess": drop},
-    {"name": "params", "symbols": [{"literal":"("}, "_nl", "names", "_nl", {"literal":")"}], "postprocess": ([,, ps]) => ps},
+    {"name": "params", "symbols": [{"literal":"("}, "_nl", "rest_names", "_nl", {"literal":")"}], "postprocess": ([,, ps]) => ps},
     {"name": "expression", "symbols": ["or_expr", "_", {"literal":"if"}, "_", "or_expr", "_", {"literal":"else"}, "_", "expression"], "postprocess": ([cons,,,, test,,,, alt]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt)},
     {"name": "expression", "symbols": ["or_expr"], "postprocess": id},
     {"name": "expression", "symbols": ["lambda_expr"], "postprocess": id},

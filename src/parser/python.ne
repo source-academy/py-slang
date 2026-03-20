@@ -218,9 +218,20 @@ compound_statement ->
            new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
              toAstToken(name), params, body, []) %}
 
+# rest-names ::= ε | *name | name (, name)... [, *name]  [python_3_bnf.tex line 37-38]
+rest_names ->
+    %name
+      {% ([t]) => { const tok = toAstToken(t); tok.isStarred = false; return [tok]; } %}
+  | "*" %name
+      {% ([, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [tok]; } %}
+  | rest_names _nl "," _nl %name
+      {% ([params,,,, t]) => { const tok = toAstToken(t); tok.isStarred = false; return [...params, tok]; } %}
+  | rest_names _nl "," _nl "*" %name
+      {% ([params,,,,, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [...params, tok]; } %}
+
 params ->
     "(" _nl ")"                               {% drop %}
-  | "(" _nl names _nl ")"                    {% ([,, ps]) => ps %}
+  | "(" _nl rest_names _nl ")"               {% ([,, ps]) => ps %}
 
 # ============================================================================
 # expression ::= ...                             [python_1_bnf.tex lines 35-46]

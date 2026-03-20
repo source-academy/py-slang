@@ -523,7 +523,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.value);
     this.resolve(expr.index);
   }
-  visitStarredExpr(_expr: ExprNS.Starred): void {
-    throw new Error("Starred expressions are not yet supported");
+  visitStarredExpr(expr: ExprNS.Starred): void {
+    this.runValidators(expr);
+    this.resolve(expr.value);
   }
 }
