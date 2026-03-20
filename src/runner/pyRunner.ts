@@ -5,7 +5,7 @@ import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import { StmtNS } from "../ast-types";
 
-type Stmt = StmtNS.Stmt
+type Stmt = StmtNS.Stmt;
 
 export interface IOptions {
   isPrelude: boolean;
@@ -14,13 +14,9 @@ export interface IOptions {
   chapter?: number;
 }
 
-function runPyAST(
-  code: string,
-  chapter: number = 4,
-  doValidate: boolean = false
-): Stmt {
+function runPyAST(code: string, chapter: number = 4, doValidate: boolean = false): Stmt {
   const script = code + "\n";
-  const ast = parse(script) as StmtNS.FileInput;
+  const ast = parse(script);
   if (doValidate) {
     analyze(ast, script, chapter);
   }
@@ -30,7 +26,7 @@ function runPyAST(
 export async function runInContext(
   code: string,
   context: Context,
-  options: RecursivePartial<IOptions> = {}
+  options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
   const pyAst = runPyAST(code, options.chapter ?? 4, true);
   const result = runCSEMachine(code, pyAst, context, options);
@@ -41,7 +37,7 @@ export function runCSEMachine(
   code: string,
   program: Stmt,
   context: Context,
-  options: RecursivePartial<IOptions> = {}
+  options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
   const result = evaluate(code, program, context, options as IOptions);
   return CSEResultPromise(context, result);

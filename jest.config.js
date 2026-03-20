@@ -2,9 +2,7 @@
 module.exports = {
   preset: "ts-jest/presets/js-with-ts-esm",
   testEnvironment: "node",
-  transformIgnorePatterns: [
-    "/node_modules/(?!(@sourceacademy/wasm-util)/).+\\.js$",
-  ],
+  transformIgnorePatterns: ["/node_modules/(?!(@sourceacademy/wasm-util)/).+\\.js$"],
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],
   coverageReporters: ["lcov"],
 };
