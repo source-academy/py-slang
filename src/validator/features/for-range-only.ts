@@ -16,9 +16,6 @@ export const ForRangeOnlyValidator: FeatureValidator = {
       return; // Valid: for x in range(...)
     }
 
-    throw new FeatureNotSupportedError(
-      "for loops must use range() — e.g. for i in range(n)",
-      node,
-    );
+    throw new FeatureNotSupportedError("for loops must use range() — e.g. for i in range(n)", node);
   },
 };

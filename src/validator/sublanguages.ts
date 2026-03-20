@@ -26,7 +26,13 @@ export function makeChapter1Validators(): FeatureValidator[] {
  * Source Chapter 2: no lists, no loops, no nonlocal, no rest params. Reassignment is allowed.
  */
 export function makeChapter2Validators(): FeatureValidator[] {
-  return [NoListsValidator, NoLoopsValidator, NoBreakContinueValidator, NoNonlocalValidator, NoRestParamsValidator];
+  return [
+    NoListsValidator,
+    NoLoopsValidator,
+    NoBreakContinueValidator,
+    NoNonlocalValidator,
+    NoRestParamsValidator,
+  ];
 }
 
 /**
