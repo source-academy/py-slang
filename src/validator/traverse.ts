@@ -69,9 +69,7 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   } else if (node instanceof ExprNS.Subscript) {
     traverseAST(node.value, fn);
     traverseAST(node.index, fn);
-  } else if (node instanceof ExprNS.Starred) {
-    traverseAST(node.value, fn);
   }
   // Leaf nodes: Literal, Variable, BigIntLiteral, Complex, None, Pass, Break, Continue,
-  // FromImport, Global, NonLocal, Indent, Dedent — no children to traverse.
+  // FromImport, Global, NonLocal — no children to traverse.
 }

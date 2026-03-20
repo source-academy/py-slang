@@ -71,10 +71,6 @@ export class AstWriter {
       "Complex   -> value: string",
     ]);
     this.defineAst("Stmt", [
-      // Indent/Dedent kept for backward compatibility with hand-written parser consumers.
-      // The Nearley grammar handles indentation at the lexer level and never produces these.
-      "Indent     -> ()",
-      "Dedent     -> ()",
       "Pass       -> ()",
       "Assign     -> name: Token, value: ExprNS.Expr",
       "AnnAssign  -> name: Token, value: ExprNS.Expr, ann: ExprNS.Expr",

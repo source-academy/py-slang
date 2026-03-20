@@ -577,12 +577,6 @@ ${args.map(
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
-  visitIndentCreation(_stmt: StmtNS.Indent): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitDedentCreation(_stmt: StmtNS.Dedent): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");
   }
@@ -611,9 +605,6 @@ ${args.map(
     throw new Error("Method not implemented.");
   }
   visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitStarredExpr(_expr: ExprNS.Starred): WasmNumeric {
     throw new Error("Method not implemented.");
   }
 }

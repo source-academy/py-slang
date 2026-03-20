@@ -310,20 +310,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
 
-  visitIndentCreation(_stmt: StmtNS.Indent): void {
-    this.runValidators(_stmt);
-    // Create a new environment
-    this.environment = new Environment(this.source, this.environment, new Map());
-  }
-
-  visitDedentCreation(_stmt: StmtNS.Dedent): void {
-    this.runValidators(_stmt);
-    // Switch to the previous environment.
-    if (this.environment?.enclosing !== undefined) {
-      this.environment = this.environment.enclosing;
-    }
-  }
-
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
     this.runValidators(stmt);
     this.environment?.declareName(stmt.name);
@@ -522,9 +508,5 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.runValidators(expr);
     this.resolve(expr.value);
     this.resolve(expr.index);
-  }
-  visitStarredExpr(expr: ExprNS.Starred): void {
-    this.runValidators(expr);
-    this.resolve(expr.value);
   }
 }
