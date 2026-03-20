@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "regen": "yarn run build && node dist/generate.js",
-    "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';fs.writeFileSync(f,'// @ts-nocheck\\n'+fs.readFileSync(f,'utf8'))\"",
+    "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';const c=fs.readFileSync(f,'utf8');const h='/* eslint-disable */\\n// @ts-nocheck\\n';if(!c.startsWith('/* eslint-disable */'))fs.writeFileSync(f,h+c);\"",
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
     "start": "yarn run build && node dist/index.js",

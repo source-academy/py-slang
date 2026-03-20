@@ -55,8 +55,8 @@ function stripQuotes(s) {
     }
   });
 }
-const Lexer = pythonLexer;
-const ParserRules = [
+let Lexer = pythonLexer;
+let ParserRules = [
   {
     name: "file",
     symbols: ["stmts"],
@@ -867,5 +867,5 @@ const ParserRules = [
     postprocess: id,
   },
 ];
-const ParserStart = "file";
+let ParserStart = "file";
 export default { Lexer, ParserRules, ParserStart };
