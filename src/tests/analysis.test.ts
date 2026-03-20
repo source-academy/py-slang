@@ -135,6 +135,10 @@ describe("Chapter 1 — most restrictive", () => {
     expect(() => analyzeOk("def f():\n    break", 1)).toThrow(FeatureNotSupportedError);
     expect(() => analyzeOk("def f():\n    continue", 1)).toThrow(FeatureNotSupportedError);
   });
+
+  test("nonlocal is banned in chapter 1", () => {
+    expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 1)).toThrow(FeatureNotSupportedError);
+  });
 });
 
 describe("Chapter 2 — loops still banned, reassignment allowed", () => {
@@ -149,6 +153,10 @@ describe("Chapter 2 — loops still banned, reassignment allowed", () => {
   test("list literal is banned in chapter 2", () => {
     expect(() => analyzeOk("x = []", 2)).toThrow(FeatureNotSupportedError);
   });
+
+  test("nonlocal is banned in chapter 2", () => {
+    expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 2)).toThrow(FeatureNotSupportedError);
+  });
 });
 
 describe("Chapter 3 — loops and lists allowed", () => {
@@ -162,6 +170,10 @@ describe("Chapter 3 — loops and lists allowed", () => {
 
   test("list literal is allowed in chapter 3", () => {
     expect(() => analyzeOk("x = []", 3)).not.toThrow();
+  });
+
+  test("nonlocal is allowed in chapter 3", () => {
+    expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 3)).not.toThrow();
   });
 });
 
