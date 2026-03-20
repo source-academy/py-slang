@@ -124,15 +124,11 @@ describe("Chapter 1 — most restrictive", () => {
   });
 
   test("annotated then plain reassignment is banned in chapter 1 (AnnAssign then Assign)", () => {
-    expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(
-      ResolverErrors.NameReassignmentError,
-    );
+    expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
   });
 
   test("plain then annotated reassignment is banned in chapter 1 (Assign then AnnAssign)", () => {
-    expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(
-      ResolverErrors.NameReassignmentError,
-    );
+    expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
   });
 
   test("break/continue are banned in chapter 1", () => {
@@ -202,7 +198,7 @@ describe("traverseAST — target visitation", () => {
   test("traverses Assign target (Variable)", () => {
     const ast = parseSource("x = 1\n");
     const visited: string[] = [];
-    traverseAST(ast, (node) => {
+    traverseAST(ast, node => {
       if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
     });
     expect(visited).toContain("x");
@@ -211,7 +207,7 @@ describe("traverseAST — target visitation", () => {
   test("traverses AnnAssign target (Variable)", () => {
     const ast = parseSource("x: abs = 1\n");
     const visited: string[] = [];
-    traverseAST(ast, (node) => {
+    traverseAST(ast, node => {
       if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
     });
     expect(visited).toContain("x");
