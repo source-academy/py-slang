@@ -28,8 +28,10 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
     traverseAST(node.iter, fn);
     node.body.forEach(s => traverseAST(s, fn));
   } else if (node instanceof StmtNS.Assign) {
+    traverseAST(node.target as ASTNode, fn);
     traverseAST(node.value, fn);
   } else if (node instanceof StmtNS.AnnAssign) {
+    traverseAST(node.target, fn);
     traverseAST(node.value, fn);
     traverseAST(node.ann, fn);
   } else if (node instanceof StmtNS.Return) {

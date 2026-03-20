@@ -7,9 +7,10 @@
  */
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver";
-import { StmtNS } from "../ast-types";
+import { StmtNS, ExprNS } from "../ast-types";
 import { FeatureNotSupportedError } from "../validator";
 import { ResolverErrors } from "../resolver/errors";
+import { traverseAST } from "../validator/traverse";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -194,5 +195,25 @@ describe("Pipeline ordering", () => {
   test("feature error is thrown after resolver passes", () => {
     // [1, 2] — name resolution is fine, but chapter 1 bans lists
     expect(() => analyzeOk("[1, 2]", 1)).toThrow(FeatureNotSupportedError);
+  });
+});
+
+describe("traverseAST — target visitation", () => {
+  test("traverses Assign target (Variable)", () => {
+    const ast = parseSource("x = 1\n");
+    const visited: string[] = [];
+    traverseAST(ast, (node) => {
+      if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
+    });
+    expect(visited).toContain("x");
+  });
+
+  test("traverses AnnAssign target (Variable)", () => {
+    const ast = parseSource("x: abs = 1\n");
+    const visited: string[] = [];
+    traverseAST(ast, (node) => {
+      if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
+    });
+    expect(visited).toContain("x");
   });
 });
