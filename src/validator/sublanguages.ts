@@ -2,7 +2,6 @@ import { FeatureValidator } from "./types";
 import { NoListsValidator } from "./features/no-lists";
 import { NoLoopsValidator } from "./features/no-loops";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
-import { NoLambdaValidator } from "./features/no-lambda";
 import { NoBreakContinueValidator } from "./features/no-break-continue";
 
 /**
@@ -14,7 +13,6 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoListsValidator,
     NoLoopsValidator,
     createNoReassignmentValidator(),
-    NoLambdaValidator,
     NoBreakContinueValidator,
   ];
 }

@@ -102,8 +102,8 @@ describe("Chapter 1 — most restrictive", () => {
     expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 1)).toThrow(FeatureNotSupportedError);
   });
 
-  test("lambda is banned in chapter 1", () => {
-    expect(() => analyzeOk("f = lambda x: x", 1)).toThrow(FeatureNotSupportedError);
+  test("lambda is allowed in chapter 1", () => {
+    expect(() => analyzeOk("f = lambda x: x", 1)).not.toThrow();
   });
 
   test("list literal is banned in chapter 1", () => {
