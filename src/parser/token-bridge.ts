@@ -79,11 +79,5 @@ export function toAstToken(mooToken: {
   const value = mooToken.value ?? "";
   const startCol = mooToken.col ?? 1;
   const endCol = startCol + value.length;
-  return new Token(
-    type,
-    value,
-    mooToken.line ?? 0,
-    endCol,
-    mooToken.offset ?? 0,
-  );
+  return new Token(type, value, mooToken.line ?? 0, endCol, mooToken.offset ?? 0);
 }
