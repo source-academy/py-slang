@@ -2,8 +2,13 @@ import { StmtNS, ExprNS } from "../ast-types";
 import { ASTNode, FeatureValidator } from "./types";
 
 /**
- * Visits every node in the AST and calls fn on each.
- * Uses the visitor pattern — each node calls accept() which dispatches to the right method.
+ * Walks the AST via instanceof dispatch and calls fn on each node.
+ *
+ * NOTE: This is a standalone utility — the main validation pipeline does NOT
+ * use this function. The Resolver runs validators inline during its own
+ * accept()-based traversal (see resolver.ts:runValidators), which provides
+ * the Environment parameter needed by scope-aware validators like
+ * no-reassignment. Prefer the Resolver pipeline for production use.
  */
 export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   fn(node);
@@ -67,6 +72,11 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   // FromImport, Global, NonLocal, Indent, Dedent — no children to traverse.
 }
 
+/**
+ * Run validators over every AST node. WARNING: does not pass Environment,
+ * so scope-aware validators (e.g. no-reassignment) will silently no-op.
+ * Use the Resolver's inline validation for production code.
+ */
 export function runValidators(ast: ASTNode, validators: FeatureValidator[]): void {
   if (validators.length === 0) return;
   traverseAST(ast, node => {
