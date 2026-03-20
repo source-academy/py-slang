@@ -201,21 +201,29 @@ class IndentationLexer implements moo.Lexer {
   }
 
   next(): IndentationToken | undefined {
+    const token = this._next();
+    if (token && token.type === this._indentationType) {
+      return this.next();
+    }
+    return token;
+  }
+
+  private _next(): IndentationToken | undefined {
     const nextToken = this._lexer.peek();
 
     if (this._state === "lineStart") {
       if (this._isIndentation(nextToken)) {
         this._queuedTokens.push(this._getToken()!);
-        return this.next();
+        return this._next();
       }
       if (this._isNewline(nextToken) || this._isComment(nextToken)) {
         this._state = "lineEnding";
-        return this.next();
+        return this._next();
       }
       this._state = "lineContent";
       this._queuedLines.push(this._queuedTokens);
       this._queuedTokens = [];
-      return this.next();
+      return this._next();
     }
 
     if (this._state === "lineEnding") {
@@ -227,7 +235,7 @@ class IndentationLexer implements moo.Lexer {
         this._queuedLines.push(this._queuedTokens);
         this._queuedTokens = [];
       }
-      return this.next();
+      return this._next();
     }
 
     if (this._state === "lineContent") {
@@ -253,13 +261,13 @@ class IndentationLexer implements moo.Lexer {
 
       if (!nextToken || indentation === indentationLevel) {
         this._state = "bufferFlush";
-        return this.next();
+        return this._next();
       }
 
       if (indentation.startsWith(indentationLevel)) {
         if (this._separators.includes(this._queuedLines[0][0].text)) {
           this._state = "separatorFlush";
-          return this.next();
+          return this._next();
         }
 
         this._indentations.push(indentation);
@@ -296,7 +304,7 @@ class IndentationLexer implements moo.Lexer {
       if (this._queuedLines[0].length === 0) {
         this._state = "lineContent";
         this._queuedLines.shift();
-        return this.next();
+        return this._next();
       }
       return this._queuedLines[0].shift();
     }
@@ -304,11 +312,11 @@ class IndentationLexer implements moo.Lexer {
     if (this._state === "bufferFlush") {
       if (this._queuedLines.length === 0) {
         this._state = "lineFlush";
-        return this.next();
+        return this._next();
       }
       if (this._queuedLines[0].length === 0) {
         this._queuedLines.shift();
-        return this.next();
+        return this._next();
       }
       return this._queuedLines[0].shift();
     }
@@ -316,7 +324,7 @@ class IndentationLexer implements moo.Lexer {
     if (this._state === "lineFlush") {
       if (!nextToken && this._indentations.length > 1) {
         this._state = "lineContent";
-        return this.next();
+        return this._next();
       }
 
       if (nextToken && this._closingPunctuations.includes(nextToken.text)) {
@@ -346,7 +354,7 @@ class IndentationLexer implements moo.Lexer {
 
       // Skip comments – they are not meaningful tokens for the parser
       if (this._isComment(token)) {
-        return this.next();
+        return this._next();
       }
 
       if (this._isNewline(token)) {
@@ -368,7 +376,7 @@ class IndentationLexer implements moo.Lexer {
         this._queuedLines.push(this._queuedTokens);
         this._queuedTokens = [];
 
-        return this.next();
+        return this._next();
       }
 
       return token;
