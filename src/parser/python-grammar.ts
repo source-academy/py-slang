@@ -57,43 +57,44 @@ function stripQuotes(s) {
 }
 let Lexer = pythonLexer;
 let ParserRules = [
+  { name: "program$ebnf$1", symbols: [] },
+  {
+    name: "program$ebnf$1$subexpression$1",
+    symbols: ["import_stmt", pythonLexer.has("newline") ? { type: "newline" } : newline],
+  },
+  {
+    name: "program$ebnf$1",
+    symbols: ["program$ebnf$1", "program$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "program$ebnf$2", symbols: [] },
+  { name: "program$ebnf$2$subexpression$1", symbols: ["statement"] },
+  {
+    name: "program$ebnf$2$subexpression$1",
+    symbols: [pythonLexer.has("newline") ? { type: "newline" } : newline],
+  },
+  {
+    name: "program$ebnf$2",
+    symbols: ["program$ebnf$2", "program$ebnf$2$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
+  },
   {
     name: "program",
-    symbols: ["program_stmts"],
-    postprocess: ([stmts]) => {
-      const filtered = (stmts || []).filter(Boolean);
+    symbols: ["program$ebnf$1", "program$ebnf$2"],
+    postprocess: ([imports, stmts]) => {
+      const importNodes = imports.map(d => d[0]);
+      const stmtNodes = stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined);
+      const filtered = [...importNodes, ...stmtNodes];
       const start = filtered[0]
         ? filtered[0].startToken
         : toAstToken({ type: "newline", value: "", line: 1, col: 1, offset: 0 });
       const end = filtered.length > 0 ? filtered[filtered.length - 1].endToken : start;
       return new StmtNS.FileInput(start, end, filtered, []);
     },
-  },
-  { name: "program_stmts", symbols: [], postprocess: drop },
-  {
-    name: "program_stmts",
-    symbols: [
-      "program_stmts",
-      "import_stmt",
-      pythonLexer.has("newline") ? { type: "newline" } : newline,
-    ],
-    postprocess: ([xs, imp]) => {
-      // Enforce: no imports after statements
-      if (xs && xs.some(s => !(s instanceof StmtNS.FromImport))) {
-        throw new Error("Import statements must appear before other statements");
-      }
-      return [...xs, imp];
-    },
-  },
-  {
-    name: "program_stmts",
-    symbols: ["program_stmts", "statement"],
-    postprocess: ([xs, x]) => (x ? [...xs, x] : xs),
-  },
-  {
-    name: "program_stmts",
-    symbols: ["program_stmts", pythonLexer.has("newline") ? { type: "newline" } : newline],
-    postprocess: id,
   },
   {
     name: "import_stmt",
@@ -104,19 +105,27 @@ let ParserRules = [
       return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
     },
   },
+  { name: "dotted_name$ebnf$1", symbols: [] },
   {
-    name: "dotted_name",
-    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
-    postprocess: ([t]) => toAstToken(t),
+    name: "dotted_name$ebnf$1$subexpression$1",
+    symbols: [{ literal: "." }, pythonLexer.has("name") ? { type: "name" } : name],
+  },
+  {
+    name: "dotted_name$ebnf$1",
+    symbols: ["dotted_name$ebnf$1", "dotted_name$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
   },
   {
     name: "dotted_name",
-    symbols: ["dotted_name", { literal: "." }, pythonLexer.has("name") ? { type: "name" } : name],
-    postprocess: ([left, , right]) => {
-      const tok = toAstToken(right);
-      tok.lexeme = left.lexeme + "." + tok.lexeme;
-      tok.col = left.col;
-      tok.indexInSource = left.indexInSource;
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name, "dotted_name$ebnf$1"],
+    postprocess: ([first, rest]) => {
+      let tok = toAstToken(first);
+      for (const [, n] of rest) {
+        const right = toAstToken(n);
+        tok.lexeme = tok.lexeme + "." + right.lexeme;
+      }
       return tok;
     },
   },
@@ -126,11 +135,19 @@ let ParserRules = [
     symbols: [{ literal: "(" }, "_nl", "import_as_names", "_nl", { literal: ")" }],
     postprocess: ([, , ns]) => ns,
   },
-  { name: "import_as_names", symbols: ["import_as_name"], postprocess: ([t]) => [t] },
+  { name: "import_as_names$ebnf$1", symbols: [] },
+  { name: "import_as_names$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "import_as_name"] },
+  {
+    name: "import_as_names$ebnf$1",
+    symbols: ["import_as_names$ebnf$1", "import_as_names$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
+  },
   {
     name: "import_as_names",
-    symbols: ["import_as_names", { literal: "," }, "import_as_name"],
-    postprocess: ([ns, , t]) => [...ns, t],
+    symbols: ["import_as_name", "import_as_names$ebnf$1"],
+    postprocess: ([first, rest]) => [first, ...rest.map(d => d[1])],
   },
   {
     name: "import_as_name",
@@ -148,106 +165,76 @@ let ParserRules = [
   },
   {
     name: "statement",
-    symbols: ["statementLine", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    symbols: ["statementAssign", pythonLexer.has("newline") ? { type: "newline" } : newline],
     postprocess: id,
   },
   {
     name: "statement",
-    symbols: [{ literal: "if" }, "expression", { literal: ":" }, "block", "elif_chain"],
-    postprocess: ([kw, test, , body, else_]) =>
-      new StmtNS.If(
-        toAstToken(kw),
-        else_ && else_.length > 0
-          ? else_[else_.length - 1].endToken
-          : body[body.length - 1].endToken,
-        test,
-        body,
-        else_,
-      ),
-  },
-  {
-    name: "statement",
-    symbols: [{ literal: "while" }, "expression", { literal: ":" }, "block"],
-    postprocess: ([kw, test, , body]) =>
-      new StmtNS.While(toAstToken(kw), body[body.length - 1].endToken, test, body),
+    symbols: ["statementAnnAssign", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
   },
   {
     name: "statement",
     symbols: [
-      { literal: "for" },
-      pythonLexer.has("name") ? { type: "name" } : name,
-      { literal: "in" },
-      "expression",
-      { literal: ":" },
-      "block",
+      "statementSubscriptAssign",
+      pythonLexer.has("newline") ? { type: "newline" } : newline,
     ],
-    postprocess: ([kw, target, , iter, , body]) =>
-      new StmtNS.For(
-        toAstToken(kw),
-        body[body.length - 1].endToken,
-        toAstToken(target),
-        iter,
-        body,
-      ),
+    postprocess: id,
   },
   {
     name: "statement",
-    symbols: [
-      { literal: "def" },
-      pythonLexer.has("name") ? { type: "name" } : name,
-      "params",
-      { literal: ":" },
-      "block",
-    ],
-    postprocess: ([kw, name, params, , body]) =>
-      new StmtNS.FunctionDef(
-        toAstToken(kw),
-        body[body.length - 1].endToken,
-        toAstToken(name),
-        params,
-        body,
-        [],
-      ),
+    symbols: ["statementReturn", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
   },
   {
-    name: "statementLine",
-    symbols: [{ literal: "pass" }],
-    postprocess: ([t]) => {
-      const tok = toAstToken(t);
-      return new StmtNS.Pass(tok, tok);
+    name: "statement",
+    symbols: ["statementPass", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementBreak", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementContinue", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementGlobal", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementNonlocal", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementAssert", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  {
+    name: "statement",
+    symbols: ["statementExpr", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  { name: "statement", symbols: ["if_statement"], postprocess: id },
+  { name: "statement", symbols: ["statementWhile"], postprocess: id },
+  { name: "statement", symbols: ["statementFor"], postprocess: id },
+  { name: "statement", symbols: ["statementDef"], postprocess: id },
+  {
+    name: "statementAssign",
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name, { literal: "=" }, "expression"],
+    postprocess: ([n, , v]) => {
+      const tok = toAstToken(n);
+      return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v);
     },
   },
   {
-    name: "statementLine",
-    symbols: [{ literal: "break" }],
-    postprocess: ([t]) => {
-      const tok = toAstToken(t);
-      return new StmtNS.Break(tok, tok);
-    },
-  },
-  {
-    name: "statementLine",
-    symbols: [{ literal: "continue" }],
-    postprocess: ([t]) => {
-      const tok = toAstToken(t);
-      return new StmtNS.Continue(tok, tok);
-    },
-  },
-  {
-    name: "statementLine",
-    symbols: [{ literal: "return" }, "expression"],
-    postprocess: ([kw, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr),
-  },
-  {
-    name: "statementLine",
-    symbols: [{ literal: "return" }],
-    postprocess: ([t]) => {
-      const tok = toAstToken(t);
-      return new StmtNS.Return(tok, tok, null);
-    },
-  },
-  {
-    name: "statementLine",
+    name: "statementAnnAssign",
     symbols: [
       pythonLexer.has("name") ? { type: "name" } : name,
       { literal: ":" },
@@ -261,7 +248,7 @@ let ParserRules = [
     },
   },
   {
-    name: "statementLine",
+    name: "statementAnnAssign",
     symbols: [pythonLexer.has("name") ? { type: "name" } : name, { literal: ":" }, "expression"],
     postprocess: ([n, , ann]) => {
       const nameTok = toAstToken(n);
@@ -276,15 +263,7 @@ let ParserRules = [
     },
   },
   {
-    name: "statementLine",
-    symbols: [pythonLexer.has("name") ? { type: "name" } : name, { literal: "=" }, "expression"],
-    postprocess: ([n, , v]) => {
-      const tok = toAstToken(n);
-      return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v);
-    },
-  },
-  {
-    name: "statementLine",
+    name: "statementSubscriptAssign",
     symbols: [
       "expressionPost",
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
@@ -303,88 +282,222 @@ let ParserRules = [
     },
   },
   {
-    name: "statementLine",
+    name: "statementReturn",
+    symbols: [{ literal: "return" }, "expression"],
+    postprocess: ([kw, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr),
+  },
+  {
+    name: "statementReturn",
+    symbols: [{ literal: "return" }],
+    postprocess: ([t]) => {
+      const tok = toAstToken(t);
+      return new StmtNS.Return(tok, tok, null);
+    },
+  },
+  {
+    name: "statementPass",
+    symbols: [{ literal: "pass" }],
+    postprocess: ([t]) => {
+      const tok = toAstToken(t);
+      return new StmtNS.Pass(tok, tok);
+    },
+  },
+  {
+    name: "statementBreak",
+    symbols: [{ literal: "break" }],
+    postprocess: ([t]) => {
+      const tok = toAstToken(t);
+      return new StmtNS.Break(tok, tok);
+    },
+  },
+  {
+    name: "statementContinue",
+    symbols: [{ literal: "continue" }],
+    postprocess: ([t]) => {
+      const tok = toAstToken(t);
+      return new StmtNS.Continue(tok, tok);
+    },
+  },
+  {
+    name: "statementGlobal",
     symbols: [{ literal: "global" }, pythonLexer.has("name") ? { type: "name" } : name],
     postprocess: ([kw, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)),
   },
   {
-    name: "statementLine",
+    name: "statementNonlocal",
     symbols: [{ literal: "nonlocal" }, pythonLexer.has("name") ? { type: "name" } : name],
     postprocess: ([kw, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)),
   },
   {
-    name: "statementLine",
+    name: "statementAssert",
     symbols: [{ literal: "assert" }, "expression"],
     postprocess: ([kw, e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e),
   },
   {
-    name: "statementLine",
+    name: "statementExpr",
     symbols: ["expression"],
     postprocess: ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e),
   },
   {
-    name: "names",
-    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
-    postprocess: ([t]) => [toAstToken(t)],
+    name: "statementWhile",
+    symbols: [{ literal: "while" }, "expression", { literal: ":" }, "block"],
+    postprocess: ([kw, test, , body]) =>
+      new StmtNS.While(toAstToken(kw), body[body.length - 1].endToken, test, body),
   },
   {
-    name: "names",
+    name: "statementFor",
     symbols: [
-      "names",
-      "_nl",
-      { literal: "," },
-      "_nl",
+      { literal: "for" },
       pythonLexer.has("name") ? { type: "name" } : name,
+      { literal: "in" },
+      "expression",
+      { literal: ":" },
+      "block",
     ],
-    postprocess: ([ps, , , , t]) => [...ps, toAstToken(t)],
+    postprocess: ([kw, target, , iter, , body]) =>
+      new StmtNS.For(
+        toAstToken(kw),
+        body[body.length - 1].endToken,
+        toAstToken(target),
+        iter,
+        body,
+      ),
   },
   {
-    name: "elif_chain",
-    symbols: [{ literal: "elif" }, "expression", { literal: ":" }, "block", "elif_chain"],
-    postprocess: ([kw, test, , body, else_]) => [
-      new StmtNS.If(
+    name: "statementDef",
+    symbols: [
+      { literal: "def" },
+      pythonLexer.has("name") ? { type: "name" } : name,
+      "params",
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, name, params, , body]) =>
+      new StmtNS.FunctionDef(
         toAstToken(kw),
+        body[body.length - 1].endToken,
+        toAstToken(name),
+        params,
+        body,
+        [],
+      ),
+  },
+  { name: "if_statement$ebnf$1", symbols: [] },
+  {
+    name: "if_statement$ebnf$1$subexpression$1",
+    symbols: [{ literal: "elif" }, "expression", { literal: ":" }, "block"],
+  },
+  {
+    name: "if_statement$ebnf$1",
+    symbols: ["if_statement$ebnf$1", "if_statement$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "if_statement$ebnf$2$subexpression$1",
+    symbols: [{ literal: "else" }, { literal: ":" }, "block"],
+  },
+  {
+    name: "if_statement$ebnf$2",
+    symbols: ["if_statement$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  {
+    name: "if_statement$ebnf$2",
+    symbols: [],
+    postprocess: function (d) {
+      return null;
+    },
+  },
+  {
+    name: "if_statement",
+    symbols: [
+      { literal: "if" },
+      "expression",
+      { literal: ":" },
+      "block",
+      "if_statement$ebnf$1",
+      "if_statement$ebnf$2",
+    ],
+    postprocess: ([kw, test, , body, elifs, elseBlock]) => {
+      let else_ = elseBlock ? elseBlock[0][2] : null;
+      for (let i = elifs.length - 1; i >= 0; i--) {
+        const [ekw, etest, ecolon, ebody] = elifs[i];
+        const endTok =
+          else_ && else_.length > 0
+            ? else_[else_.length - 1].endToken
+            : ebody[ebody.length - 1].endToken;
+        else_ = [new StmtNS.If(toAstToken(ekw), endTok, etest, ebody, else_)];
+      }
+      const endTok =
         else_ && else_.length > 0
           ? else_[else_.length - 1].endToken
-          : body[body.length - 1].endToken,
-        test,
-        body,
-        else_,
-      ),
-    ],
+          : body[body.length - 1].endToken;
+      return new StmtNS.If(toAstToken(kw), endTok, test, body, else_);
+    },
+  },
+  { name: "names$ebnf$1", symbols: [] },
+  {
+    name: "names$ebnf$1$subexpression$1",
+    symbols: [{ literal: "," }, pythonLexer.has("name") ? { type: "name" } : name],
   },
   {
-    name: "elif_chain",
-    symbols: [{ literal: "else" }, { literal: ":" }, "block"],
-    postprocess: ([, , body]) => body,
+    name: "names$ebnf$1",
+    symbols: ["names$ebnf$1", "names$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
   },
-  { name: "elif_chain", symbols: [], postprocess: nil },
+  {
+    name: "names",
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name, "names$ebnf$1"],
+    postprocess: ([first, rest]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))],
+  },
   {
     name: "block",
-    symbols: ["statementLine", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    symbols: ["blockInline", pythonLexer.has("newline") ? { type: "newline" } : newline],
     postprocess: list,
+  },
+  { name: "block$ebnf$1$subexpression$1", symbols: ["statement"] },
+  {
+    name: "block$ebnf$1$subexpression$1",
+    symbols: [pythonLexer.has("newline") ? { type: "newline" } : newline],
+  },
+  { name: "block$ebnf$1", symbols: ["block$ebnf$1$subexpression$1"] },
+  { name: "block$ebnf$1$subexpression$2", symbols: ["statement"] },
+  {
+    name: "block$ebnf$1$subexpression$2",
+    symbols: [pythonLexer.has("newline") ? { type: "newline" } : newline],
+  },
+  {
+    name: "block$ebnf$1",
+    symbols: ["block$ebnf$1", "block$ebnf$1$subexpression$2"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
   },
   {
     name: "block",
     symbols: [
       pythonLexer.has("newline") ? { type: "newline" } : newline,
       pythonLexer.has("indent") ? { type: "indent" } : indent,
-      "blockStmts",
+      "block$ebnf$1",
       pythonLexer.has("dedent") ? { type: "dedent" } : dedent,
     ],
-    postprocess: ([, , stmts]) => stmts,
+    postprocess: ([, , stmts]) => stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined),
   },
-  { name: "blockStmts", symbols: ["statement"], postprocess: ([s]) => [s] },
-  {
-    name: "blockStmts",
-    symbols: ["blockStmts", "statement"],
-    postprocess: ([xs, s]) => [...xs, s],
-  },
-  {
-    name: "blockStmts",
-    symbols: ["blockStmts", pythonLexer.has("newline") ? { type: "newline" } : newline],
-    postprocess: id,
-  },
+  { name: "blockInline", symbols: ["statementAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementAnnAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementSubscriptAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementReturn"], postprocess: id },
+  { name: "blockInline", symbols: ["statementPass"], postprocess: id },
+  { name: "blockInline", symbols: ["statementBreak"], postprocess: id },
+  { name: "blockInline", symbols: ["statementContinue"], postprocess: id },
+  { name: "blockInline", symbols: ["statementGlobal"], postprocess: id },
+  { name: "blockInline", symbols: ["statementNonlocal"], postprocess: id },
+  { name: "blockInline", symbols: ["statementAssert"], postprocess: id },
+  { name: "blockInline", symbols: ["statementExpr"], postprocess: id },
   {
     name: "rest_names",
     symbols: [pythonLexer.has("name") ? { type: "name" } : name],
@@ -698,7 +811,7 @@ let ParserRules = [
       return new ExprNS.Complex(tok, tok, t.value);
     },
   },
-  { name: "atom", symbols: ["string_lit"], postprocess: id },
+  { name: "atom", symbols: ["stringLit"], postprocess: id },
   {
     name: "atom",
     symbols: [{ literal: "None" }],
@@ -755,15 +868,31 @@ let ParserRules = [
     postprocess: ([kw, , body]) =>
       new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, [], body, []),
   },
-  { name: "expressions", symbols: ["expression"], postprocess: list },
+  { name: "expressions$ebnf$1", symbols: [] },
+  { name: "expressions$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },
+  {
+    name: "expressions$ebnf$1",
+    symbols: ["expressions$ebnf$1", "expressions$ebnf$1$subexpression$1"],
+    postprocess: function arrpush(d) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "expressions$ebnf$2$subexpression$1", symbols: [{ literal: "," }] },
+  { name: "expressions$ebnf$2", symbols: ["expressions$ebnf$2$subexpression$1"], postprocess: id },
+  {
+    name: "expressions$ebnf$2",
+    symbols: [],
+    postprocess: function (d) {
+      return null;
+    },
+  },
   {
     name: "expressions",
-    symbols: ["expressions", { literal: "," }, "expression"],
-    postprocess: ([as, , a]) => [...as, a],
+    symbols: ["expression", "expressions$ebnf$1", "expressions$ebnf$2"],
+    postprocess: ([first, rest]) => [first, ...rest.map(d => d[1])],
   },
-  { name: "expressions", symbols: ["expression", { literal: "," }], postprocess: list },
   {
-    name: "string_lit",
+    name: "stringLit",
     symbols: [
       pythonLexer.has("string_triple_double")
         ? { type: "string_triple_double" }
@@ -775,7 +904,7 @@ let ParserRules = [
     },
   },
   {
-    name: "string_lit",
+    name: "stringLit",
     symbols: [
       pythonLexer.has("string_triple_single")
         ? { type: "string_triple_single" }
@@ -787,7 +916,7 @@ let ParserRules = [
     },
   },
   {
-    name: "string_lit",
+    name: "stringLit",
     symbols: [pythonLexer.has("string_double") ? { type: "string_double" } : string_double],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
@@ -795,7 +924,7 @@ let ParserRules = [
     },
   },
   {
-    name: "string_lit",
+    name: "stringLit",
     symbols: [pythonLexer.has("string_single") ? { type: "string_single" } : string_single],
     postprocess: ([t]) => {
       const tok = toAstToken(t);

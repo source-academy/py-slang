@@ -60,9 +60,11 @@ function stripQuotes(s) {
 # is a parse error.
 # ============================================================================
 
-program -> program_stmts
-  {% ([stmts]) => {
-       const filtered = (stmts || []).filter(Boolean);
+program -> (import_stmt %newline):* (statement | %newline):*
+  {% ([imports, stmts]) => {
+       const importNodes = imports.map(d => d[0]);
+       const stmtNodes = stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined);
+       const filtered = [...importNodes, ...stmtNodes];
        const start = filtered[0]
          ? filtered[0].startToken
          : toAstToken({type:'newline',value:'',line:1,col:1,offset:0});
@@ -71,21 +73,6 @@ program -> program_stmts
          : start;
        return new StmtNS.FileInput(start, end, filtered, []);
      } %}
-
-# program_stmts: single list of imports and statements.
-# import_stmt is NOT a statement alternative, so it can only appear here.
-# The postprocessor enforces imports-before-statements ordering.
-program_stmts ->
-    null                                          {% drop %}
-  | program_stmts import_stmt %newline           {% ([xs, imp]) => {
-       // Enforce: no imports after statements
-       if (xs && xs.some(s => !(s instanceof StmtNS.FromImport))) {
-         throw new Error('Import statements must appear before other statements');
-       }
-       return [...xs, imp];
-     } %}
-  | program_stmts statement                      {% ([xs, x]) => x ? [...xs, x] : xs %}
-  | program_stmts %newline                       {% id %}
 
 # ============================================================================
 # import-stmt ::= from dotted-name import import-clause  [python_1_bnf.tex line 19]
@@ -100,14 +87,13 @@ import_stmt ->
          } %}
 
 # dotted-name ::= name ( . name )...                     [python_1_bnf.tex line 20]
-dotted_name -> %name
-  {% ([t]) => toAstToken(t) %}
-  | dotted_name "." %name
-  {% ([left,, right]) => {
-       const tok = toAstToken(right);
-       tok.lexeme = left.lexeme + '.' + tok.lexeme;
-       tok.col = left.col;
-       tok.indexInSource = left.indexInSource;
+dotted_name -> %name ("." %name):*
+  {% ([first, rest]) => {
+       let tok = toAstToken(first);
+       for (const [, n] of rest) {
+         const right = toAstToken(n);
+         tok.lexeme = tok.lexeme + '.' + right.lexeme;
+       }
        return tok;
      } %}
 
@@ -117,9 +103,8 @@ import_clause ->
   | "(" _nl import_as_names _nl ")"  {% ([,, ns]) => ns %}
 
 # import-as-names ::= import-as-name (, import-as-name)... [python_1_bnf.tex line 23]
-import_as_names ->
-    import_as_name  {% ([t]) => [t] %}
-  | import_as_names "," import_as_name  {% ([ns,, t]) => [...ns, t] %}
+import_as_names -> import_as_name ("," import_as_name):*
+  {% ([first, rest]) => [first, ...rest.map(d => d[1])] %}
 
 # import-as-name ::= name [ as name ]                     [python_1_bnf.tex line 24]
 import_as_name ->
@@ -131,36 +116,31 @@ import_as_name ->
 # ============================================================================
 
 statement ->
-    statementLine %newline                       {% id %}
-  | "if" expression ":" block elif_chain
-      {% ([kw, test,, body, else_]) =>
-           new StmtNS.If(toAstToken(kw),
-             (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
-             test, body, else_) %}
-  | "while" expression ":" block
-      {% ([kw, test,, body]) =>
-           new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
-  | "for" %name "in" expression ":" block
-      {% ([kw, target,, iter,, body]) =>
-           new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
-  | "def" %name params ":" block
-      {% ([kw, name, params,, body]) =>
-           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
-             toAstToken(name), params, body, []) %}
+    statementAssign %newline                     {% id %}
+  | statementAnnAssign %newline                  {% id %}
+  | statementSubscriptAssign %newline            {% id %}
+  | statementReturn %newline                     {% id %}
+  | statementPass %newline                       {% id %}
+  | statementBreak %newline                      {% id %}
+  | statementContinue %newline                   {% id %}
+  | statementGlobal %newline                     {% id %}
+  | statementNonlocal %newline                   {% id %}
+  | statementAssert %newline                     {% id %}
+  | statementExpr %newline                       {% id %}
+  | if_statement
+      {% id %}
+  | statementWhile
+      {% id %}
+  | statementFor
+      {% id %}
+  | statementDef
+      {% id %}
 
-# statementLine — simple statements that need a trailing newline
-statementLine ->
-    "pass"
-      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
-  | "break"
-      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Break(tok, tok); } %}
-  | "continue"
-      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
-  | "return" expression
-      {% ([kw, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
-  | "return"
-      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
-  | %name ":" expression "=" expression
+statementAssign -> %name "=" expression
+  {% ([n,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
+
+statementAnnAssign ->
+    %name ":" expression "=" expression
       {% ([n,, ann,, v]) => { const tok = toAstToken(n); return new StmtNS.AnnAssign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v, ann); } %}
   | %name ":" expression
       {% ([n,, ann]) => {
@@ -168,55 +148,98 @@ statementLine ->
            const dummyVal = new ExprNS.None(ann.endToken, ann.endToken);
            return new StmtNS.AnnAssign(nameTok, ann.endToken, new ExprNS.Variable(nameTok, nameTok, nameTok), dummyVal, ann);
          } %}
-  | %name "=" expression
-      {% ([n,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
-  | expressionPost %lsqb expression %rsqb "=" expression
-      {% function(d) {
-           var obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
-           var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
-           return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
-         } %}
-  | "global" %name
-      {% ([kw, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
-  | "nonlocal" %name
-      {% ([kw, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
-  | "assert" expression
-      {% ([kw, e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
-  | expression
-      {% ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
+
+statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression
+  {% function(d) {
+       var obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
+       var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
+       return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
+     } %}
+
+statementReturn ->
+    "return" expression
+      {% ([kw, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
+  | "return"
+      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
+
+statementPass -> "pass"
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
+
+statementBreak -> "break"
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Break(tok, tok); } %}
+
+statementContinue -> "continue"
+  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
+
+statementGlobal -> "global" %name
+  {% ([kw, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+
+statementNonlocal -> "nonlocal" %name
+  {% ([kw, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+
+statementAssert -> "assert" expression
+  {% ([kw, e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
+
+statementExpr -> expression
+  {% ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
+
+statementWhile -> "while" expression ":" block
+  {% ([kw, test,, body]) =>
+       new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
+
+statementFor -> "for" %name "in" expression ":" block
+  {% ([kw, target,, iter,, body]) =>
+       new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
+
+statementDef -> "def" %name params ":" block
+  {% ([kw, name, params,, body]) =>
+       new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
+         toAstToken(name), params, body, []) %}
+
+# ============================================================================
+# if-statement with EBNF                         [python_1_bnf.tex lines 31-33]
+# ============================================================================
+
+if_statement -> "if" expression ":" block ("elif" expression ":" block):* ("else" ":" block):?
+  {% ([kw, test,, body, elifs, elseBlock]) => {
+       let else_ = elseBlock ? elseBlock[0][2] : null;
+       for (let i = elifs.length - 1; i >= 0; i--) {
+         const [ekw, etest, ecolon, ebody] = elifs[i];
+         const endTok = else_ && else_.length > 0 ? else_[else_.length-1].endToken : ebody[ebody.length-1].endToken;
+         else_ = [new StmtNS.If(toAstToken(ekw), endTok, etest, ebody, else_)];
+       }
+       const endTok = (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken;
+       return new StmtNS.If(toAstToken(kw), endTok, test, body, else_);
+     } %}
 
 # ============================================================================
 # names ::= ...                                  [python_1_bnf.tex line 30]
 # ============================================================================
 
-names ->
-    %name                                     {% ([t]) => [toAstToken(t)] %}
-  | names _nl "," _nl %name                  {% ([ps,,,, t]) => [...ps, toAstToken(t)] %}
-
-# ============================================================================
-# if-statement ::= ...                           [python_1_bnf.tex lines 31-33]
-# ============================================================================
-
-elif_chain ->
-    "elif" expression ":" block elif_chain
-      {% ([kw, test,, body, else_]) => [new StmtNS.If(toAstToken(kw),
-           (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
-           test, body, else_)] %}
-  | "else" ":" block                            {% ([,, body]) => body %}
-  | null                                        {% nil %}
+names -> %name ("," %name):*
+  {% ([first, rest]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))] %}
 
 # ============================================================================
 # block ::= statement...                         [python_1_bnf.tex line 34]
 # ============================================================================
 
 block ->
-    statementLine %newline                   {% list %}
-  | %newline %indent blockStmts %dedent      {% ([,, stmts]) => stmts %}
+    blockInline %newline                         {% list %}
+  | %newline %indent (statement | %newline):+ %dedent
+      {% ([,, stmts]) => stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined) %}
 
-blockStmts ->
-    statement                                 {% ([s]) => [s] %}
-  | blockStmts statement                     {% ([xs, s]) => [...xs, s] %}
-  | blockStmts %newline                      {% id %}
+blockInline ->
+    statementAssign       {% id %}
+  | statementAnnAssign    {% id %}
+  | statementSubscriptAssign {% id %}
+  | statementReturn       {% id %}
+  | statementPass         {% id %}
+  | statementBreak        {% id %}
+  | statementContinue     {% id %}
+  | statementGlobal       {% id %}
+  | statementNonlocal     {% id %}
+  | statementAssert       {% id %}
+  | statementExpr         {% id %}
 
 # ============================================================================
 # rest-names ::= ε | *name | name (, name)... [, *name]  [python_3_bnf.tex line 37-38]
@@ -347,7 +370,7 @@ atom ->
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
   | %number_complex
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); } %}
-  | string_lit                                   {% id %}
+  | stringLit                                    {% id %}
   | "None"
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.None(tok, tok); } %}
   | "True"
@@ -375,16 +398,14 @@ lambda_expr ->
 # expressions ::= ...                            [python_1_bnf.tex line 51]
 # ============================================================================
 
-expressions ->
-    expression                                {% list %}
-  | expressions "," expression                {% ([as,, a]) => [...as, a] %}
-  | expression ","                            {% list %}
+expressions -> expression ("," expression):* (","):?
+  {% ([first, rest]) => [first, ...rest.map(d => d[1])] %}
 
 # ============================================================================
-# string_lit — string literals
+# stringLit — string literals
 # ============================================================================
 
-string_lit ->
+stringLit ->
     %string_triple_double  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
   | %string_triple_single  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
   | %string_double         {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
