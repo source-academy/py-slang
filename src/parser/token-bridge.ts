@@ -74,12 +74,16 @@ export function toAstToken(mooToken: {
     mooToken.type !== undefined
       ? (MOO_TO_TOKEN_TYPE[mooToken.type] ?? TokenType.NAME)
       : TokenType.NAME;
-  // Moo uses 1-based line, 1-based col, 0-based offset
+  // Moo uses 1-based line, 1-based col, 0-based offset.
+  // Our Token.col represents the column *after* the token, so adjust Moo's start column accordingly.
+  const value = mooToken.value ?? "";
+  const startCol = mooToken.col ?? 1;
+  const endCol = startCol + value.length;
   return new Token(
     type,
-    mooToken.value ?? "",
+    value,
     mooToken.line ?? 0,
-    mooToken.col ?? 0,
+    endCol,
     mooToken.offset ?? 0,
   );
 }
