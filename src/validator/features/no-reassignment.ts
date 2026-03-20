@@ -12,9 +12,24 @@ export function createNoReassignmentValidator(): FeatureValidator {
   const declaredPerScope = new WeakMap<Environment, Set<string>>();
   return {
     validate(node: ASTNode, env?: Environment): void {
-      if (!(node instanceof StmtNS.Assign) || !env) return;
-      const target = node.target;
-      if (target instanceof ExprNS.Subscript) return;
+      if (!env) return;
+
+      let target: ExprNS.Variable | null = null;
+
+      if (node instanceof StmtNS.Assign) {
+        // Subscript assignment (e.g. xs[0] = 1) is not a name reassignment
+        if (node.target instanceof ExprNS.Subscript) return;
+        if (node.target instanceof ExprNS.Variable) {
+          target = node.target;
+        }
+      } else if (node instanceof StmtNS.AnnAssign) {
+        target = node.target;
+      } else {
+        return;
+      }
+
+      if (!target) return;
+
       let declared = declaredPerScope.get(env);
       if (!declared) {
         declared = new Set();

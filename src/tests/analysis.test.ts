@@ -9,6 +9,7 @@ import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver";
 import { StmtNS } from "../ast-types";
 import { FeatureNotSupportedError } from "../validator";
+import { ResolverErrors } from "../resolver/errors";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -111,6 +112,26 @@ describe("Chapter 1 — most restrictive", () => {
   test("reassignment is banned in chapter 1", () => {
     // Two assignments to the same name
     expect(() => analyzeOk("x = 1\nx = 2", 1)).toThrow();
+  });
+
+  test("annotated reassignment is banned in chapter 1 (AnnAssign then AnnAssign)", () => {
+    // Use 'abs' (a global builtin) as the annotation so the resolver doesn't
+    // throw NameNotFoundError on the annotation itself.
+    expect(() => analyzeOk("x: abs = 1\nx: abs = 2", 1)).toThrow(
+      ResolverErrors.NameReassignmentError,
+    );
+  });
+
+  test("annotated then plain reassignment is banned in chapter 1 (AnnAssign then Assign)", () => {
+    expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(
+      ResolverErrors.NameReassignmentError,
+    );
+  });
+
+  test("plain then annotated reassignment is banned in chapter 1 (Assign then AnnAssign)", () => {
+    expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(
+      ResolverErrors.NameReassignmentError,
+    );
   });
 
   test("break/continue are banned in chapter 1", () => {
