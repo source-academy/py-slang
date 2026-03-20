@@ -175,8 +175,8 @@ let ParserRules = [
   { name: "import_clause", symbols: ["import_as_names"], postprocess: id },
   {
     name: "import_clause",
-    symbols: [{ literal: "(" }, "_nl", "import_as_names", "_nl", { literal: ")" }],
-    postprocess: ([, , ns]) => ns,
+    symbols: [{ literal: "(" }, "import_as_names", { literal: ")" }],
+    postprocess: ([, ns]) => ns,
   },
   { name: "import_as_names$ebnf$1", symbols: [] },
   { name: "import_as_names$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "import_as_name"] },
@@ -561,14 +561,8 @@ let ParserRules = [
   },
   {
     name: "rest_names",
-    symbols: [
-      "rest_names",
-      "_nl",
-      { literal: "," },
-      "_nl",
-      pythonLexer.has("name") ? { type: "name" } : name,
-    ],
-    postprocess: ([params, , , , t]) => {
+    symbols: ["rest_names", { literal: "," }, pythonLexer.has("name") ? { type: "name" } : name],
+    postprocess: ([params, , t]) => {
       const tok = toAstToken(t);
       tok.isStarred = false;
       return [...params, tok];
@@ -578,23 +572,21 @@ let ParserRules = [
     name: "rest_names",
     symbols: [
       "rest_names",
-      "_nl",
       { literal: "," },
-      "_nl",
       { literal: "*" },
       pythonLexer.has("name") ? { type: "name" } : name,
     ],
-    postprocess: ([params, , , , , t]) => {
+    postprocess: ([params, , , t]) => {
       const tok = toAstToken(t);
       tok.isStarred = true;
       return [...params, tok];
     },
   },
-  { name: "params", symbols: [{ literal: "(" }, "_nl", { literal: ")" }], postprocess: drop },
+  { name: "params", symbols: [{ literal: "(" }, { literal: ")" }], postprocess: drop },
   {
     name: "params",
-    symbols: [{ literal: "(" }, "_nl", "rest_names", "_nl", { literal: ")" }],
-    postprocess: ([, , ps]) => ps,
+    symbols: [{ literal: "(" }, "rest_names", { literal: ")" }],
+    postprocess: ([, ps]) => ps,
   },
   {
     name: "expression",
@@ -742,51 +734,46 @@ let ParserRules = [
     symbols: [
       "expressionPost",
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
-      "_nl",
       "expression",
-      "_nl",
       pythonLexer.has("rsqb") ? { type: "rsqb" } : rsqb,
     ],
-    postprocess: ([obj, , , idx, , rsqb]) =>
+    postprocess: ([obj, , idx, rsqb]) =>
       new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx),
   },
   {
     name: "expressionPost",
-    symbols: ["expressionPost", { literal: "(" }, "_nl", "expressions", "_nl", { literal: ")" }],
-    postprocess: ([callee, , , args, , rparen]) =>
+    symbols: ["expressionPost", { literal: "(" }, "expressions", { literal: ")" }],
+    postprocess: ([callee, , args, rparen]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args),
   },
   {
     name: "expressionPost",
-    symbols: ["expressionPost", { literal: "(" }, "_nl", { literal: ")" }],
-    postprocess: ([callee, , , rparen]) =>
+    symbols: ["expressionPost", { literal: "(" }, { literal: ")" }],
+    postprocess: ([callee, , rparen]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []),
   },
   { name: "expressionPost", symbols: ["atom"], postprocess: id },
   {
     name: "atom",
-    symbols: [{ literal: "(" }, "_nl", "expression", "_nl", { literal: ")" }],
-    postprocess: ([, , e]) => new ExprNS.Grouping(e.startToken, e.endToken, e),
+    symbols: [{ literal: "(" }, "expression", { literal: ")" }],
+    postprocess: ([, e]) => new ExprNS.Grouping(e.startToken, e.endToken, e),
   },
   {
     name: "atom",
     symbols: [
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
-      "_nl",
       pythonLexer.has("rsqb") ? { type: "rsqb" } : rsqb,
     ],
-    postprocess: ([l, , r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []),
+    postprocess: ([l, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []),
   },
   {
     name: "atom",
     symbols: [
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
-      "_nl",
       "expressions",
-      "_nl",
       pythonLexer.has("rsqb") ? { type: "rsqb" } : rsqb,
     ],
-    postprocess: ([l, , elems, , r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems),
+    postprocess: ([l, elems, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems),
   },
   {
     name: "atom",
@@ -912,22 +899,6 @@ let ParserRules = [
     name: "stringLit",
     symbols: [pythonLexer.has("string_single") ? { type: "string_single" } : string_single],
     postprocess: astString,
-  },
-  { name: "_nl", symbols: [], postprocess: id },
-  {
-    name: "_nl",
-    symbols: ["_nl", pythonLexer.has("newline") ? { type: "newline" } : newline],
-    postprocess: id,
-  },
-  {
-    name: "_nl",
-    symbols: ["_nl", pythonLexer.has("indent") ? { type: "indent" } : indent],
-    postprocess: id,
-  },
-  {
-    name: "_nl",
-    symbols: ["_nl", pythonLexer.has("dedent") ? { type: "dedent" } : dedent],
-    postprocess: id,
   },
 ];
 let ParserStart = "program";

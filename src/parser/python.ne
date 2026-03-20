@@ -121,7 +121,7 @@ dotted_name -> %name ("." %name):*
 # import-clause ::= import-as-names | ( import-as-names ) [python_1_bnf.tex line 21-22]
 import_clause ->
     import_as_names  {% id %}
-  | "(" _nl import_as_names _nl ")"  {% ([,, ns]) => ns %}
+  | "(" import_as_names ")"  {% ([, ns]) => ns %}
 
 # import-as-names ::= import-as-name (, import-as-name)... [python_1_bnf.tex line 23]
 import_as_names -> import_as_name ("," import_as_name):*
@@ -271,14 +271,14 @@ rest_names ->
       {% ([t]) => { const tok = toAstToken(t); tok.isStarred = false; return [tok]; } %}
   | "*" %name
       {% ([, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [tok]; } %}
-  | rest_names _nl "," _nl %name
-      {% ([params,,,, t]) => { const tok = toAstToken(t); tok.isStarred = false; return [...params, tok]; } %}
-  | rest_names _nl "," _nl "*" %name
-      {% ([params,,,,, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [...params, tok]; } %}
+  | rest_names "," %name
+      {% ([params,, t]) => { const tok = toAstToken(t); tok.isStarred = false; return [...params, tok]; } %}
+  | rest_names "," "*" %name
+      {% ([params,,, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [...params, tok]; } %}
 
 params ->
-    "(" _nl ")"                               {% drop %}
-  | "(" _nl rest_names _nl ")"               {% ([,, ps]) => ps %}
+    "(" ")"                                   {% drop %}
+  | "(" rest_names ")"                        {% ([, ps]) => ps %}
 
 # ============================================================================
 # expression ::= ...                             [python_1_bnf.tex lines 35-46]
@@ -349,12 +349,12 @@ expressionPow ->
   | expressionPost                                 {% id %}
 
 expressionPost ->
-    expressionPost %lsqb _nl expression _nl %rsqb
-      {% ([obj, ,, idx,, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
-  | expressionPost "(" _nl expressions _nl ")"
-      {% ([callee,,, args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
-  | expressionPost "(" _nl ")"
-      {% ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
+    expressionPost %lsqb expression %rsqb
+      {% ([obj, , idx, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
+  | expressionPost "(" expressions ")"
+      {% ([callee,, args, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+  | expressionPost "(" ")"
+      {% ([callee,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
   | atom                                       {% id %}
 
 # ============================================================================
@@ -362,12 +362,12 @@ expressionPost ->
 # ============================================================================
 
 atom ->
-    "(" _nl expression _nl ")"
-      {% ([,, e]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
-  | %lsqb _nl %rsqb
-      {% ([l,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
-  | %lsqb _nl expressions _nl %rsqb
-      {% ([l,, elems,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
+    "(" expression ")"
+      {% ([, e]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
+  | %lsqb %rsqb
+      {% ([l, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
+  | %lsqb expressions %rsqb
+      {% ([l, elems, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
   | %name                                        {% astVariable %}
   | %number_float
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
@@ -414,12 +414,3 @@ stringLit ->
   | %string_double         {% astString %}
   | %string_single         {% astString %}
 
-# ============================================================================
-# Whitespace rules — only _nl (for inside parens/brackets)
-# No _ or __ rules needed — lexer strips %ws tokens
-# ============================================================================
-
-_nl -> null          {% id %}
-  | _nl %newline     {% id %}
-  | _nl %indent      {% id %}
-  | _nl %dedent      {% id %}

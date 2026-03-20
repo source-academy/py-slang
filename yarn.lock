@@ -3889,13 +3889,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"moo-peekable-lexer@npm:^1.1.2":
-  version: 1.1.2
-  resolution: "moo-peekable-lexer@npm:1.1.2"
-  checksum: 10c0/8ce46160f19a78f5410aed46d2c3326965d4ca1e2296348518370097cd87825f7eb615d51bd6564b37cb2ca8fa36dd64b56c27347511b540335d0e016f8a8fbd
-  languageName: node
-  linkType: hard
-
 "moo@npm:^0.5.0, moo@npm:^0.5.2":
   version: 0.5.3
   resolution: "moo@npm:0.5.3"
@@ -4301,7 +4294,6 @@ __metadata:
     jsdoc: "npm:^4.0.4"
     mathjs: "npm:^14.9.1"
     moo: "npm:^0.5.2"
-    moo-peekable-lexer: "npm:^1.1.2"
     nearley: "npm:^2.20.1"
     nodemon: "npm:^3.1.10"
     prettier: "npm:^3.8.1"

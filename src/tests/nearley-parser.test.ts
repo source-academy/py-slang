@@ -1202,3 +1202,202 @@ describe("Negative cases — spec restrictions", () => {
     expect(() => parseStmts("def f():\n    from math import sqrt")).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Indentation tests
+// ---------------------------------------------------------------------------
+describe("Indentation handling", () => {
+  test("single indented block", () => {
+    const stmts = parseStmts("if True:\n    pass");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.If);
+    const ifStmt = stmts[0] as StmtNS.If;
+    expect(ifStmt.body[0]).toBeInstanceOf(StmtNS.Pass);
+  });
+
+  test("nested indentation", () => {
+    const src = `\
+if True:
+    if True:
+        pass`;
+    const stmts = parseStmts(src);
+    const outer = stmts[0] as StmtNS.If;
+    expect(outer.body[0]).toBeInstanceOf(StmtNS.If);
+    const inner = outer.body[0] as StmtNS.If;
+    expect(inner.body[0]).toBeInstanceOf(StmtNS.Pass);
+  });
+
+  test("dedent to outer level", () => {
+    const src = `\
+if True:
+    x = 1
+y = 2`;
+    const stmts = parseStmts(src);
+    expect(stmts).toHaveLength(2);
+    expect(stmts[1]).toBeInstanceOf(StmtNS.Assign);
+  });
+
+  test("multiple dedents at once", () => {
+    const src = `\
+if True:
+    if True:
+        if True:
+            x = 1
+y = 2`;
+    const stmts = parseStmts(src);
+    expect(stmts).toHaveLength(2);
+    expect(stmts[1]).toBeInstanceOf(StmtNS.Assign);
+  });
+
+  test("blank lines inside block", () => {
+    const src = `\
+def f():
+    x = 1
+
+    y = 2
+    return x`;
+    const stmts = parseStmts(src);
+    const fn = stmts[0] as StmtNS.FunctionDef;
+    expect(fn.body).toHaveLength(3);
+  });
+
+  test("blank lines between top-level statements", () => {
+    const src = `\
+x = 1
+
+y = 2
+
+z = 3`;
+    const stmts = parseStmts(src);
+    expect(stmts).toHaveLength(3);
+  });
+
+  test("comment-only lines don't affect indentation", () => {
+    const src = `\
+def f():
+    x = 1
+    # this is a comment
+    y = 2
+    return x`;
+    const stmts = parseStmts(src);
+    const fn = stmts[0] as StmtNS.FunctionDef;
+    expect(fn.body).toHaveLength(3);
+  });
+
+  test("deeply nested then fully dedented", () => {
+    const src = `\
+def f():
+    if True:
+        if True:
+            x = 1
+    return x`;
+    const stmts = parseStmts(src);
+    const fn = stmts[0] as StmtNS.FunctionDef;
+    expect(fn.body).toHaveLength(2);
+    expect(fn.body[1]).toBeInstanceOf(StmtNS.Return);
+  });
+
+  test("tab indentation", () => {
+    const src = "if True:\n\tpass";
+    const stmts = parseStmts(src);
+    expect(stmts[0]).toBeInstanceOf(StmtNS.If);
+    const ifStmt = stmts[0] as StmtNS.If;
+    expect(ifStmt.body[0]).toBeInstanceOf(StmtNS.Pass);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-line expression (enclosure) tests
+// ---------------------------------------------------------------------------
+describe("Multi-line expressions (enclosures)", () => {
+  test("function call spanning lines", () => {
+    const expr = parseExpr("f(\n  1,\n  2\n)");
+    expect(expr).toBeInstanceOf(ExprNS.Call);
+    expect((expr as ExprNS.Call).args).toHaveLength(2);
+  });
+
+  test("list literal spanning lines", () => {
+    const expr = parseExpr("[\n  1,\n  2,\n  3\n]");
+    expect(expr).toBeInstanceOf(ExprNS.List);
+    expect((expr as ExprNS.List).elements).toHaveLength(3);
+  });
+
+  test("function params spanning lines", () => {
+    const src = `\
+def f(
+    a,
+    b
+):
+    pass`;
+    const stmts = parseStmts(src);
+    const fn = stmts[0] as StmtNS.FunctionDef;
+    expect(fn.parameters).toHaveLength(2);
+    expect(fn.parameters[0].lexeme).toBe("a");
+    expect(fn.parameters[1].lexeme).toBe("b");
+  });
+
+  test("nested enclosures spanning lines", () => {
+    const expr = parseExpr("f(\n  g(\n    1\n  )\n)");
+    expect(expr).toBeInstanceOf(ExprNS.Call);
+    const outer = expr as ExprNS.Call;
+    expect(outer.args[0]).toBeInstanceOf(ExprNS.Call);
+  });
+
+  test("empty parens with newline", () => {
+    const expr = parseExpr("f(\n)");
+    expect(expr).toBeInstanceOf(ExprNS.Call);
+    expect((expr as ExprNS.Call).args).toHaveLength(0);
+  });
+
+  test("subscript spanning lines", () => {
+    const expr = parseExpr("a[\n  0\n]");
+    expect(expr).toBeInstanceOf(ExprNS.Subscript);
+  });
+
+  test("indentation inside parens doesn't create indent tokens", () => {
+    const src = `\
+x = f(
+    1,
+    2
+)`;
+    const stmts = parseStmts(src);
+    expect(stmts).toHaveLength(1);
+    expect(stmts[0]).toBeInstanceOf(StmtNS.Assign);
+    const assign = stmts[0] as StmtNS.Assign;
+    expect(assign.value).toBeInstanceOf(ExprNS.Call);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+describe("Edge cases", () => {
+  test("empty program", () => {
+    const result = parse("\n");
+    expect(result).toBeInstanceOf(StmtNS.FileInput);
+    expect(result.statements).toHaveLength(0);
+  });
+
+  test("program with only comments", () => {
+    const result = parse("# just a comment\n");
+    expect(result).toBeInstanceOf(StmtNS.FileInput);
+    expect(result.statements).toHaveLength(0);
+  });
+
+  test("trailing whitespace on blank line", () => {
+    const src = "x = 1\n   \ny = 2";
+    const stmts = parseStmts(src);
+    expect(stmts).toHaveLength(2);
+  });
+
+  test("comment between indented statements", () => {
+    const src = `\
+def f():
+    x = 1
+    # a comment
+    y = 2
+    return y`;
+    const stmts = parseStmts(src);
+    const fn = stmts[0] as StmtNS.FunctionDef;
+    expect(fn.body).toHaveLength(3);
+  });
+});

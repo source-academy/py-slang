@@ -60,7 +60,6 @@
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
     "moo": "^0.5.2",
-    "moo-peekable-lexer": "^1.1.2",
     "nearley": "^2.20.1",
     "wabt": "^1.0.37"
   }
