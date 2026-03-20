@@ -5,11 +5,11 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "regen": "npm run build && node dist/generate.js",
+    "regen": "yarn run build && node dist/generate.js",
     "compile-grammar": "node_modules/.bin/nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && node -e \"const fs=require('fs');const f='src/parser/python-grammar.ts';fs.writeFileSync(f,'// @ts-nocheck\\n'+fs.readFileSync(f,'utf8'))\"",
     "start:dev": "npx nodemon",
     "build": "rollup -c --bundleConfigAsCjs",
-    "start": "npm run build && node dist/index.js",
+    "start": "yarn run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
