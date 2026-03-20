@@ -88,6 +88,11 @@ let ParserRules = [
           return new StmtNS.AnnAssign(nameTok, ann.endToken, new ExprNS.Variable(nameTok, nameTok, nameTok), dummyVal, ann);
         } },
     {"name": "small_statement", "symbols": [(pythonLexer.has("name") ? {type: "name"} : name), "_", {"literal":"="}, "_", "expression"], "postprocess": ([n,,,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); }},
+    {"name": "small_statement", "symbols": ["post_expr", (pythonLexer.has("lsqb") ? {type: "lsqb"} : lsqb), "_", "expression", "_", (pythonLexer.has("rsqb") ? {type: "rsqb"} : rsqb), "_", {"literal":"="}, "_", "expression"], "postprocess":  function(d) {
+          var obj = d[0], idx = d[3], rsqb = d[5], val = d[9];
+          var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
+          return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
+        } },
     {"name": "small_statement", "symbols": ["import_stmt"], "postprocess": id},
     {"name": "small_statement", "symbols": [{"literal":"global"}, "_", (pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([kw,, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n))},
     {"name": "small_statement", "symbols": [{"literal":"nonlocal"}, "_", (pythonLexer.has("name") ? {type: "name"} : name)], "postprocess": ([kw,, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n))},

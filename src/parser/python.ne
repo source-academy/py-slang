@@ -143,6 +143,12 @@ small_statement ->
          } %}
   | %name _ "=" _ expression
       {% ([n,,,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
+  | post_expr %lsqb _ expression _ %rsqb _ "=" _ expression
+      {% function(d) {
+           var obj = d[0], idx = d[3], rsqb = d[5], val = d[9];
+           var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
+           return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
+         } %}
   | import_stmt {% id %}
   | "global" _ %name
       {% ([kw,, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}

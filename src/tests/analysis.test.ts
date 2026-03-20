@@ -191,6 +191,10 @@ describe("Chapter 3 — loops and lists allowed", () => {
   test("for without range() is allowed in chapter 4", () => {
     expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 4)).not.toThrow();
   });
+
+  test("subscript assignment resolves in chapter 3", () => {
+    expect(() => analyzeOk("xs = [1, 2]\nxs[0] = 3", 3)).not.toThrow();
+  });
 });
 
 describe("Chapter 4 — no restrictions", () => {

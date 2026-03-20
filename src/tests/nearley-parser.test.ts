@@ -1138,6 +1138,15 @@ describe("Complex expressions (no ambiguity)", () => {
 // ---------------------------------------------------------------------------
 // Parse error cases
 // ---------------------------------------------------------------------------
+describe("Subscript assignment", () => {
+  test("subscript assignment: xs[0] = 1", () => {
+    const stmts = parseStmts("xs[0] = 1");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.Assign);
+    const assign = stmts[0] as StmtNS.Assign;
+    expect(assign.target).toBeInstanceOf(ExprNS.Subscript);
+  });
+});
+
 describe("Parse errors", () => {
   test("unclosed parenthesis", () => {
     expect(() => parseStmts("f(1, 2")).toThrow();

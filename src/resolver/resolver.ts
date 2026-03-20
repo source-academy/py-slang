@@ -361,7 +361,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.runValidators(stmt);
     const target = stmt.target;
     if (target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not supported in assignment");
+      this.resolve(target.value);  // resolve the object (e.g. xs)
+      this.resolve(target.index);  // resolve the index (e.g. 0)
+      this.resolve(stmt.value);    // resolve the assigned value
+      return;
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
