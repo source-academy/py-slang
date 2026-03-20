@@ -170,6 +170,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
         ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
         ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
+        ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
         ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
         ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
         ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],

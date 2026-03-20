@@ -4,6 +4,7 @@ import { NoLoopsValidator } from "./features/no-loops";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { NoBreakContinueValidator } from "./features/no-break-continue";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
+import { ForRangeOnlyValidator } from "./features/for-range-only";
 
 /**
  * Source Chapter 1: no lists, no loops, no reassignment, no lambda, no break/continue, no nonlocal.
@@ -28,9 +29,10 @@ export function makeChapter2Validators(): FeatureValidator[] {
 
 /**
  * Source Chapter 3: lists, loops, and reassignment are all allowed.
+ * for loops are restricted to range() only.
  */
 export function makeChapter3Validators(): FeatureValidator[] {
-  return [];
+  return [ForRangeOnlyValidator];
 }
 
 /**

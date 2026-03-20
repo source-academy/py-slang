@@ -164,16 +164,32 @@ describe("Chapter 3 — loops and lists allowed", () => {
     expect(() => analyzeOk("while True:\n    pass", 3)).not.toThrow();
   });
 
-  test("for loop is allowed in chapter 3", () => {
-    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 3)).not.toThrow();
-  });
-
   test("list literal is allowed in chapter 3", () => {
     expect(() => analyzeOk("x = []", 3)).not.toThrow();
   });
 
   test("nonlocal is allowed in chapter 3", () => {
     expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 3)).not.toThrow();
+  });
+
+  test("for with range() is allowed in chapter 3", () => {
+    expect(() => analyzeOk("for i in range(10):\n    pass", 3)).not.toThrow();
+  });
+
+  test("for with range(start, stop) is allowed in chapter 3", () => {
+    expect(() => analyzeOk("for i in range(0, 10):\n    pass", 3)).not.toThrow();
+  });
+
+  test("for with range(start, stop, step) is allowed in chapter 3", () => {
+    expect(() => analyzeOk("for i in range(0, 10, 2):\n    pass", 3)).not.toThrow();
+  });
+
+  test("for without range() is banned in chapter 3", () => {
+    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 3)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("for without range() is allowed in chapter 4", () => {
+    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 4)).not.toThrow();
   });
 });
 
