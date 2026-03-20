@@ -4,9 +4,9 @@ import { TokenType } from "../tokens";
 const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
   identifier: TokenType.NAME,
   float: TokenType.NUMBER,
-  hex: TokenType.NUMBER,
-  octal: TokenType.NUMBER,
-  binary: TokenType.NUMBER,
+  hex: TokenType.BIGINT,
+  octal: TokenType.BIGINT,
+  binary: TokenType.BIGINT,
   bigint: TokenType.BIGINT,
   complex: TokenType.COMPLEX,
   stringTripleDouble: TokenType.STRING,
