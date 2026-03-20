@@ -58,8 +58,8 @@ function stripQuotes(s) {
 let Lexer = pythonLexer;
 let ParserRules = [
   {
-    name: "file",
-    symbols: ["stmts"],
+    name: "program",
+    symbols: ["program_stmts"],
     postprocess: ([stmts]) => {
       const filtered = (stmts || []).filter(Boolean);
       const start = filtered[0]
@@ -69,84 +69,118 @@ let ParserRules = [
       return new StmtNS.FileInput(start, end, filtered, []);
     },
   },
-  { name: "stmts", symbols: [], postprocess: drop },
-  { name: "stmts", symbols: ["stmts", "stmt"], postprocess: ([xs, x]) => (x ? [...xs, x] : xs) },
+  { name: "program_stmts", symbols: [], postprocess: drop },
   {
-    name: "stmts",
-    symbols: ["stmts", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    name: "program_stmts",
+    symbols: ["program_stmts", "statement"],
+    postprocess: ([xs, x]) => (x ? [...xs, x] : xs),
+  },
+  {
+    name: "program_stmts",
+    symbols: ["program_stmts", pythonLexer.has("newline") ? { type: "newline" } : newline],
     postprocess: id,
   },
   {
-    name: "stmts",
-    symbols: ["stmts", pythonLexer.has("ws") ? { type: "ws" } : ws],
+    name: "program_stmts",
+    symbols: ["program_stmts", pythonLexer.has("ws") ? { type: "ws" } : ws],
     postprocess: id,
   },
-  { name: "stmt", symbols: ["simple_stmt"], postprocess: id },
-  { name: "stmt", symbols: ["compound_stmt"], postprocess: id },
   {
-    name: "simple_stmt",
-    symbols: ["small_stmt", "_", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    name: "import_stmt",
+    symbols: [
+      { literal: "from" },
+      "_",
+      pythonLexer.has("name") ? { type: "name" } : name,
+      "_",
+      { literal: "import" },
+      "_",
+      "import_names",
+    ],
+    postprocess: ([kw, , mod, , , , names]) =>
+      new StmtNS.FromImport(toAstToken(kw), names[names.length - 1], toAstToken(mod), names),
+  },
+  {
+    name: "import_names",
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
+    postprocess: ([t]) => [toAstToken(t)],
+  },
+  {
+    name: "import_names",
+    symbols: [{ literal: "(" }, "_", "name_list", "_", { literal: ")" }],
+    postprocess: ([, , ns]) => ns,
+  },
+  {
+    name: "name_list",
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
+    postprocess: ([t]) => [toAstToken(t)],
+  },
+  {
+    name: "name_list",
+    symbols: [
+      "name_list",
+      "_",
+      { literal: "," },
+      "_",
+      pythonLexer.has("name") ? { type: "name" } : name,
+    ],
+    postprocess: ([ns, , , , t]) => [...ns, toAstToken(t)],
+  },
+  { name: "statement", symbols: ["simple_statement"], postprocess: id },
+  { name: "statement", symbols: ["compound_statement"], postprocess: id },
+  {
+    name: "simple_statement",
+    symbols: ["small_statement", "_", pythonLexer.has("newline") ? { type: "newline" } : newline],
     postprocess: id,
   },
-  { name: "small_stmt", symbols: ["pass_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["break_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["continue_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["return_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["assign_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["import_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["global_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["nonlocal_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["assert_stmt"], postprocess: id },
-  { name: "small_stmt", symbols: ["expr_stmt"], postprocess: id },
   {
-    name: "pass_stmt",
-    symbols: [pythonLexer.has("kw_pass") ? { type: "kw_pass" } : kw_pass],
+    name: "small_statement",
+    symbols: [{ literal: "pass" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new StmtNS.Pass(tok, tok);
     },
   },
   {
-    name: "break_stmt",
-    symbols: [pythonLexer.has("kw_break") ? { type: "kw_break" } : kw_break],
+    name: "small_statement",
+    symbols: [{ literal: "break" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new StmtNS.Break(tok, tok);
     },
   },
   {
-    name: "continue_stmt",
-    symbols: [pythonLexer.has("kw_continue") ? { type: "kw_continue" } : kw_continue],
+    name: "small_statement",
+    symbols: [{ literal: "continue" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new StmtNS.Continue(tok, tok);
     },
   },
   {
-    name: "return_stmt",
-    symbols: [pythonLexer.has("kw_return") ? { type: "kw_return" } : kw_return, "_", "test"],
+    name: "small_statement",
+    symbols: [{ literal: "return" }, "_", "expression"],
     postprocess: ([kw, , expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr),
   },
   {
-    name: "return_stmt",
-    symbols: [pythonLexer.has("kw_return") ? { type: "kw_return" } : kw_return],
+    name: "small_statement",
+    symbols: [{ literal: "return" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new StmtNS.Return(tok, tok, null);
     },
   },
   {
-    name: "assign_stmt",
+    name: "small_statement",
     symbols: [
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
+      pythonLexer.has("name") ? { type: "name" } : name,
       "_",
       { literal: ":" },
       "_",
-      "test",
+      "expression",
       "_",
       { literal: "=" },
       "_",
-      "test",
+      "expression",
     ],
     postprocess: ([n, , , , ann, , , , v]) => {
       const tok = toAstToken(n);
@@ -154,13 +188,13 @@ let ParserRules = [
     },
   },
   {
-    name: "assign_stmt",
+    name: "small_statement",
     symbols: [
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
+      pythonLexer.has("name") ? { type: "name" } : name,
       "_",
       { literal: ":" },
       "_",
-      "test",
+      "expression",
     ],
     postprocess: ([n, , , , ann]) => {
       const nameTok = toAstToken(n);
@@ -175,101 +209,66 @@ let ParserRules = [
     },
   },
   {
-    name: "assign_stmt",
+    name: "small_statement",
     symbols: [
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
+      pythonLexer.has("name") ? { type: "name" } : name,
       "_",
       { literal: "=" },
       "_",
-      "test",
+      "expression",
     ],
     postprocess: ([n, , , , v]) => {
       const tok = toAstToken(n);
       return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v);
     },
   },
+  { name: "small_statement", symbols: ["import_stmt"], postprocess: id },
   {
-    name: "import_stmt",
-    symbols: [
-      pythonLexer.has("kw_from") ? { type: "kw_from" } : kw_from,
-      "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
-      "_",
-      pythonLexer.has("kw_import") ? { type: "kw_import" } : kw_import,
-      "_",
-      "import_names",
-    ],
-    postprocess: ([kw, , mod, , , , names]) =>
-      new StmtNS.FromImport(toAstToken(kw), names[names.length - 1], toAstToken(mod), names),
-  },
-  {
-    name: "import_names",
-    symbols: [pythonLexer.has("identifier") ? { type: "identifier" } : identifier],
-    postprocess: ([t]) => [toAstToken(t)],
-  },
-  {
-    name: "import_names",
-    symbols: [{ literal: "(" }, "_", "name_list", "_", { literal: ")" }],
-    postprocess: ([, , ns]) => ns,
-  },
-  {
-    name: "name_list",
-    symbols: [pythonLexer.has("identifier") ? { type: "identifier" } : identifier],
-    postprocess: ([t]) => [toAstToken(t)],
-  },
-  {
-    name: "name_list",
-    symbols: [
-      "name_list",
-      "_",
-      { literal: "," },
-      "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
-    ],
-    postprocess: ([ns, , , , t]) => [...ns, toAstToken(t)],
-  },
-  {
-    name: "global_stmt",
-    symbols: [
-      pythonLexer.has("kw_global") ? { type: "kw_global" } : kw_global,
-      "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
-    ],
+    name: "small_statement",
+    symbols: [{ literal: "global" }, "_", pythonLexer.has("name") ? { type: "name" } : name],
     postprocess: ([kw, , n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)),
   },
   {
-    name: "nonlocal_stmt",
-    symbols: [
-      pythonLexer.has("kw_nonlocal") ? { type: "kw_nonlocal" } : kw_nonlocal,
-      "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
-    ],
+    name: "small_statement",
+    symbols: [{ literal: "nonlocal" }, "_", pythonLexer.has("name") ? { type: "name" } : name],
     postprocess: ([kw, , n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)),
   },
   {
-    name: "assert_stmt",
-    symbols: [pythonLexer.has("kw_assert") ? { type: "kw_assert" } : kw_assert, "_", "test"],
+    name: "small_statement",
+    symbols: [{ literal: "assert" }, "_", "expression"],
     postprocess: ([kw, , e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e),
   },
   {
-    name: "expr_stmt",
-    symbols: ["test"],
+    name: "small_statement",
+    symbols: ["expression"],
     postprocess: ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e),
   },
-  { name: "compound_stmt", symbols: ["if_stmt"], postprocess: id },
-  { name: "compound_stmt", symbols: ["while_stmt"], postprocess: id },
-  { name: "compound_stmt", symbols: ["for_stmt"], postprocess: id },
-  { name: "compound_stmt", symbols: ["funcdef"], postprocess: id },
   {
-    name: "if_stmt",
+    name: "names",
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
+    postprocess: ([t]) => [toAstToken(t)],
+  },
+  {
+    name: "names",
     symbols: [
-      pythonLexer.has("kw_if") ? { type: "kw_if" } : kw_if,
+      "names",
+      "_nl",
+      { literal: "," },
+      "_nl",
+      pythonLexer.has("name") ? { type: "name" } : name,
+    ],
+    postprocess: ([ps, , , , t]) => [...ps, toAstToken(t)],
+  },
+  {
+    name: "if_statement",
+    symbols: [
+      { literal: "if" },
       "_",
-      "test",
+      "expression",
       "_",
       { literal: ":" },
       "_",
-      "suite",
+      "block",
       "elif_chain",
     ],
     postprocess: ([kw, , test, , , , body, else_]) =>
@@ -287,13 +286,13 @@ let ParserRules = [
     name: "elif_chain",
     symbols: [
       "_",
-      pythonLexer.has("kw_elif") ? { type: "kw_elif" } : kw_elif,
+      { literal: "elif" },
       "_",
-      "test",
+      "expression",
       "_",
       { literal: ":" },
       "_",
-      "suite",
+      "block",
       "elif_chain",
     ],
     postprocess: ([, kw, , test, , , , body, else_]) => [
@@ -310,45 +309,53 @@ let ParserRules = [
   },
   {
     name: "elif_chain",
-    symbols: [
-      "_",
-      pythonLexer.has("kw_else") ? { type: "kw_else" } : kw_else,
-      "_",
-      { literal: ":" },
-      "_",
-      "suite",
-    ],
+    symbols: ["_", { literal: "else" }, "_", { literal: ":" }, "_", "block"],
     postprocess: ([, , , , , body]) => body,
   },
   { name: "elif_chain", symbols: [], postprocess: nil },
+  { name: "block", symbols: ["simple_statement"], postprocess: list },
   {
-    name: "while_stmt",
+    name: "block",
     symbols: [
-      pythonLexer.has("kw_while") ? { type: "kw_while" } : kw_while,
-      "_",
-      "test",
-      "_",
-      { literal: ":" },
-      "_",
-      "suite",
+      pythonLexer.has("newline") ? { type: "newline" } : newline,
+      pythonLexer.has("indent") ? { type: "indent" } : indent,
+      "block_stmts",
+      pythonLexer.has("dedent") ? { type: "dedent" } : dedent,
     ],
+    postprocess: ([, , stmts]) => stmts,
+  },
+  { name: "block_stmts", symbols: ["_", "statement"], postprocess: ([, s]) => [s] },
+  {
+    name: "block_stmts",
+    symbols: ["block_stmts", "_", "statement"],
+    postprocess: ([xs, , s]) => [...xs, s],
+  },
+  {
+    name: "block_stmts",
+    symbols: ["block_stmts", "_", pythonLexer.has("newline") ? { type: "newline" } : newline],
+    postprocess: id,
+  },
+  { name: "compound_statement", symbols: ["if_statement"], postprocess: id },
+  {
+    name: "compound_statement",
+    symbols: [{ literal: "while" }, "_", "expression", "_", { literal: ":" }, "_", "block"],
     postprocess: ([kw, , test, , , , body]) =>
       new StmtNS.While(toAstToken(kw), body[body.length - 1].endToken, test, body),
   },
   {
-    name: "for_stmt",
+    name: "compound_statement",
     symbols: [
-      pythonLexer.has("kw_for") ? { type: "kw_for" } : kw_for,
+      { literal: "for" },
       "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
+      pythonLexer.has("name") ? { type: "name" } : name,
       "_",
-      pythonLexer.has("kw_in") ? { type: "kw_in" } : kw_in,
+      { literal: "in" },
       "_",
-      "test",
+      "expression",
       "_",
       { literal: ":" },
       "_",
-      "suite",
+      "block",
     ],
     postprocess: ([kw, , target, , , , iter, , , , body]) =>
       new StmtNS.For(
@@ -360,17 +367,17 @@ let ParserRules = [
       ),
   },
   {
-    name: "funcdef",
+    name: "compound_statement",
     symbols: [
-      pythonLexer.has("kw_def") ? { type: "kw_def" } : kw_def,
+      { literal: "def" },
       "_",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
+      pythonLexer.has("name") ? { type: "name" } : name,
       "_",
       "params",
       "_",
       { literal: ":" },
       "_",
-      "suite",
+      "block",
     ],
     postprocess: ([kw, , name, , params, , , , body]) =>
       new StmtNS.FunctionDef(
@@ -385,216 +392,99 @@ let ParserRules = [
   { name: "params", symbols: [{ literal: "(" }, "_nl", { literal: ")" }], postprocess: drop },
   {
     name: "params",
-    symbols: [{ literal: "(" }, "_nl", "param_list", "_nl", { literal: ")" }],
+    symbols: [{ literal: "(" }, "_nl", "names", "_nl", { literal: ")" }],
     postprocess: ([, , ps]) => ps,
   },
   {
-    name: "param_list",
-    symbols: [pythonLexer.has("identifier") ? { type: "identifier" } : identifier],
-    postprocess: ([t]) => [toAstToken(t)],
-  },
-  {
-    name: "param_list",
+    name: "expression",
     symbols: [
-      "param_list",
-      "_nl",
-      { literal: "," },
-      "_nl",
-      pythonLexer.has("identifier") ? { type: "identifier" } : identifier,
-    ],
-    postprocess: ([ps, , , , t]) => [...ps, toAstToken(t)],
-  },
-  { name: "suite", symbols: ["simple_stmt"], postprocess: list },
-  {
-    name: "suite",
-    symbols: [
-      pythonLexer.has("newline") ? { type: "newline" } : newline,
-      pythonLexer.has("indent") ? { type: "indent" } : indent,
-      "suite_stmts",
-      pythonLexer.has("dedent") ? { type: "dedent" } : dedent,
-    ],
-    postprocess: ([, , stmts]) => stmts,
-  },
-  { name: "suite_stmts", symbols: ["_", "stmt"], postprocess: ([, s]) => [s] },
-  {
-    name: "suite_stmts",
-    symbols: ["suite_stmts", "_", "stmt"],
-    postprocess: ([xs, , s]) => [...xs, s],
-  },
-  {
-    name: "suite_stmts",
-    symbols: ["suite_stmts", "_", pythonLexer.has("newline") ? { type: "newline" } : newline],
-    postprocess: id,
-  },
-  {
-    name: "test",
-    symbols: [
-      "or_test",
+      "or_expr",
       "_",
-      pythonLexer.has("kw_if") ? { type: "kw_if" } : kw_if,
+      { literal: "if" },
       "_",
-      "or_test",
+      "or_expr",
       "_",
-      pythonLexer.has("kw_else") ? { type: "kw_else" } : kw_else,
+      { literal: "else" },
       "_",
-      "test",
+      "expression",
     ],
     postprocess: ([cons, , , , test, , , , alt]) =>
       new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt),
   },
-  { name: "test", symbols: ["or_test"], postprocess: id },
-  { name: "test", symbols: ["lambdef"], postprocess: id },
+  { name: "expression", symbols: ["or_expr"], postprocess: id },
+  { name: "expression", symbols: ["lambda_expr"], postprocess: id },
   {
-    name: "lambdef",
-    symbols: [
-      pythonLexer.has("kw_lambda") ? { type: "kw_lambda" } : kw_lambda,
-      "_",
-      "param_list",
-      "_",
-      { literal: ":" },
-      "_",
-      "test",
-    ],
-    postprocess: ([kw, , params, , , , body]) =>
-      new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body),
-  },
-  {
-    name: "lambdef",
-    symbols: [
-      pythonLexer.has("kw_lambda") ? { type: "kw_lambda" } : kw_lambda,
-      "_",
-      "param_list",
-      "_",
-      { literal: "::" },
-      "_",
-      "suite",
-    ],
-    postprocess: ([kw, , params, , , , body]) =>
-      new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, params, body, []),
-  },
-  {
-    name: "lambdef",
-    symbols: [
-      pythonLexer.has("kw_lambda") ? { type: "kw_lambda" } : kw_lambda,
-      "_",
-      { literal: ":" },
-      "_",
-      "test",
-    ],
-    postprocess: ([kw, , , , body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body),
-  },
-  {
-    name: "lambdef",
-    symbols: [
-      pythonLexer.has("kw_lambda") ? { type: "kw_lambda" } : kw_lambda,
-      "_",
-      { literal: "::" },
-      "_",
-      "suite",
-    ],
-    postprocess: ([kw, , , , body]) =>
-      new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, [], body, []),
-  },
-  {
-    name: "or_test",
-    symbols: [
-      "or_test",
-      "_",
-      pythonLexer.has("kw_or") ? { type: "kw_or" } : kw_or,
-      "_",
-      "and_test",
-    ],
+    name: "or_expr",
+    symbols: ["or_expr", "_", { literal: "or" }, "_", "and_expr"],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right),
   },
-  { name: "or_test", symbols: ["and_test"], postprocess: id },
+  { name: "or_expr", symbols: ["and_expr"], postprocess: id },
   {
-    name: "and_test",
-    symbols: [
-      "and_test",
-      "_",
-      pythonLexer.has("kw_and") ? { type: "kw_and" } : kw_and,
-      "_",
-      "not_test",
-    ],
+    name: "and_expr",
+    symbols: ["and_expr", "_", { literal: "and" }, "_", "not_expr"],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right),
   },
-  { name: "and_test", symbols: ["not_test"], postprocess: id },
+  { name: "and_expr", symbols: ["not_expr"], postprocess: id },
   {
-    name: "not_test",
-    symbols: [pythonLexer.has("kw_not") ? { type: "kw_not" } : kw_not, "_", "not_test"],
+    name: "not_expr",
+    symbols: [{ literal: "not" }, "_", "not_expr"],
     postprocess: ([op, , arg]) =>
       new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg),
   },
-  { name: "not_test", symbols: ["comparison"], postprocess: id },
+  { name: "not_expr", symbols: ["cmp_expr"], postprocess: id },
   {
-    name: "comparison",
-    symbols: ["comparison", "_", "comp_op", "_", "arith"],
+    name: "cmp_expr",
+    symbols: ["cmp_expr", "_", "cmp_op", "_", "add_expr"],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.Compare(left.startToken, right.endToken, left, op, right),
   },
-  { name: "comparison", symbols: ["arith"], postprocess: id },
+  { name: "cmp_expr", symbols: ["add_expr"], postprocess: id },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("less") ? { type: "less" } : less],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("greater") ? { type: "greater" } : greater],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("doubleequal") ? { type: "doubleequal" } : doubleequal],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("greaterequal") ? { type: "greaterequal" } : greaterequal],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("lessequal") ? { type: "lessequal" } : lessequal],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "comp_op",
+    name: "cmp_op",
     symbols: [pythonLexer.has("notequal") ? { type: "notequal" } : notequal],
     postprocess: ([t]) => toAstToken(t),
   },
+  { name: "cmp_op", symbols: [{ literal: "in" }], postprocess: ([t]) => toAstToken(t) },
   {
-    name: "comp_op",
-    symbols: [pythonLexer.has("kw_in") ? { type: "kw_in" } : kw_in],
-    postprocess: ([t]) => toAstToken(t),
-  },
-  {
-    name: "comp_op",
-    symbols: [
-      pythonLexer.has("kw_not") ? { type: "kw_not" } : kw_not,
-      "_",
-      pythonLexer.has("kw_in") ? { type: "kw_in" } : kw_in,
-    ],
+    name: "cmp_op",
+    symbols: [{ literal: "not" }, "_", { literal: "in" }],
     postprocess: ([t, ,]) => {
       const tok = toAstToken(t);
       tok.lexeme = "not in";
       return tok;
     },
   },
+  { name: "cmp_op", symbols: [{ literal: "is" }], postprocess: ([t]) => toAstToken(t) },
   {
-    name: "comp_op",
-    symbols: [pythonLexer.has("kw_is") ? { type: "kw_is" } : kw_is],
-    postprocess: ([t]) => toAstToken(t),
-  },
-  {
-    name: "comp_op",
-    symbols: [
-      pythonLexer.has("kw_is") ? { type: "kw_is" } : kw_is,
-      "_",
-      pythonLexer.has("kw_not") ? { type: "kw_not" } : kw_not,
-    ],
+    name: "cmp_op",
+    symbols: [{ literal: "is" }, "_", { literal: "not" }],
     postprocess: ([t, ,]) => {
       const tok = toAstToken(t);
       tok.lexeme = "is not";
@@ -602,82 +492,82 @@ let ParserRules = [
     },
   },
   {
-    name: "arith",
-    symbols: ["arith", "_", "arith_op", "_", "term"],
+    name: "add_expr",
+    symbols: ["add_expr", "_", "add_op", "_", "mul_expr"],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.Binary(left.startToken, right.endToken, left, op, right),
   },
-  { name: "arith", symbols: ["term"], postprocess: id },
+  { name: "add_expr", symbols: ["mul_expr"], postprocess: id },
   {
-    name: "arith_op",
+    name: "add_op",
     symbols: [pythonLexer.has("plus") ? { type: "plus" } : plus],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "arith_op",
+    name: "add_op",
     symbols: [pythonLexer.has("minus") ? { type: "minus" } : minus],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "term",
-    symbols: ["term", "_", "term_op", "_", "factor"],
+    name: "mul_expr",
+    symbols: ["mul_expr", "_", "mul_op", "_", "unary_expr"],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.Binary(left.startToken, right.endToken, left, op, right),
   },
-  { name: "term", symbols: ["factor"], postprocess: id },
+  { name: "mul_expr", symbols: ["unary_expr"], postprocess: id },
   {
-    name: "term_op",
+    name: "mul_op",
     symbols: [pythonLexer.has("star") ? { type: "star" } : star],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "term_op",
+    name: "mul_op",
     symbols: [pythonLexer.has("slash") ? { type: "slash" } : slash],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "term_op",
+    name: "mul_op",
     symbols: [pythonLexer.has("percent") ? { type: "percent" } : percent],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "term_op",
+    name: "mul_op",
     symbols: [pythonLexer.has("doubleslash") ? { type: "doubleslash" } : doubleslash],
     postprocess: ([t]) => toAstToken(t),
   },
   {
-    name: "factor",
-    symbols: [pythonLexer.has("plus") ? { type: "plus" } : plus, "_", "factor"],
+    name: "unary_expr",
+    symbols: [pythonLexer.has("plus") ? { type: "plus" } : plus, "_", "unary_expr"],
     postprocess: ([op, , arg]) =>
       new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg),
   },
   {
-    name: "factor",
-    symbols: [pythonLexer.has("minus") ? { type: "minus" } : minus, "_", "factor"],
+    name: "unary_expr",
+    symbols: [pythonLexer.has("minus") ? { type: "minus" } : minus, "_", "unary_expr"],
     postprocess: ([op, , arg]) =>
       new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg),
   },
-  { name: "factor", symbols: ["power"], postprocess: id },
+  { name: "unary_expr", symbols: ["pow_expr"], postprocess: id },
   {
-    name: "power",
+    name: "pow_expr",
     symbols: [
-      "atom_expr",
+      "post_expr",
       "_",
       pythonLexer.has("doublestar") ? { type: "doublestar" } : doublestar,
       "_",
-      "factor",
+      "unary_expr",
     ],
     postprocess: ([left, , op, , right]) =>
       new ExprNS.Binary(left.startToken, right.endToken, left, toAstToken(op), right),
   },
-  { name: "power", symbols: ["atom_expr"], postprocess: id },
+  { name: "pow_expr", symbols: ["post_expr"], postprocess: id },
   {
-    name: "atom_expr",
+    name: "post_expr",
     symbols: [
-      "atom_expr",
+      "post_expr",
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
       "_",
-      "test",
+      "expression",
       "_",
       pythonLexer.has("rsqb") ? { type: "rsqb" } : rsqb,
     ],
@@ -685,28 +575,21 @@ let ParserRules = [
       new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx),
   },
   {
-    name: "atom_expr",
-    symbols: ["atom_expr", { literal: "(" }, "_", "args", "_", { literal: ")" }],
+    name: "post_expr",
+    symbols: ["post_expr", { literal: "(" }, "_", "expressions", "_", { literal: ")" }],
     postprocess: ([callee, , , args, , rparen]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args),
   },
   {
-    name: "atom_expr",
-    symbols: ["atom_expr", { literal: "(" }, "_", { literal: ")" }],
+    name: "post_expr",
+    symbols: ["post_expr", { literal: "(" }, "_", { literal: ")" }],
     postprocess: ([callee, , , rparen]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []),
   },
-  { name: "atom_expr", symbols: ["atom"], postprocess: id },
-  { name: "args", symbols: ["test"], postprocess: list },
-  {
-    name: "args",
-    symbols: ["args", "_", { literal: "," }, "_", "test"],
-    postprocess: ([as, , , , a]) => [...as, a],
-  },
-  { name: "args", symbols: ["test", "_", { literal: "," }], postprocess: list },
+  { name: "post_expr", symbols: ["atom"], postprocess: id },
   {
     name: "atom",
-    symbols: [{ literal: "(" }, "_", "test", "_", { literal: ")" }],
+    symbols: [{ literal: "(" }, "_", "expression", "_", { literal: ")" }],
     postprocess: ([, , e]) => new ExprNS.Grouping(e.startToken, e.endToken, e),
   },
   {
@@ -723,7 +606,7 @@ let ParserRules = [
     symbols: [
       pythonLexer.has("lsqb") ? { type: "lsqb" } : lsqb,
       "_",
-      "args",
+      "expressions",
       "_",
       pythonLexer.has("rsqb") ? { type: "rsqb" } : rsqb,
     ],
@@ -731,7 +614,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("identifier") ? { type: "identifier" } : identifier],
+    symbols: [pythonLexer.has("name") ? { type: "name" } : name],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Variable(tok, tok, tok);
@@ -739,7 +622,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("float") ? { type: "float" } : float],
+    symbols: [pythonLexer.has("number_float") ? { type: "number_float" } : number_float],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Literal(tok, tok, parseFloat(t.value));
@@ -747,7 +630,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("bigint") ? { type: "bigint" } : bigint],
+    symbols: [pythonLexer.has("number_int") ? { type: "number_int" } : number_int],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.BigIntLiteral(tok, tok, t.value);
@@ -755,7 +638,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("hex") ? { type: "hex" } : hex],
+    symbols: [pythonLexer.has("number_hex") ? { type: "number_hex" } : number_hex],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.BigIntLiteral(tok, tok, t.value);
@@ -763,7 +646,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("octal") ? { type: "octal" } : octal],
+    symbols: [pythonLexer.has("number_oct") ? { type: "number_oct" } : number_oct],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.BigIntLiteral(tok, tok, t.value);
@@ -771,7 +654,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("binary") ? { type: "binary" } : binary],
+    symbols: [pythonLexer.has("number_bin") ? { type: "number_bin" } : number_bin],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.BigIntLiteral(tok, tok, t.value);
@@ -779,16 +662,16 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("complex") ? { type: "complex" } : complex],
+    symbols: [pythonLexer.has("number_complex") ? { type: "number_complex" } : number_complex],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Complex(tok, tok, t.value);
     },
   },
-  { name: "atom", symbols: ["string"], postprocess: id },
+  { name: "atom", symbols: ["string_lit"], postprocess: id },
   {
     name: "atom",
-    symbols: [pythonLexer.has("kw_None") ? { type: "kw_None" } : kw_None],
+    symbols: [{ literal: "None" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.None(tok, tok);
@@ -796,7 +679,7 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("kw_True") ? { type: "kw_True" } : kw_True],
+    symbols: [{ literal: "True" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Literal(tok, tok, true);
@@ -804,16 +687,62 @@ let ParserRules = [
   },
   {
     name: "atom",
-    symbols: [pythonLexer.has("kw_False") ? { type: "kw_False" } : kw_False],
+    symbols: [{ literal: "False" }],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Literal(tok, tok, false);
     },
   },
   {
-    name: "string",
+    name: "lambda_expr",
+    symbols: [{ literal: "lambda" }, "_", "names", "_", { literal: ":" }, "_", "expression"],
+    postprocess: ([kw, , params, , , , body]) =>
+      new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body),
+  },
+  {
+    name: "lambda_expr",
     symbols: [
-      pythonLexer.has("stringTripleDouble") ? { type: "stringTripleDouble" } : stringTripleDouble,
+      { literal: "lambda" },
+      "_",
+      "names",
+      "_",
+      pythonLexer.has("doublecolon") ? { type: "doublecolon" } : doublecolon,
+      "_",
+      "block",
+    ],
+    postprocess: ([kw, , params, , , , body]) =>
+      new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, params, body, []),
+  },
+  {
+    name: "lambda_expr",
+    symbols: [{ literal: "lambda" }, "_", { literal: ":" }, "_", "expression"],
+    postprocess: ([kw, , , , body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body),
+  },
+  {
+    name: "lambda_expr",
+    symbols: [
+      { literal: "lambda" },
+      "_",
+      pythonLexer.has("doublecolon") ? { type: "doublecolon" } : doublecolon,
+      "_",
+      "block",
+    ],
+    postprocess: ([kw, , , , body]) =>
+      new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, [], body, []),
+  },
+  { name: "expressions", symbols: ["expression"], postprocess: list },
+  {
+    name: "expressions",
+    symbols: ["expressions", "_", { literal: "," }, "_", "expression"],
+    postprocess: ([as, , , , a]) => [...as, a],
+  },
+  { name: "expressions", symbols: ["expression", "_", { literal: "," }], postprocess: list },
+  {
+    name: "string_lit",
+    symbols: [
+      pythonLexer.has("string_triple_double")
+        ? { type: "string_triple_double" }
+        : string_triple_double,
     ],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
@@ -821,9 +750,11 @@ let ParserRules = [
     },
   },
   {
-    name: "string",
+    name: "string_lit",
     symbols: [
-      pythonLexer.has("stringTripleSingle") ? { type: "stringTripleSingle" } : stringTripleSingle,
+      pythonLexer.has("string_triple_single")
+        ? { type: "string_triple_single" }
+        : string_triple_single,
     ],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
@@ -831,16 +762,16 @@ let ParserRules = [
     },
   },
   {
-    name: "string",
-    symbols: [pythonLexer.has("stringDouble") ? { type: "stringDouble" } : stringDouble],
+    name: "string_lit",
+    symbols: [pythonLexer.has("string_double") ? { type: "string_double" } : string_double],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Literal(tok, tok, stripQuotes(t.value));
     },
   },
   {
-    name: "string",
-    symbols: [pythonLexer.has("stringSingle") ? { type: "stringSingle" } : stringSingle],
+    name: "string_lit",
+    symbols: [pythonLexer.has("string_single") ? { type: "string_single" } : string_single],
     postprocess: ([t]) => {
       const tok = toAstToken(t);
       return new ExprNS.Literal(tok, tok, stripQuotes(t.value));
@@ -867,5 +798,5 @@ let ParserRules = [
     postprocess: id,
   },
 ];
-let ParserStart = "file";
+let ParserStart = "program";
 export default { Lexer, ParserRules, ParserStart };

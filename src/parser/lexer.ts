@@ -57,19 +57,19 @@ const mooLexer = moo.compile({
   comment: /#[^\n]*/,
 
   // Numbers — float and complex must come before bigint (longest-match ordering)
-  complex: /(?:\d+\.?\d*|\.\d+)[jJ]/,
-  float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
-  hex: /0[xX][0-9a-fA-F]+/,
-  octal: /0[oO][0-7]+/,
-  binary: /0[bB][01]+/,
-  bigint: /\d+/,
+  number_complex: /(?:\d+\.?\d*|\.\d+)[jJ]/,
+  number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
+  number_hex: /0[xX][0-9a-fA-F]+/,
+  number_oct: /0[oO][0-7]+/,
+  number_bin: /0[bB][01]+/,
+  number_int: /\d+/,
 
   // Strings (triple-quoted must precede single-quoted)
   // Allow backslash followed by any character (Python keeps unrecognized escapes literally)
-  stringTripleDouble: /"""(?:[^\\]|\\.)*?"""/,
-  stringTripleSingle: /'''(?:[^\\]|\\.)*?'''/,
-  stringDouble: /"(?:[^"\\]|\\.)*"/,
-  stringSingle: /'(?:[^'\\]|\\.)*'/,
+  string_triple_double: /"""(?:[^\\]|\\.)*?"""/,
+  string_triple_single: /'''(?:[^\\]|\\.)*?'''/,
+  string_double: /"(?:[^"\\]|\\.)*"/,
+  string_single: /'(?:[^'\\]|\\.)*'/,
 
   // Multi-character operators (must come before single-char variants)
   doublestar: "**",
@@ -102,7 +102,7 @@ const mooLexer = moo.compile({
   semi: ";",
 
   // Identifiers — reclassified as keywords via kwType when the value matches
-  identifier: { match: /[a-zA-Z_][a-zA-Z0-9_]*/, type: kwType },
+  name: { match: /[a-zA-Z_][a-zA-Z0-9_]*/, type: kwType },
 });
 
 const pythonLexer = new IndentationLexer({
