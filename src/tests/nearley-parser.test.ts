@@ -1189,3 +1189,16 @@ describe("Rest parameters", () => {
     expect(func.parameters[2].lexeme).toBe("rest");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Negative cases — spec restrictions
+// ---------------------------------------------------------------------------
+describe("Negative cases — spec restrictions", () => {
+  test("import after statement is rejected", () => {
+    expect(() => parseStmts("x = 1\nfrom math import sqrt")).toThrow();
+  });
+
+  test("import inside function body is rejected", () => {
+    expect(() => parseStmts("def f():\n    from math import sqrt")).toThrow();
+  });
+});

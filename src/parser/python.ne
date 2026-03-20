@@ -2,9 +2,15 @@
 # Produces class-based AST nodes
 #
 # Naming convention:
-#   Spec-traceable rules:     no prefix  (expression, statement, block, program, ...)
-#   Implementation-internal:  _expr/_op suffix or compound name (or_expr, add_op, block_stmts, ...)
-#   Whitespace helpers:       _, __, _nl
+#   Spec-traceable rules:     spec name (hyphens → underscores)
+#                              (program, statement, block, expression, import_stmt, ...)
+#   Precedence cascade:       expression + level suffix
+#                              (expressionOr, expressionAnd, expressionNot, expressionCmp,
+#                               expressionAdd, expressionMul, expressionUnary, expressionPow,
+#                               expressionPost)
+#   Internal helpers:          parent + descriptive suffix
+#                              (statementLine, expressionAddOp, expressionMulOp, blockStmts)
+#   Whitespace helpers:        _, __, _nl
 
 @preprocessor esmodule
 
@@ -49,6 +55,9 @@ function stripQuotes(s) {
 
 # ============================================================================
 # program ::= import-stmt ... block              [python_1_bnf.tex line 18]
+#
+# Enforces: imports come before statements.  An import after a statement
+# is a parse error.
 # ============================================================================
 
 program -> program_stmts
@@ -63,11 +72,21 @@ program -> program_stmts
        return new StmtNS.FileInput(start, end, filtered, []);
      } %}
 
+# program_stmts: single list of imports and statements.
+# import_stmt is NOT a statement alternative, so it can only appear here.
+# The postprocessor enforces imports-before-statements ordering.
 program_stmts ->
-    null                                      {% drop %}
-  | program_stmts statement                  {% ([xs, x]) => x ? [...xs, x] : xs %}
-  | program_stmts %newline                   {% id %}
-  | program_stmts %ws                        {% id %}
+    null                                          {% drop %}
+  | program_stmts import_stmt _ %newline         {% ([xs, imp]) => {
+       // Enforce: no imports after statements
+       if (xs && xs.some(s => !(s instanceof StmtNS.FromImport))) {
+         throw new Error('Import statements must appear before other statements');
+       }
+       return [...xs, imp];
+     } %}
+  | program_stmts statement                      {% ([xs, x]) => x ? [...xs, x] : xs %}
+  | program_stmts %newline                       {% id %}
+  | program_stmts %ws                            {% id %}
 
 # ============================================================================
 # import-stmt ::= from dotted-name import import-clause  [python_1_bnf.tex line 19]
@@ -112,17 +131,32 @@ import_as_name ->
 # statement ::= ...                              [python_1_bnf.tex lines 25-29]
 #   [Ch3] additions                              [python_3_bnf.tex lines 29-32]
 #   [Extension] additions
+#
+# Split into statementLine (simple, needs trailing newline)
+# and compound statements (if, while, for, def — consume their own block).
+# import_stmt is NOT a statement alternative; it only appears in program.
 # ============================================================================
 
-statement -> simple_statement {% id %} | compound_statement {% id %}
+statement ->
+    statementLine _ %newline                     {% id %}
+  | "if" _ expression _ ":" _ block elif_chain
+      {% ([kw,, test,,,, body, else_]) =>
+           new StmtNS.If(toAstToken(kw),
+             (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
+             test, body, else_) %}
+  | "while" _ expression _ ":" _ block
+      {% ([kw,, test,,,, body]) =>
+           new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
+  | "for" _ %name _ "in" _ expression _ ":" _ block
+      {% ([kw,, target,,,, iter,,,, body]) =>
+           new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
+  | "def" _ %name _ params _ ":" _ block
+      {% ([kw,, name,, params,,,, body]) =>
+           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
+             toAstToken(name), params, body, []) %}
 
-# ============================================================================
-# Simple statements
-# ============================================================================
-
-simple_statement -> small_statement _ %newline  {% id %}
-
-small_statement ->
+# statementLine — simple statements that need a trailing newline
+statementLine ->
     "pass"
       {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
   | "break"
@@ -143,13 +177,12 @@ small_statement ->
          } %}
   | %name _ "=" _ expression
       {% ([n,,,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
-  | post_expr %lsqb _ expression _ %rsqb _ "=" _ expression
+  | expressionPost %lsqb _ expression _ %rsqb _ "=" _ expression
       {% function(d) {
            var obj = d[0], idx = d[3], rsqb = d[5], val = d[9];
            var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
            return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
          } %}
-  | import_stmt {% id %}
   | "global" _ %name
       {% ([kw,, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
   | "nonlocal" _ %name
@@ -171,13 +204,6 @@ names ->
 # if-statement ::= ...                           [python_1_bnf.tex lines 31-33]
 # ============================================================================
 
-if_statement ->
-    "if" _ expression _ ":" _ block elif_chain
-      {% ([kw,, test,,,, body, else_]) =>
-           new StmtNS.If(toAstToken(kw),
-             (else_ && else_.length > 0) ? else_[else_.length-1].endToken : body[body.length-1].endToken,
-             test, body, else_) %}
-
 elif_chain ->
     _ "elif" _ expression _ ":" _ block elif_chain
       {% ([, kw,, test,,,, body, else_]) => [new StmtNS.If(toAstToken(kw),
@@ -191,34 +217,18 @@ elif_chain ->
 # ============================================================================
 
 block ->
-    simple_statement                         {% list %}
-  | %newline %indent block_stmts %dedent     {% ([,, stmts]) => stmts %}
+    statementLine _ %newline                 {% list %}
+  | %newline %indent blockStmts %dedent      {% ([,, stmts]) => stmts %}
 
-block_stmts ->
+blockStmts ->
     _ statement                               {% ([, s]) => [s] %}
-  | block_stmts _ statement                  {% ([xs,, s]) => [...xs, s] %}
-  | block_stmts _ %newline                   {% id %}
+  | blockStmts _ statement                   {% ([xs,, s]) => [...xs, s] %}
+  | blockStmts _ %newline                    {% id %}
 
 # ============================================================================
-# Compound statements
-#   [Ch3] additions                              [python_3_bnf.tex lines 29-32]
-#   [Extension] additions
-# ============================================================================
-
-compound_statement ->
-    if_statement {% id %}
-  | "while" _ expression _ ":" _ block
-      {% ([kw,, test,,,, body]) =>
-           new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
-  | "for" _ %name _ "in" _ expression _ ":" _ block
-      {% ([kw,, target,,,, iter,,,, body]) =>
-           new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
-  | "def" _ %name _ params _ ":" _ block
-      {% ([kw,, name,, params,,,, body]) =>
-           new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
-             toAstToken(name), params, body, []) %}
-
 # rest-names ::= ε | *name | name (, name)... [, *name]  [python_3_bnf.tex line 37-38]
+# ============================================================================
+
 rest_names ->
     %name
       {% ([t]) => { const tok = toAstToken(t); tok.isStarred = false; return [tok]; } %}
@@ -240,36 +250,39 @@ params ->
 # ============================================================================
 
 expression ->
-    or_expr _ "if" _ or_expr _ "else" _ expression
+    expressionOr _ "if" _ expressionOr _ "else" _ expression
       {% ([cons,,,, test,,,, alt]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt) %}
-  | or_expr                                       {% id %}
-  | lambda_expr                               {% id %}
+  | expressionOr                                   {% id %}
+  | lambda_expr                                {% id %}
 
 # ============================================================================
-# Precedence cascade (or_expr, and_expr, not_expr, cmp_expr, add_expr, mul_expr, unary_expr, pow_expr, post_expr)
+# Precedence cascade
+#   expressionOr > expressionAnd > expressionNot > expressionCmp >
+#   expressionAdd > expressionMul > expressionUnary > expressionPow >
+#   expressionPost > atom
 # ============================================================================
 
-or_expr ->
-    or_expr _ "or" _ and_expr
+expressionOr ->
+    expressionOr _ "or" _ expressionAnd
       {% ([left,, op,, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
-  | and_expr                                      {% id %}
+  | expressionAnd                                  {% id %}
 
-and_expr ->
-    and_expr _ "and" _ not_expr
+expressionAnd ->
+    expressionAnd _ "and" _ expressionNot
       {% ([left,, op,, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
-  | not_expr                                      {% id %}
+  | expressionNot                                  {% id %}
 
-not_expr ->
-    "not" _ not_expr
+expressionNot ->
+    "not" _ expressionNot
       {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
-  | cmp_expr                                      {% id %}
+  | expressionCmp                                  {% id %}
 
-cmp_expr ->
-    cmp_expr _ cmp_op _ add_expr
+expressionCmp ->
+    expressionCmp _ expressionCmpOp _ expressionAdd
       {% ([left,, op,, right]) => new ExprNS.Compare(left.startToken, right.endToken, left, op, right) %}
-  | add_expr                                      {% id %}
+  | expressionAdd                                  {% id %}
 
-cmp_op ->
+expressionCmpOp ->
     %less             {% ([t]) => toAstToken(t) %}
   | %greater          {% ([t]) => toAstToken(t) %}
   | %doubleequal      {% ([t]) => toAstToken(t) %}
@@ -281,44 +294,44 @@ cmp_op ->
   | "is"              {% ([t]) => toAstToken(t) %}
   | "is" _ "not"      {% ([t,,]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; return tok; } %}
 
-add_expr ->
-    add_expr _ add_op _ mul_expr
+expressionAdd ->
+    expressionAdd _ expressionAddOp _ expressionMul
       {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
-  | mul_expr                                      {% id %}
+  | expressionMul                                  {% id %}
 
-add_op -> %plus {% ([t]) => toAstToken(t) %} | %minus {% ([t]) => toAstToken(t) %}
+expressionAddOp -> %plus {% ([t]) => toAstToken(t) %} | %minus {% ([t]) => toAstToken(t) %}
 
-mul_expr ->
-    mul_expr _ mul_op _ unary_expr
+expressionMul ->
+    expressionMul _ expressionMulOp _ expressionUnary
       {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
-  | unary_expr                                    {% id %}
+  | expressionUnary                                {% id %}
 
-mul_op ->
+expressionMulOp ->
     %star        {% ([t]) => toAstToken(t) %}
   | %slash       {% ([t]) => toAstToken(t) %}
   | %percent     {% ([t]) => toAstToken(t) %}
   | %doubleslash {% ([t]) => toAstToken(t) %}
 
-unary_expr ->
-    %plus _ unary_expr
+expressionUnary ->
+    %plus _ expressionUnary
       {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
-  | %minus _ unary_expr
+  | %minus _ expressionUnary
       {% ([op,, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
-  | pow_expr                                      {% id %}
+  | expressionPow                                  {% id %}
 
-pow_expr ->
-    post_expr _ %doublestar _ unary_expr
+expressionPow ->
+    expressionPost _ %doublestar _ expressionUnary
       {% ([left,, op,, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, toAstToken(op), right) %}
-  | post_expr                                     {% id %}
+  | expressionPost                                 {% id %}
 
-post_expr ->
-    post_expr %lsqb _ expression _ %rsqb
+expressionPost ->
+    expressionPost %lsqb _ expression _ %rsqb
       {% ([obj, ,, idx,, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
-  | post_expr "(" _ expressions _ ")"
+  | expressionPost "(" _ expressions _ ")"
       {% ([callee,,, args,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
-  | post_expr "(" _ ")"
+  | expressionPost "(" _ ")"
       {% ([callee,,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
-  | atom                                      {% id %}
+  | atom                                       {% id %}
 
 # ============================================================================
 # atom (literals, variables, grouping, lists)
