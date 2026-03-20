@@ -1,5 +1,5 @@
 export { FeatureValidator, FeatureNotSupportedError, ASTNode } from "./types";
-export { traverseAST, runValidators } from "./traverse";
+export { traverseAST } from "./traverse";
 export {
   makeValidatorsForChapter,
   makeChapter1Validators,

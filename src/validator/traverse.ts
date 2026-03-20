@@ -1,5 +1,5 @@
 import { StmtNS, ExprNS } from "../ast-types";
-import { ASTNode, FeatureValidator } from "./types";
+import { ASTNode } from "./types";
 
 /**
  * Walks the AST via instanceof dispatch and calls fn on each node.
@@ -67,21 +67,9 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   } else if (node instanceof ExprNS.Subscript) {
     traverseAST(node.value, fn);
     traverseAST(node.index, fn);
+  } else if (node instanceof ExprNS.Starred) {
+    traverseAST(node.value, fn);
   }
   // Leaf nodes: Literal, Variable, BigIntLiteral, Complex, None, Pass, Break, Continue,
   // FromImport, Global, NonLocal, Indent, Dedent — no children to traverse.
-}
-
-/**
- * Run validators over every AST node. WARNING: does not pass Environment,
- * so scope-aware validators (e.g. no-reassignment) will silently no-op.
- * Use the Resolver's inline validation for production code.
- */
-export function runValidators(ast: ASTNode, validators: FeatureValidator[]): void {
-  if (validators.length === 0) return;
-  traverseAST(ast, node => {
-    for (const v of validators) {
-      v.validate(node);
-    }
-  });
 }
