@@ -49,6 +49,27 @@ function stripQuotes(s) {
     }
   });
 }
+
+// ── Leaf AST constructors (token → node) ────────────────────────────────
+const astVariable   = ([t]) => { const k = toAstToken(t); return new ExprNS.Variable(k, k, k); };
+const astBigInt     = ([t]) => { const k = toAstToken(t); return new ExprNS.BigIntLiteral(k, k, t.value); };
+const astComplex    = ([t]) => { const k = toAstToken(t); return new ExprNS.Complex(k, k, t.value); };
+const astNone       = ([t]) => { const k = toAstToken(t); return new ExprNS.None(k, k); };
+const astString     = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, stripQuotes(t.value)); };
+const astTrue       = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, true); };
+const astFalse      = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, false); };
+
+// ── Operator AST constructors (children → node) ────────────────────────
+const astBinary     = ([l, op, r]) => new ExprNS.Binary(l.startToken, r.endToken, l, op, r);
+const astBinaryTok  = ([l, op, r]) => new ExprNS.Binary(l.startToken, r.endToken, l, toAstToken(op), r);
+const astBoolOp     = ([l, op, r]) => new ExprNS.BoolOp(l.startToken, r.endToken, l, toAstToken(op), r);
+const astUnary      = ([op, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg);
+const astCompare    = ([l, op, r]) => new ExprNS.Compare(l.startToken, r.endToken, l, op, r);
+
+// ── Token / list helpers ────────────────────────────────────────────────
+const tok           = ([t]) => toAstToken(t);
+const flatList      = ([first, rest]) => [first, ...rest.map(d => d[1])];
+const tokList       = ([first, rest]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))];
 %}
 
 @lexer pythonLexer
@@ -104,7 +125,7 @@ import_clause ->
 
 # import-as-names ::= import-as-name (, import-as-name)... [python_1_bnf.tex line 23]
 import_as_names -> import_as_name ("," import_as_name):*
-  {% ([first, rest]) => [first, ...rest.map(d => d[1])] %}
+  {% flatList %}
 
 # import-as-name ::= name [ as name ]                     [python_1_bnf.tex line 24]
 import_as_name ->
@@ -217,7 +238,7 @@ if_statement -> "if" expression ":" block ("elif" expression ":" block):* ("else
 # ============================================================================
 
 names -> %name ("," %name):*
-  {% ([first, rest]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))] %}
+  {% tokList %}
 
 # ============================================================================
 # block ::= statement...                         [python_1_bnf.tex line 34]
@@ -275,65 +296,56 @@ expression -> expressionOr "if" expressionOr "else" expression {% ([cons, , test
 # ============================================================================
 
 expressionOr ->
-    expressionOr "or" expressionAnd
-      {% ([left, op, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
+    expressionOr "or" expressionAnd              {% astBoolOp %}
   | expressionAnd                                  {% id %}
 
 expressionAnd ->
-    expressionAnd "and" expressionNot
-      {% ([left, op, right]) => new ExprNS.BoolOp(left.startToken, right.endToken, left, toAstToken(op), right) %}
+    expressionAnd "and" expressionNot            {% astBoolOp %}
   | expressionNot                                  {% id %}
 
 expressionNot ->
-    "not" expressionNot
-      {% ([op, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
+    "not" expressionNot                          {% astUnary %}
   | expressionCmp                                  {% id %}
 
 expressionCmp ->
-    expressionCmp expressionCmpOp expressionAdd
-      {% ([left, op, right]) => new ExprNS.Compare(left.startToken, right.endToken, left, op, right) %}
+    expressionCmp expressionCmpOp expressionAdd  {% astCompare %}
   | expressionAdd                                  {% id %}
 
 expressionCmpOp ->
-    %less             {% ([t]) => toAstToken(t) %}
-  | %greater          {% ([t]) => toAstToken(t) %}
-  | %doubleequal      {% ([t]) => toAstToken(t) %}
-  | %greaterequal     {% ([t]) => toAstToken(t) %}
-  | %lessequal        {% ([t]) => toAstToken(t) %}
-  | %notequal         {% ([t]) => toAstToken(t) %}
-  | "in"              {% ([t]) => toAstToken(t) %}
+    %less             {% tok %}
+  | %greater          {% tok %}
+  | %doubleequal      {% tok %}
+  | %greaterequal     {% tok %}
+  | %lessequal        {% tok %}
+  | %notequal         {% tok %}
+  | "in"              {% tok %}
   | "not" "in"        {% ([t]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; return tok; } %}
-  | "is"              {% ([t]) => toAstToken(t) %}
+  | "is"              {% tok %}
   | "is" "not"        {% ([t]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; return tok; } %}
 
 expressionAdd ->
-    expressionAdd expressionAddOp expressionMul
-      {% ([left, op, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
+    expressionAdd expressionAddOp expressionMul  {% astBinary %}
   | expressionMul                                  {% id %}
 
-expressionAddOp -> %plus {% ([t]) => toAstToken(t) %} | %minus {% ([t]) => toAstToken(t) %}
+expressionAddOp -> %plus {% tok %} | %minus {% tok %}
 
 expressionMul ->
-    expressionMul expressionMulOp expressionUnary
-      {% ([left, op, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, op, right) %}
+    expressionMul expressionMulOp expressionUnary {% astBinary %}
   | expressionUnary                                {% id %}
 
 expressionMulOp ->
-    %star        {% ([t]) => toAstToken(t) %}
-  | %slash       {% ([t]) => toAstToken(t) %}
-  | %percent     {% ([t]) => toAstToken(t) %}
-  | %doubleslash {% ([t]) => toAstToken(t) %}
+    %star        {% tok %}
+  | %slash       {% tok %}
+  | %percent     {% tok %}
+  | %doubleslash {% tok %}
 
 expressionUnary ->
-    %plus expressionUnary
-      {% ([op, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
-  | %minus expressionUnary
-      {% ([op, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg) %}
+    %plus expressionUnary                        {% astUnary %}
+  | %minus expressionUnary                       {% astUnary %}
   | expressionPow                                  {% id %}
 
 expressionPow ->
-    expressionPost %doublestar expressionUnary
-      {% ([left, op, right]) => new ExprNS.Binary(left.startToken, right.endToken, left, toAstToken(op), right) %}
+    expressionPost %doublestar expressionUnary   {% astBinaryTok %}
   | expressionPost                                 {% id %}
 
 expressionPost ->
@@ -356,27 +368,18 @@ atom ->
       {% ([l,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
   | %lsqb _nl expressions _nl %rsqb
       {% ([l,, elems,, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
-  | %name
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Variable(tok, tok, tok); } %}
+  | %name                                        {% astVariable %}
   | %number_float
       {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
-  | %number_int
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
-  | %number_hex
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
-  | %number_oct
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
-  | %number_bin
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.BigIntLiteral(tok, tok, t.value); } %}
-  | %number_complex
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Complex(tok, tok, t.value); } %}
+  | %number_int                                  {% astBigInt %}
+  | %number_hex                                  {% astBigInt %}
+  | %number_oct                                  {% astBigInt %}
+  | %number_bin                                  {% astBigInt %}
+  | %number_complex                              {% astComplex %}
   | stringLit                                    {% id %}
-  | "None"
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.None(tok, tok); } %}
-  | "True"
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, true); } %}
-  | "False"
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, false); } %}
+  | "None"                                       {% astNone %}
+  | "True"                                       {% astTrue %}
+  | "False"                                      {% astFalse %}
 
 # ============================================================================
 # lambda_expr                                    [python_1_bnf.tex line 44]
@@ -399,17 +402,17 @@ lambda_expr ->
 # ============================================================================
 
 expressions -> expression ("," expression):* (","):?
-  {% ([first, rest]) => [first, ...rest.map(d => d[1])] %}
+  {% flatList %}
 
 # ============================================================================
 # stringLit — string literals
 # ============================================================================
 
 stringLit ->
-    %string_triple_double  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
-  | %string_triple_single  {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
-  | %string_double         {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
-  | %string_single         {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, stripQuotes(t.value)); } %}
+    %string_triple_double  {% astString %}
+  | %string_triple_single  {% astString %}
+  | %string_double         {% astString %}
+  | %string_single         {% astString %}
 
 # ============================================================================
 # Whitespace rules — only _nl (for inside parens/brackets)
