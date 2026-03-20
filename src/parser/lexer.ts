@@ -66,8 +66,8 @@ const mooLexer = moo.compile({
 
   // Strings (triple-quoted must precede single-quoted)
   // Allow backslash followed by any character (Python keeps unrecognized escapes literally)
-  stringTripleDouble: /"""(?:[^"\\]|\\.)*?"""/,
-  stringTripleSingle: /'''(?:[^'\\]|\\.)*?'''/,
+  stringTripleDouble: /"""(?:[^\\]|\\.)*?"""/,
+  stringTripleSingle: /'''(?:[^\\]|\\.)*?'''/,
   stringDouble: /"(?:[^"\\]|\\.)*"/,
   stringSingle: /'(?:[^'\\]|\\.)*'/,
 

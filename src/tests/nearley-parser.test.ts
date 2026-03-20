@@ -109,6 +109,42 @@ describe("Literal expressions", () => {
     expect(expr).toBeInstanceOf(ExprNS.Literal);
   });
 
+  test("triple-double-quoted string", () => {
+    const expr = parseExpr('"""hello"""');
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe("hello");
+  });
+
+  test("triple-double-quoted string with embedded single quote", () => {
+    const expr = parseExpr('"""a"b"""');
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe('a"b');
+  });
+
+  test("triple-double-quoted string with embedded double quotes", () => {
+    const expr = parseExpr('"""a""b"""');
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe('a""b');
+  });
+
+  test("triple-single-quoted string", () => {
+    const expr = parseExpr("'''hello'''");
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe("hello");
+  });
+
+  test("triple-single-quoted string with embedded single quote", () => {
+    const expr = parseExpr("'''it's'''");
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe("it's");
+  });
+
+  test("triple-quoted string with escape sequence", () => {
+    const expr = parseExpr('"""line1\\nline2"""');
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe("line1\nline2");
+  });
+
   test("complex literal produces Complex node", () => {
     const expr = parseExpr("3j");
     expect(expr).toBeInstanceOf(ExprNS.Complex);
