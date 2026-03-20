@@ -30,6 +30,7 @@ const kwType = moo.keywords({
   kw_import: "import",
   kw_global: "global",
   kw_nonlocal: "nonlocal",
+  kw_as: "as",
   kw_assert: "assert",
   kw_True: "True",
   kw_False: "False",

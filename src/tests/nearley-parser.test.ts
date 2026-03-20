@@ -737,7 +737,8 @@ describe("Import statement", () => {
     expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
     const imp = stmts[0] as StmtNS.FromImport;
     expect(imp.module.lexeme).toBe("math");
-    expect(imp.names[0].lexeme).toBe("sqrt");
+    expect(imp.names[0].name.lexeme).toBe("sqrt");
+    expect(imp.names[0].alias).toBeNull();
   });
 
   test("from x import (a, b, c) produces FromImport with multiple names", () => {
@@ -745,6 +746,33 @@ describe("Import statement", () => {
     expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
     const imp = stmts[0] as StmtNS.FromImport;
     expect(imp.names).toHaveLength(3);
+  });
+
+  test("dotted import: from foo.bar import baz", () => {
+    const stmts = parseStmts("from foo.bar import baz");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.module.lexeme).toBe("foo.bar");
+    expect(imp.names).toHaveLength(1);
+    expect(imp.names[0].name.lexeme).toBe("baz");
+    expect(imp.names[0].alias).toBeNull();
+  });
+
+  test("import with alias: from foo import bar as baz", () => {
+    const stmts = parseStmts("from foo import bar as baz");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.names).toHaveLength(1);
+    expect(imp.names[0].name.lexeme).toBe("bar");
+    expect(imp.names[0].alias!.lexeme).toBe("baz");
+  });
+
+  test("dotted import with parenthesized names", () => {
+    const stmts = parseStmts("from foo.bar import (baz, qux)");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.module.lexeme).toBe("foo.bar");
+    expect(imp.names).toHaveLength(2);
   });
 });
 

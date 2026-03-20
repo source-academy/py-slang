@@ -358,8 +358,13 @@ export namespace StmtNS {
   }
   export class FromImport extends Stmt {
     module: Token;
-    names: Token[];
-    constructor(startToken: Token, endToken: Token, module: Token, names: Token[]) {
+    names: { name: Token; alias: Token | null }[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      module: Token,
+      names: { name: Token; alias: Token | null }[],
+    ) {
       super(startToken, endToken);
       this.module = module;
       this.names = names;

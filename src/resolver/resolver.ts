@@ -418,9 +418,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitFromImportStmt(stmt: StmtNS.FromImport): void {
     this.runValidators(stmt);
-    for (const name of stmt.names) {
-      this.environment?.declareName(name);
-      this.environment?.moduleBindings.add(name.lexeme);
+    for (const entry of stmt.names) {
+      const binding = entry.alias ?? entry.name;
+      this.environment?.declareName(binding);
+      this.environment?.moduleBindings.add(binding.lexeme);
     }
   }
 

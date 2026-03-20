@@ -74,16 +74,39 @@ program_stmts ->
 # ============================================================================
 
 import_stmt ->
-    "from" _ %name _ "import" _ import_names
-      {% ([kw,, mod,,,, names]) => new StmtNS.FromImport(toAstToken(kw), names[names.length-1], toAstToken(mod), names) %}
+    "from" _ dotted_name _ "import" _ import_clause
+      {% ([kw,, mod,,,, names]) => {
+           const last = names[names.length-1];
+           const endTok = last.alias || last.name;
+           return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
+         } %}
 
-import_names ->
-    %name                                     {% ([t]) => [toAstToken(t)] %}
-  | "(" _ name_list _ ")"                    {% ([,, ns]) => ns %}
+# dotted-name ::= name ( . name )...                     [python_1_bnf.tex line 20]
+dotted_name -> %name
+  {% ([t]) => toAstToken(t) %}
+  | dotted_name "." %name
+  {% ([left,, right]) => {
+       const tok = toAstToken(right);
+       tok.lexeme = left.lexeme + '.' + tok.lexeme;
+       tok.col = left.col;
+       tok.indexInSource = left.indexInSource;
+       return tok;
+     } %}
 
-name_list ->
-    %name                                     {% ([t]) => [toAstToken(t)] %}
-  | name_list _ "," _ %name                  {% ([ns,,,, t]) => [...ns, toAstToken(t)] %}
+# import-clause ::= import-as-names | ( import-as-names ) [python_1_bnf.tex line 21-22]
+import_clause ->
+    import_as_names  {% id %}
+  | "(" _ import_as_names _ ")"  {% ([,, ns]) => ns %}
+
+# import-as-names ::= import-as-name (, import-as-name)... [python_1_bnf.tex line 23]
+import_as_names ->
+    import_as_name  {% ([t]) => [t] %}
+  | import_as_names _ "," _ import_as_name  {% ([ns,,,, t]) => [...ns, t] %}
+
+# import-as-name ::= name [ as name ]                     [python_1_bnf.tex line 24]
+import_as_name ->
+    %name  {% ([t]) => ({ name: toAstToken(t), alias: null }) %}
+  | %name _ "as" _ %name  {% ([t,,,, a]) => ({ name: toAstToken(t), alias: toAstToken(a) }) %}
 
 # ============================================================================
 # statement ::= ...                              [python_1_bnf.tex lines 25-29]
