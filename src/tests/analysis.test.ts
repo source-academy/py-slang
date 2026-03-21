@@ -110,6 +110,12 @@ describe("Chapter 1 — most restrictive", () => {
     expect(() => analyzeOk("x = []", 1)).toThrow(FeatureNotSupportedError);
   });
 
+  test("subscript assignment is banned in chapter 1", () => {
+    // xs[0] = 3 uses ExprNS.Subscript — NoListsValidator should catch it.
+    // Declare xs at chapter 4 level first, then try subscript assignment.
+    expect(() => analyzeOk("xs = 1\nxs[0] = 3", 1)).toThrow(FeatureNotSupportedError);
+  });
+
   test("reassignment is banned in chapter 1", () => {
     // Two assignments to the same name
     expect(() => analyzeOk("x = 1\nx = 2", 1)).toThrow();
