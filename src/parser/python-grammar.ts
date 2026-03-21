@@ -1,5 +1,3 @@
-/* eslint-disable */
-// @ts-nocheck
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
 function id(x) {
