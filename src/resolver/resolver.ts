@@ -255,9 +255,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
       }
       for (const st of stmt) {
+        this.runValidators(st);
         st.accept(this);
       }
     } else {
+      this.runValidators(stmt);
       stmt.accept(this);
     }
   }
@@ -300,7 +302,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   //// STATEMENTS
   visitFileInputStmt(stmt: StmtNS.FileInput): void {
-    this.runValidators(stmt);
     // Create a new environment.
     const oldEnv = this.environment;
     this.environment = new Environment(this.source, this.environment, new Map());
@@ -311,7 +312,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
-    this.runValidators(stmt);
     this.environment?.declareName(stmt.name);
     this.environment?.functions.add(stmt.name.lexeme);
 
@@ -336,7 +336,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
-    this.runValidators(stmt);
     this.resolve(stmt.ann);
     this.resolve(stmt.value);
     this.functionVarConstraint(stmt.target.name);
@@ -344,12 +343,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): void {
-    this.runValidators(stmt);
     const target = stmt.target;
     if (target instanceof ExprNS.Subscript) {
-      this.resolve(target.value); // resolve the object (e.g. xs)
-      this.resolve(target.index); // resolve the index (e.g. 0)
-      this.resolve(stmt.value); // resolve the assigned value
+      this.resolve(target); // dispatches to visitSubscriptExpr
+      this.resolve(stmt.value);
       return;
     }
     this.resolve(stmt.value);
@@ -358,55 +355,46 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitAssertStmt(stmt: StmtNS.Assert): void {
-    this.runValidators(stmt);
     this.resolve(stmt.value);
   }
   visitForStmt(stmt: StmtNS.For): void {
-    this.runValidators(stmt);
     this.environment?.declareName(stmt.target);
     this.resolve(stmt.iter);
     this.resolve(stmt.body);
   }
 
   visitIfStmt(stmt: StmtNS.If): void {
-    this.runValidators(stmt);
     this.resolve(stmt.condition);
     this.resolve(stmt.body);
     this.resolve(stmt.elseBlock);
   }
   // @TODO we need to treat all global statements as variable declarations in the global
   // scope.
-  visitGlobalStmt(stmt: StmtNS.Global): void {
-    this.runValidators(stmt);
+  visitGlobalStmt(_stmt: StmtNS.Global): void {
     // Do nothing because global can also be declared in our
     // own scope.
   }
   // @TODO nonlocals mean that any variable following that name in the current env
   // should not create a variable declaration, but instead point to an outer variable.
   visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    this.runValidators(stmt);
     this.environment?.lookupNameParentEnvWithError(stmt.name);
   }
 
   visitReturnStmt(stmt: StmtNS.Return): void {
-    this.runValidators(stmt);
     if (stmt.value !== null) {
       this.resolve(stmt.value);
     }
   }
 
   visitWhileStmt(stmt: StmtNS.While): void {
-    this.runValidators(stmt);
     this.resolve(stmt.condition);
     this.resolve(stmt.body);
   }
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
-    this.runValidators(stmt);
     this.resolve(stmt.expression);
   }
 
   visitFromImportStmt(stmt: StmtNS.FromImport): void {
-    this.runValidators(stmt);
     for (const entry of stmt.names) {
       const binding = entry.alias ?? entry.name;
       this.environment?.declareName(binding);
@@ -414,23 +402,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): void {
-    this.runValidators(stmt);
-  }
-  visitBreakStmt(stmt: StmtNS.Break): void {
-    this.runValidators(stmt);
-  }
-  visitPassStmt(stmt: StmtNS.Pass): void {
-    this.runValidators(stmt);
-  }
+  visitContinueStmt(_stmt: StmtNS.Continue): void {}
+  visitBreakStmt(_stmt: StmtNS.Break): void {}
+  visitPassStmt(_stmt: StmtNS.Pass): void {}
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
-    this.runValidators(expr);
     this.environment?.lookupNameCurrentEnvWithError(expr.name);
   }
   visitLambdaExpr(expr: ExprNS.Lambda): void {
-    this.runValidators(expr);
     // Create a new environment.
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
@@ -441,7 +421,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): void {
-    this.runValidators(expr);
     // Create a new environment.
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
@@ -454,58 +433,41 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
   visitUnaryExpr(expr: ExprNS.Unary): void {
-    this.runValidators(expr);
     this.resolve(expr.right);
   }
   visitGroupingExpr(expr: ExprNS.Grouping): void {
-    this.runValidators(expr);
     this.resolve(expr.expression);
   }
   visitBinaryExpr(expr: ExprNS.Binary): void {
-    this.runValidators(expr);
     this.resolve(expr.left);
     this.resolve(expr.right);
   }
   visitBoolOpExpr(expr: ExprNS.BoolOp): void {
-    this.runValidators(expr);
     this.resolve(expr.left);
     this.resolve(expr.right);
   }
   visitCompareExpr(expr: ExprNS.Compare): void {
-    this.runValidators(expr);
     this.resolve(expr.left);
     this.resolve(expr.right);
   }
 
   visitCallExpr(expr: ExprNS.Call): void {
-    this.runValidators(expr);
     this.resolve(expr.callee);
     this.resolve(expr.args);
   }
   visitTernaryExpr(expr: ExprNS.Ternary): void {
-    this.runValidators(expr);
     this.resolve(expr.predicate);
     this.resolve(expr.consequent);
     this.resolve(expr.alternative);
   }
-  visitNoneExpr(expr: ExprNS.None): void {
-    this.runValidators(expr);
-  }
-  visitLiteralExpr(expr: ExprNS.Literal): void {
-    this.runValidators(expr);
-  }
-  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
-    this.runValidators(expr);
-  }
-  visitComplexExpr(expr: ExprNS.Complex): void {
-    this.runValidators(expr);
-  }
+  visitNoneExpr(_expr: ExprNS.None): void {}
+  visitLiteralExpr(_expr: ExprNS.Literal): void {}
+  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
+  visitComplexExpr(_expr: ExprNS.Complex): void {}
   visitListExpr(expr: ExprNS.List): void {
-    this.runValidators(expr);
     this.resolve(expr.elements);
   }
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
-    this.runValidators(expr);
     this.resolve(expr.value);
     this.resolve(expr.index);
   }

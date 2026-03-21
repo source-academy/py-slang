@@ -7,6 +7,7 @@
  */
 
 import moo from "moo";
+import { UnexpectedIndentError, InconsistentDedentError } from "./lexer-errors";
 
 // ── Moo configuration (unchanged) ──────────────────────────────────────────
 
@@ -125,6 +126,16 @@ function processTokens(raw: moo.Token[]): moo.Token[] {
   let enclosureDepth = 0;
   let i = 0;
 
+  // Reject leading indentation (whitespace before the first real token
+  // with no preceding newline).
+  {
+    let j = 0;
+    while (j < raw.length && (raw[j].type === "comment" || raw[j].type === "newline")) j++;
+    if (j < raw.length && raw[j].type === "ws") {
+      throw new UnexpectedIndentError(raw[j].line, raw[j].col);
+    }
+  }
+
   while (i < raw.length) {
     const tok = raw[i];
 
@@ -211,6 +222,9 @@ function processTokens(raw: moo.Token[]): moo.Token[] {
         while (indentStack.length > 1 && indentStack[indentStack.length - 1] !== indent) {
           indentStack.pop();
           out.push(syntheticToken("dedent", raw[i]));
+        }
+        if (indentStack[indentStack.length - 1] !== indent) {
+          throw new InconsistentDedentError(raw[i].line, raw[i].col);
         }
       }
       continue;
