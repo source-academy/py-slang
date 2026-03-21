@@ -66,12 +66,7 @@ describe("Lexer valid indentation", () => {
   });
 
   test("multiple dedents at once (8 to 4 to 0)", () => {
-    const src = [
-      "if True:\n",
-      "    if True:\n",
-      "        x = 1\n",
-      "y = 2\n",
-    ].join("");
+    const src = ["if True:\n", "    if True:\n", "        x = 1\n", "y = 2\n"].join("");
     const types = tokenTypes(src);
     const dedentCount = types.filter(t => t === "dedent").length;
     expect(dedentCount).toBe(2);
@@ -114,13 +109,9 @@ describe("Lexer valid indentation", () => {
   });
 
   test("nested blocks with consistent indentation", () => {
-    const src = [
-      "def f():\n",
-      "    if True:\n",
-      "        x = 1\n",
-      "    y = 2\n",
-      "z = 3\n",
-    ].join("");
+    const src = ["def f():\n", "    if True:\n", "        x = 1\n", "    y = 2\n", "z = 3\n"].join(
+      "",
+    );
     expect(() => tokenize(src)).not.toThrow();
     const types = tokenTypes(src);
     expect(types.filter(t => t === "indent").length).toBe(2);
