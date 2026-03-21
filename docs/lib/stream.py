@@ -26,7 +26,7 @@ def stream_tail(xs):
 def is_stream(xs):
     """
     is_stream recurses down the stream and checks that it ends with the
-    empty list None
+    empty linked list None
     """
     return is_none(xs) or (
         is_pair(xs)
@@ -36,7 +36,7 @@ def is_stream(xs):
     )
 
 
-def list_to_stream(xs):
+def linked_list_to_stream(xs):
     """
     A stream is either None or a pair whose tail is
     a nullary function that returns a stream.
@@ -44,17 +44,17 @@ def list_to_stream(xs):
     return (
         None
         if is_none(xs)
-        else pair(head(xs), lambda: list_to_stream(tail(xs)))
+        else pair(head(xs), lambda: linked_list_to_stream(tail(xs)))
     )
 
 
-def stream_to_list(xs):
+def stream_to_linked_list(xs):
     """
-    stream_to_list transforms a given stream to a list
-    Lazy? No: stream_to_list needs to force the whole stream
+    stream_to_linked_list transforms a given stream to a linked list
+    Lazy? No: stream_to_linked_list needs to force the whole stream
     """
     return (
-        None if is_none(xs) else pair(head(xs), stream_to_list(stream_tail(xs)))
+        None if is_none(xs) else pair(head(xs), stream_to_linked_list(stream_tail(xs)))
     )
 
 
@@ -72,8 +72,8 @@ def stream_map(f, s):
     stream_map applies first arg f to the elements of the second
     argument, assumed to be a stream.
     f is applied element-by-element:
-    stream_map(f,list_to_stream(list(1,2)) results in
-    the same as list_to_stream(list(f(1),f(2)))
+    stream_map(f, linked_list_to_stream(linked_list(1,2)) results in
+    the same as linked_list_to_stream(linked_list(f(1),f(2)))
     stream_map throws an exception if the second argument is not a
     stream, and if the second argument is a nonempty stream and the
     first argument is not a function.
@@ -107,7 +107,7 @@ def stream_for_each(fun, xs):
     """
     stream_for_each applies first arg fun to the elements of the stream
     passed as second argument. fun is applied element-by-element:
-    for_each(fun,list_to_stream(list(1, 2,None))) results in the calls fun(1)
+    for_each(fun, linked_list_to_stream(linked_list(1, 2,None))) results in the calls fun(1)
     and fun(2).
     stream_for_each returns True.
     stream_for_each throws an exception if the second argument is not a
@@ -177,7 +177,7 @@ def stream_member(x, s):
 def stream_remove(v, xs):
     """
     stream_remove removes the first occurrence of a given first-argument element
-    in a given second-argument list. Returns the original list
+    in a given second-argument linked list. Returns the original linked list
     if there is no occurrence.
     Lazy? Yes: the result stream forces the construction of each next element
     """
@@ -249,7 +249,7 @@ def integers_from(n):
 
 def eval_stream(s, n):
     """
-    eval_stream constructs the list of the first n elements
+    eval_stream constructs the linked list of the first n elements
     of a given stream s
     Lazy? Sort-of: eval_stream only forces the computation of
     the first n elements, and leaves the rest of
@@ -258,7 +258,7 @@ def eval_stream(s, n):
 
     def es(s, n):
         return (
-            list(head(s))
+            linked_list(head(s))
             if n == 1
             else pair(head(s), es(stream_tail(s), n - 1))
         )
