@@ -153,7 +153,11 @@ describe("Chapter 1 — most restrictive", () => {
   });
 });
 
-describe("Chapter 2 — loops still banned, reassignment allowed", () => {
+describe("Chapter 2 — loops and reassignment still banned", () => {
+  test("reassignment is banned in chapter 2", () => {
+    expect(() => analyzeOk("x = 1\nx = 2", 2)).toThrow();
+  });
+
   test("while loop is banned in chapter 2", () => {
     expect(() => analyzeOk("while True:\n    pass", 2)).toThrow(FeatureNotSupportedError);
   });
