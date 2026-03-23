@@ -6,6 +6,7 @@
 
 /* tslint:disable:max-classes-per-file */
 
+import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../ast-types";
 import * as error from "../errors/errors";
 import { BuiltinReassignmentError } from "../errors/errors";
@@ -55,11 +56,6 @@ type CmdEvaluator = (
   isPrelude: boolean,
 ) => void;
 
-let cseFinalPrint = "";
-export function addPrint(str: string) {
-  cseFinalPrint = cseFinalPrint + str + "\n";
-}
-
 /**
  * Function that returns the appropriate Promise<Result> given the output of CSE machine evaluating, depending
  * on whether the program is finished evaluating, ran into a breakpoint or ran into an error.
@@ -73,7 +69,7 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
       resolve({ status: "suspended-cse-eval", context });
     } else if (value.type === "error") {
       const msg = value.message;
-      const representation = new Representation(cseFinalPrint + msg);
+      const representation = new Representation(msg);
       resolve({ status: "finished", context, value, representation });
     } else {
       const representation = new Representation(toPythonString(value));
@@ -104,6 +100,16 @@ export function evaluate(
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error) {
+    const msg =
+      typeof error == "object" && error !== null && "message" in error
+        ? String(error.message)
+        : String(error);
+    const name = error instanceof Error ? error.name : "Error";
+    if (context.streams.initialised) {
+      const writer = context.streams.stderr.getWriter();
+      writer.write({ name: name, message: msg, errorType: ErrorType.EVALUATOR_RUNTIME });
+      writer.releaseLock();
+    }
     return { type: "error", message: error instanceof Error ? error.message : String(error) };
   }
 
@@ -121,9 +127,19 @@ export function evaluate(
       options.stepLimit!,
       options.isPrelude,
     );
-    return context.output ? { type: "string", value: context.output } : result;
+    return result;
   } catch (error) {
-    return { type: "error", message: error instanceof Error ? error.message : String(error) };
+    const msg =
+      typeof error == "object" && error !== null && "message" in error
+        ? String(error.message)
+        : String(error);
+    const name = error instanceof Error ? error.name : "Error";
+    if (context.streams.initialised) {
+      const writer = context.streams.stderr.getWriter();
+      writer.write({ name: name, message: msg, errorType: ErrorType.EVALUATOR_RUNTIME });
+      writer.releaseLock();
+    }
+    return { type: "error", message: msg };
   } finally {
     context.runtime.isRunning = false;
   }

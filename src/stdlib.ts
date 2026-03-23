@@ -1993,7 +1993,11 @@ export class BuiltInFunctions {
 
   static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
     const output = args.map(arg => toPythonString(arg)).join(" ");
-    context.output += output + "\n";
+    if (context.streams.initialised) {
+      const writer = context.streams.stdout.getWriter();
+      writer.write(output);
+      writer.releaseLock();
+    }
     return { type: "undefined" };
   }
 
