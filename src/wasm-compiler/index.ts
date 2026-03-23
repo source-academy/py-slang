@@ -16,8 +16,7 @@ export type WasmExports = {
   makeString: (offset: number, length: number) => [number, bigint];
   makePair: (tag1: number, value1: bigint, tag2: number, value2: bigint) => [number, bigint];
   makeNone: () => [number, bigint];
-  getHeapPointer: () => number;
-  incrementHeapPointer: (amount: number) => void;
+  malloc: (amount: number) => number;
 };
 export const PARSE_TREE_STRINGS = [
   // node / construct tags
@@ -163,19 +162,13 @@ export async function compileToWasmAndRun(
         const encoder = new TextEncoder();
         const dataView = new DataView(memory.buffer);
 
-        let heapPointer = wasmExports.getHeapPointer();
         const strings = tokens.map(({ lexeme }) => {
           if (!wasmExports) throw new Error("WASM exports not initialised");
 
+          const heapPointer = wasmExports.malloc(lexeme.length);
           encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
-
-          const string = wasmExports.makeString(heapPointer, lexeme.length);
-
-          heapPointer += lexeme.length;
-          return string;
+          return wasmExports.makeString(heapPointer, lexeme.length);
         });
-
-        wasmExports.incrementHeapPointer(heapPointer - wasmExports.getHeapPointer());
 
         return strings.reduceRight(([tailTag, tailValue], [tag, value]) => {
           if (!wasmExports) throw new Error("WASM exports not initialised");

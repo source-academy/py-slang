@@ -45,6 +45,13 @@ export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MA
 export const HEAP_PTR = "$_heap_pointer";
 export const CURR_ENV = "$_current_env";
 
+// returns allocated block start address and moves heap pointer by amount bytes
+export const MALLOC_FX = wasm
+  .func("$_malloc")
+  .params({ $amount: i32 })
+  .results(i32)
+  .body(global.get(HEAP_PTR), global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$amount"))));
+
 // boxing functions
 
 // store directly in payload
@@ -65,15 +72,14 @@ export const MAKE_FLOAT_FX = wasm
 export const MAKE_COMPLEX_FX = wasm
   .func("$_make_complex")
   .params({ $real: f64, $img: f64 })
+  .locals({ $ptr: i32 })
   .results(i32, i64)
   .body(
-    f64.store(global.get(HEAP_PTR), local.get("$real")),
-    f64.store(i32.add(global.get(HEAP_PTR), i32.const(8)), local.get("$img")),
+    f64.store(local.tee("$ptr", wasm.call(MALLOC_FX).args(i32.const(16))), local.get("$real")),
+    f64.store(i32.add(local.get("$ptr"), i32.const(8)), local.get("$img")),
 
     i32.const(TYPE_TAG.COMPLEX),
-    i64.extend_i32_u(global.get(HEAP_PTR)),
-
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
+    i64.extend_i32_u(local.get("$ptr")),
   );
 
 // store directly as i32
@@ -225,15 +231,15 @@ export const LIST_LENGTH_FX = wasm
 export const MAKE_PAIR_FX = wasm
   .func("$_make_pair")
   .params({ $head_tag: i32, $head_val: i64, $tail_tag: i32, $tail_val: i64 })
+  .locals({ $ptr: i32 })
   .results(i32, i64)
   .body(
-    i32.store(global.get(HEAP_PTR), local.get("$head_tag")),
-    i64.store(i32.add(global.get(HEAP_PTR), i32.const(4)), local.get("$head_val")),
-    i32.store(i32.add(global.get(HEAP_PTR), i32.const(12)), local.get("$tail_tag")),
-    i64.store(i32.add(global.get(HEAP_PTR), i32.const(16)), local.get("$tail_val")),
+    i32.store(local.tee("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))), local.get("$head_tag")),
+    i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
+    i32.store(i32.add(local.get("$ptr"), i32.const(12)), local.get("$tail_tag")),
+    i64.store(i32.add(local.get("$ptr"), i32.const(16)), local.get("$tail_val")),
 
-    wasm.call(MAKE_LIST_FX).args(global.get(HEAP_PTR), i32.const(2)),
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(24))),
+    wasm.call(MAKE_LIST_FX).args(local.get("$ptr"), i32.const(2)),
   );
 
 export const IS_PAIR_FX = wasm
@@ -440,7 +446,7 @@ export const ARITHMETIC_OP_FX = wasm
   .func("$_py_arith_op")
   .params({ $x_tag: i32, $x_val: i64, $y_tag: i32, $y_val: i64, $op: i32 })
   .results(i32, i64)
-  .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $denom: f64 })
+  .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $denom: f64, $str_ptr: i32 })
   .body(
     // if adding, check if both are strings
     wasm
@@ -454,23 +460,25 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       )
       .then(
-        global.get(HEAP_PTR), // starting address of new string
-
         memory.copy(
-          global.get(HEAP_PTR),
+          local.tee(
+            "$str_ptr",
+            wasm.call(MALLOC_FX).args(i32.add(i32.wrap_i64(local.get("$x_val")), i32.wrap_i64(local.get("$y_val")))),
+          ),
           i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))),
           i32.wrap_i64(local.get("$x_val")),
         ),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.wrap_i64(local.get("$x_val")))),
         memory.copy(
-          global.get(HEAP_PTR),
+          i32.add(local.get("$str_ptr"), i32.wrap_i64(local.get("$x_val"))),
           i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))),
           i32.wrap_i64(local.get("$y_val")),
         ),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.wrap_i64(local.get("$y_val")))),
-        i32.add(i32.wrap_i64(local.get("$x_val")), i32.wrap_i64(local.get("$y_val"))),
 
-        wasm.return(wasm.call(MAKE_STRING_FX).args()),
+        wasm.return(
+          wasm
+            .call(MAKE_STRING_FX)
+            .args(local.get("$str_ptr"), i32.add(i32.wrap_i64(local.get("$x_val")), i32.wrap_i64(local.get("$y_val")))),
+        ),
       ),
 
     // if either's bool, convert to int
@@ -865,24 +873,30 @@ export const BOOL_NOT_FX = wasm
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
   .params({ $size: i32, $parent: i32 })
+  .locals({ $env: i32, $i: i32 })
   .results(i32)
   .body(
-    global.get(HEAP_PTR), // return the start of the new env, set CURR_ENV AFTER
-    i32.store(global.get(HEAP_PTR), local.get("$parent")),
-    global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
+    i32.store(
+      local.tee("$env", wasm.call(MALLOC_FX).args(i32.add(i32.const(4), i32.mul(local.get("$size"), i32.const(12))))),
+      local.get("$parent"),
+    ),
 
     wasm
       .loop("$loop")
       .body(
         wasm
-          .if(local.get("$size"))
+          .if(i32.lt_u(local.get("$i"), local.get("$size")))
           .then(
-            i32.store(global.get(HEAP_PTR), i32.const(TYPE_TAG.UNBOUND)),
-            global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
-            local.set("$size", i32.sub(local.get("$size"), i32.const(1))),
+            i32.store(
+              i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$i"), i32.const(12))),
+              i32.const(TYPE_TAG.UNBOUND),
+            ),
+            local.set("$i", i32.add(local.get("$i"), i32.const(1))),
             wasm.br("$loop"),
           ),
       ),
+
+    local.get("$env"),
   );
 
 export const PRE_APPLY_FX = wasm
@@ -924,6 +938,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       $has_starred: i32,
       $i: i32,
       $arg_ptr: i32,
+      $write_ptr: i32,
       $new_env: i32,
       $arity: i32,
       $env_size: i32,
@@ -960,9 +975,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
 
       wasm.if(local.get("$has_starred")).then(
         // set the new CURR_ENV
-        local.set("$new_env", global.get(HEAP_PTR)),
-        i32.store(global.get(HEAP_PTR), i32.wrap_i64(local.get("$val"))),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(4))),
+        i32.store(local.tee("$new_env", wasm.call(MALLOC_FX).args(i32.const(4))), i32.wrap_i64(local.get("$val"))),
 
         // loop over the entire old environment, which = envSize
         local.set("$i", i32.const(0)),
@@ -986,17 +999,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
                   i32.store(local.get("$arg_ptr"), i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff))),
                   // copy over the list
                   memory.copy(
-                    global.get(HEAP_PTR),
+                    wasm
+                      .call(MALLOC_FX)
+                      .args(
+                        i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
+                      ),
                     i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
                     i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
-                  ),
-                  // move HP
-                  global.set(
-                    HEAP_PTR,
-                    i32.add(
-                      global.get(HEAP_PTR),
-                      i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
-                    ),
                   ),
                   // add list length - 1 to arg_len
                   local.set(
@@ -1009,12 +1018,14 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
                 )
                 .else(
                   // else not starred: just copy the element over
-                  i32.store(global.get(HEAP_PTR), i32.load(local.get("$arg_ptr"))),
+                  i32.store(
+                    local.tee("$write_ptr", wasm.call(MALLOC_FX).args(i32.const(12))),
+                    i32.load(local.get("$arg_ptr")),
+                  ),
                   i64.store(
-                    i32.add(global.get(HEAP_PTR), i32.const(4)),
+                    i32.add(local.get("$write_ptr"), i32.const(4)),
                     i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))),
                   ),
-                  global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(12))),
                 ),
               local.set("$i", i32.add(local.get("$i"), i32.const(1))),
               wasm.br("$unpack_loop"),
@@ -1209,16 +1220,8 @@ export const PARSE_FX = wasm
       .args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.wrap_i64(local.get("$val"))),
   );
 
-export const GET_HEAP_PTR_FX = wasm.func("$_get_heap_pointer").results(i32).body(global.get(HEAP_PTR));
-
-export const INCREMENT_HEAP_PTR_FX = wasm
-  .func("$_increment_heap_pointer")
-  .params({ $amount: i32 })
-  .body(global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$amount"))));
-
 export const nativeFunctions = [
-  GET_HEAP_PTR_FX,
-  INCREMENT_HEAP_PTR_FX,
+  MALLOC_FX,
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
   MAKE_COMPLEX_FX,

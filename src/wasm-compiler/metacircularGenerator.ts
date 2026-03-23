@@ -28,12 +28,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   private dynamicString(str: string): [number, bigint] {
     const bytes = MetacircularGenerator.encoder.encode(str);
-    const offset = this.wasmExports.getHeapPointer();
+    const offset = this.wasmExports.malloc(bytes.length);
 
     const dataView = new DataView(this.memory.buffer, offset, bytes.length);
     bytes.forEach((byte, i) => dataView.setUint8(i, byte));
 
-    this.wasmExports.incrementHeapPointer(bytes.length);
     return this.wasmExports.makeString(offset, str.length);
   }
 
