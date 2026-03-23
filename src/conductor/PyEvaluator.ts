@@ -6,6 +6,7 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../cse-machine/context";
 import { IOptions, runInContext } from "../runner/pyRunner";
 import { Finished } from "../types";
+import AutoCompletePlugin from "./plugins/autocomplete";
 
 const defaultContext = new Context();
 const defaultOptions: IOptions = {
@@ -22,6 +23,7 @@ export default class PyEvaluator extends BasicEvaluator {
     super(conductor);
     this.context = defaultContext;
     this.options = defaultOptions;
+    conductor.registerPlugin(AutoCompletePlugin, 1);
   }
 
   async evaluateChunk(chunk: string): Promise<void> {

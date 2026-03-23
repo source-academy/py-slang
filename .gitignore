@@ -117,3 +117,6 @@ test.py
 .yarn/*
 .pnp.cjs
 .pnp.loader.mjs
+
+# Autocomplete generated files
+src/conductor/plugins/autocomplete/builtins/*.json

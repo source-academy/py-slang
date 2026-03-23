@@ -8,7 +8,7 @@
     "regen": "npx tsx src/generate.ts && prettier --write src/ast-types.ts",
     "compile-grammar": "nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && prettier --write src/parser/python-grammar.ts",
     "start:dev": "npx nodemon",
-    "build": "rollup -c --bundleConfigAsCjs",
+    "build": "./scripts/autocomplete.sh && rollup -c --bundleConfigAsCjs",
     "start": "yarn run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
@@ -16,8 +16,8 @@
     "test": "jest",
     "test-coverage": "jest --coverage",
     "lint": "eslint --concurrency=auto src",
-    "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
-    "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs,mts}\"",
+    "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs,mts}\"",
     "wasm": "ts-node src/wasm-compiler/index.ts"
   },
   "keywords": [
@@ -32,6 +32,7 @@
   "license": "Apache-2.0",
   "packageManager": "yarn@4.13.0+sha512.5c20ba010c99815433e5c8453112165e673f1c7948d8d2b267f4b5e52097538658388ebc9f9580656d9b75c5cc996f990f611f99304a2197d4c56d21eea370e7",
   "devDependencies": {
+    "@lezer/python": "^1.1.18",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
@@ -55,7 +56,7 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
-    "@sourceacademy/conductor": "^0.2.3",
+    "@sourceacademy/conductor": "^0.3.0",
     "@sourceacademy/wasm-util": "^1.0.4",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
