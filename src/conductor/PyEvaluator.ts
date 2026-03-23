@@ -5,7 +5,12 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../cse-machine/context";
-import { createErrorStream, createInputStream, createOutputStream, displayError } from "../cse-machine/streams";
+import {
+  createErrorStream,
+  createInputStream,
+  createOutputStream,
+  displayError,
+} from "../cse-machine/streams";
 import { IOptions, runInContext } from "../runner/pyRunner";
 
 const defaultContext = new Context();

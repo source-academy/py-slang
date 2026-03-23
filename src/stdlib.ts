@@ -12,7 +12,6 @@ import {
   ValueError,
 } from "./errors/errors";
 
-
 export function Validate(
   minArgs: number | null,
   maxArgs: number | null,

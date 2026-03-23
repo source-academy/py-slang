@@ -29,14 +29,23 @@ export const createInputStream = (conductor: IRunnerPlugin): ReadableStream<stri
 };
 
 export const displayError = (context: Context, error: unknown, type: ErrorType) => {
-  const name = typeof error === "object" && error !== null && "name" in error && typeof error.name === "string" ? error.name : "Error";
-  const message = typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" ? error.message : String(error);
+  const name =
+    typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
+      ? error.name
+      : "Error";
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : String(error);
   if (context.streams.initialised) {
     const writer = context.streams.stderr.getWriter();
     writer.write({ name, message, errorType: type });
     writer.releaseLock();
   }
-}
+};
 
 export const displayOutput = (context: Context, output: string) => {
   if (context.streams.initialised) {
@@ -44,4 +53,4 @@ export const displayOutput = (context: Context, output: string) => {
     writer.write(output);
     writer.releaseLock();
   }
-}
+};
