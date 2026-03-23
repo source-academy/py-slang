@@ -40,4 +40,3 @@ jobs:
           external_repository: source-academy/docs.sourceacademy.org
           publish_branch: deploy-py-slang
           force_orphan: true
-
