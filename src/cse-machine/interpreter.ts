@@ -32,6 +32,7 @@ import {
   isFalsy,
 } from "./operators";
 import { Stash, Value } from "./stash";
+import { displayError } from "./streams";
 import {
   AppInstr,
   AssmtInstr,
@@ -104,13 +105,8 @@ export function evaluate(
       typeof error == "object" && error !== null && "message" in error
         ? String(error.message)
         : String(error);
-    const name = error instanceof Error ? error.name : "Error";
-    if (context.streams.initialised) {
-      const writer = context.streams.stderr.getWriter();
-      writer.write({ name: name, message: msg, errorType: ErrorType.EVALUATOR_RUNTIME });
-      writer.releaseLock();
-    }
-    return { type: "error", message: error instanceof Error ? error.message : String(error) };
+    displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
+    return { type: "error", message: msg };
   }
 
   try {
@@ -133,12 +129,7 @@ export function evaluate(
       typeof error == "object" && error !== null && "message" in error
         ? String(error.message)
         : String(error);
-    const name = error instanceof Error ? error.name : "Error";
-    if (context.streams.initialised) {
-      const writer = context.streams.stderr.getWriter();
-      writer.write({ name: name, message: msg, errorType: ErrorType.EVALUATOR_RUNTIME });
-      writer.releaseLock();
-    }
+    displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
     return { type: "error", message: msg };
   } finally {
     context.runtime.isRunning = false;

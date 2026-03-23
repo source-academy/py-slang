@@ -3,6 +3,7 @@ import { Context } from "./cse-machine/context";
 import { ControlItem } from "./cse-machine/control";
 import { handleRuntimeError } from "./cse-machine/error";
 import { Value } from "./cse-machine/stash";
+import { displayOutput } from "./cse-machine/streams";
 import {
   MissingRequiredPositionalError,
   SublanguageError,
@@ -10,6 +11,7 @@ import {
   TypeError,
   ValueError,
 } from "./errors/errors";
+
 
 export function Validate(
   minArgs: number | null,
@@ -1993,11 +1995,7 @@ export class BuiltInFunctions {
 
   static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
     const output = args.map(arg => toPythonString(arg)).join(" ");
-    if (context.streams.initialised) {
-      const writer = context.streams.stdout.getWriter();
-      writer.write(output);
-      writer.releaseLock();
-    }
+    displayOutput(context, output);
     return { type: "undefined" };
   }
 

@@ -5,7 +5,7 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../cse-machine/context";
-import { createErrorStream, createInputStream, createOutputStream } from "../cse-machine/streams";
+import { createErrorStream, createInputStream, createOutputStream, displayError } from "../cse-machine/streams";
 import { IOptions, runInContext } from "../runner/pyRunner";
 
 const defaultContext = new Context();
@@ -39,13 +39,10 @@ export default class PyEvaluator extends BasicEvaluator {
         this.options,
       );
     } catch (error) {
-      const name = error instanceof Error ? error.name : "Error";
-      const msg = error instanceof Error ? error.message : String(error);
-      if (this.context.streams.initialised) {
-        const writer = this.context.streams.stderr.getWriter();
-        writer.write({ name: name, message: msg, errorType: ErrorType.EVALUATOR_SYNTAX });
-        writer.releaseLock();
+      if (error instanceof SyntaxError) {
+        return displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
       }
+      displayError(this.context, error, ErrorType.INTERNAL);
     }
   }
 }
