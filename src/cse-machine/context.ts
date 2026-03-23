@@ -6,7 +6,10 @@ import { Environment } from "./environment";
 import { CseError } from "./error";
 import { Heap } from "./heap";
 import { Stash, Value } from "./stash";
+import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
+
+
 
 export class Context {
   public control: Control;
@@ -18,9 +21,9 @@ export class Context {
       }
     | {
         initialised: true;
-        stdout: WritableStream<string>;
-        stderr: WritableStream<ConductorError>;
-        stdin: ReadableStream<string>;
+        stdout: WritableContext<string>;
+        stderr: WritableContext<ConductorError>;
+        stdin: ReadableContext<string>;
       };
   //public environment: Environment;
   public errors: CseError[] = [];

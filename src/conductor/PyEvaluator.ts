@@ -9,6 +9,7 @@ import {
   createErrorStream,
   createInputStream,
   createOutputStream,
+  destroyStreams,
   displayError,
 } from "../cse-machine/streams";
 import { IOptions, runInContext } from "../runner/pyRunner";
@@ -45,9 +46,12 @@ export default class PyEvaluator extends BasicEvaluator {
       );
     } catch (error) {
       if (error instanceof SyntaxError) {
-        return displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
+        await displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
+        return;
       }
-      displayError(this.context, error, ErrorType.INTERNAL);
+      await displayError(this.context, error, ErrorType.INTERNAL);
+    } finally {
+      await destroyStreams(this.context);
     }
   }
 }

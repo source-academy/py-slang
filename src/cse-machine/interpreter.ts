@@ -90,12 +90,12 @@ let source = "";
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
-export function evaluate(
+export async function evaluate(
   code: string,
   program: StmtNS.Stmt,
   context: Context,
   options: RecursivePartial<IOptions> = {},
-): Value {
+): Promise<Value> {
   source = code;
   try {
     // TODO: is undefined variables check necessary for Python?
@@ -105,7 +105,7 @@ export function evaluate(
       typeof error == "object" && error !== null && "message" in error
         ? String(error.message)
         : String(error);
-    displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
+    await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
     return { type: "error", message: msg };
   }
 
@@ -129,7 +129,7 @@ export function evaluate(
       typeof error == "object" && error !== null && "message" in error
         ? String(error.message)
         : String(error);
-    displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
+    await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
     return { type: "error", message: msg };
   } finally {
     context.runtime.isRunning = false;

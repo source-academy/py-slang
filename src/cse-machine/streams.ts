@@ -2,33 +2,49 @@ import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "./context";
 
-export function createOutputStream(conductor: IRunnerPlugin): WritableStream<string> {
-  return new WritableStream<string>({
+export type WritableContext<T> = {
+  stream: WritableStream<T>;
+  writer: WritableStreamDefaultWriter<T>;
+}
+export type ReadableContext<T> = {
+  stream: ReadableStream<T>;
+  reader: ReadableStreamDefaultReader<T>;
+}
+
+export function createOutputStream(conductor: IRunnerPlugin): WritableContext<string> {
+  const stream = new WritableStream<string>({
     write: chunk => {
       conductor.sendOutput(chunk);
     },
   });
+  const writer = stream.getWriter();
+  return { stream, writer };
 }
 
-export function createErrorStream(conductor: IRunnerPlugin): WritableStream<ConductorError> {
-  return new WritableStream<ConductorError>({
+export function createErrorStream(conductor: IRunnerPlugin): WritableContext<ConductorError> {
+  const stream = new WritableStream<ConductorError>({
     write: chunk => {
       conductor.sendError(chunk);
     },
   });
+  
+  const writer = stream.getWriter();
+  return { stream, writer };
 }
 
-export const createInputStream = (conductor: IRunnerPlugin): ReadableStream<string> => {
-  return new ReadableStream<string>({
+export const createInputStream = (conductor: IRunnerPlugin): ReadableContext<string> => {
+  const stream = new ReadableStream<string>({
     async pull(controller) {
       const input = await conductor.requestInput();
       controller.enqueue(input);
       controller.close();
     },
   });
+  const reader = stream.getReader();
+  return { stream, reader };
 };
 
-export const displayError = (context: Context, error: unknown, type: ErrorType) => {
+export const displayError = async (context: Context, error: unknown, type: ErrorType) => {
   const name =
     typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
       ? error.name
@@ -40,17 +56,31 @@ export const displayError = (context: Context, error: unknown, type: ErrorType) 
     typeof error.message === "string"
       ? error.message
       : String(error);
+  console.log(error);
   if (context.streams.initialised) {
-    const writer = context.streams.stderr.getWriter();
-    writer.write({ name, message, errorType: type });
+    await context.streams.stderr.writer.write({ name, message, errorType: type });
+  }
+};
+
+export const displayOutput = async (context: Context, output: string) => {
+  if (context.streams.initialised) {
+    const writer = context.streams.stdout.writer;
+    await writer.write(output);
     writer.releaseLock();
   }
 };
 
-export const displayOutput = (context: Context, output: string) => {
+export const destroyStreams = async (context: Context) => {
   if (context.streams.initialised) {
-    const writer = context.streams.stdout.getWriter();
-    writer.write(output);
-    writer.releaseLock();
+    context.streams.stdout.writer.releaseLock();
+    context.streams.stderr.writer.releaseLock();
+    context.streams.stdin.reader.releaseLock();
+
+    await Promise.all([
+      context.streams.stdout.stream.close(),
+      context.streams.stderr.stream.close(),
+      context.streams.stdin.stream.cancel()
+    ]);
   }
+  context.streams = { initialised: false };
 };
