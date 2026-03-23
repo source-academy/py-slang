@@ -9,8 +9,6 @@ import { Stash, Value } from "./stash";
 import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
-
-
 export class Context {
   public control: Control;
   public stash: Stash;

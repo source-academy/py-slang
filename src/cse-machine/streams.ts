@@ -5,11 +5,11 @@ import { Context } from "./context";
 export type WritableContext<T> = {
   stream: WritableStream<T>;
   writer: WritableStreamDefaultWriter<T>;
-}
+};
 export type ReadableContext<T> = {
   stream: ReadableStream<T>;
   reader: ReadableStreamDefaultReader<T>;
-}
+};
 
 export function createOutputStream(conductor: IRunnerPlugin): WritableContext<string> {
   const stream = new WritableStream<string>({
@@ -27,7 +27,7 @@ export function createErrorStream(conductor: IRunnerPlugin): WritableContext<Con
       conductor.sendError(chunk);
     },
   });
-  
+
   const writer = stream.getWriter();
   return { stream, writer };
 }
@@ -79,7 +79,7 @@ export const destroyStreams = async (context: Context) => {
     await Promise.all([
       context.streams.stdout.stream.close(),
       context.streams.stderr.stream.close(),
-      context.streams.stdin.stream.cancel()
+      context.streams.stdin.stream.cancel(),
     ]);
   }
   context.streams = { initialised: false };
