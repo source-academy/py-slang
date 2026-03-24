@@ -29,6 +29,8 @@ as follows:
                          & |   & \term{while}\ \textit{expression}\ \term{:}\ \textit{block}                             & \text{while loop}                       \\
                          & |   & \term{for}\ \textit{name}\ \term{in\ range(}
                                  \ \textit{range-args}\ \term{)}\ \term{:}\ \textit{block}                               & \text{for loop}                         \\
+                         & |   & \term{break}                                                                            & \text{break statement}                  \\
+                         & |   & \term{continue}                                                                         & \text{continue statement}               \\
                          & |   & \term{nonlocal}\ \textit{name}                                                          & \text{nonlocal statement}               \\
                          & |   & \textit{expression}                                                                     & \text{expression statement}             \\[1mm]
 \textit{range-args}      & ::= & \textit{expression}\ [\ \term{,}\ \textit{expression}\ ]
@@ -43,7 +45,6 @@ as follows:
 \textit{expression}      & ::= & \textit{number}                                                                         & \text{primitive number expression}      \\
                          & |   & \term{True}\ |\ \term{False}                                                            & \text{primitive boolean expression}     \\
                          & |   & \term{None}                                                                             & \text{primitive None expression}        \\
-                         & |   & \term{None}                                                                             & \text{primitive linked list expression} \\
                          & |   & \textit{string}                                                                         & \text{primitive string expression}      \\
                          & |   & \textit{name}                                                                           & \text{name expression}                  \\
                          & |   & \textit{expression}\ \textit{binary-operator}\ \textit{expression}                      & \text{binary operator combination}      \\
