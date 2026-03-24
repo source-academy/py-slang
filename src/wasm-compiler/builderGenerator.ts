@@ -27,6 +27,7 @@ import {
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
+  ENV_HEAD_SIZE,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
@@ -556,14 +557,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 ${global.get(CURR_ENV)}
 
 ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
-(i32.const 4) (i32.add)
+(i32.const ${ENV_HEAD_SIZE}) (i32.add)
 ${args.map(
   ({ arg, isStarred }, i) =>
     wasm.raw`
 (i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
 )}
 
-(i32.const 4) (i32.sub) (global.set ${CURR_ENV})
+(i32.const ${ENV_HEAD_SIZE}) (i32.sub) (global.set ${CURR_ENV})
 (i32.const ${args.length}) (call ${APPLY_FX_NAME})
 `;
   }

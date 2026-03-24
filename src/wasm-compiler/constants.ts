@@ -44,6 +44,7 @@ export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MA
 
 export const HEAP_PTR = "$_heap_pointer";
 export const CURR_ENV = "$_current_env";
+export const ENV_HEAD_SIZE = 8;
 
 // returns allocated block start address and moves heap pointer by amount bytes
 export const MALLOC_FX = wasm
@@ -869,7 +870,10 @@ export const BOOL_NOT_FX = wasm
     i64.extend_i32_u(i64.eqz(wasm.call(BOOLISE_FX).args(local.get("$tag"), local.get("$val")))),
   );
 
-// +4 because parentEnv is stored at start of env
+// env layout:
+// +0: parent env pointer (i32)
+// +4: environment size in bindings (i32)
+// +8: first binding (tag i32, value i64)
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
   .params({ $size: i32, $parent: i32 })
@@ -877,9 +881,13 @@ export const ALLOC_ENV_FX = wasm
   .results(i32)
   .body(
     i32.store(
-      local.tee("$env", wasm.call(MALLOC_FX).args(i32.add(i32.const(4), i32.mul(local.get("$size"), i32.const(12))))),
+      local.tee(
+        "$env",
+        wasm.call(MALLOC_FX).args(i32.add(i32.const(ENV_HEAD_SIZE), i32.mul(local.get("$size"), i32.const(12)))),
+      ),
       local.get("$parent"),
     ),
+    i32.store(i32.add(local.get("$env"), i32.const(4)), local.get("$size")),
 
     wasm
       .loop("$loop")
@@ -888,7 +896,7 @@ export const ALLOC_ENV_FX = wasm
           .if(i32.lt_u(local.get("$i"), local.get("$size")))
           .then(
             i32.store(
-              i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$i"), i32.const(12))),
+              i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$i"), i32.const(12))),
               i32.const(TYPE_TAG.UNBOUND),
             ),
             local.set("$i", i32.add(local.get("$i"), i32.const(1))),
@@ -955,7 +963,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
         wasm.if(i32.lt_s(local.get("$i"), local.get("$arg_len"))).then(
           local.set(
             "$arg_ptr",
-            i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4)),
+            i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(ENV_HEAD_SIZE)),
           ),
           wasm.if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31))).then(
             local.set("$has_starred", i32.const(1)),
@@ -975,7 +983,10 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
 
       wasm.if(local.get("$has_starred")).then(
         // set the new CURR_ENV
-        i32.store(local.tee("$new_env", wasm.call(MALLOC_FX).args(i32.const(4))), i32.wrap_i64(local.get("$val"))),
+        i32.store(
+          local.tee("$new_env", wasm.call(MALLOC_FX).args(i32.const(ENV_HEAD_SIZE))),
+          i32.wrap_i64(local.get("$val")),
+        ),
 
         // loop over the entire old environment, which = envSize
         local.set("$i", i32.const(0)),
@@ -990,7 +1001,10 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             .then(
               local.set(
                 "$arg_ptr",
-                i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(4)),
+                i32.add(
+                  i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))),
+                  i32.const(ENV_HEAD_SIZE),
+                ),
               ),
               // if starred, remove the starred bit and prepare to unpack
               wasm
@@ -1032,6 +1046,11 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             ),
         ),
 
+        i32.store(
+          i32.add(local.get("$new_env"), i32.const(4)),
+          i32.add(local.get("$arg_len"), i32.sub(local.get("$env_size"), local.get("$arity"))),
+        ),
+
         global.set(CURR_ENV, local.get("$new_env")),
       ),
 
@@ -1051,8 +1070,11 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
         local.set("$list_len", i32.sub(local.get("$arg_len"), local.get("$arity"))),
 
         memory.copy(
-          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$env_size"), i32.const(12))),
-          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
+          i32.add(
+            i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
+            i32.mul(local.get("$env_size"), i32.const(12)),
+          ),
+          i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
@@ -1060,18 +1082,24 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
         wasm.raw`${wasm
           .call(MAKE_LIST_FX)
           .args(
-            i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$env_size"), i32.const(12))),
+            i32.add(
+              i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
+              i32.mul(local.get("$env_size"), i32.const(12)),
+            ),
             local.get("$list_len"),
           )} (local.set $list_val) (local.set $list_tag)`,
 
         // store list value in the env where the varargs would be, which is right after the fixed arguments and before local declarations
         i32.store(
-          i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
+          i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
           local.get("$list_tag"),
         ),
         i64.store(
           i32.add(
-            i32.add(i32.add(global.get(CURR_ENV), i32.const(4)), i32.mul(local.get("$arity"), i32.const(12))),
+            i32.add(
+              i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
+              i32.mul(local.get("$arity"), i32.const(12)),
+            ),
             i32.const(4),
           ),
           local.get("$list_val"),
@@ -1089,7 +1117,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
               .then(
                 i32.store(
                   i32.add(
-                    i32.add(global.get(CURR_ENV), i32.const(4)),
+                    i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
                     i32.mul(i32.add(i32.add(local.get("$arity"), i32.const(1)), local.get("$i")), i32.const(12)),
                   ),
                   i32.const(TYPE_TAG.UNBOUND),
@@ -1124,7 +1152,9 @@ export const GET_LEX_ADDR_FX = wasm
       wasm.if(i32.eqz(local.get("$depth"))).then(
         local.set(
           "$tag",
-          i32.load(i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12)))),
+          i32.load(
+            i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$index"), i32.const(12))),
+          ),
         ),
 
         wasm
@@ -1133,7 +1163,12 @@ export const GET_LEX_ADDR_FX = wasm
 
         wasm.return(
           local.get("$tag"),
-          i64.load(i32.add(i32.add(local.get("$env"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12)))),
+          i64.load(
+            i32.add(
+              i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.const(4)),
+              i32.mul(local.get("$index"), i32.const(12)),
+            ),
+          ),
         ),
       ),
 
@@ -1157,11 +1192,14 @@ export const SET_LEX_ADDR_FX = wasm
         .if(i32.eqz(local.get("$depth")))
         .then(
           i32.store(
-            i32.add(i32.add(local.get("$env"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+            i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$index"), i32.const(12))),
             local.get("$tag"),
           ),
           i64.store(
-            i32.add(i32.add(local.get("$env"), i32.const(8)), i32.mul(local.get("$index"), i32.const(12))),
+            i32.add(
+              i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.const(4)),
+              i32.mul(local.get("$index"), i32.const(12)),
+            ),
             local.get("$value"),
           ),
           wasm.return(),
