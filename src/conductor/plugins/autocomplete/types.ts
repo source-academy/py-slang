@@ -62,7 +62,7 @@ export type SyntaxHighlightMessage =
     }
   | { type: "ack" };
 
-// Lifted from https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.languageserver.protocol.completionitemkind?view=visualstudiosdk-2022
+// Adapted from https://learn.microsoft.com/en-us/dotnet/api/microsoft.visualstudio.languageserver.protocol.completionitemkind?view=visualstudiosdk-2022
 export enum CompletionItemKind {
   Text = "text",
   Method = "method",
