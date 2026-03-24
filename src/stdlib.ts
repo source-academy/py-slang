@@ -3,7 +3,7 @@ import { Context } from "./cse-machine/context";
 import { ControlItem } from "./cse-machine/control";
 import { handleRuntimeError } from "./cse-machine/error";
 import { Value } from "./cse-machine/stash";
-import { displayOutput } from "./cse-machine/streams";
+import { displayOutput, receiveInput } from "./cse-machine/streams";
 import {
   MissingRequiredPositionalError,
   SublanguageError,
@@ -12,7 +12,7 @@ import {
   ValueError,
 } from "./errors/errors";
 
-export function Validate(
+export function Validate<T = Value | Promise<Value>>(
   minArgs: number | null,
   maxArgs: number | null,
   functionName: string,
@@ -22,7 +22,7 @@ export function Validate(
     _target: unknown,
     _propertyKey: string,
     descriptor: TypedPropertyDescriptor<
-      (args: Value[], source: string, command: ControlItem, context: Context) => Value
+      (args: Value[], source: string, command: ControlItem, context: Context) => T
     >,
   ): void {
     const originalMethod = descriptor.value!;
@@ -32,7 +32,7 @@ export function Validate(
       source: string,
       command: ControlItem,
       context: Context,
-    ): Value {
+    ): T {
       if (minArgs !== null && args.length < minArgs) {
         throw new MissingRequiredPositionalError(
           source,
@@ -1987,15 +1987,25 @@ export class BuiltInFunctions {
     return { type: "number", value: currentTime };
   }
 
-  static input(_args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
-    // TODO: : call conductor to receive user input
-    return { type: "string", value: "" };
+  static async input(
+    _args: Value[],
+    _source: string,
+    _command: ControlItem,
+    context: Context,
+  ): Promise<Value> {
+    const userInput = await receiveInput(context);
+    return { type: "string", value: userInput };
   }
 
-  static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
+  static async print(
+    args: Value[],
+    _source: string,
+    _command: ControlItem,
+    context: Context,
+  ): Promise<Value> {
     const output = args.map(arg => toPythonString(arg)).join(" ");
-    displayOutput(context, output);
-    return { type: "undefined" };
+    await displayOutput(context, output);
+    return { type: "none" };
   }
 
   static str(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {

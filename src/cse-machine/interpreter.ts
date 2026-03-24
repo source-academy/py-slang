@@ -55,7 +55,7 @@ type CmdEvaluator = (
   control: Control,
   stash: Stash,
   isPrelude: boolean,
-) => void;
+) => void | Promise<void>;
 
 /**
  * Function that returns the appropriate Promise<Result> given the output of CSE machine evaluating, depending
@@ -114,7 +114,7 @@ export async function evaluate(
     context.control = new Control(program);
     context.stash = new Stash();
     // Adaptation for new feature
-    const result = runCSEMachine(
+    const result = await runCSEMachine(
       code,
       context,
       context.control,
@@ -186,7 +186,7 @@ export async function evaluate(
  * @param isPrelude Whether the program is the prelude.
  * @returns The top value of the stash after execution.
  */
-export function runCSEMachine(
+export async function runCSEMachine(
   code: string,
   context: Context,
   control: Control,
@@ -194,7 +194,7 @@ export function runCSEMachine(
   envSteps: number,
   stepLimit: number,
   isPrelude: boolean = false,
-): Value {
+): Promise<Value> {
   const eceState = generateCSEMachineStateStream(
     code,
     context,
@@ -207,7 +207,7 @@ export function runCSEMachine(
 
   // Execute the generator until it completes
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const _value of eceState) {
+  for await (const _value of eceState) {
   }
 
   // Return the value at the top of the storage as the result
@@ -226,7 +226,7 @@ export function runCSEMachine(
  * @param isPrelude Whether the program is the prelude.
  * @yields The current state of the stash, control stack, and step count.
  */
-export function* generateCSEMachineStateStream(
+export async function* generateCSEMachineStateStream(
   code: string,
   context: Context,
   control: Control,
@@ -272,7 +272,7 @@ export function* generateCSEMachineStateStream(
       context.runtime.nodes.shift();
       context.runtime.nodes.unshift(command);
 
-      cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude);
 
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -285,7 +285,7 @@ export function* generateCSEMachineStateStream(
     } else {
       // Command is an instruction
       const instr = command as Instr;
-      cmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
     }
 
     command = control.peek();
@@ -767,7 +767,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash.pop();
   },
 
-  [InstrType.APPLICATION]: function (
+  [InstrType.APPLICATION]: async function (
     code: string,
     command: ControlItem,
     context: Context,
@@ -809,7 +809,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       }
     } else {
       if (callable && callable.type === "builtin") {
-        const result = callable.func(args, code, instr.srcNode, context);
+        const result = await callable.func(args, code, instr.srcNode, context);
         stash.push(result);
       }
     }

@@ -64,10 +64,17 @@ export const displayError = async (context: Context, error: unknown, type: Error
 
 export const displayOutput = async (context: Context, output: string) => {
   if (context.streams.initialised) {
-    const writer = context.streams.stdout.writer;
-    await writer.write(output);
-    writer.releaseLock();
+    await context.streams.stdout.writer.write(output);
   }
+};
+
+export const receiveInput = async (context: Context): Promise<string> => {
+  if (context.streams.initialised) {
+    const reader = context.streams.stdin.reader;
+    const { value } = await reader.read();
+    return value ?? "";
+  }
+  return "";
 };
 
 export const destroyStreams = async (context: Context) => {
