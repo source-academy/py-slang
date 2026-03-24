@@ -61,7 +61,6 @@ export const displayError = async (
     typeof error.message === "string"
       ? error.message
       : String(error);
-  console.log(error);
   if (context.streams.initialised) {
     await context.streams.stderr.writer.write({ name, message, errorType: type });
   }
