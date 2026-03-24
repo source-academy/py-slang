@@ -1,12 +1,12 @@
 \section*{Interpreter Support}
 
 \begin{itemize}
-\item \lstinline{apply_in_underlying_javascript(f, xs)}: \textit{primitive}, calls the function \lstinline{f}
+\item \lstinline{apply_in_underlying_python(f, xs)}: \textit{primitive}, calls the function \lstinline{f}
 with arguments \lstinline{xs}. For example:
 \begin{lstlisting}
 def times(x, y):
     return x * y
-apply_in_underlying_javascript(times, linked_list(2, 3))  # returns 6
+apply_in_underlying_python(times, linked_list(2, 3))  # returns 6
 \end{lstlisting}
 \item \lstinline{tokenize(x)}: \textit{primitive}, returns the literal list of tokens that results from tokenizing
   the string \lstinline{x} as a Source program. Each token is a string that contains the characters of
@@ -50,7 +50,7 @@ at the time when ``Run'' was last pressed.
                                    \textit{: block}
                                                            && \texttt{linked\_list("while\_loop",  } \langle \textit{expression}\rangle \textit{,  } \langle \textit{block}\rangle \texttt{)} \\
 &&                       && |   &\quad && \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in range}}\ \textit{( range-args ) : block}
-                                            && \texttt{linked\_list("for\_loop",  } \langle \textit{range\_args}\rangle \texttt{)} \\
+                                            && \texttt{linked\_list("for\_loop",  } \langle \textit{range\_args}\rangle \textit{,  } \langle \textit{block}\rangle \texttt{)} \\
 &&                       && |   &\quad && \textbf{\texttt{break}}
                                                            && \texttt{linked\_list("break\_statement")} \\
 &&                       && |   &\quad && \textbf{\texttt{continue}}
@@ -138,7 +138,7 @@ at the time when ``Run'' was last pressed.
 &&                       && |   &\quad &&   \textbf{\texttt{[}}\
                                             \textit{expressions}\
                                             \textbf{\texttt{]}}
-                                                           && \texttt{linked\_list("list\_expression", literal list of  } \langle \textit{expression}\rangle \texttt{)} \\
+                                                           && \texttt{linked\_list("list\_expression", linked\_list of  } \langle \textit{expression}\rangle \texttt{)} \\
 % &&                       && |   &\quad &&  \textbf{\texttt{new}}\ \textit{expression}
 %                                                           && \texttt{linked\_list("new\_expression",}\ \langle  \textit{expression} \rangle \texttt{)} \\
 %&&                       && |   &\quad &&  \textit{expression}\ \textbf{\texttt{.}}\ \textit{name}
