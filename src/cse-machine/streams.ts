@@ -38,7 +38,6 @@ export const createInputStream = (conductor: IRunnerPlugin): ReadableContext<str
     async pull(controller) {
       const input = await conductor.requestInput();
       controller.enqueue(input);
-      controller.close();
     },
   });
   const reader = stream.getReader();
@@ -88,7 +87,7 @@ export const destroyStreams = async (context: Context) => {
     context.streams.stderr.writer.releaseLock();
     context.streams.stdin.reader.releaseLock();
 
-    await Promise.all([
+    await Promise.allSettled([
       context.streams.stdout.stream.close(),
       context.streams.stderr.stream.close(),
       context.streams.stdin.stream.cancel(),
