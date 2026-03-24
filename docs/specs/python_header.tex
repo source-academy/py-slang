@@ -14,7 +14,10 @@
 \usepackage{listings}
 
 \lstdefinelanguage{Python}{
-  keywords={const, let, break, case, catch, continue, debugger, default, delete, do, else, finally, for, function, if, in, instanceof, new, return, switch, this, throw, try, typeof, var, void, while, with},
+  keywords={const, let, break, case, catch, continue, debugger,
+    default, delete, do, else, finally, for, function, if, in,
+    instanceof, new, return, switch, this, throw, try, typeof, var,
+  void, while, with},
   morecomment=[l]{//},
   morecomment=[s]{/*}{*/},
   morestring=[b]',
@@ -23,11 +26,11 @@
 }
 
 \lstset{
-   language=Python,
-   basicstyle=\ttfamily,
-   showstringspaces=false,
-   showspaces=false,
-   escapechar={^}
+  language=Python,
+  basicstyle=\ttfamily,
+  showstringspaces=false,
+  showspaces=false,
+  escapechar={^}
 }
 
 \pagestyle{myheadings}
@@ -90,18 +93,25 @@
 % ----------------
 % ``TIGHTLIST'' ENVIRONMENT (no para space between items, small indent)
 \newenvironment{tightlist}%
-{\begin{list}{$\bullet$}{%
-    \setlength{\topsep}{0in}
-    \setlength{\partopsep}{0in}
-    \setlength{\itemsep}{0in}
-    \setlength{\parsep}{0in}
-    \setlength{\leftmargin}{1.5em}
-    \setlength{\rightmargin}{0in}
-    \setlength{\itemindent}{0in}
+{
+  \begin{list}{$\bullet$}{%
+      \setlength{\topsep}{0in}
+      \setlength{\partopsep}{0in}
+      \setlength{\itemsep}{0in}
+      \setlength{\parsep}{0in}
+      \setlength{\leftmargin}{1.5em}
+      \setlength{\rightmargin}{0in}
+      \setlength{\itemindent}{0in}
+    }
+  }%
+  {
+  \end{list}
 }
-}%
-{\end{list}
-}
+
+% ----------------
+% FOR BNF
+\newcommand{\term}[1]{\textbf{\texttt{#1}}}
+\renewcommand{\arraystretch}{1.2}
 
 % ----------------
 % CODE FONT (e.g. {\cf x := 0}).
@@ -122,31 +132,30 @@
 \newcommand{\docheader}[4]{%
 
   \thispagestyle{empty}
-  
-\markright{SICP, Python Adaptation, #2 #3, #1}
-\begin{center}
-  {\Large {\bf Specification of #2 #3}---#1 edition}\\[10mm]
 
-  {\large #4}\\[5mm]
+  \markright{SICP, Python Adaptation, #2 #3, #1}
+  \begin{center}
+    {\Large {\bf Specification of #2 #3}---#1 edition}\\[10mm]
 
-  {\large National University of Singapore \\
-          School of Computing}\\[10mm]
+    {\large #4}\\[5mm]
 
-  {\large \today}\\[10mm]
-\end{center}
+    {\large National University of Singapore \\
+    School of Computing}\\[10mm]
+
+    {\large \today}\\[10mm]
+  \end{center}
 }
 
 % ----------------------------------------------------------------
 % HERE BEGINS THE DOCUMENT
 % start with \begin{document}
 
+\usepackage{url}
+\usepackage{hyperref}
 
-        \usepackage{url}
-        \usepackage{hyperref}
-
-        \hypersetup{
-    colorlinks=true,
-    linkcolor=Maroon,
-    filecolor=Maroon,      
-    urlcolor=Maroon
+\hypersetup{
+  colorlinks=true,
+  linkcolor=Maroon,
+  filecolor=Maroon,
+  urlcolor=Maroon
 }

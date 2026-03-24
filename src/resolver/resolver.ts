@@ -1,16 +1,17 @@
-import { ExprNS, StmtNS } from "../ast-types";
+import { StmtNS, ExprNS } from "../ast-types";
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 import { Token } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
 import { ResolverErrors } from "./errors";
-type Expr = ExprNS.Expr;
-type Stmt = StmtNS.Stmt;
+import { FeatureValidator } from "../validator/types";
 
 import levenshtein from "fast-levenshtein";
 // const levenshtein = require('fast-levenshtein');
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
-class Environment {
+export class Environment {
   source: string;
   // The parent of this environment
   enclosing: Environment | null;
@@ -39,6 +40,7 @@ class Environment {
   lookupName(identifier: Token): number {
     const name = identifier.lexeme;
     let distance = 0;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       if (curr.names.has(name)) {
@@ -82,22 +84,6 @@ class Environment {
     }
   }
   declareName(identifier: Token) {
-    const lookup = this.lookupNameCurrentEnv(identifier);
-    // if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) {
-    //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-    //         this.source,
-    //         identifier.indexInSource,
-    //         identifier.indexInSource + identifier.lexeme.length,
-    //         lookup);
-    // }
-    // if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
-    //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-    //         this.source,
-    //         identifier.indexInSource,
-    //         identifier.indexInSource + identifier.lexeme.length,
-    //         lookup);
-
-    // }
     this.names.set(identifier.lexeme, identifier);
     this.definedNames.add(identifier.lexeme);
   }
@@ -137,6 +123,7 @@ class Environment {
     const name = identifier.lexeme;
     let minDistance = Infinity;
     let minName = null;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       for (const declName of curr.names.keys()) {
@@ -161,9 +148,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // change the environment to be suite scope as in python
   environment: Environment | null;
   functionScope: Environment | null;
-  constructor(source: string, ast: Stmt) {
+  private validators: FeatureValidator[];
+
+  constructor(source: string, ast: Stmt, validators: FeatureValidator[] = []) {
     this.source = source;
     this.ast = ast;
+    this.validators = validators;
     // The global environment
     this.environment = new Environment(
       source,
@@ -180,6 +170,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
         ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
         ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
+        ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
         ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
         ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
         ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
@@ -246,6 +237,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     );
     this.functionScope = null;
   }
+
+  private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
+    for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+  }
+
   resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
     if (stmt === null) {
       return;
@@ -259,9 +255,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
       }
       for (const st of stmt) {
+        this.runValidators(st);
         st.accept(this);
       }
     } else {
+      this.runValidators(stmt);
       stmt.accept(this);
     }
   }
@@ -313,18 +311,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
 
-  visitIndentCreation(stmt: StmtNS.Indent): void {
-    // Create a new environment
-    this.environment = new Environment(this.source, this.environment, new Map());
-  }
-
-  visitDedentCreation(stmt: StmtNS.Dedent): void {
-    // Switch to the previous environment.
-    if (this.environment?.enclosing !== undefined) {
-      this.environment = this.environment.enclosing;
-    }
-  }
-
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
     this.environment?.declareName(stmt.name);
     this.environment?.functions.add(stmt.name.lexeme);
@@ -359,7 +345,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitAssignStmt(stmt: StmtNS.Assign): void {
     const target = stmt.target;
     if (target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not supported in assignment");
+      this.resolve(target); // dispatches to visitSubscriptExpr
+      this.resolve(stmt.value);
+      return;
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
@@ -382,7 +370,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   // @TODO we need to treat all global statements as variable declarations in the global
   // scope.
-  visitGlobalStmt(stmt: StmtNS.Global): void {
+  visitGlobalStmt(_stmt: StmtNS.Global): void {
     // Do nothing because global can also be declared in our
     // own scope.
   }
@@ -407,15 +395,16 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitFromImportStmt(stmt: StmtNS.FromImport): void {
-    for (const name of stmt.names) {
-      this.environment?.declareName(name);
-      this.environment?.moduleBindings.add(name.lexeme);
+    for (const entry of stmt.names) {
+      const binding = entry.alias ?? entry.name;
+      this.environment?.declareName(binding);
+      this.environment?.moduleBindings.add(binding.lexeme);
     }
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): void {}
-  visitBreakStmt(stmt: StmtNS.Break): void {}
-  visitPassStmt(stmt: StmtNS.Pass): void {}
+  visitContinueStmt(_stmt: StmtNS.Continue): void {}
+  visitBreakStmt(_stmt: StmtNS.Break): void {}
+  visitPassStmt(_stmt: StmtNS.Pass): void {}
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
@@ -471,19 +460,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.consequent);
     this.resolve(expr.alternative);
   }
-  visitNoneExpr(expr: ExprNS.None): void {}
-  visitLiteralExpr(expr: ExprNS.Literal): void {}
-  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {}
-  visitComplexExpr(expr: ExprNS.Complex): void {}
-
+  visitNoneExpr(_expr: ExprNS.None): void {}
+  visitLiteralExpr(_expr: ExprNS.Literal): void {}
+  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
+  visitComplexExpr(_expr: ExprNS.Complex): void {}
   visitListExpr(expr: ExprNS.List): void {
     this.resolve(expr.elements);
   }
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
     this.resolve(expr.value);
     this.resolve(expr.index);
-  }
-  visitStarredExpr(expr: ExprNS.Starred): void {
-    throw new Error("Starred expressions are not yet supported");
   }
 }
