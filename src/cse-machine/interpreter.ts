@@ -101,12 +101,7 @@ export async function evaluate(
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error) {
-    const msg =
-      typeof error == "object" && error !== null && "message" in error
-        ? String(error.message)
-        : String(error);
-    await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
-    return { type: "error", message: msg };
+    return displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   }
 
   try {
@@ -125,12 +120,7 @@ export async function evaluate(
     );
     return result;
   } catch (error) {
-    const msg =
-      typeof error == "object" && error !== null && "message" in error
-        ? String(error.message)
-        : String(error);
-    await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
-    return { type: "error", message: msg };
+    return await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   } finally {
     context.runtime.isRunning = false;
   }

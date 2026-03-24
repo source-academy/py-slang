@@ -1,6 +1,7 @@
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "./context";
+import { ErrorValue } from "./stash";
 
 export type WritableContext<T> = {
   stream: WritableStream<T>;
@@ -44,7 +45,11 @@ export const createInputStream = (conductor: IRunnerPlugin): ReadableContext<str
   return { stream, reader };
 };
 
-export const displayError = async (context: Context, error: unknown, type: ErrorType) => {
+export const displayError = async (
+  context: Context,
+  error: unknown,
+  type: ErrorType,
+): Promise<ErrorValue> => {
   const name =
     typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
       ? error.name
@@ -60,6 +65,7 @@ export const displayError = async (context: Context, error: unknown, type: Error
   if (context.streams.initialised) {
     await context.streams.stderr.writer.write({ name, message, errorType: type });
   }
+  return { type: "error", message: message };
 };
 
 export const displayOutput = async (context: Context, output: string) => {
