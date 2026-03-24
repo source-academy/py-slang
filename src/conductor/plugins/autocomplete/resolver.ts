@@ -1,8 +1,12 @@
 import { SyntaxNode, Tree, TreeCursor } from "@lezer/common";
 import { AutoCompleteEntry, CompletionItemKind } from "./types";
 
+import linkedListJSON from "./builtins/linked_list.json";
+import listJSON from "./builtins/list.json";
 import mathJSON from "./builtins/math.json";
 import miscJSON from "./builtins/misc.json";
+import pairmutatorJSON from "./builtins/pairmutator.json";
+import streamJSON from "./builtins/stream.json";
 import { getKeywords } from "./keywords";
 
 type Environment = {
@@ -36,7 +40,7 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
   };
 
   let currentEnv = topEnv;
-  while (iter) {
+  do {
     if (iter.node.type.name === "ParamList") {
       return null;
     }
@@ -50,15 +54,9 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
           }
         }
       }
-      if (!iter.enter(pos, -1)) {
-        break;
-      }
       continue;
     }
-    if (iter.node.type.name !== "Block" && iter.node.type.name !== "Script") {
-      if (!iter.enter(pos, -1)) {
-        break;
-      }
+    if (iter.node.type.name !== "Body" && iter.node.type.name !== "Script") {
       continue;
     }
     // Iterate children
@@ -90,11 +88,7 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
     };
     currentEnv.child = nextEnv;
     currentEnv = nextEnv;
-
-    if (!iter.enter(pos, -1)) {
-      break;
-    }
-  }
+  } while (iter.enter(pos, -1));
   return topEnv;
 };
 
@@ -192,13 +186,22 @@ export const getNames = (
     .forEach(s => entries.push(s));
 
   // TODO: Add docstrings for user-defined functions to autocomplete suggestions?
-  // TODO: Add documentation for other built-ins, not just math and misc modules
-  const symbols = [...miscJSON, ...mathJSON].map(v => ({
-    name: v.name,
-    meta: isCompletionItemKind(v.meta) ? v.meta : CompletionItemKind.Variable,
-    docHTML: "<h4>" + v.title + "</h4><p>" + v.description + "</p>",
-  }));
+  const symbols = [...miscJSON, ...mathJSON];
+  if (variant >= 2) {
+    symbols.push(...linkedListJSON);
+  }
+  if (variant >= 3) {
+    symbols.push(...listJSON);
+    symbols.push(...pairmutatorJSON);
+    symbols.push(...streamJSON);
+  }
+  console.log(symbols);
   symbols
+    .map(v => ({
+      name: v.name,
+      meta: isCompletionItemKind(v.meta) ? v.meta : CompletionItemKind.Variable,
+      docHTML: "<h4>" + v.title + "</h4><p>" + v.description + "</p>",
+    }))
     .filter(s => isSubsequence(query, s.name))
     .sort((a, b) => a.name.localeCompare(b.name))
     .forEach(s => entries.push(s));

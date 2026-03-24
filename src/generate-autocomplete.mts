@@ -79,6 +79,7 @@ type Entry =
           JSON.stringify(
             data.default
               .filter(entry => entry.kind === "function" || entry.kind === "constant")
+              .filter(entry => entry.scope === "global") // Only include global variables and functions in autocomplete suggestions
               .map(entry =>
                 entry.kind === "function"
                   ? {
