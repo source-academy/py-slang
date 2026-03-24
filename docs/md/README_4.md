@@ -1,4 +1,4 @@
-Python §4 is a small programming language, designed for the third chapter
+Python §4 is a small programming language, designed for the fourth chapter
 of the textbook
 <a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
 of Computer Programs, JavaScript Adaptation</a> (SICP JS).
@@ -36,7 +36,7 @@ these groups:
 
 You can use all features of
 <a href="../python_3/">Python §3</a> and 
-the two functions that are introduced in chapter 4
+the three functions that are introduced in chapter 4
 <a href="https://sourceacademy.org/sicpjs">of the textbook</a>,
 given in  <a href="../MCE/index.html">MCE</a>.
 
