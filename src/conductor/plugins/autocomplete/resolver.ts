@@ -44,6 +44,12 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
     if (iter.node.type.name === "ParamList") {
       return null;
     }
+    if (iter.node.type.name === "ForStatement") {
+      const target = iter.node.getChild("VariableName");
+      if (target) {
+        currentEnv.variables.push(getNodeText(target, doc));
+      }
+    }
     if (iter.node.type.name == "FunctionDefinition" || iter.node.type.name == "LambdaExpression") {
       // Add function parameters to inner environment
       const params = iter.node.getChild("ParamList");
@@ -89,6 +95,12 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
     currentEnv.child = nextEnv;
     currentEnv = nextEnv;
   } while (iter.enter(pos, -1));
+  if (
+    iter.node.parent &&
+    ["FunctionDefinition", "ForStatement"].includes(iter.node.parent.type.name)
+  ) {
+    return null;
+  }
   return topEnv;
 };
 
@@ -195,7 +207,6 @@ export const getNames = (
     symbols.push(...pairmutatorJSON);
     symbols.push(...streamJSON);
   }
-  console.log(symbols);
   symbols
     .map(v => ({
       name: v.name,
