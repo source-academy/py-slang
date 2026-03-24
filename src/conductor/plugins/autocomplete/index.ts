@@ -6,10 +6,9 @@ import pythonMode from "./mode";
 import { getNames } from "./resolver";
 import type { AutoCompleteMessage, SyntaxHighlightMessage } from "./types";
 
-
 /**
- * This plugin provides autocomplete suggestions and syntax highlighting for Python code. 
- * 
+ * This plugin provides autocomplete suggestions and syntax highlighting for Python code.
+ *
  * It provides two channels: one for autocomplete requests and responses, and another for sending syntax highlighting information to the web plugin.
  *  a) The autocomplete channel listens for requests containing the current code and cursor position. It uses the resolver to find relevant symbols based on the cursor position and sends back a response with the autocomplete suggestions.
  *  b) The syntax highlighting channel periodically sends the Python mode information to the web plugin until it receives an acknowledgment, ensuring that the web plugin has the necessary information to perform syntax highlighting.
@@ -32,7 +31,7 @@ export default class AutoCompletePlugin implements IPlugin {
     const handler = setInterval(() => {
       this.__syntaxHighlightChannel.send({
         type: "message",
-        data: pythonMode,
+        data: pythonMode(variant),
       });
     }, 1000);
     this.__syntaxHighlightChannel.subscribe((message: SyntaxHighlightMessage) => {

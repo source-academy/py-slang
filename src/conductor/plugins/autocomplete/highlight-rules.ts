@@ -1,9 +1,9 @@
 /**
  * Adapted from https://github.com/ajaxorg/ace/blob/master/src/mode/python_highlight_rules.js
- * 
+ *
  * Copyright (c) 2010, Ajax.org B.V.
  * All rights reserved.
- * 
+ *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
  *    * Redistributions of source code must retain the above copyright
@@ -25,24 +25,15 @@
  * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  */
 
 import constants from "../../../stdlib/py_s1_constants.json";
+import { getIllegalKeywords, getKeywords } from "./keywords";
 import { AceRules } from "./types";
 export default (variant: number) => {
-  let keywords =
-    "and|def|elif|else|from|global|if|import|lambda|not|or|pass|return|nonlocal";
-
-  let illegalKeywords =
-    "as|assert|class|del|except|finally|is|match|case|raise|try|with|yield|async|await";
-
-  if (variant < 3) {
-    illegalKeywords += "|while|for|break|continue|is";
-  } else {
-    keywords += "|while|for|break|continue";
-  }
-
+  const keywords = getKeywords(variant).join("|");
+  const illegalKeywords = getIllegalKeywords(variant).join("|");
 
   const builtinConstants = constants.constants.join("|");
 

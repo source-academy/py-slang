@@ -3,6 +3,7 @@ import { AutoCompleteEntry, CompletionItemKind } from "./types";
 
 import mathJSON from "./builtins/math.json";
 import miscJSON from "./builtins/misc.json";
+import { getKeywords } from "./keywords";
 
 type Environment = {
   variables: string[];
@@ -153,7 +154,7 @@ export const getNames = (
   doc: string,
   line: number,
   column: number,
-  _variant: number,
+  variant: number,
 ): AutoCompleteEntry[] => {
   const pos = convertPosToIndex(doc, line - 1, column); // Convert position to 0-based index
   const node = tree.resolve(pos, -1); // Get the syntax node ending at the cursor position
@@ -182,9 +183,16 @@ export const getNames = (
     score++;
   }
 
-  // TODO: Add keywords to autocomplete suggestions
+  getKeywords(variant)
+    .map(k => ({
+      name: k,
+      meta: CompletionItemKind.Keyword,
+      score: score, // Keywords are given the highest score
+    }))
+    .forEach(s => entries.push(s));
+
   // TODO: Add docstrings for user-defined functions to autocomplete suggestions?
-  // TODO: Add documentation for otherbuilt-ins, not just math and misc modules
+  // TODO: Add documentation for other built-ins, not just math and misc modules
   const symbols = [...miscJSON, ...mathJSON].map(v => ({
     name: v.name,
     meta: isCompletionItemKind(v.meta) ? v.meta : CompletionItemKind.Variable,

@@ -1,6 +1,6 @@
 import PythonHighlightRules from "./highlight-rules";
-export default {
-  highlightRules: PythonHighlightRules(1),
+export default (variant: number) => ({
+  highlightRules: PythonHighlightRules(variant),
   foldingRules: {
     hookFrom: "ace/mode/folding/pythonic",
     args: ["\\:"],
@@ -19,6 +19,6 @@ export default {
   autoOutdent: {
     hookFrom: "ace/mode/python",
   },
-  id: "ace/mode/pythonBetaDefault",
-  snippetFileId: "ace/snippets/pythonBetaDefault",
-};
+  id: "ace/mode/python" + variant,
+  snippetFileId: "ace/snippets/python" + variant,
+});
