@@ -158,4 +158,4 @@ def _accumulate_linked_list(f, initial, xs, cont):
 def accumulate_linked_list(f, initial, xs):
     return _accumulate_linked_list(f, initial, xs, lambda x: x)
 
-`
+`;

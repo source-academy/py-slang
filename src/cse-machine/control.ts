@@ -1,7 +1,7 @@
-import { Stack } from './stack';
-import { Instr, Node } from './types';
-import { isEnvDependent } from './utils';
-import { StmtNS } from '../ast-types';
+import { Stack } from "./stack";
+import { Instr, Node } from "./types";
+import { isEnvDependent } from "./utils";
+import { StmtNS } from "../ast-types";
 
 export type ControlItem = (Node | Instr) & {
   isEnvDependent?: boolean;
@@ -9,44 +9,44 @@ export type ControlItem = (Node | Instr) & {
 };
 
 export class Control extends Stack<ControlItem> {
-  private numEnvDependentItems: number
+  private numEnvDependentItems: number;
   public constructor(program?: StmtNS.Stmt) {
-    super()
-    this.numEnvDependentItems = 0
+    super();
+    this.numEnvDependentItems = 0;
     // Load program into control stack
-    program ? this.push(program) : null
+    program ? this.push(program) : null;
   }
 
   public canAvoidEnvInstr(): boolean {
-    return this.numEnvDependentItems === 0
+    return this.numEnvDependentItems === 0;
   }
 
   // For testing purposes
   public getNumEnvDependentItems(): number {
-    return this.numEnvDependentItems
+    return this.numEnvDependentItems;
   }
 
   public pop(): ControlItem | undefined {
-    const item = super.pop()
+    const item = super.pop();
     if (item !== undefined && isEnvDependent(item)) {
-      this.numEnvDependentItems--
+      this.numEnvDependentItems--;
     }
-    return item
+    return item;
   }
 
   public push(...items: ControlItem[]): void {
     items.forEach((item: ControlItem) => {
       if (isEnvDependent(item)) {
-        this.numEnvDependentItems++
+        this.numEnvDependentItems++;
       }
-    })
-    super.push(...items)
+    });
+    super.push(...items);
   }
 
   public copy(): Control {
-    const newControl = new Control()
-    const stackCopy = super.getStack()
-    newControl.push(...stackCopy)
-    return newControl
+    const newControl = new Control();
+    const stackCopy = super.getStack();
+    newControl.push(...stackCopy);
+    return newControl;
   }
 }

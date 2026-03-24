@@ -1,42 +1,41 @@
+import { StmtNS } from "../ast-types";
+import { ModuleContext, NativeStorage } from "../types";
+import { Control } from "./control";
+import { Environment } from "./environment";
+import { CseError } from "./error";
+import { Heap } from "./heap";
+import { BuiltinValue, Stash, Value } from "./stash";
+import { Node } from "./types";
 
-import { StmtNS } from '../ast-types';
-import { ModuleContext, NativeStorage } from '../types';
-import { Control } from './control';
-import { Environment } from './environment';
-import { CseError } from './error';
-import { Heap } from './heap';
-import { BuiltinValue, Stash, Value } from './stash';
-import { Node } from './types';
-
-export class Context <T = any>{
+export class Context<T = any> {
   public control: Control;
   public stash: Stash;
-  public output: string = '';
+  public output: string = "";
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
   public externalContext?: T;
-  public prelude: string | null = null;  
-  
+  public prelude: string | null = null;
+
   runtime: {
-    break: boolean
-    debuggerOn: boolean
-    isRunning: boolean
-    environmentTree: EnvTree
-    environments: Environment[]
-    nodes: Node[]
-    control: Control | null
-    stash: Stash | null
-    objectCount: number
-    envStepsTotal: number
-    breakpointSteps: number[]
-    changepointSteps: number[]
-  }
-  
+    break: boolean;
+    debuggerOn: boolean;
+    isRunning: boolean;
+    environmentTree: EnvTree;
+    environments: Environment[];
+    nodes: Node[];
+    control: Control | null;
+    stash: Stash | null;
+    objectCount: number;
+    envStepsTotal: number;
+    breakpointSteps: number[];
+    changepointSteps: number[];
+  };
+
   /**
    * Used for storing the native context and other values
    */
-  nativeStorage: NativeStorage
+  nativeStorage: NativeStorage;
 
   constructor(program?: StmtNS.Stmt, context?: Context) {
     this.control = new Control(program);
@@ -45,9 +44,9 @@ export class Context <T = any>{
     this.moduleContexts = {};
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
-      const globalEnvironment = this.createGlobalEnvironment()
-      this.runtime.environments.push(globalEnvironment)
-      this.runtime.environmentTree.insert(globalEnvironment)
+      const globalEnvironment = this.createGlobalEnvironment();
+      this.runtime.environments.push(globalEnvironment);
+      this.runtime.environmentTree.insert(globalEnvironment);
     }
     this.nativeStorage = {
       builtins: new Map<string, BuiltinValue>(),
@@ -56,17 +55,17 @@ export class Context <T = any>{
       maxExecTime: 1000,
       //evaller: null,
       loadedModules: {},
-      loadedModuleTypes: {}
-    }
+      loadedModuleTypes: {},
+    };
   }
 
   createGlobalEnvironment = (): Environment => ({
     tail: null,
-    name: 'global',
+    name: "global",
     head: {},
     heap: new Heap(),
-    id: '-1'
-  })
+    id: "-1",
+  });
 
   createEmptyRuntime = () => ({
     break: false,
@@ -82,14 +81,14 @@ export class Context <T = any>{
     envSteps: -1,
     envStepsTotal: 0,
     breakpointSteps: [],
-    changepointSteps: []
-  })
+    changepointSteps: [],
+  });
 
   public reset(program?: StmtNS.Stmt): void {
     this.control = new Control(program);
     this.stash = new Stash();
     //this.environment = createProgramEnvironment(this, false);
-    this.errors = []; 
+    this.errors = [];
   }
 
   public copy(): Context {
@@ -103,73 +102,76 @@ export class Context <T = any>{
   private copyEnvironment(env: Environment): Environment {
     const newTail = env.tail ? this.copyEnvironment(env.tail) : null;
     const newEnv: Environment = {
-      id: env.id, 
+      id: env.id,
       name: env.name,
       tail: newTail,
       head: { ...env.head },
       heap: new Heap(),
-      callExpression: env.callExpression, 
-      thisContext: env.thisContext
+      callExpression: env.callExpression,
+      thisContext: env.thisContext,
     };
     return newEnv;
   }
 }
 
 export class EnvTree {
-  private _root: EnvTreeNode | null = null
-  private map = new Map<Environment, EnvTreeNode>()
+  private _root: EnvTreeNode | null = null;
+  private map = new Map<Environment, EnvTreeNode>();
 
   get root(): EnvTreeNode | null {
-    return this._root
+    return this._root;
   }
 
   public insert(environment: Environment): void {
-    const tailEnvironment = environment.tail
+    const tailEnvironment = environment.tail;
     if (tailEnvironment === null) {
       if (this._root === null) {
-        this._root = new EnvTreeNode(environment, null)
-        this.map.set(environment, this._root)
+        this._root = new EnvTreeNode(environment, null);
+        this.map.set(environment, this._root);
       }
     } else {
-      const parentNode = this.map.get(tailEnvironment)
+      const parentNode = this.map.get(tailEnvironment);
       if (parentNode) {
-        const childNode = new EnvTreeNode(environment, parentNode)
-        parentNode.addChild(childNode)
-        this.map.set(environment, childNode)
+        const childNode = new EnvTreeNode(environment, parentNode);
+        parentNode.addChild(childNode);
+        this.map.set(environment, childNode);
       }
     }
   }
 
   public getTreeNode(environment: Environment): EnvTreeNode | undefined {
-    return this.map.get(environment)
+    return this.map.get(environment);
   }
 }
 
 export class EnvTreeNode {
-  private _children: EnvTreeNode[] = []
+  private _children: EnvTreeNode[] = [];
 
-  constructor(readonly environment: Environment, public parent: EnvTreeNode | null) {}
+  constructor(
+    readonly environment: Environment,
+    public parent: EnvTreeNode | null,
+  ) {}
 
   get children(): EnvTreeNode[] {
-    return this._children
+    return this._children;
   }
 
   public resetChildren(newChildren: EnvTreeNode[]): void {
-    this.clearChildren()
-    this.addChildren(newChildren)
-    newChildren.forEach(c => (c.parent = this))
+    this.clearChildren();
+    this.addChildren(newChildren);
+    newChildren.forEach(c => (c.parent = this));
   }
 
   private clearChildren(): void {
-    this._children = []
+    this._children = [];
   }
 
   private addChildren(newChildren: EnvTreeNode[]): void {
-    this._children.push(...newChildren)
+    this._children.push(...newChildren);
   }
 
   public addChild(newChild: EnvTreeNode): EnvTreeNode {
-    this._children.push(newChild)
-    return newChild
+    this._children.push(newChild);
+    return newChild;
   }
 }

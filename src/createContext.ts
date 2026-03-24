@@ -116,13 +116,6 @@ export const ensureGlobalEnvironmentExist = (context: Context) => {
 }
 */
 
-
-
-
-
-
-
-
 /*
 
 export const defineSymbol = (context: Context, name: string, value: BuiltinValue) => {

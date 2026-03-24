@@ -6,10 +6,9 @@ import { initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import PyCSEEvaluator from "./PyCSEEvaluator";
 import linkedList from "../stdlib/linked-list";
 
-
 export default class PyCSEEvaluator2 extends PyCSEEvaluator {
-  constructor (conductor: IRunnerPlugin) {
+  constructor(conductor: IRunnerPlugin) {
     super(conductor, {}, 2, [linkedList]);
   }
 }
-initialise(PyCSEEvaluator2)
+initialise(PyCSEEvaluator2);

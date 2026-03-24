@@ -5,10 +5,9 @@
 import { initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import PyCSEEvaluator from "./PyCSEEvaluator";
 
-
 export default class PyCSEEvaluator1 extends PyCSEEvaluator {
-  constructor (conductor: IRunnerPlugin) {
+  constructor(conductor: IRunnerPlugin) {
     super(conductor, {}, 1, []);
   }
 }
-initialise(PyCSEEvaluator1)
+initialise(PyCSEEvaluator1);

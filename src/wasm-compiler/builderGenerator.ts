@@ -34,21 +34,8 @@ import {
   SET_PARAM_FX,
   TYPE_TAG,
 } from "./constants";
-import {
-  f64,
-  global,
-  i32,
-  i64,
-  local,
-  mut,
-  wasm,
-} from "@sourceacademy/wasm-util";
-import {
-  WasmCall,
-  WasmInstruction,
-  WasmNumeric,
-  WasmRaw,
-} from "@sourceacademy/wasm-util";
+import { f64, global, i32, i64, local, mut, wasm } from "@sourceacademy/wasm-util";
+import { WasmCall, WasmInstruction, WasmNumeric, WasmRaw } from "@sourceacademy/wasm-util";
 
 const builtInFunctions: {
   name: string;
@@ -59,9 +46,7 @@ const builtInFunctions: {
   {
     name: "print",
     arity: 1,
-    body: wasm
-      .call(LOG_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
+    body: wasm.call(LOG_FX).args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     isVoid: true,
   },
   {
@@ -118,9 +103,7 @@ const builtInFunctions: {
     arity: 1,
     body: [
       i32.const(TYPE_TAG.BOOL),
-      wasm
-        .call(BOOLISE_FX)
-        .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
+      wasm.call(BOOLISE_FX).args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
     ],
     isVoid: false,
   },
@@ -134,10 +117,7 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): S | E;
 }
 
-export class BuilderGenerator implements BuilderVisitor<
-  WasmInstruction,
-  WasmNumeric
-> {
+export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNumeric> {
   private strings: [string, number][] = [];
   private heapPointer = 0;
 
@@ -147,14 +127,12 @@ export class BuilderGenerator implements BuilderVisitor<
   private getLexAddress(name: string): [number, number] {
     for (let i = this.environment.length - 1; i >= 0; i--) {
       const curr = this.environment[i];
-      const index = curr.findIndex((b) => b.name === name);
+      const index = curr.findIndex(b => b.name === name);
 
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(
-          `Name ${curr[index].name} is used prior to nonlocal declaration`,
-        );
+        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration`);
       }
 
       return [this.environment.length - 1 - i, index];
@@ -166,15 +144,10 @@ export class BuilderGenerator implements BuilderVisitor<
     statements: StmtNS.Stmt[],
     parameters?: StmtNS.FunctionDef["parameters"],
   ): Binding[] {
-    const findInNestedBody = (
-      stmts: StmtNS.Stmt[],
-    ): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
+    const findInNestedBody = (stmts: StmtNS.Stmt[]): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
       const found: (StmtNS.FunctionDef | StmtNS.Assign)[] = [];
       for (const stmt of stmts) {
-        if (
-          stmt instanceof StmtNS.FunctionDef ||
-          stmt instanceof StmtNS.Assign
-        ) {
+        if (stmt instanceof StmtNS.FunctionDef || stmt instanceof StmtNS.Assign) {
           found.push(stmt);
         } else if (stmt instanceof StmtNS.If) {
           found.push(...findInNestedBody(stmt.body));
@@ -188,7 +161,7 @@ export class BuilderGenerator implements BuilderVisitor<
       return found;
     };
 
-    const bindings: Binding[] = findInNestedBody(statements).map((s) => {
+    const bindings: Binding[] = findInNestedBody(statements).map(s => {
       if (s instanceof StmtNS.FunctionDef) {
         return { name: s.name.lexeme, tag: "local" };
       }
@@ -201,20 +174,19 @@ export class BuilderGenerator implements BuilderVisitor<
     });
 
     statements
-      .filter((s) => s instanceof StmtNS.NonLocal)
-      .map((s) => s.name.lexeme)
-      .forEach((name) => {
+      .filter(s => s instanceof StmtNS.NonLocal)
+      .map(s => s.name.lexeme)
+      .forEach(name => {
         // nonlocal declaration must exist in a nonlocal scope
         if (
           !this.environment.find(
-            (frame, i) =>
-              i !== 0 && frame.find((binding) => binding.name === name),
+            (frame, i) => i !== 0 && frame.find(binding => binding.name === name),
           )
         )
           throw new Error(`No binding for nonlocal ${name} found!`);
 
         // cannot declare parameter name as nonlocal
-        if (parameters && parameters.map((p) => p.lexeme).includes(name)) {
+        if (parameters && parameters.map(p => p.lexeme).includes(name)) {
           throw new Error(`${name} is parameter and nonlocal`);
         }
 
@@ -230,8 +202,7 @@ export class BuilderGenerator implements BuilderVisitor<
       });
 
     return [
-      ...(parameters?.map((p) => ({ name: p.lexeme, tag: "local" as const })) ??
-        []),
+      ...(parameters?.map(p => ({ name: p.lexeme, tag: "local" as const })) ?? []),
       ...bindings,
     ];
   }
@@ -249,51 +220,40 @@ export class BuilderGenerator implements BuilderVisitor<
     }
 
     // declare built-in functions in the global environment before user code
-    const builtInFuncsDeclarations = builtInFunctions.map(
-      ({ name, arity, body, isVoid }, i) => {
-        this.environment[0].push({ name, tag: "local" });
-        const tag = this.userFunctions.length;
-        const newBody = [
-          ...(Array.isArray(body) ? body : [body]),
-          wasm.return(
-            ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-            global.set(CURR_ENV, local.get("$return_env")),
-          ),
-        ];
-        this.userFunctions.push(newBody);
+    const builtInFuncsDeclarations = builtInFunctions.map(({ name, arity, body, isVoid }, i) => {
+      this.environment[0].push({ name, tag: "local" });
+      const tag = this.userFunctions.length;
+      const newBody = [
+        ...(Array.isArray(body) ? body : [body]),
+        wasm.return(
+          ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
+          global.set(CURR_ENV, local.get("$return_env")),
+        ),
+      ];
+      this.userFunctions.push(newBody);
 
-        return wasm
-          .call(SET_LEX_ADDR_FX)
-          .args(
-            i32.const(0),
-            i32.const(i),
-            wasm
-              .call(MAKE_CLOSURE_FX)
-              .args(
-                i32.const(tag),
-                i32.const(arity),
-                i32.const(arity),
-                global.get(CURR_ENV),
-              ),
-          );
-      },
-    );
+      return wasm
+        .call(SET_LEX_ADDR_FX)
+        .args(
+          i32.const(0),
+          i32.const(i),
+          wasm
+            .call(MAKE_CLOSURE_FX)
+            .args(i32.const(tag), i32.const(arity), i32.const(arity), global.get(CURR_ENV)),
+        );
+    });
 
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
-    const body = stmt.statements.map((s) => this.visit(s));
+    const body = stmt.statements.map(s => this.visit(s));
 
     // this matches the format of drop in visitSimpleExpr
     const lastInstr = body.at(-1);
     const undroppedInstr =
-      lastInstr?.op === "drop" &&
-      lastInstr.value?.op === "drop" &&
-      lastInstr.value.value;
+      lastInstr?.op === "drop" && lastInstr.value?.op === "drop" && lastInstr.value.value;
 
     // collect all strings, native functions used and user functions
-    const strings = this.strings.map(([str, add]) =>
-      wasm.data(i32.const(add), str),
-    );
+    const strings = this.strings.map(([str, add]) => wasm.data(i32.const(add), str));
 
     const applyFunction = applyFuncFactory(this.userFunctions);
 
@@ -318,9 +278,7 @@ export class BuilderGenerator implements BuilderVisitor<
           .body(
             global.set(
               CURR_ENV,
-              wasm
-                .call(ALLOC_ENV_FX)
-                .args(i32.const(globalEnvLength), i32.const(0), i32.const(0)),
+              wasm.call(ALLOC_ENV_FX).args(i32.const(globalEnvLength), i32.const(0), i32.const(0)),
             ),
 
             ...builtInFuncsDeclarations,
@@ -435,16 +393,13 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitLiteralExpr(expr: ExprNS.Literal): WasmNumeric {
-    if (typeof expr.value === "number")
-      return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
+    if (typeof expr.value === "number") return wasm.call(MAKE_FLOAT_FX).args(f64.const(expr.value));
     else if (typeof expr.value === "boolean")
       return wasm.call(MAKE_BOOL_FX).args(i32.const(expr.value ? 1 : 0));
     else if (typeof expr.value === "string") {
       const str = expr.value;
       const len = str.length;
-      const toReturn = wasm
-        .call(MAKE_STRING_FX)
-        .args(i32.const(this.heapPointer), i32.const(len));
+      const toReturn = wasm.call(MAKE_STRING_FX).args(i32.const(this.heapPointer), i32.const(len));
 
       this.strings.push([str, this.heapPointer]);
       this.heapPointer += len;
@@ -455,9 +410,7 @@ export class BuilderGenerator implements BuilderVisitor<
   }
 
   visitComplexExpr(expr: ExprNS.Complex): WasmNumeric {
-    return wasm
-      .call(MAKE_COMPLEX_FX)
-      .args(f64.const(expr.value.real), f64.const(expr.value.imag));
+    return wasm.call(MAKE_COMPLEX_FX).args(f64.const(expr.value.real), f64.const(expr.value.imag));
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
@@ -467,9 +420,7 @@ export class BuilderGenerator implements BuilderVisitor<
     const [depth, index] = this.getLexAddress(stmt.target.name.lexeme);
     const expression = this.visit(stmt.value);
 
-    return wasm
-      .call(SET_LEX_ADDR_FX)
-      .args(i32.const(depth), i32.const(index), expression);
+    return wasm.call(SET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index), expression);
   }
 
   visitVariableExpr(expr: ExprNS.Variable): WasmNumeric {
@@ -485,15 +436,13 @@ export class BuilderGenerator implements BuilderVisitor<
 
     const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
-    if (tag >= 1 << 16)
-      throw new Error("Tag cannot be above 16-bit integer limit");
-    if (arity >= 1 << 8)
-      throw new Error("Arity cannot be above 8-bit integer limit");
+    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
       throw new Error("Environment length cannot be above 8-bit integer limit");
 
     this.environment.push(newFrame);
-    const body = stmt.body.map((s) => this.visit(s));
+    const body = stmt.body.map(s => this.visit(s));
     this.environment.pop();
 
     this.userFunctions[tag] = body;
@@ -505,12 +454,7 @@ export class BuilderGenerator implements BuilderVisitor<
         i32.const(index),
         wasm
           .call(MAKE_CLOSURE_FX)
-          .args(
-            i32.const(tag),
-            i32.const(arity),
-            i32.const(newFrame.length),
-            global.get(CURR_ENV),
-          ),
+          .args(i32.const(tag), i32.const(arity), i32.const(newFrame.length), global.get(CURR_ENV)),
       );
   }
 
@@ -523,10 +467,8 @@ export class BuilderGenerator implements BuilderVisitor<
     // other than parameters
     const newFrame = this.collectDeclarations([], expr.parameters);
 
-    if (tag >= 1 << 16)
-      throw new Error("Tag cannot be above 16-bit integer limit");
-    if (arity >= 1 << 8)
-      throw new Error("Arity cannot be above 8-bit integer limit");
+    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
       throw new Error("Environment length cannot be above 8-bit integer limit");
 
@@ -538,17 +480,12 @@ export class BuilderGenerator implements BuilderVisitor<
 
     return wasm
       .call(MAKE_CLOSURE_FX)
-      .args(
-        i32.const(tag),
-        i32.const(arity),
-        i32.const(newFrame.length),
-        global.get(CURR_ENV),
-      );
+      .args(i32.const(tag), i32.const(arity), i32.const(newFrame.length), global.get(CURR_ENV));
   }
 
   visitCallExpr(expr: ExprNS.Call): WasmRaw {
     const callee = this.visit(expr.callee);
-    const args = expr.args.map((arg) => this.visit(arg));
+    const args = expr.args.map(arg => this.visit(arg));
 
     // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
     // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
@@ -600,9 +537,7 @@ ${args.map(
     // no effect
 
     const currFrame = this.environment.at(-1);
-    const bindingIndex = currFrame?.findIndex(
-      (binding) => binding.name === stmt.name.lexeme,
-    );
+    const bindingIndex = currFrame?.findIndex(binding => binding.name === stmt.name.lexeme);
 
     if (bindingIndex != null) {
       currFrame?.splice(bindingIndex, 1);
@@ -613,17 +548,15 @@ ${args.map(
 
   visitIfStmt(stmt: StmtNS.If): WasmInstruction {
     const condition = this.visit(stmt.condition);
-    const body = stmt.body.map((b) => this.visit(b));
-    const elseBody = stmt.elseBlock?.map((e) => this.visit(e));
+    const body = stmt.body.map(b => this.visit(b));
+    const elseBody = stmt.elseBlock?.map(e => this.visit(e));
 
     return elseBody
       ? wasm
           .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
           .then(...body)
           .else(...elseBody)
-      : wasm
-          .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
-          .then(...body);
+      : wasm.if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition))).then(...body);
   }
 
   visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {

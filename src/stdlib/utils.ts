@@ -1,18 +1,15 @@
 import { BuiltinValue } from "../cse-machine/stash";
 
 export enum GroupName {
-    LINKED_LISTS = 'linked-list',
-    STREAMS = 'stream',
-    LIST = 'list',
-    PAIRMUTATORS = 'pair-mutators',
-    MCE = 'mce'
+  LINKED_LISTS = "linked-list",
+  STREAMS = "stream",
+  LIST = "list",
+  PAIRMUTATORS = "pair-mutators",
+  MCE = "mce",
 }
 
 export type Group = {
-    name: GroupName;
-    prelude: string;
-    builtins: Map<string, BuiltinValue>;
-}
-
-
-    
+  name: GroupName;
+  prelude: string;
+  builtins: Map<string, BuiltinValue>;
+};

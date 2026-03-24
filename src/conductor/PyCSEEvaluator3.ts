@@ -10,8 +10,8 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 
 export default class PyCSEEvaluator3 extends PyCSEEvaluator {
-  constructor (conductor: IRunnerPlugin) {
+  constructor(conductor: IRunnerPlugin) {
     super(conductor, {}, 3, [linkedList, list, pairmutator, stream]);
   }
 }
-initialise(PyCSEEvaluator3)
+initialise(PyCSEEvaluator3);

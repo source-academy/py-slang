@@ -17,120 +17,129 @@ import {
   ListInstr,
   Node,
   StatementSequence,
-  UnOpInstr, 
-  WhileInstr
+  UnOpInstr,
+  WhileInstr,
 } from "./types";
 import { TokenType } from "../tokens";
 import { ExprNS, StmtNS } from "../ast-types";
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode })
+export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
 
 export const assmtInstr = (
   symbol: string,
   constant: boolean,
   declaration: boolean,
-  srcNode: Node
+  srcNode: Node,
 ): AssmtInstr => ({
   instrType: InstrType.ASSIGNMENT,
   symbol,
   constant,
   declaration,
-  srcNode
-})
+  srcNode,
+});
 
-export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({ instrType: InstrType.APPLICATION,
+export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({
+  instrType: InstrType.APPLICATION,
   numOfArgs,
-  srcNode
-})
+  srcNode,
+});
 
 export const breakInstr = (srcNode: Node): BreakInstr => ({
   instrType: InstrType.BREAK,
-  srcNode
-})
-  
+  srcNode,
+});
+
 export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   instrType: InstrType.ENVIRONMENT,
   env,
-  srcNode
-})
+  srcNode,
+});
 
 export const markerInstr = (srcNode: Node): Instr => ({
   instrType: InstrType.MARKER,
-  srcNode
-})
+  srcNode,
+});
 
 export const continueInstr = (srcNode: Node): ContinueInstr => ({
   instrType: InstrType.CONTINUE,
-  srcNode
-})
-
+  srcNode,
+});
 
 export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   instrType: InstrType.BINARY_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const resetInstr = (srcNode: Node): Instr => ({
   instrType: InstrType.RESET,
-  srcNode
-})
+  srcNode,
+});
 
 export const branchInstr = (
   consequent: Node,
   alternate: Node | null | undefined,
-  srcNode: Node
+  srcNode: Node,
 ): BranchInstr => ({
   instrType: InstrType.BRANCH,
   consequent,
   alternate,
-  srcNode
-})
+  srcNode,
+});
 
 export const listInstr = (numOfElements: number, srcNode: Node): ListInstr => ({
   instrType: InstrType.LIST,
   numOfElements,
-  srcNode
-})
+  srcNode,
+});
 
 export const unOpInstr = (symbol: TokenType, srcNode: Node): UnOpInstr => ({
   instrType: InstrType.UNARY_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const boolOpInstr = (symbol: TokenType, srcNode: Node): BoolOpInstr => ({
   instrType: InstrType.BOOL_OP,
   symbol,
-  srcNode
-})
+  srcNode,
+});
 
 export const listAccessInstr = (srcNode: Node): ListAccessInstr => ({
   instrType: InstrType.LIST_ACCESS,
-  srcNode
-})
+  srcNode,
+});
 
 export const listAssmtInstr = (srcNode: Node): ListAssmtInstr => ({
   instrType: InstrType.LIST_ASSIGNMENT,
-  srcNode
-})
+  srcNode,
+});
 
 export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr => ({
   instrType: InstrType.END_OF_FUNCTION_BODY,
-  srcNode
-})
+  srcNode,
+});
 
-export const forInstr = (srcNode: Node,  target: ExprNS.Expr, iter: ExprNS.Expr, body: StatementSequence): ForInstr => ({
+export const forInstr = (
+  srcNode: Node,
+  target: ExprNS.Expr,
+  iter: ExprNS.Expr,
+  body: StatementSequence,
+): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
   target,
   iter,
-  body
-})
+  body,
+});
 
-export const whileInstr = (srcNode: Node, test: ExprNS.Expr, body: StatementSequence): WhileInstr => ({
+export const whileInstr = (
+  srcNode: Node,
+  test: ExprNS.Expr,
+  body: StatementSequence,
+): WhileInstr => ({
   instrType: InstrType.WHILE,
   srcNode,
   test,
-  body
-})
+  body,
+});
