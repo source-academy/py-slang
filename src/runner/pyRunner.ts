@@ -1,9 +1,9 @@
+import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
-import { RecursivePartial, Result } from "../types";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
-import { StmtNS } from "../ast-types";
+import { RecursivePartial, Result } from "../types";
 
 type Stmt = StmtNS.Stmt;
 
@@ -33,12 +33,12 @@ export async function runInContext(
   return result;
 }
 
-export function runCSEMachine(
+export async function runCSEMachine(
   code: string,
   program: Stmt,
   context: Context,
   options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options as IOptions);
+  const result = await evaluate(code, program, context, options as IOptions);
   return CSEResultPromise(context, result);
 }
