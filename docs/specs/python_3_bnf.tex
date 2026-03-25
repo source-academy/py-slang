@@ -54,7 +54,7 @@ as follows:
                             & |   & \textit{expression}\ \textit{binary-operator}\ \textit{expression}                       & \text{binary operator combination}      \\
                             & |   & \textit{unary-operator}\ \textit{expression}                                             & \text{unary operator combination}       \\
                             & |   & \textit{expression}\ \textit{binary-logical}\ \textit{expression}                        & \text{logical composition}              \\
-                            & |   & \textit{expression}\ \term{(}\ \textit{expressions}\ \term{)}                            & \text{function application}             \\
+                            & |   & \textit{expression}\ \term{(}\ \textit{spread-expressions}\ \term{)}                     & \text{function application}             \\
                             & |   & \term{lambda}\ (\textit{name}\ |\ \textit{names})\ \term{:}\ \textit{expression}         & \text{lambda expression}                \\
                             & |   & \textit{expression}\ \term{if}\ \textit{expression}\ \term{else}\ \textit{expression}    & \text{conditional expression}           \\
                             & |   & \textit{expression}\term{[}\textit{expression}\term{] =}\ \textit{expression}            & \text{list assignment}                  \\
@@ -65,6 +65,7 @@ as follows:
                             & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}            & \text{binary operator}                  \\[1mm]
 \textit{unary-operator}     & ::= & \term{not}\ |\ \term{-}\ |\ \term{+}                                                     & \text{unary operator}                   \\[1mm]
 \textit{binary-logical}     & ::= & \term{and}\ |\ \term{or}                                                                 & \text{logical composition symbol}       \\[1mm]
+\textit{expressions}        & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                 & \text{element expressions}              \\[1mm]
 \textit{spread-expressions} & ::= & \epsilon\ |\ \textit{spread-expression}\ (\ \term{,}\ \textit{spread-expression}\ )...   & \text{argument expressions}             \\[1mm]
 \textit{spread-expression}  & ::= & \textit{expression}\ |\ \term{*}\ \textit{expression}                                    & \text{argument expressions (spread)}    \\
 
