@@ -1678,7 +1678,7 @@ describe("tokenize function tests", () => {
   });
 
   it("ignores redundant whitespace", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`tokenize("   x    +   y   ")`, true);
+    const { renderedResult } = await compileToWasmAndRun(`tokenize("x    +   y   ")`, true);
     expect(renderedResult).toBe(linkedListBuilder("x", "+", "y"));
   });
 

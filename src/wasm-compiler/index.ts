@@ -1,6 +1,8 @@
 import { WatGenerator } from "@sourceacademy/wasm-util";
 import wabt from "wabt";
 import { parse } from "../parser";
+import pythonLexer from "../parser/lexer";
+import { toAstToken } from "../parser/token-bridge";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 import { libraryFunctions } from "./library";
@@ -149,43 +151,34 @@ export async function compileToWasmAndRun(
     metacircular: {
       tokenize: (offset: number, length: number) => {
         if (!wasmExports) throw new Error("WASM exports not initialised");
+        const { malloc, makeString, makePair, makeNone } = wasmExports;
 
-        const tokenizer = new Tokenizer(
+        pythonLexer.reset(
           new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length)),
         );
-        const tokens = tokenizer.scanEverything().filter(x => x.lexeme !== "");
-
         const encoder = new TextEncoder();
         const dataView = new DataView(memory.buffer);
 
-        const strings = tokens.map(({ lexeme }) => {
-          if (!wasmExports) throw new Error("WASM exports not initialised");
-
-          const heapPointer = wasmExports.malloc(lexeme.length);
-          encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
-          return wasmExports.makeString(heapPointer, lexeme.length);
-        });
-
-        return strings.reduceRight(([tailTag, tailValue], [tag, value]) => {
-          if (!wasmExports) throw new Error("WASM exports not initialised");
-
-          const pair = wasmExports.makePair(tag, BigInt(value), tailTag, BigInt(tailValue));
-          return pair;
-        }, wasmExports.makeNone());
+        return Array.from(pythonLexer)
+          .map(t => toAstToken(t))
+          .map(({ lexeme }) => {
+            const heapPointer = malloc(lexeme.length);
+            encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+            return makeString(heapPointer, lexeme.length);
+          })
+          .reduceRight(
+            (tail, [tag, value]) => makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),
+            makeNone(),
+          );
       },
 
       parse: (offset: number, length: number) => {
-        if (!wasmExports) {
-          throw new Error("WASM exports not initialised");
-        }
+        if (!wasmExports) throw new Error("WASM exports not initialised");
 
         const string = new TextDecoder("utf8").decode(
           new Uint8Array(memory.buffer, offset, length),
         );
-        const tokenizer = new Tokenizer(string + "\n");
-        const tokens = tokenizer.scanEverything();
-        const pyParser = new Parser(string, tokens);
-        const ast = pyParser.parse();
+        const ast = parse(string + "\n");
 
         const metacircularGenerator = new MetacircularGenerator(wasmExports, memory);
         return metacircularGenerator.visit(ast);

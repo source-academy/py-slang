@@ -526,7 +526,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const callee = this.visit(expr.callee);
     const args = expr.args.map(arg => ({
       arg: this.visit(arg),
-      isStarred: arg instanceof ExprNS.Starred,
+      isStarred: false,
     }));
 
     // get the CURR_ENV first - this saves the current environment as the return env
@@ -765,11 +765,11 @@ ${args.map(
     }
   }
 
-  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
+  visitBreakStmt(_stmt: StmtNS.Break): WasmInstruction {
     return wasm.br("$exit");
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
+  visitContinueStmt(_stmt: StmtNS.Continue): WasmInstruction {
     return wasm.br("$continue");
   }
 

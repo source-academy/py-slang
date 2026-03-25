@@ -14,10 +14,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   private static readonly encoder = new TextEncoder();
 
   private list(...elements: [number, bigint][]): [number, bigint] {
-    return elements.reduceRight(([tailTag, tailValue], [tag, value]) => {
-      const pair = this.wasmExports.makePair(tag, BigInt(value), tailTag, BigInt(tailValue));
-      return pair;
-    }, this.wasmExports.makeNone());
+    return elements.reduceRight(
+      (tail, [tag, value]) =>
+        this.wasmExports.makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),
+      this.wasmExports.makeNone(),
+    );
   }
 
   private string(str: (typeof PARSE_TREE_STRINGS)[number]): [number, bigint] {
@@ -154,7 +155,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     );
   }
 
-  visitNoneExpr(expr: ExprNS.None): [number, bigint] {
+  visitNoneExpr(_expr: ExprNS.None): [number, bigint] {
     return this.list(this.string("literal"), this.wasmExports.makeNone());
   }
 
@@ -188,10 +189,6 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
     return this.list(this.string("object_access"), this.visit(expr.value), this.visit(expr.index));
-  }
-
-  visitStarredExpr(expr: ExprNS.Starred): [number, bigint] {
-    return this.visit(expr.value);
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): [number, bigint] {
@@ -255,11 +252,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     );
   }
 
-  visitBreakStmt(stmt: StmtNS.Break): [number, bigint] {
+  visitBreakStmt(_stmt: StmtNS.Break): [number, bigint] {
     return this.list(this.string("break_statement"));
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): [number, bigint] {
+  visitContinueStmt(_stmt: StmtNS.Continue): [number, bigint] {
     return this.list(this.string("continue_statement"));
   }
 
@@ -332,33 +329,27 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     );
   }
 
-  visitPassStmt(stmt: StmtNS.Pass): [number, bigint] {
+  visitPassStmt(_stmt: StmtNS.Pass): [number, bigint] {
     return this.list(this.string("pass_statement"));
   }
 
   // UNSUPPORTED / NAME- OR STRING-DEPENDENT NODES
-  visitIndentCreation(stmt: StmtNS.Indent): [number, bigint] {
+  visitFromImportStmt(_stmt: StmtNS.FromImport): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitDedentCreation(stmt: StmtNS.Dedent): [number, bigint] {
+  visitGlobalStmt(_stmt: StmtNS.Global): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitFromImportStmt(stmt: StmtNS.FromImport): [number, bigint] {
+  visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitGlobalStmt(stmt: StmtNS.Global): [number, bigint] {
+  visitComplexExpr(_expr: ExprNS.Complex): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): [number, bigint] {
+  visitAssertStmt(_stmt: StmtNS.Assert): [number, bigint] {
     throw new Error("Method not implemented.");
   }
-  visitComplexExpr(expr: ExprNS.Complex): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitAssertStmt(stmt: StmtNS.Assert): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): [number, bigint] {
+  visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
     throw new Error("Method not implemented.");
   }
 }
