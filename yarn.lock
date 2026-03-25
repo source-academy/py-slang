@@ -1161,10 +1161,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.2.3":
-  version: 0.2.3
-  resolution: "@sourceacademy/conductor@npm:0.2.3"
-  checksum: 10c0/f6251017a6ed95ea4854a67f6b302934e1023bb256e15f93da8b1a55a95df082d88ba93813b5476445f4f82825dd2b7f44cdb1b20ae7815f9f8a8e6eb7816621
+"@sourceacademy/conductor@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@sourceacademy/conductor@npm:0.3.0"
+  checksum: 10c0/e6d50cc0b9188fa5ec54c3bb2e6b9a0f9391ba37449e74a326c89c4e14deb00c4882700062427737e6f6fca556fd95d91fa9d7f6e125fe1d43938a65cc3c0c4d
   languageName: node
   linkType: hard
 
@@ -4280,7 +4280,7 @@ __metadata:
     "@rollup/plugin-json": "npm:^6.1.0"
     "@rollup/plugin-node-resolve": "npm:^16.0.1"
     "@rollup/plugin-typescript": "npm:^12.1.2"
-    "@sourceacademy/conductor": "npm:^0.2.3"
+    "@sourceacademy/conductor": "npm:^0.3.0"
     "@sourceacademy/wasm-util": "npm:^1.0.4"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

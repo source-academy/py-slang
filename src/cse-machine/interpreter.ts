@@ -6,6 +6,7 @@
 
 /* tslint:disable:max-classes-per-file */
 
+import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../ast-types";
 import * as error from "../errors/errors";
 import { BuiltinReassignmentError } from "../errors/errors";
@@ -32,6 +33,7 @@ import {
   isFalsy,
 } from "./operators";
 import { Stash, Value } from "./stash";
+import { displayError } from "./streams";
 import {
   AppInstr,
   AssmtInstr,
@@ -65,12 +67,7 @@ type CmdEvaluator = (
   control: Control,
   stash: Stash,
   isPrelude: boolean,
-) => void;
-
-let cseFinalPrint = "";
-export function addPrint(str: string) {
-  cseFinalPrint = cseFinalPrint + str + "\n";
-}
+) => void | Promise<void>;
 
 /**
  * Function that returns the appropriate Promise<Result> given the output of CSE machine evaluating, depending
@@ -85,7 +82,7 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
       resolve({ status: "suspended-cse-eval", context });
     } else if (value.type === "error") {
       const msg = value.message;
-      const representation = new Representation(cseFinalPrint + msg);
+      const representation = new Representation(msg);
       resolve({ status: "finished", context, value, representation });
     } else {
       const representation = new Representation(toPythonString(value));
@@ -105,18 +102,18 @@ let source = "";
  * @param options Evaluation options.
  * @returns The result of running the CSE machine.
  */
-export function evaluate(
+export async function evaluate(
   code: string,
   program: StmtNS.Stmt,
   context: Context,
   options: RecursivePartial<IOptions> = {},
-): Value {
+): Promise<Value> {
   source = code;
   try {
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
   } catch (error) {
-    return { type: "error", message: error instanceof Error ? error.message : String(error) };
+    return displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   }
 
   try {
@@ -125,7 +122,7 @@ export function evaluate(
     context.stash = new Stash();
 
     // Adaptation for new feature
-    runCSEMachine(
+    const result = await runCSEMachine(
       code,
       context,
       context.control,
@@ -134,9 +131,9 @@ export function evaluate(
       options.stepLimit!,
       options.isPrelude,
     );
-    return { type: "string", value: context.output };
+    return result;
   } catch (error) {
-    return { type: "error", message: error instanceof Error ? error.message : String(error) };
+    return await displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   } finally {
     context.runtime.isRunning = false;
   }
@@ -192,7 +189,7 @@ export function evaluate(
  * @param isPrelude Whether the program is the prelude.
  * @returns The top value of the stash after execution.
  */
-export function runCSEMachine(
+export async function runCSEMachine(
   code: string,
   context: Context,
   control: Control,
@@ -200,7 +197,7 @@ export function runCSEMachine(
   envSteps: number,
   stepLimit: number,
   isPrelude: boolean = false,
-): Value {
+): Promise<Value> {
   const eceState = generateCSEMachineStateStream(
     code,
     context,
@@ -213,7 +210,7 @@ export function runCSEMachine(
 
   // Execute the generator until it completes
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  for (const _value of eceState) {
+  for await (const _value of eceState) {
   }
 
   // Return the value at the top of the storage as the result
@@ -232,7 +229,7 @@ export function runCSEMachine(
  * @param isPrelude Whether the program is the prelude.
  * @yields The current state of the stash, control stack, and step count.
  */
-export function* generateCSEMachineStateStream(
+export async function* generateCSEMachineStateStream(
   code: string,
   context: Context,
   control: Control,
@@ -270,7 +267,6 @@ export function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
     control.pop();
-    console.log(command);
 
     if (isNode(command)) {
       const node = command as Node;
@@ -278,7 +274,7 @@ export function* generateCSEMachineStateStream(
 
       context.runtime.nodes.shift();
       context.runtime.nodes.unshift(command);
-      cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude);
 
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -291,7 +287,7 @@ export function* generateCSEMachineStateStream(
     } else {
       // Command is an instruction
       const instr = command as Instr;
-      cmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
     }
 
     command = control.peek();
@@ -979,7 +975,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       }
     }
   },
-  [InstrType.APPLICATION]: function (
+  [InstrType.APPLICATION]: async function (
     code: string,
     command: ControlItem,
     context: Context,
@@ -1020,8 +1016,19 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(bodyExpr);
       }
     } else if (callable?.type === "builtin") {
-      const result = callable.func(args, code, instr.srcNode, context);
+      const result = await callable.func(args, code, instr.srcNode, context);
       stash.push(result);
+    } else {
+      handleRuntimeError(
+        context,
+        new error.TypeError(
+          code,
+          instr.srcNode as ExprNS.Call,
+          context,
+          callable ? callable.type : "NoneType",
+          "callable",
+        ),
+      );
     }
   },
 

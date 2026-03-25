@@ -1,3 +1,4 @@
+import { ConductorError } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { RuntimeSourceError } from "../errors";
@@ -27,7 +28,7 @@ export type TestExpectedValue =
  * - expected is the expected value of the expression, which can be a primitive value, null (for None), or an error class (for expected errors)
  * - output is the expected output to be printed to the console, or null if no output is expected
  */
-export type TestCases = Record<string, [string, TestExpectedValue, string | null][]>;
+export type TestCases = Record<string, [string, TestExpectedValue, string[] | null][]>;
 
 export function toPythonAst(text: string): Stmt {
   const script = text + "\n";
@@ -46,12 +47,10 @@ type InternalTestCase = {
   label: TestExpectedValue;
   code: string;
   expected: TestExpectedValue;
-  output: string | null;
+  output: string[] | null;
 };
 
-export const createInternalTestCases = (
-  tests: [string, TestExpectedValue, string | null][],
-): InternalTestCase[] => {
+export const createInternalTestCases = (tests: TestCases[string]): InternalTestCase[] => {
   return tests.map(([code, expected, output]) => ({
     label:
       expected instanceof Function &&
@@ -64,6 +63,55 @@ export const createInternalTestCases = (
   }));
 };
 
+type OutputType =
+  | {
+      type: "stdout";
+      value: string;
+    }
+  | {
+      type: "stderr";
+      value: ConductorError;
+    };
+export const generateMockStreams = (context: Context, output: OutputType[]) => {
+  const stdOutStream = new WritableStream<string>({
+    write: (data: string) => {
+      output.push({ type: "stdout", value: data });
+    },
+  });
+
+  const stdErrStream = new WritableStream<ConductorError>({
+    write: (data: ConductorError) => {
+      output.push({ type: "stderr", value: data });
+    },
+  });
+
+  const stdinStream = new ReadableStream<string>({
+    start() {
+      // No-op: we won't be pushing any data to stdin in our tests
+    },
+    pull() {
+      // No-op
+    },
+    cancel() {
+      // No-op
+    },
+  });
+  context.streams = {
+    initialised: true,
+    stdout: {
+      stream: stdOutStream,
+      writer: stdOutStream.getWriter(),
+    },
+    stderr: {
+      stream: stdErrStream,
+      writer: stdErrStream.getWriter(),
+    },
+    stdin: {
+      stream: stdinStream,
+      reader: stdinStream.getReader(),
+    },
+  };
+};
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
   for (const [funcName, tests] of Object.entries(testCases)) {
     describe(funcName, () => {
@@ -71,6 +119,8 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
         `$code should return $label`,
         async ({ code, expected, output }) => {
           const context = new Context();
+          const outputLst: OutputType[] = [];
+          generateMockStreams(context, outputLst);
           const result = await runInContext(code, context, { variant, groups });
           expect(result).toBeDefined();
           expect(result.status).toBe("finished");
@@ -87,7 +137,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           }
           expect(result.status).not.toHaveProperty("value.type", "error");
           if (output !== null) {
-            expect(context.output).toBe(output);
+            expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line })));
           }
 
           if (expected === null) {

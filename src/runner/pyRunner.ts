@@ -1,6 +1,8 @@
+import { ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
+import { displayError } from "../cse-machine/streams";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import { Group } from "../stdlib/utils";
@@ -63,6 +65,7 @@ export async function runInContext(
       Object.keys(context.runtime.environments[0].head),
     );
   } catch (error) {
+    await displayError(context, error, ErrorType.EVALUATOR_SYNTAX);
     return CSEResultPromise(context, { type: "error", message: String(error) });
   }
   const result = runCSEMachine(code, pyAst, context, options);
@@ -75,6 +78,6 @@ export async function runCSEMachine(
   context: Context,
   options: RecursivePartial<IOptions> = {},
 ): Promise<Result> {
-  const result = evaluate(code, program, context, options as IOptions);
-  return CSEResultPromise(context, await result);
+  const result = await evaluate(code, program, context, options as IOptions);
+  return CSEResultPromise(context, result);
 }

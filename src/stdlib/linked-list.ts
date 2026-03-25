@@ -2,9 +2,17 @@ import { ExprNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { handleRuntimeError } from "../cse-machine/error";
-import { BoolValue, ListValue, NoneValue, StringValue, Value } from "../cse-machine/stash";
+import {
+  BoolValue,
+  BuiltinValue,
+  ListValue,
+  NoneValue,
+  StringValue,
+  Value,
+} from "../cse-machine/stash";
+import { displayOutput } from "../cse-machine/streams";
 import { TypeError } from "../errors";
-import { BuiltInFunctions, builtIns, toPythonString, Validate } from "../stdlib";
+import { toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
 
@@ -12,7 +20,7 @@ const linkedListBuiltins = new Map<string, Value>();
 
 class LinkedListBuiltins {
   @Validate(2, 2, "pair", true)
-  static pair(args: Value[], source: string, command: ControlItem, context: Context): ListValue {
+  static pair(args: Value[], _source: string, _command: ControlItem, _context: Context): ListValue {
     return { type: "list", value: args };
   }
 
@@ -32,7 +40,12 @@ class LinkedListBuiltins {
   }
 
   @Validate(1, 1, "is_pair", true)
-  static is_pair(args: Value[], source: string, command: ControlItem, context: Context): BoolValue {
+  static is_pair(
+    args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
+  ): BoolValue {
     return { type: "bool", value: args[0].type === "list" && args[0].value.length === 2 };
   }
 
@@ -115,14 +128,14 @@ class LinkedListBuiltins {
     return { type: "string", value: string };
   }
   @Validate(1, 1, "print_linked_list", true)
-  static print_linked_list(
+  static async print_linked_list(
     args: Value[],
     source: string,
     command: ControlItem,
     context: Context,
-  ): NoneValue {
+  ): Promise<NoneValue> {
     const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
-    context.output += stringValue.value + "\n";
+    await displayOutput(context, stringValue.value);
     return { type: "none" };
   }
 }
@@ -133,9 +146,9 @@ for (const builtin of Object.getOwnPropertyNames(LinkedListBuiltins)) {
   ) {
     linkedListBuiltins.set(builtin, {
       type: "builtin",
-      func: LinkedListBuiltins[builtin as keyof typeof LinkedListBuiltins] as any,
+      func: LinkedListBuiltins[builtin as keyof typeof LinkedListBuiltins] as BuiltinValue["func"],
       name: builtin,
-    }); // TODO: fix typing
+    });
   }
 }
 export default {

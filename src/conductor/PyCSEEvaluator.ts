@@ -2,10 +2,17 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
+import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../cse-machine/context";
+import {
+  createErrorStream,
+  createInputStream,
+  createOutputStream,
+  destroyStreams,
+  displayError,
+} from "../cse-machine/streams";
 import { IOptions, runInContext } from "../runner/pyRunner";
-import { Finished } from "../types";
 import { Group } from "../stdlib/utils";
 
 const defaultContext = new Context();
@@ -38,16 +45,25 @@ export default abstract class PyCSEEvaluator extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      const result = await runInContext(
+      this.context.streams = {
+        initialised: true,
+        stdout: createOutputStream(this.conductor),
+        stderr: createErrorStream(this.conductor),
+        stdin: createInputStream(this.conductor),
+      };
+      await runInContext(
         chunk, // Code
         this.context,
         this.options,
       );
-      this.conductor.sendOutput(
-        `${(result as Finished).representation.toString((result as Finished).value)}`,
-      );
     } catch (error) {
-      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
+      if (error instanceof SyntaxError) {
+        await displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
+        return;
+      }
+      await displayError(this.context, error, ErrorType.INTERNAL);
+    } finally {
+      await destroyStreams(this.context);
     }
   }
 }

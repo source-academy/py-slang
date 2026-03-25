@@ -47,6 +47,7 @@ of arguments and generate an error message when the types do not match.
     \texttt{\textbf{\%}} & int   & float   & float\\
     \texttt{\textbf{\%}} & float   & float   & float\\
     \texttt{\textbf{==}} & any   & any     & bool\\
+    \texttt{\textbf{==}} & list   & list     & error\\
     \texttt{\textbf{!=}} & any   & any     & bool\\
     \texttt{\textbf{>}} & int,float   & int,float     & bool\\
     \texttt{\textbf{>}} & string   & string     & bool\\
@@ -58,6 +59,7 @@ of arguments and generate an error message when the types do not match.
     \texttt{\textbf{<=}} & string   & string     & bool\\
     \texttt{\textbf{and}} & bool & any & any\\
     \texttt{\textbf{or}}  & bool & any & any\\
+    \texttt{\textbf{is}} & list & list & bool\\
     \texttt{\textbf{not}} & bool &     & bool\\
     \texttt{\textbf{-}}    & int &    & int\\
     \texttt{\textbf{-}}    & float &    & float\\

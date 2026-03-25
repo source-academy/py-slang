@@ -1,3 +1,4 @@
+import { ConductorError } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { ModuleContext, NativeStorage } from "../types";
 import { Control } from "./control";
@@ -5,12 +6,23 @@ import { Environment } from "./environment";
 import { CseError } from "./error";
 import { Heap } from "./heap";
 import { BuiltinValue, Stash, Value } from "./stash";
+import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
 export class Context {
   public control: Control;
   public stash: Stash;
-  public output: string = "";
+
+  public streams:
+    | {
+        initialised: false;
+      }
+    | {
+        initialised: true;
+        stdout: WritableContext<string>;
+        stderr: WritableContext<ConductorError>;
+        stdin: ReadableContext<string>;
+      };
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
@@ -47,6 +59,7 @@ export class Context {
       this.runtime.environments.push(globalEnvironment);
       this.runtime.environmentTree.insert(globalEnvironment);
     }
+    this.streams = this.createEmptyStreams();
     this.nativeStorage = {
       builtins: new Map<string, BuiltinValue>(),
       previousProgramsIdentifiers: new Set<string>(),
@@ -81,6 +94,10 @@ export class Context {
     envStepsTotal: 0,
     breakpointSteps: [],
     changepointSteps: [],
+  });
+
+  createEmptyStreams = (): { initialised: false } => ({
+    initialised: false,
   });
 
   public reset(program?: StmtNS.Stmt): void {

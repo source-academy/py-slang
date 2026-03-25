@@ -2,7 +2,6 @@ import {
   MissingRequiredPositionalError,
   TooManyPositionalArgumentsError,
   TypeError,
-  UnsupportedOperandTypeError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import { generateTestCases, TestCases } from "./utils";
@@ -22,15 +21,15 @@ describe("Linked List Tests", () => {
       ["head(1)", TypeError, null],
       ["tail(1)", TypeError, null],
       ["print_linked_list()", MissingRequiredPositionalError, null],
-      ["print_linked_list(linked_list(1, 2, 3))", null, "linked_list(1, 2, 3)\n"],
-      ["print_linked_list(pair(1, 2))", null, "[1, 2]\n"],
-      ["print_linked_list(None)", null, "linked_list()\n"],
-      ["print_linked_list(pair(1, pair(2, 3)))", null, "[1, [2, 3]]\n"],
-      ["print_linked_list(pair(1, pair(2, None)))", null, "linked_list(1, 2)\n"],
+      ["print_linked_list(linked_list(1, 2, 3))", null, ["linked_list(1, 2, 3)"]],
+      ["print_linked_list(pair(1, 2))", null, ["[1, 2]\n"]],
+      ["print_linked_list(None)", null, ["linked_list()\n"]],
+      ["print_linked_list(pair(1, pair(2, 3)))", null, ["[1, [2, 3]]\n"]],
+      ["print_linked_list(pair(1, pair(2, None)))", null, ["linked_list(1, 2)\n"]],
       [
         "print_linked_list(pair(linked_list(1, 2, 3), linked_list(4, 5, 6)))",
         null,
-        "linked_list(linked_list(1, 2, 3), 4, 5, 6)\n",
+        ["linked_list(linked_list(1, 2, 3), 4, 5, 6)\n"],
       ],
     ],
     "empty list boundaries": [
@@ -147,8 +146,8 @@ describe("Linked List Tests", () => {
       ["linked_list_ref(linked_list(10, 20, 30), 1)", 20n, null],
       ["accumulate_linked_list(lambda x, y: x + y, 10, None)", 10n, null],
       ["accumulate_linked_list(lambda x, y: x + y, 0, linked_list(1, 2, 3, 4))", 10n, null],
-      ["for_each(lambda x: x, None)", true, ""],
-      ["for_each(print, linked_list(1, 2, 3))", true, "1\n2\n3\n"],
+      ["for_each(lambda x: x, None)", true, []],
+      ["for_each(print, linked_list(1, 2, 3))", true, ["1", "2", "3"]],
     ],
   };
 

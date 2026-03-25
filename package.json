@@ -55,7 +55,7 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
-    "@sourceacademy/conductor": "^0.2.3",
+    "@sourceacademy/conductor": "^0.3.0",
     "@sourceacademy/wasm-util": "^1.0.4",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",

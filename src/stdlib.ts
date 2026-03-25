@@ -2,7 +2,6 @@ import {
   BigIntValue,
   BoolValue,
   BuiltinValue,
-  NoneValue,
   NumberValue,
   StringValue,
   Value,
@@ -12,6 +11,7 @@ import { erf, gamma, lgamma } from "mathjs";
 import { Context } from "./cse-machine/context";
 import { ControlItem } from "./cse-machine/control";
 import { handleRuntimeError } from "./cse-machine/error";
+import { displayOutput, receiveInput } from "./cse-machine/streams";
 import {
   MissingRequiredPositionalError,
   SublanguageError,
@@ -20,7 +20,7 @@ import {
   ValueError,
 } from "./errors/errors";
 
-export function Validate<T extends Value>(
+export function Validate<T extends Value | Promise<Value>>(
   minArgs: number | null,
   maxArgs: number | null,
   functionName: string,
@@ -2275,23 +2275,26 @@ export class BuiltInFunctions {
     };
   }
 
-  static input(
+  static async input(
     _args: Value[],
     _source: string,
     _command: ControlItem,
-    _context: Context,
-  ): StringValue {
-    // TODO: : call conductor to receive user input
-    return { type: "string", value: "" };
+    context: Context,
+  ): Promise<Value> {
+    const userInput = await receiveInput(context);
+    return { type: "string", value: userInput };
   }
 
-  static print(args: Value[], _source: string, _command: ControlItem, context: Context): NoneValue {
-    console.log(args);
+  static async print(
+    args: Value[],
+    _source: string,
+    _command: ControlItem,
+    context: Context,
+  ): Promise<Value> {
     const output = args.map(arg => toPythonString(arg)).join(" ");
-    context.output += output + "\n";
+    await displayOutput(context, output);
     return { type: "none" };
   }
-
   static str(
     args: Value[],
     _source: string,
