@@ -18,7 +18,7 @@
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
-    "wasm": "ts-node src/wasm-compiler/index.ts"
+    "wasm": "ts-node --transpile-only src/wasm-compiler/run-file.ts"
   },
   "keywords": [
     "Python",
