@@ -67,8 +67,9 @@ export interface WhileInstr extends BaseInstr {
 
 export interface ForInstr extends BaseInstr {
   instrType: InstrType.FOR;
-  target: ExprNS.Expr;
-  iter: ExprNS.Expr;
+  init: ExprNS.Variable;
+  test: ExprNS.Expr;
+  update: Node;
   body: StatementSequence;
 }
 

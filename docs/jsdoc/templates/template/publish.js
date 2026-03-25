@@ -1,15 +1,15 @@
 // changed from default template by MH on 1/7/2019, see "MH" below
 // changed from previous template by JC on 29/3/2020, see "JC" below
 
-const doop = require("jsdoc/util/doop");
-const env = require("jsdoc/env");
-const fs = require("jsdoc/fs");
-const helper = require("jsdoc/util/templateHelper");
-const logger = require("jsdoc/util/logger");
-const path = require("jsdoc/path");
-const taffy = require("taffydb").taffy;
-const template = require("jsdoc/template");
-const util = require("util");
+const doop = require('jsdoc/util/doop');
+const env = require('jsdoc/env');
+const fs = require('jsdoc/fs');
+const helper = require('jsdoc/util/templateHelper');
+const logger = require('jsdoc/util/logger');
+const path = require('jsdoc/path');
+const taffy = require('@jsdoc/salty').taffy;
+const template = require('jsdoc/template');
+const util = require('util');
 
 const htmlsafe = helper.htmlsafe;
 const linkto = helper.linkto;

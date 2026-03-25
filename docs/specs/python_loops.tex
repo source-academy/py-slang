@@ -1,0 +1,108 @@
+\subsection*{Loops}
+
+\subsubsection*{while loops}
+
+Roughly speaking, while loops are seen as abbreviations for function
+applications as follows:
+\[
+  \textbf{\texttt{while}}\ \textit{expression}\ \textbf{\texttt{:}}\ \textit{block}
+\]
+stands for
+
+\begin{center}
+  \begin{minipage}{90mm}
+    $\textbf{\texttt{def}}$ \lstinline{_body()}: $\textit{block}$\newline
+    \lstinline{_while( } $\textbf{\texttt{lambda:
+    }}\textit{expression}$ \lstinline{, _body )}
+  \end{minipage}
+\end{center}
+
+where \lstinline{_while} is defined as follows:
+
+\begin{lstlisting}
+def _while(test, body):
+    if test():
+        body()
+        _while(test, body)
+    else:
+        None
+\end{lstlisting}
+
+\subsubsection*{for loop through a range with one argument}
+
+The expression in the following syntax should evaluate to an integer:
+\[
+  \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in
+  range(}}\ \textit{expression}\ \textbf{\texttt{)}}\ \textbf{\texttt{:}}\ \textit{block}
+\]
+
+This roughly stands for:
+\begin{center}
+  \begin{minipage}{90mm}
+\begin{lstlisting}
+_loop_i = 0
+_end = ^$\textrm{\textit{expression}}$^
+
+while _loop_i < _end:
+    ^$\textrm{\textit{name}}$^ = _loop_i
+    ^$\textrm{\textit{block}}$^
+    _loop_i = _loop_i + 1
+\end{lstlisting}
+  \end{minipage}
+\end{center}
+
+\subsubsection*{for loop through a range with two arguments}
+
+The expressions in the following syntax should both evaluate to integers:
+\[
+  \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in
+    range(}}\ \textit{expression}_1
+  \textbf{\texttt{,}}\ \textit{expression}_2\ \textbf{\texttt{)}}\ \textbf{\texttt{:}}\ \textit{block}
+\]
+
+This roughly stands for:
+\begin{center}
+  \begin{minipage}{90mm}
+\begin{lstlisting}
+_loop_i = ^$\textrm{\textit{expression}}_1$^
+_end = ^$\textrm{\textit{expression}}_2$^
+
+while _loop_i < _end:
+    ^$\textrm{\textit{name}}$^ = _loop_i
+    ^$\textrm{\textit{block}}$^
+    _loop_i = _loop_i + 1
+\end{lstlisting}
+  \end{minipage}
+\end{center}
+
+\subsubsection*{for loop through a range with three arguments}
+
+The expressions in the following syntax should all evaluate to integers:
+\[
+  \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in
+    range(}}\ \textit{expression}_1
+    \textbf{\texttt{,}}\ \textit{expression}_2
+  \textbf{\texttt{,}}\ \textit{expression}_3\ \textbf{\texttt{)}}\ \textbf{\texttt{:}}\ \textit{block}
+\]
+
+This roughly stands for:
+\begin{center}
+  \begin{minipage}{90mm}
+\begin{lstlisting}
+_loop_i = ^$\textrm{\textit{expression}}_1$^
+_end = ^$\textrm{\textit{expression}}_2$^
+_step = ^$\textrm{\textit{expression}}_3$^
+
+if _step > 0:
+    while _loop_i < _end:
+        ^$\textrm{\textit{name}}$^ = _loop_i
+        ^$\textrm{\textit{block}}$^
+        _loop_i = _loop_i + _step
+else:
+    while _loop_i > _end:
+        ^$\textrm{\textit{name}}$^ = _loop_i
+        ^$\textrm{\textit{block}}$^
+        _loop_i = _loop_i + _step
+\end{lstlisting}
+  \end{minipage}
+\end{center}

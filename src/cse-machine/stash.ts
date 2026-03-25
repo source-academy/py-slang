@@ -2,6 +2,8 @@
 import { StmtNS } from "../ast-types";
 import { PyComplexNumber } from "../types";
 import { Closure } from "./closure";
+import { Context } from "./context";
+import { ControlItem } from "./control";
 import { Environment } from "./environment";
 import { Stack } from "./stack";
 
@@ -30,12 +32,6 @@ export interface ClosureValue {
 export interface ListValue {
   type: "list";
   value: Value[];
-}
-
-export interface Builtin {
-  type: "builtin";
-  name: string;
-  func: (...args: any[]) => any;
 }
 
 export interface BigIntValue {
@@ -91,7 +87,7 @@ export interface NoneValue {
 export interface BuiltinValue {
   type: "builtin";
   name: string;
-  func: (...args: any[]) => any;
+  func: (args: Value[], code: string, command: ControlItem, context: Context) => Value;
 }
 
 export class Stash extends Stack<Value> {

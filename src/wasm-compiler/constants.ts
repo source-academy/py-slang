@@ -1,5 +1,4 @@
-import { f64, global, i32, i64, local, memory, wasm } from "@sourceacademy/wasm-util";
-import { WasmInstruction } from "@sourceacademy/wasm-util";
+import { f64, global, i32, i64, local, memory, wasm, WasmInstruction } from "@sourceacademy/wasm-util";
 
 // tags
 export const TYPE_TAG = {

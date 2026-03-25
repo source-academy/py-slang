@@ -1,10 +1,10 @@
-import { toPythonString } from "./stdlib";
-import { BuiltinValue, Value } from "./cse-machine/stash";
-import { Context } from "./cse-machine/context";
-import { ModuleFunctions } from "./modules/moduleTypes";
-import { SourceLocation, ZeroDivisionError } from "./errors";
 import { ExprNS } from "./ast-types";
+import { Context } from "./cse-machine/context";
 import { handleRuntimeError } from "./cse-machine/error";
+import { BuiltinValue, Value } from "./cse-machine/stash";
+import { SourceLocation, ZeroDivisionError } from "./errors";
+import { ModuleFunctions } from "./modules/moduleTypes";
+import { toPythonString } from "./stdlib";
 
 export class CSEBreak {}
 
@@ -108,14 +108,14 @@ export class PyComplexNumber {
   // This approach can significantly reduce overflow or underflow, thereby ensuring that the results remain more consistent with Python.
   public div(
     source: string,
-    node: ExprNS.Expr,
+    node: ExprNS.Binary,
     context: Context,
     other: PyComplexNumber,
   ): PyComplexNumber {
     // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
     const denominator = other.real * other.real + other.imag * other.imag;
     if (denominator === 0) {
-      handleRuntimeError(context, new ZeroDivisionError(source, node, context));
+      handleRuntimeError(context, new ZeroDivisionError(source, node));
     }
 
     const a = this.real;
@@ -245,9 +245,9 @@ export interface ComplexLiteral {
  * transformed to Array<Partial<T>> instead
  */
 export type RecursivePartial<T> =
-  T extends Array<any>
-    ? Array<RecursivePartial<T[number]>>
-    : T extends Record<any, any>
+  T extends Array<infer U>
+    ? Array<RecursivePartial<U>>
+    : T extends object
       ? Partial<{
           [K in keyof T]: RecursivePartial<T[K]>;
         }>
@@ -318,14 +318,6 @@ export interface NativeStorage {
 }
 
 export interface ModuleContext {
-  state: null | any;
-  tabs: null | any[];
-}
-
-export interface CustomBuiltIns {
-  rawDisplay: (value: Value, str: string, externalContext: any) => Value;
-  prompt: (value: Value, str: string, externalContext: any) => string | null;
-  alert: (value: Value, str: string, externalContext: any) => void;
-  /* Used for list visualisation. See #12 */
-  visualiseList: (list: any, externalContext: any) => void;
+  state: null | unknown;
+  tabs: null | unknown[];
 }

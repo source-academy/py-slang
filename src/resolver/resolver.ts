@@ -1,18 +1,19 @@
-import { StmtNS, ExprNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
+import constants from "../stdlib/py_s1_constants.json";
 import { Group } from "../stdlib/utils";
-type Expr = ExprNS.Expr;
-type Stmt = StmtNS.Stmt;
 import { Token } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
+import { FeatureValidator } from "../validator/types";
 import { ResolverErrors } from "./errors";
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 
 import levenshtein from "fast-levenshtein";
-import constants from "../stdlib/py_s1_constants.json";
 // const levenshtein = require('fast-levenshtein');
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
-class Environment {
+export class Environment {
   source: string;
   // The parent of this environment
   enclosing: Environment | null;
@@ -41,6 +42,7 @@ class Environment {
   lookupName(identifier: Token): number {
     const name = identifier.lexeme;
     let distance = 0;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       if (curr.names.has(name)) {
@@ -70,7 +72,7 @@ class Environment {
   }
   lookupNameParentEnvWithError(identifier: Token) {
     const name = identifier.lexeme;
-    let parent = this.enclosing;
+    const parent = this.enclosing;
 
     if (parent === null || !parent.names.has(name)) {
       throw new ResolverErrors.NameNotFoundError(
@@ -84,22 +86,6 @@ class Environment {
     }
   }
   declareName(identifier: Token) {
-    const lookup = this.lookupNameCurrentEnv(identifier);
-    // if (lookup !== undefined && this.definedNames.has(identifier.lexeme)) {
-    //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-    //         this.source,
-    //         identifier.indexInSource,
-    //         identifier.indexInSource + identifier.lexeme.length,
-    //         lookup);
-    // }
-    // if (lookup !== undefined && lookup !== RedefineableTokenSentinel) {
-    //     throw new ResolverErrors.NameReassignmentError(identifier.line, identifier.col,
-    //         this.source,
-    //         identifier.indexInSource,
-    //         identifier.indexInSource + identifier.lexeme.length,
-    //         lookup);
-
-    // }
     this.names.set(identifier.lexeme, identifier);
     this.definedNames.add(identifier.lexeme);
   }
@@ -139,6 +125,7 @@ class Environment {
     const name = identifier.lexeme;
     let minDistance = Infinity;
     let minName = null;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
       for (const declName of curr.names.keys()) {
@@ -160,20 +147,23 @@ class Environment {
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   source: string;
   ast: Stmt;
-  variant: number;
   environment: Environment | null;
   functionScope: Environment | null;
   loopDepth: number = 0;
+  private validators: FeatureValidator[];
+
   constructor(
     source: string,
     ast: Stmt,
-    variant: number,
+    validators: FeatureValidator[] = [],
     groups: Group[] = [],
     preludeNames: string[] = [],
   ) {
     this.source = source;
     this.ast = ast;
-    this.variant = variant;
+    this.source = source;
+    this.ast = ast;
+    this.validators = validators;
     // The global environment
     this.environment = new Environment(
       source,
@@ -188,7 +178,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ),
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
-            ([name, value]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
           ),
         ),
         ...preludeNames.map(
@@ -198,25 +188,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     );
     this.functionScope = null;
   }
-  visitAugAssignStmt(stmt: StmtNS.AugAssign): void {
-    if (this.variant <= 4) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
-    const target = stmt.target;
-    this.resolve(stmt.value);
-    if (target instanceof ExprNS.Subscript) {
-      this.resolve(target.value);
-      this.resolve(target.index);
-      return;
-    } else {
-      this.resolve(target);
-    }
+
+  private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
+    for (const v of this.validators) v.validate(node, this.environment ?? undefined);
   }
 
   resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
@@ -232,9 +206,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         }
       }
       for (const st of stmt) {
+        this.runValidators(st);
         st.accept(this);
       }
     } else {
+      this.runValidators(stmt);
       stmt.accept(this);
     }
   }
@@ -286,31 +262,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
 
-  visitIndentCreation(stmt: StmtNS.Indent): void {
-    // Create a new environment
-    this.environment = new Environment(this.source, this.environment, new Map());
-  }
-
-  visitDedentCreation(stmt: StmtNS.Dedent): void {
-    // Switch to the previous environment.
-    if (this.environment?.enclosing !== undefined) {
-      this.environment = this.environment.enclosing;
-    }
-  }
-
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
     this.environment?.declareName(stmt.name);
     this.environment?.functions.add(stmt.name.lexeme);
-
-    if (this.variant < 3 && stmt.parameters.some(param => param.isStarred)) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
 
     // Create a new environment.
     const oldEnv = this.environment;
@@ -333,16 +287,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
-    if (this.variant <= 4) {
-      // Only supported in a future sublanguage
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
     this.resolve(stmt.ann);
     this.resolve(stmt.value);
     this.functionVarConstraint(stmt.target.name);
@@ -351,19 +295,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitAssignStmt(stmt: StmtNS.Assign): void {
     const target = stmt.target;
-    this.resolve(stmt.value);
     if (target instanceof ExprNS.Subscript) {
-      if (this.variant < 3) {
-        throw new ResolverErrors.UnsupportedFeatureError(
-          target.startToken.line,
-          target.startToken.col,
-          this.source,
-          target.startToken.indexInSource,
-          target.startToken.indexInSource + target.startToken.lexeme.length,
-        );
-      }
-      this.resolve(target.value);
-      this.resolve(target.index);
+      this.resolve(target); // dispatches to visitSubscriptExpr
+      this.resolve(stmt.value);
       return;
     }
     this.resolve(stmt.value);
@@ -374,40 +308,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitAssertStmt(stmt: StmtNS.Assert): void {
     this.resolve(stmt.value);
   }
-
-  _declareForTargetNames(target: Expr): void {
-    if (target instanceof ExprNS.Variable) {
-      this.environment?.declareName(target.name);
-    } else if (target instanceof ExprNS.Tuple) {
-      for (const element of target.elements) {
-        this._declareForTargetNames(element);
-      }
-    } else {
-      throw new ResolverErrors.InvalidSyntaxError(
-        target.startToken.line,
-        target.startToken.col,
-        this.source,
-        target.startToken.indexInSource,
-        target.startToken.indexInSource + target.startToken.lexeme.length,
-        "Invalid assignment target.",
-      );
-    }
-  }
   visitForStmt(stmt: StmtNS.For): void {
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
-    this._declareForTargetNames(stmt.target);
+    this.environment?.declareName(stmt.target);
     this.resolve(stmt.iter);
-    this.loopDepth += 1;
     this.resolve(stmt.body);
-    this.loopDepth -= 1;
   }
 
   visitIfStmt(stmt: StmtNS.If): void {
@@ -417,7 +321,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   // @TODO we need to treat all global statements as variable declarations in the global
   // scope.
-  visitGlobalStmt(stmt: StmtNS.Global): void {
+  visitGlobalStmt(_stmt: StmtNS.Global): void {
     // Do nothing because global can also be declared in our
     // own scope.
   }
@@ -434,74 +338,24 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitWhileStmt(stmt: StmtNS.While): void {
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
     this.resolve(stmt.condition);
-    this.loopDepth += 1;
     this.resolve(stmt.body);
-    this.loopDepth -= 1;
   }
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
     this.resolve(stmt.expression);
   }
 
   visitFromImportStmt(stmt: StmtNS.FromImport): void {
-    for (const name of stmt.names) {
-      this.environment?.declareName(name);
-      this.environment?.moduleBindings.add(name.lexeme);
+    for (const entry of stmt.names) {
+      const binding = entry.alias ?? entry.name;
+      this.environment?.declareName(binding);
+      this.environment?.moduleBindings.add(binding.lexeme);
     }
   }
 
-  visitContinueStmt(stmt: StmtNS.Continue): void {
-    if (this.loopDepth === 0) {
-      throw new ResolverErrors.InvalidSyntaxError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-        "'continue' outside of loop",
-      );
-    }
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
-  }
-  visitBreakStmt(stmt: StmtNS.Break): void {
-    if (this.loopDepth === 0) {
-      throw new ResolverErrors.InvalidSyntaxError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-        "'break' outside of loop",
-      );
-    }
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        stmt.startToken.line,
-        stmt.startToken.col,
-        this.source,
-        stmt.startToken.indexInSource,
-        stmt.startToken.indexInSource + stmt.startToken.lexeme.length,
-      );
-    }
-  }
-  visitPassStmt(stmt: StmtNS.Pass): void {}
+  visitContinueStmt(_stmt: StmtNS.Continue): void {}
+  visitBreakStmt(_stmt: StmtNS.Break): void {}
+  visitPassStmt(_stmt: StmtNS.Pass): void {}
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
@@ -510,37 +364,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitLambdaExpr(expr: ExprNS.Lambda): void {
     // Create a new environment.
     const oldEnv = this.environment;
-
-    // Validate that there are no starred parameters, as those are not supported in the Python 2 and below.
-    if (this.variant < 3 && expr.parameters.some(param => param.isStarred)) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        expr.startToken.line,
-        expr.startToken.col,
-        this.source,
-        expr.startToken.indexInSource,
-        expr.startToken.indexInSource + expr.startToken.lexeme.length,
-      );
-    }
-    let hasSeenStarred = false;
-    for (const param of expr.parameters) {
-      if (param.isStarred) {
-        if (hasSeenStarred) {
-          throw new ResolverErrors.InvalidSyntaxError(
-            param.line,
-            param.col,
-            this.source,
-            param.indexInSource,
-            param.indexInSource + param.lexeme.length,
-            "Multiple starred parameters are not allowed.",
-          );
-        }
-        hasSeenStarred = true;
-      }
-    }
-
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
-
     this.environment = new Environment(this.source, this.environment, newEnv);
     this.resolve(expr.body);
     // Restore old environment
@@ -565,24 +390,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.expression);
   }
   visitBinaryExpr(expr: ExprNS.Binary): void {
-    if (
-      this.variant <= 4 &&
-      [
-        TokenType.CIRCUMFLEX,
-        TokenType.VBAR,
-        TokenType.AT,
-        TokenType.TILDE,
-        TokenType.AMPER,
-      ].includes(expr.operator.type)
-    ) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        expr.startToken.line,
-        expr.startToken.col,
-        this.source,
-        expr.startToken.indexInSource,
-        expr.startToken.indexInSource + expr.startToken.lexeme.length,
-      );
-    }
     this.resolve(expr.left);
     this.resolve(expr.right);
   }
@@ -604,51 +411,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.consequent);
     this.resolve(expr.alternative);
   }
-  visitNoneExpr(expr: ExprNS.None): void {}
-  visitLiteralExpr(expr: ExprNS.Literal): void {}
-  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {}
-  visitComplexExpr(expr: ExprNS.Complex): void {}
-
+  visitNoneExpr(_expr: ExprNS.None): void {}
+  visitLiteralExpr(_expr: ExprNS.Literal): void {}
+  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
+  visitComplexExpr(_expr: ExprNS.Complex): void {}
   visitListExpr(expr: ExprNS.List): void {
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        expr.startToken.line,
-        expr.startToken.col,
-        this.source,
-        expr.startToken.indexInSource,
-        expr.startToken.indexInSource + expr.startToken.lexeme.length,
-      );
-    }
     this.resolve(expr.elements);
   }
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
-    if (this.variant < 3) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        expr.startToken.line,
-        expr.startToken.col,
-        this.source,
-        expr.startToken.indexInSource,
-        expr.startToken.indexInSource + expr.startToken.lexeme.length,
-      );
-    }
     this.resolve(expr.value);
     this.resolve(expr.index);
-  }
-  visitTupleExpr(expr: ExprNS.Tuple): void {
-    if (this.variant <= 4) {
-      throw new ResolverErrors.UnsupportedFeatureError(
-        expr.startToken.line,
-        expr.startToken.col,
-        this.source,
-        expr.startToken.indexInSource,
-        expr.startToken.indexInSource + expr.startToken.lexeme.length,
-      );
-    }
-    for (const element of expr.elements) {
-      this.resolve(element);
-    }
-  }
-  visitStarredExpr(expr: ExprNS.Starred): void {
-    throw new Error("Starred expressions are not yet supported");
   }
 }

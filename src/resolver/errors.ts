@@ -14,41 +14,6 @@ export namespace ResolverErrors {
       this.name = "BaseResolverError";
     }
   }
-
-  export class InvalidSyntaxError extends BaseResolverError {
-    constructor(
-      line: number,
-      col: number,
-      source: string,
-      start: number,
-      current: number,
-      hint?: string,
-    ) {
-      let { lineIndex, fullLine } = getFullLine(source, start);
-      fullLine = "\n" + fullLine + "\n";
-      hint = hint || ` Invalid syntax.`;
-      const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
-      hint = hint.padStart(hint.length + col - diff, " ");
-      const name = "InvalidSyntaxError";
-      super(name, fullLine + hint, lineIndex, col);
-      this.name = "InvalidSyntaxError";
-    }
-  }
-
-  export class UnsupportedFeatureError extends BaseResolverError {
-    constructor(line: number, col: number, source: string, start: number, current: number) {
-      let { lineIndex, fullLine } = getFullLine(source, start);
-      fullLine = "\n" + fullLine + "\n";
-      let hint = ` This feature is not supported in this version of the interpreter.`;
-      const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
-      hint = hint.padStart(hint.length + col - diff, " ");
-      const name = "UnsupportedFeatureError";
-      super(name, fullLine + hint, lineIndex, col);
-      this.name = "UnsupportedFeatureError";
-    }
-  }
   export class NameNotFoundError extends BaseResolverError {
     constructor(
       line: number,
@@ -58,8 +23,7 @@ export namespace ResolverErrors {
       current: number,
       suggestion: string | null,
     ) {
-      let { lineIndex, fullLine } = getFullLine(source, start);
-      fullLine = "\n" + fullLine + "\n";
+      const { lineIndex, fullLine } = getFullLine(source, start);
       let hint = ` This name is not found in the current or enclosing environment(s).`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
@@ -71,7 +35,7 @@ export namespace ResolverErrors {
         hint += sugg;
       }
       const name = "NameNotFoundError";
-      super(name, fullLine + hint, lineIndex, col);
+      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = "NameNotFoundError";
     }
   }
@@ -85,17 +49,16 @@ export namespace ResolverErrors {
       current: number,
       oldName: Token,
     ) {
-      let { lineIndex, fullLine } = getFullLine(source, start);
-      fullLine = "\n" + fullLine + "\n";
+      const { lineIndex, fullLine } = getFullLine(source, start);
       let hint = ` A name has been declared here.`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
       hint = hint.padStart(hint.length + col - diff, " ");
-      let { lineIndex: oldLine, fullLine: oldNameLine } = getFullLine(
+      const { lineIndex: oldLine, fullLine: oldUnpaddedNameLine } = getFullLine(
         source,
         oldName.indexInSource,
       );
-      oldNameLine = "\n" + oldNameLine + "\n";
+      const oldNameLine = "\n" + oldUnpaddedNameLine + "\n";
       let sugg = ` However, it has already been declared in the same environment at line ${oldLine}, here: `;
       sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");
       sugg = "\n" + sugg;
@@ -103,7 +66,7 @@ export namespace ResolverErrors {
       oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, " ");
       hint += oldNameLine;
       const name = "NameReassignmentError";
-      super(name, fullLine + hint, lineIndex, col);
+      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = "NameReassignmentError";
     }
   }

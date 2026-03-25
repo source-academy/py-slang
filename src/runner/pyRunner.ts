@@ -1,10 +1,9 @@
 import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
 import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
-import { Parser } from "../parser";
-import { Resolver } from "../resolver";
+import { parse } from "../parser/parser-adapter";
+import { analyze } from "../resolver/analysis";
 import { Group } from "../stdlib/utils";
-import { Tokenizer } from "../tokenizer";
 import { RecursivePartial, Result } from "../types";
 
 type Stmt = StmtNS.Stmt;
@@ -25,12 +24,9 @@ function runPyAST(
   preludeNames: string[] = [],
 ): Stmt {
   const script = code + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
-  const ast = pyParser.parse();
+  const ast = parse(script);
   if (doValidate) {
-    new Resolver(script, ast, variant, groups, preludeNames).resolve(ast);
+    analyze(ast, script, variant, groups, preludeNames);
   }
   return ast;
 }
@@ -42,7 +38,7 @@ export async function loadGroupsIntoContext(
 ) {
   if (options.isPrelude || !options.groups) return;
   let prelude = "";
-  for (const group of groups as Group[]) {
+  for (const group of groups) {
     for (const [name, value] of group.builtins) {
       context.nativeStorage.builtins.set(name, value);
     }

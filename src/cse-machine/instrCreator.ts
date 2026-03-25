@@ -1,3 +1,5 @@
+import { ExprNS } from "../ast-types";
+import { TokenType } from "../tokens";
 import { Environment } from "./environment";
 import {
   AppInstr,
@@ -20,8 +22,6 @@ import {
   UnOpInstr,
   WhileInstr,
 } from "./types";
-import { TokenType } from "../tokens";
-import { ExprNS, StmtNS } from "../ast-types";
 
 export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
 
@@ -122,14 +122,16 @@ export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr =>
 
 export const forInstr = (
   srcNode: Node,
-  target: ExprNS.Expr,
-  iter: ExprNS.Expr,
+  init: ExprNS.Variable,
+  test: ExprNS.Expr,
+  update: Node,
   body: StatementSequence,
 ): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
-  target,
-  iter,
+  init,
+  test,
+  update,
   body,
 });
 

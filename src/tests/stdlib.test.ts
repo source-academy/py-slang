@@ -1,6 +1,6 @@
 import { TypeError, UnsupportedOperandTypeError, ZeroDivisionError } from "../errors";
-import { ResolverErrors } from "../resolver/errors";
 import { PyComplexNumber } from "../types";
+import { FeatureNotSupportedError } from "../validator";
 import { generateTestCases, TestCases } from "./utils";
 
 describe("Standard Library Tests", () => {
@@ -82,7 +82,7 @@ describe("Standard Library Tests", () => {
         ["True == 1", UnsupportedOperandTypeError, null], // bool == int
         ["None == 1", UnsupportedOperandTypeError, null], // None == int
         ["None == None", UnsupportedOperandTypeError, null], // None == None
-        ["[] == []", ResolverErrors.UnsupportedFeatureError, null], // list literals are not supported,
+        ["[] == []", FeatureNotSupportedError, null], // list literals are not supported,
         ["(lambda x: x) == (lambda x: x)", UnsupportedOperandTypeError, null], // function == diff function
         ["1 == (lambda x: x)", UnsupportedOperandTypeError, null], // int == function
         ["def a():\n    return 2\na == a", UnsupportedOperandTypeError, null], // function == function

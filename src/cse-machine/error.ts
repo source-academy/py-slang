@@ -1,6 +1,12 @@
+import {
+  ErrorSeverity,
+  ErrorType,
+  RuntimeSourceError,
+  SourceError,
+  SourceLocation,
+  UNKNOWN_LOCATION,
+} from "../errors";
 import { Context } from "./context";
-import { SourceError, ErrorType, ErrorSeverity, SourceLocation, UNKNOWN_LOCATION } from "../errors";
-import { RuntimeSourceError } from "../errors";
 
 export class CseError implements SourceError {
   public type = ErrorType.RUNTIME;

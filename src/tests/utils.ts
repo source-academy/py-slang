@@ -1,18 +1,15 @@
-import { expect, test } from "@jest/globals";
-
-import { Tokenizer } from "../tokenizer";
-import { Parser } from "../parser";
-import { Resolver } from "../resolver";
-// import {Translator} from '../translator';
 import { StmtNS } from "../ast-types";
-import Stmt = StmtNS.Stmt;
 import { Context } from "../cse-machine/context";
+import { RuntimeSourceError } from "../errors";
+import { parse } from "../parser/parser-adapter";
+import { Resolver } from "../resolver";
 import { runInContext } from "../runner/pyRunner";
 import { Group } from "../stdlib/utils";
-import { RuntimeSourceError } from "../errors";
 import { PyComplexNumber } from "../types";
-import { executionAsyncId } from "async_hooks";
+import { makeValidatorsForChapter } from "../validator";
+import Stmt = StmtNS.Stmt;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Class<T> = new (...args: any[]) => T;
 
 export type TestExpectedValue =
@@ -34,30 +31,17 @@ export type TestCases = Record<string, [string, TestExpectedValue, string | null
 
 export function toPythonAst(text: string): Stmt {
   const script = text + "\n";
-  const tokenizer = new Tokenizer(script);
-  const tokens = tokenizer.scanEverything();
-  const pyParser = new Parser(script, tokens);
-  const ast = pyParser.parse();
-  // console.dir(ast);
-  return ast;
+  return parse(script);
 }
 
-export function toPythonAstAndResolve(text: string, chapter: number): Stmt {
+export function toPythonAstAndResolve(text: string, variant: number): Stmt {
+  const script = text + "\n";
   const ast = toPythonAst(text);
-  new Resolver(text, ast, chapter).resolve(ast);
+  const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant));
+  resolver.resolve(ast);
   return ast;
 }
 
-// export function toEstreeAST(text: string): Expression | Statement {
-//     const ast = toPythonAst(text);
-//     return new Translator(text).resolve(ast);
-// }
-
-// export function toEstreeAstAndResolve(text: string): Expression | Statement {
-//     const ast = toPythonAst(text);
-//     new Resolver(text, ast).resolve(ast);
-//     return new Translator(text).resolve(ast);
-// }
 type InternalTestCase = {
   label: TestExpectedValue;
   code: string;

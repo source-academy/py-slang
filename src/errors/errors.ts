@@ -1,9 +1,8 @@
-import { Token } from "../tokenizer";
-import { Context } from "../cse-machine/context";
 import { ExprNS, StmtNS } from "../ast-types";
+import { Context } from "../cse-machine/context";
 import { operatorTranslator } from "../cse-machine/types";
+import { Token } from "../tokenizer";
 import { TokenType } from "../tokens";
-import { Value } from "../cse-machine/stash";
 
 export enum ErrorType {
   IMPORT = "Import",
@@ -170,15 +169,15 @@ export class IndexError extends RuntimeSourceError {
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
   constructor(
     source: string,
-    node: ExprNS.Expr,
-    wrongType1: Value["type"],
-    wrongType2: Value["type"] | null,
-    operand: TokenType | string,
+    node: ExprNS.Binary | ExprNS.BoolOp | ExprNS.Unary,
+    wrongType1: string,
+    wrongType2: string,
+    operand: string | TokenType,
   ) {
     super(node);
     this.type = ErrorType.TYPE;
 
-    let index = node.startToken.indexInSource;
+    const index = node.startToken.indexInSource;
     const operatorStr = operatorTranslator(operand);
     const typeStr1 = typeTranslator(wrongType1);
     const { lineIndex, fullLine } = getFullLine(source, index);
@@ -196,10 +195,10 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
       "'";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
     let suggestion: string;
-    if (wrongType2 === null) {
+    if (wrongType2 === "") {
       // Format for Unary operators
       hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`;
       suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
@@ -215,6 +214,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
   }
 }
 
+// TODO: fix this class, since it doesn't seem to be functional
 export class MissingRequiredPositionalError extends RuntimeSourceError {
   private functionName: string;
   private missingParamCnt: number;
@@ -224,8 +224,8 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: unknown[],
     variadic: boolean,
   ) {
     super(node);
@@ -235,7 +235,7 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     if (variadic) {
       adverb = "at least";
     }
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
     this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
 
@@ -285,8 +285,8 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
     source: string,
     node: ExprNS.Expr,
     functionName: string,
-    params: any,
-    args: any,
+    params: number | ExprNS.Variable[],
+    args: unknown[],
     variadic: boolean,
   ) {
     super(node);
@@ -297,7 +297,7 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
       adverb = "at most";
     }
 
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
     this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
 
@@ -324,10 +324,10 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
 }
 
 export class ZeroDivisionError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context) {
+  constructor(source: string, node: ExprNS.Binary) {
     super(node);
     this.type = ErrorType.TYPE;
-    let index = node.startToken.indexInSource;
+    const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
@@ -337,10 +337,10 @@ export class ZeroDivisionError extends RuntimeSourceError {
     let hint = "ZeroDivisionError: division by zero.";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
     const name = "ZeroDivisionError";
-    const operator = (node as any).operator.lexeme;
+    const operator = node.operator.lexeme;
     switch (operator) {
       case "/":
         hint = "ZeroDivisionError: division by zero.";
@@ -377,19 +377,15 @@ export class ZeroDivisionError extends RuntimeSourceError {
 }
 
 export class StepLimitExceededError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Expr, context: Context) {
+  constructor(source: string, node: ExprNS.Binary | ExprNS.Expr) {
     super(node);
     this.type = ErrorType.RUNTIME;
-
-    const index = (node as any).loc?.start?.index ?? (node as any).srcNode?.loc?.start?.index ?? 0;
+    const index = node.startToken.indexInSource;
 
     const { lineIndex, fullLine } = getFullLine(source, index);
 
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
-    const errorPos = (node as any).operator.indexInSource - node.startToken.indexInSource;
+    const errorPos =
+      "operator" in node ? node.operator.indexInSource - node.startToken.indexInSource : 0;
 
     const indicator = createErrorIndicator(fullLine, errorPos); // no target symbol
 
@@ -421,7 +417,7 @@ export class ValueError extends RuntimeSourceError {
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    let hint = "ValueError: math domain error. ";
+    const hint = "ValueError: math domain error. ";
     const offset = fullLine.indexOf(snippet);
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
@@ -460,7 +456,7 @@ export class TypeError extends RuntimeSourceError {
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    let hint =
+    const hint =
       "TypeError: '" + originalType + "' cannot be interpreted as an '" + targetType + "'.";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;

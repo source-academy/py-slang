@@ -1,4 +1,3 @@
-
 \section{Dynamic Type Checking}
 
 Expressions evaluate to integers, floats, complex numbers, boolean
@@ -57,7 +56,7 @@ of arguments and generate an error message when the types do not match.
     \texttt{\textbf{<}} & string   & string     & bool\\
     \texttt{\textbf{>=}} & int,float   & int,float     & bool\\
     \texttt{\textbf{>=}} & string   & string     & bool\\
-    \texttt{\textbf{<=}}    & int,float   & int,float     & bool\\
+    \texttt{\textbf{<=}} & int,float   & int,float     & bool\\
     \texttt{\textbf{<=}} & string   & string     & bool\\
     \texttt{\textbf{and}} & bool & any & any\\
     \texttt{\textbf{or}}  & bool & any & any\\
@@ -69,6 +68,6 @@ of arguments and generate an error message when the types do not match.
   \end{tabular}
 \end{center}
 
-Preceding \texttt{\textbf{?}} and following \texttt{\textbf{if}},
+Preceding conditional expressions and following if statements,
 Python only allows boolean expressions. Lambda expressions can only
 be used as arguments to operators when they are paranthesized.

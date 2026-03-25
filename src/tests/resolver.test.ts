@@ -1,4 +1,6 @@
+import { ParseError } from "../parser/parser-adapter";
 import { ResolverErrors } from "../resolver/errors";
+import { FeatureNotSupportedError } from "../validator";
 import { toPythonAstAndResolve } from "./utils";
 
 describe("Resolver Tests", () => {
@@ -55,8 +57,8 @@ i = 0
 while i < 5:
     print(i)
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow();
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow();
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
 
@@ -67,22 +69,22 @@ break
       const code2 = `
 continue     
 `;
-      // expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError)
-      // expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError)
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.InvalidSyntaxError);
-      // expect(() => toPythonAstAndResolve(code2, 1)).toThrow(ResolverErrors.UnsupportedFeatureError)
-      // expect(() => toPythonAstAndResolve(code2, 2)).toThrow(ResolverErrors.UnsupportedFeatureError)
-      expect(() => toPythonAstAndResolve(code2, 3)).toThrow(ResolverErrors.InvalidSyntaxError);
+      // expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError)
+      // expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError)
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ParseError);
+      // expect(() => toPythonAstAndResolve(code2, 1)).toThrow(FeatureNotSupportedError)
+      // expect(() => toPythonAstAndResolve(code2, 2)).toThrow(FeatureNotSupportedError)
+      expect(() => toPythonAstAndResolve(code2, 3)).toThrow(ParseError);
     });
 
     test("Annotated assignments throw errors for Python 1, 2, 3, 4", () => {
       const code = `
 x: _int = 5
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ParseError);
       expect(toPythonAstAndResolve(code, 5)).toMatchObject({});
     });
 
@@ -98,10 +100,10 @@ x &= 2
 x ^= 2
 x @= 2
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ParseError);
       expect(toPythonAstAndResolve(code, 5)).toMatchObject({});
     });
 
@@ -113,10 +115,10 @@ x | 2
 x & 2
 x @ 2
 `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ParseError);
+      expect(() => toPythonAstAndResolve(code, 4)).toThrow(ParseError);
       expect(toPythonAstAndResolve(code, 5)).toMatchObject({});
     });
 
@@ -124,8 +126,8 @@ x @ 2
       const code = `
 x = [1, 2, 3]
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
 
@@ -134,8 +136,8 @@ x = [1, 2, 3]
 x = [1, 2, 3]
 print(x[0])
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
 
@@ -144,8 +146,8 @@ print(x[0])
 x = [1, 2, 3]
 x[0] = 10
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
 
@@ -155,8 +157,8 @@ def foo(*args):
     print(args)
 foo(1, 2, 3)
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
 
@@ -165,8 +167,8 @@ foo(1, 2, 3)
 foo = lambda *args: args
 print(foo(1, 2, 3))
             `;
-      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.UnsupportedFeatureError);
-      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.UnsupportedFeatureError);
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
   });
@@ -175,14 +177,14 @@ print(foo(1, 2, 3))
       const code = `
 break
             `;
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.InvalidSyntaxError);
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(Error);
     });
 
     test("Continue outside of loop should throw syntax error", () => {
       const code = `
 continue
             `;
-      expect(() => toPythonAstAndResolve(code, 3)).toThrow(ResolverErrors.InvalidSyntaxError);
+      expect(() => toPythonAstAndResolve(code, 3)).toThrow(Error);
     });
   });
 });

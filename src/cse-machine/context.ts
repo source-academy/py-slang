@@ -7,14 +7,13 @@ import { Heap } from "./heap";
 import { BuiltinValue, Stash, Value } from "./stash";
 import { Node } from "./types";
 
-export class Context<T = any> {
+export class Context {
   public control: Control;
   public stash: Stash;
   public output: string = "";
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
-  public externalContext?: T;
   public prelude: string | null = null;
 
   runtime: {
@@ -37,7 +36,7 @@ export class Context<T = any> {
    */
   nativeStorage: NativeStorage;
 
-  constructor(program?: StmtNS.Stmt, context?: Context) {
+  constructor(program?: StmtNS.Stmt) {
     this.control = new Control(program);
     this.stash = new Stash();
     this.runtime = this.createEmptyRuntime();

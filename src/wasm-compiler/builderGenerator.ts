@@ -1,3 +1,15 @@
+import {
+  f64,
+  global,
+  i32,
+  i64,
+  local,
+  mut,
+  wasm,
+  WasmInstruction,
+  WasmNumeric,
+  WasmRaw,
+} from "@sourceacademy/wasm-util";
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import {
@@ -34,8 +46,6 @@ import {
   SET_PARAM_FX,
   TYPE_TAG,
 } from "./constants";
-import { f64, global, i32, i64, local, mut, wasm } from "@sourceacademy/wasm-util";
-import { WasmCall, WasmInstruction, WasmNumeric, WasmRaw } from "@sourceacademy/wasm-util";
 
 const builtInFunctions: {
   name: string;
@@ -377,7 +387,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       .else(alternative) as unknown as WasmNumeric;
   }
 
-  visitNoneExpr(expr: ExprNS.None): WasmNumeric {
+  visitNoneExpr(_expr: ExprNS.None): WasmNumeric {
     return wasm.call(MAKE_NONE_FX);
   }
 
@@ -559,57 +569,42 @@ ${args.map(
       : wasm.if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition))).then(...body);
   }
 
-  visitPassStmt(stmt: StmtNS.Pass): WasmInstruction {
+  visitPassStmt(_stmt: StmtNS.Pass): WasmInstruction {
     return wasm.nop();
   }
 
   // UNIMPLEMENTED PYTHON CONSTRUCTS
-  visitMultiLambdaExpr(expr: ExprNS.MultiLambda): WasmNumeric {
+  visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
-  visitIndentCreation(stmt: StmtNS.Indent): WasmInstruction {
+  visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitDedentCreation(stmt: StmtNS.Dedent): WasmInstruction {
+  visitBreakStmt(_stmt: StmtNS.Break): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitAnnAssignStmt(stmt: StmtNS.AnnAssign): WasmInstruction {
+  visitContinueStmt(_stmt: StmtNS.Continue): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitAugAssignStmt(stmt: StmtNS.AugAssign): WasmInstruction {
+  visitFromImportStmt(_stmt: StmtNS.FromImport): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitBreakStmt(stmt: StmtNS.Break): WasmInstruction {
+  visitGlobalStmt(_stmt: StmtNS.Global): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitContinueStmt(stmt: StmtNS.Continue): WasmInstruction {
+  visitAssertStmt(_stmt: StmtNS.Assert): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+  visitWhileStmt(_stmt: StmtNS.While): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitGlobalStmt(stmt: StmtNS.Global): WasmInstruction {
+  visitForStmt(_stmt: StmtNS.For): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitAssertStmt(stmt: StmtNS.Assert): WasmInstruction {
+  visitListExpr(_expr: ExprNS.List): WasmNumeric {
     throw new Error("Method not implemented.");
   }
-  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitForStmt(stmt: StmtNS.For): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitListExpr(expr: ExprNS.List): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitTupleExpr(expr: ExprNS.Tuple): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+  visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
     throw new Error("Method not implemented.");
   }
 }

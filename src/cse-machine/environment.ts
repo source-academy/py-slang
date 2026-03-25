@@ -1,14 +1,10 @@
+import { ExprNS, StmtNS } from "../ast-types";
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../errors";
 import { Closure } from "./closure";
 import { Context } from "./context";
+import { handleRuntimeError } from "./error";
 import { Heap } from "./heap";
 import { Value } from "./stash";
-import { ExprNS, StmtNS } from "../ast-types";
-import { handleRuntimeError } from "./error";
-import {
-  MissingRequiredPositionalError,
-  TooManyPositionalArgumentsError,
-  TypeError,
-} from "../errors";
 
 export interface Frame {
   [name: string]: Value;
@@ -130,18 +126,18 @@ export const createBlockEnvironment = (
   };
 };
 
-export const handleArrayCreation = (
-  context: Context,
-  array: any[],
-  envOverride?: Environment,
-): void => {
-  const environment = envOverride ?? currentEnvironment(context);
-  Object.defineProperties(array, {
-    id: { value: uniqueId(context) },
-    environment: { value: environment, writable: true },
-  });
-  environment.heap.add(array as any);
-};
+// export const handleArrayCreation = (
+//   context: Context,
+//   array: Value[],
+//   envOverride?: Environment
+// ): void => {
+//   const environment = envOverride ?? currentEnvironment(context)
+//   Object.defineProperties(array, {
+//     id: { value: uniqueId(context) },
+//     environment: { value: environment, writable: true }
+//   })
+//   environment.heap.add(array)
+// }
 
 export const currentEnvironment = (context: Context): Environment => {
   return context.runtime.environments[0];

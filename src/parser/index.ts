@@ -1,1 +1,1 @@
-export { Parser } from "./parser";
+export { parse, NearleyParser as Parser } from "./parser-adapter";

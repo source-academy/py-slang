@@ -5,7 +5,7 @@ import { PyComplexNumber } from "../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { Value } from "./stash";
-import { operatorTranslator, typeTranslator } from "./types";
+import { operatorTranslator } from "./types";
 import { pythonMod } from "./utils";
 
 export type BinaryOperator =
@@ -34,7 +34,7 @@ export type BinaryOperator =
 
 export function evaluateUnaryExpression(
   code: string,
-  command: ExprNS.Expr,
+  command: ExprNS.Unary,
   context: Context,
   operator: TokenType,
   value: Value,
@@ -50,7 +50,7 @@ export function evaluateUnaryExpression(
           code,
           command,
           value.type,
-          null,
+          "",
           operatorTranslator(operator),
         ),
       );
@@ -73,11 +73,10 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              null,
+              "",
               operatorTranslator(operator),
             ),
           );
-          return { type: "error", message: "Unreachable in evaluateUnaryExpression - MINUS" };
       }
     case TokenType.PLUS:
       switch (value.type) {
@@ -92,19 +91,28 @@ export function evaluateUnaryExpression(
               code,
               command,
               value.type,
-              null,
+              "",
               operatorTranslator(operator),
             ),
           );
-          return { type: "error", message: "Unreachable in evaluateUnaryExpression - PLUS" };
       }
+    default:
+      handleRuntimeError(
+        context,
+        new UnsupportedOperandTypeError(
+          code,
+          command,
+          value.type,
+          "",
+          operatorTranslator(operator),
+        ),
+      );
   }
-  return { type: "error", message: "Unreachable in evaluateUnaryExpression" };
 }
 
 export function evaluateBinaryExpression(
   code: string,
-  command: ExprNS.Expr,
+  command: ExprNS.Binary,
   context: Context,
   operator: TokenType,
   left: Value,
@@ -126,10 +134,6 @@ export function evaluateBinaryExpression(
           operatorTranslator(operator),
         ),
       );
-      return {
-        type: "error",
-        message: "Unreachable in evaluateBinaryExpression - complex | complex (start)",
-      };
     }
     const leftComplex = PyComplexNumber.fromValue(left.value);
     const rightComplex = PyComplexNumber.fromValue(right.value);
@@ -166,10 +170,6 @@ export function evaluateBinaryExpression(
             operatorTranslator(operator),
           ),
         );
-        return {
-          type: "error",
-          message: "Unreachable in evaluateBinaryExpression - complex | complex (end)",
-        };
     }
     return { type: "complex", value: result };
   }
@@ -277,17 +277,17 @@ export function evaluateBinaryExpression(
             return { type: "number", value: l * r };
           case TokenType.SLASH:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             return { type: "number", value: l / r };
           case TokenType.DOUBLESLASH:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             return { type: "number", value: Math.floor(l / r) };
           case TokenType.PERCENT:
             if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             const mod = pythonMod(l, r);
             if (typeof mod === "bigint") {
@@ -296,7 +296,7 @@ export function evaluateBinaryExpression(
             return { type: "number", value: mod };
           case TokenType.DOUBLESTAR:
             if (l === 0 && r < 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             return { type: "number", value: l ** r };
         }
@@ -313,17 +313,17 @@ export function evaluateBinaryExpression(
             return { type: "bigint", value: l * r };
           case TokenType.SLASH:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             return { type: "number", value: Number(l) / Number(r) };
           case TokenType.DOUBLESLASH:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             return { type: "bigint", value: (l - (pythonMod(l, r) as bigint)) / r };
           case TokenType.PERCENT:
             if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             const mod = pythonMod(l, r);
             if (typeof mod === "bigint") {
@@ -332,7 +332,7 @@ export function evaluateBinaryExpression(
             return { type: "number", value: mod };
           case TokenType.DOUBLESTAR:
             if (l === 0n && r < 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command, context));
+              handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
             if (r < 0n) return { type: "number", value: Number(l) ** Number(r) };
             return { type: "bigint", value: l ** r };
@@ -588,7 +588,7 @@ export function isFalsy(value: Value): boolean {
 
 export function evaluateBoolExpression(
   code: string,
-  command: ExprNS.Expr,
+  command: ExprNS.BoolOp,
   context: Context,
   operator: TokenType,
   left: Value,
@@ -617,6 +617,5 @@ export function evaluateBoolExpression(
       context,
       new UnsupportedOperandTypeError(code, command, left.type, right.type, operator),
     );
-    return { type: "error", message: `Unreachable in evaluateBoolExpression}` };
   }
 }

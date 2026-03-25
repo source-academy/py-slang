@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           submodules: recursive
       - name: Install dependencies (apt)
@@ -19,13 +19,15 @@ jobs:
           sudo apt-get update && \
           sudo apt-get install -y --no-install-recommends \
           texlive texlive-fonts-extra texlive-lang-cjk latexmk latex-cjk-all
+      - name: Enable Corepack
+        run: corepack enable
       - name: Use Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: 'npm'
-      - name: Install npm dependencies
-        run: npm install
+          cache: yarn
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
       - name: Build py-slang Doc
         run: |
           chmod +x scripts/jsdoc.sh
@@ -38,4 +40,3 @@ jobs:
           external_repository: source-academy/docs.sourceacademy.org
           publish_branch: deploy-py-slang
           force_orphan: true
-
