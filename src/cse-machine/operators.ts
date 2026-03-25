@@ -605,12 +605,12 @@ export function evaluateBoolExpression(
   context: Context,
   operator: TokenType,
   left: Value,
-  right: Value,
-): Value {
-  if (operator === TokenType.OR) {
+  right: ExprNS.Expr,
+): Value | ExprNS.Expr {
+  if (operator === TokenType.OR && left.type === "bool") {
     // Python 'or': if the first value is truthy, return it. Otherwise, evaluate and return the second value.
     return !isFalsy(left) ? left : right;
-  } else if (operator === TokenType.AND) {
+  } else if (operator === TokenType.AND && left.type == "bool") {
     // Python 'and': if the first value is falsy, return it. Otherwise, evaluate and return the second value.
     return isFalsy(left) ? left : right;
   } else {
@@ -620,7 +620,7 @@ export function evaluateBoolExpression(
         code,
         command,
         typeTranslator(left.type),
-        typeTranslator(right.type),
+        typeTranslator(right.kind),
         operatorTranslator(operator),
       ),
     );

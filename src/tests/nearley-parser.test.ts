@@ -5,8 +5,8 @@
  * parse() from parser-adapter directly, asserting that the returned nodes
  * are instanceof the class-based ExprNS/StmtNS classes.
  */
-import { parse } from "../parser/parser-adapter";
 import { ExprNS, StmtNS } from "../ast-types";
+import { parse } from "../parser/parser-adapter";
 
 // ---------------------------------------------------------------------------
 // Helpers

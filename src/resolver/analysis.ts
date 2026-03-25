@@ -1,6 +1,7 @@
 import { StmtNS } from "../ast-types";
-import { Resolver } from "./resolver";
+import { Group } from "../stdlib/utils";
 import { makeValidatorsForChapter } from "../validator";
+import { Resolver } from "./resolver";
 
 /**
  * Full analysis pipeline (single-pass):
@@ -9,6 +10,6 @@ import { makeValidatorsForChapter } from "../validator";
  *
  * Throws on first violation found.
  */
-export function analyze(ast: StmtNS.FileInput, source: string, chapter: number = 4): void {
-  new Resolver(source, ast, makeValidatorsForChapter(chapter)).resolve(ast);
+export function analyze(ast: StmtNS.FileInput, source: string, chapter: number = 4, groups: Group[] = [], preludeNames: string[] = []): void {
+  new Resolver(source, ast, groups, makeValidatorsForChapter(chapter), preludeNames).resolve(ast);
 }

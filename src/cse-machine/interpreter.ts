@@ -8,9 +8,10 @@
 
 import { ExprNS, StmtNS } from "../ast-types";
 import * as error from "../errors/errors";
-import { BuiltinReassignmentError } from "../errors/errors";
+import { BuiltinReassignmentError, RuntimeSourceError } from "../errors/errors";
 import { IOptions } from "../runner/pyRunner";
 import { builtIns, toPythonString } from "../stdlib";
+import { TokenType } from '../tokens';
 import { CSEBreak, RecursivePartial, Representation, Result } from "../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
@@ -112,6 +113,9 @@ export function evaluate(
     context.control = new Control(program);
     context.stash = new Stash();
     // Adaptation for new feature
+    //console.log("inside evaluate for interpreter")
+    //console.log(code);
+    //console.log(program);
     const result = runCSEMachine(
       code,
       context,
@@ -123,7 +127,9 @@ export function evaluate(
     );
     return context.output ? { type: "string", value: context.output } : result;
   } catch (error) {
-    return { type: "error", message: error instanceof Error ? error.message : String(error) };
+    //console.log("error here")
+    //console.log((error as Error).message);
+    return { type: "error", message: error instanceof RuntimeSourceError ? error.message : String(error) };
   } finally {
     context.runtime.isRunning = false;
   }
@@ -325,7 +331,8 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     //   declareFunctionsAndVariables(context, command as es.BlockStatement, environment)
     // }
 
-    if (node.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment") {
+    if (node.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment" && 
+        currentEnvironment(context).name !== "prelude") {
       const programEnv = createProgramEnvironment(context, isPrelude);
       pushEnvironment(context, programEnv);
     }
@@ -417,7 +424,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const boolOp = command as ExprNS.BoolOp;
     control.push(instrCreator.boolOpInstr(boolOp.operator.type, boolOp));
-    control.push(boolOp.right);
     control.push(boolOp.left);
   },
 
@@ -733,19 +739,29 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const instr = command as BoolOpInstr;
-    const right = stash.pop();
     const left = stash.pop();
-
-    if (left && right) {
+    const boolOpNode = instr.srcNode as ExprNS.BoolOp;
+    const right = boolOpNode.right;
+    if (left) {
       const result = evaluateBoolExpression(
-        code,
-        instr.srcNode as ExprNS.BoolOp,
-        context,
-        instr.symbol,
-        left,
-        right,
-      );
-      stash.push(result);
+              code,
+              instr.srcNode as ExprNS.BoolOp,
+              context,
+              instr.symbol,
+              left,
+              right
+            )
+      const falsy = isFalsy(left)
+      const operator = instr.symbol;
+      if (operator == TokenType.AND && falsy) {
+          stash.push(left)
+        } else if (operator == TokenType.AND && !falsy) {
+          _control.push(right)
+        } else if (operator == TokenType.OR && falsy) {
+          _control.push(right)
+        } else {
+          stash.push(result as Value)
+        }
     }
   },
 
@@ -781,8 +797,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     const callable = stash.pop();
 
-    if (callable instanceof Closure) {
-      const closure = callable;
+    // console.log("creating function");
+    // console.log(callable);
+    if (callable?.type === "closure") {
+      //console.log("HERE")
+      const closure = callable.closure;
       control.push(instrCreator.resetInstr(instr.srcNode));
 
       if (closure.node.constructor.name === "FunctionDef") {

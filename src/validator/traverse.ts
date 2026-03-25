@@ -1,4 +1,4 @@
-import { StmtNS, ExprNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import { ASTNode } from "./types";
 
 /**
@@ -19,6 +19,9 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   constructor(private fn: (node: ASTNode) => void) {}
 
   // ── Statements ──
+
+  visitIndentCreation(stmt: StmtNS.Indent): void {}
+  visitDedentCreation(stmt: StmtNS.Dedent): void {}
 
   visitFileInputStmt(stmt: StmtNS.FileInput): void {
     stmt.statements.forEach(s => traverseAST(s, this.fn));

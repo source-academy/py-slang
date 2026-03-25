@@ -274,6 +274,9 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   if (builtInConstants.has(name)) {
     return builtInConstants.get(name)!;
   }
+  if (context.nativeStorage.builtins.has(name)) {
+    return context.nativeStorage.builtins.get(name)!
+  }
   throw new NameError(code, name, node as ExprNS.Variable);
 }
 

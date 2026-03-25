@@ -250,22 +250,24 @@ export namespace ExprNS {
 }
 export namespace StmtNS {
   export interface Visitor<T> {
-    visitPassStmt(stmt: Pass): T;
-    visitAssignStmt(stmt: Assign): T;
-    visitAnnAssignStmt(stmt: AnnAssign): T;
-    visitBreakStmt(stmt: Break): T;
-    visitContinueStmt(stmt: Continue): T;
-    visitReturnStmt(stmt: Return): T;
-    visitFromImportStmt(stmt: FromImport): T;
-    visitGlobalStmt(stmt: Global): T;
-    visitNonLocalStmt(stmt: NonLocal): T;
-    visitAssertStmt(stmt: Assert): T;
-    visitIfStmt(stmt: If): T;
-    visitWhileStmt(stmt: While): T;
-    visitForStmt(stmt: For): T;
-    visitFunctionDefStmt(stmt: FunctionDef): T;
-    visitSimpleExprStmt(stmt: SimpleExpr): T;
-    visitFileInputStmt(stmt: FileInput): T;
+    visitIndentCreation(stmt: Indent): T;
+        visitDedentCreation(stmt: Dedent): T;
+        visitPassStmt(stmt: Pass): T;
+        visitAssignStmt(stmt: Assign): T;
+        visitAnnAssignStmt(stmt: AnnAssign): T;
+        visitBreakStmt(stmt: Break): T;
+        visitContinueStmt(stmt: Continue): T;
+        visitReturnStmt(stmt: Return): T;
+        visitFromImportStmt(stmt: FromImport): T;
+        visitGlobalStmt(stmt: Global): T;
+        visitNonLocalStmt(stmt: NonLocal): T;
+        visitAssertStmt(stmt: Assert): T;
+        visitIfStmt(stmt: If): T;
+        visitWhileStmt(stmt: While): T;
+        visitForStmt(stmt: For): T;
+        visitFunctionDefStmt(stmt: FunctionDef): T;
+        visitSimpleExprStmt(stmt: SimpleExpr): T;
+        visitFileInputStmt(stmt: FileInput): T;
   }
   export abstract class Stmt {
     abstract readonly kind: string;
@@ -276,6 +278,24 @@ export namespace StmtNS {
       this.endToken = endToken;
     }
     abstract accept(visitor: Visitor<any>): any;
+  }
+  export class Indent extends Stmt {
+    readonly kind = "Indent";
+    constructor(startToken: Token, endToken: Token) {
+        super(startToken, endToken)
+    }
+    override accept(visitor: Visitor<any>): any {
+        return visitor.visitIndentCreation(this)
+    }
+  }
+  export class Dedent extends Stmt {
+    readonly kind = "Dedent";
+    constructor(startToken: Token, endToken: Token) {
+        super(startToken, endToken)
+    }
+    override accept(visitor: Visitor<any>): any {
+        return visitor.visitDedentCreation(this)
+    }
   }
   export class Pass extends Stmt {
     readonly kind = "Pass";

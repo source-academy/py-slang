@@ -1,4 +1,5 @@
 import { erf, gamma, lgamma } from "mathjs";
+import { StmtNS } from "./ast-types";
 import { Context } from "./cse-machine/context";
 import { ControlItem } from "./cse-machine/control";
 import { handleRuntimeError } from "./cse-machine/error";
@@ -11,52 +12,69 @@ import {
   ValueError,
 } from "./errors/errors";
 
-export function Validate(
-  minArgs: number | null,
-  maxArgs: number | null,
-  functionName: string,
-  strict: boolean,
+export function Validate<T extends Value>(
+    minArgs: number | null,
+    maxArgs: number | null,
+    functionName: string,
+    strict: boolean
 ) {
-  return function (
-    _target: unknown,
-    _propertyKey: string,
-    descriptor: TypedPropertyDescriptor<
-      (args: Value[], source: string, command: ControlItem, context: Context) => Value
-    >,
-  ): void {
-    const originalMethod = descriptor.value!;
+    return function (
+        target: unknown,
+        propertyKey: string,
+        descriptor: TypedPropertyDescriptor<(
+            args: Value[],
+            source: string,
+            command: ControlItem,
+            context: Context
+        ) => T>
+    ): TypedPropertyDescriptor<(
+        args: Value[],
+        source: string,
+        command: ControlItem,
+        context: Context
+      ) => T> {
+    
+        const originalMethod = descriptor.value!;
+        
+        descriptor.value = function (
+            args: Value[],
+            source: string,
+            command: ControlItem,
+            context: Context
+        ): T {
+            if (minArgs !== null && args.length < minArgs) {
+                handleRuntimeError(
+                    context,
+                    new MissingRequiredPositionalError(
+                        source,
+                        command as ExprNS.Expr,
+                        functionName,
+                        minArgs,
+                        args,
+                        strict
+                    )
+                );
+            }
+            if (maxArgs !== null && args.length > maxArgs) {
+                handleRuntimeError(
+                    context,
+                    new TooManyPositionalArgumentsError(
+                        source,
+                        command as ExprNS.Expr,
+                        functionName,
+                        maxArgs,
+                        args,
+                        strict
+                    )
+                );
+            }
+            
+            return originalMethod.call(this, args, source, command, context);
+        };
 
-    descriptor.value = function (
-      args: Value[],
-      source: string,
-      command: ControlItem,
-      context: Context,
-    ): Value {
-      if (minArgs !== null && args.length < minArgs) {
-        throw new MissingRequiredPositionalError(
-          source,
-          command as ExprNS.Expr,
-          functionName,
-          minArgs,
-          args,
-          strict,
-        );
-      }
-
-      if (maxArgs !== null && args.length > maxArgs) {
-        throw new TooManyPositionalArgumentsError(
-          source,
-          command as ExprNS.Expr,
-          functionName,
-          maxArgs,
-          args,
-          strict,
-        );
-      }
-
-      return originalMethod.call(this, args, source, command, context);
+        // SWC/Rsbuild requires returning the mutated descriptor
+        return descriptor; 
     };
-  };
 }
 
 export class BuiltInFunctions {
@@ -1986,6 +2004,49 @@ export class BuiltInFunctions {
     return { type: "number", value: currentTime };
   }
 
+  @Validate(1, 1, 'is_none', true)
+  static is_none(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'none' };
+  }
+
+  @Validate(1, 1, 'is_float', true)
+  static is_float(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'number' };
+  }
+
+  @Validate(1, 1, 'is_string', true)
+  static is_string(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'string' };
+  }
+
+  @Validate(1, 1, 'is_boolean', true)
+  static is_boolean(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'bool' };
+  }
+
+  @Validate(1, 1, 'is_int', true)
+  static is_int(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'bigint' };
+  }
+
+  @Validate(1, 1, 'is_function', true)
+  static is_function(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      return { type: 'bool', value: obj.type === 'function' || obj.type === 'closure' || obj.type === 'builtin' };
+  }
+
+  @Validate(1, 1, 'repr', true)
+  static repr(args: Value[], source: string, command: ControlItem, context: Context): Value {
+      const obj = args[0];
+      const result = toPythonString(obj, true);
+      return { type: 'string', value: result };
+  } 
+
   static input(_args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
     // TODO: : call conductor to receive user input
     return { type: "string", value: "" };
@@ -1994,7 +2055,7 @@ export class BuiltInFunctions {
   static print(args: Value[], _source: string, _command: ControlItem, context: Context) {
     const output = args.map(arg => toPythonString(arg)).join(" ");
     context.output += output + "\n";
-    return { type: "undefined" };
+    return { type: "none" };
   }
 
   static str(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
@@ -2007,7 +2068,7 @@ export class BuiltInFunctions {
   }
 }
 
-import { ExprNS, StmtNS } from "./ast-types";
+import { ExprNS } from "./ast-types";
 import py_s1_constants from "./stdlib/py_s1_constants.json";
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
@@ -2091,7 +2152,7 @@ export function toPythonFloat(num: number): string {
   }
   return num.toString();
 }
-
+/*
 export function toPythonString(obj: Value): string {
   let ret = "";
   if (!obj) {
@@ -2121,6 +2182,46 @@ export function toPythonString(obj: Value): string {
     ret = "None";
   } else if (obj.type === "string") {
     ret = obj.value.toString();
+  }
+  return ret;
+}*/
+
+export function toPythonString(obj: Value, repr: boolean = false): string {
+  let ret = "";
+  if (!obj) {
+    return "None";
+  }
+  if (obj.type == "builtin") {
+      return `<built-in function ${obj.name}>`
+  }
+  if (obj.type === "bigint" || obj.type === "complex") {
+      ret = obj.value.toString();
+  } else if (obj.type === "number") {
+      ret = toPythonFloat(obj.value);
+  } else if (obj.type === "bool") {
+      if (obj.value === true) {
+          return "True";
+      } else {
+          return "False";
+      }
+  } else if (obj.type === "error") {
+      return obj.message;
+  } else if (obj.type === "closure") {
+      if (obj.closure.node instanceof StmtNS.FunctionDef) {
+        return `<function ${obj.closure.node.name.lexeme}>`;
+      }
+      return `<function (anonymous)>`;
+  } else if (obj.type === "none") {
+      ret = "None";
+  } else if (obj.type === "string") {
+      ret = obj.value;
+  } else if (obj.type === "function") {
+      const funcName = obj.name || "(anonymous)";
+      ret = `<function ${funcName}>`;
+  } else if (obj.type === "list") {
+      ret = `[${obj.value.map(v => toPythonString(v, true)).join(", ")}]`;
+  } else {
+      ret = `<${obj.type} object>`;
   }
   return ret;
 }

@@ -21,7 +21,8 @@ export type Value =
   | ErrorValue
   | NoneValue
   | BigIntValue
-  | ClosureValue;
+  | ClosureValue
+  | ListValue;
 
 export interface ClosureValue {
   type: "closure";
@@ -82,6 +83,11 @@ export interface BuiltinValue {
   type: "builtin";
   name: string;
   func: (args: Value[], code: string, command: ControlItem, context: Context) => Value;
+}
+
+export interface ListValue {
+  type: "list";
+  value: Value[];
 }
 
 export class Stash extends Stack<Value> {

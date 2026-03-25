@@ -6,7 +6,11 @@ export namespace ResolverErrors {
     line: number;
     col: number;
 
-    constructor(name: string, message: string, line: number, col: number) {
+    constructor(
+      name: string, 
+      message: string, 
+      line: number, 
+      col: number) {
       super(`${name} at line ${line}
                    ${message}`);
       this.line = line;
@@ -14,6 +18,44 @@ export namespace ResolverErrors {
       this.name = "BaseResolverError";
     }
   }
+  export class InvalidSyntaxError extends BaseResolverError {
+    constructor(
+      line: number,
+      col: number, 
+      source: string, 
+      start: number,
+      current: number, 
+      hint?: string) {
+        const { lineIndex, fullLine } = getFullLine(source, start);
+        hint = hint || ` Invalid syntax.`;
+        const diff = (current - start);
+        hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+        hint = hint.padStart(hint.length + col - diff, " ");
+        const name = "InvalidSyntaxError";
+        super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+        this.name = "InvalidSyntaxError";
+      }
+    }
+            
+    export class UnsupportedFeatureError extends BaseResolverError {
+      constructor(
+        line: number, 
+        col: number, 
+        source: string, 
+        start: number,
+        current: number,
+        suggestion: string | null
+      ) {
+          const { lineIndex, fullLine } = getFullLine(source, start);
+          let hint = ` This feature is not supported in this version of the interpreter.`;
+          const diff = (current - start);
+          hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+          hint = hint.padStart(hint.length + col - diff, " ");
+          const name = "UnsupportedFeatureError";
+          super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+          this.name = "UnsupportedFeatureError";
+        }
+    }
   export class NameNotFoundError extends BaseResolverError {
     constructor(
       line: number,
