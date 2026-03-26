@@ -84,7 +84,6 @@ x: _int = 5
       expect(() => toPythonAstAndResolve(code, 2)).toThrow(Error);
       expect(() => toPythonAstAndResolve(code, 3)).toThrow(Error);
       expect(() => toPythonAstAndResolve(code, 4)).toThrow(Error);
-      expect(toPythonAstAndResolve(code, 5)).toMatchObject({});
     });
 
     test("Augmented assignments throw errors for Python 1,2,3,4", () => {

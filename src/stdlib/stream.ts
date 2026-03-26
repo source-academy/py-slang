@@ -1,11 +1,11 @@
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
-import { ListValue, NoneValue, Value } from "../cse-machine/stash";
+import { BuiltinValue, ListValue, NoneValue, Value } from "../cse-machine/stash";
 import { Validate } from "../stdlib";
 import streamPrelude from "./stream.prelude";
 import { Group, GroupName } from "./utils";
 
-const streamBuiltins = new Map<string, Value>();
+const streamBuiltins = new Map<string, BuiltinValue>();
 
 class StreamBuiltins {
   @Validate(0, null, "stream", true)
@@ -39,9 +39,9 @@ for (const builtin of Object.getOwnPropertyNames(StreamBuiltins)) {
   ) {
     streamBuiltins.set(builtin, {
       type: "builtin",
-      func: StreamBuiltins[builtin as keyof typeof StreamBuiltins] as any,
+      func: StreamBuiltins[builtin as keyof typeof StreamBuiltins] as BuiltinValue["func"],
       name: builtin,
-    }); // TODO: fix typing
+    });
   }
 }
 export default {

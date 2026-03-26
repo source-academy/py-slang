@@ -9,7 +9,7 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../ast-types";
 import * as error from "../errors/errors";
-import { BuiltinReassignmentError } from "../errors/errors";
+import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../errors/errors";
 import { IOptions } from "../runner/pyRunner";
 import { builtIns, toPythonString } from "../stdlib";
 import { TokenType } from "../tokens";
@@ -26,12 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError } from "./error";
 import * as instrCreator from "./instrCreator";
-import {
-  evaluateBinaryExpression,
-  evaluateBoolExpression,
-  evaluateUnaryExpression,
-  isFalsy,
-} from "./operators";
+import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
 import {
@@ -900,17 +895,21 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const instr = command as BoolOpInstr;
     const left = stash.pop();
-    const boolOpNode = instr.srcNode as any;
+    const boolOpNode = instr.srcNode as ExprNS.BoolOp;
     const right = boolOpNode.right;
     if (left) {
-      const result = evaluateBoolExpression(
-        code,
-        instr.srcNode as ExprNS.BoolOp,
-        context,
-        instr.symbol,
-        left,
-        right,
-      );
+      if (left.type !== "bool") {
+        handleRuntimeError(
+          context,
+          new UnsupportedOperandTypeError(
+            code,
+            boolOpNode,
+            left.type,
+            "",
+            boolOpNode.operator.type,
+          ),
+        );
+      }
       const falsy = isFalsy(left);
       const operator = instr.symbol;
       if (operator == TokenType.AND && falsy) {
@@ -920,7 +919,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       } else if (operator == TokenType.OR && falsy) {
         control.push(right);
       } else {
-        stash.push(result);
+        stash.push({ type: "bool", value: !falsy });
       }
     }
   },

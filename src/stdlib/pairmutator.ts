@@ -1,19 +1,19 @@
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
-import { Value, NoneValue } from "../cse-machine/stash";
+import { BuiltinValue, NoneValue, Value } from "../cse-machine/stash";
 import { Validate } from "../stdlib";
 import pairmutatorPrelude from "./pairmutator.prelude";
-import { GroupName, Group } from "./utils";
+import { Group, GroupName } from "./utils";
 
-const pairmutatorBuiltins = new Map<string, Value>();
+const pairmutatorBuiltins = new Map<string, BuiltinValue>();
 
 class PairmutatorBuiltins {
   @Validate(2, 2, "set_head", true)
   static set_head(
     args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context,
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
   ): NoneValue {
     const head = args[0];
     const tail = args[1];
@@ -27,9 +27,9 @@ class PairmutatorBuiltins {
   @Validate(2, 2, "set_tail", true)
   static set_tail(
     args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context,
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
   ): NoneValue {
     const head = args[0];
     const tail = args[1];
@@ -47,9 +47,11 @@ for (const builtin of Object.getOwnPropertyNames(PairmutatorBuiltins)) {
   ) {
     pairmutatorBuiltins.set(builtin, {
       type: "builtin",
-      func: PairmutatorBuiltins[builtin as keyof typeof PairmutatorBuiltins] as any,
+      func: PairmutatorBuiltins[
+        builtin as keyof typeof PairmutatorBuiltins
+      ] as BuiltinValue["func"],
       name: builtin,
-    }); // TODO: fix typing
+    });
   }
 }
 export default {

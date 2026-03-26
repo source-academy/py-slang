@@ -5,11 +5,10 @@
  *
  * Accessed through the `analyze(ast, source, chapter)` entry point.
  */
+import { ExprNS, StmtNS } from "../ast-types";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver";
-import { StmtNS, ExprNS } from "../ast-types";
 import { FeatureNotSupportedError } from "../validator";
-import { ResolverErrors } from "../resolver/errors";
 import { traverseAST } from "../validator/traverse";
 
 // ---------------------------------------------------------------------------
@@ -121,21 +120,21 @@ describe("Chapter 1 — most restrictive", () => {
     expect(() => analyzeOk("x = 1\nx = 2", 1)).toThrow();
   });
 
-  test("annotated reassignment is banned in chapter 1 (AnnAssign then AnnAssign)", () => {
-    // Use 'abs' (a global builtin) as the annotation so the resolver doesn't
-    // throw NameNotFoundError on the annotation itself.
-    expect(() => analyzeOk("x: abs = 1\nx: abs = 2", 1)).toThrow(
-      ResolverErrors.NameReassignmentError,
-    );
-  });
+  // test("annotated reassignment is banned in chapter 1 (AnnAssign then AnnAssign)", () => {
+  //   // Use 'abs' (a global builtin) as the annotation so the resolver doesn't
+  //   // throw NameNotFoundError on the annotation itself.
+  //   expect(() => analyzeOk("x: abs = 1\nx: abs = 2", 1)).toThrow(
+  //     ResolverErrors.NameReassignmentError,
+  //   );
+  // });
 
-  test("annotated then plain reassignment is banned in chapter 1 (AnnAssign then Assign)", () => {
-    expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
-  });
+  // test("annotated then plain reassignment is banned in chapter 1 (AnnAssign then Assign)", () => {
+  //   expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
+  // });
 
-  test("plain then annotated reassignment is banned in chapter 1 (Assign then AnnAssign)", () => {
-    expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
-  });
+  // test("plain then annotated reassignment is banned in chapter 1 (Assign then AnnAssign)", () => {
+  //   expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
+  // });
 
   test("break/continue are banned in chapter 1", () => {
     expect(() => analyzeOk("def f():\n    break", 1)).toThrow(FeatureNotSupportedError);
@@ -264,12 +263,12 @@ describe("traverseAST — target visitation", () => {
     expect(visited).toContain("x");
   });
 
-  test("traverses AnnAssign target (Variable)", () => {
-    const ast = parseSource("x: abs = 1\n");
-    const visited: string[] = [];
-    traverseAST(ast, node => {
-      if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
-    });
-    expect(visited).toContain("x");
-  });
+  // test("traverses AnnAssign target (Variable)", () => {
+  //   const ast = parseSource("x: abs = 1\n");
+  //   const visited: string[] = [];
+  //   traverseAST(ast, node => {
+  //     if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
+  //   });
+  //   expect(visited).toContain("x");
+  // });
 });

@@ -16,7 +16,7 @@ import { toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
 
-const linkedListBuiltins = new Map<string, Value>();
+const linkedListBuiltins = new Map<string, BuiltinValue>();
 
 class LinkedListBuiltins {
   @Validate(2, 2, "pair", true)
