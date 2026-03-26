@@ -937,7 +937,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       } else if (operator == TokenType.OR && falsy) {
         control.push(right);
       } else {
-        stash.push({ type: "bool", value: !falsy });
+        stash.push(left);
       }
     }
   },

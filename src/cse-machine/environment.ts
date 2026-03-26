@@ -50,6 +50,9 @@ export const createEnvironment = (
   const isVariadic = closure.node.parameters.some(param => param.isStarred);
   let consumed = false;
   closure.node.parameters.forEach((paramToken, index) => {
+    if (consumed) {
+      return;
+    }
     const paramName = paramToken.lexeme;
     if (paramToken.isStarred) {
       environment.head[paramName] = { type: "list", value: args.slice(index) };
