@@ -62,6 +62,7 @@ type CmdEvaluator = (
   control: Control,
   stash: Stash,
   isPrelude: boolean,
+  variant: number,
 ) => void | Promise<void>;
 
 /**
@@ -104,6 +105,7 @@ export async function evaluate(
   options: RecursivePartial<IOptions> = {},
 ): Promise<Value> {
   source = code;
+
   try {
     // TODO: is undefined variables check necessary for Python?
     // checkProgramForUndefinedVariables(program, context)
@@ -124,6 +126,7 @@ export async function evaluate(
       context.stash,
       options.envSteps!,
       options.stepLimit!,
+      options.variant!,
       options.isPrelude,
     );
     return result;
@@ -181,6 +184,7 @@ export async function evaluate(
  * @param stash Points to the current Stash.
  * @param envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
+ * @param variant The language variant being executed.
  * @param isPrelude Whether the program is the prelude.
  * @returns The top value of the stash after execution.
  */
@@ -191,6 +195,7 @@ export async function runCSEMachine(
   stash: Stash,
   envSteps: number,
   stepLimit: number,
+  variant: number,
   isPrelude: boolean = false,
 ): Promise<Value> {
   const eceState = generateCSEMachineStateStream(
@@ -200,6 +205,7 @@ export async function runCSEMachine(
     stash,
     envSteps,
     stepLimit,
+    variant,
     isPrelude,
   );
 
@@ -221,6 +227,7 @@ export async function runCSEMachine(
  * @param stash The stash storage.
  * @param _envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
+ * @param variant The language variant being executed.
  * @param isPrelude Whether the program is the prelude.
  * @yields The current state of the stash, control stack, and step count.
  */
@@ -231,6 +238,7 @@ export async function* generateCSEMachineStateStream(
   stash: Stash,
   _envSteps: number,
   stepLimit: number,
+  variant: number,
   isPrelude: boolean = false,
 ) {
   // steps: number of steps completed
@@ -269,7 +277,7 @@ export async function* generateCSEMachineStateStream(
 
       context.runtime.nodes.shift();
       context.runtime.nodes.unshift(command);
-      await cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude, variant);
 
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -282,7 +290,15 @@ export async function* generateCSEMachineStateStream(
     } else {
       // Command is an instruction
       const instr = command as Instr;
-      await cmdEvaluators[instr.instrType](code, command, context, control, stash, isPrelude);
+      await cmdEvaluators[instr.instrType](
+        code,
+        command,
+        context,
+        control,
+        stash,
+        isPrelude,
+        variant,
+      );
     }
 
     command = control.peek();
@@ -868,11 +884,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
+    variant: number,
   ) {
     const instr = command as BinOpInstr;
     const right = stash.pop();
     const left = stash.pop();
-    if (left && right) {
+    if (left && right && variant) {
       const result = evaluateBinaryExpression(
         code,
         instr.srcNode as ExprNS.Binary,
@@ -880,6 +897,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         instr.symbol,
         left,
         right,
+        variant,
       );
       stash.push(result);
     }

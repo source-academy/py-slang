@@ -109,8 +109,7 @@ export function evaluateUnaryExpression(
       );
   }
 }
-
-export function evaluateBinaryExpression(
+export function handleExpandedEquality(
   code: string,
   command: ExprNS.Binary,
   context: Context,
@@ -118,6 +117,72 @@ export function evaluateBinaryExpression(
   left: Value,
   right: Value,
 ): Value {
+  if (left.type == "list" && right.type == "list") {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator),
+      ),
+    );
+  }
+
+  // Handle complex number equality
+  if (left.type == "complex" || right.type == "complex") {
+    if (
+      (right.type !== "complex" && right.type !== "number" && right.type !== "bigint") ||
+      (left.type !== "complex" && left.type !== "number" && left.type !== "bigint")
+    ) {
+      return { type: "bool", value: operator == TokenType.NOTEQUAL };
+    }
+    return {
+      type: "bool",
+      value:
+        (operator == TokenType.NOTEQUAL) !==
+        PyComplexNumber.fromValue(left.value).equals(PyComplexNumber.fromValue(right.value)),
+    };
+  }
+
+  // Handle ints and floats
+  if (
+    (left.type === "number" || left.type === "bigint") &&
+    (right.type === "number" || right.type === "bigint")
+  ) {
+    return {
+      type: "bool",
+      value: (operator == TokenType.NOTEQUAL) !== (pyCompare(left, right) === 0),
+    };
+  }
+
+  // If two types are different, they are not equal
+  if (left.type != right.type) {
+    return { type: "bool", value: operator == TokenType.NOTEQUAL };
+  }
+
+  // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
+  if ("value" in left && "value" in right) {
+    if (left.value !== right.value) {
+      return { type: "bool", value: operator == TokenType.NOTEQUAL };
+    }
+  }
+  return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
+}
+export function evaluateBinaryExpression(
+  code: string,
+  command: ExprNS.Binary,
+  context: Context,
+  operator: TokenType,
+  left: Value,
+  right: Value,
+  variant: number,
+): Value {
+  if ((operator == TokenType.EQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
+    return handleExpandedEquality(code, command, context, operator, left, right);
+  }
+
   // Handle Complex numbers
   if (left.type === "complex" || right.type === "complex") {
     if (
