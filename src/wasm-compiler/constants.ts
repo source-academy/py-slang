@@ -14,6 +14,7 @@ export const TYPE_TAG = {
   NONE: 6,
   UNBOUND: 7,
   LIST: 9,
+  TUPLE: 10,
 } as const;
 
 export const ERROR_MAP = {
@@ -30,6 +31,7 @@ export const ERROR_MAP = {
   BOOL_UNKNOWN_TYPE: "Trying to convert an unknnown runtime type to a bool.",
   GET_ELEMENT_NOT_LIST: "Accessing an element of a non-list value.",
   SET_ELEMENT_NOT_LIST: "Setting an element of a non-list value.",
+  SET_ELEMENT_TUPLE: "Cannot assign to the rest parameter of a function.",
   INDEX_NOT_INT: "Using a non-integer index to access a list element.",
   LIST_OUT_OF_RANGE: "List index out of range.",
   GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
@@ -147,14 +149,31 @@ export const MAKE_LIST_FX = wasm
     i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
   );
 
+export const MAKE_TUPLE_FX = wasm
+  .func("$_make_tuple")
+  .params({ $ptr: i32, $len: i32 })
+  .results(i32, i64)
+  .body(
+    i32.const(TYPE_TAG.TUPLE),
+    i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+  );
+
 // list related functions
 export const GET_LIST_ELEMENT_FX = wasm
   .func("$_get_list_element")
   .params({ $tag: i32, $val: i64, $index_tag: i32, $index_val: i64 })
   .results(i32, i64)
   .body(
+    // allow tuples to be accessed also
     wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .if(
+        i32.eqz(
+          i32.or(
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+          ),
+        ),
+      )
       .then(
         wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_ELEMENT_NOT_LIST))),
         wasm.unreachable(),
@@ -186,6 +205,10 @@ export const SET_LIST_ELEMENT_FX = wasm
   .func("$_set_list_element")
   .params({ $list_tag: i32, $list_val: i64, $index_tag: i32, $index_val: i64, $tag: i32, $val: i64 })
   .body(
+    wasm
+      .if(i32.eq(local.get("$list_tag"), i32.const(TYPE_TAG.TUPLE)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.SET_ELEMENT_TUPLE))), wasm.unreachable()),
+
     wasm
       .if(i32.ne(local.get("$list_tag"), i32.const(TYPE_TAG.LIST)))
       .then(
@@ -223,7 +246,14 @@ export const LIST_LENGTH_FX = wasm
   .results(i32, i64)
   .body(
     wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .if(
+        i32.eqz(
+          i32.or(
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+          ),
+        ),
+      )
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_LENGTH_NOT_LIST))), wasm.unreachable()),
     wasm.call(MAKE_INT_FX).args(i64.and(local.get("$val"), i64.const(0xffffffff))),
   );
@@ -266,7 +296,14 @@ export const MAKE_LINKED_LIST_FX = wasm
   .results(i32, i64)
   .body(
     wasm
-      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .if(
+        i32.eqz(
+          i32.or(
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+          ),
+        ),
+      )
       .then(
         wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAKE_LINKED_LIST_NOT_LIST))),
         wasm.unreachable(),
@@ -941,7 +978,6 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64, $arg_len: i32 })
     .locals({
       $list_len: i32,
-      $list_tag: i32,
       $list_val: i64,
       $has_starred: i32,
       $i: i32,
@@ -1078,21 +1114,21 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
-        // create list with pointer to start of the copied list
+        // create tuple with pointer to start of the copied list
         wasm.raw`${wasm
-          .call(MAKE_LIST_FX)
+          .call(MAKE_TUPLE_FX)
           .args(
             i32.add(
               i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
               i32.mul(local.get("$env_size"), i32.const(12)),
             ),
             local.get("$list_len"),
-          )} (local.set $list_val) (local.set $list_tag)`,
+          )} (local.set $list_val) (drop)`,
 
-        // store list value in the env where the varargs would be, which is right after the fixed arguments and before local declarations
+        // store tuple value in the env where the varargs would be, which is right after the fixed arguments and before local declarations
         i32.store(
           i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
-          local.get("$list_tag"),
+          i32.const(TYPE_TAG.TUPLE),
         ),
         i64.store(
           i32.add(
@@ -1268,6 +1304,7 @@ export const nativeFunctions = [
   MAKE_CLOSURE_FX,
   MAKE_NONE_FX,
   MAKE_LIST_FX,
+  MAKE_TUPLE_FX,
   GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,
   LIST_LENGTH_FX,

@@ -1562,6 +1562,18 @@ f(10, 20, 30)
     );
   });
 
+  it("*args cannot be mutated inside function", async () => {
+    const pythonCode = `
+def f(*args):
+    args[0] = 100
+
+f(1, 2, 3)
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.SET_ELEMENT_TUPLE),
+    );
+  });
+
   it("lists can be unpacked into function arguments", async () => {
     const pythonCode = `
 def f(a, b, c):
