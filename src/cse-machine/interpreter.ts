@@ -11,7 +11,7 @@ import * as error from "../errors/errors";
 import { BuiltinReassignmentError, RuntimeSourceError } from "../errors/errors";
 import { IOptions } from "../runner/pyRunner";
 import { builtIns, toPythonString } from "../stdlib";
-import { TokenType } from '../tokens';
+import { TokenType } from "../tokens";
 import { CSEBreak, RecursivePartial, Representation, Result } from "../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
@@ -147,19 +147,19 @@ export function evaluate(
 //           let obj: any
 
 //           switch (spec.type) {
-//             case 'ImportSpecifier': {
-//               if (spec.imported.type === 'Identifier') {
+//             case "ImportSpecifier": {
+//               if (spec.imported.type === "Identifier") {
 //                 obj = functions[spec.imported.name];
 //               } else {
 //                 throw new Error(`Unexpected literal import: ${spec.imported.value}`);
 //               }
 //               break
 //             }
-//             case 'ImportDefaultSpecifier': {
+//             case "ImportDefaultSpecifier": {
 //               obj = functions.default
 //               break
 //             }
-//             case 'ImportNamespaceSpecifier': {
+//             case "ImportNamespaceSpecifier": {
 //               obj = functions
 //               break
 //             }
@@ -278,7 +278,7 @@ export function* generateCSEMachineStateStream(
         // We can put this under isNode since context.runtime.break
         // will only be updated after a debugger statement and so we will
         // run into a node immediately after.
-        // With the new evaluator, we don't return a break
+        // With the new evaluator, we don"t return a break
         // return new CSEBreak()
       }
     } else {
@@ -322,7 +322,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
 
     // if (hasDeclarations(command as es.BlockStatement) || hasImportDeclarations(command as es.BlockStatement)) {
-    //   if (currentEnvironment(context).name != 'programEnvironment') {
+    //   if (currentEnvironment(context).name != "programEnvironment") {
     //     const programEnv = createProgramEnvironment(context, isPrelude)
     //     pushEnvironment(context, programEnv)
     //   }
@@ -610,15 +610,16 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const ifNode = command as StmtNS.If;
+    //console.log("AST If Node:", ifNode);
     const branch = instrCreator.branchInstr(
       { type: "StatementSequence", body: ifNode.body },
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
-          ? // 'else' block
+          ? // "else" block
             { type: "StatementSequence", body: ifNode.elseBlock }
-          : // 'elif' block
+          : // "elif" block
             ifNode.elseBlock
-        : // 'else' block dont exist
+        : // "else" block dont exist
           null,
       ifNode,
     );
@@ -647,7 +648,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   FromImport: function () {
     // TODO: nothing to do for now, we can implement it for CSE instructions later on
     // All modules are preloaded into the global environment by the runner.
-    // When the code later uses the module name (e.g., 'runes'), pyGetVariable
+    // When the code later uses the module name (e.g., "runes"), pyGetVariable
     // will find it in the global scope.
   },
 
@@ -808,7 +809,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
 
-      const newEnv = createEnvironment(context, closure, args, instr.srcNode as ExprNS.Call);
+      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode as ExprNS.Call);
       pushEnvironment(context, newEnv);
 
       const closureNode = closure.node;
@@ -837,7 +838,10 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const instr = command as BranchInstr;
     const condition = stash.pop();
-
+    // console.log("here")
+    // console.log(condition);
+    // console.log(instr.consequent)
+    // console.log(instr.alternate)
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;
       if (consequent && "type" in consequent && consequent.type === "StatementSequence") {

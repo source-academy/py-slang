@@ -1,6 +1,8 @@
 import { ExprNS, StmtNS } from "../ast-types";
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../errors";
 import { Closure } from "./closure";
 import { Context } from "./context";
+import { handleRuntimeError } from "./error";
 import { Heap } from "./heap";
 import { Value } from "./stash";
 
@@ -24,10 +26,11 @@ export const uniqueId = (context: Context): string => {
 };
 
 export const createEnvironment = (
+  source: string,
   context: Context,
   closure: Closure,
   args: Value[],
-  callExpression: ExprNS.Call,
+  callExpression: ExprNS.Call
 ): Environment => {
   const environment: Environment = {
     name:
@@ -39,18 +42,34 @@ export const createEnvironment = (
     heap: new Heap(),
     id: uniqueId(context),
     callExpression: callExpression,
-    closure: closure,
-  };
-
-  // console.info('closure.node.params:', closure.node.params);
-  // console.info('Number of params:', closure.node.params.length);
-
+    closure: closure
+  }
+  
+  // console.info("closure.node.params:", closure.node.params);
+  // console.info("Number of params:", closure.node.params.length);
+  const isVariadic = closure.node.parameters.some(param => param.isStarred);
+  let consumed = false;
   closure.node.parameters.forEach((paramToken, index) => {
-    const paramName = paramToken.lexeme;
-    environment.head[paramName] = args[index];
-  });
-  return environment;
-};
+    const paramName = paramToken.lexeme
+    if (paramToken.isStarred) {
+      environment.head[paramName] = { type: "list", value: args.slice(index) };
+      consumed = true;
+    }
+    if (index >= args.length) {
+      handleRuntimeError(context, 
+          new MissingRequiredPositionalError(source, callExpression, environment.name, isVariadic ? index + 1 : closure.node.parameters.length, args, isVariadic));
+    }
+    if (!consumed) { // If we have already consumed the rest argument, the remaining are keyword-only arguments
+      environment.head[paramName] = args[index];
+    }
+  })
+  if (!isVariadic && args.length > closure.node.parameters.length) {
+    handleRuntimeError(context, 
+        new TooManyPositionalArgumentsError(source, callExpression, environment.name, closure.node.parameters.length, args, isVariadic));
+  }
+
+  return environment
+}
 
 export const createSimpleEnvironment = (
   context: Context,
