@@ -188,6 +188,23 @@ export function evaluateBinaryExpression(
     );
   }
 
+  // Handle list operations (only referential equality)
+  if (left.type == "list" || right.type == "list") {
+    if (operator == TokenType.IS && right.type === "list" && left.type === "list") {
+      return { type: "bool", value: left === right };
+    }
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator),
+      ),
+    );
+  }
+
   // Handle string operations
   if (left.type === "string" || right.type === "string") {
     if (operator === TokenType.PLUS) {
@@ -374,7 +391,16 @@ export function evaluateBinaryExpression(
       return { type: "bool", value: result };
     }
   }
-  return { type: "error", message: "todo error" };
+  handleRuntimeError(
+    context,
+    new UnsupportedOperandTypeError(
+      code,
+      command,
+      left.type,
+      right.type,
+      operatorTranslator(operator),
+    ),
+  );
 }
 
 /**

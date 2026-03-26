@@ -1,4 +1,8 @@
 import { TypeError, UnsupportedOperandTypeError, ZeroDivisionError } from "../errors";
+import linkedList from "../stdlib/linked-list";
+import list from "../stdlib/list";
+import pairmutator from "../stdlib/pairmutator";
+import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
 import { generateTestCases, TestCases } from "./utils";
@@ -741,5 +745,65 @@ describe("Standard Library Tests", () => {
 
     generateTestCases(mathTests, 1, []);
     generateTestCases(miscTests, 1, []);
+  });
+
+  describe("Chapter 3 Builtins", () => {
+    const miscTests: TestCases = {
+      "is operator": [
+        ["1 is 1", UnsupportedOperandTypeError, null], // int is int
+        ["2 is 1", UnsupportedOperandTypeError, null], // int is int
+        ["1 is (1+0j)", UnsupportedOperandTypeError, null], // int is complex
+        ["2 is (1.0+0j)", UnsupportedOperandTypeError, null], // int is complex
+        ["3 is (1+1j)", UnsupportedOperandTypeError, null], // int is complex
+        ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
+        ["1 is 2.0", UnsupportedOperandTypeError, null], // int is diff float
+        ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
+        ["3.15 is 3.14", UnsupportedOperandTypeError, null], // float is diff float
+        ["1.0 is 1", UnsupportedOperandTypeError, null], // float is int
+        ["1.0 is 2", UnsupportedOperandTypeError, null], // float is diff int
+        ["1.0 is (1+0j)", UnsupportedOperandTypeError, null], // float is complex
+        ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
+        ["-(1+0j) is (1+1j)", UnsupportedOperandTypeError, null], // complex is complex with diff imaginary
+        ["(1.2+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex with diff real
+        ["(1.2+1j) is (1.2+1.2j)", UnsupportedOperandTypeError, null], // complex is diff complex
+        ["(1+0j) is 1", UnsupportedOperandTypeError, null], // complex is int
+        ["(1.0+0j) is 1", UnsupportedOperandTypeError, null], // complex with float real is int
+        ["(1+0j) is 1.0", UnsupportedOperandTypeError, null], // complex is float
+        ["(1.5+0j) is 1.5", UnsupportedOperandTypeError, null], // complex with float real is float
+        ["(1.5+1j) is 1.5", UnsupportedOperandTypeError, null], // complex is diff float
+        ["True is True", UnsupportedOperandTypeError, null], // bool is bool
+        ["1 is True", UnsupportedOperandTypeError, null], // int is bool
+        ["1 is None", UnsupportedOperandTypeError, null], // int is None
+        ["True is 1", UnsupportedOperandTypeError, null], // bool is int
+        ["None is 1", UnsupportedOperandTypeError, null], // None is int
+        ["None is None", UnsupportedOperandTypeError, null], // None is None
+        ["(lambda x: x) is (lambda x: x)", UnsupportedOperandTypeError, null], // function is diff function
+        ["(1 is (lambda x: x))", UnsupportedOperandTypeError, null], // int is function
+        ["def a():\n    return 2\na is a", UnsupportedOperandTypeError, null], // function is function,
+        ["'' is ''", UnsupportedOperandTypeError, null], // empty string is empty string
+        ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
+        ["hello = 'hello'\nhello is 'Hello'", UnsupportedOperandTypeError, null], // string is diff string
+        ["'a' is 'abc'", UnsupportedOperandTypeError, null], // string is longer string
+        ["'a' is 'A'", UnsupportedOperandTypeError, null], // string is string with diff case
+        ["'#' is '$'", UnsupportedOperandTypeError, null], // string is string with diff character
+        ["1 is ''", UnsupportedOperandTypeError, null], // int is string
+        ["'' is 1", UnsupportedOperandTypeError, null], // string is int
+        ["'' is True", UnsupportedOperandTypeError, null], // string is bool
+        ["'' is None", UnsupportedOperandTypeError, null], // string is None
+        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null], // string is function
+        ["'' is 1.0", UnsupportedOperandTypeError, null], // string is float
+        ["'' is (1+0j)", UnsupportedOperandTypeError, null], // string is complex
+        ["1 is 0", UnsupportedOperandTypeError, null], // int is zero
+        ["1 is 0.0", UnsupportedOperandTypeError, null], // int is zero
+        ["1 is (0+0j)", UnsupportedOperandTypeError, null], // int is zero
+        ["[1,2,3] is [1,2,3]", false, null], // list is list with same elements
+        ["a = [1,2,3]\na is a", true, null], // list is itself
+        ["a = [1,2,3]\na is [1,2,3]", false, null], // list is different list with same elements
+        ["[1,2,3] is [1,2,4]", false, null], // list is different list with different elements
+        ["[1,2,3] is [1,2]", false, null], // list is different list with different length
+        ["[1,2,3] is ''", UnsupportedOperandTypeError, null], // list is string
+      ],
+    };
+    generateTestCases(miscTests, 3, [linkedList, stream, list, pairmutator]);
   });
 });

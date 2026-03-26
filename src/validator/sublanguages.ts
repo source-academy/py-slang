@@ -2,6 +2,7 @@ import { ForRangeOnlyValidator } from "./features/for-range-only";
 import { createBreakContinueValidator } from "./features/loop-break-continue-only";
 import { NoAnnAssignValidator } from "./features/no-ann-assign";
 import { NoBreakContinueValidator } from "./features/no-break-continue";
+import { NoIsOperatorValidator } from "./features/no-is-operator";
 import { NoListsValidator } from "./features/no-lists";
 import { NoLoopsValidator } from "./features/no-loops";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
@@ -10,7 +11,7 @@ import { NoRestParamsValidator } from "./features/no-rest-params";
 import { FeatureValidator } from "./types";
 
 /**
- * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments.
+ * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments, no is operator.
  * Factory function returns a fresh set of validators (stateful ones reset each time).
  */
 export function makeChapter1Validators(): FeatureValidator[] {
@@ -22,11 +23,12 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoNonlocalValidator,
     NoRestParamsValidator,
     NoAnnAssignValidator,
+    NoIsOperatorValidator,
   ];
 }
 
 /**
- * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments.
+ * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments, no is operator.
  * Linked-list library available (None as linked list expression).
  */
 export function makeChapter2Validators(): FeatureValidator[] {
@@ -38,6 +40,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoNonlocalValidator,
     NoRestParamsValidator,
     NoAnnAssignValidator,
+    NoIsOperatorValidator,
   ];
 }
 

@@ -5,6 +5,7 @@ export {
 } from "./features/loop-break-continue-only";
 export { NoAnnAssignValidator } from "./features/no-ann-assign";
 export { NoBreakContinueValidator } from "./features/no-break-continue";
+export { NoIsOperatorValidator } from "./features/no-is-operator";
 export { NoLambdaValidator } from "./features/no-lambda";
 export { NoListsValidator } from "./features/no-lists";
 export { NoLoopsValidator } from "./features/no-loops";

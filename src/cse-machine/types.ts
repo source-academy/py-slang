@@ -220,6 +220,8 @@ export function operatorTranslator(operator: TokenType | string) {
       return "and";
     case TokenType.OR:
       return "or";
+    case TokenType.IS:
+      return "is";
     default:
       return String(operator);
   }
