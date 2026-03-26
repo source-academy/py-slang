@@ -149,7 +149,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   ast: Stmt;
   environment: Environment | null;
   functionScope: Environment | null;
-  loopDepth: number = 0;
   private validators: FeatureValidator[];
 
   constructor(
@@ -173,6 +172,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         ...constants.builtInFuncs.map(
           (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
         ),
+        ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
         ...constants.constants.map(
           (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
         ),

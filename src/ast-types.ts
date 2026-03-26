@@ -18,10 +18,10 @@ export namespace ExprNS {
     visitMultiLambdaExpr(expr: MultiLambda): T;
     visitVariableExpr(expr: Variable): T;
     visitCallExpr(expr: Call): T;
-    visitComplexExpr(expr: Complex): T;
-    visitNoneExpr(expr: None): T;
     visitListExpr(expr: List): T;
     visitSubscriptExpr(expr: Subscript): T;
+    visitNoneExpr(expr: None): T;
+    visitComplexExpr(expr: Complex): T;
   }
   export abstract class Expr {
     abstract readonly kind: string;

@@ -1,11 +1,12 @@
-import { FeatureValidator } from "./types";
+import { ForRangeOnlyValidator } from "./features/for-range-only";
+import { createBreakContinueValidator } from "./features/loop-break-continue-only";
+import { NoBreakContinueValidator } from "./features/no-break-continue";
 import { NoListsValidator } from "./features/no-lists";
 import { NoLoopsValidator } from "./features/no-loops";
-import { createNoReassignmentValidator } from "./features/no-reassignment";
-import { NoBreakContinueValidator } from "./features/no-break-continue";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
-import { ForRangeOnlyValidator } from "./features/for-range-only";
+import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { NoRestParamsValidator } from "./features/no-rest-params";
+import { FeatureValidator } from "./types";
 
 /**
  * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params.
@@ -39,17 +40,17 @@ export function makeChapter2Validators(): FeatureValidator[] {
 
 /**
  * Source Chapter 3: lists, loops, and reassignment are all allowed.
- * for loops are restricted to range() only.
+ * for loops are restricted to range() only. Break and continue are allowed, but only within loops.
  */
 export function makeChapter3Validators(): FeatureValidator[] {
-  return [ForRangeOnlyValidator];
+  return [ForRangeOnlyValidator, createBreakContinueValidator()];
 }
 
 /**
- * Source Chapter 4: unrestricted. No validators.
+ * Source Chapter 4: unrestricted. No validators except for break/continue validation.
  */
 export function makeChapter4Validators(): FeatureValidator[] {
-  return [];
+  return [createBreakContinueValidator()];
 }
 
 export function makeValidatorsForChapter(chapter: number): FeatureValidator[] {
