@@ -37,6 +37,7 @@
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.1",
     "@rollup/plugin-typescript": "^12.1.2",
+    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
     "@types/moo": "^0.5.10",

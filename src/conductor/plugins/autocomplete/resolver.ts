@@ -1,5 +1,5 @@
 import { SyntaxNode, Tree, TreeCursor } from "@lezer/common";
-import { AutoCompleteEntry, CompletionItemKind } from "./types";
+import { AutoCompleteEntry, CompletionItemKind } from "@sourceacademy/autocomplete";
 
 import linkedListJSON from "./builtins/linked_list.json";
 import listJSON from "./builtins/list.json";

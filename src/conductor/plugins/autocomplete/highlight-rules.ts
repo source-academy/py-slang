@@ -28,9 +28,10 @@
  *
  */
 
+import { AceRules } from "@sourceacademy/autocomplete";
 import constants from "../../../stdlib/py_s1_constants.json";
 import { getIllegalKeywords, getKeywords } from "./keywords";
-import { AceRules } from "./types";
+
 export default (variant: number) => {
   const keywords = getKeywords(variant).join("|");
   const illegalKeywords = getIllegalKeywords(variant).join("|");

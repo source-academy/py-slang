@@ -1,3 +1,4 @@
+import { CompletionItemKind } from "@sourceacademy/autocomplete";
 import { readdir, writeFile } from "node:fs/promises";
 
 /**
@@ -91,13 +92,13 @@ type Entry =
                         ") -> " +
                         (entry.returns?.[0].type.names[0] || "None"),
                       description: entry.description,
-                      meta: "func",
+                      meta: CompletionItemKind.Function,
                     }
                   : {
                       name: entry.name,
                       title: entry.name,
                       description: entry.description,
-                      meta: "var",
+                      meta: CompletionItemKind.Variable,
                     },
               ),
           ),

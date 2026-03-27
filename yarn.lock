@@ -1197,6 +1197,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/autocomplete@github:source-academy/autocomplete#0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/autocomplete@https://github.com/source-academy/autocomplete.git#commit=db3ba73eedcef82eff6b4031e423804b67a2bb6e"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/0c836d923d5658071882b4125445237f99cbef97f2f0b2834f0b244587a5dabd44944e4c6cda766ad3458c6646a8302bf7354a513b7486ec174fb46809f4a08b
+  languageName: node
+  linkType: hard
+
 "@sourceacademy/conductor@npm:^0.3.0":
   version: 0.3.0
   resolution: "@sourceacademy/conductor@npm:0.3.0"
@@ -4317,6 +4326,7 @@ __metadata:
     "@rollup/plugin-json": "npm:^6.1.0"
     "@rollup/plugin-node-resolve": "npm:^16.0.1"
     "@rollup/plugin-typescript": "npm:^12.1.2"
+    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1"
     "@sourceacademy/conductor": "npm:^0.3.0"
     "@sourceacademy/wasm-util": "npm:^1.0.4"
     "@types/fast-levenshtein": "npm:^0.0.4"

@@ -1,5 +1,6 @@
+import { SyntaxHighlightData } from "@sourceacademy/autocomplete";
 import PythonHighlightRules from "./highlight-rules";
-export default (variant: number) => ({
+export default (variant: number): SyntaxHighlightData => ({
   highlightRules: PythonHighlightRules(variant),
   foldingRules: {
     hookFrom: "ace/mode/folding/pythonic",
