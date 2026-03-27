@@ -1,6 +1,6 @@
 PDFLATEX = latexmk -pdf
 
-SPECSNUMS = 1 2 3
+SPECSNUMS = 1 2 3 4
 
 SPECS = $(SPECSNUMS:%=python_%)
 

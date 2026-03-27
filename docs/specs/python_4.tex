@@ -2,29 +2,31 @@
 
 \begin{document}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\docheader{2026}{Python}{\S 2}{Martin Henz, Wang Yuyang, Lucas Ng, Jonas Ong}
+\docheader{2026}{Python}{\S 4}{Martin Henz, Wang Yuyang, Lucas Ng, Jonas Ong}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \input python_intro
 
 \section{Changes}
 
-Compared to Python \S 1, Python \S 2 has the following changes:
+Compared to Python \S 3, Python \S 4 has the following changes:
 \begin{itemize}
-  \item \lstinline{None}: primitive linked list expression (empty linked list).
-  \item Linked list library: Functions for creating, accessing and
-    processing linked lists.
+\item Python \S 4 adds the functions \lstinline{tokenize}, \lstinline{parse}, and
+\lstinline{apply_in_underlying_python}. 
+For details, see 
+Section ``Interpreter Support'' below.
 \end{itemize}
-
-\input python_1_bnf
+\input python_3_bnf
 
 \newpage
 
 \input python_indentation
-\input python_return
+\input python_return_3
 % \input python_import
 
 % \newpage
+
+\input python_loops
 
 \input python_names_lang
 \input python_numbers
@@ -35,7 +37,7 @@ Compared to Python \S 1, Python \S 2 has the following changes:
 
 \newpage
 
-\input python_typing
+\input python_typing_3
 
 \newpage
 
@@ -43,10 +45,18 @@ Compared to Python \S 1, Python \S 2 has the following changes:
 
 \input python_misc
 
+\input python_pair_mutators
+
+\input python_interpreter
+
 \input python_py_differences
 
 \newpage
 
 \input python_linked_list_library
+
+\newpage
+
+\input python_stream_library
 
 \end{document}

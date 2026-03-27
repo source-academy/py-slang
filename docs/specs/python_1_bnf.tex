@@ -32,7 +32,9 @@ as follows:
                          & |   & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                     &                                         \\
                          & |   & \term{else}\ \term{:}\ \textit{block}                                                   & \text{conditional statement}            \\[1mm]
 \textit{block}           & ::= & \textit{statement}...                                                                   & \text{block statement}                  \\[1mm]
-\textit{expression}      & ::= & \textit{number}                                                                         & \text{primitive number expression}      \\
+\textit{expression}      & ::= & \textit{integer}                                                                        & \text{primitive integer expression}     \\
+                         & |   & \textit{float}                                                                          & \text{primitive float expression}       \\
+                         & |   & \textit{complex}                                                                        & \text{primitive complex expression}     \\
                          & |   & \term{True}\ |\ \term{False}                                                            & \text{primitive boolean expression}     \\
                          & |   & \term{None}                                                                             & \text{primitive None expression}        \\
                          & |   & \textit{string}                                                                         & \text{primitive string expression}      \\
@@ -46,7 +48,8 @@ as follows:
                          & |   & \term{(}\ \textit{expression}\ \term{)}                                                 & \text{parenthesised expression}         \\[1mm]
 \textit{binary-operator} & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%}             &                                         \\
                          & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}           & \text{binary operator}                  \\[1mm]
-\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}                                                                 & \text{unary operator}                   \\[1mm]
+\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}                                                                 & \text{-unary operator}                  \\[1mm]
+                         & | & \term{+}                                                                                & \text{+unary operator}                  \\[1mm]
 \textit{binary-logical}  & ::= & \term{and}\ |\ \term{or}                                                                & \text{logical composition symbol}       \\[1mm]
 \textit{expressions}     & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                & \text{argument expressions}             \\
 
