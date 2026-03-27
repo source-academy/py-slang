@@ -10,11 +10,12 @@ import { loadPyodide } from "pyodide";
 import type { PyodideInterface } from "pyodide";
 import * as torch from "torch";
 import bridgeCode from "../pyodide/bridge.py";
-import { rewriteTorchImports } from "../pyodide/importAnalyzer";
+import { rewriteTorchImports, resetHelperState } from "../pyodide/importAnalyzer";
 
 let pyodide: PyodideInterface;
 
 beforeAll(async () => {
+  resetHelperState();
   pyodide = await loadPyodide({ fullStdLib: true });
 
   // Set up torch in pyodide (mirrors what loadTorch does)
@@ -24,7 +25,7 @@ beforeAll(async () => {
 }, 60_000);
 
 async function runTorchCode(source: string): Promise<unknown> {
-  const { code } = rewriteTorchImports(source);
+  const { code } = await rewriteTorchImports(pyodide, source);
   return pyodide.runPythonAsync(code);
 }
 

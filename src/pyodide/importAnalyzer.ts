@@ -1,17 +1,13 @@
 /**
- * AST-based import analysis for detecting and rewriting torch imports.
+ * Import analysis for detecting and rewriting torch imports using Python's
+ * built-in `ast` module via Pyodide.
  *
- * Uses py-slang's parser to produce an AST from the import prefix of the
- * source, then walks FromImport nodes to find torch-related imports —
- * replacing the regex-based approach used in sa-conductor-py-torch.
- *
- * Because pyodide code uses full Python syntax that py-slang cannot parse,
- * we extract only the leading `from … import …` lines, append a dummy
- * statement so the grammar is satisfied, and parse that fragment.
+ * This avoids the limitations of py-slang's parser (which only supports a
+ * subset of Python) by delegating to CPython's own parser running inside
+ * Pyodide.
  */
 
-import { parse } from "../parser/parser-adapter";
-import { StmtNS } from "../ast-types";
+import type { PyodideInterface } from "pyodide";
 
 export interface TorchImportInfo {
   /** Full module path, e.g. "torch" or "torch.nn" */
@@ -23,85 +19,88 @@ export interface TorchImportInfo {
 }
 
 /**
- * Extracts leading `from … import …` lines from the source and returns
- * them along with the line index where non-import code begins.
+ * Python helper that uses the `ast` module to extract import info.
+ * Returns a JSON string describing all FromImport statements.
  */
-function extractImportPrefix(source: string): {
-  importLines: string[];
-  bodyStartIdx: number;
-} {
-  const lines = source.split(/\r?\n/);
-  let i = 0;
-  for (; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-    if (trimmed.startsWith("from ") && trimmed.includes(" import ")) continue;
-    break;
-  }
-  return { importLines: lines.slice(0, i), bodyStartIdx: i };
+const ANALYZE_IMPORTS_PY = `
+import ast as _ast, json as _json
+
+def _sa_analyze_imports(source):
+    """Parse source and return JSON array of from-import info."""
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError:
+        return "[]"
+    result = []
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.ImportFrom) and node.module:
+            result.append({
+                "module": node.module,
+                "names": [
+                    {"name": a.name, "alias": a.asname}
+                    for a in node.names
+                ],
+                "line": node.lineno,
+            })
+    return _json.dumps(result)
+`;
+
+let helperLoaded = false;
+
+/**
+ * Ensure the Python-side `_sa_analyze_imports` function is defined.
+ * Idempotent — only runs once.
+ */
+async function ensureHelper(pyodide: PyodideInterface): Promise<void> {
+  if (helperLoaded) return;
+  await pyodide.runPythonAsync(ANALYZE_IMPORTS_PY);
+  helperLoaded = true;
 }
 
 /**
- * Parses only the import prefix of the source using py-slang's parser
- * and returns all FromImport nodes whose root module is "torch".
+ * Reset the helper loaded state. Useful for testing when pyodide
+ * instances are recreated.
  */
-export function detectTorchImports(source: string): TorchImportInfo[] {
-  const { importLines } = extractImportPrefix(source);
-  if (importLines.length === 0) return [];
-
-  // Append a dummy statement so the grammar (import* statement*) is satisfied.
-  const fragment = importLines.join("\n") + "\n_ = 0\n";
-
-  let ast: StmtNS.FileInput;
-  try {
-    ast = parse(fragment);
-  } catch {
-    return [];
-  }
-
-  const torchImports: TorchImportInfo[] = [];
-
-  for (const stmt of ast.statements) {
-    if (!(stmt instanceof StmtNS.FromImport)) continue;
-
-    const moduleName = stmt.module.lexeme;
-    const root = moduleName.split(".")[0];
-    if (root !== "torch") continue;
-
-    torchImports.push({
-      module: moduleName,
-      names: stmt.names.map(n => ({
-        name: n.name.lexeme,
-        alias: n.alias ? n.alias.lexeme : null,
-      })),
-      line: stmt.startToken.line,
-    });
-  }
-
-  return torchImports;
+export function resetHelperState(): void {
+  helperLoaded = false;
 }
 
 /**
- * Returns the set of top-level module roots for all non-torch imports.
- * These are modules that should be installed via micropip.
+ * Parses the source code using Python's `ast` module (via Pyodide) and
+ * returns all `from … import …` statements whose root module is "torch".
  */
-export function getNonTorchImportRoots(source: string): Set<string> {
-  const { importLines } = extractImportPrefix(source);
-  if (importLines.length === 0) return new Set();
+export async function detectTorchImports(
+  pyodide: PyodideInterface,
+  source: string,
+): Promise<TorchImportInfo[]> {
+  await ensureHelper(pyodide);
 
-  const fragment = importLines.join("\n") + "\n_ = 0\n";
+  const json = pyodide.runPython(
+    `_sa_analyze_imports(${JSON.stringify(source)})`,
+  ) as string;
 
-  let ast: StmtNS.FileInput;
-  try {
-    ast = parse(fragment);
-  } catch {
-    return new Set();
-  }
+  const allImports: TorchImportInfo[] = JSON.parse(json);
+  return allImports.filter(imp => imp.module.split(".")[0] === "torch");
+}
 
+/**
+ * Returns the set of top-level module roots for all non-torch
+ * `from … import …` statements. These may need to be installed via micropip.
+ */
+export async function getNonTorchImportRoots(
+  pyodide: PyodideInterface,
+  source: string,
+): Promise<Set<string>> {
+  await ensureHelper(pyodide);
+
+  const json = pyodide.runPython(
+    `_sa_analyze_imports(${JSON.stringify(source)})`,
+  ) as string;
+
+  const allImports: TorchImportInfo[] = JSON.parse(json);
   const roots = new Set<string>();
-  for (const stmt of ast.statements) {
-    if (!(stmt instanceof StmtNS.FromImport)) continue;
-    const root = stmt.module.lexeme.split(".")[0];
+  for (const imp of allImports) {
+    const root = imp.module.split(".")[0];
     if (root !== "torch") {
       roots.add(root);
     }
@@ -136,11 +135,11 @@ function generateReplacement(imp: TorchImportInfo): string {
  *
  * Non-torch code is passed through unchanged.
  */
-export function rewriteTorchImports(source: string): {
-  code: string;
-  hasTorch: boolean;
-} {
-  const imports = detectTorchImports(source);
+export async function rewriteTorchImports(
+  pyodide: PyodideInterface,
+  source: string,
+): Promise<{ code: string; hasTorch: boolean }> {
+  const imports = await detectTorchImports(pyodide, source);
 
   if (imports.length === 0) {
     return { code: source, hasTorch: false };

@@ -24,8 +24,8 @@ export default class PyodideEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     const pyodide = await this.pyodide;
 
-    // --- Use py-slang's parser to detect and rewrite torch imports ---
-    const { code, hasTorch } = rewriteTorchImports(chunk);
+    // --- Use Python's ast module (via Pyodide) to detect and rewrite torch imports ---
+    const { code, hasTorch } = await rewriteTorchImports(pyodide, chunk);
 
     if (hasTorch && !this.torchLoaded) {
       await loadTorch(pyodide);
@@ -34,7 +34,7 @@ export default class PyodideEvaluator extends BasicEvaluator {
     }
 
     // --- Install any other imported modules via micropip ---
-    const otherRoots = getNonTorchImportRoots(chunk);
+    const otherRoots = await getNonTorchImportRoots(pyodide, chunk);
     if (otherRoots.size > 0) {
       const modulesArray = Array.from(otherRoots);
       const installerCode = `
