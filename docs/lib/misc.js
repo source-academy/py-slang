@@ -127,6 +127,16 @@ function float(value = 0) {}
 function bool(value) {}
 
 /**
+ * Return a complex number constructed from a <CODE>value</CODE>, or return <CODE>0j</CODE>
+ * if no arguments are given.
+ *
+ * @param {int | float | string | bool | complex} <CODE>value</CODE> - If possible, <CODE>value</CODE> is converted
+ * to a complex number. If omitted, it defaults to <CODE>0j</CODE>.
+ * @returns {complex} a complex number constructed from the given <CODE>value</CODE>
+ */
+function complex(value = 0) {}
+
+/**
  * Return a <CODE>string</CODE> version of <CODE>object</CODE>. If <CODE>object</CODE> is not provided, returns
  * the empty <CODE>string</CODE>.
  *
@@ -179,6 +189,14 @@ function is_int(x) {}
 function is_float(x) {}
 
 /**
+ * Returns True if x is a complex number, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {bool} whether x is a complex number
+ */
+function is_complex(x) {}
+
+/**
  * Returns True if x is a string, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
@@ -217,6 +235,22 @@ function is_none(x) {}
  * @returns {int} the number of arguments accepted by <CODE>f</CODE>
  */
 function arity(f) {}
+
+/**
+ * Return the real part of a complex number <CODE>x</CODE>.
+ * 
+ * @param {complex} <CODE>x</CODE> - a complex number
+ * @returns {float} the real part of <CODE>x</CODE>
+ */
+function real(x) {}
+
+/**
+ * Return the imaginary part of a complex number <CODE>x</CODE>.
+ * 
+ * @param {complex} <CODE>x</CODE> - a complex number
+ * @returns {float} the imaginary part of <CODE>x</CODE>
+ */
+function imag(x) {}
 
 /**
  *
