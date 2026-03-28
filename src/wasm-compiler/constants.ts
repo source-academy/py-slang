@@ -39,21 +39,132 @@ export const ERROR_MAP = {
     "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
   STARRED_NOT_LIST: "Trying to unpack a non-list value.",
   PARSE_NOT_STRING: "Trying to parse a non-string value.",
+  OUT_OF_MEMORY: "Out of memory.",
+  STACK_OVERFLOW: "Stack overflow.",
+  STACK_UNDERFLOW: "Stack underflow.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
   Object.values(ERROR_MAP).findIndex(v => v === errorKey);
 
+export const DATA_END = "$_data_end";
+export const SHADOW_STACK_BOTTOM = "$_shadow_stack_bottom_pointer";
+export const SHADOW_STACK_TOP = "$_shadow_stack_top_pointer";
+
 export const HEAP_PTR = "$_heap_pointer";
+export const FROM_SPACE_END_PTR = "$_from_space_end_pointer";
+export const TO_SPACE_END_PTR = "$_to_space_end_pointer";
+export const SHADOW_STACK_PTR = "$_shadow_stack_pointer";
 export const CURR_ENV = "$_current_env";
+
 export const ENV_HEAD_SIZE = 8;
+export const SHADOW_STACK_SLOT_SIZE = 12;
+export const SHADOW_STACK_RESERVED_SIZE = 1024;
+
+export const PUSH_SHADOW_STACK_FX = wasm
+  .func("$_push_shadow_stack")
+  .params({ $tag: i32, $val: i64 })
+  .locals({ $new_ptr: i32 })
+  .results(i32, i64)
+  .body(
+    local.set("$new_ptr", i32.sub(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
+
+    wasm
+      .if(i32.lt_u(local.get("$new_ptr"), global.get(SHADOW_STACK_BOTTOM)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_OVERFLOW))), wasm.unreachable()),
+
+    global.set(SHADOW_STACK_PTR, local.get("$new_ptr")),
+    i32.store(global.get(SHADOW_STACK_PTR), local.get("$tag")),
+    i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), local.get("$val")),
+    local.get("$tag"),
+    local.get("$val"),
+  );
+
+export const POP_SHADOW_STACK_FX = wasm
+  .func("$_pop_shadow_stack")
+  .results(i32, i64)
+  .body(
+    i32.load(global.get(SHADOW_STACK_PTR)),
+    i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))),
+    global.set(SHADOW_STACK_PTR, i32.add(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
+  );
+
+export const PEEK_SHADOW_STACK_FX = wasm
+  .func("$_peek_shadow_stack")
+  .params({ $offset: i32 })
+  .locals({ $addr: i32 })
+  .results(i32, i64)
+  .body(
+    local.set(
+      "$addr",
+      i32.add(global.get(SHADOW_STACK_PTR), i32.mul(local.get("$offset"), i32.const(SHADOW_STACK_SLOT_SIZE))),
+    ),
+
+    wasm
+      .if(i32.lt_u(local.get("$addr"), global.get(SHADOW_STACK_BOTTOM)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_OVERFLOW))), wasm.unreachable()),
+
+    wasm
+      .if(i32.ge_u(local.get("$addr"), global.get(SHADOW_STACK_TOP)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_UNDERFLOW))), wasm.unreachable()),
+
+    i32.load(local.get("$addr")),
+    i64.load(i32.add(local.get("$addr"), i32.const(4))),
+  );
+
+export const DISCARD_SHADOW_STACK_FX = wasm
+  .func("$_discard_shadow_stack")
+  .params({ $num_frames: i32 })
+  .body(
+    global.set(
+      SHADOW_STACK_PTR,
+      i32.add(global.get(SHADOW_STACK_PTR), i32.mul(local.get("$num_frames"), i32.const(SHADOW_STACK_SLOT_SIZE))),
+    ),
+  );
+
+export const IS_TAG_GCABLE = wasm
+  .func("$_is_tag_gcable")
+  .params({ $tag: i32 })
+  .results(i32)
+  .body(
+    i32.or(
+      i32.or(
+        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)),
+        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)),
+      ),
+      i32.or(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)),
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+        ),
+        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+      ),
+    ),
+  );
+
+export const COLLECT_FX = wasm.func("$_collect").body();
 
 // returns allocated block start address and moves heap pointer by amount bytes
 export const MALLOC_FX = wasm
   .func("$_malloc")
   .params({ $amount: i32 })
+  .locals({ $new_heap: i32 })
   .results(i32)
-  .body(global.get(HEAP_PTR), global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$amount"))));
+  .body(
+    local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
+
+    wasm.if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR))).then(
+      wasm.call(COLLECT_FX),
+      local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
+
+      wasm
+        .if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR)))
+        .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.OUT_OF_MEMORY))), wasm.unreachable()),
+    ),
+
+    global.get(HEAP_PTR),
+    global.set(HEAP_PTR, local.get("$new_heap")),
+  );
 
 // boxing functions
 
@@ -80,9 +191,7 @@ export const MAKE_COMPLEX_FX = wasm
   .body(
     f64.store(local.tee("$ptr", wasm.call(MALLOC_FX).args(i32.const(16))), local.get("$real")),
     f64.store(i32.add(local.get("$ptr"), i32.const(8)), local.get("$img")),
-
-    i32.const(TYPE_TAG.COMPLEX),
-    i64.extend_i32_u(local.get("$ptr")),
+    wasm.call(PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.COMPLEX), i64.extend_i32_u(local.get("$ptr"))),
   );
 
 // store directly as i32
@@ -105,8 +214,12 @@ export const MAKE_STRING_FX = wasm
   .params({ $ptr: i32, $len: i32 })
   .results(i32, i64)
   .body(
-    i32.const(TYPE_TAG.STRING),
-    i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+    wasm
+      .call(PUSH_SHADOW_STACK_FX)
+      .args(
+        i32.const(TYPE_TAG.STRING),
+        i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+      ),
   );
 
 // first     1: has varargs;
@@ -119,21 +232,24 @@ export const MAKE_CLOSURE_FX = wasm
   .params({ $varargs: i32, $tag: i32, $arity: i32, $env_size: i32, $parent_env: i32 })
   .results(i32, i64)
   .body(
-    i32.const(TYPE_TAG.CLOSURE),
-
-    i64.or(
-      i64.or(
+    wasm
+      .call(PUSH_SHADOW_STACK_FX)
+      .args(
+        i32.const(TYPE_TAG.CLOSURE),
         i64.or(
           i64.or(
-            i64.shl(i64.extend_i32_u(local.get("$varargs")), i64.const(63)),
-            i64.shl(i64.extend_i32_u(local.get("$tag")), i64.const(48)),
+            i64.or(
+              i64.or(
+                i64.shl(i64.extend_i32_u(local.get("$varargs")), i64.const(63)),
+                i64.shl(i64.extend_i32_u(local.get("$tag")), i64.const(48)),
+              ),
+              i64.shl(i64.extend_i32_u(local.get("$arity")), i64.const(40)),
+            ),
+            i64.shl(i64.extend_i32_u(local.get("$env_size")), i64.const(32)),
           ),
-          i64.shl(i64.extend_i32_u(local.get("$arity")), i64.const(40)),
+          i64.extend_i32_u(local.get("$parent_env")),
         ),
-        i64.shl(i64.extend_i32_u(local.get("$env_size")), i64.const(32)),
       ),
-      i64.extend_i32_u(local.get("$parent_env")),
-    ),
   );
 
 export const MAKE_NONE_FX = wasm.func("$_make_none").results(i32, i64).body(i32.const(TYPE_TAG.NONE), i64.const(0));
@@ -145,8 +261,12 @@ export const MAKE_LIST_FX = wasm
   .params({ $ptr: i32, $len: i32 })
   .results(i32, i64)
   .body(
-    i32.const(TYPE_TAG.LIST),
-    i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+    wasm
+      .call(PUSH_SHADOW_STACK_FX)
+      .args(
+        i32.const(TYPE_TAG.LIST),
+        i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+      ),
   );
 
 export const MAKE_TUPLE_FX = wasm
@@ -154,8 +274,12 @@ export const MAKE_TUPLE_FX = wasm
   .params({ $ptr: i32, $len: i32 })
   .results(i32, i64)
   .body(
-    i32.const(TYPE_TAG.TUPLE),
-    i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+    wasm
+      .call(PUSH_SHADOW_STACK_FX)
+      .args(
+        i32.const(TYPE_TAG.TUPLE),
+        i64.or(i64.shl(i64.extend_i32_u(local.get("$ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+      ),
   );
 
 // list related functions
@@ -265,7 +389,17 @@ export const MAKE_PAIR_FX = wasm
   .locals({ $ptr: i32 })
   .results(i32, i64)
   .body(
-    i32.store(local.tee("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))), local.get("$head_tag")),
+    local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))),
+
+    // wasm
+    //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
+    //   .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $tail_val) (local.set $tail_tag)`),
+
+    // wasm
+    //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
+    //   .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
+
+    i32.store(local.get("$ptr"), local.get("$head_tag")),
     i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
     i32.store(i32.add(local.get("$ptr"), i32.const(12)), local.get("$tail_tag")),
     i64.store(i32.add(local.get("$ptr"), i32.const(16)), local.get("$tail_val")),
@@ -313,8 +447,15 @@ export const MAKE_LINKED_LIST_FX = wasm
     local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
 
     local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
+    // wasm.call(PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.NONE), i64.const(0)),
+    // wasm.drop(),
+    // wasm.drop(),
 
     wasm.loop("$loop").body(
+      // update acc from shadow stack
+      // wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
+      // wasm.raw`(local.set $acc_val) (local.set $acc_tag)`,
+
       wasm.if(i32.ge_s(local.get("$i"), i32.const(0))).then(
         wasm
           .call(MAKE_PAIR_FX)
@@ -336,6 +477,17 @@ export const MAKE_LINKED_LIST_FX = wasm
           ),
 
         wasm.raw`(local.set $acc_val) (local.set $acc_tag)`, // set acc to the new pair
+        // make_pair pushed the new pair onto the shadow stack, so pop it,
+        // discard the old accumulator, and push the new pair as the new accumulator
+        // wasm.call(POP_SHADOW_STACK_FX),
+        // wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
+        // wasm.call(PUSH_SHADOW_STACK_FX),
+        // wasm.drop(),
+        // wasm.drop(),
+
+        // reload input list into locals
+        // wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1)),
+        // wasm.raw`(local.set $val) (local.set $tag)`,
 
         local.set("$i", i32.sub(local.get("$i"), i32.const(1))),
         wasm.br("$loop"),
@@ -498,6 +650,11 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       )
       .then(
+        wasm.call(POP_SHADOW_STACK_FX),
+        wasm.raw`(local.set $y_val) (local.set $y_tag)`,
+        wasm.call(POP_SHADOW_STACK_FX),
+        wasm.raw`(local.set $x_val) (local.set $x_tag)`,
+
         memory.copy(
           local.tee(
             "$str_ptr",
@@ -574,74 +731,88 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       ),
 
-    // else, if either's complex, load from mem, set locals (default 0)
-    wasm
-      .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.FLOAT)))
-      .then(local.set("$x_tag", i32.const(TYPE_TAG.COMPLEX)))
-      .else(
-        local.set("$a", f64.load(i32.wrap_i64(local.get("$x_val")))),
-        local.set("$b", f64.load(i32.add(i32.wrap_i64(local.get("$x_val")), i32.const(8)))),
-      ),
+    // else, if either's float, convert to complex.
+    // elseif complex: load from mem, set locals (default 0).
+    // else: unreachable
     wasm
       .if(i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.FLOAT)))
       .then(local.set("$y_tag", i32.const(TYPE_TAG.COMPLEX)))
       .else(
-        local.set("$c", f64.load(i32.wrap_i64(local.get("$y_val")))),
-        local.set("$d", f64.load(i32.add(i32.wrap_i64(local.get("$y_val")), i32.const(8)))),
-      ),
+        wasm
+          .if(i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.COMPLEX)))
+          .then(
+            wasm.call(POP_SHADOW_STACK_FX),
+            wasm.raw`(local.set $y_val) (local.set $y_tag)`,
 
-    // if both complex, perform complex operations
+            local.set("$c", f64.load(i32.wrap_i64(local.get("$y_val")))),
+            local.set("$d", f64.load(i32.add(i32.wrap_i64(local.get("$y_val")), i32.const(8)))),
+          )
+          .else(
+            wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE))),
+            wasm.unreachable(),
+          ),
+      ),
     wasm
-      .if(
-        i32.and(
-          i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)),
-          i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.COMPLEX)),
-        ),
-      )
-      .then(
-        ...wasm.buildBrTableBlocks(
-          wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div"),
-          wasm.return(
-            wasm
-              .call(MAKE_COMPLEX_FX)
-              .args(f64.add(local.get("$a"), local.get("$c")), f64.add(local.get("$b"), local.get("$d"))),
+      .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.FLOAT)))
+      .then(local.set("$x_tag", i32.const(TYPE_TAG.COMPLEX)))
+      .else(
+        wasm
+          .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)))
+          .then(
+            wasm.call(POP_SHADOW_STACK_FX),
+            wasm.raw`(local.set $x_val) (local.set $x_tag)`,
+
+            local.set("$a", f64.load(i32.wrap_i64(local.get("$x_val")))),
+            local.set("$b", f64.load(i32.add(i32.wrap_i64(local.get("$x_val")), i32.const(8)))),
+          )
+          .else(
+            wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE))),
+            wasm.unreachable(),
           ),
-          wasm.return(
-            wasm
-              .call(MAKE_COMPLEX_FX)
-              .args(f64.sub(local.get("$a"), local.get("$c")), f64.sub(local.get("$b"), local.get("$d"))),
-          ),
-          // (a+bi)*(c+di) = (ac-bd) + (ad+bc)i
-          wasm.return(
-            wasm
-              .call(MAKE_COMPLEX_FX)
-              .args(
-                f64.sub(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
-                f64.add(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
-              ),
-          ),
-          // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
-          wasm.return(
-            wasm
-              .call(MAKE_COMPLEX_FX)
-              .args(
-                local.tee(
-                  "$denom",
-                  f64.div(
-                    f64.add(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
-                    f64.add(f64.mul(local.get("$c"), local.get("$c")), f64.mul(local.get("$d"), local.get("$d"))),
-                  ),
-                ),
-                f64.div(
-                  f64.sub(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
-                  local.get("$denom"),
-                ),
-              ),
-          ),
-        ),
       ),
 
-    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE))),
+    // perform complex operations
+    ...wasm.buildBrTableBlocks(
+      wasm.br_table(local.get("$op"), "$add", "$sub", "$mul", "$div"),
+      wasm.return(
+        wasm
+          .call(MAKE_COMPLEX_FX)
+          .args(f64.add(local.get("$a"), local.get("$c")), f64.add(local.get("$b"), local.get("$d"))),
+      ),
+      wasm.return(
+        wasm
+          .call(MAKE_COMPLEX_FX)
+          .args(f64.sub(local.get("$a"), local.get("$c")), f64.sub(local.get("$b"), local.get("$d"))),
+      ),
+      // (a+bi)*(c+di) = (ac-bd) + (ad+bc)i
+      wasm.return(
+        wasm
+          .call(MAKE_COMPLEX_FX)
+          .args(
+            f64.sub(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
+            f64.add(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
+          ),
+      ),
+      // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
+      wasm.return(
+        wasm
+          .call(MAKE_COMPLEX_FX)
+          .args(
+            local.tee(
+              "$denom",
+              f64.div(
+                f64.add(f64.mul(local.get("$a"), local.get("$c")), f64.mul(local.get("$b"), local.get("$d"))),
+                f64.add(f64.mul(local.get("$c"), local.get("$c")), f64.mul(local.get("$d"), local.get("$d"))),
+              ),
+            ),
+            f64.div(
+              f64.sub(f64.mul(local.get("$b"), local.get("$c")), f64.mul(local.get("$a"), local.get("$d"))),
+              local.get("$denom"),
+            ),
+          ),
+      ),
+    ),
+
     wasm.unreachable(),
   );
 
@@ -1180,7 +1351,7 @@ export const GET_LEX_ADDR_FX = wasm
   .func("$_get_lex_addr")
   .params({ $depth: i32, $index: i32 })
   .results(i32, i64)
-  .locals({ $env: i32, $tag: i32 })
+  .locals({ $env: i32, $tag: i32, $value: i64 })
   .body(
     local.set("$env", global.get(CURR_ENV)),
 
@@ -1197,8 +1368,8 @@ export const GET_LEX_ADDR_FX = wasm
           .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.UNBOUND)))
           .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.UNBOUND))), wasm.unreachable()),
 
-        wasm.return(
-          local.get("$tag"),
+        local.tee(
+          "$value",
           i64.load(
             i32.add(
               i32.add(i32.add(local.get("$env"), i32.const(ENV_HEAD_SIZE)), i32.const(4)),
@@ -1206,6 +1377,12 @@ export const GET_LEX_ADDR_FX = wasm
             ),
           ),
         ),
+
+        wasm
+          .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+          .then(wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$value")), wasm.drop(), wasm.drop()),
+
+        wasm.return(local.get("$tag"), local.get("$value")),
       ),
 
       local.set("$env", i32.load(local.get("$env"))),
@@ -1222,6 +1399,10 @@ export const SET_LEX_ADDR_FX = wasm
   .locals({ $env: i32 })
   .body(
     local.set("$env", global.get(CURR_ENV)),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
 
     wasm.loop("$loop").body(
       wasm
@@ -1254,6 +1435,10 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
   .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
   .results(i32)
   .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
+
     i32.store(
       i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
       i32.or(local.get("$tag"), i32.shl(local.get("$is_starred"), i32.const(31))),
@@ -1295,7 +1480,13 @@ export const PARSE_FX = wasm
   );
 
 export const nativeFunctions = [
+  COLLECT_FX,
   MALLOC_FX,
+  PUSH_SHADOW_STACK_FX,
+  POP_SHADOW_STACK_FX,
+  PEEK_SHADOW_STACK_FX,
+  DISCARD_SHADOW_STACK_FX,
+  IS_TAG_GCABLE,
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
   MAKE_COMPLEX_FX,

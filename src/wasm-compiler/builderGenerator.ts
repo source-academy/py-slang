@@ -27,7 +27,9 @@ import {
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
+  DATA_END,
   ENV_HEAD_SIZE,
+  FROM_SPACE_END_PTR,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
@@ -45,11 +47,17 @@ import {
   MALLOC_FX,
   nativeFunctions,
   NEG_FX,
+  PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
   RETURN_ENV_NAME,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
+  SHADOW_STACK_BOTTOM,
+  SHADOW_STACK_PTR,
+  SHADOW_STACK_RESERVED_SIZE,
+  SHADOW_STACK_TOP,
+  TO_SPACE_END_PTR,
 } from "./constants";
 import { LibFuncType } from "./library";
 
@@ -69,6 +77,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   private strings: string[] = [];
   private builtIns: WasmCall[];
   private interactiveMode = false;
+  private readonly pageCount: number;
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
@@ -159,8 +168,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     ];
   }
 
-  constructor(initialStrings: string[], builtInFunctions: LibFuncType[], interactiveMode: boolean) {
+  constructor(
+    initialStrings: string[],
+    builtInFunctions: LibFuncType[],
+    interactiveMode: boolean,
+    pageCount: number,
+  ) {
     this.strings = initialStrings;
+    this.pageCount = pageCount;
 
     this.builtIns = builtInFunctions.map(({ name, arity, body, isVoid, hasVarArgs }, i) => {
       this.environment[0].push({ name, tag: "local" });
@@ -239,12 +254,17 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
       makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
+      peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
     };
+
+    const memoryEndPointer = this.pageCount * 64 * 1024;
+    const semispaceEndPointer = memoryEndPointer - SHADOW_STACK_RESERVED_SIZE;
+    const fromSpaceEndPointer = Math.floor(semispaceEndPointer / 2);
 
     return wasm
       .module()
       .imports(
-        wasm.import("js", "memory").memory(1),
+        wasm.import("js", "memory").memory(this.pageCount),
         ...importedLogs,
         wasm
           .import("metacircular", "tokenize")
@@ -258,7 +278,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .results(i32, i64),
       )
       .globals(
+        wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
+        wasm.global(FROM_SPACE_END_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
+        wasm.global(TO_SPACE_END_PTR, mut.i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_BOTTOM, i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),
+        wasm.global(SHADOW_STACK_PTR, mut.i32).init(i32.const(memoryEndPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
       )
       .datas(...strings)

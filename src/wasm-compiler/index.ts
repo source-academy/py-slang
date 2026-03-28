@@ -18,7 +18,9 @@ export type WasmExports = {
   makePair: (tag1: number, value1: bigint, tag2: number, value2: bigint) => [number, bigint];
   makeNone: () => [number, bigint];
   malloc: (amount: number) => number;
+  peekShadowStack: (index: number) => [number, bigint];
 };
+
 export const PARSE_TREE_STRINGS = [
   // node / construct tags
   "sequence",
@@ -62,14 +64,17 @@ export const PARSE_TREE_STRINGS = [
   '"not"',
 ] as const;
 
-type WasmRunResult = {
+type BaseWasmRunResult = {
   prints: string[];
+  getStackAt: (index: number) => [number, bigint];
+};
+
+type WasmRunResult = BaseWasmRunResult & {
   rawResult: null;
   renderedResult: null;
 };
 
-type WasmInteractiveRunResult = {
-  prints: string[];
+type WasmInteractiveRunResult = BaseWasmRunResult & {
   rawResult: [number, bigint];
   renderedResult: string;
 };
@@ -86,6 +91,8 @@ export async function compileToWasmAndRun(
   code: string,
   interactiveMode: boolean = false,
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
+  const pageCount = 1;
+
   const script = code + "\n";
   const ast = parse(script);
 
@@ -93,6 +100,7 @@ export async function compileToWasmAndRun(
     [...PARSE_TREE_STRINGS],
     libraryFunctions,
     interactiveMode,
+    pageCount,
   );
   const watIR = builderGenerator.visit(ast);
 
@@ -102,7 +110,7 @@ export async function compileToWasmAndRun(
   const w = await wabt();
   const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
-  const memory = new WebAssembly.Memory({ initial: 1 });
+  const memory = new WebAssembly.Memory({ initial: pageCount });
 
   let wasmExports: WasmExports | null = null;
 
@@ -126,9 +134,7 @@ export async function compileToWasmAndRun(
         throw new Error(Object.values(ERROR_MAP).at(tag) ?? "Unknown Error");
       },
       log_list: (pointer: number, length: number) => {
-        if (!wasmExports) {
-          throw new Error("WASM exports not initialised");
-        }
+        if (!wasmExports) throw new Error("WASM exports not initialised");
 
         const renderedItems: string[] = [];
         const dataView = new DataView(memory.buffer, pointer, length * 12);
@@ -189,9 +195,14 @@ export async function compileToWasmAndRun(
 
   wasmExports = instantiated.instance.exports as WasmExports;
 
+  const getStackAt = (index: number) => {
+    if (!wasmExports) throw new Error("WASM exports not initialised");
+    return wasmExports.peekShadowStack(index);
+  };
+
   if (!interactiveMode) {
     wasmExports.main();
-    return { prints: output, rawResult: null, renderedResult: null };
+    return { prints: output, rawResult: null, renderedResult: null, getStackAt };
   }
 
   const rawResult = wasmExports.main();
@@ -202,5 +213,5 @@ export async function compileToWasmAndRun(
     throw new Error("Main function did not produce any output");
   }
 
-  return { prints: output, rawResult, renderedResult };
+  return { prints: output, rawResult, renderedResult, getStackAt };
 }
