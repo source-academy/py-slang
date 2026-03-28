@@ -1210,10 +1210,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/wasm-util@npm:^1.0.5":
-  version: 1.0.5
-  resolution: "@sourceacademy/wasm-util@npm:1.0.5"
-  checksum: 10c0/05801da2ea19e77b141fc2d233df817a4ed9dff74c61cc5eb3b48cfb359eb8c9fa71df211904ae09e7a3f036336d3239ef1844ba707ae1bb723db5e960e79bbc
+"@sourceacademy/wasm-util@npm:^1.0.6":
+  version: 1.0.6
+  resolution: "@sourceacademy/wasm-util@npm:1.0.6"
+  checksum: 10c0/5f86a348c79142c062d5b8b3c45418bc0358ceb2fc4ace0393ea75797b9d66d06ab270c4ec12d304066e0879016db36a017c1696b9f14a62ae59c42d012b47ed
   languageName: node
   linkType: hard
 
@@ -4324,7 +4324,7 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@sourceacademy/conductor": "npm:^0.3.0"
-    "@sourceacademy/wasm-util": "npm:^1.0.5"
+    "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"
     "@types/moo": "npm:^0.5.10"
