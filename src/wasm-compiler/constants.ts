@@ -286,6 +286,7 @@ export const MAKE_TUPLE_FX = wasm
 export const GET_LIST_ELEMENT_FX = wasm
   .func("$_get_list_element")
   .params({ $tag: i32, $val: i64, $index_tag: i32, $index_val: i64 })
+  .locals({ $elem_tag: i32, $elem_val: i64 })
   .results(i32, i64)
   .body(
     // allow tuples to be accessed also
@@ -311,18 +312,35 @@ export const GET_LIST_ELEMENT_FX = wasm
       .if(i32.ge_u(i32.wrap_i64(local.get("$index_val")), i32.wrap_i64(local.get("$val"))))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LIST_OUT_OF_RANGE))), wasm.unreachable()),
 
-    i32.load(
-      i32.add(
-        i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-        i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
+    wasm.call(POP_SHADOW_STACK_FX), // pop list reference from shadow stack to get actual pointer and length
+    wasm.raw`(local.set $val) (local.set $tag)`,
+
+    local.tee(
+      "$elem_tag",
+      i32.load(
+        i32.add(
+          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+          i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
+        ),
       ),
     ),
-    i64.load(
-      i32.add(
-        i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-        i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
+    local.tee(
+      "$elem_val",
+      i64.load(
+        i32.add(
+          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+          i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
+        ),
       ),
     ),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
+      .then(
+        wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$elem_tag"), local.get("$elem_val")),
+        wasm.drop(),
+        wasm.drop(),
+      ),
   );
 
 export const SET_LIST_ELEMENT_FX = wasm
@@ -347,6 +365,14 @@ export const SET_LIST_ELEMENT_FX = wasm
     wasm
       .if(i32.ge_u(i32.wrap_i64(local.get("$index_val")), i32.wrap_i64(local.get("$list_val"))))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LIST_OUT_OF_RANGE))), wasm.unreachable()),
+
+    wasm.if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag"))).then(
+      wasm.call(POP_SHADOW_STACK_FX), // pop new element from shadow stack if GCable
+      wasm.raw`(local.set $val) (local.set $tag)`,
+    ),
+
+    wasm.call(POP_SHADOW_STACK_FX), // pop list reference from shadow stack to get actual pointer and length
+    wasm.raw`(local.set $list_val) (local.set $list_tag)`,
 
     i32.store(
       i32.add(

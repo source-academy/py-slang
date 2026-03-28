@@ -805,7 +805,7 @@ ${args.map(
     const length = expr.elements.length;
     const elements = expr.elements.map(el => this.visit(el));
 
-    // repurposing SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
     return wasm.raw`
 ${wasm.call(MALLOC_FX).args(i32.const(length * 12))}

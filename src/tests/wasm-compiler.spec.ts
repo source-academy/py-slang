@@ -2397,6 +2397,42 @@ x
       const pythonCode = `[1, 2, [3, 4]]`;
       await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
     });
+
+    it("accessing list element that is not GCable should not push anything onto stack", async () => {
+      const pythonCode = `x = [10, 20, 30]
+x[1]
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
+
+    it("accessing list element that is GCable should push element onto stack", async () => {
+      const pythonCode = `
+x = [10, [1, 2], 30]
+x[1]
+`;
+      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+    });
+
+    it("accessing list element that is GCable should push element onto stack (direct access)", async () => {
+      const pythonCode = `[10, [1, 2], 30][1]`;
+      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+    });
+
+    it("setting list element should not push anything onto stack", async () => {
+      const pythonCode = `
+x = [10, 20, 30]
+x[1] = 25
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
+
+    it("setting list element that is GCable should not push anything onto stack", async () => {
+      const pythonCode = `
+x = [10, 20, 30]
+x[1] = [3, 4]
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
   });
 });
 
