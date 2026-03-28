@@ -2426,12 +2426,62 @@ x[1] = 25
       await expectShadowStackToEqual(pythonCode);
     });
 
-    it("setting list element that is GCable should not push anything onto stack", async () => {
+    it("setting list element that is GCable (list) should not push anything onto stack", async () => {
       const pythonCode = `
 x = [10, 20, 30]
 x[1] = [3, 4]
 `;
       await expectShadowStackToEqual(pythonCode);
+    });
+
+    it("setting list element that is GCable (string) should not push anything onto stack", async () => {
+      const pythonCode = `
+x = [10, 20, 30]
+x[1] = "hello"
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
+  });
+
+  describe("closure-related tests", () => {
+    it("function definition should NOT push closure to stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
+
+    it("function value should push closure to stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f
+`;
+      await expectShadowStackToEqual(pythonCode, TYPE_TAG.CLOSURE);
+    });
+
+    it("creating lambda should push closure to stack", async () => {
+      const pythonCode = `lambda x: x + 1`;
+      await expectShadowStackToEqual(pythonCode, TYPE_TAG.CLOSURE);
+    });
+
+    it("calling non-GCable-producing function should not push anything onto stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f(10)
+`;
+      await expectShadowStackToEqual(pythonCode);
+    });
+
+    it("calling function that returns GCable should push returned GCable onto stack", async () => {
+      const pythonCode = `
+def f(x):
+    return [x]
+f(10)
+`;
+      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
     });
   });
 });

@@ -28,6 +28,7 @@ import {
   COMPARISON_OP_TAG,
   CURR_ENV,
   DATA_END,
+  DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
   FROM_SPACE_END_PTR,
   GET_LEX_ADDR_FX,
@@ -50,13 +51,16 @@ import {
   PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
   RETURN_ENV_NAME,
+  SET_CONTIGUOUS_BLOCK_AT_ADDR_FX,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
   SHADOW_STACK_BOTTOM,
   SHADOW_STACK_PTR,
   SHADOW_STACK_RESERVED_SIZE,
+  SHADOW_STACK_TAG,
   SHADOW_STACK_TOP,
+  SILENT_PUSH_SHADOW_STACK_FX,
   TO_SPACE_END_PTR,
 } from "./constants";
 import { LibFuncType } from "./library";
@@ -589,7 +593,7 @@ ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 ${args.map(
   ({ arg, isStarred }, i) =>
     wasm.raw`
-(i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
+(i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_AT_ADDR_FX.name})`,
 )}
 
 (i32.const ${ENV_HEAD_SIZE}) (i32.sub) (global.set ${CURR_ENV})
@@ -808,16 +812,22 @@ ${args.map(
     // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
     return wasm.raw`
-${wasm.call(MALLOC_FX).args(i32.const(length * 12))}
+${wasm
+  .call(SILENT_PUSH_SHADOW_STACK_FX)
+  .args(
+    i32.const(SHADOW_STACK_TAG.LIST_STATE),
+    i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+  )}
 
-${elements.map(
-  (element, i) =>
-    wasm.raw`
-(i32.const ${i}) ${element} (i32.const 0) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
+${elements.map((element, i) =>
+  wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0)),
 )}
 
-(i32.const ${length})
-(call ${MAKE_LIST_FX.name})
+${wasm.call(MAKE_LIST_FX).args(
+  i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
+  i32.const(length),
+  wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)), // discard the list state from the shadow stack
+)}
 `;
   }
 

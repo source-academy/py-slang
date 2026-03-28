@@ -17,6 +17,11 @@ export const TYPE_TAG = {
   TUPLE: 10,
 } as const;
 
+export const SHADOW_STACK_TAG = {
+  LIST_STATE: -1,
+  CALL_RETURN_ADDR: -2,
+};
+
 export const ERROR_MAP = {
   NEG_NOT_SUPPORT: "Unary minus operator used on unsupported operand.",
   LOG_UNKNOWN_TYPE: "Calling log on an unknown runtime type.",
@@ -1411,7 +1416,7 @@ export const GET_LEX_ADDR_FX = wasm
 
         wasm
           .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
-          .then(wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$value")), wasm.drop(), wasm.drop()),
+          .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$value"))),
 
         wasm.return(local.get("$tag"), local.get("$value")),
       ),
@@ -1463,6 +1468,28 @@ export const SET_LEX_ADDR_FX = wasm
 
 export const SET_CONTIGUOUS_BLOCK_FX = wasm
   .func("$_set_contiguous_block")
+  .params({ $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
+  .locals({ $addr: i32 })
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
+
+    wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
+    wasm.raw`(i32.wrap_i64) (local.set $addr) (drop)`,
+
+    i32.store(
+      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
+      i32.or(local.get("$tag"), i32.shl(local.get("$is_starred"), i32.const(31))),
+    ),
+    i64.store(
+      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+      local.get("$value"),
+    ),
+  );
+
+export const SET_CONTIGUOUS_BLOCK_AT_ADDR_FX = wasm
+  .func("$_set_contiguous_block_at_addr")
   .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
   .results(i32)
   .body(
@@ -1547,6 +1574,7 @@ export const nativeFunctions = [
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
   SET_CONTIGUOUS_BLOCK_FX,
+  SET_CONTIGUOUS_BLOCK_AT_ADDR_FX,
   TOKENIZE_FX,
   PARSE_FX,
 ];
