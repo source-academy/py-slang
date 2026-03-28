@@ -2338,4 +2338,15 @@ f(4)
       new Error(ERROR_MAP.UNBOUND),
     );
   });
+
+  it("non-expression statements should return None in interactive mode", async () => {
+    const pythonCode = `
+x = 5
+y = 10
+x + y
+`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.NONE);
+    expect(renderedResult).toBe("None");
+  });
 });

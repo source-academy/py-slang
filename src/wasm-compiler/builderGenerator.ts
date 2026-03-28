@@ -268,7 +268,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
         wasm
           .func("$main")
-          .results(...(hasLastInstr ? [i32, i64] : []))
+          .results(i32, i64)
           .body(
             global.set(
               CURR_ENV,
@@ -278,7 +278,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
             // declare built-in constants/functions in the global environment before user code
             ...this.builtIns,
 
-            ...(hasLastInstr ? [...body.slice(0, -1), hasLastInstr] : body),
+            ...(hasLastInstr
+              ? [...body.slice(0, -1), hasLastInstr]
+              : [...body, wasm.call(MAKE_NONE_FX)]),
           ),
       )
       .exports(...Object.values(exports))
