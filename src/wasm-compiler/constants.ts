@@ -61,34 +61,6 @@ export const ENV_HEAD_SIZE = 8;
 export const SHADOW_STACK_SLOT_SIZE = 12;
 export const SHADOW_STACK_RESERVED_SIZE = 1024;
 
-export const PUSH_SHADOW_STACK_FX = wasm
-  .func("$_push_shadow_stack")
-  .params({ $tag: i32, $val: i64 })
-  .locals({ $new_ptr: i32 })
-  .results(i32, i64)
-  .body(
-    local.set("$new_ptr", i32.sub(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
-
-    wasm
-      .if(i32.lt_u(local.get("$new_ptr"), global.get(SHADOW_STACK_BOTTOM)))
-      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_OVERFLOW))), wasm.unreachable()),
-
-    global.set(SHADOW_STACK_PTR, local.get("$new_ptr")),
-    i32.store(global.get(SHADOW_STACK_PTR), local.get("$tag")),
-    i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), local.get("$val")),
-    local.get("$tag"),
-    local.get("$val"),
-  );
-
-export const POP_SHADOW_STACK_FX = wasm
-  .func("$_pop_shadow_stack")
-  .results(i32, i64)
-  .body(
-    i32.load(global.get(SHADOW_STACK_PTR)),
-    i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))),
-    global.set(SHADOW_STACK_PTR, i32.add(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
-  );
-
 export const PEEK_SHADOW_STACK_FX = wasm
   .func("$_peek_shadow_stack")
   .params({ $offset: i32 })
@@ -112,6 +84,31 @@ export const PEEK_SHADOW_STACK_FX = wasm
     i64.load(i32.add(local.get("$addr"), i32.const(4))),
   );
 
+export const SILENT_PUSH_SHADOW_STACK_FX = wasm
+  .func("$_silent_push_shadow_stack")
+  .params({ $tag: i32, $val: i64 })
+  .locals({ $new_ptr: i32 })
+  .body(
+    local.set("$new_ptr", i32.sub(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
+
+    wasm
+      .if(i32.lt_u(local.get("$new_ptr"), global.get(SHADOW_STACK_BOTTOM)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_OVERFLOW))), wasm.unreachable()),
+
+    global.set(SHADOW_STACK_PTR, local.get("$new_ptr")),
+    i32.store(global.get(SHADOW_STACK_PTR), local.get("$tag")),
+    i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), local.get("$val")),
+  );
+
+export const PUSH_SHADOW_STACK_FX = wasm
+  .func("$_push_shadow_stack")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$val")),
+    wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
+  );
+
 export const DISCARD_SHADOW_STACK_FX = wasm
   .func("$_discard_shadow_stack")
   .params({ $num_frames: i32 })
@@ -120,6 +117,22 @@ export const DISCARD_SHADOW_STACK_FX = wasm
       SHADOW_STACK_PTR,
       i32.add(global.get(SHADOW_STACK_PTR), i32.mul(local.get("$num_frames"), i32.const(SHADOW_STACK_SLOT_SIZE))),
     ),
+  );
+
+export const POP_SHADOW_STACK_FX = wasm
+  .func("$_pop_shadow_stack")
+  .results(i32, i64)
+  .locals({ $new_ptr: i32 })
+  .body(
+    local.set("$new_ptr", i32.add(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))),
+
+    wasm
+      .if(i32.gt_u(local.get("$new_ptr"), global.get(SHADOW_STACK_TOP)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STACK_UNDERFLOW))), wasm.unreachable()),
+
+    i32.load(global.get(SHADOW_STACK_PTR)),
+    i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))),
+    global.set(SHADOW_STACK_PTR, local.get("$new_ptr")),
   );
 
 export const IS_TAG_GCABLE = wasm
@@ -336,11 +349,7 @@ export const GET_LIST_ELEMENT_FX = wasm
 
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
-      .then(
-        wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$elem_tag"), local.get("$elem_val")),
-        wasm.drop(),
-        wasm.drop(),
-      ),
+      .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$elem_tag"), local.get("$elem_val"))),
   );
 
 export const SET_LIST_ELEMENT_FX = wasm
@@ -473,9 +482,7 @@ export const MAKE_LINKED_LIST_FX = wasm
     local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
 
     local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
-    // wasm.call(PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.NONE), i64.const(0)),
-    // wasm.drop(),
-    // wasm.drop(),
+    // wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.NONE), i64.const(0)),
 
     wasm.loop("$loop").body(
       // update acc from shadow stack
@@ -507,9 +514,7 @@ export const MAKE_LINKED_LIST_FX = wasm
         // discard the old accumulator, and push the new pair as the new accumulator
         // wasm.call(POP_SHADOW_STACK_FX),
         // wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
-        // wasm.call(PUSH_SHADOW_STACK_FX),
-        // wasm.drop(),
-        // wasm.drop(),
+        // wasm.call(SILENT_PUSH_SHADOW_STACK_FX),
 
         // reload input list into locals
         // wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1)),
@@ -1509,6 +1514,7 @@ export const nativeFunctions = [
   COLLECT_FX,
   MALLOC_FX,
   PUSH_SHADOW_STACK_FX,
+  SILENT_PUSH_SHADOW_STACK_FX,
   POP_SHADOW_STACK_FX,
   PEEK_SHADOW_STACK_FX,
   DISCARD_SHADOW_STACK_FX,
