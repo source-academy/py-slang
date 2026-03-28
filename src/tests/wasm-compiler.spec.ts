@@ -1,5 +1,14 @@
-import { compileToWasmAndRun } from "../wasm-compiler";
-import { ERROR_MAP, TYPE_TAG } from "../wasm-compiler/constants";
+import { i32, wasm } from "@sourceacademy/wasm-util";
+import { CompileOptions, compileToWasmAndRun } from "../wasm-compiler";
+import {
+  ERROR_MAP,
+  MAKE_LIST_FX,
+  PEEK_SHADOW_STACK_FX,
+  SHADOW_STACK_TAG,
+  SILENT_PUSH_SHADOW_STACK_FX,
+  TYPE_TAG,
+} from "../wasm-compiler/constants";
+import { insertInArray, isFunctionOfName } from "../wasm-compiler/irHelpers";
 
 it = it.concurrent;
 
@@ -2320,8 +2329,12 @@ describe("parse function tests", () => {
 });
 
 describe("GC/Shadow stack manipulation tests", () => {
-  const expectShadowStackToEqual = async (pythonCode: string, ...expectedTags: number[]) => {
-    const { getStackAt } = await compileToWasmAndRun(pythonCode, true);
+  const expectShadowStackToEqual = async (
+    pythonCode: string,
+    expectedTags: number[],
+    compileOptions: CompileOptions = {},
+  ) => {
+    const { getStackAt, ...rest } = await compileToWasmAndRun(pythonCode, true, compileOptions);
 
     // Check each frame's tag on the stack
     expectedTags.forEach((expectedTag, index) => {
@@ -2331,48 +2344,50 @@ describe("GC/Shadow stack manipulation tests", () => {
 
     // Verify accessing one position past the stack throws STACK_UNDERFLOW
     expect(() => getStackAt(expectedTags.length)).toThrow(new Error(ERROR_MAP.STACK_UNDERFLOW));
+
+    return rest;
   };
 
   describe("MAKE_* tests", () => {
     it("MAKE_STRING pushes returned string to stack top", async () => {
-      await expectShadowStackToEqual(`"hello"`, TYPE_TAG.STRING);
+      await expectShadowStackToEqual(`"hello"`, [TYPE_TAG.STRING]);
     });
 
     it("MAKE_COMPLEX pushes returned complex to stack top", async () => {
-      await expectShadowStackToEqual(`2j`, TYPE_TAG.COMPLEX);
+      await expectShadowStackToEqual(`2j`, [TYPE_TAG.COMPLEX]);
     });
 
     it("MAKE_CLOSURE pushes returned closure to stack top", async () => {
-      await expectShadowStackToEqual(`lambda x: x + 1`, TYPE_TAG.CLOSURE);
+      await expectShadowStackToEqual(`lambda x: x + 1`, [TYPE_TAG.CLOSURE]);
     });
 
     it("MAKE_LIST pushes returned list to stack top", async () => {
-      await expectShadowStackToEqual(`[1, 2, 3]`, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(`[1, 2, 3]`, [TYPE_TAG.LIST]);
     });
 
     // it("MAKE_PAIR pushes returned pair to stack top", async () => {
-    //   await expectShadowStackToEqual(`pair(1, 2)`, TYPE_TAG.LIST);
+    //   await expectShadowStackToEqual(`pair(1, 2)`, [TYPE_TAG.LIST]);
     // });
 
     it("adding non-complex with complex pushes result to stack top", async () => {
-      await expectShadowStackToEqual(`3 + 2j`, TYPE_TAG.COMPLEX);
+      await expectShadowStackToEqual(`3 + 2j`, [TYPE_TAG.COMPLEX]);
     });
   });
 
   describe("binary operator tests", () => {
     it("adding two complexes pushes result to stack top", async () => {
-      await expectShadowStackToEqual(`2j + 3j`, TYPE_TAG.COMPLEX);
+      await expectShadowStackToEqual(`2j + 3j`, [TYPE_TAG.COMPLEX]);
     });
 
     it("concatenating two strings pushes result to stack top", async () => {
-      await expectShadowStackToEqual(`"foo" + "bar"`, TYPE_TAG.STRING);
+      await expectShadowStackToEqual(`"foo" + "bar"`, [TYPE_TAG.STRING]);
     });
   });
 
   describe("GET/SET_LEX_ADDRESS", () => {
     it("setting variable to GCable object should pop GCable object off stack", async () => {
       const pythonCode = `x = [1, 2, 3]`;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("getting GCable variable should push variable's value onto stack", async () => {
@@ -2380,7 +2395,7 @@ describe("GC/Shadow stack manipulation tests", () => {
 x = [1, 2, 3]
 x
 `;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
     it("getting non-GCable variable should push not push anything onto stack", async () => {
@@ -2388,21 +2403,46 @@ x
 x = 42
 x
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
   });
 
   describe("list-related tests", () => {
+    it("while creating list, list pointer should be on stack until SET_CONTIGUOUS", async () => {
+      const pythonCode = `[1, 2, 3]`;
+
+      const irPass = insertInArray(
+        node =>
+          isFunctionOfName(node, MAKE_LIST_FX) &&
+          "arguments" in node &&
+          Array.isArray(node.arguments) &&
+          node.arguments,
+        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
+      );
+
+      const { rawOutputs, rawResult } = await expectShadowStackToEqual(
+        pythonCode,
+        [TYPE_TAG.LIST],
+        { irPasses: [irPass] },
+      );
+
+      // without intervening GC, the list state pointer should be the same as the resultant list
+      // pointer, and should be on stack until SET_CONTIGUOUS
+      expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.LIST_STATE);
+      expect((rawOutputs[0][1] << 32n) | 3n).toBe(rawResult[1]);
+    });
+
     it("GCable element in list should NOT be on stack (already popped by SET_CONTIGUOUS)", async () => {
       const pythonCode = `[1, 2, [3, 4]]`;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
     it("accessing list element that is not GCable should not push anything onto stack", async () => {
       const pythonCode = `x = [10, 20, 30]
 x[1]
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("accessing list element that is GCable should push element onto stack", async () => {
@@ -2410,12 +2450,12 @@ x[1]
 x = [10, [1, 2], 30]
 x[1]
 `;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
     it("accessing list element that is GCable should push element onto stack (direct access)", async () => {
       const pythonCode = `[10, [1, 2], 30][1]`;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
     it("setting list element should not push anything onto stack", async () => {
@@ -2423,7 +2463,7 @@ x[1]
 x = [10, 20, 30]
 x[1] = 25
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("setting list element that is GCable (list) should not push anything onto stack", async () => {
@@ -2431,7 +2471,7 @@ x[1] = 25
 x = [10, 20, 30]
 x[1] = [3, 4]
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("setting list element that is GCable (string) should not push anything onto stack", async () => {
@@ -2439,7 +2479,7 @@ x[1] = [3, 4]
 x = [10, 20, 30]
 x[1] = "hello"
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
   });
 
@@ -2449,7 +2489,7 @@ x[1] = "hello"
 def f(x):
     return x + 1
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("function value should push closure to stack", async () => {
@@ -2458,12 +2498,12 @@ def f(x):
     return x + 1
 f
 `;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.CLOSURE);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.CLOSURE]);
     });
 
     it("creating lambda should push closure to stack", async () => {
       const pythonCode = `lambda x: x + 1`;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.CLOSURE);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.CLOSURE]);
     });
 
     it("calling non-GCable-producing function should not push anything onto stack", async () => {
@@ -2472,7 +2512,7 @@ def f(x):
     return x + 1
 f(10)
 `;
-      await expectShadowStackToEqual(pythonCode);
+      await expectShadowStackToEqual(pythonCode, []);
     });
 
     it("calling function that returns GCable should push returned GCable onto stack", async () => {
@@ -2481,7 +2521,7 @@ def f(x):
     return [x]
 f(10)
 `;
-      await expectShadowStackToEqual(pythonCode, TYPE_TAG.LIST);
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
   });
 });

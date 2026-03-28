@@ -587,6 +587,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // 3. make the list variable
     return wasm.raw`
 ${global.get(CURR_ENV)}
+${wasm
+  .call(SILENT_PUSH_SHADOW_STACK_FX)
+  .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV)))}
 
 ${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
 (i32.const ${ENV_HEAD_SIZE}) (i32.add)
@@ -805,30 +808,31 @@ ${args.map(
     return wasm.br("$continue");
   }
 
-  visitListExpr(expr: ExprNS.List): WasmRaw {
+  visitListExpr(expr: ExprNS.List): WasmCall {
     const length = expr.elements.length;
     const elements = expr.elements.map(el => this.visit(el));
 
     // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
-    return wasm.raw`
-${wasm
-  .call(SILENT_PUSH_SHADOW_STACK_FX)
-  .args(
-    i32.const(SHADOW_STACK_TAG.LIST_STATE),
-    i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
-  )}
 
-${elements.map((element, i) =>
-  wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0)),
-)}
+    // ! indicates actual arguments - the rest are for setting up the list
+    // in the shadow stack for SET_CONTIGUOUS_BLOCK_FX to write to
+    return wasm.call(MAKE_LIST_FX).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX)
+        .args(
+          i32.const(SHADOW_STACK_TAG.LIST_STATE),
+          i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+        ),
 
-${wasm.call(MAKE_LIST_FX).args(
-  i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
-  i32.const(length),
-  wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)), // discard the list state from the shadow stack
-)}
-`;
+      ...elements.map((element, i) =>
+        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0)),
+      ),
+
+      /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
+      /* ! */ i32.const(length),
+      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)), // discard the list state from the shadow stack
+    );
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {

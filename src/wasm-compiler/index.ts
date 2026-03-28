@@ -1,4 +1,4 @@
-import { WatGenerator } from "@sourceacademy/wasm-util";
+import { WatGenerator, type WasmInstruction } from "@sourceacademy/wasm-util";
 import wabt from "wabt";
 import { parse } from "../parser";
 import pythonLexer from "../parser/lexer";
@@ -20,6 +20,16 @@ export type WasmExports = {
   malloc: (amount: number) => number;
   peekShadowStack: (index: number) => [number, bigint];
 };
+
+export type IrPass = (ir: WasmInstruction) => WasmInstruction;
+
+export type CompileOptions = {
+  irPasses?: IrPass[];
+};
+
+function applyIrPasses(ir: WasmInstruction, passes: IrPass[] = []): WasmInstruction {
+  return passes.reduce((acc, pass) => pass(acc), ir);
+}
 
 export const PARSE_TREE_STRINGS = [
   // node / construct tags
@@ -67,6 +77,7 @@ export const PARSE_TREE_STRINGS = [
 type BaseWasmRunResult = {
   prints: string[];
   getStackAt: (index: number) => [number, bigint];
+  rawOutputs: [number, bigint][];
 };
 
 type WasmRunResult = BaseWasmRunResult & {
@@ -82,14 +93,17 @@ type WasmInteractiveRunResult = BaseWasmRunResult & {
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode?: false,
+  options?: CompileOptions,
 ): Promise<WasmRunResult>;
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode: true,
+  options?: CompileOptions,
 ): Promise<WasmInteractiveRunResult>;
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode: boolean = false,
+  options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
   const pageCount = 1;
 
@@ -102,7 +116,7 @@ export async function compileToWasmAndRun(
     interactiveMode,
     pageCount,
   );
-  const watIR = builderGenerator.visit(ast);
+  const watIR = applyIrPasses(builderGenerator.visit(ast), options.irPasses ?? []);
 
   const watGenerator = new WatGenerator();
   const wat = watGenerator.visit(watIR);
@@ -116,6 +130,9 @@ export async function compileToWasmAndRun(
 
   const output: string[] = [];
   const capture = (value: string) => void output.push(value);
+
+  const rawOutputs: [number, bigint][] = [];
+  const captureRaw = (tag: number, value: bigint) => void rawOutputs.push([tag, value]);
 
   const instantiated = await WebAssembly.instantiate(wasm, {
     console: {
@@ -153,6 +170,7 @@ export async function compileToWasmAndRun(
 
         capture(`[${renderedItems.join(", ")}]`);
       },
+      log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
     },
     metacircular: {
       tokenize: (offset: number, length: number) => {
@@ -202,7 +220,7 @@ export async function compileToWasmAndRun(
 
   if (!interactiveMode) {
     wasmExports.main();
-    return { prints: output, rawResult: null, renderedResult: null, getStackAt };
+    return { prints: output, rawOutputs, rawResult: null, renderedResult: null, getStackAt };
   }
 
   const rawResult = wasmExports.main();
@@ -213,5 +231,5 @@ export async function compileToWasmAndRun(
     throw new Error("Main function did not produce any output");
   }
 
-  return { prints: output, rawResult, renderedResult, getStackAt };
+  return { prints: output, rawOutputs, rawResult, renderedResult, getStackAt };
 }

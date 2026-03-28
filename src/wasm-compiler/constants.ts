@@ -572,6 +572,7 @@ export const importedLogs = [
   wasm.import("console", "log_none").func("$_log_none"),
   wasm.import("console", "log_list").func("$_log_list").params(i32, i32),
   wasm.import("console", "log_error").func("$_log_error").params(i32),
+  wasm.import("console", "log_raw").func("$_log_raw").params(i32, i64),
 ];
 
 export const LOG_FX = wasm
