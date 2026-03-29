@@ -12,59 +12,62 @@ A Python program is a \emph{program}, defined using Backus-Naur Form\footnote{
 clarifying the structure of BNF expressions.}
 as follows:
 
+\renewcommand{\arraystretch}{1.1}
+
 % tex-fmt: off
 \[\begin{array}{rcll}
 
-\textit{program}         & ::= & \textit{import-stmt} ... \ \textit{block}                                               & \text{program}                          \\[1mm]
-\textit{import-stmt}     & ::= & \term{from}\ \textit{dotted-name}\ \term{import}\ \textit{import-clause}                & \text{import statement}                 \\[1mm]
-\textit{dotted-name}     & ::= & \textit{name}\ (\ \term{.}\ \textit{name}\ )...                                         & \text{dotted identifier chain}          \\[1mm]
-\textit{import-clause}   & ::= & \textit{import-as-names}                                                                &                                         \\
-                         & |   & \term{(}\ \textit{import-as-names}\ \term{)}                                            & \text{wildcard or name list}            \\[1mm]
-\textit{import-as-names} & ::= & \textit{import-as-name}\ (\ \term{,}\ \textit{import-as-name}\ )...                     & \text{clause name list}                 \\[1mm]
-\textit{import-as-name}  & ::= & \textit{name}\ [\ \term{as}\ \textit{name}\ ]                                           & \text{clause name and alias}            \\[1mm]
-\textit{statement}       & ::= & \textit{name}\ \term{=}\ \textit{expression}                                            & \text{variable declaration}             \\
-                         & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block} & \text{function declaration}             \\
-                         & |   & \term{return}\ \textit{expression}                                                      & \text{return statement}                 \\
-                         & |   & \textit{if-statement}                                                                   & \text{conditional statement}            \\
-                         & |   & \term{while}\ \textit{expression}\ \term{:}\ \textit{block}                             & \text{while loop}                       \\
-                         & |   & \term{for}\ \textit{name}\ \term{in\ range(}
-                                 \ \textit{range-args}\ \term{)}\ \term{:}\ \textit{block}                               & \text{for loop}                         \\
-                         & |   & \term{break}                                                                            & \text{break statement}                  \\
-                         & |   & \term{continue}                                                                         & \text{continue statement}               \\
-                         & |   & \term{nonlocal}\ \textit{name}                                                          & \text{nonlocal statement}               \\
-                         & |   & \textit{expression}                                                                     & \text{expression statement}             \\[1mm]
-\textit{range-args}      & ::= & \textit{expression}\ [\ \term{,}\ \textit{expression}\ ]
-                                 \ [\ \term{,}\ \textit{expression}\ ]                                                   & \text{for loop range arguments}         \\[1mm]
-\textit{names}           & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...                            & \text{name list}                        \\[1mm]
-\textit{rest-names}      & ::= & \epsilon\ |\ \term{*}\textit{name}
-                                 \ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...\ [\ \term{,\ *}\textit{name}\ ]    & \text{name list (rest)}                 \\[1mm]
-\textit{if-statement}    & ::= & \term{if}\ \textit{expression}\ \term{:}\ \textit{block}                                &                                         \\
-                         & |   & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                     &                                         \\
-                         & |   & \term{else}\ \term{:}\ \textit{block}                                                   & \text{conditional statement}            \\[1mm]
-\textit{block}           & ::= & \textit{statement}...                                                                   & \text{block statement}                  \\[1mm]
-\textit{expression}      & ::= & \textit{integer}                                                                        & \text{primitive integer expression}     \\
-                         & |   & \textit{float}                                                                          & \text{primitive float expression}       \\
-                         & |   & \textit{complex}                                                                        & \text{primitive complex expression}     \\
-                         & |   & \term{True}\ |\ \term{False}                                                            & \text{primitive boolean expression}     \\
-                         & |   & \term{None}                                                                             & \text{primitive None expression}        \\
-                         & |   & \textit{string}                                                                         & \text{primitive string expression}      \\
-                         & |   & \textit{name}                                                                           & \text{name expression}                  \\
-                         & |   & \textit{expression}\ \textit{binary-operator}\ \textit{expression}                      & \text{binary operator combination}      \\
-                         & |   & \textit{unary-operator}\ \textit{expression}                                            & \text{unary operator combination}       \\
-                         & |   & \textit{expression}\ \textit{binary-logical}\ \textit{expression}                       & \text{logical composition}              \\
-                         & |   & \textit{expression}\ \term{(}\ \textit{expressions}\ \term{)}                           & \text{function application}             \\
-                         & |   & \term{lambda}\ (\textit{name}\ |\ \textit{names})\ \term{:}\ \textit{expression}        & \text{lambda expression}                \\
-                         & |   & \textit{expression}\ \term{if}\ \textit{expression}\ \term{else}\ \textit{expression}   & \text{conditional expression}           \\
-                         & |   & \textit{expression}\term{[}\textit{expression}\term{] =}\ \textit{expression}           & \text{list assignment}                  \\
-                         & |   & \textit{expression}\term{[}\textit{expression}\term{]}                                  & \text{list access}                      \\
-                         & |   & \term{[}\ \textit{expressions}\ \term{]}                                                & \text{literal list expression}          \\
-                         & |   & \term{(}\ \textit{expression}\ \term{)}                                                 & \text{parenthesised expression}         \\[1mm]
-\textit{binary-operator} & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%} |\ \term{is} &                                         \\
-                         & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}           & \text{binary operator}                  \\[1mm]
-\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}                                                                 & \text{-unary operator}                  \\[1mm]
-                         & |   & \term{+}                                                                                & \text{+unary operator}                  \\[1mm]
-\textit{binary-logical}  & ::= & \term{and}\ |\ \term{or}                                                                & \text{logical composition symbol}       \\[1mm]
-\textit{expressions}     & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                & \text{argument expressions}             \\
+\textit{program}            & ::= & \textit{import-stmt} ... \ \textit{block}                                                & \text{program}                          \\[1mm]
+\textit{import-stmt}        & ::= & \term{from}\ \textit{dotted-name}\ \term{import}\ \textit{import-clause}                 & \text{import statement}                 \\[1mm]
+\textit{dotted-name}        & ::= & \textit{name}\ (\ \term{.}\ \textit{name}\ )...                                          & \text{dotted identifier chain}          \\[1mm]
+\textit{import-clause}      & ::= & \textit{import-as-names}                                                                 &                                         \\
+                            & |   & \term{(}\ \textit{import-as-names}\ \term{)}                                             & \text{wildcard or name list}            \\[1mm]
+\textit{import-as-names}    & ::= & \textit{import-as-name}\ (\ \term{,}\ \textit{import-as-name}\ )...                      & \text{clause name list}                 \\[1mm]
+\textit{import-as-name}     & ::= & \textit{name}\ [\ \term{as}\ \textit{name}\ ]                                            & \text{clause name and alias}            \\[1mm]
+\textit{statement}          & ::= & \textit{name}\ \term{=}\ \textit{expression}                                             & \text{variable declaration}             \\
+                            & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block}  & \text{function declaration}             \\
+                            & |   & \term{return}\ \textit{expression}                                                       & \text{return statement}                 \\
+                            & |   & \textit{if-statement}                                                                    & \text{conditional statement}            \\
+                            & |   & \term{while}\ \textit{expression}\ \term{:}\ \textit{block}                              & \text{while loop}                       \\
+                            & |   & \term{for}\ \textit{name}\ \term{in\ range(}
+                                    \ \textit{range-args}\ \term{)}\ \term{:}\ \textit{block}                                & \text{for loop}                         \\
+                            & |   & \term{break}                                                                             & \text{break statement}                  \\
+                            & |   & \term{continue}                                                                          & \text{continue statement}               \\
+                            & |   & \term{nonlocal}\ \textit{name}                                                           & \text{nonlocal statement}               \\
+                            & |   & \textit{expression}                                                                      & \text{expression statement}             \\[1mm]
+\textit{range-args}         & ::= & \textit{expression}\ [\ \term{,}\ \textit{expression}\ ]
+                                    \ [\ \term{,}\ \textit{expression}\ ]                                                    & \text{for loop range arguments}         \\[1mm]
+\textit{names}              & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...                             & \text{name list}                        \\[1mm]
+\textit{rest-names}         & ::= & \epsilon\ |\ \term{*}\textit{name}
+                                    \ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...\ [\ \term{,\ *}\textit{name}\ ]     & \text{name list (rest)}                 \\[1mm]
+\textit{if-statement}       & ::= & \term{if}\ \textit{expression}\ \term{:}\ \textit{block}                                 &                                         \\
+                            &     & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                      &                                         \\
+                            &     & [\ \term{else}\ \term{:}\ \textit{block}\ ]                                                    & \text{conditional statement}            \\[1mm]
+\textit{block}              & ::= & \textit{statement}...                                                                    & \text{block statement}                  \\[1mm]
+\textit{expression}         & ::= & \textit{integer}                                                                         & \text{primitive integer expression}     \\
+                            & |   & \textit{float}                                                                           & \text{primitive float expression}       \\
+                            & |   & \textit{complex}                                                                         & \text{primitive complex expression}     \\
+                            & |   & \term{True}\ |\ \term{False}                                                             & \text{primitive boolean expression}     \\
+                            & |   & \term{None}                                                                              & \text{primitive None expression}        \\
+                            & |   & \textit{string}                                                                          & \text{primitive string expression}      \\
+                            & |   & \textit{name}                                                                            & \text{name expression}                  \\
+                            & |   & \textit{expression}\ \textit{binary-operator}\ \textit{expression}                       & \text{binary operator combination}      \\
+                            & |   & \textit{unary-operator}\ \textit{expression}                                             & \text{unary operator combination}       \\
+                            & |   & \textit{expression}\ \textit{binary-logical}\ \textit{expression}                        & \text{logical composition}              \\
+                            & |   & \textit{expression}\ \term{(}\ \textit{spread-expressions}\ \term{)}                     & \text{function application}             \\
+                            & |   & \term{lambda}\ (\textit{name}\ |\ \textit{names})\ \term{:}\ \textit{expression}         & \text{lambda expression}                \\
+                            & |   & \textit{expression}\ \term{if}\ \textit{expression}\ \term{else}\ \textit{expression}    & \text{conditional expression}           \\
+                            & |   & \textit{expression}\term{[}\textit{expression}\term{] =}\ \textit{expression}            & \text{list assignment}                  \\
+                            & |   & \textit{expression}\term{[}\textit{expression}\term{]}                                   & \text{list access}                      \\
+                            & |   & \term{[}\ \textit{expressions}\ \term{]}                                                 & \text{literal list expression}          \\
+                            & |   & \term{(}\ \textit{expression}\ \term{)}                                                  & \text{parenthesised expression}         \\[1mm]
+\textit{binary-operator}    & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%} |\ \term{is} &                                         \\
+                            & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}            & \text{binary operator}                  \\[1mm]
+\textit{unary-operator}     & ::= & \term{not}\ |\ \term{-}\ |\ \term{+}                                                     & \text{unary operator}                   \\[1mm]
+\textit{binary-logical}     & ::= & \term{and}\ |\ \term{or}                                                                 & \text{logical composition symbol}       \\[1mm]
+\textit{expressions}        & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                 & \text{element expressions}              \\[1mm]
+\textit{spread-expressions} & ::= & \epsilon\ |\ \textit{spread-expression}\ (\ \term{,}\ \textit{spread-expression}\ )...   & \text{argument expressions}             \\[1mm]
+\textit{spread-expression}  & ::= & \textit{expression}\ |\ \term{*}\ \textit{expression}                                    & \text{argument expressions (spread)}    \\
 
 \end{array}\]
 % tex-fmt: on
