@@ -125,10 +125,8 @@ def equal(xs, ys):
         )
     elif is_none(xs):
         return is_none(ys)
-    elif is_int(xs):
-        return is_int(ys) and xs == ys
-    elif is_float(xs):
-        return is_float(ys) and xs == ys
+    elif is_int(xs) or is_float(xs) or is_complex(xs):
+        return (is_int(ys) or is_float(ys) or is_complex(ys)) and xs == ys
     elif is_boolean(xs):
         return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
     elif is_string(xs):
