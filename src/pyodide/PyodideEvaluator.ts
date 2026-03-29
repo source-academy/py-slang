@@ -1,11 +1,13 @@
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import type { PyodideInterface } from "pyodide";
+import { parse } from "../parser/parser-adapter";
+import { analyze } from "../resolver/analysis";
+import { getNonTorchImportRoots, rewriteTorchImports } from "./importAnalyzer";
 import { loadPyodideGeneric } from "./loadPyodide";
 import { loadTorch } from "./loadTorch";
-import { rewriteTorchImports, getNonTorchImportRoots } from "./importAnalyzer";
 
-export default class PyodideEvaluator extends BasicEvaluator {
-  private pyodide: Promise<PyodideInterface>;
+export default abstract class PyodideEvaluator extends BasicEvaluator {
+  protected pyodide: Promise<PyodideInterface>;
   private torchLoaded = false;
 
   constructor(conductor: IRunnerPlugin) {
@@ -21,7 +23,11 @@ export default class PyodideEvaluator extends BasicEvaluator {
     });
   }
 
+  protected abstract validateChunk(_chunk: string): void;
+
   async evaluateChunk(chunk: string): Promise<void> {
+    this.validateChunk(chunk);
+
     const pyodide = await this.pyodide;
 
     // --- Use Python's ast module (via Pyodide) to detect and rewrite torch imports ---
@@ -55,5 +61,20 @@ if missing:
     // --- Execute the (possibly rewritten) code ---
     const output = await pyodide.runPythonAsync(code);
     this.conductor.sendOutput(output);
+  }
+}
+
+export class ChapterPyodideEvaluator extends PyodideEvaluator {
+  private chapter: number;
+
+  constructor(conductor: IRunnerPlugin, chapter: number) {
+    super(conductor);
+    this.chapter = chapter;
+  }
+
+  protected validateChunk(chunk: string): void {
+    const script = chunk + "\n";
+    const ast = parse(script);
+    analyze(ast, script, this.chapter);
   }
 }
