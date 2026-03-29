@@ -553,6 +553,14 @@ export class NameError extends RuntimeSourceError {
   }
 }
 
+export class UserError extends RuntimeSourceError {
+  constructor(message: string, node: ExprNS.Expr) {
+    super(node);
+    this.type = ErrorType.RUNTIME;
+    this.message = message;
+  }
+}
+
 export class BuiltinReassignmentError extends RuntimeSourceError {
   constructor(source: string, name: string, node: ExprNS.Expr) {
     super(node);

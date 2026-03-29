@@ -363,6 +363,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const simpleExpr = command as StmtNS.SimpleExpr;
+    control.push(instrCreator.popInstr(command as Node));
     control.push(simpleExpr.expression);
   },
 
@@ -752,6 +753,10 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     // All modules are preloaded into the global environment by the runner.
     // When the code later uses the module name (e.g., 'runes'), pyGetVariable
     // will find it in the global scope.
+  },
+
+  Pass: function () {
+    // No action needed for 'pass' statement
   },
 
   /**

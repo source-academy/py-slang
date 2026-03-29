@@ -17,6 +17,7 @@ import {
   SublanguageError,
   TooManyPositionalArgumentsError,
   TypeError,
+  UserError,
   ValueError,
 } from "./errors/errors";
 
@@ -275,9 +276,9 @@ export class BuiltInFunctions {
     return toPythonString(val);
   }
 
-  static error(args: Value[], _source: string, _command: ControlItem, _context: Context): Value {
+  static error(args: Value[], _source: string, command: ControlItem, context: Context): Value {
     const output = "Error: " + args.map(arg => BuiltInFunctions.toStr(arg)).join(" ") + "\n";
-    throw new Error(output);
+    handleRuntimeError(context, new UserError(output, command as ExprNS.Expr));
   }
 
   @Validate(2, 2, "isinstance", false)
@@ -2248,6 +2249,17 @@ export class BuiltInFunctions {
   ): BoolValue {
     const obj = args[0];
     return { type: "bool", value: obj.type === "bool" };
+  }
+
+  @Validate(1, 1, "is_complex", true)
+  static is_complex(
+    args: Value[],
+    _source: string,
+    _command: ControlItem,
+    _context: Context,
+  ): BoolValue {
+    const obj = args[0];
+    return { type: "bool", value: obj.type === "complex" };
   }
 
   @Validate(1, 1, "is_int", true)

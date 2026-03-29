@@ -1,6 +1,7 @@
 import { ConductorError } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
+import { Stash } from "../cse-machine/stash";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
@@ -115,10 +116,15 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
   for (const [funcName, tests] of Object.entries(testCases)) {
     describe(funcName, () => {
-      test.concurrent.each(createInternalTestCases(tests))(
+      afterEach(() => {
+        jest.restoreAllMocks(); // Automatically restores all spyOn mocks
+      });
+      test.each(createInternalTestCases(tests))(
         `$code should return $label`,
         async ({ code, expected, output }) => {
+          const spy = jest.spyOn(Stash.prototype, "pop");
           const context = new Context();
+
           const outputLst: OutputType[] = [];
           generateMockStreams(context, outputLst);
           const result = await runInContext(code, context, { variant, groups });
@@ -141,44 +147,47 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           }
 
           if (expected === null) {
-            expect(context.stash.peek()).toHaveProperty("type", "none");
+            expect(spy).toHaveLastReturnedWith(expect.objectContaining({ type: "none" }));
             return;
           }
 
           if (typeof expected === "bigint") {
-            expect(context.stash.peek()).toHaveProperty("type", "bigint");
-            expect(context.stash.peek()).toHaveProperty("value", expected);
+            expect(spy).toHaveLastReturnedWith(
+              expect.objectContaining({ type: "bigint", value: expected }),
+            );
             return;
           }
 
           if (typeof expected === "number") {
-            expect(context.stash.peek()).toHaveProperty("type", "number");
-            expect(context.stash.peek()).toHaveProperty("value", expect.closeTo(expected));
+            expect(spy).toHaveLastReturnedWith(
+              expect.objectContaining({ type: "number", value: expect.closeTo(expected) }),
+            );
             return;
           }
 
           if (typeof expected === "boolean") {
-            expect(context.stash.peek()).toHaveProperty("type", "bool");
-            expect(context.stash.peek()).toHaveProperty("value", expected);
+            expect(spy).toHaveLastReturnedWith(
+              expect.objectContaining({ type: "bool", value: expected }),
+            );
             return;
           }
 
           if (expected instanceof PyComplexNumber) {
-            expect(context.stash.peek()).toHaveProperty("type", "complex");
-            expect(context.stash.peek()).toHaveProperty(
-              "value.real",
-              expect.closeTo(expected.real),
-            );
-            expect(context.stash.peek()).toHaveProperty(
-              "value.imag",
-              expect.closeTo(expected.imag),
+            expect(spy).toHaveLastReturnedWith(
+              expect.objectContaining({
+                type: "complex",
+                value: expect.objectContaining({
+                  real: expect.closeTo(expected.real),
+                  imag: expect.closeTo(expected.imag),
+                }),
+              }),
             );
             return;
           }
 
-          expect(context.stash.peek()).toHaveProperty("type", "string");
-          expect(context.stash.peek()).toHaveProperty("value", expected);
-
+          expect(spy).toHaveLastReturnedWith(
+            expect.objectContaining({ type: "string", value: expected }),
+          );
           return;
         },
       );

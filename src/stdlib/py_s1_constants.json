@@ -57,6 +57,7 @@
     "math_sqrt",
     "is_none",
     "is_boolean",
+    "is_complex",
     "is_string",
     "is_function",
     "is_float",

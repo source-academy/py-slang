@@ -2,7 +2,6 @@ import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { BuiltinValue, NoneValue, Value } from "../cse-machine/stash";
 import { Validate } from "../stdlib";
-import pairmutatorPrelude from "./pairmutator.prelude";
 import { Group, GroupName } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();
@@ -56,6 +55,6 @@ for (const builtin of Object.getOwnPropertyNames(PairmutatorBuiltins)) {
 }
 export default {
   name: GroupName.PAIRMUTATORS,
-  prelude: pairmutatorPrelude,
+  prelude: ``,
   builtins: pairmutatorBuiltins,
 } as Group;
