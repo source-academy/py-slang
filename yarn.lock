@@ -4306,7 +4306,7 @@ __metadata:
     prettier: "npm:^3.8.1"
     pyodide: "npm:^0.29.3"
     rollup: "npm:^4.59.0"
-    torch: "https://pkg.pr.new/veehz/torch@297abf6"
+    torch: "https://pkg.pr.new/veehz/torch@687fc81"
     ts-jest: "npm:^29.0.5"
     ts-node: "npm:^10.9.1"
     tslib: "npm:^2.8.1"
@@ -4818,10 +4818,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"torch@https://pkg.pr.new/veehz/torch@297abf6":
+"torch@https://pkg.pr.new/veehz/torch@687fc81":
   version: 0.1.0
-  resolution: "torch@https://pkg.pr.new/veehz/torch@297abf6"
-  checksum: 10c0/bde381a0d266c845970fd34b3d27048709b60fd9e64a2d96f3080eb9c3a4bb1433bcc0ea1bc1123fbb31883ad2623c031ede94319e514f54398b9752c290c6d4
+  resolution: "torch@https://pkg.pr.new/veehz/torch@687fc81"
+  checksum: 10c0/84fd0d0fae8f5e67dccfa01d429755ef5db147340544f697a14ce32332a31b5515b84aa47ac849c327f1026c8c4ff29a7af3c60bd5c1db541f49ddfa9f529185
   languageName: node
   linkType: hard
 

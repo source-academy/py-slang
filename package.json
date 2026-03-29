@@ -62,7 +62,7 @@
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
     "pyodide": "^0.29.3",
-    "torch": "https://pkg.pr.new/veehz/torch@297abf6",
+    "torch": "https://pkg.pr.new/veehz/torch@687fc81",
     "wabt": "^1.0.37"
   }
 }

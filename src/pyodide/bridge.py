@@ -184,8 +184,7 @@ class Tensor:
         return Tensor(self._js.transpose(dim0, dim1))
 
     def flatten(self, start_dim=0, end_dim=-1):
-        n = self.numel()
-        return self.reshape([n])
+        return Tensor(self._js.flatten(start_dim, end_dim))
 
     # ------------------------------------------------------------------
     # Reductions — default (no dim) sums all elements, matching PyTorch
@@ -387,7 +386,7 @@ class Module:
             object.__setattr__(self, name, value)
             return
 
-        if isinstance(value, Tensor) and value.requires_grad:
+        if isinstance(value, Parameter):
             params[name] = value
         elif isinstance(value, (Module, _NNModule)):
             modules[name] = value
@@ -674,17 +673,15 @@ class _Torch:
         return bool(js_torch.is_grad_enabled())
 
     def cat(self, tensors, dim=0):
-        """Concatenate tensors along dim. NOTE: gradient is not tracked."""
-        if dim != 0:
-            raise NotImplementedError("torch.cat only supports dim=0 in this bridge")
-        result = []
-        for t in tensors:
-            data = t.tolist()
-            if isinstance(data, list):
-                result.extend(data)
-            else:
-                result.append(data)
-        return Tensor(result)
+        if isinstance(tensors, Tensor):
+            tensors = [tensors]
+        return Tensor(js_torch.cat(to_js([t._js for t in tensors]), dim))
+
+    def concatenate(self, tensors, dim=0):
+        return self.cat(tensors, dim)
+
+    def concat(self, tensors, dim=0):
+        return self.cat(tensors, dim)
 
     def Size(self, shape):
         return list(shape)
