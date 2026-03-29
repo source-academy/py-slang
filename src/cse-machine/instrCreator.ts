@@ -29,9 +29,10 @@ export const assmtInstr = (
   srcNode,
 });
 
-export const appInstr = (numOfArgs: number, srcNode: Node): AppInstr => ({
+export const appInstr = (numOfArgs: number, srcNode: Node, spreadIndices: number[] = []): AppInstr => ({
   instrType: InstrType.APPLICATION,
   numOfArgs,
+  spreadIndices,
   srcNode,
 });
 

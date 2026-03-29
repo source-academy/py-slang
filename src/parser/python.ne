@@ -352,7 +352,7 @@ expressionPow ->
 expressionPost ->
     expressionPost %lsqb expression %rsqb
       {% ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
-  | expressionPost "(" expressions ")"
+  | expressionPost "(" spread_expressions ")"
       {% ([callee,, args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token])  => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
   | expressionPost "(" ")"
       {% ([callee,, rparen]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
@@ -387,9 +387,9 @@ atom ->
 # ============================================================================
 
 lambda_expr ->
-    "lambda" names ":" expression
+    "lambda" rest_names ":" expression
       {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body) %}
-  | "lambda" names %doublecolon block
+  | "lambda" rest_names %doublecolon block
       {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
            new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, params, body, []) %}
   | "lambda" ":" expression
@@ -404,6 +404,19 @@ lambda_expr ->
 
 expressions -> expression ("," expression):* (%comma):?
   {% flatList %}
+
+# ============================================================================
+# spread-expressions ::= ...                     [python_3_bnf.tex lines 69-70]
+# ============================================================================
+
+spread_expressions -> spread_expression ("," spread_expression):* (%comma):?
+  {% flatList %}
+
+spread_expression ->
+    expression                                   {% id %}
+  | %star expression
+      {% ([star, expr]: [moo.Token, ExprNS.Expr]) =>
+           new ExprNS.Starred(toAstToken(star), expr.endToken, expr) %}
 
 # ============================================================================
 # stringLit — string literals

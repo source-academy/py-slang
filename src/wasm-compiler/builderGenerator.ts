@@ -607,4 +607,7 @@ ${args.map(
   visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
     throw new Error("Method not implemented.");
   }
+  visitStarredExpr(_expr: ExprNS.Starred): WasmNumeric {
+    throw new Error("Spread expressions are not yet supported in WASM compilation.");
+  }
 }

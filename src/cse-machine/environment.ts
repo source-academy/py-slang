@@ -47,7 +47,16 @@ export const createEnvironment = (
 
   closure.node.parameters.forEach((paramToken, index) => {
     const paramName = paramToken.lexeme;
-    environment.head[paramName] = args[index];
+    if (paramToken.isStarred) {
+      // Rest parameter: collect remaining args into a raw JS array.
+      // This is intentionally stored as Value[] (not a typed Value variant)
+      // so that spread flattening in the Application handler can detect it
+      // via Array.isArray(). A proper ListValue type should be added when
+      // the CSE machine gains full list support.
+      environment.head[paramName] = args.slice(index) as unknown as Value;
+    } else {
+      environment.head[paramName] = args[index];
+    }
   });
   return environment;
 };

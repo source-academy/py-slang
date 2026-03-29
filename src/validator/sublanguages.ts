@@ -6,6 +6,7 @@ import { NoBreakContinueValidator } from "./features/no-break-continue";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
 import { ForRangeOnlyValidator } from "./features/for-range-only";
 import { NoRestParamsValidator } from "./features/no-rest-params";
+import { NoSpreadValidator } from "./features/no-spread";
 
 /**
  * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params.
@@ -19,6 +20,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
+    NoSpreadValidator,
   ];
 }
 
@@ -34,6 +36,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
+    NoSpreadValidator,
   ];
 }
 

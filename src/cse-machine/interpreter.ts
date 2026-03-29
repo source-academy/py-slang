@@ -520,9 +520,17 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const callNode = command as ExprNS.Call;
 
-    control.push(instrCreator.appInstr(callNode.args.length, callNode));
+    const spreadIndices = callNode.args.reduce<number[]>((acc, arg, i) => {
+      if (arg instanceof ExprNS.Starred) acc.push(i);
+      return acc;
+    }, []);
+
+    control.push(instrCreator.appInstr(callNode.args.length, callNode, spreadIndices));
     for (let i = callNode.args.length - 1; i >= 0; i--) {
-      control.push(callNode.args[i]);
+      const arg = callNode.args[i];
+      // Push the inner expression for Starred nodes — the spread flattening
+      // happens at application time using spreadIndices.
+      control.push(arg instanceof ExprNS.Starred ? arg.value : arg);
     }
     control.push(callNode.callee);
   },
@@ -768,13 +776,25 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as AppInstr;
     const numOfArgs = instr.numOfArgs;
 
-    const args: Value[] = [];
+    const rawArgs: Value[] = [];
     for (let i = 0; i < numOfArgs; i++) {
       const arg = stash.pop();
       if (arg) {
-        args.unshift(arg);
+        rawArgs.unshift(arg);
       }
     }
+
+    // Flatten spread args: starred indices contain list values that
+    // need to be expanded inline.
+    const spreadSet = new Set(instr.spreadIndices);
+    const args: Value[] =
+      spreadSet.size === 0
+        ? rawArgs
+        : rawArgs.flatMap((val, i) => {
+            if (!spreadSet.has(i)) return val;
+            if (Array.isArray(val)) return val;
+            throw new Error("Cannot spread non-iterable value");
+          });
 
     const callable = stash.pop();
 

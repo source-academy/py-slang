@@ -413,7 +413,11 @@ const ParserRules = [
     symbols: ["if_statement$ebnf$2$subexpression$1"],
     postprocess: id,
   },
-  { name: "if_statement$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "if_statement$ebnf$2",
+    symbols: [],
+    postprocess: () => null,
+  },
   {
     name: "if_statement",
     symbols: [
@@ -628,7 +632,7 @@ const ParserRules = [
   },
   {
     name: "expressionPost",
-    symbols: ["expressionPost", { literal: "(" }, "expressions", { literal: ")" }],
+    symbols: ["expressionPost", { literal: "(" }, "spread_expressions", { literal: ")" }],
     postprocess: ([callee, , args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args),
   },
@@ -677,13 +681,13 @@ const ParserRules = [
   { name: "atom", symbols: [{ literal: "False" }], postprocess: astFalse },
   {
     name: "lambda_expr",
-    symbols: [{ literal: "lambda" }, "names", { literal: ":" }, "expression"],
+    symbols: [{ literal: "lambda" }, "rest_names", { literal: ":" }, "expression"],
     postprocess: ([kw, params, , body]: [moo.Token, FunctionParam[], moo.Token, ExprNS.Expr]) =>
       new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body),
   },
   {
     name: "lambda_expr",
-    symbols: [{ literal: "lambda" }, "names", { type: "doublecolon" }, "block"],
+    symbols: [{ literal: "lambda" }, "rest_names", { type: "doublecolon" }, "block"],
     postprocess: ([kw, params, , body]: [moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
       new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, params, body, []),
   },
@@ -710,11 +714,50 @@ const ParserRules = [
   },
   { name: "expressions$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
   { name: "expressions$ebnf$2", symbols: ["expressions$ebnf$2$subexpression$1"], postprocess: id },
-  { name: "expressions$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "expressions$ebnf$2",
+    symbols: [],
+    postprocess: () => null,
+  },
   {
     name: "expressions",
     symbols: ["expression", "expressions$ebnf$1", "expressions$ebnf$2"],
     postprocess: flatList,
+  },
+  { name: "spread_expressions$ebnf$1", symbols: [] },
+  {
+    name: "spread_expressions$ebnf$1$subexpression$1",
+    symbols: [{ literal: "," }, "spread_expression"],
+  },
+  {
+    name: "spread_expressions$ebnf$1",
+    symbols: ["spread_expressions$ebnf$1", "spread_expressions$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "spread_expressions$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "spread_expressions$ebnf$2",
+    symbols: ["spread_expressions$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  {
+    name: "spread_expressions$ebnf$2",
+    symbols: [],
+    postprocess: () => null,
+  },
+  {
+    name: "spread_expressions",
+    symbols: ["spread_expression", "spread_expressions$ebnf$1", "spread_expressions$ebnf$2"],
+    postprocess: flatList,
+  },
+  { name: "spread_expression", symbols: ["expression"], postprocess: id },
+  {
+    name: "spread_expression",
+    symbols: [{ type: "star" }, "expression"],
+    postprocess: ([star, expr]: [moo.Token, ExprNS.Expr]) =>
+      new ExprNS.Starred(toAstToken(star), expr.endToken, expr),
   },
   { name: "stringLit", symbols: [{ type: "string_triple_double" }], postprocess: astString },
   { name: "stringLit", symbols: [{ type: "string_triple_single" }], postprocess: astString },

@@ -1188,6 +1188,116 @@ describe("Rest parameters", () => {
     expect(func.parameters[2].isStarred).toBe(true);
     expect(func.parameters[2].lexeme).toBe("rest");
   });
+
+  test("lambda *args: args parses with starred param", () => {
+    const expr = parseExpr("lambda *args: args");
+    expect(expr).toBeInstanceOf(ExprNS.Lambda);
+    const lam = expr as ExprNS.Lambda;
+    expect(lam.parameters).toHaveLength(1);
+    expect(lam.parameters[0].isStarred).toBe(true);
+    expect(lam.parameters[0].lexeme).toBe("args");
+  });
+
+  test("lambda a, *rest: a parses mixed lambda params", () => {
+    const expr = parseExpr("lambda a, *rest: a");
+    const lam = expr as ExprNS.Lambda;
+    expect(lam.parameters).toHaveLength(2);
+    expect(lam.parameters[0].isStarred).toBe(false);
+    expect(lam.parameters[1].isStarred).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spread expressions in function calls
+// ---------------------------------------------------------------------------
+describe("Spread expressions", () => {
+  test("f(*x) parses with one Starred arg", () => {
+    const expr = parseExpr("f(*x)");
+    expect(expr).toBeInstanceOf(ExprNS.Call);
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(1);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+    const starred = call.args[0] as ExprNS.Starred;
+    expect(starred.value).toBeInstanceOf(ExprNS.Variable);
+    expect((starred.value as ExprNS.Variable).name.lexeme).toBe("x");
+  });
+
+  test("f(a, *b, c) parses mixed args", () => {
+    const expr = parseExpr("f(a, *b, c)");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(3);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Variable);
+    expect(call.args[1]).toBeInstanceOf(ExprNS.Starred);
+    expect(call.args[2]).toBeInstanceOf(ExprNS.Variable);
+  });
+
+  test("f(*a, *b) parses multiple starred args", () => {
+    const expr = parseExpr("f(*a, *b)");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(2);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+    expect(call.args[1]).toBeInstanceOf(ExprNS.Starred);
+  });
+
+  test("f() still parses as empty call", () => {
+    const expr = parseExpr("f()");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(0);
+  });
+
+  test("f(a, b) still parses as normal call", () => {
+    const expr = parseExpr("f(a, b)");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(2);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Variable);
+    expect(call.args[1]).toBeInstanceOf(ExprNS.Variable);
+  });
+
+  test("[1, 2, 3] does NOT allow spread", () => {
+    expect(() => parseExpr("[*x]")).toThrow();
+  });
+
+  test("f(*[1, 2, 3]) spread of list literal", () => {
+    const expr = parseExpr("f(*[1, 2, 3])");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(1);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+    const starred = call.args[0] as ExprNS.Starred;
+    expect(starred.value).toBeInstanceOf(ExprNS.List);
+  });
+
+  test("f(1, *g(x), 2) spread of function call result", () => {
+    const expr = parseExpr("f(1, *g(x), 2)");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(3);
+    expect(call.args[1]).toBeInstanceOf(ExprNS.Starred);
+    const starred = call.args[1] as ExprNS.Starred;
+    expect(starred.value).toBeInstanceOf(ExprNS.Call);
+  });
+
+  test("nested spread: f(*g(*h(x)))", () => {
+    const expr = parseExpr("f(*g(*h(x)))");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(1);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+    const inner = (call.args[0] as ExprNS.Starred).value as ExprNS.Call;
+    expect(inner.args[0]).toBeInstanceOf(ExprNS.Starred);
+  });
+
+  test("trailing comma: f(*a,) parses", () => {
+    const expr = parseExpr("f(*a,)");
+    const call = expr as ExprNS.Call;
+    expect(call.args).toHaveLength(1);
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+  });
+
+  test("Starred has correct start/end tokens", () => {
+    const expr = parseExpr("f(*xyz)");
+    const call = expr as ExprNS.Call;
+    const starred = call.args[0] as ExprNS.Starred;
+    expect(starred.startToken.lexeme).toBe("*");
+    expect(starred.endToken.lexeme).toBe("xyz");
+  });
 });
 
 // ---------------------------------------------------------------------------
