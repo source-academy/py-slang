@@ -1,10 +1,11 @@
+// @ts-nocheck
 // Generated automatically by nearley, version 2.20.1
 // http://github.com/Hardmath123/nearley
 function id(x) {
   return x[0];
 }
 
-import { StmtNS, ExprNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import pythonLexer from "./lexer";
 import { toAstToken } from "./token-bridge";
 

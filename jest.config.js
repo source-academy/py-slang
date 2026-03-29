@@ -12,6 +12,7 @@ module.exports = {
         },
       },
     ],
+    "\\.py$": "<rootDir>/src/tests/raw-text-transformer.js",
   },
   transformIgnorePatterns: ["/node_modules/(?!(@sourceacademy/wasm-util)/).+\\.js$"],
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],

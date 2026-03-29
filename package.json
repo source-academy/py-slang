@@ -13,8 +13,8 @@
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
-    "test": "jest",
-    "test-coverage": "jest --coverage",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test-coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
@@ -61,6 +61,8 @@
     "mathjs": "^14.9.1",
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
+    "pyodide": "^0.29.3",
+    "torch": "https://pkg.pr.new/veehz/torch@687fc81",
     "wabt": "^1.0.37"
   }
 }
