@@ -676,30 +676,3 @@ export function isFalsy(value: Value): boolean {
       return false;
   }
 }
-
-export function evaluateBoolExpression(
-  code: string,
-  command: ExprNS.BoolOp,
-  context: Context,
-  operator: TokenType,
-  left: Value,
-): Value {
-  if (left.type !== "bool") {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(code, command, left.type, "", operatorTranslator(operator)),
-    );
-  }
-  if (operator === TokenType.OR) {
-    // Python 'or': if the first value is true, return true. Otherwise return false
-    return { type: "bool", value: !isFalsy(left) };
-  } else if (operator === TokenType.AND) {
-    // Python 'and': if the first value is false, return false. Otherwise, evaluate and return the second value.
-    return { type: "bool", value: !isFalsy(left) };
-  } else {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(code, command, left.type, "", operator),
-    );
-  }
-}
