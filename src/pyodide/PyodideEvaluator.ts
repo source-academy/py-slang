@@ -1,3 +1,4 @@
+import { ConductorError } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import type { PyodideInterface } from "pyodide";
 import { parse } from "../parser/parser-adapter";
@@ -59,8 +60,13 @@ if missing:
     }
 
     // --- Execute the (possibly rewritten) code ---
-    const output = await pyodide.runPythonAsync(code);
-    this.conductor.sendOutput(output);
+    try {
+      const output = await pyodide.runPythonAsync(code);
+      this.conductor.sendResult(output);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.conductor.sendError(new ConductorError(message));
+    }
   }
 }
 

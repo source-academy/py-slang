@@ -1,8 +1,10 @@
-import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ChapterPyodideEvaluator } from "../PyodideEvaluator";
 
-export default class PyodideEvaluator4 extends ChapterPyodideEvaluator {
+class PyodideEvaluator4 extends ChapterPyodideEvaluator {
   constructor(conductor: IRunnerPlugin) {
     super(conductor, 4);
   }
 }
+
+initialise(PyodideEvaluator4);
