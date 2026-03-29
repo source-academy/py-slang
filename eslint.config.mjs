@@ -17,7 +17,7 @@ export default defineConfig([
   tseslint.configs.recommended,
   eslintConfigPrettierFlat,
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx,mts}"],
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {

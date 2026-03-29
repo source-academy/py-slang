@@ -845,6 +845,42 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@lezer/common@npm:^1.0.0, @lezer/common@npm:^1.2.0, @lezer/common@npm:^1.3.0":
+  version: 1.5.1
+  resolution: "@lezer/common@npm:1.5.1"
+  checksum: 10c0/49baefdfc6f2244ad4f7d4a318149729fbecfd634fe1f7769883b5098ab9b35429140851e524c3a97614594004d8a3ad08fdd91221a63438be8c31ff2431fb54
+  languageName: node
+  linkType: hard
+
+"@lezer/highlight@npm:^1.0.0":
+  version: 1.2.3
+  resolution: "@lezer/highlight@npm:1.2.3"
+  dependencies:
+    "@lezer/common": "npm:^1.3.0"
+  checksum: 10c0/3bcb4fce7a1a45b5973895d7cb2be47970a0098700f2a0970aef9878ffd37f540285a2d7388ec1f524726ec90cc5196b5701bbb9764b7e7300786d772b7d2ce2
+  languageName: node
+  linkType: hard
+
+"@lezer/lr@npm:^1.0.0":
+  version: 1.4.8
+  resolution: "@lezer/lr@npm:1.4.8"
+  dependencies:
+    "@lezer/common": "npm:^1.0.0"
+  checksum: 10c0/8bd2228a316a5ef8da01908e3e22aca95fa9695211ffe56f3e8be756b37d0810d5aa91fbbdd274b198a343051d8637e130e26f51161161f089244af242b653c9
+  languageName: node
+  linkType: hard
+
+"@lezer/python@npm:^1.1.18":
+  version: 1.1.18
+  resolution: "@lezer/python@npm:1.1.18"
+  dependencies:
+    "@lezer/common": "npm:^1.2.0"
+    "@lezer/highlight": "npm:^1.0.0"
+    "@lezer/lr": "npm:^1.0.0"
+  checksum: 10c0/8d984729e887808c75800f18ed54560adfd4e67094b301a1666bdcd49e8987ab45f04c515563a92dfb1377d4a04dcf6616adc50a75285afe9ab53ab90f659bd5
+  languageName: node
+  linkType: hard
+
 "@npmcli/agent@npm:^4.0.0":
   version: 4.0.0
   resolution: "@npmcli/agent@npm:4.0.0"
@@ -1158,6 +1194,15 @@ __metadata:
   dependencies:
     "@sinonjs/commons": "npm:^3.0.0"
   checksum: 10c0/2e2fb6cc57f227912814085b7b01fede050cd4746ea8d49a1e44d5a0e56a804663b0340ae2f11af7559ea9bf4d087a11f2f646197a660ea3cb04e19efc04aa63
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/autocomplete@github:source-academy/autocomplete#0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/autocomplete@https://github.com/source-academy/autocomplete.git#commit=db3ba73eedcef82eff6b4031e423804b67a2bb6e"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/0c836d923d5658071882b4125445237f99cbef97f2f0b2834f0b244587a5dabd44944e4c6cda766ad3458c6646a8302bf7354a513b7486ec174fb46809f4a08b
   languageName: node
   linkType: hard
 
@@ -4276,10 +4321,12 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "py-slang@workspace:."
   dependencies:
+    "@lezer/python": "npm:^1.1.18"
     "@rollup/plugin-commonjs": "npm:^28.0.3"
     "@rollup/plugin-json": "npm:^6.1.0"
     "@rollup/plugin-node-resolve": "npm:^16.0.1"
     "@rollup/plugin-typescript": "npm:^12.1.2"
+    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1"
     "@sourceacademy/conductor": "npm:^0.3.0"
     "@sourceacademy/wasm-util": "npm:^1.0.4"
     "@types/fast-levenshtein": "npm:^0.0.4"
