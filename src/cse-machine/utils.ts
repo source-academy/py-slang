@@ -14,7 +14,7 @@ import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";
 import { AssertionError, handleRuntimeError } from "./error";
-import { Value } from "./stash";
+import { BigIntValue, ComplexValue, NumberValue, Value } from "./stash";
 import {
   BranchInstr,
   ForInstr,
@@ -322,6 +322,14 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
   } else {
     return mod;
   }
+}
+
+export function isNumeric(value: Value): value is NumberValue | BigIntValue {
+  return value.type === "number" || value.type === "bigint";
+}
+
+export function isCoercedComplex(value: Value): value is NumberValue | BigIntValue | ComplexValue {
+  return value.type === "number" || value.type === "bigint" || value.type === "complex";
 }
 
 export default function assert(

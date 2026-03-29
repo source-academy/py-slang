@@ -4,9 +4,9 @@ import { TokenType } from "../tokens";
 import { PyComplexNumber } from "../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
-import { Value } from "./stash";
+import { BigIntValue, NumberValue, Value } from "./stash";
 import { operatorTranslator } from "./types";
-import { pythonMod } from "./utils";
+import { isCoercedComplex, isNumeric, pythonMod } from "./utils";
 
 export type BinaryOperator =
   | "=="
@@ -132,10 +132,7 @@ export function handleExpandedEquality(
 
   // Handle complex number equality
   if (left.type == "complex" || right.type == "complex") {
-    if (
-      (right.type !== "complex" && right.type !== "number" && right.type !== "bigint") ||
-      (left.type !== "complex" && left.type !== "number" && left.type !== "bigint")
-    ) {
+    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
       return { type: "bool", value: operator == TokenType.NOTEQUAL };
     }
     return {
@@ -147,10 +144,7 @@ export function handleExpandedEquality(
   }
 
   // Handle ints and floats
-  if (
-    (left.type === "number" || left.type === "bigint") &&
-    (right.type === "number" || right.type === "bigint")
-  ) {
+  if (isNumeric(left) && isNumeric(right)) {
     return {
       type: "bool",
       value: (operator == TokenType.NOTEQUAL) !== (pyCompare(left, right) === 0),
@@ -185,10 +179,7 @@ export function evaluateBinaryExpression(
 
   // Handle Complex numbers
   if (left.type === "complex" || right.type === "complex") {
-    if (
-      (right.type !== "complex" && right.type !== "number" && right.type !== "bigint") ||
-      (left.type !== "complex" && left.type !== "number" && left.type !== "bigint")
-    ) {
+    if (!isCoercedComplex(right) || !isCoercedComplex(left)) {
       handleRuntimeError(
         context,
         new UnsupportedOperandTypeError(
@@ -317,10 +308,7 @@ export function evaluateBinaryExpression(
     );
   }
 
-  if (
-    (left.type !== "number" && left.type !== "bigint") ||
-    (right.type !== "number" && right.type !== "bigint")
-  ) {
+  if (!isNumeric(left) || !isNumeric(right)) {
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
@@ -503,7 +491,7 @@ export function evaluateBinaryExpression(
  * By layering sign checks, safe numeric range checks, and approximate comparisons,
  * we achieve a Python-like ordering of large integers vs floats.
  */
-function pyCompare(val1: Value, val2: Value): number {
+function pyCompare(val1: NumberValue | BigIntValue, val2: NumberValue | BigIntValue): number {
   // Handle same type comparisons first
   if (val1.type === "bigint" && val2.type === "bigint") {
     if (val1.value < val2.value) return -1;
