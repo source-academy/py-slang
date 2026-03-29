@@ -40,6 +40,7 @@ foo()
   });
 
   describe("Variant Specific Syntax", () => {
+    // TODO: Uncomment when we want to support for loops in Python 3
     //         test('For loops throw errors for Python 1 and 2', () => {
     //             const code = `
     // for i in range(5):
@@ -68,11 +69,11 @@ break
       const code2 = `
 continue     
 `;
-      // expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError)
-      // expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError)
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(() => toPythonAstAndResolve(code, 3)).toThrow(Error);
-      // expect(() => toPythonAstAndResolve(code2, 1)).toThrow(FeatureNotSupportedError)
-      // expect(() => toPythonAstAndResolve(code2, 2)).toThrow(FeatureNotSupportedError)
+      expect(() => toPythonAstAndResolve(code2, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code2, 2)).toThrow(FeatureNotSupportedError);
       expect(() => toPythonAstAndResolve(code2, 3)).toThrow(Error);
     });
 
@@ -146,7 +147,7 @@ x[0] = 10
       expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
-    // To uncomment when we want to support variadic arguments in Python 3
+    // TODO: To uncomment when we want to support variadic arguments in Python 3
     //     test("Variadic arguments throw errors for Python 1 and 2", () => {
     //       const code = `
     // def foo(*args):
