@@ -1,6 +1,7 @@
 import { i32, wasm } from "@sourceacademy/wasm-util";
 import { CompileOptions, compileToWasmAndRun } from "../wasm-compiler";
 import {
+  APPLY_FX_NAME,
   ERROR_MAP,
   MAKE_LIST_FX,
   PEEK_SHADOW_STACK_FX,
@@ -2342,6 +2343,7 @@ describe("GC/Shadow stack manipulation tests", () => {
       expect(stackFrame[0]).toBe(expectedTag);
     });
 
+    // console.log(rest.rawOutputs);
     // Verify accessing one position past the stack throws STACK_UNDERFLOW
     expect(() => getStackAt(expectedTags.length)).toThrow(new Error(ERROR_MAP.STACK_UNDERFLOW));
 
@@ -2412,11 +2414,7 @@ x
       const pythonCode = `[1, 2, 3]`;
 
       const irPass = insertInArray(
-        node =>
-          isFunctionOfName(node, MAKE_LIST_FX) &&
-          "arguments" in node &&
-          Array.isArray(node.arguments) &&
-          node.arguments,
+        node => isFunctionOfName(node, MAKE_LIST_FX) && node.arguments,
         instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
         [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
       );
@@ -2484,6 +2482,88 @@ x[1] = "hello"
   });
 
   describe("closure-related tests", () => {
+    it("while calling function: before PRE_APPLY, return address should be on stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f(10)
+`;
+
+      const irPass = insertInArray(
+        node => isFunctionOfName(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [irPass],
+      });
+
+      expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.CALL_RETURN_ADDR);
+    });
+
+    it("while calling function: after PRE_APPLY, return address + callee value should be on stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f(10)
+`;
+
+      const irPass = insertInArray(
+        node => {
+          const secondPush =
+            isFunctionOfName(node, APPLY_FX_NAME) &&
+            node.arguments &&
+            node.arguments.filter(arg => isFunctionOfName(arg, SILENT_PUSH_SHADOW_STACK_FX))[1];
+
+          return secondPush && secondPush.arguments;
+        },
+        instruction =>
+          instruction != null &&
+          typeof instruction === "object" &&
+          "op" in instruction &&
+          instruction.op === "i64.extend_i32_u",
+        [
+          wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
+          wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
+        ],
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [irPass],
+      });
+
+      expect(rawOutputs[0][0]).toBe(TYPE_TAG.CLOSURE);
+      expect(rawOutputs[1][0]).toBe(SHADOW_STACK_TAG.CALL_RETURN_ADDR);
+    });
+
+    it("while calling function: before SET_CONTIGUOUS_BLOCK, return address + callee value + new env pointer should be on stack", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f(10)
+`;
+
+      const irPass = insertInArray(
+        node => isFunctionOfName(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        [
+          wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
+          wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
+          wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(2))),
+        ],
+        1,
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [irPass],
+      });
+
+      expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.CALL_NEW_ENV);
+      expect(rawOutputs[1][0]).toBe(TYPE_TAG.CLOSURE);
+      expect(rawOutputs[2][0]).toBe(SHADOW_STACK_TAG.CALL_RETURN_ADDR);
+    });
+
     it("function definition should NOT push closure to stack", async () => {
       const pythonCode = `
 def f(x):
@@ -2521,6 +2601,63 @@ def f(x):
     return [x]
 f(10)
 `;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("GCable argument should NOT be on stack (already popped by SET_CONTIGUOUS)", async () => {
+      const pythonCode = `
+def f(x):
+    return
+f([1, 2])
+`;
+
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+  });
+
+  describe("library function tests", () => {
+    it("pair function with non-GCable arguments should push resultant list onto stack", async () => {
+      const pythonCode = `pair(1, 2)`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("pair function with one GCable argument should push resultant list onto stack", async () => {
+      const pythonCode = `pair(1, "test")`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("pair function with two GCable arguments should push resultant list onto stack", async () => {
+      const pythonCode = `pair([1, 2], [3, 4])`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("nested pair should push resultant list onto stack (only one)", async () => {
+      const pythonCode = `pair(1, pair(2, None))`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("is_pair function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_pair(pair(1, 2))`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("head function should NOT push result onto stack if it's not GCable", async () => {
+      const pythonCode = `head(pair(1, 2))`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("head function should push result onto stack if it's GCable", async () => {
+      const pythonCode = `head(pair([1, 2], 3))`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("tail function should NOT push result onto stack if it's not GCable", async () => {
+      const pythonCode = `tail(pair(1, 2))`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("tail function should push result onto stack if it's GCable", async () => {
+      const pythonCode = `tail(pair(3, [1, 2]))`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
   });

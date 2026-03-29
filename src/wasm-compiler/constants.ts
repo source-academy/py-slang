@@ -20,6 +20,7 @@ export const TYPE_TAG = {
 export const SHADOW_STACK_TAG = {
   LIST_STATE: -1,
   CALL_RETURN_ADDR: -2,
+  CALL_NEW_ENV: -3,
 };
 
 export const ERROR_MAP = {
@@ -431,13 +432,13 @@ export const MAKE_PAIR_FX = wasm
   .body(
     local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))),
 
-    // wasm
-    //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
-    //   .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $tail_val) (local.set $tail_tag)`),
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $tail_val) (local.set $tail_tag)`),
 
-    // wasm
-    //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
-    //   .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
 
     i32.store(local.get("$ptr"), local.get("$head_tag")),
     i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
@@ -452,6 +453,10 @@ export const IS_PAIR_FX = wasm
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
   .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
     wasm
       .call(MAKE_BOOL_FX)
       .args(
@@ -1155,14 +1160,11 @@ export const ALLOC_ENV_FX = wasm
 export const PRE_APPLY_FX = wasm
   .func("$_pre_apply")
   .params({ $tag: i32, $val: i64, $arg_len: i32 })
-  .results(i32, i64, i32)
+  .results(i32)
   .body(
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.CALL_NOT_FX))), wasm.unreachable()),
-
-    local.get("$tag"),
-    local.get("$val"),
 
     wasm
       .call(ALLOC_ENV_FX)
@@ -1183,8 +1185,11 @@ export const RETURN_ENV_NAME = "$return_env";
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .params({ [RETURN_ENV_NAME]: i32, $tag: i32, $val: i64, $arg_len: i32 })
+    .params({ $arg_len: i32 })
     .locals({
+      [RETURN_ENV_NAME]: i32,
+      $tag: i32,
+      $val: i64,
       $list_len: i32,
       $list_val: i64,
       $has_starred: i32,
@@ -1195,9 +1200,20 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       $arity: i32,
       $env_size: i32,
       $has_varargs: i32,
+      $return_tag: i32,
+      $return_val: i64,
     })
     .results(i32, i64)
     .body(
+      global.set(CURR_ENV, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
+
+      wasm.call(POP_SHADOW_STACK_FX),
+      wasm.raw`(local.set $val) (local.set $tag)`,
+
+      local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
+
       local.set("$arity", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255))),
       local.set("$env_size", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255))),
       local.set("$has_varargs", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(63))), i32.const(1))),
@@ -1469,7 +1485,7 @@ export const SET_LEX_ADDR_FX = wasm
 
 export const SET_CONTIGUOUS_BLOCK_FX = wasm
   .func("$_set_contiguous_block")
-  .params({ $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
+  .params({ $index: i32, $tag: i32, $value: i64, $offset: i32, $is_starred: i32 })
   .locals({ $addr: i32 })
   .body(
     wasm
@@ -1480,34 +1496,16 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
     wasm.raw`(i32.wrap_i64) (local.set $addr) (drop)`,
 
     i32.store(
-      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
+      i32.add(i32.add(local.get("$addr"), local.get("$offset")), i32.mul(local.get("$index"), i32.const(12))),
       i32.or(local.get("$tag"), i32.shl(local.get("$is_starred"), i32.const(31))),
     ),
     i64.store(
-      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+      i32.add(
+        i32.add(i32.add(local.get("$addr"), local.get("$offset")), i32.const(4)),
+        i32.mul(local.get("$index"), i32.const(12)),
+      ),
       local.get("$value"),
     ),
-  );
-
-export const SET_CONTIGUOUS_BLOCK_AT_ADDR_FX = wasm
-  .func("$_set_contiguous_block_at_addr")
-  .params({ $addr: i32, $index: i32, $tag: i32, $value: i64, $is_starred: i32 })
-  .results(i32)
-  .body(
-    wasm
-      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
-      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
-
-    i32.store(
-      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
-      i32.or(local.get("$tag"), i32.shl(local.get("$is_starred"), i32.const(31))),
-    ),
-    i64.store(
-      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
-      local.get("$value"),
-    ),
-
-    local.get("$addr"),
   );
 
 export const TOKENIZE_FX = wasm
@@ -1575,7 +1573,6 @@ export const nativeFunctions = [
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
   SET_CONTIGUOUS_BLOCK_FX,
-  SET_CONTIGUOUS_BLOCK_AT_ADDR_FX,
   TOKENIZE_FX,
   PARSE_FX,
 ];

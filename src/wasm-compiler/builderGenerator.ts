@@ -51,7 +51,6 @@ import {
   PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
   RETURN_ENV_NAME,
-  SET_CONTIGUOUS_BLOCK_AT_ADDR_FX,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
@@ -187,7 +186,20 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       const newBody = [
         ...body,
         wasm.return(
-          ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
+          ...(isVoid
+            ? [wasm.call(MAKE_NONE_FX)]
+            : [
+                // wasm.raw`(local.set $return_val) (local.set $return_tag)`,
+                // wasm
+                //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$return_tag")))
+                //   .then(
+                //     wasm
+                //       .call(SILENT_PUSH_SHADOW_STACK_FX)
+                //       .args(local.get("$return_tag"), local.get("$return_val")),
+                //   ),
+                // local.get("$return_tag"),
+                // local.get("$return_val"),
+              ]),
           global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
         ),
       ];
@@ -554,54 +566,61 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       );
   }
 
-  visitCallExpr(expr: ExprNS.Call): WasmRaw {
+  visitCallExpr(expr: ExprNS.Call): WasmCall {
     const callee = this.visit(expr.callee);
     const args = expr.args.map(arg => ({
       arg: this.visit(arg),
       isStarred: false,
     }));
 
-    // get the CURR_ENV first - this saves the current environment as the return env
-    // on the stack for APPLY later
+    // push the return address onto the shadow stack first (for APPLY later).
 
-    // we call PRE_APPLY first, which verifies the callee is a closure and arity matches
-    // AND creates a new environment for the function call, but does not set CURR_ENV yet
-    // this is so that we can set the arguments in the new environment first
-    // PRE_APPLY creates an environment the size of the function'call argument length
-    // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
+    // we call PRE_APPLY next, which verifies the callee is a closure and arity matches
+    // AND creates a new environment for the function call the size of the function call
+    // argument length. it returns the pointer to this env, which we push onto the
+    // shadow stack.
 
-    // so we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
-    // which takes in the pointer to the new env as its first parameter
-    // the SET_CONTIGUOUS_BLOCK function returns the env address after setting the parameter
-    // so we can chain the calls together
+    // we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
+    // which reads the pointer to the new env from the shadow stack.
 
-    // we set CURR_ENV only after all arguments have been set to prevent overlapping
-    // environments in nested function calls
-
-    // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
+    // APPLY takes in the argument length. it reads the (3) call-state shadow stack values
+    // directly. it also sets CURR_ENV, only after all arguments have been set to prevent
+    // overlapping environments in nested function calls
 
     // if has varargs, the list elements are set directly after the last parameter
     // so we need to, in the APPLY_FX:
     // 1. set HEAP_PTR to the end of the varargs list,
     // 2. shift all the list elements over by 1 to make space for the varargs list
     // 3. make the list variable
-    return wasm.raw`
-${global.get(CURR_ENV)}
-${wasm
-  .call(SILENT_PUSH_SHADOW_STACK_FX)
-  .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV)))}
 
-${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
-(i32.const ${ENV_HEAD_SIZE}) (i32.add)
-${args.map(
-  ({ arg, isStarred }, i) =>
-    wasm.raw`
-(i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_AT_ADDR_FX.name})`,
-)}
+    return wasm.call(APPLY_FX_NAME).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX) // (1) PUSH return address
+        .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
 
-(i32.const ${ENV_HEAD_SIZE}) (i32.sub) (global.set ${CURR_ENV})
-(i32.const ${args.length}) (call ${APPLY_FX_NAME})
-`;
+      wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH new env pointer
+        i64.extend_i32_u(
+          wasm.call(PRE_APPLY_FX).args(
+            callee, // (2) callee is already PUSHED at this point
+            i32.const(args.length),
+          ),
+        ),
+      ),
+
+      ...args.map((element, i) =>
+        wasm
+          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .args(
+            i32.const(i),
+            element.arg,
+            i32.const(ENV_HEAD_SIZE),
+            i32.const(element.isStarred ? 1 : 0),
+          ),
+      ),
+
+      /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack and memory
+    );
   }
 
   visitReturnStmt(stmt: StmtNS.Return): WasmInstruction {
@@ -826,7 +845,7 @@ ${args.map(
         ),
 
       ...elements.map((element, i) =>
-        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0)),
+        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0), i32.const(0)),
       ),
 
       /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
