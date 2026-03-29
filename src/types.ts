@@ -2,15 +2,11 @@ import { ExprNS } from "./ast-types";
 import { Context } from "./cse-machine/context";
 import { handleRuntimeError } from "./cse-machine/error";
 import { BuiltinValue, Value } from "./cse-machine/stash";
-import { SourceLocation, ZeroDivisionError } from "./errors";
+import { ZeroDivisionError } from "./errors";
 import { ModuleFunctions } from "./modules/moduleTypes";
 import { toPythonString } from "./stdlib";
 
 export class CSEBreak {}
-
-// export class CseError {
-//     constructor(public readonly error: any) {}
-// }
 
 export class PyComplexNumber {
   public real: number;
@@ -226,17 +222,6 @@ export class PyComplexNumber {
   }
 }
 
-export interface None {
-  type: "NoneType";
-  loc?: SourceLocation | null;
-}
-
-export interface ComplexLiteral {
-  type: "Literal";
-  complex: PyComplexNumber;
-  loc?: SourceLocation | null;
-}
-
 /**
  * Helper type to recursively make properties that are also objects
  * partial
@@ -253,7 +238,8 @@ export type RecursivePartial<T> =
         }>
       : T;
 
-export type Result = Finished | SuspendedCseEval; // | CSEError | Suspended
+// The CSE machine either finishes evaluating (to an error or a result) or it has a suspended evaluation.
+export type Result = Finished | SuspendedCseEval;
 
 // TODO: should allow debug
 // export interface Suspended {
@@ -277,19 +263,6 @@ export interface Finished {
   // the display of the result will use the representation
   // field instead
 }
-
-// export interface CSEError {
-//     status: 'error'
-//     context: Context
-//     error: Error
-// }
-
-// export class Representation {
-//     constructor(public representation: string) {}
-//     toString() {
-//         return this.representation
-//     }
-// }
 
 export class Representation {
   constructor(public representation: string) {}

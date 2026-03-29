@@ -627,6 +627,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _stash: Stash,
     _isPrelude: boolean,
   ) {
+    // TODO: Implement for loops
     // const forNode = command as StmtNS.For;
     // const instr = instrCreator.forInstr(forNode, forNode.target, forNode.iter, {
     //   type: "StatementSequence",
