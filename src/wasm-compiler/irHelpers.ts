@@ -35,9 +35,9 @@ export function insertInArray(
   };
 }
 
-export function isFunctionOfName(
+export function isFunctionCall(
   instruction: unknown,
-  name: string | WasmFunction,
+  functionName: string | WasmFunction,
 ): instruction is { function: string; arguments: unknown[] } {
   return (
     instruction != null &&
@@ -45,6 +45,20 @@ export function isFunctionOfName(
     "function" in instruction &&
     "arguments" in instruction &&
     Array.isArray(instruction.arguments) &&
-    instruction.function === (typeof name === "string" ? name : name.name)
+    instruction.function === (typeof functionName === "string" ? functionName : functionName.name)
+  );
+}
+
+export function isFunctionOfName(
+  instruction: unknown,
+  functionName: string | WasmFunction,
+): instruction is { name: string; body: unknown[] } {
+  return (
+    instruction != null &&
+    typeof instruction === "object" &&
+    "name" in instruction &&
+    "body" in instruction &&
+    Array.isArray(instruction.body) &&
+    instruction.name === (typeof functionName === "string" ? functionName : functionName.name)
   );
 }

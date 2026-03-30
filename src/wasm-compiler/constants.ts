@@ -1120,17 +1120,26 @@ export const BOOL_NOT_FX = wasm
 // +8: first binding (tag i32, value i64)
 export const ALLOC_ENV_FX = wasm
   .func("$_alloc_env")
-  .params({ $size: i32, $parent: i32 })
-  .locals({ $env: i32, $i: i32 })
+  .params({ $size: i32 })
+  .locals({ $env: i32, $i: i32, $parent: i32 })
   .results(i32)
   .body(
-    i32.store(
-      local.tee(
-        "$env",
-        wasm.call(MALLOC_FX).args(i32.add(i32.const(ENV_HEAD_SIZE), i32.mul(local.get("$size"), i32.const(12)))),
-      ),
-      local.get("$parent"),
+    local.set(
+      "$env",
+      wasm.call(MALLOC_FX).args(i32.add(i32.const(ENV_HEAD_SIZE), i32.mul(local.get("$size"), i32.const(12)))),
     ),
+
+    // if there's a callee on the stack, we need to reload the parent from it after MALLOC.
+    // if there's no callee, the parent is 0, so this doesn't change anything
+    wasm
+      .if(i32.lt_s(global.get(SHADOW_STACK_PTR), global.get(SHADOW_STACK_TOP)))
+      .then(
+        wasm
+          .if(i32.eq(i32.load(global.get(SHADOW_STACK_PTR)), i32.const(TYPE_TAG.CLOSURE)))
+          .then(local.set("$parent", i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))))),
+      ),
+
+    i32.store(local.get("$env"), local.get("$parent")),
     i32.store(i32.add(local.get("$env"), i32.const(4)), local.get("$size")),
 
     wasm
@@ -1170,7 +1179,6 @@ export const PRE_APPLY_FX = wasm
             i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255)),
           ),
         ),
-        i32.wrap_i64(local.get("$val")),
       ),
   );
 
@@ -1182,11 +1190,9 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .params({ $arg_len: i32 })
     .locals({
       [RETURN_ENV_NAME]: i32,
-      $tag: i32,
       $val: i64,
       $list_len: i32,
-      $list_val: i64,
-      $has_starred: i32,
+      $additional_args: i32,
       $i: i32,
       $arg_ptr: i32,
       $write_ptr: i32,
@@ -1242,13 +1248,15 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       ),
 
       wasm.if(local.get("$additional_args")).then(
-        // MALLOC a new environment with size = old env size + additional args from unpacking
+        // ALLOC a new environment with size = old env size + additional args from unpacking
+        // push the callee back onto the stack for ALLOC_ENV to use as the parent env, then discard it after
+        wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.CLOSURE), local.get("$val")),
         local.set(
           "$new_env",
-          wasm
-            .call(ALLOC_ENV_FX)
-            .args(i32.add(local.get("$env_size"), local.get("$additional_args")), i32.wrap_i64(local.get("$val"))),
+          wasm.call(ALLOC_ENV_FX).args(i32.add(local.get("$env_size"), local.get("$additional_args"))),
         ),
+        wasm.call(DISCARD_SHADOW_STACK_FX),
+
         local.set("$arg_len", i32.add(local.get("$arg_len"), local.get("$additional_args"))),
         local.set("$write_ptr", i32.add(local.get("$new_env"), i32.const(ENV_HEAD_SIZE))),
 
@@ -1317,18 +1325,8 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           i32.mul(local.get("$list_len"), i32.const(12)),
         ),
 
-        // create tuple with pointer to start of the copied list
-        wasm.raw`${wasm
-          .call(MAKE_TUPLE_FX)
-          .args(
-            i32.add(
-              i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
-              i32.mul(local.get("$env_size"), i32.const(12)),
-            ),
-            local.get("$list_len"),
-          )} (local.set $list_val) (drop)`,
-
-        // store tuple value in the env where the varargs would be, which is right after the fixed arguments and before local declarations
+        // create tuple manually with pointer to start of the copied list, and store it in the env where the varargs would be,
+        // which is right after the fixed arguments and before local declarations
         i32.store(
           i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
           i32.const(TYPE_TAG.TUPLE),
@@ -1341,7 +1339,18 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             ),
             i32.const(4),
           ),
-          local.get("$list_val"),
+          i64.or(
+            i64.shl(
+              i64.extend_i32_u(
+                i32.add(
+                  i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
+                  i32.mul(local.get("$env_size"), i32.const(12)),
+                ),
+              ),
+              i64.const(32),
+            ),
+            i64.extend_i32_u(local.get("$list_len")),
+          ),
         ),
 
         // need to re-UNBOUND the local variables

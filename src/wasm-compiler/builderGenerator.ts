@@ -314,7 +314,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .body(
             global.set(
               CURR_ENV,
-              wasm.call(ALLOC_ENV_FX).args(i32.const(this.environment[0].length), i32.const(0)),
+              wasm.call(ALLOC_ENV_FX).args(i32.const(this.environment[0].length)),
             ),
 
             // declare built-in constants/functions in the global environment before user code
@@ -619,7 +619,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           ),
       ),
 
-      /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack and memory
+      /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
     );
   }
 

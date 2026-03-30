@@ -2334,16 +2334,15 @@ describe("GC/Shadow stack manipulation tests", () => {
     pythonCode: string,
     expectedTags: number[],
     compileOptions: CompileOptions = {},
+    interactiveMode: boolean = true,
   ) => {
-    const { getStackAt, ...rest } = await compileToWasmAndRun(pythonCode, true, compileOptions);
+    const { getStackAt, ...rest } = interactiveMode
+      ? await compileToWasmAndRun(pythonCode, true, compileOptions)
+      : await compileToWasmAndRun(pythonCode, false, compileOptions);
 
     // Check each frame's tag on the stack
-    expectedTags.forEach((expectedTag, index) => {
-      const stackFrame = getStackAt(index);
-      expect(stackFrame[0]).toBe(expectedTag);
-    });
+    expectedTags.forEach((expectedTag, index) => expect(getStackAt(index)[0]).toBe(expectedTag));
 
-    // console.log(rest.rawOutputs);
     // Verify accessing one position past the stack throws STACK_UNDERFLOW
     expect(() => getStackAt(expectedTags.length)).toThrow(new Error(ERROR_MAP.STACK_UNDERFLOW));
 
@@ -2367,9 +2366,9 @@ describe("GC/Shadow stack manipulation tests", () => {
       await expectShadowStackToEqual(`[1, 2, 3]`, [TYPE_TAG.LIST]);
     });
 
-    // it("MAKE_PAIR pushes returned pair to stack top", async () => {
-    //   await expectShadowStackToEqual(`pair(1, 2)`, [TYPE_TAG.LIST]);
-    // });
+    it("MAKE_PAIR pushes returned pair to stack top", async () => {
+      await expectShadowStackToEqual(`pair(1, 2)`, [TYPE_TAG.LIST]);
+    });
 
     it("adding non-complex with complex pushes result to stack top", async () => {
       await expectShadowStackToEqual(`3 + 2j`, [TYPE_TAG.COMPLEX]);
@@ -2414,8 +2413,8 @@ x
       const pythonCode = `[1, 2, 3]`;
 
       const irPass = insertInArray(
-        node => isFunctionOfName(node, MAKE_LIST_FX) && node.arguments,
-        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+        instruction => isFunctionCall(instruction, SILENT_PUSH_SHADOW_STACK_FX),
         [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
       );
 
@@ -2428,7 +2427,7 @@ x
       // without intervening GC, the list state pointer should be the same as the resultant list
       // pointer, and should be on stack until SET_CONTIGUOUS
       expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.LIST_STATE);
-      expect((rawOutputs[0][1] << 32n) | 3n).toBe(rawResult[1]);
+      expect((rawOutputs[0][1] << 32n) | 3n).toBe(rawResult![1]);
     });
 
     it("GCable element in list should NOT be on stack (already popped by SET_CONTIGUOUS)", async () => {
@@ -2490,8 +2489,8 @@ f(10)
 `;
 
       const irPass = insertInArray(
-        node => isFunctionOfName(node, APPLY_FX_NAME) && node.arguments,
-        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SILENT_PUSH_SHADOW_STACK_FX),
         [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
       );
 
@@ -2512,9 +2511,9 @@ f(10)
       const irPass = insertInArray(
         node => {
           const secondPush =
-            isFunctionOfName(node, APPLY_FX_NAME) &&
+            isFunctionCall(node, APPLY_FX_NAME) &&
             node.arguments &&
-            node.arguments.filter(arg => isFunctionOfName(arg, SILENT_PUSH_SHADOW_STACK_FX))[1];
+            node.arguments.filter(arg => isFunctionCall(arg, SILENT_PUSH_SHADOW_STACK_FX))[1];
 
           return secondPush && secondPush.arguments;
         },
@@ -2545,8 +2544,8 @@ f(10)
 `;
 
       const irPass = insertInArray(
-        node => isFunctionOfName(node, APPLY_FX_NAME) && node.arguments,
-        instruction => isFunctionOfName(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SILENT_PUSH_SHADOW_STACK_FX),
         [
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
@@ -2612,6 +2611,64 @@ f([1, 2])
 `;
 
       await expectShadowStackToEqual(pythonCode, []);
+    });
+  });
+
+  describe("APPLY function special handling tests", () => {
+    it("before any MALLOC in APPLY, stack should be empty after popping all necessary values", async () => {
+      const pythonCode = `
+def f(x):
+    return x + 1
+f(10)
+`;
+
+      const irPass = insertInArray(
+        node => isFunctionOfName(node, APPLY_FX_NAME) && node.body,
+        instruction => isFunctionCall(instruction, DISCARD_SHADOW_STACK_FX),
+        [
+          wasm
+            .call("$_log_raw")
+            .args(
+              i32.const(TYPE_TAG.BOOL),
+              i64.extend_i32_u(i32.eq(global.get(SHADOW_STACK_PTR), global.get(SHADOW_STACK_TOP))),
+            ),
+        ],
+        1,
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [irPass],
+      });
+
+      expect(rawOutputs[0][1]).toBe(1n); // should be true (stack is empty)
+    });
+
+    it("before any MALLOC in APPLY for varargs, stack should be empty after popping all necessary values", async () => {
+      const pythonCode = `
+def f(*x):
+    return x[0]
+f(10, 20)
+`;
+
+      const irPass = insertInArray(
+        node => isFunctionOfName(node, APPLY_FX_NAME) && node.body,
+        instruction => isFunctionCall(instruction, DISCARD_SHADOW_STACK_FX),
+        [
+          wasm
+            .call("$_log_raw")
+            .args(
+              i32.const(TYPE_TAG.BOOL),
+              i64.extend_i32_u(i32.eq(global.get(SHADOW_STACK_PTR), global.get(SHADOW_STACK_TOP))),
+            ),
+        ],
+        1,
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [irPass],
+      });
+
+      expect(rawOutputs[0][1]).toBe(1n); // should be true (stack is empty)
     });
   });
 
