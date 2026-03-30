@@ -3,9 +3,9 @@
  */
 
 import nearley from "nearley";
+import { StmtNS } from "../ast-types";
 import pythonLexer from "./lexer";
 import grammar from "./python-grammar";
-import { StmtNS } from "../ast-types";
 
 /**
  * NearleyParser - Drop-in replacement for the old Parser class
@@ -44,7 +44,6 @@ export class NearleyParser {
       if (parser.results.length > 1) {
         throw new Error(`Ambiguous grammar: ${parser.results.length} possible parses for input`);
       }
-
       // Return the first (or only) parse result
       return parser.results[0];
     } catch (error: unknown) {

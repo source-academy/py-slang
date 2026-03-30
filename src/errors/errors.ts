@@ -1,8 +1,8 @@
-import { ExprNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../cse-machine/context";
-import { Value } from "../cse-machine/stash";
 import { operatorTranslator } from "../cse-machine/types";
 import { Token } from "../tokenizer";
+import { TokenType } from "../tokens";
 
 export enum ErrorType {
   IMPORT = "Import",
@@ -100,14 +100,16 @@ function typeTranslator(type: string): string {
       return "int";
     case "number":
       return "float";
-    case "boolean":
-      return "bool";
     case "bool":
       return "bool";
     case "string":
-      return "string";
+      return "str";
     case "complex":
       return "complex";
+    case "none":
+      return "NoneType";
+    case "closure":
+      return "function";
     default:
       return "unknown";
   }
@@ -145,45 +147,22 @@ export function createErrorIndicator(snippet: string, errorPos: number): string 
   return indicator;
 }
 
-export class TypeConcatenateError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Binary, wrongType: string) {
+export class IndexError extends RuntimeSourceError {
+  constructor(
+    source: string,
+    node: ExprNS.Expr | StmtNS.Stmt,
+    context: Context,
+    index: number,
+    length: number,
+  ) {
     super(node);
-    this.type = ErrorType.TYPE;
-
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
-
-    const hint = 'TypeError: can only concatenate str (not "' + wrongType + '") to str.';
-    const offset = fullLine.indexOf(snippet);
-    const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
-    const indicator = createErrorIndicator(snippet, errorPos);
-
-    const name = "TypeError";
-    const suggestion =
-      "You are trying to concatenate a string with an " +
-      wrongType +
-      ". To fix this, convert the " +
-      wrongType +
-      " to a string using str(), or ensure both operands are of the same type.";
-    const msg =
-      name +
-      " at line " +
-      lineIndex +
-      "\n\n    " +
-      fullLine +
-      "\n    " +
-      " ".repeat(adjustedOffset) +
-      indicator +
-      "\n" +
-      hint +
-      "\n" +
-      suggestion;
-    this.message = msg;
+    this.type = ErrorType.RUNTIME;
+    this.message =
+      "IndexError: list index out of range. You tried to access index " +
+      index +
+      " but the list only has " +
+      length +
+      " elements.";
   }
 }
 
@@ -193,7 +172,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
     node: ExprNS.Binary | ExprNS.BoolOp | ExprNS.Unary,
     wrongType1: string,
     wrongType2: string,
-    operand: string,
+    operand: string | TokenType,
   ) {
     super(node);
     this.type = ErrorType.TYPE;
@@ -246,7 +225,7 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     node: ExprNS.Expr,
     functionName: string,
     params: number | ExprNS.Variable[],
-    args: Value[],
+    args: unknown[],
     variadic: boolean,
   ) {
     super(node);
@@ -307,7 +286,7 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
     node: ExprNS.Expr,
     functionName: string,
     params: number | ExprNS.Variable[],
-    args: Value[],
+    args: unknown[],
     variadic: boolean,
   ) {
     super(node);
@@ -463,7 +442,7 @@ export class ValueError extends RuntimeSourceError {
 export class TypeError extends RuntimeSourceError {
   constructor(
     source: string,
-    node: ExprNS.Expr,
+    node: ExprNS.Expr | StmtNS.Stmt,
     context: Context,
     originalType: string,
     targetType: string,
@@ -571,6 +550,14 @@ export class NameError extends RuntimeSourceError {
     const suggestion = `The name '${name}' is not defined in the current scope. Check for typos or make sure the variable is assigned a value before being used.`;
     const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
     this.message = msg;
+  }
+}
+
+export class UserError extends RuntimeSourceError {
+  constructor(message: string, node: ExprNS.Expr) {
+    super(node);
+    this.type = ErrorType.RUNTIME;
+    this.message = message;
   }
 }
 
