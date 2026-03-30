@@ -1,14 +1,12 @@
+import { ExprNS } from "./ast-types";
 import { Context } from "./cse-machine/context";
-import { Value } from "./cse-machine/stash";
-import { SourceLocation } from "./errors";
+import { handleRuntimeError } from "./cse-machine/error";
+import { BuiltinValue, Value } from "./cse-machine/stash";
+import { ZeroDivisionError } from "./errors";
 import { ModuleFunctions } from "./modules/moduleTypes";
 import { toPythonString } from "./stdlib";
 
 export class CSEBreak {}
-
-// export class CseError {
-//     constructor(public readonly error: any) {}
-// }
 
 export class PyComplexNumber {
   public real: number;
@@ -104,11 +102,16 @@ export class PyComplexNumber {
   // It first compares the magnitudes of the dividend and divisor, and if some components are too large or too small,
   // appropriate scaling is applied before performing the operation.
   // This approach can significantly reduce overflow or underflow, thereby ensuring that the results remain more consistent with Python.
-  public div(other: PyComplexNumber): PyComplexNumber {
+  public div(
+    source: string,
+    node: ExprNS.Binary,
+    context: Context,
+    other: PyComplexNumber,
+  ): PyComplexNumber {
     // (a+bi)/(c+di) = ((a+bi)*(c-di)) / (c^2 + d^2)
     const denominator = other.real * other.real + other.imag * other.imag;
     if (denominator === 0) {
-      throw new Error(`Division by zero in complex number.`);
+      handleRuntimeError(context, new ZeroDivisionError(source, node));
     }
 
     const a = this.real;
@@ -219,17 +222,6 @@ export class PyComplexNumber {
   }
 }
 
-export interface None {
-  type: "NoneType";
-  loc?: SourceLocation | null;
-}
-
-export interface ComplexLiteral {
-  type: "Literal";
-  complex: PyComplexNumber;
-  loc?: SourceLocation | null;
-}
-
 /**
  * Helper type to recursively make properties that are also objects
  * partial
@@ -246,7 +238,8 @@ export type RecursivePartial<T> =
         }>
       : T;
 
-export type Result = Finished | Error | SuspendedCseEval; // | Suspended
+// The CSE machine either finishes evaluating (to an error or a result) or it has a suspended evaluation.
+export type Result = Finished | SuspendedCseEval;
 
 // TODO: should allow debug
 // export interface Suspended {
@@ -271,13 +264,6 @@ export interface Finished {
   // field instead
 }
 
-// export class Representation {
-//     constructor(public representation: string) {}
-//     toString() {
-//         return this.representation
-//     }
-// }
-
 export class Representation {
   constructor(public representation: string) {}
 
@@ -290,7 +276,7 @@ export class Representation {
 }
 
 export interface NativeStorage {
-  builtins: Map<string, Value>;
+  builtins: Map<string, BuiltinValue>;
   previousProgramsIdentifiers: Set<string>;
   operators: Map<string, (...operands: Value[]) => Value>;
   maxExecTime: number;
