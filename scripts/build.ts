@@ -24,7 +24,7 @@ async function main() {
 
   if (process.argv.length > 2) {
     backend = program.opts().backend as BackendChoice;
-    const valid = BACKENDS.map((b) => b.value) as readonly string[];
+    const valid = BACKENDS.map(b => b.value) as readonly string[];
     if (!valid.includes(backend)) {
       console.error(`Invalid backend: ${backend}. Expected: ${valid.join(", ")}`);
       process.exit(1);

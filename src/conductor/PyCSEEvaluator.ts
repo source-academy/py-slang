@@ -66,6 +66,7 @@ export class PyCSEEvaluator extends BasicEvaluator {
       });
 
       if (result.type === "error") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         this.conductor.sendError(toEvaluatorError(new Error(result.message)) as any);
         return;
       }

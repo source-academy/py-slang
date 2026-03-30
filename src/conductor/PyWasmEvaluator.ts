@@ -10,6 +10,7 @@ export class PyWasmEvaluator extends BasicEvaluator {
         this.conductor.sendResult(result);
       }
     } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       this.conductor.sendError(toEvaluatorError(e) as any);
     }
   }

@@ -1,15 +1,65 @@
-import { ConductorError } from "@sourceacademy/conductor/common";
+import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
+import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash } from "../engines/cse/stash";
+import { displayError } from "../engines/cse/streams";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
-import { runInContext } from "../runner/pyRunner";
 import { Group } from "../stdlib/utils";
+import { RecursivePartial, Result } from "../types";
 import { PyComplexNumber } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import Stmt = StmtNS.Stmt;
+
+/**
+ * Test-local replacement for the deleted pyRunner.runInContext.
+ * Orchestrates: load groups → parse → resolve → evaluate → wrap result.
+ */
+async function runInContext(
+  code: string,
+  context: Context,
+  options: RecursivePartial<IOptions> = {},
+): Promise<Result> {
+  // Load groups into context (builtins + preludes)
+  if (!options.isPrelude && options.groups) {
+    let prelude = "";
+    for (const group of options.groups as Group[]) {
+      for (const [name, value] of group.builtins) {
+        context.nativeStorage.builtins.set(name, value);
+      }
+      prelude += group.prelude + "\n";
+    }
+    if (prelude.trim()) {
+      await runInContext(prelude, context, { ...options, isPrelude: true, groups: [] });
+    }
+  }
+
+  // Parse
+  let pyAst: Stmt;
+  try {
+    const script = code + "\n";
+    pyAst = parse(script);
+    if (!options.isPrelude) {
+      const resolver = new Resolver(
+        script,
+        pyAst,
+        makeValidatorsForChapter(options.variant ?? 1),
+        (options.groups as Group[]) ?? [],
+        Object.keys(context.runtime.environments[0].head),
+      );
+      resolver.resolve(pyAst);
+    }
+  } catch (error) {
+    await displayError(context, error, ErrorType.EVALUATOR_SYNTAX);
+    return CSEResultPromise(context, { type: "error", message: String(error) });
+  }
+
+  // Evaluate
+  const result = await evaluate(code, pyAst, context, options as Partial<IOptions>);
+  return CSEResultPromise(context, result);
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Class<T> = new (...args: any[]) => T;
