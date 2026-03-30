@@ -1220,7 +1220,6 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(ENV_HEAD_SIZE)),
           ),
           wasm.if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31))).then(
-            local.set("$has_starred", i32.const(1)),
             // check if it's a list, if not error (only lists can be unpacked)
             wasm
               .if(i32.ne(i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff)), i32.const(TYPE_TAG.LIST)))
@@ -1228,6 +1227,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
                 wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.STARRED_NOT_LIST))),
                 wasm.unreachable(),
               ),
+            local.set(
+              "$additional_args",
+              i32.add(
+                local.get("$additional_args"),
+                i32.sub(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(1)),
+              ),
+            ),
           ),
 
           local.set("$i", i32.add(local.get("$i"), i32.const(1))),
@@ -1235,74 +1241,53 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
         ),
       ),
 
-      wasm.if(local.get("$has_starred")).then(
-        // set the new CURR_ENV
-        i32.store(
-          local.tee("$new_env", wasm.call(MALLOC_FX).args(i32.const(ENV_HEAD_SIZE))),
-          i32.wrap_i64(local.get("$val")),
+      wasm.if(local.get("$additional_args")).then(
+        // MALLOC a new environment with size = old env size + additional args from unpacking
+        local.set(
+          "$new_env",
+          wasm
+            .call(ALLOC_ENV_FX)
+            .args(i32.add(local.get("$env_size"), local.get("$additional_args")), i32.wrap_i64(local.get("$val"))),
         ),
+        local.set("$arg_len", i32.add(local.get("$arg_len"), local.get("$additional_args"))),
+        local.set("$write_ptr", i32.add(local.get("$new_env"), i32.const(ENV_HEAD_SIZE))),
 
         // loop over the entire old environment, which = envSize
         local.set("$i", i32.const(0)),
         wasm.loop("$unpack_loop").body(
-          wasm
-            .if(
-              i32.lt_s(
-                local.get("$i"),
-                i32.add(local.get("$arg_len"), i32.sub(local.get("$env_size"), local.get("$arity"))),
-              ),
-            )
-            .then(
-              local.set(
-                "$arg_ptr",
-                i32.add(
-                  i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))),
-                  i32.const(ENV_HEAD_SIZE),
+          wasm.if(i32.lt_s(local.get("$i"), i32.load(i32.add(global.get(CURR_ENV), i32.const(4))))).then(
+            local.set(
+              "$arg_ptr",
+              i32.add(i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))), i32.const(ENV_HEAD_SIZE)),
+            ),
+
+            // if starred, remove the starred bit and prepare to unpack
+            wasm
+              .if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31)))
+              .then(
+                i32.store(local.get("$arg_ptr"), i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff))),
+                // copy over the list
+                memory.copy(
+                  local.get("$write_ptr"),
+                  i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
+                  i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
                 ),
-              ),
-              // if starred, remove the starred bit and prepare to unpack
-              wasm
-                .if(i32.shr_u(i32.load(local.get("$arg_ptr")), i32.const(31)))
-                .then(
-                  i32.store(local.get("$arg_ptr"), i32.and(i32.load(local.get("$arg_ptr")), i32.const(0x7fffffff))),
-                  // copy over the list
-                  memory.copy(
-                    wasm
-                      .call(MALLOC_FX)
-                      .args(
-                        i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
-                      ),
-                    i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
+                local.set(
+                  "$write_ptr",
+                  i32.add(
+                    local.get("$write_ptr"),
                     i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
                   ),
-                  // add list length - 1 to arg_len
-                  local.set(
-                    "$arg_len",
-                    i32.add(
-                      local.get("$arg_len"),
-                      i32.sub(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(1)),
-                    ),
-                  ),
-                )
-                .else(
-                  // else not starred: just copy the element over
-                  i32.store(
-                    local.tee("$write_ptr", wasm.call(MALLOC_FX).args(i32.const(12))),
-                    i32.load(local.get("$arg_ptr")),
-                  ),
-                  i64.store(
-                    i32.add(local.get("$write_ptr"), i32.const(4)),
-                    i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))),
-                  ),
                 ),
-              local.set("$i", i32.add(local.get("$i"), i32.const(1))),
-              wasm.br("$unpack_loop"),
-            ),
-        ),
-
-        i32.store(
-          i32.add(local.get("$new_env"), i32.const(4)),
-          i32.add(local.get("$arg_len"), i32.sub(local.get("$env_size"), local.get("$arity"))),
+              )
+              .else(
+                // else not starred: just copy the element over
+                memory.copy(local.get("$write_ptr"), local.get("$arg_ptr"), i32.const(12)),
+                local.set("$write_ptr", i32.add(local.get("$write_ptr"), i32.const(12))),
+              ),
+            local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+            wasm.br("$unpack_loop"),
+          ),
         ),
 
         global.set(CURR_ENV, local.get("$new_env")),
