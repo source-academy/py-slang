@@ -9,7 +9,7 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
 } from "../wasm-compiler/constants";
-import { insertInArray, isFunctionOfName } from "../wasm-compiler/irHelpers";
+import { insertInArray, isFunctionCall, isFunctionOfName } from "../wasm-compiler/irHelpers";
 
 it = it.concurrent;
 
@@ -93,12 +93,6 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
     expect(renderedResult).toBe("hello world");
   });
-
-  //   it("string repetition with *", async () => {
-  //     const pythonCode = `"ab" * 3`;
-  //     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-  //     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
-  //   });
 
   it("string + int should error (type mismatch)", async () => {
     const pythonCode = `"a" + 1`;
@@ -1309,18 +1303,6 @@ x[3]
     );
   });
 
-  //   it("list length grows via append", async () => {
-  //     const pythonCode = `
-  // x = [1]
-  // x.append(2)
-  // x.append(3)
-  // x[2]
-  // `;
-  //     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-  //     expect(rawResult[0]).toBe(TYPE_TAG.INT);
-  //     expect(renderedResult).toBe("3");
-  //   });
-
   it("nested lists indexing", async () => {
     const pythonCode = `
 x = [[1, 2], [3, 4]]
@@ -1454,6 +1436,18 @@ x[0] + x[2]
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
+  });
+
+  it("is_list identifies varargs tuples as lists", async () => {
+    const pythonCode = `
+def f(*args):
+    return is_list(args)
+
+f(1, 2, 3)
+`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
   it("list length function", async () => {
@@ -2712,10 +2706,10 @@ f(10, 20)
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    // it("linked_list function should push resultant list onto stack", async () => {
-    //   const pythonCode = `linked_list(1, 2, 3)`;
-    //   await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
-    // });
+    it("linked_list function should push resultant list onto stack", async () => {
+      const pythonCode = `linked_list(1, 2, 3)`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
 
     it("set_head function should NOT push anything onto stack if new head is not GCable", async () => {
       const pythonCode = `
@@ -2747,6 +2741,31 @@ x = pair(1, 2)
 set_tail(x, [3, 4])
 `;
       await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("list_length function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `list_length([1, 2, 3])`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("is_list function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_list([1, 2, 3])`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("bool function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `bool([1, 2, 3])`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("tokenize function should push resultant list onto stack", async () => {
+      const pythonCode = `tokenize("1 + 2")`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("parse function should push resultant list onto stack", async () => {
+      const pythonCode = `parse("1 + 2")`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
   });
 });

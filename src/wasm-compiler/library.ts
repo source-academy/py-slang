@@ -6,6 +6,7 @@ import {
   GET_LIST_ELEMENT_FX,
   getErrorIndex,
   IS_LINKED_LIST_FX,
+  IS_LIST_FX,
   IS_PAIR_FX,
   LIST_LENGTH_FX,
   LOG_FX,
@@ -97,9 +98,7 @@ export const libraryFunctions: LibFuncType[] = [
 
   // list functions
   libFunc("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
-  libFunc("is_list", 1).body(
-    x => wasm.raw`${x} (drop) (i32.const ${TYPE_TAG.LIST}) (i32.eq) (call ${MAKE_BOOL_FX.name})`,
-  ),
+  libFunc("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
 
   libFunc("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
 

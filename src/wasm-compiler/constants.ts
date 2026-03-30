@@ -414,7 +414,30 @@ export const LIST_LENGTH_FX = wasm
         ),
       )
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GET_LENGTH_NOT_LIST))), wasm.unreachable()),
+
+    wasm.call(POP_SHADOW_STACK_FX), // pop list reference from shadow stack to get actual pointer and length
+    wasm.raw`(local.set $val) (local.set $tag)`,
+
     wasm.call(MAKE_INT_FX).args(i64.and(local.get("$val"), i64.const(0xffffffff))),
+  );
+
+export const IS_LIST_FX = wasm
+  .func("$_is_list")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm
+      .call(MAKE_BOOL_FX)
+      .args(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+        ),
+      ),
   );
 
 // pair related functions
@@ -1055,6 +1078,10 @@ export const BOOLISE_FX = wasm
   .params({ $tag: i32, $val: i64 })
   .results(i64)
   .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
     // None => False
     wasm
       .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE)))
@@ -1570,6 +1597,7 @@ export const nativeFunctions = [
   GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,
   LIST_LENGTH_FX,
+  IS_LIST_FX,
   MAKE_PAIR_FX,
   IS_PAIR_FX,
   MAKE_LINKED_LIST_FX,
