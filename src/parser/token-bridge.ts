@@ -93,6 +93,5 @@ export function toFunctionParam(
   },
   isStarred: boolean,
 ): FunctionParam {
-  const token = toAstToken(mooToken);
-  return { ...token, isStarred };
+  return Object.assign(toAstToken(mooToken), { isStarred });
 }

@@ -416,7 +416,9 @@ const ParserRules = [
   {
     name: "if_statement$ebnf$2",
     symbols: [],
-    postprocess: () => null,
+    postprocess: function (d) {
+      return null;
+    },
   },
   {
     name: "if_statement",
@@ -717,7 +719,9 @@ const ParserRules = [
   {
     name: "expressions$ebnf$2",
     symbols: [],
-    postprocess: () => null,
+    postprocess: function (d) {
+      return null;
+    },
   },
   {
     name: "expressions",
@@ -745,7 +749,9 @@ const ParserRules = [
   {
     name: "spread_expressions$ebnf$2",
     symbols: [],
-    postprocess: () => null,
+    postprocess: function (d) {
+      return null;
+    },
   },
   {
     name: "spread_expressions",
