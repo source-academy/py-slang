@@ -1,10 +1,10 @@
-import { ExprNS } from "./ast-types";
-import { Context } from "./cse-machine/context";
-import { handleRuntimeError } from "./cse-machine/error";
-import { BuiltinValue, Value } from "./cse-machine/stash";
-import { ZeroDivisionError } from "./errors";
-import { ModuleFunctions } from "./modules/moduleTypes";
-import { toPythonString } from "./stdlib";
+import { ExprNS } from "../ast-types";
+import { Context } from "../engines/cse/context";
+import { handleRuntimeError } from "../engines/cse/error";
+import { BuiltinValue, Value } from "../engines/cse/stash";
+import { ZeroDivisionError } from "../errors";
+import { ModuleFunctions } from "../modules/moduleTypes";
+import { toPythonString } from "../stdlib";
 
 export class CSEBreak {}
 

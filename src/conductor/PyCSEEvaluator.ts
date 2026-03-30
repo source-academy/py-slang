@@ -4,14 +4,14 @@
 
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { Context } from "../cse-machine/context";
+import { Context } from "../engines/cse/context";
 import {
   createErrorStream,
   createInputStream,
   createOutputStream,
   destroyStreams,
   displayError,
-} from "../cse-machine/streams";
+} from "../engines/cse/streams";
 import { IOptions, runInContext } from "../runner/pyRunner";
 import { Group } from "../stdlib/utils";
 

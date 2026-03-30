@@ -1,6 +1,6 @@
-import { Context } from "../cse-machine/context";
-import { ControlItem } from "../cse-machine/control";
-import { BuiltinValue, NoneValue, Value } from "../cse-machine/stash";
+import { Context } from "../engines/cse/context";
+import { ControlItem } from "../engines/cse/control";
+import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
 import { Validate } from "../stdlib";
 import { Group, GroupName } from "./utils";
 

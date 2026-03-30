@@ -1,7 +1,7 @@
 import { ConductorError } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
-import { Stash } from "../cse-machine/stash";
+import { Context } from "../engines/cse/context";
+import { Stash } from "../engines/cse/stash";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";

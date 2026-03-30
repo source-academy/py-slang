@@ -3,7 +3,7 @@
 // Original author(s): Source Academy Team
 
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { compileToWasmAndRun } from "../wasm-compiler";
+import { compileToWasmAndRun } from "../engines/wasm";
 
 export default class PyEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {

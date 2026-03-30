@@ -5,13 +5,13 @@ import {
   NumberValue,
   StringValue,
   Value,
-} from "./cse-machine/stash";
+} from "./engines/cse/stash";
 // npm install mathjs
 import { erf, gamma, lgamma } from "mathjs";
-import { Context } from "./cse-machine/context";
-import { ControlItem } from "./cse-machine/control";
-import { handleRuntimeError } from "./cse-machine/error";
-import { displayOutput, receiveInput } from "./cse-machine/streams";
+import { Context } from "./engines/cse/context";
+import { ControlItem } from "./engines/cse/control";
+import { handleRuntimeError } from "./engines/cse/error";
+import { displayOutput, receiveInput } from "./engines/cse/streams";
 import {
   MissingRequiredPositionalError,
   SublanguageError,
@@ -2334,7 +2334,7 @@ export class BuiltInFunctions {
 }
 
 import { ExprNS } from "./ast-types";
-import { isNumeric } from "./cse-machine/utils";
+import { isNumeric } from "./engines/cse/utils";
 import py_s1_constants from "./stdlib/py_s1_constants.json";
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),

@@ -1,8 +1,8 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
-import { CSEResultPromise, evaluate } from "../cse-machine/interpreter";
-import { displayError } from "../cse-machine/streams";
+import { Context } from "../engines/cse/context";
+import { CSEResultPromise, evaluate } from "../engines/cse/interpreter";
+import { displayError } from "../engines/cse/streams";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import { Group } from "../stdlib/utils";

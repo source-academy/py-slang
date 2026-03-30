@@ -1,7 +1,7 @@
 import { WatGenerator } from "@sourceacademy/wasm-util";
 import assert from "assert";
 import wabt from "wabt";
-import { parse } from "../parser";
+import { parse } from "../../parser";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 

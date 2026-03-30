@@ -1,5 +1,5 @@
-import { compileToWasmAndRun } from "../wasm-compiler";
-import { TYPE_TAG } from "../wasm-compiler/constants";
+import { compileToWasmAndRun } from "../engines/wasm";
+import { TYPE_TAG } from "../engines/wasm/constants";
 
 describe("Arithmetic operator tests (int, float, complex, string)", () => {
   // --- INT ARITHMETIC ---

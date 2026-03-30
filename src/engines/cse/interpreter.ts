@@ -7,13 +7,13 @@
 /* tslint:disable:max-classes-per-file */
 
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { ExprNS, StmtNS } from "../ast-types";
-import * as error from "../errors/errors";
-import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../errors/errors";
-import { IOptions } from "../runner/pyRunner";
-import { builtIns, toPythonString } from "../stdlib";
-import { TokenType } from "../tokens";
-import { CSEBreak, RecursivePartial, Representation, Result } from "../types";
+import { ExprNS, StmtNS } from "../../ast-types";
+import * as error from "../../errors/errors";
+import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
+import { IOptions } from "../../runner/pyRunner";
+import { builtIns, toPythonString } from "../../stdlib";
+import { TokenType } from "../../tokens";
+import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";

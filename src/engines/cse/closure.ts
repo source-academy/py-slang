@@ -1,4 +1,4 @@
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import { Context } from "./context";
 import { ControlItem } from "./control";
 import { Environment, uniqueId } from "./environment";
