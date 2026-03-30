@@ -117,13 +117,7 @@ export const PUSH_SHADOW_STACK_FX = wasm
 
 export const DISCARD_SHADOW_STACK_FX = wasm
   .func("$_discard_shadow_stack")
-  .params({ $num_frames: i32 })
-  .body(
-    global.set(
-      SHADOW_STACK_PTR,
-      i32.add(global.get(SHADOW_STACK_PTR), i32.mul(local.get("$num_frames"), i32.const(SHADOW_STACK_SLOT_SIZE))),
-    ),
-  );
+  .body(global.set(SHADOW_STACK_PTR, i32.add(global.get(SHADOW_STACK_PTR), i32.const(SHADOW_STACK_SLOT_SIZE))));
 
 export const POP_SHADOW_STACK_FX = wasm
   .func("$_pop_shadow_stack")
@@ -1206,13 +1200,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .results(i32, i64)
     .body(
       global.set(CURR_ENV, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
-      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
+      wasm.call(DISCARD_SHADOW_STACK_FX),
 
       wasm.call(POP_SHADOW_STACK_FX),
       wasm.raw`(local.set $val) (local.set $tag)`,
 
       local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
-      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
+      wasm.call(DISCARD_SHADOW_STACK_FX),
 
       local.set("$arity", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255))),
       local.set("$env_size", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255))),

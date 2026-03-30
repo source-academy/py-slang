@@ -850,7 +850,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
       /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
       /* ! */ i32.const(length),
-      wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)), // discard the list state from the shadow stack
+      wasm.call(DISCARD_SHADOW_STACK_FX), // discard the list state from the shadow stack
     );
   }
 
