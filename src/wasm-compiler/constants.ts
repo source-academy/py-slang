@@ -449,6 +449,9 @@ export const MAKE_PAIR_FX = wasm
   .body(
     local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))),
 
+    wasm.call("$_log_raw").args(local.get("$head_tag"), local.get("$head_val")),
+    wasm.call("$_log_raw").args(local.get("$tail_tag"), local.get("$tail_val")),
+
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $tail_val) (local.set $tail_tag)`),
@@ -456,6 +459,9 @@ export const MAKE_PAIR_FX = wasm
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
+
+    wasm.call("$_log_raw").args(local.get("$head_tag"), local.get("$head_val")),
+    wasm.call("$_log_raw").args(local.get("$tail_tag"), local.get("$tail_val")),
 
     i32.store(local.get("$ptr"), local.get("$head_tag")),
     i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
@@ -488,7 +494,7 @@ export const IS_PAIR_FX = wasm
 export const MAKE_LINKED_LIST_FX = wasm
   .func("$_make_linked_list")
   .params({ $tag: i32, $val: i64 })
-  .locals({ $i: i32, $acc_tag: i32, $acc_val: i64 })
+  .locals({ $i: i32, $acc_tag: i32, $acc_val: i64, $elem_tag: i32, $elem_val: i64 })
   .results(i32, i64)
   .body(
     wasm
@@ -505,59 +511,66 @@ export const MAKE_LINKED_LIST_FX = wasm
         wasm.unreachable(),
       ),
 
+    // we don't pop the list reference from the shadow stack because we need to access it multiple times
+
     // start from the end of the list and keep pairing the last element with the accumulated linked list
     local.set("$i", i32.sub(i32.wrap_i64(local.get("$val")), i32.const(1))),
 
     local.set("$acc_tag", i32.const(TYPE_TAG.NONE)),
-    // wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.NONE), i64.const(0)),
 
     wasm.loop("$loop").body(
-      // update acc from shadow stack
-      // wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
-      // wasm.raw`(local.set $acc_val) (local.set $acc_tag)`,
-
       wasm.if(i32.ge_s(local.get("$i"), i32.const(0))).then(
+        // update acc from shadow stack IF it's not the initial acc (None)
         wasm
-          .call(MAKE_PAIR_FX)
-          .args(
-            i32.load(
-              i32.add(
-                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-                i32.mul(local.get("$i"), i32.const(12)),
-              ),
-            ),
-            i64.load(
-              i32.add(
-                i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-                i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
-              ),
-            ),
-            local.get("$acc_tag"),
-            local.get("$acc_val"),
+          .if(wasm.call(IS_TAG_GCABLE).args(local.get("$acc_tag")))
+          .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $acc_val) (local.set $acc_tag)`),
+
+        wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)), // peek list reference to get actual pointer and length
+        wasm.raw`(local.set $val) (local.set $tag)`,
+
+        local.tee(
+          "$elem_tag",
+          i32.load(
+            i32.add(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.mul(local.get("$i"), i32.const(12))),
           ),
+        ),
+        local.tee(
+          "$elem_val",
+          i64.load(
+            i32.add(
+              i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+              i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
+            ),
+          ),
+        ),
+        local.get("$acc_tag"),
+        local.get("$acc_val"),
 
-        wasm.raw`(local.set $acc_val) (local.set $acc_tag)`, // set acc to the new pair
-        // make_pair pushed the new pair onto the shadow stack, so pop it,
-        // discard the old accumulator, and push the new pair as the new accumulator
-        // wasm.call(POP_SHADOW_STACK_FX),
-        // wasm.call(DISCARD_SHADOW_STACK_FX).args(i32.const(1)),
-        // wasm.call(SILENT_PUSH_SHADOW_STACK_FX),
+        wasm
+          .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
+          .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$elem_tag"), local.get("$elem_val"))),
+        wasm
+          .if(wasm.call(IS_TAG_GCABLE).args(local.get("$acc_tag")))
+          .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$acc_tag"), local.get("$acc_val"))),
 
-        // reload input list into locals
-        // wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1)),
-        // wasm.raw`(local.set $val) (local.set $tag)`,
+        wasm.raw`(call ${MAKE_PAIR_FX.name}) (local.set $acc_val) (local.set $acc_tag)`,
 
         local.set("$i", i32.sub(local.get("$i"), i32.const(1))),
         wasm.br("$loop"),
       ),
     ),
 
-    local.get("$acc_tag"),
-    local.get("$acc_val"),
+    // pop final acc into locals, then discard the original list reference from shadow stack
+    // then push the final linked list result back to shadow stack
+    wasm.call(POP_SHADOW_STACK_FX),
+    wasm.raw`(local.set $acc_val) (local.set $acc_tag)`,
+    wasm.call(DISCARD_SHADOW_STACK_FX),
+
+    wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$acc_tag"), local.get("$acc_val")),
   );
 
 export const IS_LINKED_LIST_FX = wasm
-  .func("$_is_list")
+  .func("$_is_linked_list")
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
   .body(
@@ -1557,6 +1570,9 @@ export const TOKENIZE_FX = wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.PARSE_NOT_STRING))), wasm.unreachable()),
 
+    wasm.call(POP_SHADOW_STACK_FX),
+    wasm.raw`(local.set $val) (local.set $tag)`,
+
     wasm
       .call("$_host_tokenize")
       .args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.wrap_i64(local.get("$val"))),
@@ -1570,6 +1586,9 @@ export const PARSE_FX = wasm
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.STRING)))
       .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.PARSE_NOT_STRING))), wasm.unreachable()),
+
+    wasm.call(POP_SHADOW_STACK_FX),
+    wasm.raw`(local.set $val) (local.set $tag)`,
 
     wasm
       .call("$_host_parse")

@@ -1720,15 +1720,15 @@ describe("parse function tests", () => {
   // A single top-level statement is returned directly; multiple statements are wrapped in a sequence.
   const seqOf = (...stmt: string[]) => linkedListBuilder("sequence", linkedListBuilder(...stmt));
 
-  it("integer literal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
-    expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
-  });
-
   it("parse on non-string should error", async () => {
     await expect(compileToWasmAndRun(`parse(42)`, true)).rejects.toThrow(
       new Error(ERROR_MAP.PARSE_NOT_STRING),
     );
+  });
+
+  it("integer literal", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
+    expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
   });
 
   it("float literal", async () => {
@@ -2711,6 +2711,11 @@ f(10, 20)
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
+    it("is_linked_list function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
     it("set_head function should NOT push anything onto stack if new head is not GCable", async () => {
       const pythonCode = `
 x = pair(1, 2)
@@ -2765,6 +2770,11 @@ set_tail(x, [3, 4])
 
     it("parse function should push resultant list onto stack", async () => {
       const pythonCode = `parse("1 + 2")`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("more complex parse should push resultant list onto stack", async () => {
+      const pythonCode = `parse("def f():\\n    nonlocal x\\n    x = 5\\n    return x")`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
   });

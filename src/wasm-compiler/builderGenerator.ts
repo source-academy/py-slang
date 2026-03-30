@@ -406,8 +406,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmNumeric {
     const value = BigInt(expr.value);
-    const min = BigInt("-9223372036854775808"); // -(2^63)
-    const max = BigInt("9223372036854775807"); // (2^63) - 1
+    const min = -9223372036854775808n; // -(2^63)
+    const max = 9223372036854775807n; // (2^63) - 1
     if (value < min || value > max) {
       throw new Error(`BigInt literal out of bounds: ${expr.value}`);
     }
