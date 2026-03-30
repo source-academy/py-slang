@@ -2,6 +2,7 @@ import {
   BigIntValue,
   BoolValue,
   BuiltinValue,
+  ComplexValue,
   NumberValue,
   StringValue,
   Value,
@@ -14,7 +15,6 @@ import { handleRuntimeError } from "./cse-machine/error";
 import { displayOutput, receiveInput } from "./cse-machine/streams";
 import {
   MissingRequiredPositionalError,
-  SublanguageError,
   TooManyPositionalArgumentsError,
   TypeError,
   UserError,
@@ -76,13 +76,19 @@ export function Validate<T extends Value | Promise<Value>>(
 }
 
 export class BuiltInFunctions {
-  @Validate(null, 1, "_int", true)
-  static _int(args: Value[], source: string, command: ControlItem, context: Context): BigIntValue {
+  @Validate(null, 2, "int", true)
+  static int(args: Value[], source: string, command: ControlItem, context: Context): BigIntValue {
     if (args.length === 0) {
       return { type: "bigint", value: BigInt(0) };
     }
-
     const arg = args[0];
+    if (!isNumeric(arg) && arg.type !== "string" && arg.type !== "bool") {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, arg.type, "str, int, float or bool"),
+      );
+    }
+
     if (args.length === 1) {
       if (arg.type === "number") {
         const truncated = Math.trunc(arg.value);
@@ -101,137 +107,145 @@ export class BuiltInFunctions {
         }
         return { type: "bigint", value: BigInt(str) };
       }
-    } else if (args.length === 2) {
-      const baseArg = args[1];
-      if (arg.type !== "string") {
+      return { type: "bigint", value: arg.value ? BigInt(1) : BigInt(0) };
+    }
+    const baseArg = args[1];
+    if (arg.type !== "string") {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, arg.type, "string"),
+      );
+    }
+    if (baseArg.type !== "bigint") {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, baseArg.type, "int"),
+      );
+    }
+
+    let base = Number(baseArg.value);
+    let str = arg.value.trim().replace(/_/g, "");
+
+    const sign = str.startsWith("-") ? -1 : 1;
+    if (str.startsWith("+") || str.startsWith("-")) {
+      str = str.substring(1);
+    }
+
+    if (base === 0) {
+      if (str.startsWith("0x") || str.startsWith("0X")) {
+        base = 16;
+        str = str.substring(2);
+      } else if (str.startsWith("0o") || str.startsWith("0O")) {
+        base = 8;
+        str = str.substring(2);
+      } else if (str.startsWith("0b") || str.startsWith("0B")) {
+        base = 2;
+        str = str.substring(2);
+      } else {
+        base = 10;
+      }
+    }
+
+    if (base < 2 || base > 36) {
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, "int"));
+    }
+
+    const validChars = "0123456789abcdefghijklmnopqrstuvwxyz".substring(0, base);
+    const regex = new RegExp(`^[${validChars}]+$`, "i");
+    if (!regex.test(str)) {
+      handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, "int"));
+    }
+
+    const parsed = parseInt(str, base);
+    return { type: "bigint", value: BigInt(sign * parsed) };
+  }
+
+  @Validate(null, 1, "float", true)
+  static float(args: Value[], source: string, command: ControlItem, context: Context): NumberValue {
+    if (args.length === 0) {
+      return { type: "number", value: 0 };
+    }
+    const val = args[0];
+    if (val.type === "bigint") {
+      return { type: "number", value: Number(val.value) };
+    } else if (val.type === "number") {
+      return { type: "number", value: val.value };
+    } else if (val.type === "bool") {
+      return { type: "number", value: val.value ? 1 : 0 };
+    } else if (val.type === "string") {
+      const str = val.value.trim().replace(/_/g, "");
+      const num = Number(str);
+      if (isNaN(num) && str.toLowerCase() !== "nan") {
         handleRuntimeError(
           context,
-          new TypeError(source, command as ExprNS.Expr, context, arg.type, "string"),
+          new ValueError(source, command as ExprNS.Expr, context, "float"),
         );
       }
-      if (baseArg.type !== "bigint") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command as ExprNS.Expr, context, baseArg.type, "float' or 'int"),
-        );
-      }
-
-      let base = Number(baseArg.value);
-      let str = arg.value.trim().replace(/_/g, "");
-
-      const sign = str.startsWith("-") ? -1 : 1;
-      if (str.startsWith("+") || str.startsWith("-")) {
-        str = str.substring(1);
-      }
-
-      if (base === 0) {
-        if (str.startsWith("0x") || str.startsWith("0X")) {
-          base = 16;
-          str = str.substring(2);
-        } else if (str.startsWith("0o") || str.startsWith("0O")) {
-          base = 8;
-          str = str.substring(2);
-        } else if (str.startsWith("0b") || str.startsWith("0B")) {
-          base = 2;
-          str = str.substring(2);
-        } else {
-          base = 10;
-        }
-      }
-
-      if (base < 2 || base > 36) {
-        handleRuntimeError(
-          context,
-          new ValueError(source, command as ExprNS.Expr, context, "float' or 'int"),
-        );
-      }
-
-      const validChars = "0123456789abcdefghijklmnopqrstuvwxyz".substring(0, base);
-      const regex = new RegExp(`^[${validChars}]+$`, "i");
-      if (!regex.test(str)) {
-        handleRuntimeError(
-          context,
-          new ValueError(source, command as ExprNS.Expr, context, "float' or 'int"),
-        );
-      }
-
-      const parsed = parseInt(str, base);
-      return { type: "bigint", value: BigInt(sign * parsed) };
+      return { type: "number", value: num };
     }
     handleRuntimeError(
       context,
-      new TypeError(
-        source,
-        command as ExprNS.Expr,
-        context,
-        arg.type,
-        "string, a bytes-like object or a real number",
-      ),
+      new TypeError(source, command as ExprNS.Expr, context, val.type, "float' or 'int"),
     );
   }
 
-  @Validate(1, 2, "_int_from_string", true)
-  static _int_from_string(
+  @Validate(null, 1, "complex", true)
+  static complex(
     args: Value[],
     source: string,
     command: ControlItem,
     context: Context,
-  ): BigIntValue {
-    const strVal = args[0];
-    if (strVal.type !== "string") {
+  ): ComplexValue {
+    if (args.length === 0) {
+      return { type: "complex", value: new PyComplexNumber(0, 0) };
+    }
+    const val = args[0];
+    if (
+      val.type !== "bigint" &&
+      val.type !== "number" &&
+      val.type !== "bool" &&
+      val.type !== "string" &&
+      val.type !== "complex"
+    ) {
       handleRuntimeError(
         context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
+        new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
       );
     }
+    return { type: "complex", value: PyComplexNumber.fromValue(val.value) };
+  }
 
-    let base: number = 10;
-    if (args.length === 2) {
-      // The second argument must be either a bigint or a number (it will be converted to a number for uniform processing).
-      const baseVal = args[1];
-      if (baseVal.type === "bigint") {
-        base = Number(baseVal.value);
-      } else {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command as ExprNS.Expr, context, args[1].type, "float' or 'int"),
-        );
-      }
-    }
-
-    // base should be in between 2 and 36
-    if (base < 2 || base > 36) {
+  @Validate(1, 1, "real", true)
+  static real(args: Value[], source: string, command: ControlItem, context: Context): NumberValue {
+    const val = args[0];
+    if (val.type !== "complex") {
       handleRuntimeError(
         context,
-        new ValueError(source, command as ExprNS.Expr, context, "_int_from_string"),
+        new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
       );
     }
+    return { type: "number", value: val.value.real };
+  }
 
-    let str = strVal.value;
-    str = str.trim();
-    str = str.replace(/_/g, "");
-
-    // Parse the sign (determine if the value is positive or negative)
-    let sign: bigint = BigInt(1);
-    if (str.startsWith("+")) {
-      str = str.slice(1);
-    } else if (str.startsWith("-")) {
-      sign = BigInt(-1);
-      str = str.slice(1);
-    }
-
-    // The remaining portion must consist of valid characters for the specified base.
-    const parsedNumber = parseInt(str, base);
-    if (isNaN(parsedNumber)) {
+  @Validate(1, 1, "imag", true)
+  static imag(args: Value[], source: string, command: ControlItem, context: Context): NumberValue {
+    const val = args[0];
+    if (val.type !== "complex") {
       handleRuntimeError(
         context,
-        new ValueError(source, command as ExprNS.Expr, context, "_int_from_string"),
+        new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
       );
     }
+    return { type: "number", value: val.value.imag };
+  }
 
-    const result: bigint = sign * BigInt(parsedNumber);
-
-    return { type: "bigint", value: result };
+  @Validate(null, 1, "bool", true)
+  static bool(args: Value[], _source: string, _command: ControlItem, _context: Context): BoolValue {
+    if (args.length === 0) {
+      return { type: "bool", value: false };
+    }
+    const val = args[0];
+    return { type: "bool", value: !isFalsy(val) };
   }
 
   @Validate(1, 1, "abs", false)
@@ -279,63 +293,6 @@ export class BuiltInFunctions {
   static error(args: Value[], _source: string, command: ControlItem, context: Context): Value {
     const output = "Error: " + args.map(arg => BuiltInFunctions.toStr(arg)).join(" ") + "\n";
     handleRuntimeError(context, new UserError(output, command as ExprNS.Expr));
-  }
-
-  @Validate(2, 2, "isinstance", false)
-  static isinstance(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    const obj = args[0];
-    const classinfo = args[1];
-
-    let expectedType: string;
-    if (classinfo.type === "string") {
-      switch (classinfo.value) {
-        case "int":
-          expectedType = "bigint";
-          if (obj.type === "bool") {
-            handleRuntimeError(
-              context,
-              new SublanguageError(
-                source,
-                command as ExprNS.Expr,
-                context,
-                "isinstance",
-                "1",
-                "Python §1 does not treat bool as a subtype of int",
-              ),
-            );
-          }
-          break;
-        case "float":
-          expectedType = "number";
-          break;
-        case "string":
-          expectedType = "string";
-          break;
-        case "bool":
-          expectedType = "bool";
-          break;
-        case "complex":
-          expectedType = "complex";
-          break;
-        case "NoneType":
-          expectedType = "NoneType";
-          break;
-        default:
-          handleRuntimeError(
-            context,
-            new ValueError(source, command as ExprNS.Expr, context, "isinstance"),
-          );
-      }
-    } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
-      );
-    }
-
-    const result = obj.type === expectedType;
-
-    return { type: "bool", value: result };
   }
 
   @Validate(1, 1, "math_acos", false)
@@ -2334,8 +2291,10 @@ export class BuiltInFunctions {
 }
 
 import { ExprNS } from "./ast-types";
+import { isFalsy } from "./cse-machine/operators";
 import { isNumeric } from "./cse-machine/utils";
 import py_s1_constants from "./stdlib/py_s1_constants.json";
+import { PyComplexNumber } from "./types";
 
 // NOTE: If we ever switch to another Python “chapter” (e.g. py_s2_constants),
 //       just change the variable below to switch to the set.

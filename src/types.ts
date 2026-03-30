@@ -66,9 +66,14 @@ export class PyComplexNumber {
     return new PyComplexNumber(realPart, imagPart);
   }
 
-  public static fromValue(value: number | bigint | string | PyComplexNumber): PyComplexNumber {
+  public static fromValue(
+    value: number | bigint | string | PyComplexNumber | boolean,
+  ): PyComplexNumber {
     if (value instanceof PyComplexNumber) {
       return new PyComplexNumber(value.real, value.imag);
+    }
+    if (typeof value === "boolean") {
+      return new PyComplexNumber(value ? 1 : 0, 0);
     }
     if (typeof value === "number") {
       return PyComplexNumber.fromNumber(value);
