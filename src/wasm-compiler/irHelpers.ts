@@ -1,11 +1,16 @@
 import { WasmFunction, WasmInstruction } from "@sourceacademy/wasm-util";
 import { IrPass } from ".";
 
+type InsertInArrayOptions = {
+  matchIndex?: number;
+  before?: boolean;
+};
+
 export function insertInArray(
   arrayLocator: (node: unknown) => false | unknown[],
   instructionLocator: (array: unknown) => boolean,
   insert: WasmInstruction[],
-  matchIndex = 0,
+  { matchIndex = 0, before = false }: InsertInArrayOptions = {},
 ): IrPass {
   return ir => {
     const dfs = (node: unknown): unknown => {
@@ -17,7 +22,7 @@ export function insertInArray(
         if (matches.length > 0) {
           // Insert instructions after the first match
           const index = array.indexOf(matches[matchIndex]);
-          array.splice(index + 1, 0, ...insert);
+          array.splice(index + (before ? 0 : 1), 0, ...insert);
           return;
         }
       } else {

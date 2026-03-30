@@ -1184,6 +1184,36 @@ export const PRE_APPLY_FX = wasm
 
 export const APPLY_FX_NAME = "$_apply";
 export const RETURN_ENV_NAME = "$return_env";
+export const RETURN_NONVOID_SUFFIX = [
+  wasm.raw`(local.set $return_val) (local.set $return_tag)`,
+  wasm
+    .if(wasm.call(IS_TAG_GCABLE).args(local.get("$return_tag")))
+    .results(i32, i64)
+    .then(
+      wasm.call(DISCARD_SHADOW_STACK_FX),
+      local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+      wasm.call(DISCARD_SHADOW_STACK_FX),
+
+      wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$return_tag"), local.get("$return_val")),
+    )
+    .else(
+      local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+      wasm.call(DISCARD_SHADOW_STACK_FX),
+      local.get("$return_tag"),
+      local.get("$return_val"),
+    ),
+
+  global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
+];
+
+export const RETURN_VOID_SUFFIX = [
+  local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+  wasm.call(DISCARD_SHADOW_STACK_FX),
+  wasm.call(MAKE_NONE_FX),
+
+  global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
+];
+
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
@@ -1191,7 +1221,6 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .locals({
       [RETURN_ENV_NAME]: i32,
       $val: i64,
-      $list_len: i32,
       $additional_args: i32,
       $i: i32,
       $arg_ptr: i32,
@@ -1205,14 +1234,15 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     })
     .results(i32, i64)
     .body(
+      // the new env pointer is rooted in CURR_ENV global, so no need to remain on shadow stack after this point
       global.set(CURR_ENV, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
       wasm.call(DISCARD_SHADOW_STACK_FX),
 
+      // pop closure from shadow stack into locals
       wasm.call(POP_SHADOW_STACK_FX),
-      wasm.raw`(local.set $val) (local.set $tag)`,
+      wasm.raw`(local.set $val) (drop)`,
 
-      local.set(RETURN_ENV_NAME, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
-      wasm.call(DISCARD_SHADOW_STACK_FX),
+      // return env remains on the shadow stack for the return instruction to use after the call
 
       local.set("$arity", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(40))), i32.const(255))),
       local.set("$env_size", i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.const(255))),
@@ -1314,15 +1344,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
 
       // if has varargs
       wasm.if(local.get("$has_varargs")).then(
-        local.set("$list_len", i32.sub(local.get("$arg_len"), local.get("$arity"))),
-
         memory.copy(
           i32.add(
             i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
             i32.mul(local.get("$env_size"), i32.const(12)),
           ),
           i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
-          i32.mul(local.get("$list_len"), i32.const(12)),
+          i32.mul(i32.sub(local.get("$arg_len"), local.get("$arity")), i32.const(12)),
         ),
 
         // create tuple manually with pointer to start of the copied list, and store it in the env where the varargs would be,
@@ -1349,7 +1377,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
               ),
               i64.const(32),
             ),
-            i64.extend_i32_u(local.get("$list_len")),
+            i64.extend_i32_u(i32.sub(local.get("$arg_len"), local.get("$arity"))),
           ),
         ),
 
@@ -1381,10 +1409,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
           i32.and(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(48))), i32.const(32767)),
           ...Array(bodies.length).keys(),
         ),
-        ...bodies.map(body => [
-          ...body,
-          wasm.return(wasm.call(MAKE_NONE_FX), global.set(CURR_ENV, local.get(RETURN_ENV_NAME))),
-        ]),
+        ...bodies.map(body => [...body, wasm.return(...RETURN_VOID_SUFFIX)]),
       ),
     );
 

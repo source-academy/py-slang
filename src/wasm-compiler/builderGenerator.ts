@@ -3,7 +3,6 @@ import {
   global,
   i32,
   i64,
-  local,
   mut,
   wasm,
   WasmCall,
@@ -50,7 +49,8 @@ import {
   NEG_FX,
   PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
-  RETURN_ENV_NAME,
+  RETURN_NONVOID_SUFFIX,
+  RETURN_VOID_SUFFIX,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
@@ -185,23 +185,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       const tag = this.userFunctions.length;
       const newBody = [
         ...body,
-        wasm.return(
-          ...(isVoid
-            ? [wasm.call(MAKE_NONE_FX)]
-            : [
-                // wasm.raw`(local.set $return_val) (local.set $return_tag)`,
-                // wasm
-                //   .if(wasm.call(IS_TAG_GCABLE).args(local.get("$return_tag")))
-                //   .then(
-                //     wasm
-                //       .call(SILENT_PUSH_SHADOW_STACK_FX)
-                //       .args(local.get("$return_tag"), local.get("$return_val")),
-                //   ),
-                // local.get("$return_tag"),
-                // local.get("$return_val"),
-              ]),
-          global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
-        ),
+        wasm.return(...(isVoid ? RETURN_VOID_SUFFIX : RETURN_NONVOID_SUFFIX)),
       ];
       this.userFunctions.push(newBody);
 
@@ -628,7 +612,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
+      ...RETURN_NONVOID_SUFFIX,
     );
   }
 
