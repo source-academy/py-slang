@@ -212,7 +212,7 @@ def _linked_list_to_string(xs, cont):
             ),
         )
     else:
-        return cont(str(xs))
+        return cont(repr(xs))
 
 
 def reverse_linked_list(xs):
