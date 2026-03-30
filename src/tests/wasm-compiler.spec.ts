@@ -2809,4 +2809,16 @@ y = 10
     expect(rawResult[0]).toBe(TYPE_TAG.NONE);
     expect(renderedResult).toBe("None");
   });
+
+  it("empty program should produce None in interactive mode", async () => {
+    const { rawResult, renderedResult } = await compileToWasmAndRun(``, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.NONE);
+    expect(renderedResult).toBe("None");
+  });
+
+  it("empty program should not do anything in non-interactive mode", async () => {
+    const { rawResult, renderedResult } = await compileToWasmAndRun(``, false);
+    expect(rawResult).toBeNull();
+    expect(renderedResult).toBeNull();
+  });
 });

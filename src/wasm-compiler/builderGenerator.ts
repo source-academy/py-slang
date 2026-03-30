@@ -215,11 +215,6 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
-    if (stmt.statements.length <= 0) {
-      console.log("No statements found");
-      throw new Error("No statements found");
-    }
-
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
     const body = stmt.statements.map(s => this.visit(s));
