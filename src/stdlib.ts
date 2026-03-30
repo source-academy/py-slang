@@ -212,7 +212,10 @@ export class BuiltInFunctions {
         new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
       );
     }
-    return { type: "complex", value: PyComplexNumber.fromValue(val.value) };
+    return {
+      type: "complex",
+      value: PyComplexNumber.fromValue(context, source, command as ExprNS.Expr, val.value),
+    };
   }
 
   @Validate(1, 1, "real", true)
@@ -641,34 +644,6 @@ export class BuiltInFunctions {
     const erfc = 1 - BuiltInFunctions.math_erf([args[0]], source, command, context).value;
 
     return { type: "number", value: erfc };
-  }
-
-  @Validate(2, 2, "char_at", false)
-  static char_at(
-    args: Value[],
-    source: string,
-    command: ControlItem,
-    context: Context,
-  ): StringValue {
-    const s = args[0];
-    const i = args[1];
-
-    if (s.type !== "string") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as ExprNS.Expr, context, s.type, "string"),
-      );
-    }
-    if (!isNumeric(i)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as ExprNS.Expr, context, i.type, "float' or 'int"),
-      );
-    }
-
-    const index = Number(i.value);
-
-    return { type: "string", value: s.value[index] };
   }
 
   @Validate(2, 2, "math_comb", false)

@@ -1066,15 +1066,15 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as ListAccessInstr;
     const index = stash.pop();
     const list = stash.pop();
-    if (!list || list.type !== "list") {
+    if (!list || (list.type !== "list" && list.type !== "string")) {
       handleRuntimeError(
         context,
         new error.TypeError(
           code,
           instr.srcNode as ExprNS.Expr,
           context,
-          (list as Value).type,
-          "list",
+          list ? list.type : "NoneType",
+          "list or string",
         ),
       );
     }
@@ -1097,7 +1097,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length),
       );
     }
-    stash.push(list.value[idx]);
+    if (list.type === "string") {
+      stash.push({ type: "string", value: list.value.at(idx) ?? "" });
+    } else {
+      stash.push(list.value[idx]);
+    }
   },
 
   [InstrType.BRANCH]: function (

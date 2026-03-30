@@ -2,7 +2,6 @@
   "builtInFuncs": [
     "abs",
     "bool",
-    "char_at",
     "complex",
     "error",
     "float",

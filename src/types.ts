@@ -2,7 +2,7 @@ import { ExprNS } from "./ast-types";
 import { Context } from "./cse-machine/context";
 import { handleRuntimeError } from "./cse-machine/error";
 import { BuiltinValue, Value } from "./cse-machine/stash";
-import { ZeroDivisionError } from "./errors";
+import { ValueError, ZeroDivisionError } from "./errors";
 import { ModuleFunctions } from "./modules/moduleTypes";
 import { toPythonString } from "./stdlib";
 
@@ -26,12 +26,27 @@ export class PyComplexNumber {
   }
 
   public static fromString(str: string): PyComplexNumber {
+    str = str.replace(/_/g, ""); // Remove underscores for easier parsing
     if (!/[jJ]/.test(str)) {
       const realVal = Number(str);
       if (isNaN(realVal)) {
         throw new Error(`Invalid complex string: ${str}`);
       }
       return new PyComplexNumber(realVal, 0);
+    }
+    const match = str.match(
+      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-]\d+(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
+    );
+    if (match) {
+      console.log(match);
+      const realPart = Number(match[1]);
+      let imagPart = 0;
+
+      if (match[4]) {
+        imagPart = Number(match[4].substring(0, match[4].length - 1)); // Remove the trailing 'j' or 'J'
+      }
+
+      return new PyComplexNumber(realPart, imagPart);
     }
 
     const lower = str.toLowerCase();
@@ -49,24 +64,14 @@ export class PyComplexNumber {
       return new PyComplexNumber(0, imagVal);
     }
 
-    const match = str.match(
-      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-]\d+(\.\d+)?([eE][+\-]?\d+)?)?[jJ]?$/,
-    );
-    if (!match) {
-      throw new Error(`Invalid complex string: ${str}`);
-    }
-
-    const realPart = Number(match[1]);
-    let imagPart = 0;
-
-    if (match[4]) {
-      imagPart = Number(match[4]);
-    }
-
-    return new PyComplexNumber(realPart, imagPart);
+    throw new Error(`Invalid complex string: ${str}`);
   }
 
   public static fromValue(
+    context: Context,
+    source: string,
+    node: ExprNS.Expr,
+
     value: number | bigint | string | PyComplexNumber | boolean,
   ): PyComplexNumber {
     if (value instanceof PyComplexNumber) {
@@ -81,7 +86,11 @@ export class PyComplexNumber {
     if (typeof value === "bigint") {
       return PyComplexNumber.fromBigInt(value);
     }
-    return PyComplexNumber.fromString(value);
+    try {
+      return PyComplexNumber.fromString(value);
+    } catch {
+      handleRuntimeError(context, new ValueError(source, node, context, "complex"));
+    }
   }
 
   /**

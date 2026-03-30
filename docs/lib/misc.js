@@ -1,18 +1,4 @@
 /**
- * Takes a <CODE>string</CODE> <CODE>s</CODE> as the first argument and a nonnegative
- * integer <CODE>i</CODE> as the second argument. If <CODE>i</CODE> is less than
- * the length of <CODE>s</CODE>, this function returns a one-character <CODE>string</CODE> that
- * contains the character of <CODE>s</CODE> at position <CODE>i</CODE>, counting from <CODE>0</CODE>.
- * If <CODE>i</CODE> is larger than or equal to the length of <CODE>s</CODE>, this function returns
- * <CODE>None</CODE>.
- *
- * @param {string} <CODE>s</CODE> - the given <CODE>string</CODE>
- * @param {int} <CODE>i</CODE> - the <CODE>index</CODE>
- * @returns {string} one-character <CODE>string</CODE> or <CODE>None</CODE>
- */
-function char_at(s, i) {}
-
-/**
  * A simplified version of the Python built-in <CODE>print</CODE> function.
  * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
  * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
