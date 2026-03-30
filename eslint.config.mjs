@@ -5,14 +5,7 @@ import tseslint from "typescript-eslint";
 export default defineConfig([
   {
     // global ignores
-    ignores: [
-      "dist",
-      "docs",
-      "coverage",
-      "node_modules",
-      "src/parser/python-grammar.ts",
-      "src/ast-types.ts",
-    ],
+    ignores: ["dist", "docs", "coverage", "node_modules", "src/ast-types.ts"],
   },
   tseslint.configs.recommended,
   eslintConfigPrettierFlat,

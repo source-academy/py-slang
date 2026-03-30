@@ -6,7 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "regen": "npx tsx src/generate.ts && prettier --write src/ast-types.ts",
-    "compile-grammar": "nearleyc src/parser/python.ne -o src/parser/python-grammar.ts && prettier --write src/parser/python-grammar.ts",
+    "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
     "start:dev": "npx nodemon",
     "build": "npx tsx scripts/build.ts",
     "build:cse": "npx tsx scripts/build.ts --backend cse",
