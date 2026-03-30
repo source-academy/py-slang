@@ -4,7 +4,7 @@ function id(x) {
   return x[0];
 }
 
-import { StmtNS, ExprNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import pythonLexer from "./lexer";
 import { toAstToken } from "./token-bridge";
 
@@ -462,7 +462,7 @@ let ParserRules = [
       "if_statement$ebnf$2",
     ],
     postprocess: ([kw, test, , body, elifs, elseBlock]) => {
-      let else_ = elseBlock ? elseBlock[0][2] : null;
+      let else_ = elseBlock ? elseBlock[2] : null;
       for (let i = elifs.length - 1; i >= 0; i--) {
         const [ekw, etest, ecolon, ebody] = elifs[i];
         const endTok =

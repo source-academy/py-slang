@@ -5,7 +5,7 @@ import { Control } from "./control";
 import { Environment } from "./environment";
 import { CseError } from "./error";
 import { Heap } from "./heap";
-import { Stash, Value } from "./stash";
+import { BuiltinValue, Stash, Value } from "./stash";
 import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
@@ -26,6 +26,7 @@ export class Context {
   //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
+  public prelude: string | null = null;
 
   runtime: {
     break: boolean;
@@ -60,7 +61,7 @@ export class Context {
     }
     this.streams = this.createEmptyStreams();
     this.nativeStorage = {
-      builtins: new Map<string, Value>(),
+      builtins: new Map<string, BuiltinValue>(),
       previousProgramsIdentifiers: new Set<string>(),
       operators: new Map<string, (...operands: Value[]) => Value>(),
       maxExecTime: 1000,
