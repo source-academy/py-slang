@@ -1298,6 +1298,19 @@ describe("Spread expressions", () => {
     expect(starred.startToken.lexeme).toBe("*");
     expect(starred.endToken.lexeme).toBe("xyz");
   });
+
+  test("spread of complex expression: f(*(g(x)))", () => {
+    const expr = parseExpr("f(*(g(x)))");
+    const call = expr as ExprNS.Call;
+    expect(call.args[0]).toBeInstanceOf(ExprNS.Starred);
+  });
+
+  test("spread binds to full expression: f(*a + b) parses as f(*(a+b))", () => {
+    const expr = parseExpr("f(*a + b)");
+    const call = expr as ExprNS.Call;
+    const starred = call.args[0] as ExprNS.Starred;
+    expect(starred.value).toBeInstanceOf(ExprNS.Binary);
+  });
 });
 
 // ---------------------------------------------------------------------------
