@@ -5,6 +5,7 @@ import {
   ERROR_MAP,
   MAKE_LIST_FX,
   PEEK_SHADOW_STACK_FX,
+  SET_LIST_CONTIGUOUS_BLOCK_FX,
   SHADOW_STACK_TAG,
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
@@ -2403,6 +2404,53 @@ x
   });
 
   describe("list-related tests", () => {
+    it("LIST_STATE tracks stable pointer and WIP length during list construction", async () => {
+      const pythonCode = `[1, 2, 3]`;
+
+      const log = wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)));
+
+      const afterListStatePush = insertInArray(
+        node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+        instruction => isFunctionCall(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        [log],
+      );
+      const afterSet0 = insertInArray(
+        node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 0 },
+      );
+      const afterSet1 = insertInArray(
+        node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 1 },
+      );
+      const afterSet2 = insertInArray(
+        node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 2 },
+      );
+
+      const { rawOutputs, rawResult } = await expectShadowStackToEqual(
+        pythonCode,
+        [TYPE_TAG.LIST],
+        { irPasses: [afterListStatePush, afterSet0, afterSet1, afterSet2] },
+      );
+
+      expect(rawOutputs).toHaveLength(4);
+      rawOutputs.forEach(([tag]) => expect(tag).toBe(SHADOW_STACK_TAG.LIST_STATE));
+
+      rawOutputs.forEach(([, val], index) => {
+        const pointer = (val >> 32n) & 0xffffffffn;
+        const length = Number(val & 0xffffffffn);
+
+        expect(pointer).toBe(rawResult![1] >> 32n);
+        expect(length).toBe(index);
+      });
+    });
+
     it("while creating list, list pointer should be on stack until SET_CONTIGUOUS", async () => {
       const pythonCode = `[1, 2, 3]`;
 
@@ -2412,16 +2460,11 @@ x
         [wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))],
       );
 
-      const { rawOutputs, rawResult } = await expectShadowStackToEqual(
-        pythonCode,
-        [TYPE_TAG.LIST],
-        { irPasses: [irPass] },
-      );
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST], {
+        irPasses: [irPass],
+      });
 
-      // without intervening GC, the list state pointer should be the same as the resultant list
-      // pointer, and should be on stack until SET_CONTIGUOUS
       expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.LIST_STATE);
-      expect((rawOutputs[0][1] << 32n) | 3n).toBe(rawResult![1]);
     });
 
     it("GCable element in list should NOT be on stack (already popped by SET_CONTIGUOUS)", async () => {

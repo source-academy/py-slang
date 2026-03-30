@@ -18,6 +18,7 @@ export const TYPE_TAG = {
 } as const;
 
 export const SHADOW_STACK_TAG = {
+  // upper 32: pointer; lower 32: length
   LIST_STATE: -1,
   CALL_RETURN_ADDR: -2,
   CALL_NEW_ENV: -3,
@@ -48,6 +49,7 @@ export const ERROR_MAP = {
   OUT_OF_MEMORY: "Out of memory.",
   STACK_OVERFLOW: "Stack overflow.",
   STACK_UNDERFLOW: "Stack underflow.",
+  GC_COPY_UNKNOWN_TYPE: "Trying to copy an unknown runtime type during garbage collection.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -155,7 +157,91 @@ export const IS_TAG_GCABLE = wasm
     ),
   );
 
-export const COLLECT_FX = wasm.func("$_collect").body();
+export const COPY_FX = wasm
+  .func("$_copy")
+  .params({ $tag: i32, $val: i64 })
+  .locals({ $new_ptr: i32, $len: i32 })
+  .results(i64)
+  .body(
+    // complex
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
+      .then(
+        local.set("$new_ptr", global.get(HEAP_PTR)),
+        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
+        memory.copy(local.get("$new_ptr"), i32.wrap_i64(local.get("$val")), i32.const(16)),
+        wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
+      ),
+
+    // string
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING))).then(
+      wasm
+        .if(i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), global.get(DATA_END)))
+        .then(wasm.return(local.get("$val"))),
+
+      local.set("$new_ptr", global.get(HEAP_PTR)),
+      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.tee("$len", i32.wrap_i64(local.get("$val"))))),
+      memory.copy(local.get("$new_ptr"), i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), local.get("$len")),
+      wasm.return(
+        i64.or(i64.shl(i64.extend_i32_u(local.get("$new_ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+      ),
+    ),
+
+    // closure
+
+    // lists, tuples, and list_state
+    wasm
+      .if(
+        i32.or(
+          i32.or(
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+          ),
+          i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.LIST_STATE)),
+        ),
+      )
+      .then(
+        local.set("$len", i32.mul(i32.wrap_i64(local.get("$val")), i32.const(12))),
+        local.set("$new_ptr", global.get(HEAP_PTR)),
+        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$len"))),
+        memory.copy(
+          local.get("$new_ptr"),
+          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+          local.get("$len"),
+        ),
+        wasm.return(
+          i64.or(i64.shl(i64.extend_i32_u(local.get("$new_ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
+        ),
+      ),
+
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GC_COPY_UNKNOWN_TYPE))),
+    wasm.unreachable(),
+  );
+
+export const COLLECT_FX = wasm
+  .func("$_collect")
+  .locals({ $temp: i32, $free: i32, $scan: i32, $shadow_ptr: i32 })
+  .body(
+    local.set("$free", global.get(FROM_SPACE_END_PTR)),
+    local.set("$scan", global.get(FROM_SPACE_END_PTR)),
+    local.set("$shadow_ptr", global.get(SHADOW_STACK_PTR)),
+
+    global.set(HEAP_PTR, global.get(FROM_SPACE_END_PTR)),
+
+    // copy live objects in shadow stack to to-space
+    wasm.loop("$copy_loop").body(
+      wasm.if(i32.lt_u(local.get("$shadow_ptr"), global.get(SHADOW_STACK_TOP))).then(
+        i64.store(
+          i32.add(local.get("$shadow_ptr"), i32.const(4)),
+          wasm
+            .call(COPY_FX)
+            .args(i32.load(local.get("$shadow_ptr")), i64.load(i32.add(local.get("$shadow_ptr"), i32.const(4)))),
+        ),
+
+        local.set("$shadow_ptr", i32.add(local.get("$shadow_ptr"), i32.const(SHADOW_STACK_SLOT_SIZE))),
+      ),
+    ),
+  );
 
 // returns allocated block start address and moves heap pointer by amount bytes
 export const MALLOC_FX = wasm
@@ -1536,8 +1622,8 @@ export const SET_LEX_ADDR_FX = wasm
     wasm.unreachable(),
   );
 
-export const SET_CONTIGUOUS_BLOCK_FX = wasm
-  .func("$_set_contiguous_block")
+export const SET_CALL_CONTIGUOUS_BLOCK_FX = wasm
+  .func("$_set_call_contiguous_block")
   .params({ $index: i32, $tag: i32, $value: i64, $offset: i32, $is_starred: i32 })
   .locals({ $addr: i32 })
   .body(
@@ -1559,6 +1645,36 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
       ),
       local.get("$value"),
     ),
+  );
+
+export const SET_LIST_CONTIGUOUS_BLOCK_FX = wasm
+  .func("$_set_list_contiguous_block")
+  .params({ $index: i32, $tag: i32, $value: i64 })
+  .locals({ $addr: i32, $state_tag: i32, $state_val: i64 })
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
+
+    wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
+    wasm.raw`(local.set $state_val) (local.set $state_tag)`,
+
+    // LIST_STATE payload packs list pointer in upper 32 bits and WIP length in lower 32 bits
+    local.set("$addr", i32.wrap_i64(i64.shr_u(local.get("$state_val"), i64.const(32)))),
+
+    i32.store(
+      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
+      local.get("$tag"),
+    ),
+    i64.store(
+      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
+      local.get("$value"),
+    ),
+
+    // increment WIP list length by 1 in LIST_STATE (lower 32 bits)
+    wasm
+      .if(i32.eq(local.get("$state_tag"), i32.const(SHADOW_STACK_TAG.LIST_STATE)))
+      .then(i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), i64.add(local.get("$state_val"), i64.const(1)))),
   );
 
 export const TOKENIZE_FX = wasm
@@ -1596,6 +1712,7 @@ export const PARSE_FX = wasm
   );
 
 export const nativeFunctions = [
+  COPY_FX,
   COLLECT_FX,
   MALLOC_FX,
   PUSH_SHADOW_STACK_FX,
@@ -1632,7 +1749,8 @@ export const nativeFunctions = [
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
-  SET_CONTIGUOUS_BLOCK_FX,
+  SET_CALL_CONTIGUOUS_BLOCK_FX,
+  SET_LIST_CONTIGUOUS_BLOCK_FX,
   TOKENIZE_FX,
   PARSE_FX,
 ];

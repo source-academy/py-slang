@@ -51,8 +51,9 @@ import {
   PRE_APPLY_FX,
   RETURN_NONVOID_SUFFIX,
   RETURN_VOID_SUFFIX,
-  SET_CONTIGUOUS_BLOCK_FX,
+  SET_CALL_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
+  SET_LIST_CONTIGUOUS_BLOCK_FX,
   SET_LIST_ELEMENT_FX,
   SHADOW_STACK_BOTTOM,
   SHADOW_STACK_PTR,
@@ -559,7 +560,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // argument length. it returns the pointer to this env, which we push onto the
     // shadow stack.
 
-    // we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
+    // we manually set the arguments in the new environment using SET_CALL_CONTIGUOUS_BLOCK_FX
     // which reads the pointer to the new env from the shadow stack.
 
     // APPLY takes in the argument length. it reads the (3) call-state shadow stack values
@@ -589,7 +590,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
       ...args.map((element, i) =>
         wasm
-          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .call(SET_CALL_CONTIGUOUS_BLOCK_FX)
           .args(
             i32.const(i),
             element.arg,
@@ -810,25 +811,30 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const length = expr.elements.length;
     const elements = expr.elements.map(el => this.visit(el));
 
-    // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // SET_LIST_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
 
     // ! indicates actual arguments - the rest are for setting up the list
-    // in the shadow stack for SET_CONTIGUOUS_BLOCK_FX to write to
+    // in the shadow stack for SET_LIST_CONTIGUOUS_BLOCK_FX to write to
     return wasm.call(MAKE_LIST_FX).args(
       wasm
         .call(SILENT_PUSH_SHADOW_STACK_FX)
         .args(
           i32.const(SHADOW_STACK_TAG.LIST_STATE),
-          i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+          i64.shl(
+            i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+            i64.const(32),
+          ),
         ),
 
       ...elements.map((element, i) =>
-        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0), i32.const(0)),
+        wasm.call(SET_LIST_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element),
       ),
 
+      /* ! */ i32.wrap_i64(
+        i64.shr_u(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))), i64.const(32)),
+      ),
       /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
-      /* ! */ i32.const(length),
       wasm.call(DISCARD_SHADOW_STACK_FX), // discard the list state from the shadow stack
     );
   }
