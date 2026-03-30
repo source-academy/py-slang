@@ -1034,7 +1034,13 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         : rawArgs.flatMap((val, i) => {
             if (!spreadSet.has(i)) return val;
             // List values from rest params: { type: "list", value: Value[] }
-            if (val && typeof val === "object" && "type" in val && val.type === "list" && "value" in val) {
+            if (
+              val &&
+              typeof val === "object" &&
+              "type" in val &&
+              val.type === "list" &&
+              "value" in val
+            ) {
               return (val as { type: "list"; value: Value[] }).value;
             }
             if (Array.isArray(val)) return val;

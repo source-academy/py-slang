@@ -41,23 +41,19 @@ function analyzeOnly(src: string, chapter: number): void {
 // ---------------------------------------------------------------------------
 describe("Spread validator gating", () => {
   test("chapter 1 rejects spread in call", () => {
-    expect(() => analyzeOnly("def f(a):\n    pass\nf(*f)", 1))
-      .toThrow(FeatureNotSupportedError);
+    expect(() => analyzeOnly("def f(a):\n    pass\nf(*f)", 1)).toThrow(FeatureNotSupportedError);
   });
 
   test("chapter 2 rejects spread in call", () => {
-    expect(() => analyzeOnly("def f(a):\n    pass\nf(*f)", 2))
-      .toThrow(FeatureNotSupportedError);
+    expect(() => analyzeOnly("def f(a):\n    pass\nf(*f)", 2)).toThrow(FeatureNotSupportedError);
   });
 
   test("chapter 3 accepts spread in call", () => {
-    expect(() => analyzeOnly("def f(a):\n    pass\nx = [1]\nf(*x)", 3))
-      .not.toThrow();
+    expect(() => analyzeOnly("def f(a):\n    pass\nx = [1]\nf(*x)", 3)).not.toThrow();
   });
 
   test("chapter 4 accepts spread in call", () => {
-    expect(() => analyzeOnly("def f(a):\n    pass\nx = [1]\nf(*x)", 4))
-      .not.toThrow();
+    expect(() => analyzeOnly("def f(a):\n    pass\nx = [1]\nf(*x)", 4)).not.toThrow();
   });
 });
 
@@ -66,28 +62,23 @@ describe("Spread validator gating", () => {
 // ---------------------------------------------------------------------------
 describe("Lambda rest param validator gating", () => {
   test("chapter 1 rejects lambda *args: args", () => {
-    expect(() => analyzeOnly("f = lambda *args: args", 1))
-      .toThrow(FeatureNotSupportedError);
+    expect(() => analyzeOnly("f = lambda *args: args", 1)).toThrow(FeatureNotSupportedError);
   });
 
   test("chapter 2 rejects lambda *args: args", () => {
-    expect(() => analyzeOnly("f = lambda *args: args", 2))
-      .toThrow(FeatureNotSupportedError);
+    expect(() => analyzeOnly("f = lambda *args: args", 2)).toThrow(FeatureNotSupportedError);
   });
 
   test("chapter 3 accepts lambda *args: args", () => {
-    expect(() => analyzeOnly("f = lambda *args: args", 3))
-      .not.toThrow();
+    expect(() => analyzeOnly("f = lambda *args: args", 3)).not.toThrow();
   });
 
   test("chapter 1 rejects def f(*args)", () => {
-    expect(() => analyzeOnly("def f(*args):\n    pass", 1))
-      .toThrow(FeatureNotSupportedError);
+    expect(() => analyzeOnly("def f(*args):\n    pass", 1)).toThrow(FeatureNotSupportedError);
   });
 
   test("chapter 3 accepts def f(*args)", () => {
-    expect(() => analyzeOnly("def f(*args):\n    pass", 3))
-      .not.toThrow();
+    expect(() => analyzeOnly("def f(*args):\n    pass", 3)).not.toThrow();
   });
 });
 
