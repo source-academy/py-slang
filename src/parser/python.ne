@@ -14,17 +14,18 @@
 
 @preprocessor esmodule
 
-@{%
-import { StmtNS, ExprNS } from '../ast-types';
-import pythonLexer from './lexer';
-import { toAstToken } from './token-bridge';
 
-const nil = () => null;
-const list = ([x]) => [x];
+@{%
+import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
+import { Token } from "../tokenizer";
+import pythonLexer from "./lexer";
+import { toAstToken, toFunctionParam } from "./token-bridge";
+
+const list = <T>([x]: [T]) => [x];
 const drop = () => [];
 
 /** Strip surrounding quotes and process escape sequences. */
-function stripQuotes(s) {
+function stripQuotes(s: string) {
   let inner;
   if (s.startsWith('"""') || s.startsWith("'''")) inner = s.slice(3, -3);
   else if (s.startsWith('"') || s.startsWith("'")) inner = s.slice(1, -1);
@@ -51,25 +52,25 @@ function stripQuotes(s) {
 }
 
 // ── Leaf AST constructors (token → node) ────────────────────────────────
-const astVariable   = ([t]) => { const k = toAstToken(t); return new ExprNS.Variable(k, k, k); };
-const astBigInt     = ([t]) => { const k = toAstToken(t); return new ExprNS.BigIntLiteral(k, k, t.value); };
-const astComplex    = ([t]) => { const k = toAstToken(t); return new ExprNS.Complex(k, k, t.value); };
-const astNone       = ([t]) => { const k = toAstToken(t); return new ExprNS.None(k, k); };
-const astString     = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, stripQuotes(t.value)); };
-const astTrue       = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, true); };
-const astFalse      = ([t]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, false); };
+const astVariable   = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Variable(k, k, k); };
+const astBigInt     = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.BigIntLiteral(k, k, t.value); };
+const astComplex    = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Complex(k, k, t.value); };
+const astNone       = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.None(k, k); };
+const astString     = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, stripQuotes(t.value)); };
+const astTrue       = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, true); };
+const astFalse      = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, false); };
 
 // ── Operator AST constructors (children → node) ────────────────────────
-const astBinary     = ([l, op, r]) => new ExprNS.Binary(l.startToken, r.endToken, l, op, r);
-const astBinaryTok  = ([l, op, r]) => new ExprNS.Binary(l.startToken, r.endToken, l, toAstToken(op), r);
-const astBoolOp     = ([l, op, r]) => new ExprNS.BoolOp(l.startToken, r.endToken, l, toAstToken(op), r);
-const astUnary      = ([op, arg]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg);
-const astCompare    = ([l, op, r]) => new ExprNS.Compare(l.startToken, r.endToken, l, op, r);
+const astBinary     = ([l, op, r]: [ExprNS.Expr, Token, ExprNS.Expr]) => new ExprNS.Binary(l.startToken, r.endToken, l, op, r);
+const astBinaryTok  = ([l, op, r]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => new ExprNS.Binary(l.startToken, r.endToken, l, toAstToken(op), r);
+const astBoolOp     = ([l, op, r]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => new ExprNS.BoolOp(l.startToken, r.endToken, l, toAstToken(op), r);
+const astUnary      = ([op, arg]: [moo.Token, ExprNS.Expr]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg);
+const astCompare    = ([l, op, r]: [ExprNS.Expr, Token, ExprNS.Expr]) => new ExprNS.Compare(l.startToken, r.endToken, l, op, r);
 
 // ── Token / list helpers ────────────────────────────────────────────────
-const tok           = ([t]) => toAstToken(t);
-const flatList      = ([first, rest]) => [first, ...rest.map(d => d[1])];
-const tokList       = ([first, rest]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))];
+const tok           = ([t]: [moo.Token]) => toAstToken(t);
+const flatList      = <T>([first, rest]: [T, [unknown, T][]]): T[] => [first, ...rest.map(d => d[1])];
+const tokList       = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))];
 %}
 
 @lexer pythonLexer
@@ -82,9 +83,9 @@ const tokList       = ([first, rest]) => [toAstToken(first), ...rest.map(d => to
 # ============================================================================
 
 program -> (import_stmt %newline):* (statement | %newline):*
-  {% ([imports, stmts]) => {
+  {% ([imports, stmts]: [[StmtNS.FromImport, moo.Token][], ([StmtNS.Stmt] | [moo.Token])[]]) => {
        const importNodes = imports.map(d => d[0]);
-       const stmtNodes = stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined);
+       const stmtNodes = stmts.map(d => d[0]).filter(s => 'startToken' in s);
        const filtered = [...importNodes, ...stmtNodes];
        const start = filtered[0]
          ? filtered[0].startToken
@@ -101,7 +102,7 @@ program -> (import_stmt %newline):* (statement | %newline):*
 
 import_stmt ->
     "from" dotted_name "import" import_clause
-      {% ([kw, mod,, names]) => {
+      {% ([kw, mod,, names]: [moo.Token, Token, moo.Token, StmtNS.FromImport["names"]]) => {
            const last = names[names.length-1];
            const endTok = last.alias || last.name;
            return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
@@ -109,8 +110,8 @@ import_stmt ->
 
 # dotted-name ::= name ( . name )...                     [python_1_bnf.tex line 20]
 dotted_name -> %name ("." %name):*
-  {% ([first, rest]) => {
-       let tok = toAstToken(first);
+  {% ([first, rest]: [moo.Token, [moo.Token, moo.Token][]]) => {
+       const tok = toAstToken(first);
        for (const [, n] of rest) {
          const right = toAstToken(n);
          tok.lexeme = tok.lexeme + '.' + right.lexeme;
@@ -121,7 +122,7 @@ dotted_name -> %name ("." %name):*
 # import-clause ::= import-as-names | ( import-as-names ) [python_1_bnf.tex line 21-22]
 import_clause ->
     import_as_names  {% id %}
-  | "(" import_as_names ")"  {% ([, ns]) => ns %}
+  | "(" import_as_names ")"  {% ([, ns, ]: [moo.Token, StmtNS.FromImport["names"][number], moo.Token]) => ns %}
 
 # import-as-names ::= import-as-name (, import-as-name)... [python_1_bnf.tex line 23]
 import_as_names -> import_as_name ("," import_as_name):*
@@ -129,8 +130,8 @@ import_as_names -> import_as_name ("," import_as_name):*
 
 # import-as-name ::= name [ as name ]                     [python_1_bnf.tex line 24]
 import_as_name ->
-    %name  {% ([t]) => ({ name: toAstToken(t), alias: null }) %}
-  | %name "as" %name  {% ([t,, a]) => ({ name: toAstToken(t), alias: toAstToken(a) }) %}
+    %name  {% ([t]: [moo.Token]) => ({ name: toAstToken(t), alias: null }) %}
+  | %name "as" %name  {% ([t,, a]: [moo.Token, moo.Token, moo.Token]) => ({ name: toAstToken(t), alias: toAstToken(a) }) %}
 
 # ============================================================================
 # statement                                      [python_1_bnf.tex lines 25-29]
@@ -158,62 +159,62 @@ statement ->
       {% id %}
 
 statementAssign -> %name "=" expression
-  {% ([n,, v]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
+  {% ([n,, v]: [moo.Token, moo.Token, ExprNS.Expr]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
 
 statementAnnAssign ->
     %name ":" expression "=" expression
-      {% ([n,, ann,, v]) => { const tok = toAstToken(n); return new StmtNS.AnnAssign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v, ann); } %}
+      {% ([n,, ann,, v]: [moo.Token, moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) => { const tok = toAstToken(n); return new StmtNS.AnnAssign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v, ann); } %}
   | %name ":" expression
-      {% ([n,, ann]) => {
+      {% ([n,, ann]: [moo.Token, moo.Token, ExprNS.Expr]) => {
            const nameTok = toAstToken(n);
            const dummyVal = new ExprNS.None(ann.endToken, ann.endToken);
            return new StmtNS.AnnAssign(nameTok, ann.endToken, new ExprNS.Variable(nameTok, nameTok, nameTok), dummyVal, ann);
          } %}
 
 statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression
-  {% function(d) {
-       var obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
-       var sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
+  {% function(d: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token, moo.Token, ExprNS.Expr]) {
+       const obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
+       const sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
        return new StmtNS.Assign(obj.startToken, val.endToken, sub, val);
      } %}
 
 statementReturn ->
     "return" expression
-      {% ([kw, expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
+      {% ([kw, expr]: [moo.Token, ExprNS.Expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
   | "return"
-      {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
+      {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
 
 statementPass -> "pass"
-  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
+  {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Pass(tok, tok); } %}
 
 statementBreak -> "break"
-  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Break(tok, tok); } %}
+  {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Break(tok, tok); } %}
 
 statementContinue -> "continue"
-  {% ([t]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
+  {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
 
 statementGlobal -> "global" %name
-  {% ([kw, n]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
 
 statementNonlocal -> "nonlocal" %name
-  {% ([kw, n]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
 
 statementAssert -> "assert" expression
-  {% ([kw, e]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
+  {% ([kw, e]: [moo.Token, ExprNS.Expr]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
 
 statementExpr -> expression
-  {% ([e]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
+  {% ([e]: [ExprNS.Expr]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
 
 statementWhile -> "while" expression ":" block
-  {% ([kw, test,, body]) =>
+  {% ([kw, test,, body]: [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
        new StmtNS.While(toAstToken(kw), body[body.length-1].endToken, test, body) %}
 
 statementFor -> "for" %name "in" expression ":" block
-  {% ([kw, target,, iter,, body]) =>
+  {% ([kw, target,, iter,, body]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
        new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
 
 statementDef -> "def" %name params ":" block
-  {% ([kw, name, params,, body]) =>
+  {% ([kw, name, params,, body]: [moo.Token, moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
        new StmtNS.FunctionDef(toAstToken(kw), body[body.length-1].endToken,
          toAstToken(name), params, body, []) %}
 
@@ -222,10 +223,10 @@ statementDef -> "def" %name params ":" block
 # ============================================================================
 
 if_statement -> "if" expression ":" block ("elif" expression ":" block):* ("else" ":" block):?
-  {% ([kw, test,, body, elifs, elseBlock]) => {
-       let else_ = elseBlock ? elseBlock[0][2] : null;
+  {% ([kw, test,, body, elifs, elseBlock]: [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[], [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]][], [moo.Token, moo.Token, StmtNS.Stmt[]]]) => {
+       let else_ = elseBlock ? elseBlock[2] : null;
        for (let i = elifs.length - 1; i >= 0; i--) {
-         const [ekw, etest, ecolon, ebody] = elifs[i];
+         const [ekw, etest,, ebody] = elifs[i];
          const endTok = else_ && else_.length > 0 ? else_[else_.length-1].endToken : ebody[ebody.length-1].endToken;
          else_ = [new StmtNS.If(toAstToken(ekw), endTok, etest, ebody, else_)];
        }
@@ -247,7 +248,7 @@ names -> %name ("," %name):*
 block ->
     blockInline %newline                         {% list %}
   | %newline %indent (statement | %newline):+ %dedent
-      {% ([,, stmts]) => stmts.map(d => d[0]).filter(s => s && s.startToken !== undefined) %}
+      {% ([,, stmts]: [moo.Token, moo.Token, ([StmtNS.Stmt] | [moo.Token])[]]) => stmts.map(d => d[0]).filter(s => s && 'startToken' in s) %}
 
 blockInline ->
     statementAssign       {% id %}
@@ -268,23 +269,23 @@ blockInline ->
 
 rest_names ->
     %name
-      {% ([t]) => { const tok = toAstToken(t); tok.isStarred = false; return [tok]; } %}
+      {% ([t]: [moo.Token]) => { const tok = toFunctionParam(t, false); return [tok]; } %}
   | "*" %name
-      {% ([, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [tok]; } %}
+      {% ([, t]: [moo.Token, moo.Token]) => { const tok = toFunctionParam(t, true); return [tok]; } %}
   | rest_names "," %name
-      {% ([params,, t]) => { const tok = toAstToken(t); tok.isStarred = false; return [...params, tok]; } %}
+      {% ([params,, t]: [FunctionParam[], moo.Token, moo.Token]) => { const tok = toFunctionParam(t, false); return [...params, tok]; } %}
   | rest_names "," "*" %name
-      {% ([params,,, t]) => { const tok = toAstToken(t); tok.isStarred = true; return [...params, tok]; } %}
+      {% ([params,,, t]: [FunctionParam[], moo.Token, moo.Token, moo.Token]) => { const tok = toFunctionParam(t, true); return [...params, tok]; } %}
 
 params ->
     "(" ")"                                   {% drop %}
-  | "(" rest_names ")"                        {% ([, ps]) => ps %}
+  | "(" rest_names ")"                        {% ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => ps %}
 
 # ============================================================================
 # expression ::= ...                             [python_1_bnf.tex lines 35-46]
 # ============================================================================
 
-expression -> expressionOr "if" expressionOr "else" expression {% ([cons, , test,, alt]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt) %}
+expression -> expressionOr "if" expressionOr "else" expression {% ([cons, , test,, alt] : [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) => new ExprNS.Ternary(cons.startToken, alt.endToken, test, cons, alt) %}
   | expressionOr                                   {% id %}
   | lambda_expr                                {% id %}
 
@@ -319,9 +320,9 @@ expressionCmpOp ->
   | %lessequal        {% tok %}
   | %notequal         {% tok %}
   | "in"              {% tok %}
-  | "not" "in"        {% ([t]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; return tok; } %}
+  | "not" "in"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; return tok; } %}
   | "is"              {% tok %}
-  | "is" "not"        {% ([t]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; return tok; } %}
+  | "is" "not"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; return tok; } %}
 
 expressionAdd ->
     expressionAdd expressionAddOp expressionMul  {% astBinary %}
@@ -350,11 +351,11 @@ expressionPow ->
 
 expressionPost ->
     expressionPost %lsqb expression %rsqb
-      {% ([obj, , idx, rsqb]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
+      {% ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
   | expressionPost "(" expressions ")"
-      {% ([callee,, args, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+      {% ([callee,, args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token])  => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
   | expressionPost "(" ")"
-      {% ([callee,, rparen]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
+      {% ([callee,, rparen]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
   | atom                                       {% id %}
 
 # ============================================================================
@@ -363,14 +364,14 @@ expressionPost ->
 
 atom ->
     "(" expression ")"
-      {% ([, e]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
+      {% ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
   | %lsqb %rsqb
-      {% ([l, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
+      {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
   | %lsqb expressions %rsqb
-      {% ([l, elems, r]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
+      {% ([l, elems, r]: [moo.Token, ExprNS.Expr[], moo.Token]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
   | %name                                        {% astVariable %}
   | %number_float
-      {% ([t]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
+      {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
   | %number_int                                  {% astBigInt %}
   | %number_hex                                  {% astBigInt %}
   | %number_oct                                  {% astBigInt %}
@@ -387,21 +388,21 @@ atom ->
 
 lambda_expr ->
     "lambda" names ":" expression
-      {% ([kw, params,, body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body) %}
+      {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body) %}
   | "lambda" names %doublecolon block
-      {% ([kw, params,, body]) =>
+      {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
            new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, params, body, []) %}
   | "lambda" ":" expression
-      {% ([kw,, body]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body) %}
+      {% ([kw,, body]: [moo.Token, moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body) %}
   | "lambda" %doublecolon block
-      {% ([kw,, body]) =>
+      {% ([kw,, body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) =>
            new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, [], body, []) %}
 
 # ============================================================================
 # expressions ::= ...                            [python_1_bnf.tex line 51]
 # ============================================================================
 
-expressions -> expression ("," expression):* (","):?
+expressions -> expression ("," expression):* (%comma):?
   {% flatList %}
 
 # ============================================================================
