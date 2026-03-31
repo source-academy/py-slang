@@ -18,8 +18,7 @@ export const TYPE_TAG = {
 } as const;
 
 export const SHADOW_STACK_TAG = {
-  // upper 32: pointer; lower 32: length
-  LIST_STATE: -1,
+  LIST_STATE: -1, // upper 32: pointer; lower 32: length
   CALL_RETURN_ADDR: -2,
   CALL_NEW_ENV: -3,
 };
@@ -1360,8 +1359,11 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     })
     .results(i32, i64)
     .body(
-      // the new env pointer is rooted in CURR_ENV global, so no need to remain on shadow stack after this point
-      global.set(CURR_ENV, i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))))),
+      // the new env pointer will be rooted in CURR_ENV global, so no need to remain on shadow stack after this point
+      global.set(
+        CURR_ENV,
+        i32.wrap_i64(i64.shr_u(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))), i64.const(32))),
+      ),
       wasm.call(DISCARD_SHADOW_STACK_FX),
 
       // pop closure from shadow stack into locals
@@ -1622,17 +1624,21 @@ export const SET_LEX_ADDR_FX = wasm
     wasm.unreachable(),
   );
 
-export const SET_CALL_CONTIGUOUS_BLOCK_FX = wasm
-  .func("$_set_call_contiguous_block")
+export const SET_CONTIGUOUS_BLOCK_FX = wasm
+  .func("$_set_contiguous_block")
   .params({ $index: i32, $tag: i32, $value: i64, $offset: i32, $is_starred: i32 })
-  .locals({ $addr: i32 })
+  .locals({ $addr: i32, $state_val: i64 })
   .body(
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
 
     wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
-    wasm.raw`(i32.wrap_i64) (local.set $addr) (drop)`,
+    wasm.raw`(local.set $state_val) (drop)`,
+
+    // top shadow stack payload packs pointer in upper 32 bits and WIP length in lower 32 bits.
+    // This works for both CALL_NEW_ENV and LIST_STATE.
+    local.set("$addr", i32.wrap_i64(i64.shr_u(local.get("$state_val"), i64.const(32)))),
 
     i32.store(
       i32.add(i32.add(local.get("$addr"), local.get("$offset")), i32.mul(local.get("$index"), i32.const(12))),
@@ -1645,36 +1651,9 @@ export const SET_CALL_CONTIGUOUS_BLOCK_FX = wasm
       ),
       local.get("$value"),
     ),
-  );
 
-export const SET_LIST_CONTIGUOUS_BLOCK_FX = wasm
-  .func("$_set_list_contiguous_block")
-  .params({ $index: i32, $tag: i32, $value: i64 })
-  .locals({ $addr: i32, $state_tag: i32, $state_val: i64 })
-  .body(
-    wasm
-      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
-      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`),
-
-    wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
-    wasm.raw`(local.set $state_val) (local.set $state_tag)`,
-
-    // LIST_STATE payload packs list pointer in upper 32 bits and WIP length in lower 32 bits
-    local.set("$addr", i32.wrap_i64(i64.shr_u(local.get("$state_val"), i64.const(32)))),
-
-    i32.store(
-      i32.add(local.get("$addr"), i32.mul(local.get("$index"), i32.const(12))),
-      local.get("$tag"),
-    ),
-    i64.store(
-      i32.add(i32.add(local.get("$addr"), i32.const(4)), i32.mul(local.get("$index"), i32.const(12))),
-      local.get("$value"),
-    ),
-
-    // increment WIP list length by 1 in LIST_STATE (lower 32 bits)
-    wasm
-      .if(i32.eq(local.get("$state_tag"), i32.const(SHADOW_STACK_TAG.LIST_STATE)))
-      .then(i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), i64.add(local.get("$state_val"), i64.const(1)))),
+    // increment WIP length/count by 1 in top state payload (lower 32 bits)
+    i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), i64.add(local.get("$state_val"), i64.const(1))),
   );
 
 export const TOKENIZE_FX = wasm
@@ -1749,8 +1728,7 @@ export const nativeFunctions = [
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
   SET_LEX_ADDR_FX,
-  SET_CALL_CONTIGUOUS_BLOCK_FX,
-  SET_LIST_CONTIGUOUS_BLOCK_FX,
+  SET_CONTIGUOUS_BLOCK_FX,
   TOKENIZE_FX,
   PARSE_FX,
 ];

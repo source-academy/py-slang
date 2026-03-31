@@ -5,7 +5,7 @@ import {
   ERROR_MAP,
   MAKE_LIST_FX,
   PEEK_SHADOW_STACK_FX,
-  SET_LIST_CONTIGUOUS_BLOCK_FX,
+  SET_CONTIGUOUS_BLOCK_FX,
   SHADOW_STACK_TAG,
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
@@ -2416,19 +2416,19 @@ x
       );
       const afterSet0 = insertInArray(
         node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
-        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
         [log],
         { matchIndex: 0 },
       );
       const afterSet1 = insertInArray(
         node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
-        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
         [log],
         { matchIndex: 1 },
       );
       const afterSet2 = insertInArray(
         node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
-        instruction => isFunctionCall(instruction, SET_LIST_CONTIGUOUS_BLOCK_FX),
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
         [log],
         { matchIndex: 2 },
       );
@@ -2558,7 +2558,7 @@ f(10)
           instruction != null &&
           typeof instruction === "object" &&
           "op" in instruction &&
-          instruction.op === "i64.extend_i32_u",
+          instruction.op === "i64.or",
         [
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
@@ -2598,6 +2598,58 @@ f(10)
       expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.CALL_NEW_ENV);
       expect(rawOutputs[1][0]).toBe(TYPE_TAG.CLOSURE);
       expect(rawOutputs[2][0]).toBe(SHADOW_STACK_TAG.CALL_RETURN_ADDR);
+    });
+
+    it("CALL_NEW_ENV tracks stable pointer and WIP arg length during call setup", async () => {
+      const pythonCode = `
+def f(a, b, c):
+    return a
+f(10, 20, 30)
+`;
+
+      const log = wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)));
+
+      const afterCallStatePush = insertInArray(
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SILENT_PUSH_SHADOW_STACK_FX),
+        [log],
+        { matchIndex: 1 },
+      );
+      const afterSet0 = insertInArray(
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 0 },
+      );
+      const afterSet1 = insertInArray(
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 1 },
+      );
+      const afterSet2 = insertInArray(
+        node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+        instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
+        [log],
+        { matchIndex: 2 },
+      );
+
+      const { rawOutputs } = await expectShadowStackToEqual(pythonCode, [], {
+        irPasses: [afterCallStatePush, afterSet0, afterSet1, afterSet2],
+      });
+
+      expect(rawOutputs).toHaveLength(4);
+      rawOutputs.forEach(([tag]) => expect(tag).toBe(SHADOW_STACK_TAG.CALL_NEW_ENV));
+
+      const basePointer = (rawOutputs[0][1] >> 32n) & 0xffffffffn;
+
+      rawOutputs.forEach(([, val], index) => {
+        const pointer = (val >> 32n) & 0xffffffffn;
+        const length = Number(val & 0xffffffffn);
+
+        expect(pointer).toBe(basePointer);
+        expect(length).toBe(index);
+      });
     });
 
     it("function definition should NOT push closure to stack", async () => {

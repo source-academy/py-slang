@@ -51,9 +51,8 @@ import {
   PRE_APPLY_FX,
   RETURN_NONVOID_SUFFIX,
   RETURN_VOID_SUFFIX,
-  SET_CALL_CONTIGUOUS_BLOCK_FX,
+  SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
-  SET_LIST_CONTIGUOUS_BLOCK_FX,
   SET_LIST_ELEMENT_FX,
   SHADOW_STACK_BOTTOM,
   SHADOW_STACK_PTR,
@@ -560,7 +559,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // argument length. it returns the pointer to this env, which we push onto the
     // shadow stack.
 
-    // we manually set the arguments in the new environment using SET_CALL_CONTIGUOUS_BLOCK_FX
+    // we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
     // which reads the pointer to the new env from the shadow stack.
 
     // APPLY takes in the argument length. it reads the (3) call-state shadow stack values
@@ -579,18 +578,21 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
 
       wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(
-        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH new env pointer
-        i64.extend_i32_u(
-          wasm.call(PRE_APPLY_FX).args(
-            callee, // (2) callee is already PUSHED at this point
-            i32.const(args.length),
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH packed call env state: upper 32 = env pointer, lower 32 = WIP arg count
+        i64.shl(
+          i64.extend_i32_u(
+            wasm.call(PRE_APPLY_FX).args(
+              callee, // (2) callee is already PUSHED at this point
+              i32.const(args.length),
+            ),
           ),
+          i64.const(32),
         ),
       ),
 
       ...args.map((element, i) =>
         wasm
-          .call(SET_CALL_CONTIGUOUS_BLOCK_FX)
+          .call(SET_CONTIGUOUS_BLOCK_FX)
           .args(
             i32.const(i),
             element.arg,
@@ -811,11 +813,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const length = expr.elements.length;
     const elements = expr.elements.map(el => this.visit(el));
 
-    // SET_LIST_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
 
     // ! indicates actual arguments - the rest are for setting up the list
-    // in the shadow stack for SET_LIST_CONTIGUOUS_BLOCK_FX to write to
+    // in the shadow stack for SET_CONTIGUOUS_BLOCK_FX to write to
     return wasm.call(MAKE_LIST_FX).args(
       wasm
         .call(SILENT_PUSH_SHADOW_STACK_FX)
@@ -828,7 +830,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         ),
 
       ...elements.map((element, i) =>
-        wasm.call(SET_LIST_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element),
+        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0), i32.const(0)),
       ),
 
       /* ! */ i32.wrap_i64(
