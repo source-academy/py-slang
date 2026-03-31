@@ -30,10 +30,12 @@ import {
   DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
   FROM_SPACE_END_PTR,
+  GET_LAST_EXPR_RESULT_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
+  IS_TAG_GCABLE,
   LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
@@ -217,15 +219,16 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
-    const body = stmt.statements.map(s => this.visit(s));
-
-    // this matches the format of drop in visitSimpleExpr
-    const lastInstr = body.at(-1);
-    const hasLastInstr =
-      this.interactiveMode &&
-      lastInstr?.op === "drop" &&
-      lastInstr.value?.op === "drop" &&
-      lastInstr.value.value;
+    // In interactive mode, handle the last expression specially,
+    // since we want to return its value instead of None
+    const lastStmt = stmt.statements.at(-1);
+    const hasLastExprForReturn = this.interactiveMode && lastStmt instanceof StmtNS.SimpleExpr;
+    const body = hasLastExprForReturn
+      ? [
+          ...stmt.statements.slice(0, -1).map(s => this.visit(s)),
+          wasm.call(GET_LAST_EXPR_RESULT_FX).args(this.visit(lastStmt.expression)),
+        ]
+      : [...stmt.statements.map(s => this.visit(s)), wasm.call(MAKE_NONE_FX)];
 
     // collect all strings
     const strings: WasmData[] = [];
@@ -241,6 +244,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // exported functions for parse
     const exports: { [key in keyof WasmExports]: WasmExport } = {
       main: wasm.export("main").func("$main"),
+      collect: wasm.export("collect").func("$_collect"),
       log: wasm.export("log").func(LOG_FX.name),
       makeInt: wasm.export("makeInt").func(MAKE_INT_FX.name),
       makeFloat: wasm.export("makeFloat").func(MAKE_FLOAT_FX.name),
@@ -299,9 +303,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
             // declare built-in constants/functions in the global environment before user code
             ...this.builtIns,
 
-            ...(hasLastInstr
-              ? [...body.slice(0, -1), hasLastInstr]
-              : [...body, wasm.call(MAKE_NONE_FX)]),
+            ...body,
           ),
       )
       .exports(...Object.values(exports))
@@ -309,8 +311,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): WasmInstruction {
+    // Regardless of mode, drop value and check at runtime if tag is gcable
+    // If gcable, discard the shadow stack
+
     const expr = this.visit(stmt.expression);
-    return wasm.drop(wasm.drop(expr));
+    return wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(wasm.raw`${expr} (drop)`))
+      .then(wasm.call(DISCARD_SHADOW_STACK_FX));
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): WasmNumeric {

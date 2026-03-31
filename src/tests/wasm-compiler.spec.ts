@@ -2344,6 +2344,50 @@ describe("GC/Shadow stack manipulation tests", () => {
     return rest;
   };
 
+  describe("simple expression statement cleanup (non-interactive)", () => {
+    it("last simple expression statement with list literal leaves stack clean", async () => {
+      const pythonCode = `[1, 2, 3]`;
+      await expectShadowStackToEqual(pythonCode, [], {}, false);
+    });
+
+    it("last simple expression statement with GCable variable access leaves stack clean", async () => {
+      const pythonCode = `
+x = [1, 2, 3]
+x
+`;
+      await expectShadowStackToEqual(pythonCode, [], {}, false);
+    });
+
+    it("multiple simple expression statements with GCable finals leave stack clean", async () => {
+      const pythonCode = `
+1
+"hello"
+[1, 2, 3]
+`;
+      await expectShadowStackToEqual(pythonCode, [], {}, false);
+    });
+  });
+
+  describe("simple expression statement cleanup (interactive)", () => {
+    it("keeps only the final GCable expression on stack", async () => {
+      const pythonCode = `
+[1]
+"hello"
+[2, 3]
+`;
+      await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
+    });
+
+    it("keeps stack clean when final expression is non-GCable", async () => {
+      const pythonCode = `
+[1, 2]
+"hello"
+42
+`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+  });
+
   describe("MAKE_* tests", () => {
     it("MAKE_STRING pushes returned string to stack top", async () => {
       await expectShadowStackToEqual(`"hello"`, [TYPE_TAG.STRING]);
@@ -2558,7 +2602,7 @@ f(10)
           instruction != null &&
           typeof instruction === "object" &&
           "op" in instruction &&
-          instruction.op === "i64.or",
+          instruction.op === "i64.shl",
         [
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
           wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
