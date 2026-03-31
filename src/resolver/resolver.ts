@@ -406,6 +406,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.callee);
     this.resolve(expr.args);
   }
+  visitStarredExpr(expr: ExprNS.Starred): void {
+    this.resolve(expr.value);
+  }
   visitTernaryExpr(expr: ExprNS.Ternary): void {
     this.resolve(expr.predicate);
     this.resolve(expr.consequent);
