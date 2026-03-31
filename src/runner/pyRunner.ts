@@ -19,6 +19,7 @@ export interface IOptions {
 }
 
 function runPyAST(
+  context: Context,
   code: string,
   variant: number = 1,
   doValidate: boolean = false,
@@ -28,7 +29,13 @@ function runPyAST(
   const script = code + "\n";
   const ast = parse(script);
   if (doValidate) {
-    analyze(ast, script, variant, groups, preludeNames);
+    const errors = analyze(ast, script, variant, groups, preludeNames);
+    if (errors.length > 0) {
+      for (const error of errors.slice(0, -1)) {
+        displayError(context, error, ErrorType.EVALUATOR_SYNTAX);
+      }
+      throw errors[errors.length - 1];
+    }
   }
   return ast;
 }
@@ -58,6 +65,7 @@ export async function runInContext(
   let pyAst: Stmt;
   try {
     pyAst = runPyAST(
+      context,
       code,
       options.variant,
       !options.isPrelude,
