@@ -908,6 +908,7 @@ describe("Standard Library Tests", () => {
         ["arity(is_function)", 1n, null],
         ["arity(is_float)", 1n, null],
         ["arity(is_int)", 1n, null],
+        ["arity(len)", 1n, null],
         ["arity(max)", 2n, null],
         ["arity(min)", 2n, null],
         ["arity(random_random)", 0n, null],
@@ -926,6 +927,20 @@ describe("Standard Library Tests", () => {
         ["arity(None)", TypeError, null],
         ["arity('abc')", TypeError, null],
         ["arity(True)", TypeError, null],
+      ],
+      len: [
+        ["len('')", 0n, null],
+        ["len('abc')", 3n, null],
+        ["len('hello world')", 11n, null],
+        ["len('こんにちは')", 5n, null],
+        ["len('👋🌍')", 2n, null],
+        ["len(1)", TypeError, null],
+        ["len(1.0)", TypeError, null],
+        ["len(1+0j)", TypeError, null],
+        ["len(None)", TypeError, null],
+        ["len(True)", TypeError, null],
+        ["len(lambda x: x)", TypeError, null],
+        ["len(print)", TypeError, null],
       ],
     };
 
@@ -995,6 +1010,10 @@ describe("Standard Library Tests", () => {
         ["def f(x, y, *args, z):\n    pass\narity(f)", 2n, null],
         ["def f(*args, x, y, z):\n    pass\narity(f)", 0n, null],
         ["arity([1, 2, 3])", TypeError, null],
+      ],
+      len: [
+        ["len([1, 2, 3])", 3n, null], // len list
+        ["len([])", 0n, null], // len empty list
       ],
     };
     generateTestCases(miscTests, 3, [linkedList, stream, list, pairmutator]);

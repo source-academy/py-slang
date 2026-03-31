@@ -310,6 +310,20 @@ export class BuiltInFunctions {
     }
   }
 
+  @Validate(1, 1, "len", true)
+  static len(args: Value[], source: string, command: ControlItem, context: Context): BigIntValue {
+    const val = args[0];
+    if (val.type === "string" || val.type === "list") {
+      // The spread operator is used to count the number of Unicode code points
+      // in the string
+      return { type: "bigint", value: BigInt([...val.value].length) };
+    }
+    handleRuntimeError(
+      context,
+      new TypeError(source, command as ExprNS.Expr, context, val.type, "object with length"),
+    );
+  }
+
   static toStr(val: Value): string {
     return toPythonString(val);
   }

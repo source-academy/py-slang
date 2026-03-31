@@ -64,6 +64,7 @@
     "is_function",
     "is_float",
     "is_int",
+    "len",
     "max",
     "min",
     "random_random",
