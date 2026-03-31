@@ -92,6 +92,13 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(renderedResult).toBe("11 + 2j");
   });
 
+  it("pure imaginary output omits leading zero real part", async () => {
+    const pythonCode = `2j`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("2j");
+  });
+
   // --- STRING ARITHMETIC ---
   it("string concatenation with +", async () => {
     const pythonCode = `"hello" + " world"`;
@@ -3010,7 +3017,7 @@ describe("GC collect/copy tests", () => {
 
     expect(afterPtr).toBeGreaterThan(beforePtr);
     expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("0 + 2j");
+    expect(renderedResult).toBe("2j");
   });
 
   it("rewrites closure parent env after collect", async () => {

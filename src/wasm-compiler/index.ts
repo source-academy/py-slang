@@ -139,7 +139,7 @@ export async function compileToWasmAndRun(
     console: {
       log: (value: bigint) => capture(value.toString()),
       log_complex: (real: number, imag: number) =>
-        capture(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
+        capture(real === 0 ? `${imag}j` : `${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
       log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
       log_string: (offset: number, length: number) =>
         capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
