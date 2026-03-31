@@ -556,7 +556,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const callee = this.visit(expr.callee);
     const args = expr.args.map(arg => ({
       arg: this.visit(arg),
-      isStarred: false,
+      isStarred: arg instanceof ExprNS.Starred,
     }));
 
     // push the return address onto the shadow stack first (for APPLY later).
@@ -610,6 +610,10 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
       /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
     );
+  }
+
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+    return this.visit(expr.value);
   }
 
   visitReturnStmt(stmt: StmtNS.Return): WasmInstruction {

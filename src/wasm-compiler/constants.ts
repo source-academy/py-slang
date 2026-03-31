@@ -1554,19 +1554,21 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       ),
 
       wasm.if(local.get("$additional_args")).then(
-        // ALLOC a new environment with size = old env size + additional args from unpacking
+        // ALLOC a new environment with size = old env length + additional args from unpacking
         // push the callee back onto the stack for ALLOC_ENV to use as the parent env, then discard it after
         wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.CLOSURE), local.get("$val")),
         local.set(
           "$new_env",
-          wasm.call(ALLOC_ENV_FX).args(i32.add(local.get("$env_size"), local.get("$additional_args"))),
+          wasm
+            .call(ALLOC_ENV_FX)
+            .args(i32.add(i32.load(i32.add(global.get(CURR_ENV), i32.const(4))), local.get("$additional_args"))),
         ),
         wasm.call(DISCARD_SHADOW_STACK_FX),
 
         local.set("$arg_len", i32.add(local.get("$arg_len"), local.get("$additional_args"))),
         local.set("$write_ptr", i32.add(local.get("$new_env"), i32.const(ENV_HEAD_SIZE))),
 
-        // loop over the entire old environment, which = envSize
+        // loop over the entire old environment, which = old env length
         local.set("$i", i32.const(0)),
         wasm.loop("$unpack_loop").body(
           wasm.if(i32.lt_s(local.get("$i"), i32.load(i32.add(global.get(CURR_ENV), i32.const(4))))).then(

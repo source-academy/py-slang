@@ -372,21 +372,24 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   // UNSUPPORTED / NAME- OR STRING-DEPENDENT NODES
   visitFromImportStmt(_stmt: StmtNS.FromImport): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Import expressions are not supported in parse tree generation");
   }
   visitGlobalStmt(_stmt: StmtNS.Global): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Global declarations are not supported in parse tree generation");
   }
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Multi-lambda expressions are not supported in parse tree generation");
   }
   visitComplexExpr(_expr: ExprNS.Complex): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Complex expressions are not supported in parse tree generation");
   }
   visitAssertStmt(_stmt: StmtNS.Assert): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Assert statements are not supported in parse tree generation");
   }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Annotated assignment statements are not supported in parse tree generation");
+  }
+  visitStarredExpr(_expr: ExprNS.Starred): [number, bigint] {
+    throw new Error("Starred expressions are not supported in parse tree generation");
   }
 }
