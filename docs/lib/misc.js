@@ -1,18 +1,4 @@
 /**
- * Takes a <CODE>string</CODE> <CODE>s</CODE> as the first argument and a nonnegative
- * integer <CODE>i</CODE> as the second argument. If <CODE>i</CODE> is less than
- * the length of <CODE>s</CODE>, this function returns a one-character <CODE>string</CODE> that
- * contains the character of <CODE>s</CODE> at position <CODE>i</CODE>, counting from <CODE>0</CODE>.
- * If <CODE>i</CODE> is larger than or equal to the length of <CODE>s</CODE>, this function returns
- * <CODE>None</CODE>.
- *
- * @param {string} <CODE>s</CODE> - the given <CODE>string</CODE>
- * @param {int} <CODE>i</CODE> - the <CODE>index</CODE>
- * @returns {string} one-character <CODE>string</CODE> or <CODE>None</CODE>
- */
-function char_at(s, i) {}
-
-/**
  * A simplified version of the Python built-in <CODE>print</CODE> function.
  * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
  * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
@@ -145,21 +131,6 @@ function complex(value = 0) {}
  * @returns {string} the informal <CODE>string</CODE> representation of <CODE>object</CODE>
  */
 function str(object = "") {}
-
-/**
- * Return an integer object constructed from a <CODE>string</CODE>. If <CODE>base</CODE> is given,
- * the <CODE>string</CODE> is parsed as an integer in radix <CODE>base</CODE>. Otherwise, it defaults
- * to base 10.The <CODE>string</CODE> may include optional whitespace, a leading sign (<CODE>+</CODE>
- * or <CODE>-</CODE>), and underscores between digits.
- *
- * @param {string} <CODE>string</CODE> - A <CODE>string</CODE> representing an integer in a given base.
- * The string may include optional whitespace, a leading sign, and underscores between digits.
- * @param {int} <CODE>base</CODE> - The base (radix) for conversion. It must be <CODE>0</CODE>
- * or an integer in the range <CODE>2</CODE>–<CODE>36</CODE>. The default is <CODE>10</CODE>.
- * @returns {int} an integer object parsed from the provided <CODE>string</CODE> using the specified
- * <CODE>base</CODE>
- */
-function parse_int(string, base = 10) {}
 
 /**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
