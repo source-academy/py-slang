@@ -101,6 +101,7 @@ export interface BinOpInstr extends BaseInstr {
 export interface AppInstr extends BaseInstr {
   instrType: InstrType.APPLICATION;
   numOfArgs: number;
+  spreadIndices: number[];
   srcNode: Node;
 }
 

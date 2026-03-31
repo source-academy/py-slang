@@ -55,8 +55,12 @@ export const createEnvironment = (
     }
     const paramName = paramToken.lexeme;
     if (paramToken.isStarred) {
+      // Rest parameter: collect remaining args into a list value.
+      // Spread flattening in the Application handler detects these via
+      // val.type === "list" and expands val.value inline.
       environment.head[paramName] = { type: "list", value: args.slice(index) };
       consumed = true;
+      return;
     }
     if (index >= args.length) {
       handleRuntimeError(
