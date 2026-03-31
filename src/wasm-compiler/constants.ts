@@ -20,8 +20,12 @@ export const TYPE_TAG = {
 export const SHADOW_STACK_TAG = {
   LIST_STATE: -1, // upper 32: pointer; lower 32: length
   CALL_RETURN_ADDR: -2,
-  CALL_NEW_ENV: -3,
-};
+  CALL_NEW_ENV: -3, // upper 32: pointer; lower 32: length
+} as const;
+
+export const GC_SPECIAL_TAG = {
+  ENV: -4,
+} as const;
 
 export const ERROR_MAP = {
   NEG_NOT_SUPPORT: "Unary minus operator used on unsupported operand.",
@@ -48,7 +52,6 @@ export const ERROR_MAP = {
   OUT_OF_MEMORY: "Out of memory.",
   STACK_OVERFLOW: "Stack overflow.",
   STACK_UNDERFLOW: "Stack underflow.",
-  GC_COPY_UNKNOWN_TYPE: "Trying to copy an unknown runtime type during garbage collection.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -67,6 +70,7 @@ export const CURR_ENV = "$_current_env";
 export const ENV_HEAD_SIZE = 8;
 export const SHADOW_STACK_SLOT_SIZE = 12;
 export const SHADOW_STACK_RESERVED_SIZE = 1024;
+export const ENV_FORWARDING_BIT = 0x40000000;
 
 export const PEEK_SHADOW_STACK_FX = wasm
   .func("$_peek_shadow_stack")
@@ -156,39 +160,114 @@ export const IS_TAG_GCABLE = wasm
     ),
   );
 
+const COPY_FX_NAME = "$_copy";
 export const COPY_FX = wasm
-  .func("$_copy")
+  .func(COPY_FX_NAME)
   .params({ $tag: i32, $val: i64 })
-  .locals({ $new_ptr: i32, $len: i32 })
+  .locals({ $new_ptr: i32, $len: i32, $ptr: i32, $alloc_size: i32 })
   .results(i64)
   .body(
-    // complex
-    wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)))
-      .then(
-        local.set("$new_ptr", global.get(HEAP_PTR)),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
-        memory.copy(local.get("$new_ptr"), i32.wrap_i64(local.get("$val")), i32.const(16)),
-        wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
+    // gc-special environment pointer in low 32 bits
+    wasm.if(i32.eq(local.get("$tag"), i32.const(GC_SPECIAL_TAG.ENV))).then(
+      local.set("$ptr", i32.wrap_i64(local.get("$val"))),
+
+      // forwarding bit is at +4 offset, 2nd leftmost bit.
+      // forwarding address is at +0 offset, whole 32 bits.
+      wasm
+        .if(i32.and(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(ENV_FORWARDING_BIT)))
+        .then(wasm.return(i64.extend_i32_u(i32.load(local.get("$ptr"))))),
+
+      local.set(
+        "$len",
+        i32.add(i32.const(ENV_HEAD_SIZE), i32.mul(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(12))),
       ),
+      local.set("$new_ptr", global.get(HEAP_PTR)),
+      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$len"))),
+      memory.copy(local.get("$new_ptr"), local.get("$ptr"), local.get("$len")),
+
+      // install forwarding metadata on from-space env
+      // (overwrite length with the forwarding bit)
+      i32.store(local.get("$ptr"), local.get("$new_ptr")),
+      i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
+
+      wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
+    ),
+
+    // complex
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX))).then(
+      local.set("$ptr", i32.wrap_i64(local.get("$val"))),
+
+      // forwarding metadata is encoded in from-space memory at $ptr as an i64:
+      // upper 32 bits = forwarding address, lower 32 bits carries forwarding bit (2nd leftmost bit)
+      wasm
+        .if(i32.eq(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(ENV_FORWARDING_BIT)))
+        .then(wasm.return(i64.extend_i32_u(i32.load(local.get("$ptr"))))),
+
+      local.set("$new_ptr", global.get(HEAP_PTR)),
+      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
+      memory.copy(local.get("$new_ptr"), local.get("$ptr"), i32.const(16)),
+
+      // install forwarding metadata in from-space memory
+      i32.store(local.get("$ptr"), local.get("$new_ptr")),
+      i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
+
+      wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
+    ),
 
     // string
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING))).then(
+      // if string in data section, don't do anything since data section is immutable and won't be moved by GC
       wasm
         .if(i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), global.get(DATA_END)))
         .then(wasm.return(local.get("$val"))),
 
+      local.set("$ptr", i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))),
+      local.set("$len", i32.wrap_i64(local.get("$val"))),
+
+      // forwarding metadata is encoded in from-space memory at $ptr as an i64:
+      wasm
+        .if(i32.eq(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(ENV_FORWARDING_BIT)))
+        .then(
+          wasm.return(
+            i64.or(
+              i64.shl(i64.extend_i32_u(i32.load(local.get("$ptr"))), i64.const(32)),
+              i64.extend_i32_u(local.get("$len")),
+            ),
+          ),
+        ),
+
       local.set("$new_ptr", global.get(HEAP_PTR)),
-      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.tee("$len", i32.wrap_i64(local.get("$val"))))),
-      memory.copy(local.get("$new_ptr"), i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), local.get("$len")),
+      local.set("$alloc_size", wasm.select(i32.const(8), local.get("$len"), i32.lt_u(local.get("$len"), i32.const(8)))),
+      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$alloc_size"))),
+      memory.copy(local.get("$new_ptr"), local.get("$ptr"), local.get("$len")),
+
+      // forwarding metadata is encoded in from-space memory at $ptr as an i64:
+      // upper 32 bits = forwarding address, lower 32 bits carries forwarding bit (2nd leftmost bit)
+      i32.store(local.get("$ptr"), local.get("$new_ptr")),
+      i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
+
       wasm.return(
         i64.or(i64.shl(i64.extend_i32_u(local.get("$new_ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
       ),
     ),
 
-    // closure
+    // closure: payload low 32 bits is parent env pointer
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE))).then(
+      local.set("$new_ptr", i32.wrap_i64(local.get("$val"))),
 
-    // lists, tuples, and list_state
+      // null parent env means top-level closure: nothing to rewrite
+      wasm.if(local.get("$new_ptr")).then(
+        // keep high 32 bits, replace low 32 parent env with forwarded/copied env pointer
+        wasm.return(
+          i64.or(
+            i64.and(local.get("$val"), i64.const(BigInt("0xffffffff00000000"))),
+            wasm.call(COPY_FX_NAME).args(i32.const(GC_SPECIAL_TAG.ENV), i64.extend_i32_u(local.get("$new_ptr"))),
+          ),
+        ),
+      ),
+    ),
+
+    // lists, tuples, and list_state: upper 32 is pointer, lower 32 is length
     wasm
       .if(
         i32.or(
@@ -200,32 +279,85 @@ export const COPY_FX = wasm
         ),
       )
       .then(
-        local.set("$len", i32.mul(i32.wrap_i64(local.get("$val")), i32.const(12))),
+        local.set("$ptr", i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))),
+        local.set("$len", i32.wrap_i64(local.get("$val"))),
+
+        // forwarding metadata is encoded in from-space memory at $ptr as an i64:
+        // upper 32 bits = forwarding address, lower 32 bits carries forwarding bit (2nd leftmost bit)
+        wasm
+          .if(i32.eq(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(ENV_FORWARDING_BIT)))
+          .then(
+            wasm.return(
+              i64.or(
+                i64.shl(i64.extend_i32_u(i32.load(local.get("$ptr"))), i64.const(32)),
+                i64.extend_i32_u(local.get("$len")),
+              ),
+            ),
+          ),
+
         local.set("$new_ptr", global.get(HEAP_PTR)),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$len"))),
-        memory.copy(
-          local.get("$new_ptr"),
-          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-          local.get("$len"),
+        local.set("$alloc_size", i32.mul(local.get("$len"), i32.const(12))),
+        local.set(
+          "$alloc_size",
+          wasm.select(i32.const(8), local.get("$alloc_size"), i32.lt_u(local.get("$alloc_size"), i32.const(8))),
         ),
+        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$alloc_size"))),
+        memory.copy(local.get("$new_ptr"), local.get("$ptr"), i32.mul(local.get("$len"), i32.const(12))),
+
+        // install forwarding metadata in from-space memory
+        // (overwrite length with the forwarding bit)
+        i32.store(local.get("$ptr"), local.get("$new_ptr")),
+        i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
+
         wasm.return(
           i64.or(i64.shl(i64.extend_i32_u(local.get("$new_ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
         ),
       ),
 
-    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GC_COPY_UNKNOWN_TYPE))),
-    wasm.unreachable(),
+    // call env state: upper 32 = env pointer, lower 32 = WIP arg count
+    wasm.if(i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV))).then(
+      local.set("$new_ptr", i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))),
+
+      // null env pointer means there is no env payload to rewrite
+      wasm
+        .if(local.get("$new_ptr"))
+        .then(
+          wasm.return(
+            i64.or(
+              i64.shl(
+                wasm.call(COPY_FX_NAME).args(i32.const(GC_SPECIAL_TAG.ENV), i64.extend_i32_u(local.get("$new_ptr"))),
+                i64.const(32),
+              ),
+              i64.and(local.get("$val"), i64.const(0xffffffff)),
+            ),
+          ),
+        ),
+    ),
+
+    wasm.return(local.get("$val")),
   );
 
 export const COLLECT_FX = wasm
   .func("$_collect")
-  .locals({ $temp: i32, $free: i32, $scan: i32, $shadow_ptr: i32 })
+  .locals({
+    $scan: i32,
+    $shadow_ptr: i32,
+  })
   .body(
-    local.set("$free", global.get(FROM_SPACE_END_PTR)),
     local.set("$scan", global.get(FROM_SPACE_END_PTR)),
     local.set("$shadow_ptr", global.get(SHADOW_STACK_PTR)),
 
     global.set(HEAP_PTR, global.get(FROM_SPACE_END_PTR)),
+
+    // only copy CURR_ENV root here; BFS will discover and copy the rest
+    wasm
+      .if(global.get(CURR_ENV))
+      .then(
+        global.set(
+          CURR_ENV,
+          i32.wrap_i64(wasm.call(COPY_FX).args(i32.const(GC_SPECIAL_TAG.ENV), i64.extend_i32_u(global.get(CURR_ENV)))),
+        ),
+      ),
 
     // copy live objects in shadow stack to to-space
     wasm.loop("$copy_loop").body(
@@ -238,22 +370,38 @@ export const COLLECT_FX = wasm
         ),
 
         local.set("$shadow_ptr", i32.add(local.get("$shadow_ptr"), i32.const(SHADOW_STACK_SLOT_SIZE))),
+        wasm.br("$copy_loop"),
       ),
     ),
+
+    // BFS
+    wasm
+      .loop("$bfs_loop")
+      .body(
+        wasm
+          .if(i32.lt_u(local.get("$scan"), global.get(HEAP_PTR)))
+          .then(wasm.if(wasm.call(IS_TAG_GCABLE).args(i32.load(local.get("$scan")))).then()),
+      ),
   );
 
 // returns allocated block start address and moves heap pointer by amount bytes
 export const MALLOC_FX = wasm
   .func("$_malloc")
   .params({ $amount: i32 })
-  .locals({ $new_heap: i32 })
+  .locals({ $new_heap: i32, $alloc_amount: i32 })
   .results(i32)
   .body(
-    local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
+    // All heap-allocated values that can be moved by GC need at least 8 bytes
+    // so forwarding metadata (bit + address) can always be installed in from-space.
+    local.set(
+      "$alloc_amount",
+      wasm.select(i32.const(8), local.get("$amount"), i32.lt_u(local.get("$amount"), i32.const(8))),
+    ),
+    local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$alloc_amount"))),
 
     wasm.if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR))).then(
       wasm.call(COLLECT_FX),
-      local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
+      local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$alloc_amount"))),
 
       wasm
         .if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR)))
@@ -1690,6 +1838,20 @@ export const PARSE_FX = wasm
       .args(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.wrap_i64(local.get("$val"))),
   );
 
+// Helper function for interactive mode: takes (tag, value) and returns either
+// the shadow stack value (if tag is gcable) or the original (tag, value)
+export const GET_LAST_EXPR_RESULT_FX = wasm
+  .func("$_get_last_expr_result")
+  .params({ $tag: i32, $value: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .results(i32, i64)
+      .then(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)))
+      .else(local.get("$tag"), local.get("$value")),
+  );
+
 export const nativeFunctions = [
   COPY_FX,
   COLLECT_FX,
@@ -1731,4 +1893,5 @@ export const nativeFunctions = [
   SET_CONTIGUOUS_BLOCK_FX,
   TOKENIZE_FX,
   PARSE_FX,
+  GET_LAST_EXPR_RESULT_FX,
 ];

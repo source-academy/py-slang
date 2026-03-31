@@ -10,6 +10,7 @@ import { MetacircularGenerator } from "./metacircularGenerator";
 
 export type WasmExports = {
   main: () => [number, bigint];
+  collect: () => void;
   log: (tag: number, value: bigint) => void;
   makeInt: (value: bigint) => [number, bigint];
   makeFloat: (value: number) => [number, bigint];

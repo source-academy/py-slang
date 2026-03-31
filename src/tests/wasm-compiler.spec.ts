@@ -2,7 +2,12 @@ import { i32, wasm } from "@sourceacademy/wasm-util";
 import { CompileOptions, compileToWasmAndRun } from "../wasm-compiler";
 import {
   APPLY_FX_NAME,
+  ARITHMETIC_OP_FX,
+  COLLECT_FX,
   ERROR_MAP,
+  GET_LAST_EXPR_RESULT_FX,
+  MAKE_CLOSURE_FX,
+  MAKE_COMPLEX_FX,
   MAKE_LIST_FX,
   PEEK_SHADOW_STACK_FX,
   SET_CONTIGUOUS_BLOCK_FX,
@@ -2324,7 +2329,7 @@ describe("parse function tests", () => {
   });
 });
 
-describe("GC/Shadow stack manipulation tests", () => {
+describe("Shadow stack manipulation tests", () => {
   const expectShadowStackToEqual = async (
     pythonCode: string,
     expectedTags: number[],
@@ -2916,6 +2921,124 @@ set_tail(x, [3, 4])
       const pythonCode = `parse("def f():\\n    nonlocal x\\n    x = 5\\n    return x")`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
+  });
+});
+
+describe("GC collect/copy tests", () => {
+  const topOfShadowStack = wasm
+    .call("$_log_raw")
+    .args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)));
+
+  it("moves list payload and preserves logical value", async () => {
+    const pythonCode = `[1, 2, 3]`;
+
+    const forceCollectAfterListCreate = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, MAKE_LIST_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterListCreate],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.LIST);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.LIST);
+
+    const beforePtr = rawOutputs[0][1] >> 32n;
+    const afterPtr = rawOutputs[1][1] >> 32n;
+    const beforeLen = Number(rawOutputs[0][1] & 0xffffffffn);
+    const afterLen = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    // GC copies from FROM-space to TO-space. TO-space is initially at a higher base address, so
+    // forwarded pointers should increase after collection.
+    expect(afterPtr).toBeGreaterThan(beforePtr);
+    expect(afterLen).toBe(beforeLen);
+    expect(rawResult[0]).toBe(TYPE_TAG.LIST);
+    expect(renderedResult).toBe("[1, 2, 3]");
+  });
+
+  it("moves heap string payload and preserves bytes", async () => {
+    const pythonCode = `"foo" + "bar"`;
+
+    const forceCollectAfterConcat = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, ARITHMETIC_OP_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterConcat],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.STRING);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.STRING);
+
+    const beforePtr = rawOutputs[0][1] >> 32n;
+    const afterPtr = rawOutputs[1][1] >> 32n;
+    const beforeLen = Number(rawOutputs[0][1] & 0xffffffffn);
+    const afterLen = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    expect(afterPtr).toBeGreaterThan(beforePtr);
+    expect(beforeLen).toBe(6);
+    expect(afterLen).toBe(6);
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("foobar");
+  });
+
+  it("moves complex payload and preserves numeric value", async () => {
+    const pythonCode = `2j`;
+
+    const forceCollectAfterComplexCreate = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, MAKE_COMPLEX_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterComplexCreate],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.COMPLEX);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.COMPLEX);
+
+    const beforePtr = rawOutputs[0][1];
+    const afterPtr = rawOutputs[1][1];
+
+    expect(afterPtr).toBeGreaterThan(beforePtr);
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("0 + 2j");
+  });
+
+  it("rewrites closure parent env after collect", async () => {
+    const pythonCode = `lambda x: x + 1`;
+
+    const forceCollectAfterClosureCreate = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, MAKE_CLOSURE_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterClosureCreate],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.CLOSURE);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.CLOSURE);
+
+    const beforeMeta = rawOutputs[0][1] & 0xffffffff00000000n;
+    const afterMeta = rawOutputs[1][1] & 0xffffffff00000000n;
+    const beforeParent = Number(rawOutputs[0][1] & 0xffffffffn);
+    const afterParent = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    expect(afterMeta).toBe(beforeMeta);
+    expect(beforeParent).not.toBe(afterParent);
+    expect(afterParent).toBeGreaterThan(beforeParent);
+    expect(rawResult[0]).toBe(TYPE_TAG.CLOSURE);
   });
 });
 
