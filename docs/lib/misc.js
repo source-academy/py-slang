@@ -233,6 +233,14 @@ function real(x) {}
 function imag(x) {}
 
 /**
+ * Return the length of an object <CODE>s</CODE>, where <CODE>s</CODE> is a container for a finite number of values (e.g., a string).
+ * 
+ * @param {string | list} <CODE>s</CODE> - a container object whose length is to be computed
+ * @returns {int} the length of <CODE>s</CODE>
+ */
+function len(s) {}
+
+/**
  *
  * An object frequently used to represent the absence of a value.
  * See also <a href="https://docs.python.org/3.13/library/constants.html#None">Python 3.13 Documentation</a>.

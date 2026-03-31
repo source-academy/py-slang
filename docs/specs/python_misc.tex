@@ -3,10 +3,6 @@
 The following
 names are provided by the MISC library:
 \begin{itemize}
-  \item
-    \verb#time_time#\textt{()}: \textit{primitive},
-    returns number of milliseconds elapsed since
-    January 1, 1970 00:00:00 UTC
   \item \verb#int#\texttt{(x)}, \verb#float#\texttt{(x)},
     \verb#bool#\texttt{(x)}, \verb#complex#\texttt{(x)}, \verb#str#\texttt{(x)}: \textit{primitive},
     converts the value \texttt{x} to an integer, a float, a boolean, a complex number, or a string
@@ -43,14 +39,48 @@ names are provided by the MISC library:
     If the ``Cancel'' button is pressed, \texttt{input} returns a
     non-string value.
   \item
-    \verb#print#\texttt{(*x)}:
-    \textit{primitive}, takes in any number of parameters, converts them to their string
+    \verb#min#\texttt{(x, y, *args)} and \verb#max#\texttt{(x, y, *args)}: \textit{primitive}, 
+    takes in two or more arguments and returns the smallest and largest of the arguments respectively. 
+    If multiple arguments are equally small or large, the first one encountered in the argument list is returned. 
+    The arguments must be mutually comparable (i.e., they must support the < and > operators).
+  \item
+    \verb#abs#\texttt{(x)}: \textit{primitive}, returns the absolute value of \texttt{x}.
+    For an \verb#int# input, it returns the non-negative integer equivalent. 
+    For a \verb#float# input, it returns the positive floating-point number representing its magnitude.
+    For a \verb#complex# input, it returns the modulus of the complex number, which is a non-negative float.
+  \item
+    \verb#print#\texttt{(*x)}: \textit{primitive}, takes in any number of parameters, converts them to their string
     representations using \verb#str# and writes them to the console, followed by a newline character.
   \item
-    \verb#error#\texttt{(*x)}:
-    \textit{primitive}, takes in any number of parameters, converts them to their string
+    \verb#error#\texttt{(*x)}: \textit{primitive}, takes in any number of parameters, converts them to their string
     representations using \verb#str# and writes them to the console, followed by a newline character.
     The evaluation of any call of \texttt{error} aborts the running program immediately.
+  \item
+    \verb#arity#\texttt{(f)}: \textit{primitive}, 
+    takes in a function \texttt{f} and returns the minimum number of parameters that \texttt{f} can accept.
+  \item
+    \verb#round#\texttt{(x)}\footnote{
+      In \href{https://docs.python.org/3.13/library/functions.html\#round}{Python 3.13},
+      when the value to be rounded is exactly halfway between two possible rounded values, it rounds to the nearest even number. For example, \texttt{round(2.5)} would return 2, while \texttt{round(3.5)} would return 4.
+    }: \textit{primitive}, 
+    takes in an int or float \texttt{x} and returns the nearest integer to \texttt{x}.
+  \item
+    \verb#round#\texttt{(x, n)}: \textit{primitive},
+    takes in an int or float \texttt{x} and an int \texttt{n}, 
+    and returns the value of \texttt{x} rounded to \texttt{n} digits of precision after the decimal point.
+    If the second argument \texttt{n} is None, it is treated as \verb#round#\texttt{(x)}.
+  \item
+    \verb#len#\texttt{(s)}: \textit{primitive},
+    takes in a container for a finite number of values (e.g., a string), and returns the number of elements in the container.
+  \item
+    \verb#time_time#\texttt{()}: \textit{primitive},
+    returns number of milliseconds elapsed since
+    January 1, 1970 00:00:00 UTC
+  \item
+    \verb#random_random#\texttt{()}: \textit{primitive},
+    returns a random float uniformly in the range $[0.0, 1.0)$.
+  
+
 \end{itemize}
 All library functions can be assumed to run
 in $O(1)$ time, except \texttt{print}, \texttt{error}, \texttt{str} and \texttt{repr},
