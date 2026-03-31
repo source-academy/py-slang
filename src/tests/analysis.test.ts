@@ -5,11 +5,10 @@
  *
  * Accessed through the `analyze(ast, source, chapter)` entry point.
  */
+import { ExprNS, StmtNS } from "../ast-types";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver";
-import { StmtNS, ExprNS } from "../ast-types";
 import { FeatureNotSupportedError } from "../validator";
-import { ResolverErrors } from "../resolver/errors";
 import { traverseAST } from "../validator/traverse";
 
 // ---------------------------------------------------------------------------
@@ -121,22 +120,6 @@ describe("Chapter 1 — most restrictive", () => {
     expect(() => analyzeOk("x = 1\nx = 2", 1)).toThrow();
   });
 
-  test("annotated reassignment is banned in chapter 1 (AnnAssign then AnnAssign)", () => {
-    // Use 'abs' (a global builtin) as the annotation so the resolver doesn't
-    // throw NameNotFoundError on the annotation itself.
-    expect(() => analyzeOk("x: abs = 1\nx: abs = 2", 1)).toThrow(
-      ResolverErrors.NameReassignmentError,
-    );
-  });
-
-  test("annotated then plain reassignment is banned in chapter 1 (AnnAssign then Assign)", () => {
-    expect(() => analyzeOk("x: abs = 1\nx = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
-  });
-
-  test("plain then annotated reassignment is banned in chapter 1 (Assign then AnnAssign)", () => {
-    expect(() => analyzeOk("x = 1\nx: abs = 2", 1)).toThrow(ResolverErrors.NameReassignmentError);
-  });
-
   test("break/continue are banned in chapter 1", () => {
     expect(() => analyzeOk("def f():\n    break", 1)).toThrow(FeatureNotSupportedError);
     expect(() => analyzeOk("def f():\n    continue", 1)).toThrow(FeatureNotSupportedError);
@@ -150,6 +133,14 @@ describe("Chapter 1 — most restrictive", () => {
 
   test("rest params are banned in chapter 1", () => {
     expect(() => analyzeOk("def f(*args):\n    pass", 1)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("spread in call is banned in chapter 1", () => {
+    expect(() => analyzeOk("def f(a):\n    pass\nf(*f)", 1)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("lambda *args is banned in chapter 1", () => {
+    expect(() => analyzeOk("f = lambda *args: args", 1)).toThrow(FeatureNotSupportedError);
   });
 });
 
@@ -178,6 +169,14 @@ describe("Chapter 2 — loops and reassignment still banned", () => {
 
   test("rest params are banned in chapter 2", () => {
     expect(() => analyzeOk("def f(*args):\n    pass", 2)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("spread in call is banned in chapter 2", () => {
+    expect(() => analyzeOk("def f(a):\n    pass\nf(*f)", 2)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("lambda *args is banned in chapter 2", () => {
+    expect(() => analyzeOk("f = lambda *args: args", 2)).toThrow(FeatureNotSupportedError);
   });
 });
 
@@ -223,6 +222,14 @@ describe("Chapter 3 — loops and lists allowed", () => {
   test("rest params are allowed in chapter 3", () => {
     expect(() => analyzeOk("def f(*args):\n    pass", 3)).not.toThrow();
   });
+
+  test("spread in call is allowed in chapter 3", () => {
+    expect(() => analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 3)).not.toThrow();
+  });
+
+  test("lambda *args is allowed in chapter 3", () => {
+    expect(() => analyzeOk("f = lambda *args: args", 3)).not.toThrow();
+  });
 });
 
 describe("Chapter 4 — no restrictions", () => {
@@ -236,6 +243,18 @@ describe("Chapter 4 — no restrictions", () => {
 
   test("lambda is allowed", () => {
     expect(() => analyzeOk("f = lambda x: x", 4)).not.toThrow();
+  });
+
+  test("annotated assignment is not allowed", () => {
+    expect(() => analyzeOk("x: int = 5", 4)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("annotated assignment is not allowed after normal assignment (Assign -> AnnAssign)", () => {
+    expect(() => analyzeOk("x = 5\nx: int = 10", 4)).toThrow(FeatureNotSupportedError);
+  });
+
+  test("spread in call is allowed in chapter 4", () => {
+    expect(() => analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 4)).not.toThrow();
   });
 });
 
@@ -263,13 +282,123 @@ describe("traverseAST — target visitation", () => {
     });
     expect(visited).toContain("x");
   });
+});
 
-  test("traverses AnnAssign target (Variable)", () => {
-    const ast = parseSource("x: abs = 1\n");
-    const visited: string[] = [];
-    traverseAST(ast, node => {
-      if (node instanceof ExprNS.Variable) visited.push(node.name.lexeme);
-    });
-    expect(visited).toContain("x");
+// ---------------------------------------------------------------------------
+// Rest + spread runtime (CSE machine integration)
+// ---------------------------------------------------------------------------
+import { evaluate } from "../cse-machine/interpreter";
+import { Context } from "../cse-machine/context";
+import { Value } from "../cse-machine/stash";
+
+async function run(src: string, chapter = 4): Promise<Value> {
+  const code = src.endsWith("\n") ? src : src + "\n";
+  const ast = parse(code);
+  analyze(ast, code, chapter);
+  const ctx = new Context();
+  return evaluate(code, ast, ctx);
+}
+
+describe("Rest + spread runtime (CSE machine)", () => {
+  test("rest-and-forward: wrapper delegates to builtin", async () => {
+    const val = await run(`
+def wrapper(*args):
+    return abs(*args)
+
+wrapper(-7)
+`);
+    expect(val).toEqual({ type: "none" });
+  });
+
+  test("spread into builtin directly: abs(*args) inside function", async () => {
+    const val = await run(`
+def go(*args):
+    return abs(*args)
+
+go(-42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("spread non-array causes runtime error", async () => {
+    const val = await run(`
+def f(a):
+    return a
+
+f(*42)
+`);
+    expect(val).toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("partial spread: fixed arg + spread rest", async () => {
+    const val = await run(`
+def pack(*args):
+    return args
+
+def use_max():
+    return max(1, *pack(2, 3))
+
+use_max()
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("multiple spreads don't crash", async () => {
+    const val = await run(`
+def pack(*a):
+    return a
+
+def go():
+    return max(*pack(1, 2), *pack(3, 4))
+
+go()
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("empty spread doesn't add args", async () => {
+    const val = await run(`
+def empty(*a):
+    return a
+
+def go():
+    return abs(-5, *empty())
+
+go()
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("nested rest-forward through two layers doesn't crash", async () => {
+    const val = await run(`
+def layer1(*args):
+    return layer2(*args)
+
+def layer2(*args):
+    return abs(*args)
+
+layer1(-99)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("rest param with exact arity: f(a, *rest) called with f(1) gives empty rest", async () => {
+    const val = await run(`
+def f(a, *rest):
+    return abs(*rest, a)
+
+f(-5)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("rest param with zero args: f(*args) called with f()", async () => {
+    const val = await run(`
+def f(*args):
+    return abs(-1, *args)
+
+f()
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
   });
 });

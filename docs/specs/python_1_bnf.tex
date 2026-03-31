@@ -12,6 +12,8 @@ A Python program is a \emph{program}, defined using Backus-Naur Form\footnote{
 clarifying the structure of BNF expressions.}
 as follows:
 
+\renewcommand{\arraystretch}{1.2}
+
 % tex-fmt: off
 \[\begin{array}{rcll}
 
@@ -29,8 +31,8 @@ as follows:
                          & |   & \textit{expression}                                                                     & \text{expression statement}             \\[1mm]
 \textit{names}           & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...                            & \text{name list}                        \\[1mm]
 \textit{if-statement}    & ::= & \term{if}\ \textit{expression}\ \term{:}\ \textit{block}                                &                                         \\
-                         & |   & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                     &                                         \\
-                         & |   & \term{else}\ \term{:}\ \textit{block}                                                   & \text{conditional statement}            \\[1mm]
+                         &     & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                     &                                         \\
+                         &     & \term{else}\ \term{:}\ \textit{block}                                                   & \text{conditional statement}            \\[1mm]
 \textit{block}           & ::= & \textit{statement}...                                                                   & \text{block statement}                  \\[1mm]
 \textit{expression}      & ::= & \textit{integer}                                                                        & \text{primitive integer expression}     \\
                          & |   & \textit{float}                                                                          & \text{primitive float expression}       \\
@@ -48,8 +50,7 @@ as follows:
                          & |   & \term{(}\ \textit{expression}\ \term{)}                                                 & \text{parenthesised expression}         \\[1mm]
 \textit{binary-operator} & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%}             &                                         \\
                          & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}           & \text{binary operator}                  \\[1mm]
-\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}                                                                 & \text{-unary operator}                  \\[1mm]
-                         & | & \term{+}                                                                                & \text{+unary operator}                  \\[1mm]
+\textit{unary-operator}  & ::= & \term{not}\ |\ \term{-}\ |\ \term{+}                                                    & \text{unary operator}                   \\[1mm]
 \textit{binary-logical}  & ::= & \term{and}\ |\ \term{or}                                                                & \text{logical composition symbol}       \\[1mm]
 \textit{expressions}     & ::= & \epsilon\ |\ \textit{expression}\ (\ \term{,}\ \textit{expression}\ )...                & \text{argument expressions}             \\
 
