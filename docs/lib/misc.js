@@ -181,7 +181,7 @@ function is_string(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a boolean
  */
-function is_bool(x) {}
+function is_boolean(x) {}
 
 /**
  * Returns True if x is a function, and False otherwise.
