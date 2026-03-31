@@ -990,9 +990,8 @@ describe("Standard Library Tests", () => {
         ["[1,2,3] is ''", UnsupportedOperandTypeError, null], // list is string
       ],
       arity: [
-        // TODO: Uncomment when we add support for variadic lambdas
-        // ["arity((lambda *args: args))", 0n, null],
-        // ["arity((lambda x, *args: args))", 1n, null],
+        ["arity((lambda *args: args))", 0n, null],
+        ["arity((lambda x, *args: args))", 1n, null],
         ["def f(x, y, *args, z):\n    pass\narity(f)", 2n, null],
         ["def f(*args, x, y, z):\n    pass\narity(f)", 0n, null],
         ["arity([1, 2, 3])", TypeError, null],
