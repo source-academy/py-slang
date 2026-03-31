@@ -526,7 +526,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const callee = this.visit(expr.callee);
     const args = expr.args.map(arg => ({
       arg: this.visit(arg),
-      isStarred: false,
+      isStarred: arg instanceof ExprNS.Starred,
     }));
 
     // get the CURR_ENV first - this saves the current environment as the return env
@@ -567,6 +567,10 @@ ${args.map(
 (i32.const ${ENV_HEAD_SIZE}) (i32.sub) (global.set ${CURR_ENV})
 (i32.const ${args.length}) (call ${APPLY_FX_NAME})
 `;
+  }
+
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+    return this.visit(expr.value);
   }
 
   visitReturnStmt(stmt: StmtNS.Return): WasmInstruction {

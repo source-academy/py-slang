@@ -352,4 +352,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
     throw new Error("Method not implemented.");
   }
+  visitStarredExpr(_expr: ExprNS.Starred): [number, bigint] {
+    throw new Error("Starred expressions are not supported in parse tree generation");
+  }
 }
