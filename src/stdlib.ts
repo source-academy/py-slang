@@ -206,7 +206,13 @@ export class BuiltInFunctions {
     }
     handleRuntimeError(
       context,
-      new TypeError(source, command as ExprNS.Expr, context, val.type, "float' or 'int"),
+      new TypeError(
+        source,
+        command as ExprNS.Expr,
+        context,
+        val.type,
+        "'float', 'int', 'bool' or 'str'",
+      ),
     );
   }
 
