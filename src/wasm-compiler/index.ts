@@ -139,7 +139,7 @@ export async function compileToWasmAndRun(
       log: (value: bigint) => capture(value.toString()),
       log_complex: (real: number, imag: number) =>
         capture(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
-      log_bool: (value: bigint) => capture(value === BigInt(0) ? "False" : "True"),
+      log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
       log_string: (offset: number, length: number) =>
         capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
       log_closure: (tag: number, arity: number, envSize: number, parentEnv: number) =>
@@ -190,10 +190,7 @@ export async function compileToWasmAndRun(
             encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
             return makeString(heapPointer, lexeme.length);
           })
-          .reduceRight(
-            (tail, [tag, value]) => makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),
-            makeNone(),
-          );
+          .reduceRight((tail, [tag, value]) => makePair(tag, value, tail[0], tail[1]), makeNone());
       },
 
       parse: (offset: number, length: number) => {
