@@ -133,6 +133,15 @@ function complex(value = 0) {}
 function str(object = "") {}
 
 /**
+ * Return a <CODE>string</CODE> representation of <CODE>object</CODE> that is unambiguous and suitable for debugging.
+ * For many values, this string can be used to reconstruct <CODE>s</CODE>
+ * 
+ * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
+ * @returns {string} the unambiguous <CODE>string</CODE> representation of <CODE>object</CODE>
+ */
+function repr(object) {}
+
+/**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
  * The function then reads a line from input, converts it to a <CODE>string</CODE> (stripping a trailing newline),
  * and returns that.
