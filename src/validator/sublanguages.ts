@@ -8,6 +8,7 @@ import { NoLoopsValidator } from "./features/no-loops";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { NoRestParamsValidator } from "./features/no-rest-params";
+import { NoSpreadValidator } from "./features/no-spread";
 import { FeatureValidator } from "./types";
 
 /**
@@ -22,6 +23,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
+    NoSpreadValidator,
     NoAnnAssignValidator,
     NoIsOperatorValidator,
   ];
@@ -39,6 +41,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
+    NoSpreadValidator,
     NoAnnAssignValidator,
     NoIsOperatorValidator,
   ];

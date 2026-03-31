@@ -20,6 +20,7 @@ export namespace ExprNS {
     visitCallExpr(expr: Call): T;
     visitListExpr(expr: List): T;
     visitSubscriptExpr(expr: Subscript): T;
+    visitStarredExpr(expr: Starred): T;
     visitNoneExpr(expr: None): T;
     visitComplexExpr(expr: Complex): T;
   }
@@ -225,6 +226,17 @@ export namespace ExprNS {
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitSubscriptExpr(this);
+    }
+  }
+  export class Starred extends Expr {
+    readonly kind = "Starred";
+    value: Expr;
+    constructor(startToken: Token, endToken: Token, value: Expr) {
+      super(startToken, endToken);
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitStarredExpr(this);
     }
   }
   export class None extends Expr {
