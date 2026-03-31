@@ -38,7 +38,6 @@ export class PyComplexNumber {
       /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-]\d+(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
     );
     if (match) {
-      console.log(match);
       const realPart = Number(match[1]);
       let imagPart = 0;
 

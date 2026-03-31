@@ -21,6 +21,8 @@ import {
   ValueError,
 } from "./errors/errors";
 
+export const minArgMap = new Map<string, number>();
+
 export function Validate<T extends Value | Promise<Value>>(
   minArgs: number | null,
   maxArgs: number | null,
@@ -35,7 +37,7 @@ export function Validate<T extends Value | Promise<Value>>(
     >,
   ): void {
     const originalMethod = descriptor.value!;
-
+    minArgMap.set(functionName, minArgs || 0);
     descriptor.value = function (
       args: Value[],
       source: string,
@@ -76,6 +78,25 @@ export function Validate<T extends Value | Promise<Value>>(
 }
 
 export class BuiltInFunctions {
+  @Validate(1, 1, "arity", true)
+  static arity(args: Value[], source: string, command: ControlItem, context: Context): BigIntValue {
+    const func = args[0];
+    if (func.type !== "builtin" && func.type !== "closure") {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command as ExprNS.Expr, context, func.type, "function"),
+      );
+    }
+    if (func.type === "closure") {
+      const variadicInstance = func.closure.node.parameters.findIndex(param => param.isStarred);
+      if (variadicInstance !== -1) {
+        return { type: "bigint", value: BigInt(variadicInstance) };
+      }
+      return { type: "bigint", value: BigInt(func.closure.node.parameters.length) };
+    }
+    return { type: "bigint", value: BigInt(func.minArgs) };
+  }
+
   @Validate(null, 2, "int", true)
   static int(args: Value[], source: string, command: ControlItem, context: Context): BigIntValue {
     if (args.length === 0) {
@@ -626,7 +647,7 @@ export class BuiltInFunctions {
     return { type: "number", value: erfnum };
   }
 
-  @Validate(1, 1, "math_efc", false)
+  @Validate(1, 1, "math_erfc", false)
   static math_erfc(
     args: Value[],
     source: string,
@@ -1310,6 +1331,7 @@ export class BuiltInFunctions {
     return { type: "number", value: result };
   }
 
+  @Validate(2, 2, "math_nextafter", false)
   static math_nextafter(
     _args: Value[],
     _source: string,
@@ -1320,6 +1342,7 @@ export class BuiltInFunctions {
     throw new Error("math_nextafter not implemented");
   }
 
+  @Validate(1, 1, "math_ulp", false)
   static math_ulp(
     _args: Value[],
     _source: string,
@@ -1385,7 +1408,7 @@ export class BuiltInFunctions {
     return { type: "number", value: result };
   }
 
-  @Validate(1, 1, "math_exps", false)
+  @Validate(1, 1, "math_exp2", false)
   static math_exp2(
     args: Value[],
     source: string,
@@ -2308,7 +2331,12 @@ for (const name of constants.builtInFuncs) {
     throw new Error(`BuiltInFunctions.${name} is not implemented`);
   }
   const builtinName = name.startsWith("_") ? name.substring(1) : name;
-  builtIns.set(name, { type: "builtin", name: builtinName, func: impl });
+  builtIns.set(name, {
+    type: "builtin",
+    name: builtinName,
+    func: impl,
+    minArgs: minArgMap.get(name) || 0,
+  });
 }
 
 /**

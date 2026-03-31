@@ -1,6 +1,7 @@
 {
   "builtInFuncs": [
     "abs",
+    "arity",
     "bool",
     "complex",
     "error",

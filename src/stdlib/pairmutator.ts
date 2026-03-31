@@ -1,7 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { BuiltinValue, NoneValue, Value } from "../cse-machine/stash";
-import { Validate } from "../stdlib";
+import { minArgMap, Validate } from "../stdlib";
 import { Group, GroupName } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();
@@ -50,6 +50,7 @@ for (const builtin of Object.getOwnPropertyNames(PairmutatorBuiltins)) {
         builtin as keyof typeof PairmutatorBuiltins
       ] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }
