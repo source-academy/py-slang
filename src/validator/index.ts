@@ -1,17 +1,23 @@
-export { FeatureValidator, FeatureNotSupportedError, ASTNode } from "./types";
-export { traverseAST } from "./traverse";
+export { ForRangeOnlyValidator } from "./features/for-range-only";
 export {
-  makeValidatorsForChapter,
+  BreakContinueValidator,
+  createBreakContinueValidator,
+} from "./features/loop-break-continue-only";
+export { NoAnnAssignValidator } from "./features/no-ann-assign";
+export { NoBreakContinueValidator } from "./features/no-break-continue";
+export { NoIsOperatorValidator } from "./features/no-is-operator";
+export { NoLambdaValidator } from "./features/no-lambda";
+export { NoListsValidator } from "./features/no-lists";
+export { NoLoopsValidator } from "./features/no-loops";
+export { NoNonlocalValidator } from "./features/no-nonlocal";
+export { createNoReassignmentValidator, NoReassignmentValidator } from "./features/no-reassignment";
+export { NoRestParamsValidator } from "./features/no-rest-params";
+export {
   makeChapter1Validators,
   makeChapter2Validators,
   makeChapter3Validators,
   makeChapter4Validators,
+  makeValidatorsForChapter,
 } from "./sublanguages";
-export { NoListsValidator } from "./features/no-lists";
-export { NoLoopsValidator } from "./features/no-loops";
-export { NoReassignmentValidator, createNoReassignmentValidator } from "./features/no-reassignment";
-export { NoLambdaValidator } from "./features/no-lambda";
-export { NoBreakContinueValidator } from "./features/no-break-continue";
-export { NoNonlocalValidator } from "./features/no-nonlocal";
-export { ForRangeOnlyValidator } from "./features/for-range-only";
-export { NoRestParamsValidator } from "./features/no-rest-params";
+export { traverseAST } from "./traverse";
+export { ASTNode, FeatureNotSupportedError, FeatureValidator } from "./types";

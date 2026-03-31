@@ -21,11 +21,17 @@ export type Value =
   | ErrorValue
   | NoneValue
   | BigIntValue
-  | ClosureValue;
+  | ClosureValue
+  | ListValue;
 
 export interface ClosureValue {
   type: "closure";
   closure: Closure;
+}
+
+export interface ListValue {
+  type: "list";
+  value: Value[];
 }
 
 export interface BigIntValue {
