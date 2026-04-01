@@ -177,8 +177,11 @@ export class BuiltInFunctions {
       handleRuntimeError(context, new ValueError(source, command as ExprNS.Expr, context, "int"));
     }
 
-    const parsed = parseInt(str, base);
-    return { type: "bigint", value: BigInt(sign * parsed) };
+    let res = BigInt(0);
+    for (const char of str) {
+      res = res * BigInt(base) + BigInt(validChars.indexOf(char.toLowerCase()));
+    }
+    return { type: "bigint", value: BigInt(sign) * res };
   }
 
   @Validate(null, 1, "float", true)
