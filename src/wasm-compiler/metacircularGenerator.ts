@@ -27,7 +27,10 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   private string(str: (typeof PARSE_TREE_STRINGS)[number]): [number, bigint] {
     const index = PARSE_TREE_STRINGS.indexOf(str);
-    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce((acc, s) => acc + MetacircularGenerator.utf8ByteLength(s), 0);
+    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce(
+      (acc, s) => acc + MetacircularGenerator.utf8ByteLength(s),
+      0,
+    );
     return this.wasmExports.makeString(offset, MetacircularGenerator.utf8ByteLength(str));
   }
 
