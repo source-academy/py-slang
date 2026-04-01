@@ -162,9 +162,10 @@ export async function compileToWasmAndRun(
         return Array.from(pythonLexer)
           .map(t => toAstToken(t))
           .map(({ lexeme }) => {
-            const heapPointer = malloc(lexeme.length);
-            encoder.encode(lexeme).forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
-            return makeString(heapPointer, lexeme.length);
+            const bytes = encoder.encode(lexeme);
+            const heapPointer = malloc(bytes.length);
+            bytes.forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+            return makeString(heapPointer, bytes.length);
           })
           .reduceRight(
             (tail, [tag, value]) => makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),

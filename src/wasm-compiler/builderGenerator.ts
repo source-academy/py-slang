@@ -66,6 +66,24 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
 }
 
 export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNumeric> {
+  private static readonly encoder = new TextEncoder();
+  private static utf8ByteLength(str: string): number {
+    return BuilderGenerator.encoder.encode(str).length;
+  }
+
+  private static toWasmDataString(str: string): string {
+    const bytes = BuilderGenerator.encoder.encode(str);
+    return Array.from(bytes, byte => {
+      const isPrintableAscii = byte >= 0x20 && byte <= 0x7e;
+      const escapeInWat = ["\\", '"', "'", "\n", "\r", "\t"];
+      const isSafeInWatString = !escapeInWat.includes(String.fromCharCode(byte));
+
+      if (isPrintableAscii && isSafeInWatString) return String.fromCharCode(byte);
+
+      return `\\${byte.toString(16).padStart(2, "0")}`;
+    }).join("");
+  }
+
   private strings: string[] = [];
   private builtIns: WasmCall[];
   private interactiveMode = false;
@@ -222,10 +240,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     let heapPointer = 0;
 
     for (const str of this.strings) {
-      strings.push(
-        wasm.data(i32.const(heapPointer), str.replace(/"/g, '\\"').replace(/\n/g, "\\n")),
-      );
-      heapPointer += str.length;
+      strings.push(wasm.data(i32.const(heapPointer), BuilderGenerator.toWasmDataString(str)));
+      heapPointer += BuilderGenerator.utf8ByteLength(str);
     }
 
     // exported functions for parse
@@ -395,8 +411,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       const toReturn = wasm
         .call(MAKE_STRING_FX)
         .args(
-          i32.const(this.strings.reduce((acc, s) => acc + s.length, 0)),
-          i32.const(expr.value.length),
+          i32.const(this.strings.reduce((acc, s) => acc + BuilderGenerator.utf8ByteLength(s), 0)),
+          i32.const(BuilderGenerator.utf8ByteLength(expr.value)),
         );
       this.strings.push(expr.value);
       return toReturn;
