@@ -107,6 +107,7 @@ describe("Linked List Tests", () => {
       ["length_linked_list(linked_list(1, 2, 3, 4))", 4n, null],
       ["length_linked_list(None)", 0n, null],
       ["linked_list_to_string(linked_list(1, 2))", "[1, [2, None]]", null],
+      ["linked_list_to_string(linked_list('a', 'b'))", "['a', ['b', None]]", null],
       ["linked_list_to_string(None)", "None", null],
     ],
     transformations: [
