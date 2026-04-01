@@ -1029,6 +1029,12 @@ describe("Standard Library Tests", () => {
         ["len([1, 2, 3])", 3n, null], // len list
         ["len([])", 0n, null], // len empty list
       ],
+      "List access": [
+        ["a = 'abc'\na[0]", "a", null],
+        ["a = '🎊🎉🔔❤️‍🩹'\na[0]", "🎊", null],
+        ["a = '👨‍👩‍👧‍👦'\na[0]", "👨", null],
+        ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
+      ],
     };
     generateTestCases(miscTests, 3, [linkedList, stream, list, pairmutator]);
   });
