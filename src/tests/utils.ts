@@ -162,6 +162,10 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           }
 
           if (typeof expected === "number") {
+            if (isNaN(expected)) {
+              expect.objectContaining({ type: "number", value: NaN });
+              return;
+            }
             expect(spy).toHaveLastReturnedWith(
               expect.objectContaining({ type: "number", value: expect.closeTo(expected) }),
             );

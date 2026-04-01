@@ -139,7 +139,9 @@ export function handleExpandedEquality(
       type: "bool",
       value:
         (operator == TokenType.NOTEQUAL) !==
-        PyComplexNumber.fromValue(left.value).equals(PyComplexNumber.fromValue(right.value)),
+        PyComplexNumber.fromValue(context, code, command, left.value).equals(
+          PyComplexNumber.fromValue(context, code, command, right.value),
+        ),
     };
   }
 
@@ -191,8 +193,8 @@ export function evaluateBinaryExpression(
         ),
       );
     }
-    const leftComplex = PyComplexNumber.fromValue(left.value);
-    const rightComplex = PyComplexNumber.fromValue(right.value);
+    const leftComplex = PyComplexNumber.fromValue(context, code, command, left.value);
+    const rightComplex = PyComplexNumber.fromValue(context, code, command, right.value);
     let result: PyComplexNumber;
 
     switch (operator) {

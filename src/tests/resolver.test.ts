@@ -147,27 +147,26 @@ x[0] = 10
       expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
     });
-    // TODO: To uncomment when we want to support variadic arguments in Python 3
-    //     test("Variadic arguments throw errors for Python 1 and 2", () => {
-    //       const code = `
-    // def foo(*args):
-    //     print(args)
-    // foo(1, 2, 3)
-    //             `;
-    //       expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
-    //       expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
-    //       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
-    //     });
+    test("Variadic arguments throw errors for Python 1 and 2", () => {
+      const code = `
+def foo(*args):
+    print(args)
+foo(1, 2, 3)
+                `;
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+    });
 
-    //     test("Variadic arguments with lambdas throw errors for Python 1 and 2", () => {
-    //       const code = `
-    // foo = lambda *args: args
-    // print(foo(1, 2, 3))
-    //             `;
-    //       expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
-    //       expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
-    //       expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
-    //     });
+    test("Variadic arguments with lambdas throw errors for Python 1 and 2", () => {
+      const code = `
+foo = lambda *args: args
+print(foo(1, 2, 3))
+                `;
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(FeatureNotSupportedError);
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(FeatureNotSupportedError);
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+    });
   });
   describe("Break and Continue Syntax Errors", () => {
     test("Break outside of loop should throw syntax error", () => {
