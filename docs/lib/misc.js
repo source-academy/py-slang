@@ -134,7 +134,7 @@ function str(object = "") {}
 
 /**
  * Return a <CODE>string</CODE> representation of <CODE>object</CODE> that is unambiguous and suitable for debugging.
- * For many values, this string can be used to reconstruct <CODE>s</CODE>
+ * For many values, this string can be used to reconstruct <CODE>object</CODE>
  * 
  * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
  * @returns {string} the unambiguous <CODE>string</CODE> representation of <CODE>object</CODE>
