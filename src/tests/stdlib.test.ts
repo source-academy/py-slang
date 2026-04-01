@@ -741,6 +741,12 @@ describe("Standard Library Tests", () => {
         ['is_string("")', true, null],
         ['is_string("abc")', true, null],
       ],
+      "CRLF tests": [
+        ["hello = 'hello'\r\nhello", "hello", null],
+        ["hello = 'hello'\r\nhello\r\n", "hello", null],
+        ["hello = 'hello'\r\n\r\nhello", "hello", null],
+        ["hello = 'hello'\r\n# This is a comment\r\nhello", "hello", null],
+      ],
     };
 
     generateTestCases(mathTests, 1, []);
