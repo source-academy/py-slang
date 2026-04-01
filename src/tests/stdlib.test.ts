@@ -678,6 +678,12 @@ describe("Standard Library Tests", () => {
         ],
         ["repr(1+2j)", "(1+2j)", null],
       ],
+      "boundary tests": [
+        ["a = 18446744073709551616\nstr(a)", "18446744073709551616", null],
+        ["a = 18446744073709551616\nrepr(a)", "18446744073709551616", null],
+        ["a = 18446744073709551616\nb = 2**64\na == b", true, null],
+        ["a = 18446744073709551616\nb = int('18446744073709551615')\na != b", true, null],
+      ],
       "is functions": [
         ["is_int(1)", true, null],
         ["is_int(1.0)", false, null],
