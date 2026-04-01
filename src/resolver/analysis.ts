@@ -8,7 +8,7 @@ import { Resolver } from "./resolver";
  *   1. NameResolver (scope analysis, name lookup)  — Resolver class
  *   2. FeatureGate  (chapter sublanguage restrictions) — validators run inline during resolution
  *
- * Throws on first violation found.
+ * Analyzes the entire AST, returning an array of errors. If the array is empty, then the AST is valid.
  */
 export function analyze(
   ast: StmtNS.FileInput,
@@ -16,6 +16,8 @@ export function analyze(
   chapter: number = 4,
   groups: Group[] = [],
   preludeNames: string[] = [],
-): void {
-  new Resolver(source, ast, makeValidatorsForChapter(chapter), groups, preludeNames).resolve(ast);
+): Error[] {
+  return new Resolver(source, ast, makeValidatorsForChapter(chapter), groups, preludeNames).resolve(
+    ast,
+  );
 }
