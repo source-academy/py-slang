@@ -806,6 +806,14 @@ describe("Standard Library Tests", () => {
         ['float("13")', 13, null],
         ['float("13.05")', 13.05, null],
         ['float("-13.05")', -13.05, null],
+        ['float("inf")', Infinity, null],
+        ['float("-inf")', -Infinity, null],
+        ['float("nan")', NaN, null],
+        ['float("-nan")', NaN, null],
+        ['float("+nan")', NaN, null],
+        ['float("infinity")', Infinity, null],
+        ['float("+infinity")', Infinity, null],
+        ['float("-infinity")', -Infinity, null],
         // TODO: Add more coercion test cases for float() where double underscores between digits is prohibited
 
         ["complex(1)", PyComplexNumber.fromBigInt(1n), null],

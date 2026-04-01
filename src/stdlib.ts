@@ -194,9 +194,23 @@ export class BuiltInFunctions {
     } else if (val.type === "bool") {
       return { type: "number", value: val.value ? 1 : 0 };
     } else if (val.type === "string") {
-      const str = val.value.trim().replace(/_/g, "");
+      const str = val.value.trim().replace(/_/g, "").toLowerCase();
+      const mappings = {
+        inf: Infinity,
+        "+inf": Infinity,
+        "-inf": -Infinity,
+        infinity: Infinity,
+        "+infinity": Infinity,
+        "-infinity": -Infinity,
+        nan: NaN,
+        "+nan": NaN,
+        "-nan": NaN,
+      };
+      if (str in mappings) {
+        return { type: "number", value: mappings[str as keyof typeof mappings] };
+      }
       const num = Number(str);
-      if (isNaN(num) && str.toLowerCase() !== "nan") {
+      if (isNaN(num)) {
         handleRuntimeError(
           context,
           new ValueError(source, command as ExprNS.Expr, context, "float"),
