@@ -149,6 +149,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   ast: Stmt;
   environment: Environment | null;
   functionScope: Environment | null;
+  errors: Error[];
   private validators: FeatureValidator[];
 
   constructor(
@@ -163,6 +164,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.source = source;
     this.ast = ast;
     this.validators = validators;
+    this.errors = [];
     // The global environment
     this.environment = new Environment(
       source,
@@ -190,19 +192,35 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
-    for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+    try {
+      for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
   }
 
-  resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
+  resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null): Error[] {
     if (stmt === null) {
-      return;
+      return this.errors;
     }
     if (stmt instanceof Array) {
       // Resolve all top-level functions first. Python allows functions declared after
       // another function to be used in that function.
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          this.environment?.declarePlaceholderName(st.name);
+          try {
+            this.environment?.declarePlaceholderName(st.name);
+          } catch (e) {
+            if (e instanceof Error) {
+              this.errors.push(e);
+              continue;
+            }
+            throw e;
+          }
         }
       }
       for (const st of stmt) {
@@ -213,6 +231,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       this.runValidators(stmt);
       stmt.accept(this);
     }
+    return this.errors;
   }
 
   varDeclNames(names: Map<string, Token>): Token[] | null {
@@ -236,16 +255,21 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
         const token = curr.names.get(identifier.lexeme);
         if (token === undefined) {
-          throw new Error("placeholder error");
+          this.errors.push(new Error("placeholder error"));
+          return;
         }
-        throw new ResolverErrors.NameReassignmentError(
-          identifier.line,
-          identifier.col,
-          this.source,
-          identifier.indexInSource,
-          identifier.indexInSource + identifier.lexeme.length,
-          token,
+
+        this.errors.push(
+          new ResolverErrors.NameReassignmentError(
+            identifier.line,
+            identifier.col,
+            this.source,
+            identifier.indexInSource,
+            identifier.indexInSource + identifier.lexeme.length,
+            token,
+          ),
         );
+        return;
       }
       curr = curr?.enclosing ?? null;
     }
@@ -328,7 +352,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // @TODO nonlocals mean that any variable following that name in the current env
   // should not create a variable declaration, but instead point to an outer variable.
   visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    this.environment?.lookupNameParentEnvWithError(stmt.name);
+    try {
+      this.environment?.lookupNameParentEnvWithError(stmt.name);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
   }
 
   visitReturnStmt(stmt: StmtNS.Return): void {
@@ -359,7 +391,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
-    this.environment?.lookupNameCurrentEnvWithError(expr.name);
+    try {
+      this.environment?.lookupNameCurrentEnvWithError(expr.name);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
   }
   visitLambdaExpr(expr: ExprNS.Lambda): void {
     // Create a new environment.

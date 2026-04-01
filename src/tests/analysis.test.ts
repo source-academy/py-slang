@@ -19,16 +19,17 @@ function parseSource(src: string): StmtNS.FileInput {
   return parse(script);
 }
 
-function analyzeOk(src: string, chapter = 4): void {
+function analyzeOk(src: string, chapter = 4) {
   const script = src.endsWith("\n") ? src : src + "\n";
   const ast = parseSource(script);
-  analyze(ast, script, chapter);
+  expect(analyze(ast, script, chapter)).toEqual([]);
 }
 
-function analyzeThrows(src: string, chapter = 4): void {
+function analyzeThrows(src: string, chapter = 4, errors: jest.Constructable[] = [Error]) {
   const script = src.endsWith("\n") ? src : src + "\n";
   const ast = parseSource(script);
-  expect(() => analyze(ast, script, chapter)).toThrow();
+  const analysisErrors = analyze(ast, script, chapter);
+  expect(analysisErrors).toEqual(errors.map(ErrorConstructor => expect.any(ErrorConstructor)));
 }
 
 // ---------------------------------------------------------------------------
@@ -36,15 +37,15 @@ function analyzeThrows(src: string, chapter = 4): void {
 // ---------------------------------------------------------------------------
 describe("NameResolver — scope analysis", () => {
   test("single variable usage after declaration passes", () => {
-    expect(() => analyzeOk("x = 1\nx")).not.toThrow();
+    analyzeOk("x = 1\nx");
   });
 
   test("function name is visible after definition", () => {
-    expect(() => analyzeOk("def f():\n    pass\nf()")).not.toThrow();
+    analyzeOk("def f():\n    pass\nf()");
   });
 
   test("function parameter is visible inside body", () => {
-    expect(() => analyzeOk("def f(a):\n    a")).not.toThrow();
+    analyzeOk("def f(a):\n    a");
   });
 
   test("undeclared variable throws a resolver error", () => {
@@ -56,7 +57,7 @@ describe("NameResolver — scope analysis", () => {
   });
 
   test("global builtins (print, abs, etc.) are always in scope", () => {
-    expect(() => analyzeOk("print(abs(1))")).not.toThrow();
+    analyzeOk("print(abs(1))");
   });
 
   test("re-declaring the same name in the same scope throws in chapter 1", () => {
@@ -70,15 +71,15 @@ def outer():
     def helper():
         x
 `;
-    expect(() => analyzeOk(src)).not.toThrow();
+    analyzeOk(src);
   });
 
   test("lambda parameter is in scope in its body", () => {
-    expect(() => analyzeOk("f = lambda x: x")).not.toThrow();
+    analyzeOk("f = lambda x: x");
   });
 
   test("from-import binds the imported name", () => {
-    expect(() => analyzeOk("from math import sqrt\nsqrt(4)")).not.toThrow();
+    analyzeOk("from math import sqrt\nsqrt(4)");
   });
 });
 
@@ -88,173 +89,170 @@ def outer():
 
 describe("Chapter 1 — most restrictive", () => {
   test("simple function definition passes", () => {
-    expect(() => analyzeOk("def f(x):\n    x", 1)).not.toThrow();
+    analyzeOk("def f(x):\n    x", 1);
   });
 
   test("while loop is banned in chapter 1", () => {
-    expect(() => analyzeOk("while True:\n    pass", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("while True:\n    pass", 1, [FeatureNotSupportedError]);
   });
 
   test("for loop is banned in chapter 1", () => {
     // Feature gate runs after resolver; use a declared variable as iter
     // so the resolver passes and the feature gate can fire.
-    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 1, [FeatureNotSupportedError]);
   });
 
   test("lambda is allowed in chapter 1", () => {
-    expect(() => analyzeOk("f = lambda x: x", 1)).not.toThrow();
+    analyzeOk("f = lambda x: x", 1);
   });
 
   test("list literal is banned in chapter 1", () => {
-    expect(() => analyzeOk("x = []", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("x = []", 1, [FeatureNotSupportedError]);
   });
 
   test("subscript assignment is banned in chapter 1", () => {
     // xs[0] = 3 uses ExprNS.Subscript — NoListsValidator should catch it.
     // Declare xs at chapter 4 level first, then try subscript assignment.
-    expect(() => analyzeOk("xs = 1\nxs[0] = 3", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("xs = 1\nxs[0] = 3", 1, [FeatureNotSupportedError]);
   });
 
   test("reassignment is banned in chapter 1", () => {
     // Two assignments to the same name
-    expect(() => analyzeOk("x = 1\nx = 2", 1)).toThrow();
+    analyzeThrows("x = 1\nx = 2", 1);
   });
 
   test("break/continue are banned in chapter 1", () => {
-    expect(() => analyzeOk("def f():\n    break", 1)).toThrow(FeatureNotSupportedError);
-    expect(() => analyzeOk("def f():\n    continue", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("def f():\n    break", 1, [FeatureNotSupportedError]);
+    analyzeThrows("def f():\n    continue", 1, [FeatureNotSupportedError]);
   });
 
   test("nonlocal is banned in chapter 1", () => {
-    expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 1)).toThrow(
+    analyzeThrows("def f():\n    x = 1\n    def g():\n        nonlocal x", 1, [
       FeatureNotSupportedError,
-    );
+    ]);
   });
 
   test("rest params are banned in chapter 1", () => {
-    expect(() => analyzeOk("def f(*args):\n    pass", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("def f(*args):\n    pass", 1, [FeatureNotSupportedError]);
   });
 
   test("spread in call is banned in chapter 1", () => {
-    expect(() => analyzeOk("def f(a):\n    pass\nf(*f)", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("def f(a):\n    pass\nf(*f)", 1, [FeatureNotSupportedError]);
   });
 
   test("lambda *args is banned in chapter 1", () => {
-    expect(() => analyzeOk("f = lambda *args: args", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("f = lambda *args: args", 1, [FeatureNotSupportedError]);
   });
 });
 
 describe("Chapter 2 — loops and reassignment still banned", () => {
   test("reassignment is banned in chapter 2", () => {
-    expect(() => analyzeOk("x = 1\nx = 2", 2)).toThrow();
+    analyzeThrows("x = 1\nx = 2", 2);
   });
 
   test("while loop is banned in chapter 2", () => {
-    expect(() => analyzeOk("while True:\n    pass", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("while True:\n    pass", 2, [FeatureNotSupportedError]);
   });
 
   test("for loop is banned in chapter 2", () => {
-    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 2, [FeatureNotSupportedError]);
   });
 
   test("list literal is banned in chapter 2", () => {
-    expect(() => analyzeOk("x = []", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("x = []", 2, [FeatureNotSupportedError]);
   });
 
   test("nonlocal is banned in chapter 2", () => {
-    expect(() => analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 2)).toThrow(
+    analyzeThrows("def f():\n    x = 1\n    def g():\n        nonlocal x", 2, [
       FeatureNotSupportedError,
-    );
+    ]);
   });
 
   test("rest params are banned in chapter 2", () => {
-    expect(() => analyzeOk("def f(*args):\n    pass", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("def f(*args):\n    pass", 2, [FeatureNotSupportedError]);
   });
 
   test("spread in call is banned in chapter 2", () => {
-    expect(() => analyzeOk("def f(a):\n    pass\nf(*f)", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("def f(a):\n    pass\nf(*f)", 2, [FeatureNotSupportedError]);
   });
 
   test("lambda *args is banned in chapter 2", () => {
-    expect(() => analyzeOk("f = lambda *args: args", 2)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("f = lambda *args: args", 2, [FeatureNotSupportedError]);
   });
 });
 
 describe("Chapter 3 — loops and lists allowed", () => {
   test("while loop is allowed in chapter 3", () => {
-    expect(() => analyzeOk("while True:\n    pass", 3)).not.toThrow();
+    analyzeOk("while True:\n    pass", 3);
   });
 
   test("list literal is allowed in chapter 3", () => {
-    expect(() => analyzeOk("x = []", 3)).not.toThrow();
+    analyzeOk("x = []", 3);
   });
 
   test("nonlocal is allowed in chapter 3", () => {
-    expect(() =>
-      analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 3),
-    ).not.toThrow();
+    analyzeOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 3);
   });
-
   test("for with range() is allowed in chapter 3", () => {
-    expect(() => analyzeOk("for i in range(10):\n    pass", 3)).not.toThrow();
+    analyzeOk("for i in range(10):\n    pass", 3);
   });
 
   test("for with range(start, stop) is allowed in chapter 3", () => {
-    expect(() => analyzeOk("for i in range(0, 10):\n    pass", 3)).not.toThrow();
+    analyzeOk("for i in range(0, 10):\n    pass", 3);
   });
 
   test("for with range(start, stop, step) is allowed in chapter 3", () => {
-    expect(() => analyzeOk("for i in range(0, 10, 2):\n    pass", 3)).not.toThrow();
+    analyzeOk("for i in range(0, 10, 2):\n    pass", 3);
   });
 
   test("for without range() is banned in chapter 3", () => {
-    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 3)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 3, [FeatureNotSupportedError]);
   });
 
   test("for without range() is allowed in chapter 4", () => {
-    expect(() => analyzeOk("xs = 1\nfor i in xs:\n    pass", 4)).not.toThrow();
+    analyzeOk("xs = 1\nfor i in xs:\n    pass", 4);
   });
 
   test("subscript assignment resolves in chapter 3", () => {
-    expect(() => analyzeOk("xs = [1, 2]\nxs[0] = 3", 3)).not.toThrow();
+    analyzeOk("xs = [1, 2]\nxs[0] = 3", 3);
   });
 
   test("rest params are allowed in chapter 3", () => {
-    expect(() => analyzeOk("def f(*args):\n    pass", 3)).not.toThrow();
+    analyzeOk("def f(*args):\n    pass", 3);
   });
 
   test("spread in call is allowed in chapter 3", () => {
-    expect(() => analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 3)).not.toThrow();
+    analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 3);
   });
 
   test("lambda *args is allowed in chapter 3", () => {
-    expect(() => analyzeOk("f = lambda *args: args", 3)).not.toThrow();
+    analyzeOk("f = lambda *args: args", 3);
   });
 });
 
 describe("Chapter 4 — no restrictions", () => {
   test("while loop is allowed", () => {
-    expect(() => analyzeOk("while True:\n    pass", 4)).not.toThrow();
+    analyzeOk("while True:\n    pass", 4);
   });
 
   test("list literal is allowed", () => {
-    expect(() => analyzeOk("x = [1, 2, 3]", 4)).not.toThrow();
+    analyzeOk("x = [1, 2, 3]", 4);
   });
 
   test("lambda is allowed", () => {
-    expect(() => analyzeOk("f = lambda x: x", 4)).not.toThrow();
+    analyzeOk("f = lambda x: x", 4);
   });
 
   test("annotated assignment is not allowed", () => {
-    expect(() => analyzeOk("x: int = 5", 4)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("x: abs = 5", 4, [FeatureNotSupportedError]);
   });
 
   test("annotated assignment is not allowed after normal assignment (Assign -> AnnAssign)", () => {
-    expect(() => analyzeOk("x = 5\nx: int = 10", 4)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("x = 5\nx: abs = 10", 4, [FeatureNotSupportedError]);
   });
 
   test("spread in call is allowed in chapter 4", () => {
-    expect(() => analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 4)).not.toThrow();
+    analyzeOk("def f(a):\n    pass\nx = [1]\nf(*x)", 4);
   });
 });
 
@@ -269,7 +267,7 @@ describe("Pipeline ordering", () => {
 
   test("feature error is thrown after resolver passes", () => {
     // [1, 2] — name resolution is fine, but chapter 1 bans lists
-    expect(() => analyzeOk("[1, 2]", 1)).toThrow(FeatureNotSupportedError);
+    analyzeThrows("[1, 2]", 1, [FeatureNotSupportedError]);
   });
 });
 
@@ -287,8 +285,8 @@ describe("traverseAST — target visitation", () => {
 // ---------------------------------------------------------------------------
 // Rest + spread runtime (CSE machine integration)
 // ---------------------------------------------------------------------------
-import { evaluate } from "../cse-machine/interpreter";
 import { Context } from "../cse-machine/context";
+import { evaluate } from "../cse-machine/interpreter";
 import { Value } from "../cse-machine/stash";
 
 async function run(src: string, chapter = 4): Promise<Value> {

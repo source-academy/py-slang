@@ -7,7 +7,7 @@
  */
 
 import moo from "moo";
-import { UnexpectedIndentError, InconsistentDedentError } from "./lexer-errors";
+import { InconsistentDedentError, UnexpectedIndentError } from "./lexer-errors";
 
 // ── Moo configuration (unchanged) ──────────────────────────────────────────
 
@@ -51,9 +51,9 @@ const kwType = moo.keywords({
 });
 
 const mooLexer = moo.compile({
-  newline: { match: /\n/, lineBreaks: true },
+  newline: { match: /\r?\n/, lineBreaks: true },
   ws: /[ \t]+/,
-  comment: /#[^\n]*/,
+  comment: /#[^\r\n]*/,
 
   number_complex: /(?:\d+\.?\d*|\.\d+)[jJ]/,
   number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
