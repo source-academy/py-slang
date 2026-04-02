@@ -46,12 +46,14 @@ const config = [
         format: "iife",
         name: "PySlangWorker",
         sourcemap: true,
+        plugins: [terser()],
       },
       {
         file: `dist/python-evaluator-wasm.cjs`,
         format: "cjs",
         name: "PySlangEvaluator",
         sourcemap: true,
+        plugins: [terser()],
       },
     ],
     plugins: [
@@ -61,27 +63,8 @@ const config = [
       }),
       json(),
       typescript(),
-    ],
-  },
-
-  // wasm
-  {
-    plugins: [
-      nodeResolve({ browser: true }),
-      commonjs({
-        include: "node_modules/**",
-      }),
-      json(),
-      typescript(),
       nodePolyfills(),
     ],
-    input: "src/conductor/PyWasmEvaluator.ts",
-    output: {
-      plugins: [terser()],
-      file: "dist/pywasm-evaluator.js",
-      format: "iife",
-      sourcemap: true,
-    },
   },
 ];
 
