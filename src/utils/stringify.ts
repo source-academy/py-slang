@@ -1,4 +1,5 @@
-import { Value } from "../cse-machine/stash";
+import { StmtNS } from "../ast-types";
+import { ListValue, Value } from "../cse-machine/stash";
 
 const MAX_LIST_DISPLAY_LENGTH = 100;
 
@@ -116,7 +117,7 @@ export function valueToStringDag(value: Value): StringDag {
       return [memoResult, false];
     }
     ancestors.set(v, ancestors.size);
-    const elems = (v as any).value;
+    const elems = (v as ListValue).value;
     const [headDag, headIsCircular] = convert(elems[0]);
     const [tailDag, tailIsCircular] = convert(elems[1]);
     const isCircular = headIsCircular || tailIsCircular;
@@ -201,9 +202,10 @@ export function valueToStringDag(value: Value): StringDag {
     } else if (v.type === "closure" || v.type === "function") {
       let funcName = "(anonymous)";
       if (v.type === "closure") {
-        funcName = (v.closure.node as any).name?.lexeme || "(anonymous)";
+        const node = v.closure.node;
+        funcName = node instanceof StmtNS.FunctionDef ? node.name.lexeme : "(anonymous)";
       } else {
-        funcName = (v as any).name || "(anonymous)";
+        funcName = v.name || "(anonymous)";
       }
       const s = `<function ${funcName}>`;
       return [{ type: "terminal", str: s, length: s.length }, false];
@@ -211,7 +213,7 @@ export function valueToStringDag(value: Value): StringDag {
       const s = `<built-in function ${v.name}>`;
       return [{ type: "terminal", str: s, length: s.length }, false];
     } else {
-      return convertRepr(`<${(v as any).type} object>`);
+      return convertRepr(`<${v.type} object>`);
     }
   }
 
