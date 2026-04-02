@@ -14,6 +14,7 @@ export type WasmExports = {
   log: (tag: number, value: bigint) => void;
   makeInt: (value: bigint) => [number, bigint];
   makeFloat: (value: number) => [number, bigint];
+  makeComplex: (real: number, imag: number) => [number, bigint];
   makeBool: (value: number) => [number, bigint];
   makeString: (offset: number, length: number) => [number, bigint];
   makePair: (tag1: number, value1: bigint, tag2: number, value2: bigint) => [number, bigint];

@@ -99,6 +99,13 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(renderedResult).toBe("2j");
   });
 
+  it("complex output prints minus sign for negative imaginary part", async () => {
+    const pythonCode = `1-2j`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
+    expect(renderedResult).toBe("1 - 2j");
+  });
+
   // --- STRING ARITHMETIC ---
   it("string concatenation with +", async () => {
     const pythonCode = `"hello" + " world"`;
@@ -123,72 +130,61 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
 });
 
 describe("Comparison operator tests (int, float, complex, string)", () => {
+  const expectComparisonToBe = async (pythonCode: string, expected: "True" | "False") => {
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe(expected);
+  };
+
+  const expectComparisonToError = async (pythonCode: string, errorMessage: string) => {
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(new Error(errorMessage));
+  };
+
   // --- INT COMPARE ---
-  it("int eq true", async () => {
-    const pythonCode = `3 == 3`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
+  it("int ==", async () => expectComparisonToBe(`3 == 3`, "True"));
+  it("int !=", async () => expectComparisonToBe(`3 != 4`, "True"));
+  it("int <", async () => expectComparisonToBe(`5 < 1`, "False"));
+  it("int <=", async () => expectComparisonToBe(`5 <= 5`, "True"));
+  it("int >", async () => expectComparisonToBe(`7 > 2`, "True"));
+  it("int >=", async () => expectComparisonToBe(`2 >= 9`, "False"));
 
-  it("int lt false", async () => {
-    const pythonCode = `5 < 1`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  // --- FLOAT COMPARE ---
-  it("float == float", async () => {
-    const pythonCode = `1.25 == 1.25`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("float < int", async () => {
-    const pythonCode = `1.5 < 2`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
+  // --- FLOAT/INT MIXED COMPARE ---
+  it("float/int ==", async () => expectComparisonToBe(`1.5 == 1.5`, "True"));
+  it("float/int !=", async () => expectComparisonToBe(`1.5 != 2`, "True"));
+  it("float/int <", async () => expectComparisonToBe(`1.5 < 2`, "True"));
+  it("float/int <=", async () => expectComparisonToBe(`2.0 <= 2`, "True"));
+  it("float/int >", async () => expectComparisonToBe(`3.25 > 3`, "True"));
+  it("float/int >=", async () => expectComparisonToBe(`3.0 >= 4`, "False"));
 
   // --- COMPLEX COMPARE ---
-  it("complex == complex (Python: only equal works)", async () => {
-    const pythonCode = `(1+2j) == (1+2j)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
+  it("complex ==", async () => expectComparisonToBe(`(1+2j) == (1+2j)`, "True"));
+  it("complex !=", async () => expectComparisonToBe(`(1+2j) != (2+1j)`, "True"));
 
-  it("complex ordering (<, >, etc.) must error", async () => {
-    const pythonCode = `(1+1j) < (2+2j)`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.COMPLEX_COMPARISON),
-    );
-  });
+  it("complex < must error", async () =>
+    expectComparisonToError(`(1+1j) < (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
+  it("complex <= must error", async () =>
+    expectComparisonToError(`(1+1j) <= (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
+  it("complex > must error", async () =>
+    expectComparisonToError(`(1+1j) > (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
+  it("complex >= must error", async () =>
+    expectComparisonToError(`(1+1j) >= (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
 
   // --- STRING COMPARE ---
-  it("string equality true", async () => {
-    const pythonCode = `"abc" == "abc"`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
+  it("string ==", async () => expectComparisonToBe(`"abc" == "abc"`, "True"));
+  it("string !=", async () => expectComparisonToBe(`"abc" != "abd"`, "True"));
+  it("string <", async () => expectComparisonToBe(`"apple" < "banana"`, "True"));
+  it("string <=", async () => expectComparisonToBe(`"apple" <= "apple"`, "True"));
+  it("string >", async () => expectComparisonToBe(`"pear" > "orange"`, "True"));
+  it("string >=", async () => expectComparisonToBe(`"pear" >= "zebra"`, "False"));
 
-  it("string ordering lexicographically", async () => {
-    const pythonCode = `"apple" < "banana"`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("string compare with non-string errors", async () => {
-    const pythonCode = `"x" < 3`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE),
-    );
-  });
+  it("string < non-string must error", async () =>
+    expectComparisonToError(`"x" < 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
+  it("string <= non-string must error", async () =>
+    expectComparisonToError(`"x" <= 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
+  it("string > non-string must error", async () =>
+    expectComparisonToError(`"x" > 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
+  it("string >= non-string must error", async () =>
+    expectComparisonToError(`"x" >= 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
 });
 
 describe("Boolean tests", () => {
@@ -624,6 +620,44 @@ f()
     );
   });
 
+  it("name used before nonlocal declaration throws error", async () => {
+    const pythonCode = `
+def f():
+    x = 1
+    def g():
+        x = 2 
+        nonlocal x
+        x = 3
+        return x
+    return g()
+f()
+`;
+
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("Name x is used prior to nonlocal declaration!"),
+    );
+  });
+
+  it("cannot declare parameter as nonlocal", async () => {
+    const pythonCode = `
+def f(x):
+    nonlocal x
+    x = 1
+    return x
+f(5)
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("x is a parameter and cannot be declared nonlocal!"),
+    );
+  });
+
+  it("undefined name error", async () => {
+    const pythonCode = `undefined_variable`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("Name undefined_variable not defined!"),
+    );
+  });
+
   it("shadowing local variable hides outer variable", async () => {
     const pythonCode = `
 x = 7
@@ -903,6 +937,76 @@ result
 });
 
 describe("Loop semantics tests", () => {
+  it("for loop: only range() is supported", async () => {
+    const pythonCode = `
+for i in [1, 2, 3]:
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("Only range() is supported in for loops"),
+    );
+  });
+
+  it("for loop: range() requires at least one argument", async () => {
+    const pythonCode = `
+for i in range():
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("range() requires at least one argument"),
+    );
+  });
+
+  it("for loop: range() accepts at most 3 arguments", async () => {
+    const pythonCode = `
+for i in range(1, 2, 3, 4):
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error("range() accepts at most 3 arguments"),
+    );
+  });
+
+  it("for loop: range(stop) requires integer stop", async () => {
+    const pythonCode = `
+for i in range(3.5):
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.RANGE_ARG_NOT_INT),
+    );
+  });
+
+  it("for loop: range(start, stop) requires integer start", async () => {
+    const pythonCode = `
+for i in range(1.5, 4):
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.RANGE_ARG_NOT_INT),
+    );
+  });
+
+  it("for loop: range(start, stop) requires integer stop", async () => {
+    const pythonCode = `
+for i in range(1, 4.5):
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.RANGE_ARG_NOT_INT),
+    );
+  });
+
+  it("for loop: range(start, stop, step) requires integer step", async () => {
+    const pythonCode = `
+for i in range(1, 5, 0.5):
+    pass
+`;
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.RANGE_ARG_NOT_INT),
+    );
+  });
+
   it("for loop: range(stop)", async () => {
     const pythonCode = `
 sum = 0
@@ -1479,32 +1583,33 @@ f(1, 2, 3)
 });
 
 describe("Function *args & unpacking tests", () => {
-  it("no extra arguments: *args is empty", async () => {
-    const pythonCode = `
+  describe("*args tests", () => {
+    it("no extra arguments: *args is empty", async () => {
+      const pythonCode = `
 def f(a, b, *c):
     return list_length(c)
 
 f(1, 2)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("0");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("0");
+    });
 
-  it("extra arguments are packed into *args", async () => {
-    const pythonCode = `
+    it("extra arguments are packed into *args", async () => {
+      const pythonCode = `
 def f(a, b, *c):
     return c[0] + c[1]
 
 f(1, 2, 10, 20)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("30");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("30");
+    });
 
-  it("*args contains all extra arguments beyond defined params", async () => {
-    const pythonCode = `
+    it("*args contains all extra arguments beyond defined params", async () => {
+      const pythonCode = `
 def f(a, *args):
     sum = 0
     for i in range(list_length(args)):
@@ -1513,112 +1618,176 @@ def f(a, *args):
 
 f(1, 2, 3, 4)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("9");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("9");
+    });
 
-  it("*args in function with no fixed parameters", async () => {
-    const pythonCode = `
+    it("*args in function with no fixed parameters", async () => {
+      const pythonCode = `
 def f(*args):
     return args[0] + args[1]
 
 f(7, 8)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("15");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("15");
+    });
 
-  it("*args with mixed types", async () => {
-    const pythonCode = `
+    it("*args with mixed types", async () => {
+      const pythonCode = `
 def f(a, *args):
     return args[0] + args[1]
 
 f(0, 3, 4.5)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
-    expect(renderedResult).toBe("7.5");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
+      expect(renderedResult).toBe("7.5");
+    });
 
-  it("*args must be last parameter", async () => {
-    const pythonCode = `
+    it("*args must be last parameter", async () => {
+      const pythonCode = `
 def f(*args, a):
     return a
 
 f(1, 2, 3)
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Starred parameter must be the last parameter"),
-    );
-  });
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error("Starred parameter must be the last parameter"),
+      );
+    });
 
-  it("function with *args must be called with at least the fixed parameters", async () => {
-    const pythonCode = `
+    it("function with *args must be called with at least the fixed parameters", async () => {
+      const pythonCode = `
 def f(a, b, *args):
     return a + b
 
 f(1)
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
-    );
-  });
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.FUNC_WRONG_ARITY),
+      );
+    });
 
-  it("local declarations unbound should error even if *args is present", async () => {
-    const pythonCode = `
+    it("local declarations unbound should error even if *args is present", async () => {
+      const pythonCode = `
 def f(*args):
     x = x + 1
     return args[0]
 
 f(10, 20, 30)
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.UNBOUND),
-    );
-  });
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.UNBOUND),
+      );
+    });
 
-  it("*args cannot be mutated inside function", async () => {
-    const pythonCode = `
+    it("*args cannot be mutated inside function", async () => {
+      const pythonCode = `
 def f(*args):
     args[0] = 100
 
 f(1, 2, 3)
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.SET_ELEMENT_TUPLE),
-    );
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.SET_ELEMENT_TUPLE),
+      );
+    });
+
+    it("only one *args allowed", async () => {
+      const pythonCode = `
+def f(*args1, *args2):
+    return list_length(args1) + list_length(args2)
+
+f(1, 2, 3)
+`;
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error("Only one starred parameter is allowed"),
+      );
+    });
+
+    it("lambda with fixed arg and *args", async () => {
+      const pythonCode = `
+f = lambda a, *args: args[0] + args[1]
+f(1, 2, 3)
+`;
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("5");
+    });
+
+    it("lambda with only *args", async () => {
+      const pythonCode = `
+f = lambda *args: list_length(args)
+f(1, 2, 3)
+`;
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("3");
+    });
+
+    it("lambda with fixed arg and *args still enforces minimum arity", async () => {
+      const pythonCode = `
+f = lambda a, *args: a
+f()
+`;
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.FUNC_WRONG_ARITY),
+      );
+    });
+
+    it("lambda only one *args allowed", async () => {
+      const pythonCode = `
+f = lambda *args1, *args2: list_length(args1)
+f(1, 2, 3)
+`;
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error("Only one starred parameter is allowed"),
+      );
+    });
+
+    it("lambda *args must be last parameter", async () => {
+      const pythonCode = `
+f = lambda *args, a: a
+f(1, 2, 3)
+`;
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error("Starred parameter must be the last parameter"),
+      );
+    });
   });
 
-  it("lists can be unpacked into function arguments", async () => {
-    const pythonCode = `
+  describe("unpacking tests", () => {
+    it("lists can be unpacked into function arguments", async () => {
+      const pythonCode = `
 def f(a, b, c):
     return a + b + c
 
 args = [2, 3]
 f(1, *args)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("6");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("6");
+    });
 
-  it("unpacking a non-list should error", async () => {
-    const pythonCode = `
+    it("unpacking a non-list should error", async () => {
+      const pythonCode = `
 def f(a, b):
     return a + b
 
 not_a_list = 42
 f(1, *not_a_list)
   `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.STARRED_NOT_LIST),
-    );
-  });
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.STARRED_NOT_LIST),
+      );
+    });
 
-  it("multiple unpacking operators in call", async () => {
-    const pythonCode = `
+    it("multiple unpacking operators in call", async () => {
+      const pythonCode = `
 def f(a, b, c, d):
     return a + b + c + d
 
@@ -1626,39 +1795,62 @@ args1 = [2, 3]
 args2 = [4]
 f(1, *args1, *args2)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("10");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("10");
+    });
 
-  it("arity check accounts for unpacked arguments (too few)", async () => {
-    const pythonCode = `
+    it("arity check accounts for unpacked arguments (too few)", async () => {
+      const pythonCode = `
 def f(a, b, c):
     return a + b + c
 
 args = [2]
 f(1, *args)
   `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
-    );
-  });
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.FUNC_WRONG_ARITY),
+      );
+    });
 
-  it("arity check accounts for unpacked arguments (too many)", async () => {
-    const pythonCode = `
+    it("arity check accounts for unpacked arguments (too many)", async () => {
+      const pythonCode = `
 def f(a, b, c):
     return a + b + c
 
 args = [2, 3]
 f(1, *args, 4)
   `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.FUNC_WRONG_ARITY),
-    );
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.FUNC_WRONG_ARITY),
+      );
+    });
+
+    it("lambda can be called with unpacked list arguments", async () => {
+      const pythonCode = `
+f = lambda a, b, c: a + b + c
+args = [2, 3]
+f(1, *args)
+`;
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("6");
+    });
+
+    it("lambda unpacking a non-list should error", async () => {
+      const pythonCode = `
+f = lambda a, b: a + b
+f(1, *42)
+`;
+      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+        new Error(ERROR_MAP.STARRED_NOT_LIST),
+      );
+    });
   });
 
-  it("unpacking operator with varargs", async () => {
-    const pythonCode = `
+  describe("combined tests", () => {
+    it("unpacking operator with varargs", async () => {
+      const pythonCode = `
 def f(a, *args):
     sum = a
     for i in range(list_length(args)):
@@ -1668,13 +1860,13 @@ def f(a, *args):
 args = [2, 3, 4]
 f(1, *args)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("10");
-  });
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("10");
+    });
 
-  it("after copying environment for unpacking operator, should reserve space for locals", async () => {
-    const pythonCode = `
+    it("after copying environment for unpacking operator, should reserve space for locals", async () => {
+      const pythonCode = `
 def f(a, b):
     test2 = 4
     test = 5
@@ -1686,9 +1878,21 @@ def f(a, b):
     return test
 f(*[1, 2])
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("5");
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("5");
+    });
+
+    it("lambda with *args accepts unpacked arguments", async () => {
+      const pythonCode = `
+f = lambda a, *args: a + args[0] + args[1]
+rest = [2, 3]
+f(1, *rest)
+`;
+      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      expect(rawResult[0]).toBe(TYPE_TAG.INT);
+      expect(renderedResult).toBe("6");
+    });
   });
 });
 
@@ -1739,6 +1943,11 @@ describe("parse function tests", () => {
     );
   });
 
+  it("empty input returns sequence(None)", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("")`, true);
+    expect(renderedResult).toBe(linkedListBuilder("sequence", linkedListBuilder("None")));
+  });
+
   it("integer literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
     expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
@@ -1747,6 +1956,11 @@ describe("parse function tests", () => {
   it("float literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("3.5")`, true);
     expect(renderedResult).toBe(linkedListBuilder("literal", "3.5"));
+  });
+
+  it("complex literal (pure imaginary)", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("2j")`, true);
+    expect(renderedResult).toBe(linkedListBuilder("literal", "2j"));
   });
 
   it("bool literal True", async () => {
@@ -1772,6 +1986,11 @@ describe("parse function tests", () => {
   it("name", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("x")`, true);
     expect(renderedResult).toBe(linkedListBuilder("name", '"x"'));
+  });
+
+  it("grouping expression unwraps to inner expression", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("(1)")`, true);
+    expect(renderedResult).toBe(linkedListBuilder("literal", "1"));
   });
 
   it("multiple top-level statements", async () => {
@@ -2120,6 +2339,13 @@ describe("parse function tests", () => {
     );
   });
 
+  it("bare return statement returns None", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("return")`, true);
+    expect(renderedResult).toBe(
+      linkedListBuilder("return_statement", linkedListBuilder("literal", "None")),
+    );
+  });
+
   it("break statement", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse("break")`, true);
     expect(renderedResult).toBe(linkedListBuilder("break_statement"));
@@ -2193,6 +2419,18 @@ describe("parse function tests", () => {
     );
   });
 
+  it("if statement without else uses None as else branch", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse("if True:\\n    1")`, true);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "conditional_statement",
+        linkedListBuilder("literal", "True"),
+        linkedListBuilder("literal", "1"),
+        "None",
+      ),
+    );
+  });
+
   it("if-else statement with multiple statements per branch", async () => {
     const { renderedResult } = await compileToWasmAndRun(
       `parse("if True:\\n    x = 1\\n    y\\nelse:\\n    pass\\n    z")`,
@@ -2221,117 +2459,39 @@ describe("parse function tests", () => {
     );
   });
 
-  it("while loop: single statement body (no sequence)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("while True:\\n    1")`, true);
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "while_loop",
-        linkedListBuilder("literal", "True"),
-        linkedListBuilder("literal", "1"),
-      ),
+  it("while loop is not supported in parse tree generation", async () => {
+    await expect(compileToWasmAndRun(`parse("while True:\\n    1")`, true)).rejects.toThrow(
+      new Error("While loops are not supported in parse tree generation"),
     );
   });
 
-  it("while loop: multiple statement body (sequence)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("while True:\\n    x = 1\\n    x")`,
-      true,
-    );
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "while_loop",
-        linkedListBuilder("literal", "True"),
-        linkedListBuilder(
-          "sequence",
-          linkedListBuilder(
-            linkedListBuilder(
-              "assignment",
-              linkedListBuilder("name", '"x"'),
-              linkedListBuilder("literal", "1"),
-            ),
-            linkedListBuilder("name", '"x"'),
-          ),
-        ),
-      ),
+  it("for loop is not supported in parse tree generation", async () => {
+    await expect(compileToWasmAndRun(`parse("for i in range(5):\\n    1")`, true)).rejects.toThrow(
+      new Error("For loops are not supported in parse tree generation"),
     );
   });
 
-  it("for loop: range(stop)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("for i in range(5):\\n    1")`,
-      true,
-    );
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "for_loop",
-        linkedListBuilder("name", '"i"'),
-        linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
-        linkedListBuilder("literal", "1"),
-      ),
+  it("function declaration with starred parameter is not supported in parse tree generation", async () => {
+    await expect(
+      compileToWasmAndRun(`parse("def f(*args):\\n    return 1")`, true),
+    ).rejects.toThrow(new Error("Starred parameters are not supported in parse tree generation"));
+  });
+
+  it("lambda with starred parameter is not supported in parse tree generation", async () => {
+    await expect(compileToWasmAndRun(`parse("lambda *args: 1")`, true)).rejects.toThrow(
+      new Error("Starred parameters are not supported in parse tree generation"),
     );
   });
 
-  it("for loop: range(start, stop)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("for i in range(2, 5):\\n    1")`,
-      true,
-    );
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "for_loop",
-        linkedListBuilder("name", '"i"'),
-        linkedListBuilder(
-          "range_args",
-          linkedListBuilder("literal", "2"),
-          linkedListBuilder("literal", "5"),
-        ),
-        linkedListBuilder("literal", "1"),
-      ),
+  it("starred expression in call is not supported in parse tree generation", async () => {
+    await expect(compileToWasmAndRun(`parse("f(*x)")`, true)).rejects.toThrow(
+      new Error("Starred expressions are not supported in parse tree generation"),
     );
   });
 
-  it("for loop: range(start, stop, step)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("for i in range(1, 10, 2):\\n    1")`,
-      true,
-    );
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "for_loop",
-        linkedListBuilder("name", '"i"'),
-        linkedListBuilder(
-          "range_args",
-          linkedListBuilder("literal", "1"),
-          linkedListBuilder("literal", "10"),
-          linkedListBuilder("literal", "2"),
-        ),
-        linkedListBuilder("literal", "1"),
-      ),
-    );
-  });
-
-  it("for loop with multiple statements in body", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("for i in range(5):\\n    x = 1\\n    i")`,
-      true,
-    );
-    expect(renderedResult).toBe(
-      linkedListBuilder(
-        "for_loop",
-        linkedListBuilder("name", '"i"'),
-        linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
-        linkedListBuilder(
-          "sequence",
-          linkedListBuilder(
-            linkedListBuilder(
-              "assignment",
-              linkedListBuilder("name", '"x"'),
-              linkedListBuilder("literal", "1"),
-            ),
-            linkedListBuilder("name", '"i"'),
-          ),
-        ),
-      ),
+  it("multiple starred expressions in call are not supported in parse tree generation", async () => {
+    await expect(compileToWasmAndRun(`parse("f(*x, *y)")`, true)).rejects.toThrow(
+      new Error("Starred expressions are not supported in parse tree generation"),
     );
   });
 });
@@ -3086,7 +3246,7 @@ y = 10
   });
 
   it("empty program should not do anything in non-interactive mode", async () => {
-    const { rawResult, renderedResult } = await compileToWasmAndRun(``, false);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(``);
     expect(rawResult).toBeNull();
     expect(renderedResult).toBeNull();
   });

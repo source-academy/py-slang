@@ -44,6 +44,7 @@ export const ERROR_MAP = {
   SET_ELEMENT_TUPLE: "Cannot assign to the rest parameter of a function.",
   INDEX_NOT_INT: "Using a non-integer index to access a list element.",
   LIST_OUT_OF_RANGE: "List index out of range.",
+  RANGE_ARG_NOT_INT: "Using a non-integer argument in range().",
   GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
   MAKE_LINKED_LIST_NOT_LIST:
     "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
@@ -420,6 +421,19 @@ export const MAKE_INT_FX = wasm
   .params({ $value: i64 })
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.INT), local.get("$value"));
+
+export const CHECK_INT_FX = wasm
+  .func("$_check_int")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.RANGE_ARG_NOT_INT))), wasm.unreachable()),
+
+    local.get("$tag"),
+    local.get("$val"),
+  );
 
 // reinterpret bits as int
 export const MAKE_FLOAT_FX = wasm
@@ -1858,6 +1872,7 @@ export const nativeFunctions = [
   PEEK_SHADOW_STACK_FX,
   DISCARD_SHADOW_STACK_FX,
   IS_TAG_GCABLE,
+  CHECK_INT_FX,
   MAKE_INT_FX,
   MAKE_FLOAT_FX,
   MAKE_COMPLEX_FX,

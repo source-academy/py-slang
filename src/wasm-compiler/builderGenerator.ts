@@ -23,6 +23,7 @@ import {
   ARITHMETIC_OP_TAG,
   BOOL_NOT_FX,
   BOOLISE_FX,
+  CHECK_INT_FX,
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
@@ -96,7 +97,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration`);
+        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration!`);
       }
 
       return [this.environment.length - 1 - i, index];
@@ -149,14 +150,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       .filter(s => s instanceof StmtNS.NonLocal)
       .map(s => s.name.lexeme)
       .forEach(l => {
+        // cannot declare parameter name as nonlocal
+        if (parameters && parameters.map(p => p.lexeme).includes(l)) {
+          throw new Error(`${l} is a parameter and cannot be declared nonlocal!`);
+        }
+
         // nonlocal declaration must exist in a nonlocal scope
         if (!this.environment.find((frame, i) => i !== 0 && frame.find(({ name }) => name === l))) {
           throw new Error(`No binding for nonlocal ${l} found!`);
-        }
-
-        // cannot declare parameter name as nonlocal
-        if (parameters && parameters.map(p => p.lexeme).includes(l)) {
-          throw new Error(`${l} is parameter and nonlocal`);
         }
 
         // tag this binding as nonlocal so
@@ -252,6 +253,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       makeString: wasm.export("makeString").func(MAKE_STRING_FX.name),
       makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
       makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
+      makeComplex: wasm.export("makeComplex").func(MAKE_COMPLEX_FX.name),
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
       peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
     };
@@ -732,11 +734,12 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         );
 
     const rangeArgs = stmt.iter.args;
+    const checkedRangeArg = (arg: ExprNS.Expr) => wasm.call(CHECK_INT_FX).args(this.visit(arg));
 
     if (rangeArgs.length === 1 || rangeArgs.length === 2) {
       return wasm.raw`
-      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : this.visit(rangeArgs[0]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? this.visit(rangeArgs[0]) : this.visit(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? checkedRangeArg(rangeArgs[0]) : checkedRangeArg(rangeArgs[1]))}
       
       ${wasm
         .block("$exit")
@@ -755,9 +758,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         )}`;
     } else {
       return wasm.raw`
-      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, this.visit(rangeArgs[0]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, this.visit(rangeArgs[1]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, this.visit(rangeArgs[2]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, checkedRangeArg(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, checkedRangeArg(rangeArgs[2]))}
 
       ${wasm
         .if(
