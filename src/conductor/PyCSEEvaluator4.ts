@@ -11,8 +11,8 @@ import stream from "../stdlib/stream";
 import parser from "../stdlib/parser";
 
 export default class PyCSEEvaluator4 extends PyCSEEvaluator {
-  constructor (conductor: IRunnerPlugin) {
+  constructor(conductor: IRunnerPlugin) {
     super(conductor, {}, 4, [linkedList, list, pairmutator, stream, parser]);
   }
 }
-initialise(PyCSEEvaluator4)
+initialise(PyCSEEvaluator4);
