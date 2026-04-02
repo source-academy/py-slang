@@ -3,13 +3,16 @@ import {
   global,
   i32,
   i64,
-  local,
   mut,
   wasm,
-  WasmInstruction,
-  WasmNumeric,
-  WasmRaw,
+  WasmCall,
+  WasmData,
+  WasmExport,
+  type WasmInstruction,
+  type WasmNumeric,
+  type WasmRaw,
 } from "@sourceacademy/wasm-util";
+import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../ast-types";
 import { TokenType } from "../tokens";
 import {
@@ -20,104 +23,53 @@ import {
   ARITHMETIC_OP_TAG,
   BOOL_NOT_FX,
   BOOLISE_FX,
+  CHECK_INT_FX,
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
+  DATA_END,
+  DISCARD_SHADOW_STACK_FX,
+  ENV_HEAD_SIZE,
+  FROM_SPACE_END_PTR,
+  GET_LAST_EXPR_RESULT_FX,
   GET_LEX_ADDR_FX,
-  GET_PAIR_HEAD_FX,
-  GET_PAIR_TAIL_FX,
+  GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
+  IS_TAG_GCABLE,
   LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
   MAKE_FLOAT_FX,
   MAKE_INT_FX,
+  MAKE_LIST_FX,
   MAKE_NONE_FX,
   MAKE_PAIR_FX,
   MAKE_STRING_FX,
+  MALLOC_FX,
   nativeFunctions,
   NEG_FX,
+  PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
+  RETURN_NONVOID_SUFFIX,
+  RETURN_VOID_SUFFIX,
+  SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
-  SET_PAIR_HEAD_FX,
-  SET_PAIR_TAIL_FX,
-  SET_PARAM_FX,
-  TYPE_TAG,
+  SET_LIST_ELEMENT_FX,
+  SHADOW_STACK_BOTTOM,
+  SHADOW_STACK_PTR,
+  SHADOW_STACK_RESERVED_SIZE,
+  SHADOW_STACK_TAG,
+  SHADOW_STACK_TOP,
+  SILENT_PUSH_SHADOW_STACK_FX,
+  TO_SPACE_END_PTR,
 } from "./constants";
+import { LibFuncType } from "./library";
 
-const builtInFunctions: {
-  name: string;
-  arity: number;
-  body: WasmInstruction | WasmInstruction[];
-  isVoid: boolean;
-}[] = [
-  {
-    name: "print",
-    arity: 1,
-    body: wasm.call(LOG_FX).args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: true,
-  },
-  {
-    name: "pair",
-    arity: 2,
-    body: wasm
-      .call(MAKE_PAIR_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: false,
-  },
-  {
-    name: "head",
-    arity: 1,
-    body: wasm
-      .call(GET_PAIR_HEAD_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: false,
-  },
-  {
-    name: "tail",
-    arity: 1,
-    body: wasm
-      .call(GET_PAIR_TAIL_FX)
-      .args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    isVoid: false,
-  },
-  {
-    name: "set_head",
-    arity: 2,
-    body: wasm
-      .call(SET_PAIR_HEAD_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: true,
-  },
-  {
-    name: "set_tail",
-    arity: 2,
-    body: wasm
-      .call(SET_PAIR_TAIL_FX)
-      .args(
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0)),
-        wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(1)),
-      ),
-    isVoid: true,
-  },
-  {
-    name: "bool",
-    arity: 1,
-    body: [
-      i32.const(TYPE_TAG.BOOL),
-      wasm.call(BOOLISE_FX).args(wasm.call(GET_LEX_ADDR_FX).args(i32.const(0), i32.const(0))),
-    ],
-    isVoid: false,
-  },
-];
+const FOR_END_PREFIX = "_for_end_";
+const FOR_STEP_PREFIX = "_for_step_";
+const FOR_ITER_PREFIX = "_for_iter_";
 
 type Binding = { name: string; tag: "local" | "nonlocal" };
 
@@ -128,11 +80,14 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
 }
 
 export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNumeric> {
-  private strings: [string, number][] = [];
-  private heapPointer = 0;
+  private strings: string[] = [];
+  private builtIns: WasmCall[];
+  private interactiveMode = false;
+  private readonly pageCount: number;
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
+  private forDepth = 0;
 
   private getLexAddress(name: string): [number, number] {
     for (let i = this.environment.length - 1; i >= 0; i--) {
@@ -142,7 +97,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration`);
+        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration!`);
       }
 
       return [this.environment.length - 1 - i, index];
@@ -154,61 +109,63 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     statements: StmtNS.Stmt[],
     parameters?: StmtNS.FunctionDef["parameters"],
   ): Binding[] {
-    const findInNestedBody = (stmts: StmtNS.Stmt[]): (StmtNS.FunctionDef | StmtNS.Assign)[] => {
-      const found: (StmtNS.FunctionDef | StmtNS.Assign)[] = [];
+    const findLexemes = (stmts: StmtNS.Stmt[], forDepth: number): string[] => {
+      const found: string[] = [];
       for (const stmt of stmts) {
-        if (stmt instanceof StmtNS.FunctionDef || stmt instanceof StmtNS.Assign) {
-          found.push(stmt);
+        if (stmt instanceof StmtNS.FunctionDef) {
+          // base case: function declaration
+          found.push(stmt.name.lexeme);
+        } else if (stmt instanceof StmtNS.Assign && stmt.target instanceof ExprNS.Variable) {
+          // base case: variable declaration in assignment statement
+          found.push(stmt.target.name.lexeme);
         } else if (stmt instanceof StmtNS.If) {
-          found.push(...findInNestedBody(stmt.body));
+          // recursively search if and else block
+          found.push(...findLexemes(stmt.body, forDepth));
           if (stmt.elseBlock) {
-            found.push(...findInNestedBody(stmt.elseBlock));
+            found.push(...findLexemes(stmt.elseBlock, forDepth));
           }
-        } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
-          found.push(...findInNestedBody(stmt.body));
+        } else if (stmt instanceof StmtNS.While) {
+          // recursively search loop body
+          found.push(...findLexemes(stmt.body, forDepth));
+        } else if (stmt instanceof StmtNS.For) {
+          // add _end, _step variables for range() to avoid evaluating args multiple times
+          found.push(`${FOR_END_PREFIX}${forDepth}`);
+          found.push(`${FOR_STEP_PREFIX}${forDepth}`);
+          // add _iter variable to prevent mutation to loop variable affecting iteration
+          found.push(`${FOR_ITER_PREFIX}${forDepth}`);
+          // for loop target is also a declaration
+          found.push(stmt.target.lexeme);
+          found.push(...findLexemes(stmt.body, forDepth + 1));
         }
       }
       return found;
     };
 
-    const bindings: Binding[] = findInNestedBody(statements).map(s => {
-      if (s instanceof StmtNS.FunctionDef) {
-        return { name: s.name.lexeme, tag: "local" };
-      }
-
-      if (s.target instanceof ExprNS.Subscript) {
-        throw new Error("Subscript assignment is not yet supported");
-      }
-
-      return { name: s.target.name.lexeme, tag: "local" };
-    });
+    const bindings: Binding[] = findLexemes(statements, 0).map(lexeme => ({
+      name: lexeme,
+      tag: "local",
+    }));
 
     statements
       .filter(s => s instanceof StmtNS.NonLocal)
       .map(s => s.name.lexeme)
-      .forEach(name => {
-        // nonlocal declaration must exist in a nonlocal scope
-        if (
-          !this.environment.find(
-            (frame, i) => i !== 0 && frame.find(binding => binding.name === name),
-          )
-        )
-          throw new Error(`No binding for nonlocal ${name} found!`);
-
+      .forEach(l => {
         // cannot declare parameter name as nonlocal
-        if (parameters && parameters.map(p => p.lexeme).includes(name)) {
-          throw new Error(`${name} is parameter and nonlocal`);
+        if (parameters && parameters.map(p => p.lexeme).includes(l)) {
+          throw new Error(`${l} is a parameter and cannot be declared nonlocal!`);
         }
 
-        for (let i = 0; i < bindings.length; i++) {
-          const binding = bindings[i];
-          if (binding.name === name) {
-            // tag this binding as nonlocal so
-            // if it's accessed before its nonlocal statement,
-            // throw error
-            bindings[i].tag = "nonlocal";
-          }
+        // nonlocal declaration must exist in a nonlocal scope
+        if (!this.environment.find((frame, i) => i !== 0 && frame.find(({ name }) => name === l))) {
+          throw new Error(`No binding for nonlocal ${l} found!`);
         }
+
+        // tag this binding as nonlocal so
+        // if it's accessed before its nonlocal statement,
+        // throw error
+        bindings.forEach(binding => {
+          if (binding.name === l) binding.tag = "nonlocal";
+        });
       });
 
     return [
@@ -217,28 +174,21 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     ];
   }
 
-  visit(stmt: StmtNS.Stmt): WasmInstruction;
-  visit(stmt: ExprNS.Expr): WasmNumeric;
-  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmNumeric {
-    return stmt.accept(this);
-  }
+  constructor(
+    initialStrings: string[],
+    builtInFunctions: LibFuncType[],
+    interactiveMode: boolean,
+    pageCount: number,
+  ) {
+    this.strings = initialStrings;
+    this.pageCount = pageCount;
 
-  visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
-    if (stmt.statements.length <= 0) {
-      console.log("No statements found");
-      throw new Error("No statements found");
-    }
-
-    // declare built-in functions in the global environment before user code
-    const builtInFuncsDeclarations = builtInFunctions.map(({ name, arity, body, isVoid }, i) => {
+    this.builtIns = builtInFunctions.map(({ name, arity, body, isVoid, hasVarArgs }, i) => {
       this.environment[0].push({ name, tag: "local" });
       const tag = this.userFunctions.length;
       const newBody = [
-        ...(Array.isArray(body) ? body : [body]),
-        wasm.return(
-          ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-          global.set(CURR_ENV, local.get("$return_env")),
-        ),
+        ...body,
+        wasm.return(...(isVoid ? RETURN_VOID_SUFFIX : RETURN_NONVOID_SUFFIX)),
       ];
       this.userFunctions.push(newBody);
 
@@ -249,60 +199,127 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           i32.const(i),
           wasm
             .call(MAKE_CLOSURE_FX)
-            .args(i32.const(tag), i32.const(arity), i32.const(arity), global.get(CURR_ENV)),
+            .args(
+              i32.const(hasVarArgs ? 1 : 0),
+              i32.const(tag),
+              i32.const(arity),
+              i32.const(arity + (hasVarArgs ? 1 : 0)),
+              global.get(CURR_ENV),
+            ),
         );
     });
+    this.interactiveMode = interactiveMode;
+  }
 
+  visit(stmt: StmtNS.Stmt): WasmInstruction;
+  visit(stmt: ExprNS.Expr): WasmNumeric;
+  visit(stmt: StmtNS.Stmt | ExprNS.Expr): WasmInstruction | WasmNumeric {
+    return stmt.accept(this);
+  }
+
+  visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
-    const body = stmt.statements.map(s => this.visit(s));
+    // In interactive mode, handle the last expression specially,
+    // since we want to return its value instead of None
+    const lastStmt = stmt.statements.at(-1);
+    const hasLastExprForReturn = this.interactiveMode && lastStmt instanceof StmtNS.SimpleExpr;
+    const body = hasLastExprForReturn
+      ? [
+          ...stmt.statements.slice(0, -1).map(s => this.visit(s)),
+          wasm.call(GET_LAST_EXPR_RESULT_FX).args(this.visit(lastStmt.expression)),
+        ]
+      : [...stmt.statements.map(s => this.visit(s)), wasm.call(MAKE_NONE_FX)];
 
-    // this matches the format of drop in visitSimpleExpr
-    const lastInstr = body.at(-1);
-    const undroppedInstr =
-      lastInstr?.op === "drop" && lastInstr.value?.op === "drop" && lastInstr.value.value;
+    // collect all strings
+    const strings: WasmData[] = [];
+    let heapPointer = 0;
 
-    // collect all strings, native functions used and user functions
-    const strings = this.strings.map(([str, add]) => wasm.data(i32.const(add), str));
+    for (const str of this.strings) {
+      strings.push(
+        wasm.data(i32.const(heapPointer), str.replace(/"/g, '\\"').replace(/\n/g, "\\n")),
+      );
+      heapPointer += str.length;
+    }
 
-    const applyFunction = applyFuncFactory(this.userFunctions);
+    // exported functions for parse
+    const exports: { [key in keyof WasmExports]: WasmExport } = {
+      main: wasm.export("main").func("$main"),
+      collect: wasm.export("collect").func("$_collect"),
+      log: wasm.export("log").func(LOG_FX.name),
+      makeInt: wasm.export("makeInt").func(MAKE_INT_FX.name),
+      makeFloat: wasm.export("makeFloat").func(MAKE_FLOAT_FX.name),
+      makeBool: wasm.export("makeBool").func(MAKE_BOOL_FX.name),
+      makeString: wasm.export("makeString").func(MAKE_STRING_FX.name),
+      makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
+      makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
+      makeComplex: wasm.export("makeComplex").func(MAKE_COMPLEX_FX.name),
+      malloc: wasm.export("malloc").func(MALLOC_FX.name),
+      peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
+    };
 
-    // because each variable has a tag and payload = 3 words
-    const globalEnvLength = this.environment[0].length;
+    const memoryEndPointer = this.pageCount * 64 * 1024;
+    const semispaceEndPointer = memoryEndPointer - SHADOW_STACK_RESERVED_SIZE;
+    const fromSpaceEndPointer = Math.floor(semispaceEndPointer / 2);
 
     return wasm
       .module()
-      .imports(wasm.import("js", "memory").memory(1), ...importedLogs)
+      .imports(
+        wasm.import("js", "memory").memory(this.pageCount),
+        ...importedLogs,
+        wasm
+          .import("metacircular", "tokenize")
+          .func("$_host_tokenize")
+          .params(i32, i32)
+          .results(i32, i64),
+        wasm
+          .import("metacircular", "parse")
+          .func("$_host_parse")
+          .params(i32, i32)
+          .results(i32, i64),
+      )
       .globals(
-        wasm.global(HEAP_PTR, mut.i32).init(i32.const(this.heapPointer)),
+        wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
+        wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
+        wasm.global(FROM_SPACE_END_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
+        wasm.global(TO_SPACE_END_PTR, mut.i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_BOTTOM, i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),
+        wasm.global(SHADOW_STACK_PTR, mut.i32).init(i32.const(memoryEndPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
       )
       .datas(...strings)
       .funcs(
         ...nativeFunctions,
-        applyFunction,
+        applyFuncFactory(this.userFunctions),
 
         wasm
           .func("$main")
-          .results(...(undroppedInstr ? [i32, i64] : []))
+          .results(i32, i64)
           .body(
             global.set(
               CURR_ENV,
-              wasm.call(ALLOC_ENV_FX).args(i32.const(globalEnvLength), i32.const(0), i32.const(0)),
+              wasm.call(ALLOC_ENV_FX).args(i32.const(this.environment[0].length)),
             ),
 
-            ...builtInFuncsDeclarations,
+            // declare built-in constants/functions in the global environment before user code
+            ...this.builtIns,
 
-            ...(undroppedInstr ? [...body.slice(0, -1), undroppedInstr] : body),
+            ...body,
           ),
       )
-      .exports(wasm.export("main").func("$main"))
+      .exports(...Object.values(exports))
       .build();
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): WasmInstruction {
+    // Regardless of mode, drop value and check at runtime if tag is gcable
+    // If gcable, discard the shadow stack
+
     const expr = this.visit(stmt.expression);
-    return wasm.drop(wasm.drop(expr));
+    return wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(wasm.raw`${expr} (drop)`))
+      .then(wasm.call(DISCARD_SHADOW_STACK_FX));
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): WasmNumeric {
@@ -393,8 +410,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmNumeric {
     const value = BigInt(expr.value);
-    const min = BigInt("-9223372036854775808"); // -(2^63)
-    const max = BigInt("9223372036854775807"); // (2^63) - 1
+    const min = -9223372036854775808n; // -(2^63)
+    const max = 9223372036854775807n; // (2^63) - 1
     if (value < min || value > max) {
       throw new Error(`BigInt literal out of bounds: ${expr.value}`);
     }
@@ -407,12 +424,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     else if (typeof expr.value === "boolean")
       return wasm.call(MAKE_BOOL_FX).args(i32.const(expr.value ? 1 : 0));
     else if (typeof expr.value === "string") {
-      const str = expr.value;
-      const len = str.length;
-      const toReturn = wasm.call(MAKE_STRING_FX).args(i32.const(this.heapPointer), i32.const(len));
-
-      this.strings.push([str, this.heapPointer]);
-      this.heapPointer += len;
+      const toReturn = wasm
+        .call(MAKE_STRING_FX)
+        .args(
+          i32.const(this.strings.reduce((acc, s) => acc + s.length, 0)),
+          i32.const(expr.value.length),
+        );
+      this.strings.push(expr.value);
       return toReturn;
     } else {
       throw new Error(`Unsupported literal type: ${typeof expr.value}`);
@@ -424,13 +442,20 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): WasmInstruction {
-    if (stmt.target instanceof ExprNS.Subscript) {
-      throw new Error("Subscript assignment is not yet supported");
-    }
-    const [depth, index] = this.getLexAddress(stmt.target.name.lexeme);
-    const expression = this.visit(stmt.value);
+    const target = stmt.target;
+    if (target instanceof ExprNS.Variable) {
+      const [depth, index] = this.getLexAddress(target.name.lexeme);
+      const expression = this.visit(stmt.value);
 
-    return wasm.call(SET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index), expression);
+      return wasm.call(SET_LEX_ADDR_FX).args(i32.const(depth), i32.const(index), expression);
+    } else if (target instanceof ExprNS.Subscript) {
+      const value = this.visit(target.value);
+      const index = this.visit(target.index);
+      const expression = this.visit(stmt.value);
+
+      return wasm.call(SET_LIST_ELEMENT_FX).args(value, index, expression);
+    }
+    throw new Error("Invalid assignment target");
   }
 
   visitVariableExpr(expr: ExprNS.Variable): WasmNumeric {
@@ -440,13 +465,25 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): WasmInstruction {
     const [depth, index] = this.getLexAddress(stmt.name.lexeme);
-    const arity = stmt.parameters.length;
+    const arity = stmt.parameters.filter(p => !p.isStarred).length;
     const tag = this.userFunctions.length;
+    let hasStarred = false;
     this.userFunctions.push([]); // placeholder
+
+    if (stmt.parameters.some(p => p.isStarred)) {
+      if (stmt.parameters.filter(p => p.isStarred).length > 1) {
+        throw new Error("Only one starred parameter is allowed");
+      }
+      if (stmt.parameters.findIndex(p => p.isStarred) !== stmt.parameters.length - 1) {
+        throw new Error("Starred parameter must be the last parameter");
+      }
+
+      hasStarred = true;
+    }
 
     const newFrame = this.collectDeclarations(stmt.body, stmt.parameters);
 
-    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (tag >= 1 << 15) throw new Error("Tag cannot be above 15-bit integer limit");
     if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
       throw new Error("Environment length cannot be above 8-bit integer limit");
@@ -464,20 +501,38 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         i32.const(index),
         wasm
           .call(MAKE_CLOSURE_FX)
-          .args(i32.const(tag), i32.const(arity), i32.const(newFrame.length), global.get(CURR_ENV)),
+          .args(
+            i32.const(hasStarred ? 1 : 0),
+            i32.const(tag),
+            i32.const(arity),
+            i32.const(newFrame.length),
+            global.get(CURR_ENV),
+          ),
       );
   }
 
   visitLambdaExpr(expr: ExprNS.Lambda): WasmNumeric {
-    const arity = expr.parameters.length;
+    const arity = expr.parameters.filter(p => !p.isStarred).length;
     const tag = this.userFunctions.length;
+    let hasStarred = false;
     this.userFunctions.push([]); // placeholder
+
+    if (expr.parameters.some(p => p.isStarred)) {
+      if (expr.parameters.filter(p => p.isStarred).length > 1) {
+        throw new Error("Only one starred parameter is allowed");
+      }
+      if (expr.parameters.findIndex(p => p.isStarred) !== expr.parameters.length - 1) {
+        throw new Error("Starred parameter must be the last parameter");
+      }
+
+      hasStarred = true;
+    }
 
     // no statements allowed in lambdas, so there won't be any new local declarations
     // other than parameters
     const newFrame = this.collectDeclarations([], expr.parameters);
 
-    if (tag >= 1 << 16) throw new Error("Tag cannot be above 16-bit integer limit");
+    if (tag >= 1 << 15) throw new Error("Tag cannot be above 15-bit integer limit");
     if (arity >= 1 << 8) throw new Error("Arity cannot be above 8-bit integer limit");
     if (newFrame.length > 1 << 8)
       throw new Error("Environment length cannot be above 8-bit integer limit");
@@ -490,38 +545,77 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     return wasm
       .call(MAKE_CLOSURE_FX)
-      .args(i32.const(tag), i32.const(arity), i32.const(newFrame.length), global.get(CURR_ENV));
+      .args(
+        i32.const(hasStarred ? 1 : 0),
+        i32.const(tag),
+        i32.const(arity),
+        i32.const(newFrame.length),
+        global.get(CURR_ENV),
+      );
   }
 
-  visitCallExpr(expr: ExprNS.Call): WasmRaw {
+  visitCallExpr(expr: ExprNS.Call): WasmCall {
     const callee = this.visit(expr.callee);
-    const args = expr.args.map(arg => this.visit(arg));
+    const args = expr.args.map(arg => ({
+      arg: this.visit(arg),
+      isStarred: arg instanceof ExprNS.Starred,
+    }));
 
-    // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
-    // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
+    // push the return address onto the shadow stack first (for APPLY later).
 
-    // we call PRE_APPLY first, which verifies the callee is a closure and arity matches
-    // AND creates a new environment for the function call, but does not set CURR_ENV yet
-    // this is so that we can set the arguments in the new environment first
+    // we call PRE_APPLY next, which verifies the callee is a closure and arity matches
+    // AND creates a new environment for the function call the size of the function call
+    // argument length. it returns the pointer to this env, which we push onto the
+    // shadow stack.
 
-    // this means we can't use SET_LEX_ADDR_FX because it uses CURR_ENV internally
-    // so we manually set the arguments in the new environment using SET_PARAM_FX
+    // we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
+    // which reads the pointer to the new env from the shadow stack.
 
-    // the SET_PARAM function returns the env address after setting the parameter
-    // so we can chain the calls together
-    return wasm.raw`
-${global.get(CURR_ENV)}
-${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
+    // APPLY takes in the argument length. it reads the (3) call-state shadow stack values
+    // directly. it also sets CURR_ENV, only after all arguments have been set to prevent
+    // overlapping environments in nested function calls
 
-${args.map(
-  (arg, i) =>
-    wasm.raw`
-(i32.const ${i}) ${arg} (call ${SET_PARAM_FX.name})`,
-)}
+    // if has varargs, the list elements are set directly after the last parameter
+    // so we need to, in the APPLY_FX:
+    // 1. set HEAP_PTR to the end of the varargs list,
+    // 2. shift all the list elements over by 1 to make space for the varargs list
+    // 3. make the list variable
 
-(global.set ${CURR_ENV})
-(call ${APPLY_FX_NAME})
-`;
+    return wasm.call(APPLY_FX_NAME).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX) // (1) PUSH return address
+        .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
+
+      wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH packed call env state: upper 32 = env pointer, lower 32 = WIP arg count
+        i64.shl(
+          i64.extend_i32_u(
+            wasm.call(PRE_APPLY_FX).args(
+              callee, // (2) callee is already PUSHED at this point
+              i32.const(args.length),
+            ),
+          ),
+          i64.const(32),
+        ),
+      ),
+
+      ...args.map((element, i) =>
+        wasm
+          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .args(
+            i32.const(i),
+            element.arg,
+            i32.const(ENV_HEAD_SIZE),
+            i32.const(element.isStarred ? 1 : 0),
+          ),
+      ),
+
+      /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
+    );
+  }
+
+  visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
+    return this.visit(expr.value);
   }
 
   visitReturnStmt(stmt: StmtNS.Return): WasmInstruction {
@@ -529,7 +623,7 @@ ${args.map(
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get("$return_env")),
+      ...RETURN_NONVOID_SUFFIX,
     );
   }
 
@@ -573,17 +667,206 @@ ${args.map(
     return wasm.nop();
   }
 
+  visitWhileStmt(stmt: StmtNS.While): WasmInstruction {
+    const condition = this.visit(stmt.condition);
+    const body = stmt.body.map(b => this.visit(b));
+
+    return wasm.block("$exit").body(
+      wasm.loop().body(
+        wasm
+          .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(condition)))
+          .then(wasm.block("$continue").body(...body), wasm.br(1)), // 1 to jump to the beginning of the loop
+      ),
+    );
+  }
+
+  visitForStmt(stmt: StmtNS.For): WasmRaw {
+    if (
+      !(stmt.iter instanceof ExprNS.Call) ||
+      !(stmt.iter.callee instanceof ExprNS.Variable) ||
+      stmt.iter.callee.name.lexeme !== "range"
+    ) {
+      throw new Error("Only range() is supported in for loops");
+    } else if (stmt.iter.args.length === 0) {
+      throw new Error("range() requires at least one argument");
+    } else if (stmt.iter.args.length > 3) {
+      throw new Error("range() accepts at most 3 arguments");
+    }
+
+    this.forDepth += 1;
+    const body = stmt.body.map(b => this.visit(b));
+    this.forDepth -= 1;
+
+    const targetLex = this.getLexAddress(stmt.target.lexeme).map(n => i32.const(n));
+    const iterLex = this.getLexAddress(`${FOR_ITER_PREFIX}${this.forDepth}`).map(n => i32.const(n));
+    const endLex = this.getLexAddress(`${FOR_END_PREFIX}${this.forDepth}`).map(n => i32.const(n));
+    const stepLex = this.getLexAddress(`${FOR_STEP_PREFIX}${this.forDepth}`).map(n => i32.const(n));
+
+    const setIter = wasm
+      .call(SET_LEX_ADDR_FX)
+      .args(...targetLex, wasm.call(GET_LEX_ADDR_FX).args(...iterLex));
+    const loopCondition = (comparison: WasmNumeric) =>
+      i32.wrap_i64(
+        wasm
+          .call(BOOLISE_FX)
+          .args(
+            wasm
+              .call(COMPARISON_OP_FX)
+              .args(
+                wasm.call(GET_LEX_ADDR_FX).args(...iterLex),
+                wasm.call(GET_LEX_ADDR_FX).args(...endLex),
+                comparison,
+              ),
+          ),
+      );
+    const loopStep = (step: WasmNumeric) =>
+      wasm
+        .call(SET_LEX_ADDR_FX)
+        .args(
+          ...iterLex,
+          wasm
+            .call(ARITHMETIC_OP_FX)
+            .args(
+              wasm.call(GET_LEX_ADDR_FX).args(...iterLex),
+              step,
+              i32.const(ARITHMETIC_OP_TAG.ADD),
+            ),
+        );
+
+    const rangeArgs = stmt.iter.args;
+    const checkedRangeArg = (arg: ExprNS.Expr) => wasm.call(CHECK_INT_FX).args(this.visit(arg));
+
+    if (rangeArgs.length === 1 || rangeArgs.length === 2) {
+      return wasm.raw`
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? checkedRangeArg(rangeArgs[0]) : checkedRangeArg(rangeArgs[1]))}
+      
+      ${wasm
+        .block("$exit")
+        .body(
+          wasm
+            .loop()
+            .body(
+              wasm
+                .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+                .then(
+                  wasm.block("$continue").body(setIter, ...body),
+                  loopStep(wasm.call(MAKE_INT_FX).args(i64.const(1))),
+                  wasm.br(1),
+                ),
+            ),
+        )}`;
+    } else {
+      return wasm.raw`
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, checkedRangeArg(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, checkedRangeArg(rangeArgs[2]))}
+
+      ${wasm
+        .if(
+          i32.wrap_i64(
+            wasm
+              .call(BOOLISE_FX)
+              .args(
+                wasm
+                  .call(COMPARISON_OP_FX)
+                  .args(
+                    wasm.call(GET_LEX_ADDR_FX).args(...stepLex),
+                    wasm.call(MAKE_INT_FX).args(i64.const(0)),
+                    i32.const(COMPARISON_OP_TAG.GT),
+                  ),
+              ),
+          ),
+        )
+        .then(
+          wasm
+            .block("$exit")
+            .body(
+              wasm
+                .loop()
+                .body(
+                  wasm
+                    .if(loopCondition(i32.const(COMPARISON_OP_TAG.LT)))
+                    .then(
+                      wasm.block("$continue").body(setIter, ...body),
+                      loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                      wasm.br(1),
+                    ),
+                ),
+            ),
+        )
+        .else(
+          wasm
+            .block("$exit")
+            .body(
+              wasm
+                .loop()
+                .body(
+                  wasm
+                    .if(loopCondition(i32.const(COMPARISON_OP_TAG.GT)))
+                    .then(
+                      wasm.block("$continue").body(setIter, ...body),
+                      loopStep(wasm.call(GET_LEX_ADDR_FX).args(...stepLex)),
+                      wasm.br(1),
+                    ),
+                ),
+            ),
+        )}`;
+    }
+  }
+
+  visitBreakStmt(_stmt: StmtNS.Break): WasmInstruction {
+    return wasm.br("$exit");
+  }
+
+  visitContinueStmt(_stmt: StmtNS.Continue): WasmInstruction {
+    return wasm.br("$continue");
+  }
+
+  visitListExpr(expr: ExprNS.List): WasmCall {
+    const length = expr.elements.length;
+    const elements = expr.elements.map(el => this.visit(el));
+
+    // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // in the heap, and then make the list with MAKE_LIST_FX
+
+    // ! indicates actual arguments - the rest are for setting up the list
+    // in the shadow stack for SET_CONTIGUOUS_BLOCK_FX to write to
+    return wasm.call(MAKE_LIST_FX).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX)
+        .args(
+          i32.const(SHADOW_STACK_TAG.LIST_STATE),
+          i64.shl(
+            i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+            i64.const(32),
+          ),
+        ),
+
+      ...elements.map((element, i) =>
+        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0), i32.const(0)),
+      ),
+
+      /* ! */ i32.wrap_i64(
+        i64.shr_u(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))), i64.const(32)),
+      ),
+      /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
+      wasm.call(DISCARD_SHADOW_STACK_FX), // discard the list state from the shadow stack
+    );
+  }
+
+  visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
+    const value = this.visit(expr.value);
+    const index = this.visit(expr.index);
+
+    return wasm.call(GET_LIST_ELEMENT_FX).args(value, index);
+  }
+
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitBreakStmt(_stmt: StmtNS.Break): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitContinueStmt(_stmt: StmtNS.Continue): WasmInstruction {
     throw new Error("Method not implemented.");
   }
   visitFromImportStmt(_stmt: StmtNS.FromImport): WasmInstruction {
@@ -594,20 +877,5 @@ ${args.map(
   }
   visitAssertStmt(_stmt: StmtNS.Assert): WasmInstruction {
     throw new Error("Method not implemented.");
-  }
-  visitWhileStmt(_stmt: StmtNS.While): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitForStmt(_stmt: StmtNS.For): WasmInstruction {
-    throw new Error("Method not implemented.");
-  }
-  visitListExpr(_expr: ExprNS.List): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitSubscriptExpr(_expr: ExprNS.Subscript): WasmNumeric {
-    throw new Error("Method not implemented.");
-  }
-  visitStarredExpr(_expr: ExprNS.Starred): WasmNumeric {
-    throw new Error("Spread expressions are not yet supported in WASM compilation.");
   }
 }
