@@ -1,7 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { BuiltinValue, ListValue, NoneValue, Value } from "../cse-machine/stash";
-import { Validate } from "../stdlib";
+import { minArgMap, Validate } from "../stdlib";
 import streamPrelude from "./stream.prelude";
 import { Group, GroupName } from "./utils";
 
@@ -26,6 +26,7 @@ class StreamBuiltins {
         {
           type: "builtin",
           name: "anonymous stream",
+          minArgs: 0,
           func: () => StreamBuiltins.stream(args.slice(1), source, command, context),
         },
       ],
@@ -41,6 +42,7 @@ for (const builtin of Object.getOwnPropertyNames(StreamBuiltins)) {
       type: "builtin",
       func: StreamBuiltins[builtin as keyof typeof StreamBuiltins] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

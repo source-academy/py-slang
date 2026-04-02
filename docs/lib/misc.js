@@ -1,18 +1,4 @@
 /**
- * Takes a <CODE>string</CODE> <CODE>s</CODE> as the first argument and a nonnegative
- * integer <CODE>i</CODE> as the second argument. If <CODE>i</CODE> is less than
- * the length of <CODE>s</CODE>, this function returns a one-character <CODE>string</CODE> that
- * contains the character of <CODE>s</CODE> at position <CODE>i</CODE>, counting from <CODE>0</CODE>.
- * If <CODE>i</CODE> is larger than or equal to the length of <CODE>s</CODE>, this function returns
- * <CODE>None</CODE>.
- *
- * @param {string} <CODE>s</CODE> - the given <CODE>string</CODE>
- * @param {int} <CODE>i</CODE> - the <CODE>index</CODE>
- * @returns {string} one-character <CODE>string</CODE> or <CODE>None</CODE>
- */
-function char_at(s, i) {}
-
-/**
  * A simplified version of the Python built-in <CODE>print</CODE> function.
  * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
  * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
@@ -147,19 +133,13 @@ function complex(value = 0) {}
 function str(object = "") {}
 
 /**
- * Return an integer object constructed from a <CODE>string</CODE>. If <CODE>base</CODE> is given,
- * the <CODE>string</CODE> is parsed as an integer in radix <CODE>base</CODE>. Otherwise, it defaults
- * to base 10.The <CODE>string</CODE> may include optional whitespace, a leading sign (<CODE>+</CODE>
- * or <CODE>-</CODE>), and underscores between digits.
- *
- * @param {string} <CODE>string</CODE> - A <CODE>string</CODE> representing an integer in a given base.
- * The string may include optional whitespace, a leading sign, and underscores between digits.
- * @param {int} <CODE>base</CODE> - The base (radix) for conversion. It must be <CODE>0</CODE>
- * or an integer in the range <CODE>2</CODE>–<CODE>36</CODE>. The default is <CODE>10</CODE>.
- * @returns {int} an integer object parsed from the provided <CODE>string</CODE> using the specified
- * <CODE>base</CODE>
+ * Return a <CODE>string</CODE> representation of <CODE>object</CODE> that is unambiguous and suitable for debugging.
+ * For many values, this string can be used to reconstruct <CODE>object</CODE>
+ * 
+ * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
+ * @returns {string} the unambiguous <CODE>string</CODE> representation of <CODE>object</CODE>
  */
-function parse_int(string, base = 10) {}
+function repr(object) {}
 
 /**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
@@ -210,7 +190,7 @@ function is_string(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a boolean
  */
-function is_bool(x) {}
+function is_boolean(x) {}
 
 /**
  * Returns True if x is a function, and False otherwise.
@@ -251,6 +231,14 @@ function real(x) {}
  * @returns {float} the imaginary part of <CODE>x</CODE>
  */
 function imag(x) {}
+
+/**
+ * Return the length of an object <CODE>s</CODE>, where <CODE>s</CODE> is a container for a finite number of values (e.g., a string).
+ * 
+ * @param {string | list} <CODE>s</CODE> - a container object whose length is to be computed
+ * @returns {int} the length of <CODE>s</CODE>
+ */
+function len(s) {}
 
 /**
  *

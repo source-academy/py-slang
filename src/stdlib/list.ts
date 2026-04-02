@@ -1,7 +1,7 @@
 import { Context } from "../cse-machine/context";
 import { ControlItem } from "../cse-machine/control";
 import { BigIntValue, BoolValue, BuiltinValue, Value } from "../cse-machine/stash";
-import { Validate } from "../stdlib";
+import { minArgMap, Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
 import { Group, GroupName } from "./utils";
 
@@ -61,6 +61,7 @@ for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
       type: "builtin",
       func: ListBuiltins[builtin as keyof typeof ListBuiltins] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

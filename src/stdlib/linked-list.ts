@@ -12,7 +12,7 @@ import {
 } from "../cse-machine/stash";
 import { displayOutput } from "../cse-machine/streams";
 import { TypeError } from "../errors";
-import { toPythonString, Validate } from "../stdlib";
+import { minArgMap, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
 import { Group, GroupName } from "./utils";
 
@@ -148,6 +148,7 @@ for (const builtin of Object.getOwnPropertyNames(LinkedListBuiltins)) {
       type: "builtin",
       func: LinkedListBuiltins[builtin as keyof typeof LinkedListBuiltins] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

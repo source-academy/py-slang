@@ -13,11 +13,10 @@ def is_linked_list(xs):
     """
     if is_none(xs):
         return True
-    else: 
-        if is_pair(xs):
-            return is_linked_list(tail(xs))
-        else:
-            return False
+    elif is_pair(xs):
+        return is_linked_list(tail(xs))
+    else:
+        return False
 
 def equal(xs, ys):
     """
@@ -115,7 +114,7 @@ def _linked_list_to_string(xs, cont):
             ),
         )
     else:
-        return cont(str(xs))
+        return cont(repr(xs))
 
 
 def reverse_linked_list(xs):
