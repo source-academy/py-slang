@@ -682,9 +682,6 @@ export const MAKE_PAIR_FX = wasm
   .body(
     local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))),
 
-    wasm.call("$_log_raw").args(local.get("$head_tag"), local.get("$head_val")),
-    wasm.call("$_log_raw").args(local.get("$tail_tag"), local.get("$tail_val")),
-
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $tail_val) (local.set $tail_tag)`),
@@ -692,9 +689,6 @@ export const MAKE_PAIR_FX = wasm
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
-
-    wasm.call("$_log_raw").args(local.get("$head_tag"), local.get("$head_val")),
-    wasm.call("$_log_raw").args(local.get("$tail_tag"), local.get("$tail_val")),
 
     i32.store(local.get("$ptr"), local.get("$head_tag")),
     i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
