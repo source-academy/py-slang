@@ -6,9 +6,11 @@ import {
   COLLECT_FX,
   ERROR_MAP,
   GET_LAST_EXPR_RESULT_FX,
+  GET_LEX_ADDR_FX,
   MAKE_CLOSURE_FX,
   MAKE_COMPLEX_FX,
   MAKE_LIST_FX,
+  MAKE_STRING_FX,
   PEEK_SHADOW_STACK_FX,
   SET_CONTIGUOUS_BLOCK_FX,
   SHADOW_STACK_TAG,
@@ -2503,17 +2505,21 @@ describe("Shadow stack manipulation tests", () => {
     compileOptions: CompileOptions = {},
     interactiveMode: boolean = true,
   ) => {
-    const { getStackAt, ...rest } = interactiveMode
+    const results = interactiveMode
       ? await compileToWasmAndRun(pythonCode, true, compileOptions)
       : await compileToWasmAndRun(pythonCode, false, compileOptions);
 
     // Check each frame's tag on the stack
-    expectedTags.forEach((expectedTag, index) => expect(getStackAt(index)[0]).toBe(expectedTag));
+    expectedTags.forEach((expectedTag, index) =>
+      expect(results.debugFunctions.getStackAt(index)[0]).toBe(expectedTag),
+    );
 
     // Verify accessing one position past the stack throws STACK_UNDERFLOW
-    expect(() => getStackAt(expectedTags.length)).toThrow(new Error(ERROR_MAP.STACK_UNDERFLOW));
+    expect(() => results.debugFunctions.getStackAt(expectedTags.length)).toThrow(
+      new Error(ERROR_MAP.STACK_UNDERFLOW),
+    );
 
-    return rest;
+    return results;
   };
 
   describe("simple expression statement cleanup (non-interactive)", () => {
@@ -3074,6 +3080,16 @@ set_tail(x, [3, 4])
       await expectShadowStackToEqual(pythonCode, []);
     });
 
+    it("is_none function with GC argument should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_none([1, 2, 3])`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
+    it("is_none function with non-GC argument should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_none(42)`;
+      await expectShadowStackToEqual(pythonCode, []);
+    });
+
     it("tokenize function should push resultant list onto stack", async () => {
       const pythonCode = `tokenize("1 + 2")`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
@@ -3105,7 +3121,12 @@ describe("GC collect/copy tests", () => {
       [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
     );
 
-    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+    const {
+      rawOutputs,
+      rawResult,
+      renderedResult,
+      debugFunctions: { getListElement },
+    } = await compileToWasmAndRun(pythonCode, true, {
       irPasses: [forceCollectAfterListCreate],
     });
 
@@ -3124,6 +3145,10 @@ describe("GC collect/copy tests", () => {
     expect(afterLen).toBe(beforeLen);
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
     expect(renderedResult).toBe("[1, 2, 3]");
+
+    expect(getListElement(TYPE_TAG.LIST, rawResult[1], 0)).toEqual([TYPE_TAG.INT, 1n]);
+    expect(getListElement(TYPE_TAG.LIST, rawResult[1], 1)).toEqual([TYPE_TAG.INT, 2n]);
+    expect(getListElement(TYPE_TAG.LIST, rawResult[1], 2)).toEqual([TYPE_TAG.INT, 3n]);
   });
 
   it("moves heap string payload and preserves bytes", async () => {
@@ -3206,6 +3231,175 @@ describe("GC collect/copy tests", () => {
     expect(beforeParent).not.toBe(afterParent);
     expect(afterParent).toBeGreaterThan(beforeParent);
     expect(rawResult[0]).toBe(TYPE_TAG.CLOSURE);
+  });
+
+  it("does not move data-section string payload during collect", async () => {
+    const pythonCode = `"hello"`;
+
+    const forceCollectAfterLiteral = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, MAKE_STRING_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterLiteral],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.STRING);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.STRING);
+    expect(rawOutputs[1][1]).toBe(rawOutputs[0][1]);
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("hello");
+  });
+
+  it("rewrites closure parent env after collect for function declaration closure", async () => {
+    const pythonCode = `
+def inc(x):
+    return x + 1
+inc
+`;
+
+    const forceCollectAfterFunctionValueRead = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, GET_LEX_ADDR_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const { rawOutputs, rawResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectAfterFunctionValueRead],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.CLOSURE);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.CLOSURE);
+
+    const beforeMeta = rawOutputs[0][1] & 0xffffffff00000000n;
+    const afterMeta = rawOutputs[1][1] & 0xffffffff00000000n;
+    const beforeParent = Number(rawOutputs[0][1] & 0xffffffffn);
+    const afterParent = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    expect(afterMeta).toBe(beforeMeta);
+    expect(beforeParent).not.toBe(afterParent);
+    expect(afterParent).toBeGreaterThan(beforeParent);
+    expect(rawResult[0]).toBe(TYPE_TAG.CLOSURE);
+  });
+
+  it("nested lists survive collect after outer list creation (testing recursive copy)", async () => {
+    const pythonCode = `[[1, 2], [3, 4]]`;
+
+    const collectAfterOuterCreation = insertInArray(
+      node => isFunctionCall(node, GET_LAST_EXPR_RESULT_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, MAKE_LIST_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+    );
+
+    const {
+      rawOutputs,
+      rawResult,
+      renderedResult,
+      debugFunctions: { getListElement },
+    } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [collectAfterOuterCreation],
+    });
+
+    const beforeOuterValue = rawOutputs[0];
+    const afterOuterValue = rawOutputs[1];
+
+    expect(rawResult[0]).toBe(TYPE_TAG.LIST);
+    expect(renderedResult).toBe("[[1, 2], [3, 4]]");
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(beforeOuterValue[0]).toBe(TYPE_TAG.LIST);
+    expect(afterOuterValue[0]).toBe(TYPE_TAG.LIST);
+
+    // Verify outer list pointer is different after collect
+    expect(afterOuterValue[1] >> 32n).toBeGreaterThan(beforeOuterValue[1] >> 32n);
+
+    const beforeInner1 = getListElement(TYPE_TAG.LIST, beforeOuterValue[1], 0);
+    const beforeInner2 = getListElement(TYPE_TAG.LIST, beforeOuterValue[1], 1);
+
+    const afterInner1 = getListElement(TYPE_TAG.LIST, afterOuterValue[1], 0);
+    const afterInner2 = getListElement(TYPE_TAG.LIST, afterOuterValue[1], 1);
+
+    // Verify inner values are still lists (after, not before: forwarding metadata)
+    expect(afterInner1[0]).toBe(TYPE_TAG.LIST);
+    expect(afterInner2[0]).toBe(TYPE_TAG.LIST);
+
+    // Verify inner list pointers are different after collect
+    expect(afterInner1[1] >> 32n).toBeGreaterThan(beforeInner1[1] >> 32n);
+    expect(afterInner2[1] >> 32n).toBeGreaterThan(beforeInner2[1] >> 32n);
+  });
+
+  it("fib(30) with GC should work", async () => {
+    const pythonCode = `
+def fib(n):
+    if n <= 1:
+        return n
+    else:
+        return fib(n-1) + fib(n-2)
+fib(30)
+`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(rawResult[1]).toBe(832040n);
+    expect(renderedResult).toBe("832040");
+  });
+
+  it("fib(30) without GC should OOM", async () => {
+    const pythonCode = `
+def fib(n):
+    if n <= 1:
+        return n
+    else:
+        return fib(n-1) + fib(n-2)
+fib(30)
+`;
+    await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
+      new Error(ERROR_MAP.OUT_OF_MEMORY),
+    );
+  });
+
+  it("native reverse(50) with GC should work", async () => {
+    const pythonCode = `
+def append(xs, ys):
+    if is_none(xs):
+        return ys
+    return pair(head(xs), append(tail(xs), ys))
+
+
+def reverse(xs):
+    if is_none(xs):
+        return None
+    return append(reverse(tail(xs)), pair(head(xs), None))
+
+reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.LIST);
+
+    const frontPart = [...Array(50).keys()].map(i => `[${49 - i}`).join(", ");
+    expect(renderedResult).toBe(`${frontPart}, None${"]".repeat(50)}`);
+  });
+
+  it("native reverse(50) without GC should OOM", async () => {
+    const pythonCode = `
+def append(xs, ys):
+    if is_none(xs):
+        return ys
+    return pair(head(xs), append(tail(xs), ys))
+
+def reverse(xs):
+    if is_none(xs):
+        return None
+    return append(reverse(tail(xs)), pair(head(xs), None))
+
+reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+`;
+    await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
+      new Error(ERROR_MAP.OUT_OF_MEMORY),
+    );
   });
 });
 

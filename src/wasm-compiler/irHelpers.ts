@@ -1,5 +1,6 @@
-import { WasmFunction, WasmInstruction } from "@sourceacademy/wasm-util";
+import { wasm, WasmFunction, WasmInstruction } from "@sourceacademy/wasm-util";
 import { IrPass } from ".";
+import { COLLECT_FX } from "./constants";
 
 type InsertInArrayOptions = {
   matchIndex?: number;
@@ -39,6 +40,26 @@ export function insertInArray(
     return ir;
   };
 }
+
+export const disableGcIrPass: IrPass = ir => {
+  if (
+    ir != null &&
+    typeof ir === "object" &&
+    "op" in ir &&
+    "funcs" in ir &&
+    ir.op === "module" &&
+    Array.isArray(ir.funcs)
+  ) {
+    ir.funcs = ir.funcs.map(fn => {
+      if (isFunctionOfName(fn, COLLECT_FX)) {
+        return { ...fn, body: [wasm.nop()] };
+      }
+      return fn;
+    });
+  }
+
+  return ir;
+};
 
 export function isFunctionCall(
   instruction: unknown,

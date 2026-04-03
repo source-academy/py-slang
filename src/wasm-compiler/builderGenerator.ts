@@ -28,9 +28,11 @@ import {
   COMPARISON_OP_TAG,
   CURR_ENV,
   DATA_END,
+  DEBUG_GET_LIST_ELEMENT_FX,
   DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
   FROM_SPACE_END_PTR,
+  FROM_SPACE_START_PTR,
   GET_LAST_EXPR_RESULT_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
@@ -64,6 +66,7 @@ import {
   SHADOW_STACK_TOP,
   SILENT_PUSH_SHADOW_STACK_FX,
   TO_SPACE_END_PTR,
+  TO_SPACE_START_PTR,
 } from "./constants";
 import { LibFuncType } from "./library";
 
@@ -256,6 +259,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       makeComplex: wasm.export("makeComplex").func(MAKE_COMPLEX_FX.name),
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
       peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
+      getListElement: wasm.export("getListElement").func(DEBUG_GET_LIST_ELEMENT_FX.name),
     };
 
     const memoryEndPointer = this.pageCount * 64 * 1024;
@@ -281,7 +285,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       .globals(
         wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
+        wasm.global(FROM_SPACE_START_PTR, mut.i32).init(i32.const(heapPointer)),
         wasm.global(FROM_SPACE_END_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
+        wasm.global(TO_SPACE_START_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
         wasm.global(TO_SPACE_END_PTR, mut.i32).init(i32.const(semispaceEndPointer)),
         wasm.global(SHADOW_STACK_BOTTOM, i32).init(i32.const(semispaceEndPointer)),
         wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),

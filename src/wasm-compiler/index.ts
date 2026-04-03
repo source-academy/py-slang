@@ -5,6 +5,7 @@ import pythonLexer from "../parser/lexer";
 import { toAstToken } from "../parser/token-bridge";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
+import { disableGcIrPass } from "./irHelpers";
 import { libraryFunctions } from "./library";
 import { MetacircularGenerator } from "./metacircularGenerator";
 
@@ -21,12 +22,15 @@ export type WasmExports = {
   makeNone: () => [number, bigint];
   malloc: (amount: number) => number;
   peekShadowStack: (index: number) => [number, bigint];
+  getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
 };
 
 export type IrPass = (ir: WasmInstruction) => WasmInstruction;
 
 export type CompileOptions = {
   irPasses?: IrPass[];
+  pageCount?: number;
+  disableGC?: boolean;
 };
 
 function applyIrPasses(ir: WasmInstruction, passes: IrPass[] = []): WasmInstruction {
@@ -78,8 +82,11 @@ export const PARSE_TREE_STRINGS = [
 
 type BaseWasmRunResult = {
   prints: string[];
-  getStackAt: (index: number) => [number, bigint];
   rawOutputs: [number, bigint][];
+  debugFunctions: {
+    getStackAt: (index: number) => [number, bigint];
+    getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
+  };
 };
 
 type WasmRunResult = BaseWasmRunResult & {
@@ -107,8 +114,6 @@ export async function compileToWasmAndRun(
   interactiveMode: boolean = false,
   options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
-  const pageCount = 1;
-
   const script = code + "\n";
   const ast = parse(script);
 
@@ -116,9 +121,13 @@ export async function compileToWasmAndRun(
     [...PARSE_TREE_STRINGS],
     libraryFunctions,
     interactiveMode,
-    pageCount,
+    options.pageCount ?? 1,
   );
-  const watIR = applyIrPasses(builderGenerator.visit(ast), options.irPasses ?? []);
+  const passes: IrPass[] = [
+    ...(options.irPasses ?? []),
+    ...(options.disableGC ? [disableGcIrPass] : []),
+  ];
+  const watIR = applyIrPasses(builderGenerator.visit(ast), passes);
 
   const watGenerator = new WatGenerator();
   const wat = watGenerator.visit(watIR);
@@ -126,7 +135,7 @@ export async function compileToWasmAndRun(
   const w = await wabt();
   const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
-  const memory = new WebAssembly.Memory({ initial: pageCount });
+  const memory = new WebAssembly.Memory({ initial: options.pageCount ?? 1 });
 
   let wasmExports: WasmExports | null = null;
 
@@ -217,9 +226,20 @@ export async function compileToWasmAndRun(
     return wasmExports.peekShadowStack(index);
   };
 
+  const getListElement = (listTag: number, listValue: bigint, index: number) => {
+    if (!wasmExports) throw new Error("WASM exports not initialised");
+    return wasmExports.getListElement(listTag, listValue, index);
+  };
+
   if (!interactiveMode) {
     wasmExports.main();
-    return { prints: output, rawOutputs, rawResult: null, renderedResult: null, getStackAt };
+    return {
+      prints: output,
+      rawOutputs,
+      rawResult: null,
+      renderedResult: null,
+      debugFunctions: { getStackAt, getListElement },
+    };
   }
 
   const rawResult = wasmExports.main();
@@ -230,5 +250,11 @@ export async function compileToWasmAndRun(
     throw new Error("Main function did not produce any output");
   }
 
-  return { prints: output, rawOutputs, rawResult, renderedResult, getStackAt };
+  return {
+    prints: output,
+    rawOutputs,
+    rawResult,
+    renderedResult,
+    debugFunctions: { getStackAt, getListElement },
+  };
 }

@@ -63,14 +63,16 @@ export const SHADOW_STACK_BOTTOM = "$_shadow_stack_bottom_pointer";
 export const SHADOW_STACK_TOP = "$_shadow_stack_top_pointer";
 
 export const HEAP_PTR = "$_heap_pointer";
+export const FROM_SPACE_START_PTR = "$_from_space_start_pointer";
 export const FROM_SPACE_END_PTR = "$_from_space_end_pointer";
+export const TO_SPACE_START_PTR = "$_to_space_start_pointer";
 export const TO_SPACE_END_PTR = "$_to_space_end_pointer";
 export const SHADOW_STACK_PTR = "$_shadow_stack_pointer";
 export const CURR_ENV = "$_current_env";
 
 export const ENV_HEAD_SIZE = 8;
 export const SHADOW_STACK_SLOT_SIZE = 12;
-export const SHADOW_STACK_RESERVED_SIZE = 1024;
+export const SHADOW_STACK_RESERVED_SIZE = 1024 * 8; // 8KB reserved for shadow stack
 export const ENV_FORWARDING_BIT = 0x40000000;
 
 export const PEEK_SHADOW_STACK_FX = wasm
@@ -148,15 +150,24 @@ export const IS_TAG_GCABLE = wasm
   .body(
     i32.or(
       i32.or(
-        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)),
-        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)),
-      ),
-      i32.or(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX)),
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)),
+        ),
         i32.or(
           i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)),
           i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
         ),
-        i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+      ),
+      i32.or(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+          i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.LIST_STATE)),
+        ),
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV)),
+          i32.eq(local.get("$tag"), i32.const(GC_SPECIAL_TAG.ENV)),
+        ),
       ),
     ),
   );
@@ -165,7 +176,7 @@ const COPY_FX_NAME = "$_copy";
 export const COPY_FX = wasm
   .func(COPY_FX_NAME)
   .params({ $tag: i32, $val: i64 })
-  .locals({ $new_ptr: i32, $len: i32, $ptr: i32, $alloc_size: i32 })
+  .locals({ $new_ptr: i32, $len: i32, $ptr: i32, $alloc_size: i32, $i: i32, $elem_tag: i32, $elem_ptr: i32 })
   .results(i64)
   .body(
     // gc-special environment pointer in low 32 bits
@@ -182,6 +193,7 @@ export const COPY_FX = wasm
         "$len",
         i32.add(i32.const(ENV_HEAD_SIZE), i32.mul(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(12))),
       ),
+      local.set("$alloc_size", i32.load(i32.add(local.get("$ptr"), i32.const(4)))),
       local.set("$new_ptr", global.get(HEAP_PTR)),
       global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$len"))),
       memory.copy(local.get("$new_ptr"), local.get("$ptr"), local.get("$len")),
@@ -190,6 +202,45 @@ export const COPY_FX = wasm
       // (overwrite length with the forwarding bit)
       i32.store(local.get("$ptr"), local.get("$new_ptr")),
       i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
+
+      // if parent is not yet 0, means we need to copy parent also (+0 offset)
+      wasm
+        .if(i32.load(local.get("$new_ptr")))
+        .then(
+          i32.store(
+            local.get("$new_ptr"),
+            i32.wrap_i64(
+              wasm
+                .call(COPY_FX_NAME)
+                .args(i32.const(GC_SPECIAL_TAG.ENV), i64.extend_i32_u(i32.load(local.get("$new_ptr")))),
+            ),
+          ),
+        ),
+
+      local.set("$i", i32.const(0)),
+      wasm.loop("$copy_env_fields").body(
+        wasm.if(i32.lt_u(local.get("$i"), local.get("$alloc_size"))).then(
+          local.set(
+            "$elem_ptr",
+            i32.add(i32.add(local.get("$new_ptr"), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$i"), i32.const(12))),
+          ),
+          local.set("$elem_tag", i32.load(local.get("$elem_ptr"))),
+
+          wasm
+            .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
+            .then(
+              i64.store(
+                i32.add(local.get("$elem_ptr"), i32.const(4)),
+                wasm
+                  .call(COPY_FX_NAME)
+                  .args(local.get("$elem_tag"), i64.load(i32.add(local.get("$elem_ptr"), i32.const(4)))),
+              ),
+            ),
+
+          local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+          wasm.br("$copy_env_fields"),
+        ),
+      ),
 
       wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
     ),
@@ -268,6 +319,19 @@ export const COPY_FX = wasm
       ),
     ),
 
+    // call return address: payload low 32 bits is the saved env pointer
+    wasm.if(i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR))).then(
+      local.set("$new_ptr", i32.wrap_i64(local.get("$val"))),
+
+      wasm
+        .if(local.get("$new_ptr"))
+        .then(
+          wasm.return(
+            wasm.call(COPY_FX_NAME).args(i32.const(GC_SPECIAL_TAG.ENV), i64.extend_i32_u(local.get("$new_ptr"))),
+          ),
+        ),
+    ),
+
     // lists, tuples, and list_state: upper 32 is pointer, lower 32 is length
     wasm
       .if(
@@ -310,6 +374,28 @@ export const COPY_FX = wasm
         i32.store(local.get("$ptr"), local.get("$new_ptr")),
         i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
 
+        local.set("$i", i32.const(0)),
+        wasm.loop("$copy_list_fields").body(
+          wasm.if(i32.lt_u(local.get("$i"), local.get("$len"))).then(
+            local.set("$elem_ptr", i32.add(local.get("$new_ptr"), i32.mul(local.get("$i"), i32.const(12)))),
+            local.set("$elem_tag", i32.load(local.get("$elem_ptr"))),
+
+            wasm
+              .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
+              .then(
+                i64.store(
+                  i32.add(local.get("$elem_ptr"), i32.const(4)),
+                  wasm
+                    .call(COPY_FX_NAME)
+                    .args(local.get("$elem_tag"), i64.load(i32.add(local.get("$elem_ptr"), i32.const(4)))),
+                ),
+              ),
+
+            local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+            wasm.br("$copy_list_fields"),
+          ),
+        ),
+
         wasm.return(
           i64.or(i64.shl(i64.extend_i32_u(local.get("$new_ptr")), i64.const(32)), i64.extend_i32_u(local.get("$len"))),
         ),
@@ -340,17 +426,12 @@ export const COPY_FX = wasm
 
 export const COLLECT_FX = wasm
   .func("$_collect")
-  .locals({
-    $scan: i32,
-    $shadow_ptr: i32,
-  })
+  .locals({ $shadow_ptr: i32, $temp_start: i32, $temp_end: i32 })
   .body(
-    local.set("$scan", global.get(FROM_SPACE_END_PTR)),
     local.set("$shadow_ptr", global.get(SHADOW_STACK_PTR)),
+    global.set(HEAP_PTR, global.get(TO_SPACE_START_PTR)),
 
-    global.set(HEAP_PTR, global.get(FROM_SPACE_END_PTR)),
-
-    // only copy CURR_ENV root here; BFS will discover and copy the rest
+    // Root copying; transitive copying happens in $_copy.
     wasm
       .if(global.get(CURR_ENV))
       .then(
@@ -375,14 +456,14 @@ export const COLLECT_FX = wasm
       ),
     ),
 
-    // BFS
-    wasm
-      .loop("$bfs_loop")
-      .body(
-        wasm
-          .if(i32.lt_u(local.get("$scan"), global.get(HEAP_PTR)))
-          .then(wasm.if(wasm.call(IS_TAG_GCABLE).args(i32.load(local.get("$scan")))).then()),
-      ),
+    // swap from-space and to-space
+    local.set("$temp_start", global.get(FROM_SPACE_START_PTR)),
+    local.set("$temp_end", global.get(FROM_SPACE_END_PTR)),
+
+    global.set(FROM_SPACE_START_PTR, global.get(TO_SPACE_START_PTR)),
+    global.set(FROM_SPACE_END_PTR, global.get(TO_SPACE_END_PTR)),
+    global.set(TO_SPACE_START_PTR, local.get("$temp_start")),
+    global.set(TO_SPACE_END_PTR, local.get("$temp_end")),
   );
 
 // returns allocated block start address and moves heap pointer by amount bytes
@@ -590,6 +671,33 @@ export const GET_LIST_ELEMENT_FX = wasm
         i32.add(
           i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
           i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
+        ),
+      ),
+    ),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
+      .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$elem_tag"), local.get("$elem_val"))),
+  );
+
+export const DEBUG_GET_LIST_ELEMENT_FX = wasm
+  .func("$_debug_get_list_element")
+  .params({ $tag: i32, $val: i64, $index: i32 })
+  .locals({ $elem_tag: i32, $elem_val: i64 })
+  .results(i32, i64)
+  .body(
+    local.tee(
+      "$elem_tag",
+      i32.load(
+        i32.add(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.mul(local.get("$index"), i32.const(12))),
+      ),
+    ),
+    local.tee(
+      "$elem_val",
+      i64.load(
+        i32.add(
+          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
+          i32.add(i32.mul(local.get("$index"), i32.const(12)), i32.const(4)),
         ),
       ),
     ),
@@ -1441,6 +1549,18 @@ export const ALLOC_ENV_FX = wasm
     local.get("$env"),
   );
 
+export const IS_NONE_FX = wasm
+  .func("$_is_none")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))),
+  );
+
 export const PRE_APPLY_FX = wasm
   .func("$_pre_apply")
   .params({ $tag: i32, $val: i64, $arg_len: i32 })
@@ -1883,6 +2003,7 @@ export const nativeFunctions = [
   MAKE_LIST_FX,
   MAKE_TUPLE_FX,
   GET_LIST_ELEMENT_FX,
+  DEBUG_GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,
   LIST_LENGTH_FX,
   IS_LIST_FX,
@@ -1897,6 +2018,7 @@ export const nativeFunctions = [
   COMPARISON_OP_FX,
   BOOLISE_FX,
   BOOL_NOT_FX,
+  IS_NONE_FX,
   ALLOC_ENV_FX,
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,

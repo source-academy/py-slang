@@ -7,10 +7,10 @@ import {
   getErrorIndex,
   IS_LINKED_LIST_FX,
   IS_LIST_FX,
+  IS_NONE_FX,
   IS_PAIR_FX,
   LIST_LENGTH_FX,
   LOG_FX,
-  MAKE_BOOL_FX,
   MAKE_INT_FX,
   MAKE_LINKED_LIST_FX,
   MAKE_PAIR_FX,
@@ -84,9 +84,7 @@ export const libraryFunctions: LibFuncType[] = [
 
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
   ]),
-  libFunc("is_none", 1).body(
-    x => wasm.raw`${x} (drop) (i32.const ${TYPE_TAG.NONE}) (i32.eq) (call ${MAKE_BOOL_FX.name})`,
-  ),
+  libFunc("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
   libFunc("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
   libFunc("is_linked_list", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
   libFunc("set_head", 2, true).body((x, y) =>
