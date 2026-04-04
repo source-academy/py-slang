@@ -61,6 +61,7 @@ for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
       type: "builtin",
       func: ListBuiltins[builtin as keyof typeof ListBuiltins] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

@@ -20,7 +20,7 @@
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
-    "wasm": "ts-node src/engines/wasm/index.ts"
+    "wasm": "ts-node --transpile-only src/engines/wasm/run-file.ts"
   },
   "keywords": [
     "Python",
@@ -64,7 +64,7 @@
   },
   "dependencies": {
     "@sourceacademy/conductor": "^0.3.0",
-    "@sourceacademy/wasm-util": "^1.0.4",
+    "@sourceacademy/wasm-util": "^1.0.6",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
     "moo": "^0.5.2",

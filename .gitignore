@@ -118,3 +118,5 @@ test.py
 .pnp.cjs
 .pnp.loader.mjs
 package-lock.json
+
+.DS_Store

@@ -90,6 +90,7 @@ export interface BuiltinValue {
   func:
     | ((args: Value[], code: string, command: ControlItem, context: Context) => Value)
     | ((args: Value[], code: string, command: ControlItem, context: Context) => Promise<Value>);
+  minArgs: number;
 }
 
 export class Stash extends Stack<Value> {

@@ -59,7 +59,13 @@ export class PyCSEEvaluator extends BasicEvaluator {
 
       const script = chunk + "\n";
       const ast = parse(script);
-      analyze(ast, script, 4, ALL_GROUPS);
+      const errors = analyze(ast, script, 4, ALL_GROUPS);
+      if (errors.length > 0) {
+        for (const error of errors.slice(0, -1)) {
+          await displayError(context, error, ErrorType.EVALUATOR_SYNTAX);
+        }
+        throw errors[errors.length - 1];
+      }
       const result = await evaluate("", ast, context, {
         variant: 4,
         groups: ALL_GROUPS,

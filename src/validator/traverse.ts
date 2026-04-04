@@ -128,6 +128,10 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     traverseAST(expr.index, this.fn);
   }
 
+  visitStarredExpr(expr: ExprNS.Starred): void {
+    traverseAST(expr.value, this.fn);
+  }
+
   // Leaf expressions — no children to traverse.
   visitLiteralExpr(): void {}
   visitVariableExpr(): void {}

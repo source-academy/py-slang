@@ -564,9 +564,17 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const callNode = command as ExprNS.Call;
 
-    control.push(instrCreator.appInstr(callNode.args.length, callNode));
+    const spreadIndices = callNode.args.reduce<number[]>((acc, arg, i) => {
+      if (arg instanceof ExprNS.Starred) acc.push(i);
+      return acc;
+    }, []);
+
+    control.push(instrCreator.appInstr(callNode.args.length, callNode, spreadIndices));
     for (let i = callNode.args.length - 1; i >= 0; i--) {
-      control.push(callNode.args[i]);
+      const arg = callNode.args[i];
+      // Push the inner expression for Starred nodes — the spread flattening
+      // happens at application time using spreadIndices.
+      control.push(arg instanceof ExprNS.Starred ? arg.value : arg);
     }
     control.push(callNode.callee);
   },
@@ -1026,13 +1034,37 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as AppInstr;
     const numOfArgs = instr.numOfArgs;
 
-    const args: Value[] = [];
+    const rawArgs: Value[] = [];
     for (let i = 0; i < numOfArgs; i++) {
       const arg = stash.pop();
       if (arg) {
-        args.unshift(arg);
+        rawArgs.unshift(arg);
       }
     }
+
+    // Flatten spread args: starred indices contain list values that
+    // need to be expanded inline.
+    const spreadSet = new Set(instr.spreadIndices);
+    const args: Value[] =
+      spreadSet.size === 0
+        ? rawArgs
+        : rawArgs.flatMap((val, i) => {
+            if (!spreadSet.has(i)) return val;
+            if (val?.type === "list") {
+              return (val as { type: "list"; value: Value[] }).value;
+            }
+            handleRuntimeError(
+              context,
+              new error.TypeError(
+                code,
+                instr.srcNode as ExprNS.Call,
+                context,
+                val ? val.type : "NoneType",
+                "iterable",
+              ),
+            );
+            return []; // unreachable, satisfies TypeScript
+          });
 
     const callable = stash.pop();
 
@@ -1083,15 +1115,15 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const instr = command as ListAccessInstr;
     const index = stash.pop();
     const list = stash.pop();
-    if (!list || list.type !== "list") {
+    if (!list || (list.type !== "list" && list.type !== "string")) {
       handleRuntimeError(
         context,
         new error.TypeError(
           code,
           instr.srcNode as ExprNS.Expr,
           context,
-          (list as Value).type,
-          "list",
+          list ? list.type : "NoneType",
+          "list or string",
         ),
       );
     }
@@ -1108,13 +1140,18 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       );
     }
     const idx = Number(index.value);
-    if (idx >= list.value.length) {
+    // TODO: make this O(1)
+    if (idx >= [...list.value].length) {
       handleRuntimeError(
         context,
         new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length),
       );
     }
-    stash.push(list.value[idx]);
+    if (list.type === "string") {
+      stash.push({ type: "string", value: [...list.value].at(idx) ?? "" });
+    } else {
+      stash.push(list.value[idx]);
+    }
   },
 
   [InstrType.BRANCH]: function (

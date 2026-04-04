@@ -1,17 +1,33 @@
-import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { compileToWasmAndRun } from "../engines/wasm";
-import { toEvaluatorError } from "./errors";
+// This file is adapted from:
+// https://github.com/source-academy/conductor
+// Original author(s): Source Academy Team
 
-export class PyWasmEvaluator extends BasicEvaluator {
+import { BasicEvaluator, initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { compileToWasmAndRun } from "../engines/wasm";
+
+class PyWasmEvaluator extends BasicEvaluator {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor);
+  }
+
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      const result = await compileToWasmAndRun(chunk);
-      if (result !== undefined && result !== null) {
-        this.conductor.sendResult(result);
-      }
-    } catch (e) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      this.conductor.sendError(toEvaluatorError(e) as any);
+      const { prints, renderedResult } = await compileToWasmAndRun(chunk, true);
+      prints.forEach(print => this.conductor.sendOutput(print));
+      this.conductor.sendResult(renderedResult); // find a way to send NOT stringified result
+    } catch (error) {
+      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  async evaluateFile(fileName: string, fileContent: string): Promise<void> {
+    try {
+      const { prints } = await compileToWasmAndRun(fileContent);
+      prints.forEach(print => this.conductor.sendOutput(print));
+    } catch (error) {
+      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }
   }
 }
+
+initialise(PyWasmEvaluator);

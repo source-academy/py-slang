@@ -90,7 +90,10 @@ export function toPythonAstAndResolve(text: string, variant: number): Stmt {
   const script = text + "\n";
   const ast = toPythonAst(text);
   const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant));
-  resolver.resolve(ast);
+  const errors = resolver.resolve(ast);
+  if (errors.length > 0) {
+    throw errors[0];
+  }
   return ast;
 }
 
@@ -209,6 +212,10 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           }
 
           if (typeof expected === "number") {
+            if (isNaN(expected)) {
+              expect.objectContaining({ type: "number", value: NaN });
+              return;
+            }
             expect(spy).toHaveLastReturnedWith(
               expect.objectContaining({ type: "number", value: expect.closeTo(expected) }),
             );

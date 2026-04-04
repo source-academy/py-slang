@@ -97,6 +97,14 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
       return item;
     },
   ],
+  [
+    "Starred",
+    (item: ControlItem) => {
+      const node = item as ExprNS.Starred;
+      item.isEnvDependent = isEnvDependent(node.value);
+      return item;
+    },
+  ],
   ["Literal", setToFalse],
   ["BigIntLiteral", setToFalse],
   ["None", setToFalse],

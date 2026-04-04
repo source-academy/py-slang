@@ -50,6 +50,7 @@ for (const builtin of Object.getOwnPropertyNames(PairmutatorBuiltins)) {
         builtin as keyof typeof PairmutatorBuiltins
       ] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

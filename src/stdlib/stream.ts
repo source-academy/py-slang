@@ -26,6 +26,7 @@ class StreamBuiltins {
         {
           type: "builtin",
           name: "anonymous stream",
+          minArgs: 0,
           func: () => StreamBuiltins.stream(args.slice(1), source, command, context),
         },
       ],
@@ -41,6 +42,7 @@ for (const builtin of Object.getOwnPropertyNames(StreamBuiltins)) {
       type: "builtin",
       func: StreamBuiltins[builtin as keyof typeof StreamBuiltins] as BuiltinValue["func"],
       name: builtin,
+      minArgs: minArgMap.get(builtin) || 0,
     });
   }
 }

@@ -1,9 +1,9 @@
 import nodeResolve from "@rollup/plugin-node-resolve";
+import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
 import json from "@rollup/plugin-json";
 import commonjs from "@rollup/plugin-commonjs";
 import nodePolyfills from "rollup-plugin-polyfill-node";
-import terser from "@rollup/plugin-terser";
 import replace from "@rollup/plugin-replace";
 import wasm from "@rollup/plugin-wasm";
 
@@ -66,6 +66,26 @@ const config = [
       sourcemap: true,
     },
     plugins: plugins(terserNode),
+  },
+
+  // wasm
+  {
+    plugins: [
+      nodeResolve({ browser: true }),
+      commonjs({
+        include: "node_modules/**",
+      }),
+      json(),
+      typescript(),
+      nodePolyfills(),
+    ],
+    input: "src/conductor/PyWasmEvaluator.ts",
+    output: {
+      plugins: [terser()],
+      file: "dist/pywasm-evaluator.js",
+      format: "iife",
+      sourcemap: true,
+    },
   },
 ];
 
