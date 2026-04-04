@@ -320,7 +320,9 @@ describe("if/elif/else — scope analysis", () => {
   });
 
   test("if/elif/else inside function can reference function parameter", () => {
-    analyzeOk("def f(x):\n    if x:\n        pass\n    elif x:\n        pass\n    else:\n        pass");
+    analyzeOk(
+      "def f(x):\n    if x:\n        pass\n    elif x:\n        pass\n    else:\n        pass",
+    );
   });
 });
 
