@@ -15,39 +15,61 @@ const evaluatorMap: Record<BackendChoice, string> = {
   wasm: "PyWasmEvaluator",
 };
 
+function buildBackend(backend: BackendChoice) {
+  const evaluator = evaluatorMap[backend];
+  console.log(`\nBuilding backend=${backend} (evaluator=${evaluator})...\n`);
+  execSync("rollup -c --bundleConfigAsCjs", {
+    env: { ...process.env, EVALUATOR: evaluator },
+    stdio: "inherit",
+  });
+}
+
 async function main() {
   const program = new Command()
-    .option("--backend <type>", "Backend engine: cse, wasm", "cse")
+    .option("--backend <type>", "Backend engine: cse, wasm")
+    .option("--all", "Build all backends")
     .parse();
 
-  let backend: BackendChoice;
+  const opts = program.opts();
+  const valid = BACKENDS.map(b => b.value) as readonly string[];
 
-  if (process.argv.length > 2) {
-    backend = program.opts().backend as BackendChoice;
-    const valid = BACKENDS.map(b => b.value) as readonly string[];
-    if (!valid.includes(backend)) {
-      console.error(`Invalid backend: ${backend}. Expected: ${valid.join(", ")}`);
-      process.exit(1);
+  if (opts.all) {
+    for (const backend of BACKENDS.map(b => b.value)) {
+      buildBackend(backend);
     }
-  } else {
-    backend = (await select({
-      message: "Select backend:",
-      choices: [...BACKENDS],
-      default: "cse",
-    })) as BackendChoice;
+    return;
   }
 
-  const evaluator = evaluatorMap[backend];
-  console.log(`\nBuilding with backend=${backend} (evaluator=${evaluator})...\n`);
+  if (opts.backend) {
+    if (!valid.includes(opts.backend)) {
+      console.error(`Invalid backend: ${opts.backend}. Expected: ${valid.join(", ")}`);
+      process.exit(1);
+    }
+    buildBackend(opts.backend as BackendChoice);
+    return;
+  }
 
-  try {
-    execSync("rollup -c --bundleConfigAsCjs", {
-      env: { ...process.env, EVALUATOR: evaluator },
-      stdio: "inherit",
-    });
-  } catch {
-    process.exit(1);
+  // No args: non-interactive default to --all
+  if (process.stdin.isTTY) {
+    const backend = (await select({
+      message: "Select backend (or Ctrl+C to build all):",
+      choices: [...BACKENDS, { name: "all  - Build all backends", value: "all" as const }],
+      default: "all",
+    })) as BackendChoice | "all";
+
+    if (backend === "all") {
+      for (const b of BACKENDS.map(b => b.value)) {
+        buildBackend(b);
+      }
+    } else {
+      buildBackend(backend);
+    }
+  } else {
+    // Non-interactive (CI): build all
+    for (const backend of BACKENDS.map(b => b.value)) {
+      buildBackend(backend);
+    }
   }
 }
 
-main();
+main().catch(() => process.exit(1));

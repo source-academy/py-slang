@@ -2,10 +2,10 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { BasicEvaluator, initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { compileToWasmAndRun } from "../engines/wasm";
 
-class PyWasmEvaluator extends BasicEvaluator {
+export class PyWasmEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
   }
@@ -29,5 +29,3 @@ class PyWasmEvaluator extends BasicEvaluator {
     }
   }
 }
-
-initialise(PyWasmEvaluator);

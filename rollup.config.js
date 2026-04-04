@@ -11,6 +11,11 @@ import wasm from "@rollup/plugin-wasm";
 // Set by scripts/build.ts; defaults to CSE.
 const EVALUATOR = process.env.EVALUATOR || "PyCSEEvaluator";
 
+const outputName = {
+  PyCSEEvaluator: "cse",
+  PyWasmEvaluator: "wasm",
+}[EVALUATOR] ?? EVALUATOR.toLowerCase();
+
 const replacePlugin = replace({
   preventAssignment: true,
   values: {
@@ -50,7 +55,7 @@ const config = [
   {
     input: "src/index.ts",
     output: {
-      file: "dist/worker.js",
+      file: `dist/worker-${outputName}.js`,
       format: "iife",
       name: "PySlangWorker",
       sourcemap: true,
@@ -60,32 +65,12 @@ const config = [
   {
     input: "src/index.ts",
     output: {
-      file: "dist/python-evaluator.cjs",
+      file: `dist/evaluator-${outputName}.cjs`,
       format: "cjs",
       name: "PySlangEvaluator",
       sourcemap: true,
     },
     plugins: plugins(terserNode),
-  },
-
-  // wasm
-  {
-    plugins: [
-      nodeResolve({ browser: true }),
-      commonjs({
-        include: "node_modules/**",
-      }),
-      json(),
-      typescript(),
-      nodePolyfills(),
-    ],
-    input: "src/conductor/PyWasmEvaluator.ts",
-    output: {
-      plugins: [terser()],
-      file: "dist/pywasm-evaluator.js",
-      format: "iife",
-      sourcemap: true,
-    },
   },
 ];
 
