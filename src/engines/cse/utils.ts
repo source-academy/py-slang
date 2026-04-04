@@ -1,4 +1,4 @@
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import {
   IndexError,
   MissingRequiredPositionalError,
@@ -6,10 +6,10 @@ import {
   TooManyPositionalArgumentsError,
   TypeError,
   UnboundLocalError,
-} from "../errors/errors";
-import { builtInConstants, builtIns } from "../stdlib";
-import { Token } from "../tokenizer";
-import { TokenType } from "../tokens";
+} from "../../errors/errors";
+import { builtInConstants, builtIns } from "../../stdlib";
+import { Token } from "../../tokenizer";
+import { TokenType } from "../../tokens";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";

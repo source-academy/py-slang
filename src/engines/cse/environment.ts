@@ -1,5 +1,5 @@
-import { ExprNS, StmtNS } from "../ast-types";
-import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../errors";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../../errors";
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";

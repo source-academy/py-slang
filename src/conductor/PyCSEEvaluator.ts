@@ -1,69 +1,91 @@
-// This file is adapted from:
-// https://github.com/source-academy/conductor
-// Original author(s): Source Academy Team
-
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { Context } from "../cse-machine/context";
+import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import { parse } from "../parser/parser-adapter";
+import { analyze } from "../resolver/analysis";
+import { Context } from "../engines/cse/context";
+import { evaluate } from "../engines/cse/interpreter";
 import {
   createErrorStream,
   createInputStream,
   createOutputStream,
   destroyStreams,
   displayError,
-} from "../cse-machine/streams";
-import { IOptions, runInContext } from "../runner/pyRunner";
+} from "../engines/cse/streams";
+import { toEvaluatorError } from "./errors";
+import linkedList from "../stdlib/linked-list";
+import list from "../stdlib/list";
+import pairmutator from "../stdlib/pairmutator";
+import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 
-const defaultContext = new Context();
-const defaultOptions: IOptions = {
-  isPrelude: false,
-  groups: [],
-  envSteps: 100000,
-  stepLimit: 100000,
-  variant: 1,
-};
+const ALL_GROUPS: Group[] = [linkedList, list, pairmutator, stream];
 
-export default abstract class PyCSEEvaluator extends BasicEvaluator {
-  private context: Context;
-  private options: IOptions;
-  readonly chapter: number; // AM: do we want to re-create the JS-Slang chapter enum?
-  readonly groups: Group[];
-
-  constructor(
-    conductor: IRunnerPlugin,
-    options: Partial<IOptions> = {},
-    chapter: number,
-    groups: Group[],
-  ) {
-    super(conductor);
-    this.context = defaultContext;
-    this.options = { ...defaultOptions, groups: groups, variant: chapter, ...options };
-    this.chapter = chapter;
-    this.groups = groups;
+function cseValueToNative(value: { type: string; value?: unknown }): unknown {
+  switch (value.type) {
+    case "number":
+    case "bool":
+    case "string":
+      return value.value;
+    case "bigint":
+      return Number(value.value);
+    case "none":
+      return undefined;
+    default:
+      return undefined;
   }
+}
 
+export class PyCSEEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
+    const context = new Context();
     try {
-      this.context.streams = {
+      context.streams = {
         initialised: true,
         stdout: createOutputStream(this.conductor),
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
       };
-      await runInContext(
-        chunk, // Code
-        this.context,
-        this.options,
-      );
-    } catch (error) {
-      if (error instanceof SyntaxError) {
-        await displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
+
+      // Load stdlib groups into context
+      for (const group of ALL_GROUPS) {
+        for (const [name, value] of group.builtins) {
+          context.nativeStorage.builtins.set(name, value);
+        }
+        if (group.prelude) {
+          const preludeAst = parse(group.prelude + "\n");
+          await evaluate("", preludeAst, context, { isPrelude: true, variant: 4, groups: [] });
+        }
+      }
+
+      const script = chunk + "\n";
+      const ast = parse(script);
+      const errors = analyze(ast, script, 4, ALL_GROUPS);
+      if (errors.length > 0) {
+        for (const error of errors.slice(0, -1)) {
+          await displayError(context, error, ErrorType.EVALUATOR_SYNTAX);
+        }
+        throw errors[errors.length - 1];
+      }
+      const result = await evaluate("", ast, context, {
+        variant: 4,
+        groups: ALL_GROUPS,
+      });
+
+      if (result.type === "error") {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        this.conductor.sendError(toEvaluatorError(new Error(result.message)) as any);
         return;
       }
-      await displayError(this.context, error, ErrorType.INTERNAL);
+
+      this.conductor.sendResult(cseValueToNative(result));
+    } catch (e) {
+      if (e instanceof SyntaxError) {
+        await displayError(context, e, ErrorType.EVALUATOR_SYNTAX);
+        return;
+      }
+      await displayError(context, e, ErrorType.INTERNAL);
     } finally {
-      await destroyStreams(this.context);
+      await destroyStreams(context);
     }
   }
 }

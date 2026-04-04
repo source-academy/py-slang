@@ -1,6 +1,6 @@
 // Value.ts
-import { StmtNS } from "../ast-types";
-import { PyComplexNumber } from "../types";
+import { StmtNS } from "../../ast-types";
+import { PyComplexNumber } from "../../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { ControlItem } from "./control";

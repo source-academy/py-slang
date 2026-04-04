@@ -7,13 +7,13 @@
 /* tslint:disable:max-classes-per-file */
 
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { ExprNS, StmtNS } from "../ast-types";
-import * as error from "../errors/errors";
-import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../errors/errors";
-import { IOptions } from "../runner/pyRunner";
-import { builtIns, toPythonString } from "../stdlib";
-import { TokenType } from "../tokens";
-import { CSEBreak, RecursivePartial, Representation, Result } from "../types";
+import { ExprNS, StmtNS } from "../../ast-types";
+import * as error from "../../errors/errors";
+import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
+import { builtIns, toPythonString } from "../../stdlib";
+import { Group } from "../../stdlib/utils";
+import { TokenType } from "../../tokens";
+import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
@@ -54,6 +54,14 @@ import {
   pyGetVariable,
   scanForAssignments,
 } from "./utils";
+
+export interface IOptions {
+  isPrelude: boolean;
+  groups: Group[];
+  envSteps: number;
+  stepLimit: number;
+  variant: number;
+}
 
 type CmdEvaluator = (
   code: string,
@@ -104,6 +112,15 @@ export async function evaluate(
   context: Context,
   options: RecursivePartial<IOptions> = {},
 ): Promise<Value> {
+  const opts: IOptions = {
+    isPrelude: false,
+    groups: [],
+    envSteps: 100000,
+    stepLimit: 100000,
+    variant: 4,
+    ...(options as Partial<IOptions>),
+  };
+
   source = code;
 
   try {
@@ -124,10 +141,10 @@ export async function evaluate(
       context,
       context.control,
       context.stash,
-      options.envSteps!,
-      options.stepLimit!,
-      options.variant!,
-      options.isPrelude,
+      opts.envSteps,
+      opts.stepLimit,
+      opts.variant,
+      opts.isPrelude,
     );
     return result;
   } catch (error) {

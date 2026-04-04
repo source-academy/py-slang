@@ -117,5 +117,6 @@ test.py
 .yarn/*
 .pnp.cjs
 .pnp.loader.mjs
+package-lock.json
 
 .DS_Store

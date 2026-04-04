@@ -1,5 +1,5 @@
-import { compileToWasmAndRun } from "../wasm-compiler";
-import { ERROR_MAP, TYPE_TAG } from "../wasm-compiler/constants";
+import { compileToWasmAndRun } from "../engines/wasm";
+import { ERROR_MAP, TYPE_TAG } from "../engines/wasm/constants";
 
 it = it.concurrent;
 

@@ -1,5 +1,5 @@
-import { ExprNS, StmtNS } from "../ast-types";
-import { TokenType } from "../tokens";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { TokenType } from "../../tokens";
 import { Environment } from "./environment";
 import { Value } from "./stash";
 

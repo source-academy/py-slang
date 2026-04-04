@@ -1,8 +1,8 @@
 import { WatGenerator } from "@sourceacademy/wasm-util";
 import wabt from "wabt";
-import { parse } from "../parser";
-import pythonLexer from "../parser/lexer";
-import { toAstToken } from "../parser/token-bridge";
+import { parse } from "../../parser";
+import pythonLexer from "../../parser/lexer";
+import { toAstToken } from "../../parser/token-bridge";
 import { BuilderGenerator } from "./builderGenerator";
 import { ERROR_MAP } from "./constants";
 import { libraryFunctions } from "./library";

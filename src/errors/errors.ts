@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
-import { operatorTranslator } from "../cse-machine/types";
+import { Context } from "../engines/cse/context";
+import { operatorTranslator } from "../engines/cse/types";
 import { Token } from "../tokenizer";
 import { TokenType } from "../tokens";
 
