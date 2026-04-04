@@ -1,74 +1,60 @@
 #!/usr/bin/env tsx
+import { select } from "@inquirer/prompts";
 import { execSync } from "child_process";
 import { Command } from "commander";
-import { select } from "@inquirer/prompts";
 
-const BACKENDS = [
-  { name: "cse  - CSE machine (default)", value: "cse" },
-  { name: "wasm - WebAssembly backend", value: "wasm" },
-] as const;
-
-type BackendChoice = (typeof BACKENDS)[number]["value"];
-
-const evaluatorMap: Record<BackendChoice, string> = {
+const evaluatorMap = {
   cse: "PyCSEEvaluator",
   wasm: "PyWasmEvaluator",
-};
+} as const;
 
-function buildBackend(backend: BackendChoice) {
-  const evaluator = evaluatorMap[backend];
-  console.log(`\nBuilding backend=${backend} (evaluator=${evaluator})...\n`);
+type EvaluatorKey = keyof typeof evaluatorMap;
+const evaluators = Object.keys(evaluatorMap) as EvaluatorKey[];
+
+function buildEvaluator(name: EvaluatorKey) {
+  console.log(`\nBuilding evaluator=${name} (${evaluatorMap[name]})...\n`);
   execSync("rollup -c --bundleConfigAsCjs", {
-    env: { ...process.env, EVALUATOR: evaluator },
+    env: { ...process.env, EVALUATOR: evaluatorMap[name] },
     stdio: "inherit",
   });
 }
 
-async function main() {
-  const program = new Command()
-    .option("--backend <type>", "Backend engine: cse, wasm")
-    .option("--all", "Build all backends")
-    .parse();
+async function resolveTargets(evaluator?: string, all?: boolean): Promise<EvaluatorKey[]> {
+  if (all) return evaluators;
 
-  const opts = program.opts();
-  const valid = BACKENDS.map(b => b.value) as readonly string[];
-
-  if (opts.all) {
-    for (const backend of BACKENDS.map(b => b.value)) {
-      buildBackend(backend);
-    }
-    return;
-  }
-
-  if (opts.backend) {
-    if (!valid.includes(opts.backend)) {
-      console.error(`Invalid backend: ${opts.backend}. Expected: ${valid.join(", ")}`);
+  if (evaluator) {
+    if (!(evaluator in evaluatorMap)) {
+      console.error(`Invalid evaluator: ${evaluator}. Expected: ${evaluators.join(", ")}`);
       process.exit(1);
     }
-    buildBackend(opts.backend as BackendChoice);
-    return;
+    return [evaluator as EvaluatorKey];
   }
 
-  // No args: non-interactive default to --all
-  if (process.stdin.isTTY) {
-    const backend = (await select({
-      message: "Select backend (or Ctrl+C to build all):",
-      choices: [...BACKENDS, { name: "all  - Build all backends", value: "all" as const }],
-      default: "all",
-    })) as BackendChoice | "all";
+  if (!process.stdin.isTTY) return evaluators;
 
-    if (backend === "all") {
-      for (const b of BACKENDS.map(b => b.value)) {
-        buildBackend(b);
-      }
-    } else {
-      buildBackend(backend);
-    }
-  } else {
-    // Non-interactive (CI): build all
-    for (const backend of BACKENDS.map(b => b.value)) {
-      buildBackend(backend);
-    }
+  const choice = await select({
+    message: "Select evaluator:",
+    choices: [
+      ...evaluators.map(value => ({ name: value, value })),
+      { name: "all", value: "all" },
+    ],
+    default: "all",
+  });
+
+  return choice === "all" ? evaluators : [choice as EvaluatorKey];
+}
+
+async function main() {
+  const program = new Command()
+    .option("--evaluator <type>", `Evaluator engine: ${evaluators.join(", ")}`)
+    .option("--all", "Build all evaluators")
+    .parse();
+
+  const { evaluator, all } = program.opts();
+  const targets = await resolveTargets(evaluator, all);
+
+  for (const target of targets) {
+    buildEvaluator(target);
   }
 }
 

@@ -7,14 +7,11 @@ import nodePolyfills from "rollup-plugin-polyfill-node";
 import replace from "@rollup/plugin-replace";
 import wasm from "@rollup/plugin-wasm";
 
-// Build-time evaluator selection via environment variables.
-// Set by scripts/build.ts; defaults to CSE.
-const EVALUATOR = process.env.EVALUATOR || "PyCSEEvaluator";
-
-const outputName = {
-  PyCSEEvaluator: "cse",
-  PyWasmEvaluator: "wasm",
-}[EVALUATOR] ?? EVALUATOR.toLowerCase();
+// Env EVALUATOR are set by scripts/build.ts.
+const EVALUATOR = process.env.EVALUATOR;
+if (!EVALUATOR) {
+  throw new Error("EVALUATOR env vars must be set. Use scripts/build.ts.");
+}
 
 const replacePlugin = replace({
   preventAssignment: true,
@@ -23,30 +20,20 @@ const replacePlugin = replace({
   },
 });
 
-function plugins(terserConfig) {
+function plugins() {
   return [
     replacePlugin,
-    commonjs(),
+    commonjs({ include: "node_modules/**" }),
     json(),
     wasm({ maxFileSize: 100_000 }),
     typescript(),
     nodeResolve(),
     nodePolyfills(),
-    terserConfig,
+    terser({
+      compress: { drop_console: true, dead_code: true, passes: 3 },
+    }),
   ];
 }
-
-// Browser bundle
-const terserBrowser = terser({
-  compress: { drop_console: true, dead_code: true, passes: 3 },
-});
-
-// Node.js bundle (readable)
-const terserNode = terser({
-  compress: { defaults: false, unused: true, dead_code: true },
-  mangle: false,
-  format: { beautify: true },
-});
 
 /**
  * @type {import('rollup').RollupOptions}
@@ -55,22 +42,22 @@ const config = [
   {
     input: "src/index.ts",
     output: {
-      file: `dist/worker-${outputName}.js`,
+      file: `dist/${EVALUATOR}.js`,
       format: "iife",
       name: "PySlangWorker",
       sourcemap: true,
     },
-    plugins: plugins(terserBrowser),
+    plugins: plugins(),
   },
   {
     input: "src/index.ts",
     output: {
-      file: `dist/evaluator-${outputName}.cjs`,
+      file: `dist/${EVALUATOR}.cjs`,
       format: "cjs",
       name: "PySlangEvaluator",
       sourcemap: true,
     },
-    plugins: plugins(terserNode),
+    plugins: plugins(),
   },
 ];
 
