@@ -1,7 +1,7 @@
 import { Context } from "../engines/cse/context";
 import { ControlItem } from "../engines/cse/control";
 import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
-import { Validate } from "../stdlib";
+import { minArgMap, Validate } from "../stdlib";
 import { Group, GroupName } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();

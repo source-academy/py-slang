@@ -1,7 +1,7 @@
 import { Context } from "../engines/cse/context";
 import { ControlItem } from "../engines/cse/control";
 import { BuiltinValue, ListValue, NoneValue, Value } from "../engines/cse/stash";
-import { Validate } from "../stdlib";
+import { minArgMap, Validate } from "../stdlib";
 import streamPrelude from "./stream.prelude";
 import { Group, GroupName } from "./utils";
 

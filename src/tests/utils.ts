@@ -49,7 +49,8 @@ async function runInContext(
         (options.groups as Group[]) ?? [],
         Object.keys(context.runtime.environments[0].head),
       );
-      resolver.resolve(pyAst);
+      const errors = resolver.resolve(pyAst);
+      if (errors.length > 0) throw errors[0];
     }
   } catch (error) {
     await displayError(context, error, ErrorType.EVALUATOR_SYNTAX);

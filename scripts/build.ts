@@ -34,10 +34,7 @@ async function resolveTargets(evaluator?: string, all?: boolean): Promise<Evalua
 
   const choice = await select({
     message: "Select evaluator:",
-    choices: [
-      ...evaluators.map(value => ({ name: value, value })),
-      { name: "all", value: "all" },
-    ],
+    choices: [...evaluators.map(value => ({ name: value, value })), { name: "all", value: "all" }],
     default: "all",
   });
 

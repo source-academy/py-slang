@@ -285,9 +285,9 @@ describe("traverseAST — target visitation", () => {
 // ---------------------------------------------------------------------------
 // Rest + spread runtime (CSE machine integration)
 // ---------------------------------------------------------------------------
-import { Context } from "../cse-machine/context";
-import { evaluate } from "../cse-machine/interpreter";
-import { Value } from "../cse-machine/stash";
+import { Context } from "../engines/cse/context";
+import { evaluate } from "../engines/cse/interpreter";
+import { Value } from "../engines/cse/stash";
 
 async function run(src: string, chapter = 4): Promise<Value> {
   const code = src.endsWith("\n") ? src : src + "\n";
