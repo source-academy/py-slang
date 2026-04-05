@@ -35,14 +35,20 @@ export class PyComplexNumber {
       return new PyComplexNumber(realVal, 0);
     }
     const match = str.match(
-      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-]\d+(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
+      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-](?:\d+)?(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
     );
     if (match) {
       const realPart = Number(match[1]);
       let imagPart = 0;
 
-      if (match[4]) {
-        imagPart = Number(match[4].substring(0, match[4].length - 1)); // Remove the trailing 'j' or 'J'
+      if (match[4] !== undefined) {
+        if (match[4] === "+j" || match[4] === "j") {
+          imagPart = 1;
+        } else if (match[4] === "-j") {
+          imagPart = -1;
+        } else {
+          imagPart = Number(match[4].substring(0, match[4].length - 1)); // Remove the trailing 'j' or 'J'
+        }
       }
 
       return new PyComplexNumber(realPart, imagPart);
