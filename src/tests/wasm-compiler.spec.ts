@@ -116,6 +116,20 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(renderedResult).toBe("hello world");
   });
 
+  it("string literal with multibyte UTF-8 characters", async () => {
+    const pythonCode = `"😀"`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("😀");
+  });
+
+  it("string concatenation with multibyte UTF-8 characters", async () => {
+    const pythonCode = `"😀" + "é"`;
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("😀é");
+  });
+
   it("string + int should error (type mismatch)", async () => {
     const pythonCode = `"a" + 1`;
     await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
@@ -1928,6 +1942,11 @@ describe("tokenize function tests", () => {
     expect(renderedResult).toBe(linkedListBuilder("f", "(", "x", ",", "y", "[", "0", "]", ")"));
   });
 
+  it("tokenizes multibyte UTF-8 string lexemes", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`tokenize('"😀é"')`, true);
+    expect(renderedResult).toBe(linkedListBuilder('"😀é"'));
+  });
+
   it("tokenize on non-string should error", async () => {
     await expect(compileToWasmAndRun(`tokenize(42)`, true)).rejects.toThrow(
       new Error(ERROR_MAP.PARSE_NOT_STRING),
@@ -1983,6 +2002,11 @@ describe("parse function tests", () => {
   it("string literal", async () => {
     const { renderedResult } = await compileToWasmAndRun(`parse('"hello"')`, true);
     expect(renderedResult).toBe(linkedListBuilder("literal", '"hello"'));
+  });
+
+  it("string literal with multibyte UTF-8 characters", async () => {
+    const { renderedResult } = await compileToWasmAndRun(`parse('"😀é"')`, true);
+    expect(renderedResult).toBe(linkedListBuilder("literal", '"😀é"'));
   });
 
   it("name", async () => {

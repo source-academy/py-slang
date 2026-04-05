@@ -51,6 +51,10 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   private memory: WebAssembly.Memory;
   private static readonly encoder = new TextEncoder();
 
+  private static utf8ByteLength(str: string): number {
+    return MetacircularGenerator.encoder.encode(str).length;
+  }
+
   private list(...elements: [number, bigint][]): [number, bigint] {
     return elements.reduceRight(
       (tail, [tag, value]) => this.wasmExports.makePair(tag, value, tail[0], tail[1]),
@@ -60,8 +64,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   private string(str: (typeof PARSE_TREE_STRINGS)[number]): [number, bigint] {
     const index = PARSE_TREE_STRINGS.indexOf(str);
-    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce((acc, s) => acc + s.length, 0);
-    return this.wasmExports.makeString(offset, str.length);
+    const offset = PARSE_TREE_STRINGS.slice(0, index).reduce(
+      (acc, s) => acc + MetacircularGenerator.utf8ByteLength(s),
+      0,
+    );
+    return this.wasmExports.makeString(offset, MetacircularGenerator.utf8ByteLength(str));
   }
 
   private dynamicString(str: string): [number, bigint] {
@@ -71,7 +78,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     const dataView = new DataView(this.memory.buffer, offset, bytes.length);
     bytes.forEach((byte, i) => dataView.setUint8(i, byte));
 
-    return this.wasmExports.makeString(offset, str.length);
+    return this.wasmExports.makeString(offset, bytes.length);
   }
 
   constructor(wasmExports: WasmExports, memory: WebAssembly.Memory) {

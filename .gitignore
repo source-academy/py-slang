@@ -117,3 +117,5 @@ test.py
 .yarn/*
 .pnp.cjs
 .pnp.loader.mjs
+
+.DS_Store
