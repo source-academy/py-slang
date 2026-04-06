@@ -31,7 +31,7 @@ const generateConfig = variant => ({
   ],
 });
 
-const variants = [1, 2, 3].map(v => generateConfig(v));
+const variants = [1, 2, 3, 4].map(v => generateConfig(v));
 
 /**
  * @type {import('rollup').RollupOptions}
