@@ -1,7 +1,9 @@
 import commonjs from "@rollup/plugin-commonjs";
 import json from "@rollup/plugin-json";
 import nodeResolve from "@rollup/plugin-node-resolve";
+import terser from "@rollup/plugin-terser";
 import typescript from "@rollup/plugin-typescript";
+import nodePolyfills from "rollup-plugin-polyfill-node";
 
 const generateConfig = variant => ({
   input: `src/conductor/PyCSEEvaluator${variant}.ts`,
@@ -60,6 +62,26 @@ const config = [
       json(),
       typescript(),
     ],
+  },
+
+  // wasm
+  {
+    plugins: [
+      nodeResolve({ browser: true }),
+      commonjs({
+        include: "node_modules/**",
+      }),
+      json(),
+      typescript(),
+      nodePolyfills(),
+    ],
+    input: "src/conductor/PyWasmEvaluator.ts",
+    output: {
+      plugins: [terser()],
+      file: "dist/pywasm-evaluator.js",
+      format: "iife",
+      sourcemap: true,
+    },
   },
 ];
 
