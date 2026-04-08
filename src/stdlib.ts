@@ -13,6 +13,7 @@ import { Context } from "./engines/cse/context";
 import { ControlItem } from "./engines/cse/control";
 import { handleRuntimeError } from "./engines/cse/error";
 import { displayOutput, receiveInput } from "./engines/cse/streams";
+import { stringify } from "./utils/stringify";
 import {
   MissingRequiredPositionalError,
   TooManyPositionalArgumentsError,
@@ -2424,6 +2425,10 @@ function escape(str: string): string {
   }
   return escaped;
 }
+function toPythonList(obj: Value): string {
+  return stringify(obj);
+}
+
 export function toPythonString(obj: Value, repr: boolean = false): string {
   let ret: string = "";
   if (obj.type == "builtin") {
@@ -2455,7 +2460,7 @@ export function toPythonString(obj: Value, repr: boolean = false): string {
     const funcName = obj.name || "(anonymous)";
     ret = `<function ${funcName}>`;
   } else if (obj.type === "list") {
-    ret = `[${obj.value.map(v => toPythonString(v, true)).join(", ")}]`;
+    ret = toPythonList(obj);
   } else {
     ret = `<${obj.type} object>`;
   }
