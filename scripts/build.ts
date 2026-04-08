@@ -1,63 +1,87 @@
 #!/usr/bin/env tsx
-/// <reference types="node" />
 import { select } from "@inquirer/prompts";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { Command } from "commander";
 
-const evaluatorMap = {
-  cse: "PyCseEvaluator",
-  wasm: "PyWasmEvaluator",
-} as const;
+/** Keep in sync with the evaluators registry in src/index.ts. */
+const allTargets = [
+  "PyCseEvaluator1",
+  "PyCseEvaluator2",
+  "PyCseEvaluator3",
+  "PyCseEvaluator4",
+  "PyWasmEvaluator",
+] as const;
 
-type EvaluatorKey = keyof typeof evaluatorMap;
-const evaluators = Object.keys(evaluatorMap) as EvaluatorKey[];
+type EvaluatorName = (typeof allTargets)[number];
 
-function buildEvaluator(name: EvaluatorKey, variant: string, extraArgs: string[] = []) {
-  console.log(`\nBuilding evaluator=${name} variant=${variant} (${evaluatorMap[name]})...\n`);
-  const rollupCmd = ["rollup -c --bundleConfigAsCjs", ...extraArgs].join(" ");
+function buildTarget(target: EvaluatorName, extraArgs: string[] = []) {
+  console.log(`\nBuilding ${target}...\n`);
+  const rollupCmd = ["rollup -c rollup.config.mjs", ...extraArgs].join(" ");
   execSync(rollupCmd, {
-    env: { ...process.env, EVALUATOR: evaluatorMap[name], VARIANT: variant },
+    env: { ...process.env, EVALUATOR: target },
     stdio: "inherit",
   });
 }
 
-async function resolveTargets(evaluator?: string, all?: boolean): Promise<EvaluatorKey[]> {
-  if (all) return evaluators;
+function watchTarget(target: EvaluatorName) {
+  console.log(`\nWatching ${target}...\n`);
+  const child = spawn("rollup", ["-c", "rollup.config.mjs", "--watch"], {
+    env: { ...process.env, EVALUATOR: target },
+    stdio: "inherit",
+  });
+  return child;
+}
+
+async function resolveTargets(evaluator?: string, all?: boolean): Promise<EvaluatorName[]> {
+  if (all) return [...allTargets];
 
   if (evaluator) {
-    if (!(evaluator in evaluatorMap)) {
-      console.error(`Invalid evaluator: ${evaluator}. Expected: ${evaluators.join(", ")}`);
+    if (!allTargets.includes(evaluator as EvaluatorName)) {
+      console.error(`Invalid target: ${evaluator}. Expected: ${allTargets.join(", ")}`);
       process.exit(1);
     }
-    return [evaluator as EvaluatorKey];
+    return [evaluator as EvaluatorName];
   }
 
-  if (!process.stdin.isTTY) return evaluators;
+  if (!process.stdin.isTTY) return [...allTargets];
 
   const choice = await select({
-    message: "Select evaluator:",
-    choices: [...evaluators.map(value => ({ name: value, value })), { name: "all", value: "all" }],
+    message: "Select build target:",
+    choices: [
+      ...allTargets.map(value => ({ name: value, value })),
+      { name: "all", value: "all" as const },
+    ],
     default: "all",
   });
 
-  return choice === "all" ? evaluators : [choice as EvaluatorKey];
+  return choice === "all" ? [...allTargets] : [choice as EvaluatorName];
 }
 
 async function main() {
   const program = new Command()
-    .option("--evaluator <type>", `Evaluator engine: ${evaluators.join(", ")}`)
-    .option("--variant <number>", "Python variant (chapter)")
-    .option("--all", "Build all evaluators")
-    .allowUnknownOption()
+    .option("--evaluator <name>", `Build target: ${allTargets.join(", ")}`)
+    .option("--all", "Build all targets")
+    .option("--watch", "Watch for changes and rebuild")
     .parse();
 
   const opts = program.opts();
-  const variant = opts.variant ?? 4;
   const extraArgs = program.args;
   const targets = await resolveTargets(opts.evaluator, opts.all);
 
-  for (const target of targets) {
-    buildEvaluator(target, variant, extraArgs);
+  if (opts.watch) {
+    if (targets.length > 1) {
+      console.error("Watch mode only supports a single target. Use --evaluator <name>.");
+      process.exit(1);
+    }
+    const child = watchTarget(targets[0]);
+    process.on("SIGINT", () => {
+      child.kill();
+      process.exit(0);
+    });
+  } else {
+    for (const target of targets) {
+      buildTarget(target, extraArgs);
+    }
   }
 }
 

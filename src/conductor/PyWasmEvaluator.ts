@@ -14,7 +14,7 @@ export class PyWasmEvaluator extends BasicEvaluator {
     try {
       const { prints, renderedResult } = await compileToWasmAndRun(chunk, true);
       prints.forEach(print => this.conductor.sendOutput(print));
-      this.conductor.sendResult(renderedResult); // find a way to send NOT stringified result
+      this.conductor.sendOutput(renderedResult);
     } catch (error) {
       this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }

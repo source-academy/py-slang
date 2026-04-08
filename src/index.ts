@@ -1,17 +1,26 @@
 declare const __EVALUATOR__: string;
 
 import { initialise } from "@sourceacademy/conductor/runner";
-
-import { PyCseEvaluator } from "./conductor/PyCseEvaluator";
+import {
+  PyCseEvaluator1,
+  PyCseEvaluator2,
+  PyCseEvaluator3,
+  PyCseEvaluator4,
+} from "./conductor/PyCseEvaluator";
 import { PyWasmEvaluator } from "./conductor/PyWasmEvaluator";
 
+/** Single registry of all evaluators. */
 const evaluators = {
-  PyCseEvaluator,
+  PyCseEvaluator1,
+  PyCseEvaluator2,
+  PyCseEvaluator3,
+  PyCseEvaluator4,
   PyWasmEvaluator,
 } as const;
 
-const Evaluator = evaluators[__EVALUATOR__ as keyof typeof evaluators];
-initialise(Evaluator);
+type EvaluatorName = keyof typeof evaluators;
 
-// Re-exports for library consumers
-export { PyCseEvaluator, PyWasmEvaluator };
+initialise(evaluators[__EVALUATOR__ as EvaluatorName]);
+
+// Export back for library consumers
+export { evaluators, type EvaluatorName };

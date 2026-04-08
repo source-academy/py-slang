@@ -18,28 +18,21 @@ import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 
-const VARIANT_GROUPS: ReadonlyMap<number, Group[]> = new Map([
-  [1, []],
-  [2, [linkedList]],
-  [3, [linkedList, list, pairmutator, stream]],
-  [4, [linkedList, list, pairmutator, stream, parser]],
-]);
-
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
   return () => (promise ??= fn());
 }
 
-export class PyCseEvaluator extends BasicEvaluator {
+abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
   private readonly ensurePreludesLoaded: () => Promise<void>;
 
-  constructor(conductor: IRunnerPlugin, variant: number = 4) {
+  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
-    this.groups = VARIANT_GROUPS.get(variant) ?? [];
+    this.groups = groups;
 
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
@@ -96,5 +89,29 @@ export class PyCseEvaluator extends BasicEvaluator {
     } finally {
       await destroyStreams(this.context);
     }
+  }
+}
+
+export class PyCseEvaluator1 extends PyCseEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 1, []);
+  }
+}
+
+export class PyCseEvaluator2 extends PyCseEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 2, [linkedList]);
+  }
+}
+
+export class PyCseEvaluator3 extends PyCseEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 3, [linkedList, list, pairmutator, stream]);
+  }
+}
+
+export class PyCseEvaluator4 extends PyCseEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 4, [linkedList, list, pairmutator, stream, parser]);
   }
 }

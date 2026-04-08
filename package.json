@@ -5,13 +5,10 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "regen": "npx tsx src/generate.ts && prettier --write src/ast-types.ts",
+    "regen": "tsx src/generate.ts && prettier --write src/ast-types.ts",
     "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
-    "start:dev": "npx nodemon",
-    "build": "npx tsx scripts/build.ts --all",
-    "build:watch": "npx tsx scripts/build.ts --all --watch",
-    "build:cse": "npx tsx scripts/build.ts --evaluator cse",
-    "build:wasm": "npx tsx scripts/build.ts --evaluator wasm",
+    "build": "tsx scripts/build.ts --all",
+    "dev": "tsx scripts/build.ts --watch",
     "start": "yarn run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
@@ -21,7 +18,7 @@
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
-    "wasm": "npx tsx src/engines/wasm/run-file.ts"
+    "wasm": "tsx src/engines/wasm/run-file.ts"
   },
   "keywords": [
     "Python",
@@ -53,7 +50,6 @@
     "eslint-config-prettier": "^10.1.8",
     "jest": "^29.7.0",
     "jsdoc": "^4.0.4",
-    "nodemon": "^3.1.10",
     "prettier": "^3.8.1",
     "rollup": "^4.59.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
