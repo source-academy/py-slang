@@ -14,8 +14,8 @@ import {
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 import { WasmExports } from ".";
-import { ExprNS, StmtNS } from "../ast-types";
-import { TokenType } from "../tokens";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { TokenType } from "../../tokens";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,

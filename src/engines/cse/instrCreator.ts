@@ -1,5 +1,5 @@
-import { ExprNS } from "../ast-types";
-import { TokenType } from "../tokens";
+import { ExprNS } from "../../ast-types";
+import { TokenType } from "../../tokens";
 import { Environment } from "./environment";
 import {
   AppInstr,
