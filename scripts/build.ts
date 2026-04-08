@@ -3,16 +3,16 @@ import { select } from "@inquirer/prompts";
 import { execSync, spawn } from "child_process";
 import { Command } from "commander";
 
-/** Keep in sync with the evaluators registry in src/index.ts. */
+// Keep in sync with src/conductor/index.ts exports.
 const allTargets = [
   "PyCseEvaluator1",
   "PyCseEvaluator2",
   "PyCseEvaluator3",
   "PyCseEvaluator4",
   "PyWasmEvaluator",
-] as const;
+];
 
-type EvaluatorName = (typeof allTargets)[number];
+type EvaluatorName = string;
 
 function buildTarget(target: EvaluatorName, extraArgs: string[] = []) {
   console.log(`\nBuilding ${target}...\n`);

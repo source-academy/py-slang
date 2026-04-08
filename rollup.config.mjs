@@ -5,27 +5,21 @@ import json from "@rollup/plugin-json";
 import commonjs from "@rollup/plugin-commonjs";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import replace from "@rollup/plugin-replace";
-import wasm from "@rollup/plugin-wasm";
 
-// Env EVALUATOR are set by scripts/build.ts.
+// Env EVALUATOR is set by scripts/build.ts.
 const EVALUATOR = process.env.EVALUATOR;
 if (!EVALUATOR) {
-  throw new Error("EVALUATOR env vars must be set. Use scripts/build.ts.");
+  throw new Error("EVALUATOR env var must be set. Use scripts/build.ts.");
 }
-
-const replacePlugin = replace({
-  preventAssignment: true,
-  values: {
-    __EVALUATOR__: JSON.stringify(EVALUATOR),
-  },
-});
 
 function plugins() {
   return [
-    replacePlugin,
+    replace({
+      preventAssignment: true,
+      values: { __EVALUATOR__: EVALUATOR },
+    }),
     commonjs({ include: "node_modules/**" }),
     json(),
-    wasm({ maxFileSize: 100_000 }),
     typescript(),
     nodeResolve(),
     nodePolyfills(),
@@ -40,7 +34,10 @@ function plugins() {
  */
 const config = [
   {
-    input: "src/index.ts",
+    treeshake: {
+      moduleSideEffects: false,
+    },
+    input: "src/conductor/initialise.ts",
     output: {
       file: `dist/${EVALUATOR}.js`,
       format: "iife",
@@ -50,11 +47,14 @@ const config = [
     plugins: plugins(),
   },
   {
-    input: "src/index.ts",
+    treeshake: {
+      moduleSideEffects: false,
+    },
+    input: "src/conductor/evaluator.ts",
     output: {
       file: `dist/${EVALUATOR}.cjs`,
       format: "cjs",
-      name: "PySlangEvaluator",
+      exports: "default",
       sourcemap: true,
     },
     plugins: plugins(),
