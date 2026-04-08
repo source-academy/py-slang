@@ -6,9 +6,21 @@
  * Jest's CJS transform (class field initializers before super()). We use a
  * plain object that satisfies the structural interface instead.
  */
-export function toEvaluatorError(e: unknown): { message: string; line?: number; column?: number } {
+interface EvaluatorError {
+  name: string;
+  errorType: string;
+  message: string;
+  line?: number;
+  column?: number;
+}
+
+export function toEvaluatorError(e: unknown): EvaluatorError {
   if (e instanceof Error) {
-    const err: { message: string; line?: number; column?: number } = { message: e.message };
+    const err: EvaluatorError = {
+      name: e.name,
+      errorType: "runtime",
+      message: e.message,
+    };
     // Check if it's a SourceError-like object with location info
     const potentialSourceError = e as { location?: { start?: { line: number; column: number } } };
     if (potentialSourceError.location?.start) {
@@ -17,5 +29,5 @@ export function toEvaluatorError(e: unknown): { message: string; line?: number; 
     }
     return err;
   }
-  return { message: String(e) };
+  return { name: "Error", errorType: "runtime", message: String(e) };
 }

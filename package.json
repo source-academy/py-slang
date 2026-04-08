@@ -9,6 +9,7 @@
     "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
     "start:dev": "npx nodemon",
     "build": "npx tsx scripts/build.ts --all",
+    "build:watch": "npx tsx scripts/build.ts --all --watch",
     "build:cse": "npx tsx scripts/build.ts --evaluator cse",
     "build:wasm": "npx tsx scripts/build.ts --evaluator wasm",
     "start": "yarn run build && node dist/index.js",
@@ -20,7 +21,7 @@
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
-    "wasm": "ts-node --transpile-only src/engines/wasm/run-file.ts"
+    "wasm": "npx tsx src/engines/wasm/run-file.ts"
   },
   "keywords": [
     "Python",
@@ -57,8 +58,8 @@
     "rollup": "^4.59.0",
     "rollup-plugin-polyfill-node": "^0.13.0",
     "ts-jest": "^29.0.5",
-    "ts-node": "^10.9.1",
     "tslib": "^2.8.1",
+    "tsx": "^4.19.0",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.56.1"
   },
