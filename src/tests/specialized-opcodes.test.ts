@@ -15,7 +15,7 @@ import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { runAnalysisPass, MutableEnv } from "../specialization/dfa-driver";
 import { TypeAnalysisModule } from "../specialization/type-analysis";
-import type { HintTable } from "../specialization/analysis-module";
+import { annotateTree, type HintTable } from "../specialization/analysis-module";
 
 /**
  * Compile and run with DFA type analysis enabled.
@@ -31,7 +31,7 @@ function compileAndRunSpecialized(code: string): unknown {
   const hints: HintTable = new WeakMap();
   const typeEnv = new MutableEnv();
   runAnalysisPass(ast.statements, new TypeAnalysisModule(), typeEnv, hints, compiler.createSlotLookup());
-  compiler.setTypeHints(hints);
+  annotateTree(ast.statements, hints);
 
   const program = compiler.compileProgram(ast);
   const interpreter = new SVMLInterpreter(program);

@@ -6,7 +6,7 @@ import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { toEvaluatorError } from "./errors";
 import { runAnalysisPass, MutableEnv } from "../specialization/dfa-driver";
 import { TypeAnalysisModule } from "../specialization/type-analysis";
-import type { HintTable } from "../specialization/analysis-module";
+import { annotateTree, type HintTable } from "../specialization/analysis-module";
 
 export class PySvmlEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
@@ -23,7 +23,7 @@ export class PySvmlEvaluator extends BasicEvaluator {
       const hints: HintTable = new WeakMap();
       const typeEnv = new MutableEnv();
       runAnalysisPass(ast.statements, new TypeAnalysisModule(), typeEnv, hints, compiler.createSlotLookup());
-      compiler.setTypeHints(hints);
+      annotateTree(ast.statements, hints);
 
       const program = compiler.compileProgram(ast);
       const interpreter = new SVMLInterpreter(program);

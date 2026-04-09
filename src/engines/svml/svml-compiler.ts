@@ -6,9 +6,15 @@ import { SVMLProgram } from "./types";
 import { SVMLIRBuilder } from "./SVMLIRBuilder";
 import OpCodes from "./opcodes";
 import { FunctionEnvironments, Environment, Resolver } from "../../resolver";
-import type { HintTable } from "../../specialization/analysis-module";
+import type { Annotated, OptimizationHint, PyASTNode } from "../../specialization/analysis-module";
 import type { SlotInfo, SlotLookup } from "../../specialization/types";
 import { INT_BIT, BOOL_BIT, FLOAT_BIT } from "../../types/abstract-value";
+
+/** Read the hint placed by annotateTree(), returning undefined if absent. */
+function getHint(node: PyASTNode): OptimizationHint | undefined {
+  return "hint" in node ? (node as Annotated<PyASTNode>).hint : undefined;
+}
+
 // Fast compiler annotations for maximum performance
 interface CompilerAnnotation {
   slot: number; // Variable slot index within environment
@@ -40,9 +46,6 @@ export class SVMLCompiler
 
   // Deterministic counter for temporary variable names
   private tmpCounter = 0;
-
-  // Type hints from DFA analysis — used for specialized opcode selection
-  private typeHints: HintTable | null = null;
 
   // Loop stack for break/continue support
   private loopStack: Array<{
@@ -96,8 +99,6 @@ export class SVMLCompiler
       this.functionEnvironments,
       builder,
     );
-    compiler.typeHints = this.typeHints;
-
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);
 
@@ -109,14 +110,6 @@ export class SVMLCompiler
     compiler.envSlotCounters.set(nextEnvironment, numArgs);
 
     return compiler;
-  }
-
-  /**
-   * Set type hints from DFA analysis. Enables specialized opcode selection.
-   * Call before compileProgram().
-   */
-  setTypeHints(hints: HintTable): void {
-    this.typeHints = hints;
   }
 
   /**
@@ -376,9 +369,8 @@ export class SVMLCompiler
 
   /** True when both operands have a statically known numeric type (int or float). */
   private bothNumeric(left: ExprNS.Expr, right: ExprNS.Expr): boolean {
-    if (!this.typeHints) return false;
-    const lk = this.typeHints.get(left)?.type?.sound.kinds;
-    const rk = this.typeHints.get(right)?.type?.sound.kinds;
+    const lk = getHint(left)?.type?.sound.kinds;
+    const rk = getHint(right)?.type?.sound.kinds;
     return (lk === INT_BIT || lk === FLOAT_BIT) && (rk === INT_BIT || rk === FLOAT_BIT);
   }
 
@@ -450,13 +442,11 @@ export class SVMLCompiler
 
     switch (expr.operator.type) {
       case TokenType.NOT: {
-        const hint = this.typeHints?.get(expr.right);
-        opcode = hint?.type?.sound.kinds === BOOL_BIT ? OpCodes.NOTB : OpCodes.NOTG;
+        opcode = getHint(expr.right)?.type?.sound.kinds === BOOL_BIT ? OpCodes.NOTB : OpCodes.NOTG;
         break;
       }
       case TokenType.MINUS: {
-        const hint = this.typeHints?.get(expr.right);
-        const k = hint?.type?.sound.kinds;
+        const k = getHint(expr.right)?.type?.sound.kinds;
         opcode = k === INT_BIT || k === FLOAT_BIT ? OpCodes.NEGF : OpCodes.NEGG;
         break;
       }
