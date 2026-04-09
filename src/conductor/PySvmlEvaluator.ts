@@ -4,6 +4,9 @@ import { analyzeWithEnvironments } from "../resolver";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { toEvaluatorError } from "./errors";
+import { runAnalysisPass, MutableEnv } from "../specialization/dfa-driver";
+import { TypeAnalysisModule } from "../specialization/type-analysis";
+import type { HintTable } from "../specialization/analysis-module";
 
 export class PySvmlEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
@@ -15,6 +18,13 @@ export class PySvmlEvaluator extends BasicEvaluator {
         throw errors[0];
       }
       const compiler = SVMLCompiler.fromProgram(ast, environments);
+
+      // Run forward type analysis before codegen to enable specialized opcode selection
+      const hints: HintTable = new WeakMap();
+      const typeEnv = new MutableEnv();
+      runAnalysisPass(ast.statements, new TypeAnalysisModule(), typeEnv, hints, compiler.createSlotLookup());
+      compiler.setTypeHints(hints);
+
       const program = compiler.compileProgram(ast);
       const interpreter = new SVMLInterpreter(program);
       const returnValue = interpreter.execute();

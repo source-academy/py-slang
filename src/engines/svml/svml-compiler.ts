@@ -6,6 +6,9 @@ import { SVMLProgram } from "./types";
 import { SVMLIRBuilder } from "./SVMLIRBuilder";
 import OpCodes from "./opcodes";
 import { FunctionEnvironments, Environment, Resolver } from "../../resolver";
+import type { HintTable } from "../../specialization/analysis-module";
+import type { SlotInfo, SlotLookup } from "../../specialization/types";
+import { INT_BIT, BOOL_BIT, FLOAT_BIT } from "../../types/abstract-value";
 // Fast compiler annotations for maximum performance
 interface CompilerAnnotation {
   slot: number; // Variable slot index within environment
@@ -37,6 +40,9 @@ export class SVMLCompiler
 
   // Deterministic counter for temporary variable names
   private tmpCounter = 0;
+
+  // Type hints from DFA analysis — used for specialized opcode selection
+  private typeHints: HintTable | null = null;
 
   // Loop stack for break/continue support
   private loopStack: Array<{
@@ -90,6 +96,7 @@ export class SVMLCompiler
       this.functionEnvironments,
       builder,
     );
+    compiler.typeHints = this.typeHints;
 
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);
@@ -102,6 +109,26 @@ export class SVMLCompiler
     compiler.envSlotCounters.set(nextEnvironment, numArgs);
 
     return compiler;
+  }
+
+  /**
+   * Set type hints from DFA analysis. Enables specialized opcode selection.
+   * Call before compileProgram().
+   */
+  setTypeHints(hints: HintTable): void {
+    this.typeHints = hints;
+  }
+
+  /**
+   * Create a SlotLookup function for the type analyser. Maps each token to the
+   * {slot, envLevel, isPrimitive} triple used by the compiler — ensuring analysis
+   * and codegen use identical slot numbering.
+   */
+  createSlotLookup(): SlotLookup {
+    return (token: Token): SlotInfo => {
+      const a = this.getTokenAnnotation(token);
+      return { slot: a.slot, envLevel: a.envLevel, isPrimitive: a.isPrimitive };
+    };
   }
 
   /**
@@ -316,82 +343,59 @@ export class SVMLCompiler
     return { maxStackSize: 1 };
   }
 
-  /**
-   * Convert Python operator token to SVML binary operator
-   */
-  private getBinaryOpCode(operator: Token): number {
-    switch (operator.type) {
-      case TokenType.PLUS:
-        return OpCodes.ADDG;
-      case TokenType.MINUS:
-        return OpCodes.SUBG;
-      case TokenType.STAR:
-        return OpCodes.MULG;
-      case TokenType.SLASH:
-        return OpCodes.DIVG;
-      case TokenType.PERCENT:
-        return OpCodes.MODG;
-      case TokenType.DOUBLESLASH:
-        return OpCodes.FLOORDIVG;
-      default:
-        throw new Error(`Unsupported binary operator: ${operator.lexeme}`);
-    }
+  // [generic, specialized] opcode pairs, indexed by token type
+  private static readonly BINARY_OPCODES = new Map<TokenType, [number, number]>([
+    [TokenType.PLUS,        [OpCodes.ADDG,      OpCodes.ADDF]],
+    [TokenType.MINUS,       [OpCodes.SUBG,      OpCodes.SUBF]],
+    [TokenType.STAR,        [OpCodes.MULG,      OpCodes.MULF]],
+    [TokenType.SLASH,       [OpCodes.DIVG,      OpCodes.DIVF]],
+    [TokenType.PERCENT,     [OpCodes.MODG,      OpCodes.MODF]],
+    [TokenType.DOUBLESLASH, [OpCodes.FLOORDIVG, OpCodes.FLOORDIVF]],
+  ]);
+
+  private static readonly COMPARE_OPCODES = new Map<TokenType, [number, number]>([
+    [TokenType.LESS,         [OpCodes.LTG, OpCodes.LTF]],
+    [TokenType.GREATER,      [OpCodes.GTG, OpCodes.GTF]],
+    [TokenType.LESSEQUAL,    [OpCodes.LEG, OpCodes.LEF]],
+    [TokenType.GREATEREQUAL, [OpCodes.GEG, OpCodes.GEF]],
+    [TokenType.DOUBLEEQUAL,  [OpCodes.EQG, OpCodes.EQF]],
+    [TokenType.NOTEQUAL,     [OpCodes.NEQG, OpCodes.NEQF]],
+  ]);
+
+  private getBinaryOpCode(operator: Token, specialized = false): number {
+    const pair = SVMLCompiler.BINARY_OPCODES.get(operator.type);
+    if (!pair) throw new Error(`Unsupported binary operator: ${operator.lexeme}`);
+    return pair[specialized ? 1 : 0];
   }
 
-  /**
-   * Convert Python comparison operator token to SVML comparison operator
-   */
-  private getCompareOpCode(operator: Token): number {
-    switch (operator.type) {
-      case TokenType.LESS:
-        return OpCodes.LTG;
-      case TokenType.GREATER:
-        return OpCodes.GTG;
-      case TokenType.LESSEQUAL:
-        return OpCodes.LEG;
-      case TokenType.GREATEREQUAL:
-        return OpCodes.GEG;
-      case TokenType.DOUBLEEQUAL:
-        return OpCodes.EQG;
-      case TokenType.NOTEQUAL:
-        return OpCodes.NEQG;
-      default:
-        throw new Error(`Unsupported comparison operator: ${operator.lexeme}`);
-    }
+  private getCompareOpCode(operator: Token, specialized = false): number {
+    const pair = SVMLCompiler.COMPARE_OPCODES.get(operator.type);
+    if (!pair) throw new Error(`Unsupported comparison operator: ${operator.lexeme}`);
+    return pair[specialized ? 1 : 0];
+  }
+
+  /** True when both operands have a statically known numeric type (int or float). */
+  private bothNumeric(left: ExprNS.Expr, right: ExprNS.Expr): boolean {
+    if (!this.typeHints) return false;
+    const lk = this.typeHints.get(left)?.type?.sound.kinds;
+    const rk = this.typeHints.get(right)?.type?.sound.kinds;
+    return (lk === INT_BIT || lk === FLOAT_BIT) && (rk === INT_BIT || rk === FLOAT_BIT);
   }
 
   visitBinaryExpr(expr: ExprNS.Binary): ExpressionResult {
-    const opcode = this.getBinaryOpCode(expr.operator);
-
-    // Compile left operand
+    const opcode = this.getBinaryOpCode(expr.operator, this.bothNumeric(expr.left, expr.right));
     const leftResult = this.compile(expr.left);
-
-    // Compile right operand
     const rightResult = this.compile(expr.right);
-
-    // Emit the operation
     this.builder.emitNullary(opcode);
-
-    return {
-      maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize),
-    };
+    return { maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize) };
   }
 
   visitCompareExpr(expr: ExprNS.Compare): ExpressionResult {
-    const opcode = this.getCompareOpCode(expr.operator);
-
-    // Compile left operand
+    const opcode = this.getCompareOpCode(expr.operator, this.bothNumeric(expr.left, expr.right));
     const leftResult = this.compile(expr.left);
-
-    // Compile right operand
     const rightResult = this.compile(expr.right);
-
-    // Emit the operation
     this.builder.emitNullary(opcode);
-
-    return {
-      maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize),
-    };
+    return { maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize) };
   }
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): ExpressionResult {
@@ -445,12 +449,17 @@ export class SVMLCompiler
     let opcode: number;
 
     switch (expr.operator.type) {
-      case TokenType.NOT:
-        opcode = OpCodes.NOTG;
+      case TokenType.NOT: {
+        const hint = this.typeHints?.get(expr.right);
+        opcode = hint?.type?.sound.kinds === BOOL_BIT ? OpCodes.NOTB : OpCodes.NOTG;
         break;
-      case TokenType.MINUS:
-        opcode = OpCodes.NEGG;
+      }
+      case TokenType.MINUS: {
+        const hint = this.typeHints?.get(expr.right);
+        const k = hint?.type?.sound.kinds;
+        opcode = k === INT_BIT || k === FLOAT_BIT ? OpCodes.NEGF : OpCodes.NEGG;
         break;
+      }
       case TokenType.PLUS:
         // Unary plus - for now just return the operand
         return this.compile(expr.right);
