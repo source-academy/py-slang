@@ -10,7 +10,8 @@ const allTargets = [
   "PyCseEvaluator3",
   "PyCseEvaluator4",
   "PyWasmEvaluator",
-];
+  "PySvmlEvaluator",
+] as const;
 
 type EvaluatorName = string;
 

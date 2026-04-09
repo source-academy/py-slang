@@ -1,2 +1,2 @@
 export { analyze } from "./analysis";
-export { Resolver } from "./resolver";
+export { FunctionEnvironments, Environment, Resolver } from "./resolver";
