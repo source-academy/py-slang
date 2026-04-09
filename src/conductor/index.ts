@@ -6,3 +6,4 @@ export {
 } from "./PyCseEvaluator";
 export { PySvmlEvaluator } from "./PySvmlEvaluator";
 export { PyWasmEvaluator } from "./PyWasmEvaluator";
+export { PySvmlSinterEvaluator } from "./PySvmlSinterEvaluator";

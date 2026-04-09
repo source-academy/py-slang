@@ -57,11 +57,14 @@ export class SVMLCompiler
   }
 
   /**
-   * Create SVMLCompiler from program AST
+   * Create SVMLCompiler from program AST.
+   * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
    */
-  static fromProgram(program: StmtNS.FileInput): SVMLCompiler {
-    const resolver = new Resolver("", program);
-    const functionEnvironments = resolver.resolveEnvironments(program);
+  static fromProgram(program: StmtNS.FileInput, functionEnvironments?: FunctionEnvironments): SVMLCompiler {
+    if (!functionEnvironments) {
+      const resolver = new Resolver("", program);
+      functionEnvironments = resolver.resolveEnvironments(program);
+    }
     const mainEnv = functionEnvironments.get(program);
     if (!mainEnv) {
       throw new Error("Main program environment not found");
