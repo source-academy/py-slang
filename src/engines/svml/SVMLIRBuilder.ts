@@ -1,5 +1,6 @@
-import OpCodes from "./opcodes";
+import OpCodes, { OPCODE_MAX } from "./opcodes";
 import { SVMLBoxType, SVMLIR } from "./types";
+import { SVMLCompilerError } from "./errors";
 
 /**
  * Mutable builder for constructing SVMLIR.
@@ -162,7 +163,7 @@ export class SVMLIRBuilder {
     for (const { instrIndex, labelId } of this.fixups) {
       const targetIndex = this.labelPositions[labelId];
       if (targetIndex === undefined) {
-        throw new Error(`Undefined label ID: ${labelId}`);
+        throw new SVMLCompilerError(`Undefined label ID: ${labelId}`);
       }
       arg1s[instrIndex] = targetIndex - instrIndex;
     }
@@ -194,8 +195,7 @@ export class SVMLIRBuilder {
 }
 
 // Pre-computed stack effects indexed by opcode for O(1) lookup
-// Size 2100 to accommodate custom opcodes up to ~2002
-const STACK_EFFECTS = new Int16Array(2100);
+const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
 (() => {
   // Load constant instructions (+1 to stack)
   STACK_EFFECTS[OpCodes.LDCI] = 1;

@@ -25,9 +25,9 @@ function plugins() {
     typescript(),
     nodeResolve(),
     nodePolyfills(),
-    // terser({
-    //   compress: { dead_code: true, passes: 3 },
-    // }),
+    terser({
+      compress: { dead_code: true, passes: 3 },
+    }),
   ];
 }
 
