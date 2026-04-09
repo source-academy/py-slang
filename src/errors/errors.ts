@@ -587,4 +587,3 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
     Current position is one after real position of end of token: 1
 */
 export const MAGIC_OFFSET = 1;
-
