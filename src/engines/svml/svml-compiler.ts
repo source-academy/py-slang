@@ -391,47 +391,49 @@ export class SVMLCompiler
   }
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): ExpressionResult {
+    // Python and/or return the short-circuit operand, not a boolean literal.
+    // Save left to a temp slot so it can be returned when it is the result.
+    // BRF/BRT use Python truthiness (see SVMLInterpreter.isTruthy).
+    const tmpSlot = this.getOrAssignSlot(
+      this.currentEnvironment,
+      `__boolop_tmp_${this.tmpCounter++}`,
+    );
+
     if (expr.operator.type === TokenType.AND) {
-      // left && right -> left ? right : false
-      const testResult = this.compile(expr.left);
-      const elseLabel = this.builder.emitJump(OpCodes.BRF);
+      // x and y → x if not truthy(x) else y
+      const leftResult = this.compile(expr.left);
+      this.builder.emitUnary(OpCodes.STLG, tmpSlot); // save x
+      this.builder.emitUnary(OpCodes.LDLG, tmpSlot); // reload for branch
+      const elseLabel = this.builder.emitJump(OpCodes.BRF); // if falsy, return x
 
       const conseqResult = this.compile(expr.right);
       const endLabel = this.builder.emitJump(OpCodes.BR);
 
       this.builder.markLabel(elseLabel);
-      this.builder.emitNullary(OpCodes.LGCB0); // false
-      const altResult = { maxStackSize: 1 };
+      this.builder.emitUnary(OpCodes.LDLG, tmpSlot); // return x (the falsy value)
 
       this.builder.markLabel(endLabel);
 
       return {
-        maxStackSize: Math.max(
-          testResult.maxStackSize,
-          conseqResult.maxStackSize,
-          altResult.maxStackSize,
-        ),
+        maxStackSize: Math.max(leftResult.maxStackSize, conseqResult.maxStackSize, 1),
       };
     } else if (expr.operator.type === TokenType.OR) {
-      // left || right -> left ? true : right
-      const testResult = this.compile(expr.left);
-      const elseLabel = this.builder.emitJump(OpCodes.BRF);
+      // x or y → x if truthy(x) else y
+      const leftResult = this.compile(expr.left);
+      this.builder.emitUnary(OpCodes.STLG, tmpSlot); // save x
+      this.builder.emitUnary(OpCodes.LDLG, tmpSlot); // reload for branch
+      const elseLabel = this.builder.emitJump(OpCodes.BRT); // if truthy, return x
 
-      this.builder.emitNullary(OpCodes.LGCB1); // true
-      const conseqResult = { maxStackSize: 1 };
+      const altResult = this.compile(expr.right);
       const endLabel = this.builder.emitJump(OpCodes.BR);
 
       this.builder.markLabel(elseLabel);
-      const altResult = this.compile(expr.right);
+      this.builder.emitUnary(OpCodes.LDLG, tmpSlot); // return x (the truthy value)
 
       this.builder.markLabel(endLabel);
 
       return {
-        maxStackSize: Math.max(
-          testResult.maxStackSize,
-          conseqResult.maxStackSize,
-          altResult.maxStackSize,
-        ),
+        maxStackSize: Math.max(leftResult.maxStackSize, altResult.maxStackSize, 1),
       };
     }
     throw new Error(`Unsupported boolean operator: ${expr.operator.lexeme}`);

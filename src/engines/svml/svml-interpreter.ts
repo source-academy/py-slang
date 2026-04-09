@@ -747,22 +747,29 @@ export class SVMLInterpreter {
     this.currentFrame.pc += offset - 1;
   }
 
+  /** Python truthiness: mirrors bool(x) semantics. */
+  private isTruthy(value: SVMLBoxType): boolean {
+    if (value === null || value === undefined || value === false) return false;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") return value.length > 0;
+    if (typeof value === "boolean") return value; // true
+    if (typeof value === "object" && value !== null) {
+      if ((value as SVMLArray).type === "array") return (value as SVMLArray).elements.length > 0;
+      return true; // closures and iterators are always truthy
+    }
+    return true;
+  }
+
   private branchIfTrue(offset: number): void {
     const condition = this.pop();
-    if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getSVMLType(condition));
-    }
-    if (condition) {
+    if (this.isTruthy(condition)) {
       this.branch(offset);
     }
   }
 
   private branchIfFalse(offset: number): void {
     const condition = this.pop();
-    if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getSVMLType(condition));
-    }
-    if (!condition) {
+    if (!this.isTruthy(condition)) {
       this.branch(offset);
     }
   }

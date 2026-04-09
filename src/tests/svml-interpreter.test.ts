@@ -274,14 +274,15 @@ not 1
       expect(() => compileAndRun(code)).toThrow(UnsupportedOperandTypeError);
     });
 
-    test("branch condition must be boolean", () => {
+    test("branch condition uses Python truthiness (non-zero int is truthy)", () => {
+      // BRF/BRT now use Python truthiness, not strict boolean check.
       const code = `
 if 1:
     10
 else:
     20
 `;
-      expect(() => compileAndRun(code)).toThrow(UnsupportedOperandTypeError);
+      expect(compileAndRun(code)).toBe(10);
     });
   });
 

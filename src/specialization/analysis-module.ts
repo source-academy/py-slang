@@ -4,9 +4,35 @@ import type { SlotLookup } from "./types";
 
 export type PyASTNode = ExprNS.Expr | StmtNS.Stmt;
 
+// ── ConstLattice ──────────────────────────────────────────────────────────────
+
+export type ConstValue = number | boolean | string;
+
+/**
+ * Constant-propagation lattice element.
+ *
+ * Ordering: BOTTOM ≤ const(v) ≤ TOP
+ *   - bottom  = "no info yet" — identity for join
+ *   - const(v) = "definitely has value v on all paths so far"
+ *   - top     = "overdefined / unknown"
+ *
+ * join(const(v), const(w)) = top when v ≠ w (paths disagree → lose the constant).
+ * mergeKind = "may" so the existing DFAStatementDriver works unchanged.
+ */
+export type ConstLattice =
+  | { readonly tag: "bottom" }
+  | { readonly tag: "const"; readonly value: ConstValue }
+  | { readonly tag: "top" };
+
+export const CONST_BOTTOM: ConstLattice = Object.freeze({ tag: "bottom" as const });
+export const CONST_TOP: ConstLattice    = Object.freeze({ tag: "top"    as const });
+export function constOf(value: ConstValue): ConstLattice { return { tag: "const", value }; }
+
+// ── OptimizationHint — product lattice across all analyses ────────────────────
+
 export interface OptimizationHint {
-  type?: AbstractValue;
-  // future dimensions: constVal, purity, escape, liveness
+  type?:     AbstractValue;
+  constVal?: ConstLattice;
 }
 
 export type HintTable = WeakMap<PyASTNode, OptimizationHint>;
@@ -134,6 +160,24 @@ class AnnotationWalker implements ExprNS.Visitor<void>, StmtNS.Visitor<void> {
   visitNonLocalStmt(_stmt: StmtNS.NonLocal): void {}
   visitFromImportStmt(_stmt: StmtNS.FromImport): void {}
 }
+
+export interface StmtTransformRule {
+  readonly name: string;
+  readonly level: "stmt";
+  matches(stmt: StmtNS.Stmt, hints: HintTable): boolean;
+  /** Returns replacement statements. Empty array = delete the statement. */
+  apply(stmt: StmtNS.Stmt, hints: HintTable): StmtNS.Stmt[];
+}
+
+export interface ExprTransformRule {
+  readonly name: string;
+  readonly level: "expr";
+  matches(expr: ExprNS.Expr, hints: HintTable): boolean;
+  /** Returns replacement expression (1:1). */
+  apply(expr: ExprNS.Expr, hints: HintTable): ExprNS.Expr;
+}
+
+export type TransformRule = StmtTransformRule | ExprTransformRule;
 
 export interface AnalysisModule<L> {
   readonly name: string;
