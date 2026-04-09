@@ -59,7 +59,8 @@ export default async function init(props: Record<string, unknown> = {}): Promise
         return { type: "int", value: dv.getInt32(resPtr + 4, true) };
       case 5: // sinter_type_float (IEEE-754 float32)
         return { type: "float", value: dv.getFloat32(resPtr + 4, true) };
-      case 6: { // sinter_type_string = 6,
+      case 6: {
+        // sinter_type_string = 6,
         // raw32 is a pointer to null-terminated string
         const bytearray = module.HEAPU8.subarray(raw32, module.HEAPU8.indexOf(0, raw32));
         return { type: "string", value: new TextDecoder("utf-8").decode(bytearray) };

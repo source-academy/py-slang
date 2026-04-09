@@ -39,13 +39,15 @@ export class PySvmlSinterEvaluator extends BasicEvaluator {
       const binary = assemble(program);
 
       if (!this.sinter) {
-        this.sinter = await initSinter({ print: (text: string) => this.conductor.sendOutput(text) });
+        this.sinter = await initSinter({
+          print: (text: string) => this.conductor.sendOutput(text),
+        });
       }
       const result = this.sinter.runBinary(binary);
-      const native = sinterValueToNative(result);             
+      const native = sinterValueToNative(result);
       if (native !== undefined) {
-          this.conductor.sendOutput(String(native));          
-      }                                                       
+        this.conductor.sendOutput(String(native));
+      }
       this.conductor.sendResult(native);
     } catch (e) {
       this.conductor.sendError(toEvaluatorError(e) as any);

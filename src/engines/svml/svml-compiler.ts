@@ -60,7 +60,10 @@ export class SVMLCompiler
    * Create SVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
    */
-  static fromProgram(program: StmtNS.FileInput, functionEnvironments?: FunctionEnvironments): SVMLCompiler {
+  static fromProgram(
+    program: StmtNS.FileInput,
+    functionEnvironments?: FunctionEnvironments,
+  ): SVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program);
       functionEnvironments = resolver.resolveEnvironments(program);
@@ -85,11 +88,7 @@ export class SVMLCompiler
     const numArgs = node.parameters.length;
     const builder = this.builder.createChildBuilder(numArgs);
 
-    const compiler = new SVMLCompiler(
-      nextEnvironment,
-      this.functionEnvironments,
-      builder,
-    );
+    const compiler = new SVMLCompiler(nextEnvironment, this.functionEnvironments, builder);
 
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);

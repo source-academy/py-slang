@@ -33,7 +33,13 @@ export function analyzeWithEnvironments(
   groups: Group[] = [],
   preludeNames: string[] = [],
 ): { errors: Error[]; environments: FunctionEnvironments } {
-  const resolver = new Resolver(source, ast, makeValidatorsForChapter(chapter), groups, preludeNames);
+  const resolver = new Resolver(
+    source,
+    ast,
+    makeValidatorsForChapter(chapter),
+    groups,
+    preludeNames,
+  );
   const errors = resolver.resolve(ast);
   return { errors, environments: resolver.functionEnvironments };
 }

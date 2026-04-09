@@ -8,7 +8,6 @@ import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { UnsupportedOperandTypeError } from "../engines/svml/errors";
 
-
 /**
  * Helper function to compile and run Python code
  * For now, uses SVMProgram and converts to FunctionBuilder internally
@@ -512,5 +511,3 @@ total
     });
   });
 });
-
-

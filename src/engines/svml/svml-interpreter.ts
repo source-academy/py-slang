@@ -3,22 +3,21 @@ import { UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
 import OpCodes from "./opcodes";
 import { executePrimitive } from "./builtins";
 import {
-    getSVMLType,
-    isSVMLObject,
-    SVMLArray,
-    SVMLBoxType,
-    SVMLClosure,
-    SVMLEnvironment,
-    SVMLIR,
-    SVMLIterator,
-    SVMLProgram,
-    SVMLType,
+  getSVMLType,
+  isSVMLObject,
+  SVMLArray,
+  SVMLBoxType,
+  SVMLClosure,
+  SVMLEnvironment,
+  SVMLIR,
+  SVMLIterator,
+  SVMLProgram,
+  SVMLType,
 } from "./types";
 
-const __DEBUG__ = typeof (globalThis as any).__DEBUG__ !== "undefined" && (globalThis as any).__DEBUG__;
-const debug: (msg: string) => void = __DEBUG__
-    ? (msg: string) => console.log(msg)
-    : () => {};
+const __DEBUG__ =
+  typeof (globalThis as any).__DEBUG__ !== "undefined" && (globalThis as any).__DEBUG__;
+const debug: (msg: string) => void = __DEBUG__ ? (msg: string) => console.log(msg) : () => {};
 
 /**
  * TypeScript-based SVML Interpreter
