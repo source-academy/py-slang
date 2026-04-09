@@ -28,7 +28,9 @@ module.exports = {
       },
     ],
   },
-  transformIgnorePatterns: ["/node_modules/(?!(@sourceacademy/wasm-util|@sourceacademy/conductor)/).+\\.js$"],
+  transformIgnorePatterns: [
+    "/node_modules/(?!(@sourceacademy/wasm-util|@sourceacademy/conductor)/).+\\.js$",
+  ],
   testPathIgnorePatterns: ["/node_modules/", "/dist/"],
   coverageReporters: ["lcov"],
 };

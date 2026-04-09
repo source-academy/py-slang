@@ -16,7 +16,8 @@ import {
 } from "./types";
 
 const __DEBUG__ =
-  typeof (globalThis as Record<string, unknown>).__DEBUG__ !== "undefined" && (globalThis as Record<string, unknown>).__DEBUG__;
+  typeof (globalThis as Record<string, unknown>).__DEBUG__ !== "undefined" &&
+  (globalThis as Record<string, unknown>).__DEBUG__;
 const debug: (msg: string) => void = __DEBUG__ ? (msg: string) => console.log(msg) : () => {};
 
 /**
