@@ -588,9 +588,3 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
 */
 export const MAGIC_OFFSET = 1;
 
-export const SPECIAL_CHARS = new RegExp("[\\\\$'\"]", "g");
-
-function escape(unsafe: string): string {
-  // @TODO escape newlines
-  return unsafe.replace(SPECIAL_CHARS, "\\$&");
-}

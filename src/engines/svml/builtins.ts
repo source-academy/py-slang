@@ -21,7 +21,7 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
 function assertNumericArgs(args: SVMLBoxType[], fn: string): number[] {
   if (!args.every(a => typeof a === "number"))
     throw new SVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
-  return args as number[];
+  return args;
 }
 
 /**
