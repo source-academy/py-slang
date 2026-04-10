@@ -6,21 +6,22 @@ import { SVMLProgram } from "./types";
 import { SVMLIRBuilder } from "./SVMLIRBuilder";
 import OpCodes from "./opcodes";
 import { FunctionEnvironments, Environment, Resolver } from "../../resolver";
-// Fast compiler annotations for maximum performance
+
+/** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
+const I32_MIN = -2_147_483_648;
+const I32_MAX = 2_147_483_647;
+
 interface CompilerAnnotation {
-  slot: number; // Variable slot index within environment
-  envLevel: number; // Environment nesting level (0 = local)
-  isPrimitive: boolean; // True if this is a builtin function
-  primitiveIndex?: number; // Index in PRIMITIVE_FUNCTIONS if isPrimitive
+  slot: number;
+  envLevel: number;
+  isPrimitive: boolean;
+  primitiveIndex?: number;
 }
 
 export type ExpressionResult = {
   maxStackSize: number;
 };
 
-/**
- * SVML Compiler implementing visitor interface
- */
 export class SVMLCompiler
   implements StmtNS.Visitor<ExpressionResult>, ExprNS.Visitor<ExpressionResult>
 {
@@ -29,16 +30,11 @@ export class SVMLCompiler
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
 
-  // Ultra-fast annotation cache (no string lookups during compilation)
   private tokenAnnotations = new WeakMap<Token, CompilerAnnotation>();
-  // Per-environment slot assignment for variables
   private envSlotCounters = new WeakMap<Environment, number>();
   private envSlotMaps = new WeakMap<Environment, Map<string, number>>();
-
-  // Deterministic counter for temporary variable names
   private tmpCounter = 0;
 
-  // Loop stack for break/continue support
   private loopStack: Array<{
     breakLabel: number;
     continueLabel: number;
@@ -103,9 +99,6 @@ export class SVMLCompiler
     return compiler;
   }
 
-  /**
-   * Compile entire program and return an immutable SVMLProgram.
-   */
   compileProgram(program: StmtNS.FileInput): SVMLProgram {
     this.compile(program);
 
@@ -115,16 +108,10 @@ export class SVMLCompiler
     return new SVMLProgram(0, functions);
   }
 
-  /**
-   * Compile a statement or expression and return stack effect
-   */
   compile(node: StmtNS.Stmt | ExprNS.Expr): ExpressionResult {
     return node.accept(this);
   }
 
-  /**
-   * Get or create fast annotation for a token (O(1) lookup via WeakMap)
-   */
   private getTokenAnnotation(token: Token): CompilerAnnotation {
     let annotation = this.tokenAnnotations.get(token);
     if (annotation) {
@@ -134,7 +121,6 @@ export class SVMLCompiler
     const name = token.lexeme;
     const parentEnv = this.currentEnvironment.lookupNameEnv(token);
 
-    // Handle primitive functions
     if (parentEnv !== null && parentEnv.enclosing === null) {
       const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
       if (primitiveIndex === undefined) {
@@ -147,7 +133,6 @@ export class SVMLCompiler
         primitiveIndex,
       };
     } else if (parentEnv != null) {
-      // Handle user-declared variables
       const envLevel = this.currentEnvironment.lookupName(token);
       const slot = this.getOrAssignSlot(parentEnv, name);
 
@@ -164,9 +149,6 @@ export class SVMLCompiler
     return annotation;
   }
 
-  /**
-   * Assign variable slot in environment (O(1) with WeakMap)
-   */
   private getOrAssignSlot(env: Environment, name: string): number {
     let slotMap = this.envSlotMaps.get(env);
     if (!slotMap) {
@@ -225,10 +207,6 @@ export class SVMLCompiler
     }
   }
 
-  // ========================================================================
-  // Expression Visitor Methods
-  // ========================================================================
-
   visitLiteralExpr(expr: ExprNS.Literal): ExpressionResult {
     const value = expr.value;
 
@@ -240,7 +218,7 @@ export class SVMLCompiler
           this.builder.emitNullary(value ? OpCodes.LGCB1 : OpCodes.LGCB0);
           break;
         case "number":
-          if (Number.isInteger(value) && -2_147_483_648 <= value && value <= 2_147_483_647) {
+          if (Number.isInteger(value) && I32_MIN <= value && value <= I32_MAX) {
             this.builder.emitUnary(OpCodes.LGCI, value);
           } else {
             this.builder.emitUnary(OpCodes.LGCF64, value);
@@ -263,7 +241,7 @@ export class SVMLCompiler
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
     const numValue = Number(expr.value);
-    if (Number.isInteger(numValue) && -2_147_483_648 <= numValue && numValue <= 2_147_483_647) {
+    if (Number.isInteger(numValue) && I32_MIN <= numValue && numValue <= I32_MAX) {
       this.builder.emitUnary(OpCodes.LGCI, numValue);
     } else {
       this.builder.emitUnary(OpCodes.LGCF64, numValue);
@@ -273,31 +251,29 @@ export class SVMLCompiler
   }
 
   visitComplexExpr(_expr: ExprNS.Complex): ExpressionResult {
-    // For now, treat complex numbers as objects
-    // This would need proper SVML support for complex numbers
+    // TODO: needs proper SVML support for complex numbers
     throw new Error("Complex numbers not yet supported in SVML compiler");
   }
 
   visitListExpr(expr: ExprNS.List): ExpressionResult {
     const n = expr.elements.length;
-    // Allocate a temporary slot to hold the array
-    const tmpName = `__list_tmp_${this.builder.getFunctionIndex()}_${n}_${this.tmpCounter++}`;
-    const tmpSlot = this.getOrAssignSlot(this.currentEnvironment, tmpName);
+    // Spill to a named slot because SVML has no direct stack-to-array-store
+    const tmpSlot = this.getOrAssignSlot(
+      this.currentEnvironment,
+      `__list_tmp_${this.tmpCounter++}`,
+    );
 
-    // Create the array
     this.builder.emitUnary(OpCodes.LGCI, n);
     this.builder.emitNullary(OpCodes.NEWA);
     this.builder.emitUnary(OpCodes.STLG, tmpSlot);
 
-    // Fill each element
     for (let i = 0; i < n; i++) {
-      this.builder.emitUnary(OpCodes.LDLG, tmpSlot); // push array
-      this.builder.emitUnary(OpCodes.LGCI, i); // push index
-      this.compile(expr.elements[i]); // push value
-      this.builder.emitNullary(OpCodes.STAG); // arr[i] = value
+      this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+      this.builder.emitUnary(OpCodes.LGCI, i);
+      this.compile(expr.elements[i]);
+      this.builder.emitNullary(OpCodes.STAG);
     }
 
-    // Leave array as result
     this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
 
     return { maxStackSize: 3 + 1 };
@@ -315,9 +291,6 @@ export class SVMLCompiler
     return { maxStackSize: 1 };
   }
 
-  /**
-   * Convert Python operator token to SVML binary operator
-   */
   private getBinaryOpCode(operator: Token): number {
     switch (operator.type) {
       case TokenType.PLUS:
@@ -337,9 +310,6 @@ export class SVMLCompiler
     }
   }
 
-  /**
-   * Convert Python comparison operator token to SVML comparison operator
-   */
   private getCompareOpCode(operator: Token): number {
     switch (operator.type) {
       case TokenType.LESS:
@@ -359,38 +329,21 @@ export class SVMLCompiler
     }
   }
 
-  visitBinaryExpr(expr: ExprNS.Binary): ExpressionResult {
-    const opcode = this.getBinaryOpCode(expr.operator);
-
-    // Compile left operand
-    const leftResult = this.compile(expr.left);
-
-    // Compile right operand
-    const rightResult = this.compile(expr.right);
-
-    // Emit the operation
+  private compileBinOp(left: ExprNS.Expr, right: ExprNS.Expr, opcode: number): ExpressionResult {
+    const leftResult = this.compile(left);
+    const rightResult = this.compile(right);
     this.builder.emitNullary(opcode);
-
     return {
       maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize),
     };
   }
 
+  visitBinaryExpr(expr: ExprNS.Binary): ExpressionResult {
+    return this.compileBinOp(expr.left, expr.right, this.getBinaryOpCode(expr.operator));
+  }
+
   visitCompareExpr(expr: ExprNS.Compare): ExpressionResult {
-    const opcode = this.getCompareOpCode(expr.operator);
-
-    // Compile left operand
-    const leftResult = this.compile(expr.left);
-
-    // Compile right operand
-    const rightResult = this.compile(expr.right);
-
-    // Emit the operation
-    this.builder.emitNullary(opcode);
-
-    return {
-      maxStackSize: Math.max(leftResult.maxStackSize, 1 + rightResult.maxStackSize),
-    };
+    return this.compileBinOp(expr.left, expr.right, this.getCompareOpCode(expr.operator));
   }
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): ExpressionResult {
@@ -403,7 +356,7 @@ export class SVMLCompiler
       const endLabel = this.builder.emitJump(OpCodes.BR);
 
       this.builder.markLabel(elseLabel);
-      this.builder.emitNullary(OpCodes.LGCB0); // false
+      this.builder.emitNullary(OpCodes.LGCB0);
       const altResult = { maxStackSize: 1 };
 
       this.builder.markLabel(endLabel);
@@ -420,7 +373,7 @@ export class SVMLCompiler
       const testResult = this.compile(expr.left);
       const elseLabel = this.builder.emitJump(OpCodes.BRF);
 
-      this.builder.emitNullary(OpCodes.LGCB1); // true
+      this.builder.emitNullary(OpCodes.LGCB1);
       const conseqResult = { maxStackSize: 1 };
       const endLabel = this.builder.emitJump(OpCodes.BR);
 
@@ -451,16 +404,12 @@ export class SVMLCompiler
         opcode = OpCodes.NEGG;
         break;
       case TokenType.PLUS:
-        // Unary plus - for now just return the operand
         return this.compile(expr.right);
       default:
         throw new Error(`Unsupported unary operator: ${expr.operator.lexeme}`);
     }
 
-    // Compile the operand
     const operandResult = this.compile(expr.right);
-
-    // Emit the operation
     this.builder.emitNullary(opcode);
 
     return { maxStackSize: operandResult.maxStackSize };
@@ -473,17 +422,14 @@ export class SVMLCompiler
 
     const callee: ExprNS.Variable = expr.callee;
 
-    // Load function if needed
     const { maxStackSize: functionStackEffect } = this.emitLoadSymbol(callee.name);
 
-    // Compile arguments
     let maxArgStackSize = 0;
     for (let i = 0; i < expr.args.length; i++) {
       const argResult = this.compile(expr.args[i]);
       maxArgStackSize = Math.max(maxArgStackSize, i + argResult.maxStackSize);
     }
 
-    // Emit call instruction
     const numArgs = expr.args.length;
     this.emitFunctionCall(callee.name, numArgs);
 
@@ -493,15 +439,12 @@ export class SVMLCompiler
   }
 
   visitTernaryExpr(expr: ExprNS.Ternary): ExpressionResult {
-    // Compile test
     const testResult = this.compile(expr.predicate);
     const elseLabel = this.builder.emitJump(OpCodes.BRF);
 
-    // Compile consequent
     const conseqResult = this.compile(expr.consequent);
     const endLabel = this.builder.emitJump(OpCodes.BR);
 
-    // Compile alternate
     this.builder.markLabel(elseLabel);
     const altResult = this.compile(expr.alternative);
 
@@ -521,38 +464,26 @@ export class SVMLCompiler
     return { maxStackSize: 1 };
   }
 
-  visitLambdaExpr(expr: ExprNS.Lambda): ExpressionResult {
-    const ast: StmtNS.Stmt = new StmtNS.Return(expr.startToken, expr.endToken, expr.body);
-
-    // Compile lambda body in child environment
-    const compiler = this.fromFunctionNode(expr);
-
-    const { maxStackSize } = compiler.compile(ast);
-
-    // Add return if needed (functions should always return something)
+  /** Compile a closure body, emit RETG, and emit NEWC in the parent scope. */
+  private compileClosure(
+    node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda,
+    compileBody: (compiler: SVMLCompiler) => ExpressionResult,
+  ): ExpressionResult {
+    const compiler = this.fromFunctionNode(node);
+    const { maxStackSize } = compileBody(compiler);
+    // Functions must always return a value
     compiler.builder.emitNullary(OpCodes.RETG);
-
-    // Emit function creation instruction in current environment
     this.builder.emitUnary(OpCodes.NEWC, compiler.builder.getFunctionIndex());
-
     return { maxStackSize: Math.max(maxStackSize, 1) };
   }
 
+  visitLambdaExpr(expr: ExprNS.Lambda): ExpressionResult {
+    const ast = new StmtNS.Return(expr.startToken, expr.endToken, expr.body);
+    return this.compileClosure(expr, c => c.compile(ast));
+  }
+
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): ExpressionResult {
-    const ast: StmtNS.Stmt[] = expr.body;
-
-    // Compile lambda body in child environment
-    const compiler = this.fromFunctionNode(expr);
-
-    const { maxStackSize } = compiler.compileStatements(ast);
-
-    // Add return if needed (functions should always return something)
-    compiler.builder.emitNullary(OpCodes.RETG);
-
-    // Emit function creation instruction in current environment
-    this.builder.emitUnary(OpCodes.NEWC, compiler.builder.getFunctionIndex());
-
-    return { maxStackSize: Math.max(maxStackSize, 1) };
+    return this.compileClosure(expr, c => c.compileStatements(expr.body));
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): ExpressionResult {
@@ -584,26 +515,10 @@ export class SVMLCompiler
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): ExpressionResult {
-    const ast: StmtNS.Stmt[] = stmt.body;
-
-    // Compile function body in child environment
-    const childCompiler = this.fromFunctionNode(stmt);
-
-    const { maxStackSize } = childCompiler.compileStatements(ast);
-
-    // Add return if needed (functions should always return something)
-    childCompiler.builder.emitNullary(OpCodes.RETG);
-
-    // Add function creation instruction
-    this.builder.emitUnary(OpCodes.NEWC, childCompiler.builder.getFunctionIndex());
-
-    // Assign function as variable
+    const result = this.compileClosure(stmt, c => c.compileStatements(stmt.body));
     this.emitStoreSymbol(stmt.name);
-
-    // Load it right back
-    this.emitLoadSymbol(stmt.name);
-
-    return { maxStackSize: Math.max(maxStackSize, 1) };
+    this.builder.emitNullary(OpCodes.LGCU);
+    return result;
   }
 
   visitIfStmt(stmt: StmtNS.If): ExpressionResult {
@@ -642,20 +557,18 @@ export class SVMLCompiler
       iteratorOnStack: false,
     });
 
-    // Compile test
     const testResult = this.compile(stmt.condition);
     this.builder.emitJump(OpCodes.BRF, endLabel);
 
-    // Compile body
     const bodyResult = this.compileStatements(stmt.body);
-    // Pop body result (while body values aren't used), matching for-loop behaviour
+    // Body values aren't used; discard to maintain stack balance
     this.builder.emitNullary(OpCodes.POPG);
     this.builder.emitJump(OpCodes.BR, loopLabel);
 
     this.loopStack.pop();
 
     this.builder.markLabel(endLabel);
-    this.builder.emitNullary(OpCodes.LGCU); // While loops return undefined
+    this.builder.emitNullary(OpCodes.LGCU);
 
     return {
       maxStackSize: Math.max(testResult.maxStackSize, bodyResult.maxStackSize, 1),
@@ -711,11 +624,9 @@ export class SVMLCompiler
   }
 
   visitForStmt(stmt: StmtNS.For): ExpressionResult {
-    // Compile iterable and wrap in iterator
     this.compile(stmt.iter);
     this.builder.emitNullary(OpCodes.NEWITER);
 
-    // Allocate labels
     const loopStartLabel = this.builder.markLabel();
     const loopEndLabel = this.builder.getNextLabel();
 
@@ -725,26 +636,24 @@ export class SVMLCompiler
       iteratorOnStack: true,
     });
 
-    // FOR_ITER: if exhausted, pop iter and jump to loopEnd; else push next value
+    // FOR_ITER: if exhausted, pops iter and jumps to loopEnd; else pushes next value
     this.builder.emitJump(OpCodes.FOR_ITER, loopEndLabel);
 
-    // Store next value into loop variable (iterator stays on stack below)
+    // Iterator stays on stack below the value
     const targetSlot = this.getOrAssignSlot(this.currentEnvironment, stmt.target.lexeme);
     this.builder.emitUnary(OpCodes.STLG, targetSlot);
 
-    // Compile loop body
     const bodyResult = this.compileStatements(stmt.body);
-    // Pop body result (loop body values aren't used)
+    // Body values aren't used; discard to maintain stack balance
     this.builder.emitNullary(OpCodes.POPG);
 
-    // Jump back to loop start
     this.builder.emitJump(OpCodes.BR, loopStartLabel);
 
     this.loopStack.pop();
 
-    // Mark loop end (iterator already popped by FOR_ITER on exhaustion)
+    // Iterator already popped by FOR_ITER on exhaustion
     this.builder.markLabel(loopEndLabel);
-    this.builder.emitNullary(OpCodes.LGCU); // for-loop produces undefined
+    this.builder.emitNullary(OpCodes.LGCU);
 
     return { maxStackSize: Math.max(bodyResult.maxStackSize + 2, 2) };
   }
