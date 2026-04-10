@@ -2,10 +2,10 @@
 // https://github.com/source-academy/conductor
 // Original author(s): Source Academy Team
 
-import { BasicEvaluator, initialise, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { compileToWasmAndRun } from "../wasm-compiler";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { compileToWasmAndRun } from "../engines/wasm";
 
-class PyWasmEvaluator extends BasicEvaluator {
+export class PyWasmEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
   }
@@ -14,7 +14,7 @@ class PyWasmEvaluator extends BasicEvaluator {
     try {
       const { prints, renderedResult } = await compileToWasmAndRun(chunk, true);
       prints.forEach(print => this.conductor.sendOutput(print));
-      this.conductor.sendResult(renderedResult); // find a way to send NOT stringified result
+      this.conductor.sendOutput(renderedResult);
     } catch (error) {
       this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }
@@ -29,5 +29,3 @@ class PyWasmEvaluator extends BasicEvaluator {
     }
   }
 }
-
-initialise(PyWasmEvaluator);

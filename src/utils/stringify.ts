@@ -1,5 +1,5 @@
 import { StmtNS } from "../ast-types";
-import { ListValue, Value } from "../cse-machine/stash";
+import { ListValue, Value } from "../engines/cse/stash";
 
 const MAX_LIST_DISPLAY_LENGTH = 100;
 

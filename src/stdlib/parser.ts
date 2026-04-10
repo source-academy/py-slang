@@ -1,7 +1,7 @@
 import { parse } from "../parser";
 import pythonLexer from "../parser/lexer";
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
+import { Context } from "../engines/cse/context";
 import {
   Value,
   BuiltinValue,
@@ -12,13 +12,13 @@ import {
   BigIntValue,
   NumberValue,
   ComplexValue,
-} from "../cse-machine/stash";
-import { handleRuntimeError } from "../cse-machine/error";
+} from "../engines/cse/stash";
+import { handleRuntimeError } from "../engines/cse/error";
 import { TypeError } from "../errors/errors";
-import { ControlItem } from "../cse-machine/control";
+import { ControlItem } from "../engines/cse/control";
 import { minArgMap, Validate } from "../stdlib";
 import { Group, GroupName } from "./utils";
-import { operatorTranslator } from "../cse-machine/types";
+import { operatorTranslator } from "../engines/cse/types";
 
 const None: NoneValue = { type: "none" };
 

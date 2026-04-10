@@ -1,4 +1,4 @@
-import { StmtNS } from "../ast-types";
+import { StmtNS } from "../../ast-types";
 import { Stack } from "./stack";
 import { Instr, Node } from "./types";
 import { isEnvDependent } from "./utils";

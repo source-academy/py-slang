@@ -1,6 +1,6 @@
-import { Context } from "../cse-machine/context";
-import { ControlItem } from "../cse-machine/control";
-import { BigIntValue, BoolValue, BuiltinValue, Value } from "../cse-machine/stash";
+import { Context } from "../engines/cse/context";
+import { ControlItem } from "../engines/cse/control";
+import { BigIntValue, BoolValue, BuiltinValue, Value } from "../engines/cse/stash";
 import { minArgMap, Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
 import { Group, GroupName } from "./utils";

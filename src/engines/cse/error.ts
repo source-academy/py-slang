@@ -5,7 +5,7 @@ import {
   SourceError,
   SourceLocation,
   UNKNOWN_LOCATION,
-} from "../errors";
+} from "../../errors";
 import { Context } from "./context";
 
 export class CseError implements SourceError {

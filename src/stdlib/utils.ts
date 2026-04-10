@@ -1,4 +1,4 @@
-import { BuiltinValue } from "../cse-machine/stash";
+import { BuiltinValue } from "../engines/cse/stash";
 
 export enum GroupName {
   LINKED_LISTS = "linked-list",

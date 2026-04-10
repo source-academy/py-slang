@@ -283,11 +283,170 @@ describe("traverseAST — target visitation", () => {
 });
 
 // ---------------------------------------------------------------------------
+// if / elif / else — scope analysis
+// ---------------------------------------------------------------------------
+describe("if/elif/else — scope analysis", () => {
+  test("if condition can reference outer variable", () => {
+    analyzeOk("x = 1\nif x:\n    pass");
+  });
+
+  test("variable declared in if body is visible after the block (no block scope)", () => {
+    // Python has no block scope — x leaks out of the if branch.
+    analyzeOk("if True:\n    x = 1\nx");
+  });
+
+  test("variable declared in else body is visible after the block", () => {
+    analyzeOk("if True:\n    pass\nelse:\n    x = 1\nx");
+  });
+
+  test("elif condition can reference outer variable", () => {
+    analyzeOk("x = 1\ny = 2\nif x:\n    pass\nelif y:\n    pass");
+  });
+
+  test("variable declared inside elif body is visible after the block", () => {
+    analyzeOk("x = 1\nif x:\n    pass\nelif True:\n    z = 2\nz");
+  });
+
+  test("undeclared variable used in if condition throws", () => {
+    analyzeThrows("if undeclared:\n    pass");
+  });
+
+  test("undeclared variable used in elif condition throws", () => {
+    analyzeThrows("x = 1\nif x:\n    pass\nelif undeclared:\n    pass");
+  });
+
+  test("nested if can reference enclosing scope variable", () => {
+    analyzeOk("x = 1\nif True:\n    if x:\n        pass");
+  });
+
+  test("if/elif/else inside function can reference function parameter", () => {
+    analyzeOk(
+      "def f(x):\n    if x:\n        pass\n    elif x:\n        pass\n    else:\n        pass",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// if / elif / else — runtime (CSE machine integration)
+// ---------------------------------------------------------------------------
+// The CSE machine pops expression-statement values from the stash before returning,
+// so run() always returns { type: "none" } for well-formed scripts. Runtime tests
+// verify branch selection by checking whether a runtime error occurs: a branch that
+// would call f(*42) (invalid spread) produces { type: "error" }; the safe branch does not.
+describe("if/elif/else runtime (CSE machine)", () => {
+  test("if branch executes when condition is true (else branch would error)", async () => {
+    // If the else branch ran, f(*42) would produce a runtime error.
+    const val = await run(`
+def f(a):
+    return a
+
+if True:
+    pass
+else:
+    f(*42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("else branch executes when condition is false (if branch would error)", async () => {
+    const val = await run(`
+def f(a):
+    return a
+
+if False:
+    f(*42)
+else:
+    pass
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("elif branch executes: first condition false, elif condition true", async () => {
+    // If the if branch ran, f(*42) would error. If else ran, g(*42) would error.
+    const val = await run(`
+def f(a):
+    return a
+
+def g(a):
+    return a
+
+if False:
+    f(*42)
+elif True:
+    pass
+else:
+    g(*42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("else branch executes when all elif conditions are false", async () => {
+    const val = await run(`
+def f(a):
+    return a
+
+if False:
+    f(*42)
+elif False:
+    f(*42)
+else:
+    pass
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("if without else: skipped when condition is false, no error", async () => {
+    const val = await run(`
+def f(a):
+    return a
+
+if False:
+    f(*42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("multiple elif: first matching branch is taken, later branches skipped", async () => {
+    // elif True is taken; the subsequent elif would error if reached.
+    const val = await run(`
+def f(a):
+    return a
+
+if False:
+    f(*42)
+elif True:
+    pass
+elif True:
+    f(*42)
+else:
+    f(*42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+
+  test("nested if/else: correct inner branch is taken", async () => {
+    const val = await run(`
+def f(a):
+    return a
+
+if True:
+    if False:
+        f(*42)
+    else:
+        pass
+else:
+    f(*42)
+`);
+    expect(val).not.toEqual(expect.objectContaining({ type: "error" }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Rest + spread runtime (CSE machine integration)
 // ---------------------------------------------------------------------------
-import { Context } from "../cse-machine/context";
-import { evaluate } from "../cse-machine/interpreter";
-import { Value } from "../cse-machine/stash";
+import { Context } from "../engines/cse/context";
+import { evaluate } from "../engines/cse/interpreter";
+import { Value } from "../engines/cse/stash";
 
 async function run(src: string, chapter = 4): Promise<Value> {
   const code = src.endsWith("\n") ? src : src + "\n";

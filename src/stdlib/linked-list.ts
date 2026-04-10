@@ -1,7 +1,7 @@
 import { ExprNS } from "../ast-types";
-import { Context } from "../cse-machine/context";
-import { ControlItem } from "../cse-machine/control";
-import { handleRuntimeError } from "../cse-machine/error";
+import { Context } from "../engines/cse/context";
+import { ControlItem } from "../engines/cse/control";
+import { handleRuntimeError } from "../engines/cse/error";
 import {
   BoolValue,
   BuiltinValue,
@@ -9,8 +9,8 @@ import {
   NoneValue,
   StringValue,
   Value,
-} from "../cse-machine/stash";
-import { displayOutput } from "../cse-machine/streams";
+} from "../engines/cse/stash";
+import { displayOutput } from "../engines/cse/streams";
 import { TypeError } from "../errors";
 import { minArgMap, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
