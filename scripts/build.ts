@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 import { select } from "@inquirer/prompts";
-import { execSync, spawn } from "child_process";
+import { spawn } from "child_process";
 import { Command } from "commander";
 
 // Keep in sync with src/conductor/index.ts exports.
@@ -16,12 +16,17 @@ const allTargets = [
 
 type EvaluatorName = string;
 
-function buildTarget(target: EvaluatorName, extraArgs: string[] = []) {
+function buildTarget(target: EvaluatorName, extraArgs: string[] = []): Promise<void> {
   console.log(`\nBuilding ${target}...\n`);
-  const rollupCmd = ["rollup -c rollup.config.mjs", ...extraArgs].join(" ");
-  execSync(rollupCmd, {
-    env: { ...process.env, EVALUATOR: target },
-    stdio: "inherit",
+  return new Promise((resolve, reject) => {
+    const child = spawn("rollup", ["-c", "rollup.config.mjs", ...extraArgs], {
+      env: { ...process.env, EVALUATOR: target },
+      stdio: "inherit",
+    });
+    child.on("close", code => {
+      if (code === 0) resolve();
+      else reject(new Error(`Build failed for ${target} (exit ${code})`));
+    });
   });
 }
 
@@ -81,9 +86,7 @@ async function main() {
       process.exit(0);
     });
   } else {
-    for (const target of targets) {
-      buildTarget(target, extraArgs);
-    }
+    await Promise.all(targets.map(target => buildTarget(target, extraArgs)));
   }
 }
 
