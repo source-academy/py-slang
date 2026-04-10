@@ -1,7 +1,10 @@
 import { parse } from "../parser/parser-adapter";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
-import { MissingRequiredPositionalError, UnsupportedOperandTypeError } from "../engines/svml/errors";
+import {
+  MissingRequiredPositionalError,
+  UnsupportedOperandTypeError,
+} from "../engines/svml/errors";
 
 function compileAndRun(code: string): unknown {
   const ast = parse(code);

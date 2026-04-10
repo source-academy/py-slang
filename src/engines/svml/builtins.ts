@@ -119,9 +119,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
       if (isSVMLObject(v) && v.type === "array") return v.elements.length;
-      throw new SVMLInterpreterError(
-        `TypeError: object of type '${typeof v}' has no len()`,
-      );
+      throw new SVMLInterpreterError(`TypeError: object of type '${typeof v}' has no len()`);
     }
 
     default:
