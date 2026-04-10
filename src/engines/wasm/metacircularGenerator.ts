@@ -8,6 +8,44 @@ interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt | ExprNS.Expr): S | E;
 }
 
+// In this class, we shouldn't save the result of an intermediate node as a variable:
+
+// WRONG:
+/*
+  const valueTree =
+    stmt.value != null
+      ? this.visit(stmt.value)
+      : this.list(this.string("literal"), this.wasmExports.makeNone());
+
+  return this.list(this.string("return_statement"), valueTree);
+*/
+
+// CORRECT:
+/*
+  return this.list(
+    this.string("return_statement"),
+    stmt.value != null
+      ? this.visit(stmt.value)
+      : this.list(this.string("literal"), this.wasmExports.makeNone()),
+  );
+*/
+
+// This is because the makePair functions must chain immediately without any intermediate variables
+// in order to construct the correct nested pair structure for the parse tree with respect to the
+// shadow stack.
+
+// Alternatively, we can save the intermediate values as a nullary function:
+
+// ALSO CORRECT:
+/*
+  const valueTree = () =>
+    stmt.value != null
+      ? this.visit(stmt.value)
+      : this.list(this.string("literal"), this.wasmExports.makeNone());
+
+  return this.list(this.string("return_statement"), valueTree());
+*/
+
 export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [number, bigint]> {
   private wasmExports: WasmExports;
   private memory: WebAssembly.Memory;
@@ -19,8 +57,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   private list(...elements: [number, bigint][]): [number, bigint] {
     return elements.reduceRight(
-      (tail, [tag, value]) =>
-        this.wasmExports.makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),
+      (tail, [tag, value]) => this.wasmExports.makePair(tag, value, tail[0], tail[1]),
       this.wasmExports.makeNone(),
     );
   }
@@ -64,8 +101,10 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
       return this.visit(stmt.statements[0]);
     }
 
-    const statementsList = this.list(...stmt.statements.map(s => this.visit(s)));
-    return this.list(this.string("sequence"), statementsList);
+    return this.list(
+      this.string("sequence"),
+      this.list(...stmt.statements.map(s => this.visit(s))),
+    );
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): [number, bigint] {
@@ -168,8 +207,8 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): [number, bigint] {
     const value = BigInt(expr.value);
-    const min = BigInt("-9223372036854775808"); // -(2^63)
-    const max = BigInt("9223372036854775807"); // (2^63) - 1
+    const min = -9223372036854775808n; // -(2^63)
+    const max = 9223372036854775807n; // (2^63) - 1
     if (value < min || value > max) {
       throw new Error(`BigInt literal out of bounds: ${expr.value}`);
     }
@@ -189,9 +228,18 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     }
   }
 
+  visitComplexExpr(expr: ExprNS.Complex): [number, bigint] {
+    return this.list(
+      this.string("literal"),
+      this.wasmExports.makeComplex(expr.value.real, expr.value.imag),
+    );
+  }
+
   visitListExpr(expr: ExprNS.List): [number, bigint] {
-    const elementsList = this.list(...expr.elements.map(e => this.visit(e)));
-    return this.list(this.string("list_expression"), elementsList);
+    return this.list(
+      this.string("list_expression"),
+      this.list(...expr.elements.map(e => this.visit(e))),
+    );
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
@@ -225,9 +273,8 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
         );
       }).length > 0;
 
-    const body = this.visitFileInputStmt(
-      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
-    );
+    const body = () =>
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []));
 
     return this.list(
       this.string("function_declaration"),
@@ -240,7 +287,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      hasVarDecls ? this.list(this.string("block"), body) : body,
+      hasVarDecls ? this.list(this.string("block"), body()) : body(),
     );
   }
 
@@ -268,65 +315,33 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitReturnStmt(stmt: StmtNS.Return): [number, bigint] {
-    const valueTree =
+    return this.list(
+      this.string("return_statement"),
       stmt.value != null
         ? this.visit(stmt.value)
-        : this.list(this.string("literal"), this.wasmExports.makeNone());
-
-    return this.list(this.string("return_statement"), valueTree);
+        : this.list(this.string("literal"), this.wasmExports.makeNone()),
+    );
   }
 
   visitIfStmt(stmt: StmtNS.If): [number, bigint] {
-    const condition = this.visit(stmt.condition);
-    const thenBody = this.visitFileInputStmt(
-      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
-    );
-
-    const elseBody =
+    return this.list(
+      this.string("conditional_statement"),
+      this.visit(stmt.condition),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
       stmt.elseBlock && stmt.elseBlock.length > 0
         ? this.visitFileInputStmt(
             new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.elseBlock, []),
           )
-        : this.wasmExports.makeNone();
-
-    return this.list(this.string("conditional_statement"), condition, thenBody, elseBody);
-  }
-
-  visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
-    const condition = this.visit(stmt.condition);
-    const body = this.visitFileInputStmt(
-      new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []),
-    );
-
-    return this.list(this.string("while_loop"), condition, body);
-  }
-
-  visitForStmt(stmt: StmtNS.For): [number, bigint] {
-    if (
-      !(stmt.iter instanceof ExprNS.Call) ||
-      !(stmt.iter.callee instanceof ExprNS.Variable) ||
-      stmt.iter.callee.name.lexeme !== "range"
-    ) {
-      throw new Error("Only range() is supported in for loops");
-    } else if (stmt.iter.args.length === 0) {
-      throw new Error("range() requires at least one argument");
-    } else if (stmt.iter.args.length > 3) {
-      throw new Error("range() accepts at most 3 arguments");
-    }
-
-    return this.list(
-      this.string("for_loop"),
-      this.list(this.string("name"), this.dynamicString(`"${stmt.target.lexeme}"`)),
-      this.list(this.string("range_args"), ...stmt.iter.args.map(a => this.visit(a))),
-      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
+        : this.wasmExports.makeNone(),
     );
   }
 
   visitCallExpr(expr: ExprNS.Call): [number, bigint] {
-    const callee = this.visit(expr.callee);
-    const argsList = this.list(...expr.args.map(a => this.visit(a)));
-
-    return this.list(this.string("application"), callee, argsList);
+    return this.list(
+      this.string("application"),
+      this.visit(expr.callee),
+      this.list(...expr.args.map(a => this.visit(a))),
+    );
   }
 
   visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
@@ -340,24 +355,28 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     return this.list(this.string("pass_statement"));
   }
 
-  // UNSUPPORTED / NAME- OR STRING-DEPENDENT NODES
+  // UNSUPPORTED NODES
+
+  visitWhileStmt(_stmt: StmtNS.While): [number, bigint] {
+    throw new Error("While loops are not supported in parse tree generation");
+  }
+  visitForStmt(_stmt: StmtNS.For): [number, bigint] {
+    throw new Error("For loops are not supported in parse tree generation");
+  }
   visitFromImportStmt(_stmt: StmtNS.FromImport): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Import expressions are not supported in parse tree generation");
   }
   visitGlobalStmt(_stmt: StmtNS.Global): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Global declarations are not supported in parse tree generation");
   }
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): [number, bigint] {
-    throw new Error("Method not implemented.");
-  }
-  visitComplexExpr(_expr: ExprNS.Complex): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Multi-lambda expressions are not supported in parse tree generation");
   }
   visitAssertStmt(_stmt: StmtNS.Assert): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Assert statements are not supported in parse tree generation");
   }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
-    throw new Error("Method not implemented.");
+    throw new Error("Annotated assignment statements are not supported in parse tree generation");
   }
   visitStarredExpr(_expr: ExprNS.Starred): [number, bigint] {
     throw new Error("Starred expressions are not supported in parse tree generation");
