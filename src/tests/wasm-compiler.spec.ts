@@ -1,5 +1,5 @@
 import { i32, wasm } from "@sourceacademy/wasm-util";
-import { CompileOptions, compileToWasmAndRun } from "../wasm-compiler";
+import { CompileOptions, compileToWasmAndRun } from "../engines/wasm";
 import {
   APPLY_FX_NAME,
   ARITHMETIC_OP_FX,
@@ -16,8 +16,8 @@ import {
   SHADOW_STACK_TAG,
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
-} from "../wasm-compiler/constants";
-import { insertInArray, isFunctionCall, isFunctionOfName } from "../wasm-compiler/irHelpers";
+} from "../engines/wasm/constants";
+import { insertInArray, isFunctionCall, isFunctionOfName } from "../engines/wasm/irHelpers";
 
 it = it.concurrent;
 
