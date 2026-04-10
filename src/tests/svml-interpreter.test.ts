@@ -1,18 +1,11 @@
-/**
- * Unit tests for SVML Interpreter
- * Converted from test-interpreter.ts manual tests to Jest test suite
- */
-
 import { parse } from "../parser/parser-adapter";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
-import { UnsupportedOperandTypeError } from "../engines/svml/errors";
+import {
+  MissingRequiredPositionalError,
+  UnsupportedOperandTypeError,
+} from "../engines/svml/errors";
 
-
-/**
- * Helper function to compile and run Python code
- * For now, uses SVMProgram and converts to FunctionBuilder internally
- */
 function compileAndRun(code: string): unknown {
   const ast = parse(code);
   const compiler = SVMLCompiler.fromProgram(ast);
@@ -399,6 +392,26 @@ total
       expect(compileAndRun(code)).toBe(15); // 5+4+3+2+1
     });
 
+    test("range with positive step and start >= stop produces empty range", () => {
+      const code = `
+x = 99
+for i in range(5, 0):
+    x = 0
+x
+`;
+      expect(compileAndRun(code)).toBe(99);
+    });
+
+    test("range with negative step and start <= stop produces empty range", () => {
+      const code = `
+x = 99
+for i in range(0, 5, -1):
+    x = 0
+x
+`;
+      expect(compileAndRun(code)).toBe(99);
+    });
+
     test("for over empty list does not execute body", () => {
       const code = `
 x = 99
@@ -512,6 +525,26 @@ total
       expect(compileAndRun(code)).toBe(6); // 3 outer iters * 2 inner iters each
     });
   });
+
+  describe("Builtin argument validation", () => {
+    test("range() with no arguments throws", () => {
+      expect(() => compileAndRun("range()\n")).toThrow(MissingRequiredPositionalError);
+    });
+
+    test("range() with 4 arguments throws", () => {
+      expect(() => compileAndRun("range(1, 2, 3, 4)\n")).toThrow(MissingRequiredPositionalError);
+    });
+
+    test("range() with step=0 throws ValueError", () => {
+      expect(() => compileAndRun("range(0, 10, 0)\n")).toThrow(/ValueError.*zero/);
+    });
+
+    test("len() with no arguments throws", () => {
+      expect(() => compileAndRun("len()\n")).toThrow(MissingRequiredPositionalError);
+    });
+
+    test("len() with non-array argument throws with type information", () => {
+      expect(() => compileAndRun("len(42)\n")).toThrow(/TypeError/);
+    });
+  });
 });
-
-

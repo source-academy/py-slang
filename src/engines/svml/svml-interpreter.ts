@@ -3,22 +3,22 @@ import { UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
 import OpCodes from "./opcodes";
 import { executePrimitive } from "./builtins";
 import {
-    getSVMLType,
-    isSVMLObject,
-    SVMLArray,
-    SVMLBoxType,
-    SVMLClosure,
-    SVMLEnvironment,
-    SVMLIR,
-    SVMLIterator,
-    SVMLProgram,
-    SVMLType,
+  getSVMLType,
+  isSVMLObject,
+  SVMLArray,
+  SVMLBoxType,
+  SVMLClosure,
+  SVMLEnvironment,
+  SVMLIR,
+  SVMLIterator,
+  SVMLProgram,
+  SVMLType,
 } from "./types";
 
-const __DEBUG__ = typeof (globalThis as any).__DEBUG__ !== "undefined" && (globalThis as any).__DEBUG__;
-const debug: (msg: string) => void = __DEBUG__
-    ? (msg: string) => console.log(msg)
-    : () => {};
+const __DEBUG__ =
+  typeof (globalThis as Record<string, unknown>).__DEBUG__ !== "undefined" &&
+  (globalThis as Record<string, unknown>).__DEBUG__;
+const debug: (msg: string) => void = __DEBUG__ ? (msg: string) => console.log(msg) : () => {};
 
 /**
  * TypeScript-based SVML Interpreter
@@ -33,11 +33,10 @@ export type RuntimeStdOut = string;
  */
 interface CallFrame {
   closure: SVMLClosure;
-  ir: SVMLIR; // Possibly specialized IR for this call
-  pc: number; // Program counter (instruction index)
+  ir: SVMLIR;
+  pc: number;
   env: SVMLEnvironment;
-  stack: SVMLBoxType[]; // Each frame has its own operand stack!
-  returnAddress: number; // Where to return in the caller
+  stack: SVMLBoxType[];
   callerFrame: CallFrame | null;
   memoArgs?: SVMLBoxType[];
   memoClosure?: SVMLClosure;
@@ -109,14 +108,12 @@ export class SVMLInterpreter {
       throw new Error(`Entry point function at index ${entryPointIndex} not found`);
     }
 
-    // Create closure for entry point
     const entryClosure: SVMLClosure = {
       type: "closure",
       functionIndex: entryPointIndex,
       parentEnv: null,
     };
 
-    // Create initial frame with its own stack
     const entryEnv = new SVMLEnvironment(entryFunction.envSize, null);
 
     this.currentFrame = {
@@ -124,8 +121,7 @@ export class SVMLInterpreter {
       ir: entryFunction,
       pc: 0,
       env: entryEnv,
-      stack: [], // Each frame gets its own operand stack
-      returnAddress: -1,
+      stack: [],
       callerFrame: null,
     };
 
@@ -133,7 +129,6 @@ export class SVMLInterpreter {
     this.halted = false;
     this.instructionCount = 0;
 
-    // Run the interpreter loop
     return this.run();
   }
 
@@ -468,11 +463,8 @@ export class SVMLInterpreter {
           break;
 
         case OpCodes.CALLP:
-          this.callPrimitive(a1, a2, false);
-          break;
-
         case OpCodes.CALLTP:
-          this.callPrimitive(a1, a2, true);
+          this.callPrimitive(a1, a2);
           break;
 
         case OpCodes.RETG:
@@ -794,14 +786,6 @@ export class SVMLInterpreter {
     this.push(closure);
   }
 
-  /**
-   * Get a (possibly specialized) version of a function IR for the given arguments.
-   *
-   * Uses AST-level abstract interpretation: annotates the AST with type info,
-   * then recompiles the function body with specialized opcodes.
-   *
-   * Cache key: packed integer (functionIndex * 0x10000 + typeSigInt).
-   */
   private call(numArgs: number, isTailCall: boolean): void {
     if (!this.currentFrame) {
       throw new Error("No current frame");
@@ -817,9 +801,7 @@ export class SVMLInterpreter {
         `[CALL] numArgs=${numArgs}, stackSize=${this.currentFrame.stack}, isTail=${isTailCall}`,
       );
 
-    // According to SVML spec: Pop N arguments from stack, then pop function
-    // Stack should be: [... func arg1 arg2 ... argN] with argN on top
-    // After popping args, we get [arg1, arg2, ..., argN]
+    // Stack layout: [... func arg1 arg2 ... argN] with argN on top
     const args = new Array<SVMLBoxType>(numArgs);
     for (let i = numArgs - 1; i >= 0; i--) {
       if (this.currentFrame?.stack.length === 0) {
@@ -831,7 +813,6 @@ export class SVMLInterpreter {
     if (__DEBUG__)
       debug(`[CALL] Popped ${numArgs} args, stack now has ${this.currentFrame.stack.length} items`);
 
-    // Pop the function
     if (this.currentFrame?.stack.length === 0) {
       throw new Error(
         `Stack underflow while popping function. ` +
@@ -853,7 +834,6 @@ export class SVMLInterpreter {
 
     const closure = func;
 
-    // Check memoization
     if (closure.isMemoized && closure.memoCache) {
       const cacheKey = JSON.stringify(args);
       if (closure.memoCache.has(cacheKey)) {
@@ -863,17 +843,13 @@ export class SVMLInterpreter {
       }
     }
 
-    // Get the function definition and specialize based on argument types
     const funcDef = this.program.functions[closure.functionIndex];
 
     if (numArgs !== funcDef.numArgs) {
       throw new Error(`Function expects ${funcDef.numArgs} arguments but got ${numArgs}`);
     }
 
-    // Create new environment for the function
     const newEnv = new SVMLEnvironment(funcDef.envSize, closure.parentEnv);
-
-    // Store arguments in the new environment (first N slots)
     for (let i = 0; i < numArgs; i++) {
       newEnv.set(i, args[i]);
       if (__DEBUG__)
@@ -886,22 +862,18 @@ export class SVMLInterpreter {
       );
 
     if (isTailCall) {
-      // Tail call optimization: reuse current frame
       this.currentFrame.closure = closure;
       this.currentFrame.ir = funcDef;
       this.currentFrame.pc = 0;
       this.currentFrame.env = newEnv;
-      // Clear the stack for tail call
       this.currentFrame.stack = [];
     } else {
-      // Create new call frame with its own stack
       const newFrame: CallFrame = {
         closure,
         ir: funcDef,
         pc: 0,
         env: newEnv,
-        stack: [], // New operand stack for this call!
-        returnAddress: this.currentFrame.pc,
+        stack: [],
         callerFrame: this.currentFrame,
       };
       this.currentFrame = newFrame;
@@ -917,11 +889,10 @@ export class SVMLInterpreter {
     }
   }
 
-  private callPrimitive(primitiveIndex: number, numArgs: number, _isTailCall: boolean): void {
+  private callPrimitive(primitiveIndex: number, numArgs: number): void {
     if (__DEBUG__) debug(`[CALLP] primitiveIndex=${primitiveIndex}, numArgs=${numArgs}`);
 
-    // According to SVML spec: call.p pops N arguments (NO function object)
-    // Primitives don't push a function onto the stack
+    // Primitives pop N arguments only — no function object on the stack
     const args = new Array<SVMLBoxType>(numArgs);
     for (let i = numArgs - 1; i >= 0; i--) {
       if (this.currentFrame?.stack.length === 0) {
@@ -935,7 +906,6 @@ export class SVMLInterpreter {
         `[CALLP] Calling primitive ${primitiveIndex} with args: ${JSON.stringify(args.map(a => SVMLInterpreter.toJSValue(a)))}`,
       );
 
-    // Execute primitive function
     const result = executePrimitive(primitiveIndex, args, this.boundSendToStdout);
     this.push(result);
 
@@ -965,18 +935,13 @@ export class SVMLInterpreter {
     const callerFrame = this.currentFrame.callerFrame;
 
     if (!callerFrame) {
-      // Returning from entry point
       this.halted = true;
-      // Leave return value on the entry frame's stack
       this.push(returnValue);
       return;
     }
 
-    // Switch to caller frame
     this.currentFrame = callerFrame;
     this.callDepth--;
-
-    // Push return value onto CALLER's stack
     this.push(returnValue);
 
     if (__DEBUG__)

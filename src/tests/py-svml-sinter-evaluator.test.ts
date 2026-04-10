@@ -1,21 +1,25 @@
 import { PySvmlSinterEvaluator } from "../conductor/PySvmlSinterEvaluator";
-import { BufferingConductor } from "../conductor/BufferingConductor";
+import { BufferingConductor } from "./BufferingConductor";
+
+// Sinter requires WASM which cannot run in Node/Jest. Mock the init so the
+// evaluator's error path is exercised rather than hanging on WASM instantiation.
+jest.mock("../engines/svml/sinter/sinter", () => ({
+  __esModule: true,
+  default: jest.fn().mockRejectedValue(new Error("WASM not available in test environment")),
+}));
 
 function makeEvaluator() {
   const conductor = new BufferingConductor();
-  const evaluator = new PySvmlSinterEvaluator(conductor as any);
+  const evaluator = new PySvmlSinterEvaluator(conductor);
   return { evaluator, conductor };
 }
 
 describe("PySvmlSinterEvaluator", () => {
-  test("evaluates integer addition", async () => {
+  test("routes sinter init failure to sendError without crashing", async () => {
     const { evaluator, conductor } = makeEvaluator();
     await evaluator.evaluateChunk("1 + 2");
-    // Sinter may or may not be available - check no crash at minimum
-    // If sinter is available, result should be defined
-    const err = conductor.getError();
-    const result = conductor.getResult();
-    expect(err !== undefined || result !== undefined).toBe(true);
+    expect(conductor.getError()).toBeDefined();
+    expect(conductor.getResult()).toBeUndefined();
   });
 
   test("does not implement TypeAnnotating", () => {

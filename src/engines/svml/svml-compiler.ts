@@ -1,14 +1,14 @@
-import { StmtNS, ExprNS } from "../../ast-types";
-import { Token } from "../../tokenizer";
-import { TokenType } from "../../tokens";
-import { PRIMITIVE_FUNCTIONS } from "./builtins";
-import { SVMLProgram } from "./types";
-import { SVMLIRBuilder } from "./SVMLIRBuilder";
-import OpCodes from "./opcodes";
-import { FunctionEnvironments, Environment, Resolver } from "../../resolver";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import type { Annotated, OptimizationHint, PyASTNode } from "../../specialization/analysis-module";
 import type { SlotInfo, SlotLookup } from "../../specialization/types";
-import { INT_BIT, BOOL_BIT, FLOAT_BIT } from "../../types/abstract-value";
+import { Token } from "../../tokenizer";
+import { TokenType } from "../../tokens";
+import { BOOL_BIT, FLOAT_BIT, INT_BIT } from "../../types/abstract-value";
+import { SVMLIRBuilder } from "./SVMLIRBuilder";
+import { PRIMITIVE_FUNCTIONS } from "./builtins";
+import OpCodes from "./opcodes";
+import { SVMLProgram } from "./types";
 
 /** Read the hint placed by annotateTree(), returning undefined if absent. */
 function getHint(node: PyASTNode): OptimizationHint | undefined {
@@ -69,7 +69,10 @@ export class SVMLCompiler
    * Create SVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
    */
-  static fromProgram(program: StmtNS.FileInput, functionEnvironments?: FunctionEnvironments): SVMLCompiler {
+  static fromProgram(
+    program: StmtNS.FileInput,
+    functionEnvironments?: FunctionEnvironments,
+  ): SVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program);
       functionEnvironments = resolver.resolveEnvironments(program);

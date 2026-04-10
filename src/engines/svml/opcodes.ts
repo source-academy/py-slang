@@ -86,8 +86,10 @@ export enum OpCodes {
   NEQB = 84,
   FLOORDIVG = 85,
   FLOORDIVF = 86,
+  NEWITER = 87,
+  FOR_ITER = 88,
 
-  // custom opcodes
+  // custom opcodes (primitive function IDs used as arguments to CALLV/CALLTV)
   ARRAY_LEN = 1000,
   DISPLAY = 1001,
   DRAW_DATA = 1002,
@@ -142,8 +144,6 @@ export enum OpCodes {
   DISPLAY_LIST = 1051,
   CHAR_AT = 1052,
   ARITY = 1053,
-  NEWITER = 1054,
-  FOR_ITER = 1055,
 
   // Source 3 Concurrent Opcodes
   EXECUTE = 2000,
@@ -151,7 +151,7 @@ export enum OpCodes {
   CLEAR = 2002,
 }
 
-export const OPCODE_MAX = 86;
+export const OPCODE_MAX = 88;
 
 export function getInstructionSize(opcode: OpCodes): number {
   switch (opcode) {
@@ -190,6 +190,7 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.BRT:
     case OpCodes.BR:
     case OpCodes.JMP:
+    case OpCodes.FOR_ITER:
       return 5;
 
     case OpCodes.LDCF64:

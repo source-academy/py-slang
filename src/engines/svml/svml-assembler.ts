@@ -130,6 +130,7 @@ function serialiseFunction(f: SVMLIR): ImFunction {
       case OpCodes.BRF:
       case OpCodes.BRT:
       case OpCodes.BR:
+      case OpCodes.FOR_ITER:
         const offset = instrOffsets[index + (instr.arg1 as number)] - instrOffsets[index + 1];
         b.putI(32, offset);
         break;
@@ -439,7 +440,8 @@ export function disassemble(p: Uint8Array): SVMLProgram {
           break;
         case OpCodes.BRF:
         case OpCodes.BRT:
-        case OpCodes.BR: {
+        case OpCodes.BR:
+        case OpCodes.FOR_ITER: {
           if (cursor + 4 > p.byteLength) {
             throw new Error("Truncated instruction");
           }

@@ -1,24 +1,20 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import initSinter, { SinterValue } from "../engines/svml/sinter/sinter";
+import { assemble } from "../engines/svml/svml-assembler";
+import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { assemble } from "../engines/svml/svml-assembler";
-import { toEvaluatorError } from "./errors";
-import initSinter from "../engines/svml/sinter/sinter";
+import { EvaluatorError } from "./errors";
 
-function sinterValueToNative(value: { type: string; value?: unknown }): unknown {
+function sinterValueToNative(value: SinterValue): unknown {
   switch (value.type) {
     case "int":
     case "float":
     case "bool":
     case "string":
       return value.value;
-    case "bigint":
-      return Number(value.value);
     case "NoneType":
     case "undefined":
-      return undefined;
-    default:
       return undefined;
   }
 }
@@ -39,13 +35,14 @@ export class PySvmlSinterEvaluator extends BasicEvaluator {
       const binary = assemble(program);
 
       if (!this.sinter) {
-        this.sinter = await initSinter();
+        this.sinter = await initSinter({
+          print: (text: string) => this.conductor.sendOutput(text),
+        });
       }
       const result = this.sinter.runBinary(binary);
-
       this.conductor.sendResult(sinterValueToNative(result));
     } catch (e) {
-      this.conductor.sendError(toEvaluatorError(e) as any);
+      this.conductor.sendError(new EvaluatorError(e));
     }
   }
 }

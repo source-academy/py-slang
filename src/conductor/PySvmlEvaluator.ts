@@ -1,15 +1,15 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { parse } from "../parser/parser-adapter";
-import { analyzeWithEnvironments } from "../resolver";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
-import { toEvaluatorError } from "./errors";
-import { runAnalysisPass, MutableEnv } from "../specialization/dfa-driver";
-import { TypeAnalysisModule } from "../specialization/type-analysis";
+import { parse } from "../parser/parser-adapter";
+import { analyzeWithEnvironments } from "../resolver";
 import { annotateTree, type HintTable } from "../specialization/analysis-module";
+import { MutableEnv, runAnalysisPass } from "../specialization/dfa-driver";
+import { TypeAnalysisModule } from "../specialization/type-analysis";
+import { EvaluatorError } from "./errors";
 
 export class PySvmlEvaluator extends BasicEvaluator {
-  async evaluateChunk(chunk: string): Promise<void> {
+  evaluateChunk(chunk: string): Promise<void> {
     try {
       const script = chunk + "\n";
       const ast = parse(script);
@@ -34,7 +34,8 @@ export class PySvmlEvaluator extends BasicEvaluator {
       }
       this.conductor.sendResult(SVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
-      this.conductor.sendError(toEvaluatorError(e) as any);
+      this.conductor.sendError(new EvaluatorError(e));
     }
+    return Promise.resolve();
   }
 }

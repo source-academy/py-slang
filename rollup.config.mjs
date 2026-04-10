@@ -26,7 +26,7 @@ function plugins() {
     nodeResolve(),
     nodePolyfills(),
     terser({
-      compress: { drop_console: true, dead_code: true, passes: 3 },
+      compress: { dead_code: true, passes: 3 },
     }),
   ];
 }
