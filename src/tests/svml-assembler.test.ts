@@ -101,5 +101,41 @@ total
     test("for-loop over empty range", () => {
       expect(roundTrip("for i in range(0):\n    i\n")).toBeUndefined();
     });
+
+    test("float64 literal round-trips correctly", () => {
+      expect(roundTrip("3.141592653589793\n")).toBeCloseTo(3.141592653589793, 10);
+    });
+
+    test("multiple distinct string constants are preserved", () => {
+      expect(roundTrip('"hello" + " world"\n')).toBe("hello world");
+    });
+
+    test("duplicate string constants deduplicate in binary", () => {
+      // "x" + "x" stores one constant; "x" + "y" stores two — binary must be smaller.
+      const withDupe = compileAndAssemble('"x" + "x"\n');
+      const withUnique = compileAndAssemble('"x" + "y"\n');
+      expect(withDupe.byteLength).toBeLessThan(withUnique.byteLength);
+      expect(roundTrip('"x" + "x"\n')).toBe("xx");
+    });
+  });
+
+  describe("disassemble error paths", () => {
+    test("bad magic number throws", () => {
+      const bad = new Uint8Array(32);
+      new DataView(bad.buffer).setUint32(0, 0xdeadbeef, true);
+      expect(() => disassemble(bad)).toThrow(/magic/i);
+    });
+
+    test("wrong version throws", () => {
+      const good = compileAndAssemble("1\n");
+      const patched = new Uint8Array(good);
+      new DataView(patched.buffer).setUint16(4, 99, true); // major version = 99
+      expect(() => disassemble(patched)).toThrow(/version/i);
+    });
+
+    test("truncated binary throws", () => {
+      const good = compileAndAssemble("1\n");
+      expect(() => disassemble(good.slice(0, 4))).toThrow();
+    });
   });
 });

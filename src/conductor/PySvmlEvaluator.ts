@@ -16,12 +16,10 @@ export class PySvmlEvaluator extends BasicEvaluator {
       }
       const compiler = SVMLCompiler.fromProgram(ast, environments);
       const program = compiler.compileProgram(ast);
-      const interpreter = new SVMLInterpreter(program);
+      const interpreter = new SVMLInterpreter(program, {
+        sendOutput: msg => this.conductor.sendOutput(msg),
+      });
       const returnValue = interpreter.execute();
-      const stdout = interpreter.getStdout();
-      if (stdout) {
-        this.conductor.sendOutput(stdout);
-      }
       this.conductor.sendResult(SVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));

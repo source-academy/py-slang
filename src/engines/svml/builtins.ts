@@ -48,15 +48,19 @@ export function executePrimitive(
 
     case 20: {
       // min
-      if (args.length === 0)
-        throw new MissingRequiredPositionalError("min() requires at least 1 argument");
+      if (args.length < 2)
+        throw new MissingRequiredPositionalError(
+          `min() takes at least 2 arguments (${args.length} given)`,
+        );
       return Math.min(...assertNumericArgs(args, "min"));
     }
 
     case 21: {
       // max
-      if (args.length === 0)
-        throw new MissingRequiredPositionalError("max() requires at least 1 argument");
+      if (args.length < 2)
+        throw new MissingRequiredPositionalError(
+          `max() takes at least 2 arguments (${args.length} given)`,
+        );
       return Math.max(...assertNumericArgs(args, "max"));
     }
 

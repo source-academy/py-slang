@@ -26,8 +26,6 @@ const debug: (msg: string) => void = __DEBUG__ ? (msg: string) => console.log(ms
  * This interpreter runs SVML bytecode directly without needing WASM assembly.
  */
 
-export type RuntimeStdOut = string;
-
 /**
  * Call frame for function execution
  */
@@ -50,18 +48,15 @@ export class SVMLInterpreter {
   private currentFrame: CallFrame | null;
   private globalEnv: SVMLEnvironment;
   private halted: boolean;
-  private stdout: RuntimeStdOut[];
+  private readonly onOutput: (msg: string) => void;
 
   // Execution limits for safety
   private maxStackSize: number = 10000;
   private maxCallDepth: number = 1000;
   private callDepth: number = 0;
 
-  // Statistics
   private instructionCount: number = 0;
   private maxInstructionLimit: number = 1000000;
-
-  private readonly boundSendToStdout = (msg: string) => this.sendToStdout(msg);
 
   constructor(
     program: SVMLProgram,
@@ -69,32 +64,20 @@ export class SVMLInterpreter {
       maxStackSize?: number;
       maxCallDepth?: number;
       maxInstructions?: number;
+      sendOutput?: (msg: string) => void;
     },
   ) {
     this.program = program;
     this.currentFrame = null;
     this.globalEnv = new SVMLEnvironment(0);
     this.halted = false;
-    this.stdout = [];
+    this.onOutput = options?.sendOutput ?? (() => {});
 
     if (options) {
       if (options.maxStackSize) this.maxStackSize = options.maxStackSize;
       if (options.maxCallDepth) this.maxCallDepth = options.maxCallDepth;
       if (options.maxInstructions) this.maxInstructionLimit = options.maxInstructions;
     }
-  }
-
-  reset(program: SVMLProgram): void {
-    this.program = program;
-    this.currentFrame = null;
-    this.halted = false;
-    this.stdout = [];
-    this.callDepth = 0;
-    this.instructionCount = 0;
-  }
-
-  sendToStdout(message: string) {
-    this.stdout.push(message);
   }
 
   /**
@@ -130,13 +113,6 @@ export class SVMLInterpreter {
     this.instructionCount = 0;
 
     return this.run();
-  }
-
-  /**
-   * Collect stdout in readable string format
-   */
-  getStdout(): string {
-    return this.stdout.join("\n");
   }
 
   /**
@@ -899,7 +875,7 @@ export class SVMLInterpreter {
         `[CALLP] Calling primitive ${primitiveIndex} with args: ${JSON.stringify(args.map(a => SVMLInterpreter.toJSValue(a)))}`,
       );
 
-    const result = executePrimitive(primitiveIndex, args, this.boundSendToStdout);
+    const result = executePrimitive(primitiveIndex, args, this.onOutput);
     this.push(result);
 
     if (__DEBUG__)
@@ -990,21 +966,6 @@ export class SVMLInterpreter {
   // ========================================================================
   // Utility Methods
   // ========================================================================
-
-  /**
-   * Get execution statistics
-   */
-  getStats(): {
-    instructionCount: number;
-    maxCallDepth: number;
-    currentStackSize: number;
-  } {
-    return {
-      instructionCount: this.instructionCount,
-      maxCallDepth: this.callDepth,
-      currentStackSize: this.currentFrame ? this.currentFrame.stack.length : 0,
-    };
-  }
 
   /**
    * Convert runtime value to JavaScript value for display
