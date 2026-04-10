@@ -35,11 +35,11 @@ export default class Buffer {
   }
 
   private maybeExpand(n: number) {
-    if (this.cursor + n < this._capacity) {
+    if (this.cursor + n <= this._capacity) {
       return;
     }
 
-    while (this.cursor + n >= this._capacity) {
+    while (this.cursor + n > this._capacity) {
       this._capacity *= 2;
     }
     this._buffer = ArrayBuffer.transfer(this._buffer, this._capacity);

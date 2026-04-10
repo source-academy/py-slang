@@ -102,17 +102,26 @@ export function executePrimitive(
 
     case 30: {
       // range
+      if (args.length < 1 || args.length > 3)
+        throw new MissingRequiredPositionalError(
+          `range() takes 1 to 3 arguments (${args.length} given)`,
+        );
       const [a, b, c] = assertNumericArgs(args, "range");
       const [start, stop, step] =
         args.length === 1 ? [0, a, 1] : args.length === 2 ? [a, b, 1] : [a, b, c];
+      if (step === 0) throw new SVMLInterpreterError("ValueError: range() arg 3 must not be zero");
       return { type: "iterator", kind: "range", current: start, stop, step };
     }
 
     case 31: {
       // len
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
       if (isSVMLObject(v) && v.type === "array") return v.elements.length;
-      throw new SVMLInterpreterError("TypeError: object of type is not subscriptable");
+      throw new SVMLInterpreterError(
+        `TypeError: object of type '${typeof v}' has no len()`,
+      );
     }
 
     default:
