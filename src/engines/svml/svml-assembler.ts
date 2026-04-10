@@ -1,5 +1,5 @@
 import Buffer from "../../utils/buffer";
-import OpCodes, { getInstructionSize, OPCODE_MAX } from "./opcodes";
+import OpCodes, { getInstructionSize, OPCODE_MAX, unsupportedOpcodeMessage } from "./opcodes";
 import { Instruction, SVMLProgram, SVMLIR } from "./types";
 
 const SVM_MAGIC = 0x5005acad;
@@ -48,7 +48,7 @@ function writeStringConstant(b: Buffer, s: string) {
   b.putU(8, 0);
 }
 
-function serialiseFunction(f: SVMLIR): ImFunction {
+function serialiseFunction(f: SVMLIR, targetMaxOpcode?: number): ImFunction {
   const code = f.toInstructions();
   const { stackSize, envSize, numArgs } = f;
   const holes: Hole[] = [];
@@ -66,6 +66,9 @@ function serialiseFunction(f: SVMLIR): ImFunction {
   for (const [instr, index] of code.map((i1, i2) => [i1, i2] as [Instruction, number])) {
     if (instr.opcode < 0 || instr.opcode > OPCODE_MAX) {
       throw new Error(`Invalid opcode ${instr.opcode.toString()}`);
+    }
+    if (targetMaxOpcode !== undefined && instr.opcode > targetMaxOpcode) {
+      throw new Error(unsupportedOpcodeMessage(instr.opcode));
     }
     const opcode: OpCodes = instr.opcode;
     b.putU(8, opcode);
@@ -155,12 +158,12 @@ function serialiseFunction(f: SVMLIR): ImFunction {
   };
 }
 
-export function assemble(p: SVMLProgram): Uint8Array {
+export function assemble(p: SVMLProgram, targetMaxOpcode?: number): Uint8Array {
   const entrypointIndex = p.entryPoint;
   const jsonFns = p.functions;
 
   // serialise all the functions
-  const imFns = jsonFns.map(fn => serialiseFunction(fn));
+  const imFns = jsonFns.map(fn => serialiseFunction(fn, targetMaxOpcode));
 
   // collect all string constants
   const uniqueStrings = [
@@ -284,21 +287,35 @@ export function disassemble(p: Uint8Array): SVMLProgram {
     throw new Error("Malformed SVML binary: no function section");
   }
 
-  // First pass: collect all function start offsets
-  // Start with entrypoint and any 4-byte aligned offsets referenced by NEWC
+  // First pass: discover function start offsets by parsing from known starts.
+  // Using getInstructionSize to advance prevents matching NEWC inside immediates.
   const functionOffsetSet = new Set<number>([entrypointOffset]);
+  const worklist: number[] = [entrypointOffset];
 
-  // Scan the binary for NEWC instructions to find function references
-  let scanCursor = functionsStart;
-  while (scanCursor < p.byteLength) {
-    const opcode = view.getUint8(scanCursor);
-    if (opcode === OpCodes.NEWC && scanCursor + 5 <= p.byteLength) {
-      const targetOffset = view.getUint32(scanCursor + 1, true);
-      if (targetOffset >= functionsStart && targetOffset < p.byteLength) {
-        functionOffsetSet.add(targetOffset);
+  while (worklist.length > 0) {
+    const fnOffset = worklist.pop()!;
+    let pc = fnOffset + 4; // skip 4-byte function header
+
+    while (pc < p.byteLength) {
+      if (pc !== fnOffset && functionOffsetSet.has(pc)) break;
+
+      const opcode = view.getUint8(pc);
+      if (opcode > OPCODE_MAX) break;
+
+      if (opcode === OpCodes.NEWC && pc + 5 <= p.byteLength) {
+        const targetOffset = view.getUint32(pc + 1, true);
+        if (
+          targetOffset >= functionsStart &&
+          targetOffset < p.byteLength &&
+          !functionOffsetSet.has(targetOffset)
+        ) {
+          functionOffsetSet.add(targetOffset);
+          worklist.push(targetOffset);
+        }
       }
+
+      pc += getInstructionSize(opcode);
     }
-    scanCursor++;
   }
 
   const functionOffsets = Array.from(functionOffsetSet).sort((a, b) => a - b);

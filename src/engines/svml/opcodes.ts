@@ -88,70 +88,36 @@ export enum OpCodes {
   FLOORDIVF = 86,
   NEWITER = 87,
   FOR_ITER = 88,
-
-  // custom opcodes (primitive function IDs used as arguments to CALLV/CALLTV)
-  ARRAY_LEN = 1000,
-  DISPLAY = 1001,
-  DRAW_DATA = 1002,
-  ERROR = 1003,
-  IS_ARRAY = 1004,
-  IS_BOOL = 1005,
-  IS_FUNC = 1006,
-  IS_NULL = 1007,
-  IS_NUMBER = 1008,
-  IS_STRING = 1009,
-  IS_UNDEFINED = 1010,
-  MATH_ABS = 1011,
-  MATH_ACOS = 1012,
-  MATH_ACOSH = 1013,
-  MATH_ASIN = 1014,
-  MATH_ASINH = 1015,
-  MATH_ATAN = 1016,
-  MATH_ATAN2 = 1017,
-  MATH_ATANH = 1018,
-  MATH_CBRT = 1019,
-  MATH_CEIL = 1020,
-  MATH_CLZ32 = 1021,
-  MATH_COS = 1022,
-  MATH_COSH = 1023,
-  MATH_EXP = 1024,
-  MATH_EXPM1 = 1025,
-  MATH_FLOOR = 1026,
-  MATH_FROUND = 1027,
-  MATH_HYPOT = 1028,
-  MATH_IMUL = 1029,
-  MATH_LOG = 1030,
-  MATH_LOG1P = 1031,
-  MATH_LOG2 = 1032,
-  MATH_LOG10 = 1033,
-  MATH_MAX = 1034,
-  MATH_MIN = 1035,
-  MATH_POW = 1036,
-  MATH_RANDOM = 1037,
-  MATH_ROUND = 1038,
-  MATH_SIGN = 1039,
-  MATH_SIN = 1040,
-  MATH_SINH = 1041,
-  MATH_SQRT = 1042,
-  MATH_TAN = 1043,
-  MATH_TANH = 1044,
-  MATH_TRUNC = 1045,
-  PARSE_INT = 1046,
-  RUNTIME = 1047,
-  STREAM = 1048,
-  STRINGIFY = 1049,
-  PROMPT = 1050,
-  DISPLAY_LIST = 1051,
-  CHAR_AT = 1052,
-  ARITY = 1053,
-
-  // Source 3 Concurrent Opcodes
-  EXECUTE = 2000,
-  TEST_AND_SET = 2001,
-  CLEAR = 2002,
 }
 
 export const OPCODE_MAX = 88;
+
+/**
+ * Sinter VM's maximum supported opcode (op_neq_b = 0x54).
+ * Opcodes above this value are py-slang extensions not present in the
+ * compiled WASM binary.
+ */
+export const SINTER_OPCODE_MAX = 0x54; // 84
+
+const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
+  [OpCodes.FLOORDIVG]: "floor division (//)",
+  [OpCodes.FLOORDIVF]: "floor division (//)",
+  [OpCodes.NEWITER]: "for loops",
+  [OpCodes.FOR_ITER]: "for loops",
+};
+
+/**
+ * Returns a human-readable description of an opcode that exceeds the
+ * sinter VM's supported range, or a generic fallback.
+ */
+export function unsupportedOpcodeMessage(opcode: number): string {
+  const feature = UNSUPPORTED_OPCODE_FEATURES[opcode];
+  const name = OpCodes[opcode] ?? `opcode ${opcode}`;
+  if (feature) {
+    return `${name}: ${feature} is not supported by the sinter backend`;
+  }
+  return `${name} (opcode ${opcode}) is not supported by the sinter backend`;
+}
 
 export function getInstructionSize(opcode: OpCodes): number {
   switch (opcode) {

@@ -46,6 +46,9 @@ export default async function init(props: Record<string, unknown> = {}): Promise
   const free = module.cwrap("siwasm_free", undefined, ["number"]);
   const run = module.cwrap("siwasm_run", "number", ["number", "number"]);
 
+  // Initialise the sinter heap (required before any run call)
+  alloc_heap(0x10000);
+
   const readReturnValue = (resPtr: number): SinterValue => {
     const u8 = module.HEAPU8 as Uint8Array;
     const dv = new DataView(u8.buffer);
