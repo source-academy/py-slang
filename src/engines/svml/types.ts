@@ -40,8 +40,6 @@ export interface SVMLClosure {
   type: "closure";
   functionIndex: number;
   parentEnv: SVMLEnvironment | null;
-  isMemoized?: boolean;
-  memoCache?: Map<string, SVMLBoxType>;
 }
 
 /** Type guard: narrows SVMLBoxType to the three object variants. */
