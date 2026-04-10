@@ -22,6 +22,25 @@ module.exports = {
       "ts-jest",
       {
         useESM: true,
+        tsconfig: {
+          paths: {
+            "@sourceacademy/conductor/common": [
+              "node_modules/@sourceacademy/conductor/dist/common/index.d.ts",
+            ],
+            "@sourceacademy/conductor/conduit": [
+              "node_modules/@sourceacademy/conductor/dist/conduit/index.d.ts",
+            ],
+            "@sourceacademy/conductor/module": [
+              "node_modules/@sourceacademy/conductor/dist/conductor/module/index.d.ts",
+            ],
+            "@sourceacademy/conductor/runner": [
+              "node_modules/@sourceacademy/conductor/dist/conductor/runner/index.d.ts",
+            ],
+            "@sourceacademy/conductor/types": [
+              "node_modules/@sourceacademy/conductor/dist/conductor/types/index.d.ts",
+            ],
+          },
+        },
         diagnostics: {
           exclude: ["**/python-grammar.ts"],
         },
