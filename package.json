@@ -63,7 +63,7 @@
     "@sourceacademy/conductor": "^0.3.0",
     "@sourceacademy/wasm-util": "^1.0.6",
     "fast-levenshtein": "^3.0.0",
-    "mathjs": "^14.9.1",
+    "mathjs": "^15.2.0",
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
     "wabt": "^1.0.37"
