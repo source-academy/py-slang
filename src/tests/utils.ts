@@ -4,6 +4,8 @@ import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
+import { SVMLCompiler } from "../engines/svml/svml-compiler";
+import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
@@ -249,6 +251,75 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           return;
         },
       );
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// SVML test utilities
+// ---------------------------------------------------------------------------
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ErrorClass = new (...args: any[]) => Error;
+
+/**
+ * Expected value for an SVML test case.
+ * SVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
+ * `undefined` means the expression should evaluate to Python None / no return value.
+ */
+export type SVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+
+/**
+ * Same shape as TestCases but with SVML-compatible expected values.
+ * Each tuple: [code, expected, output].
+ *   - expected: a JS primitive, undefined, null, or an Error subclass (for expected throws)
+ *   - output: expected print outputs, or null if none expected
+ */
+export type SVMLTestCases = Record<string, [string, SVMLTestExpectedValue, string[] | null][]>;
+
+export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
+  for (const [sectionName, tests] of Object.entries(testCases)) {
+    describe(sectionName, () => {
+      test.each(
+        tests.map(([code, expected, output]) => ({
+          code,
+          expected,
+          output,
+          label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
+        })),
+      )("$code → $label", ({ code, expected, output }) => {
+        const source = code.endsWith("\n") ? code : code + "\n";
+        if (typeof expected === "function") {
+          expect(() => {
+            const ast = parse(source);
+            const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
+            new SVMLInterpreter(program).execute();
+          }).toThrow(expected);
+          return;
+        }
+
+        const outputs: string[] = [];
+        const ast = parse(source);
+        const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
+        const interpreter = new SVMLInterpreter(program, {
+          sendOutput: msg => outputs.push(msg),
+        });
+        const result = SVMLInterpreter.toJSValue(interpreter.execute());
+
+        if (expected === undefined) {
+          expect(result).toBeUndefined();
+        } else if (expected === null) {
+          expect(result).toBeNull();
+        } else if (typeof expected === "number" && !Number.isInteger(expected)) {
+          expect(result).toBeCloseTo(expected);
+        } else {
+          expect(result).toBe(expected);
+        }
+
+        if (output !== null) {
+          expect(outputs).toEqual(output);
+        }
+      });
     });
   }
 };
