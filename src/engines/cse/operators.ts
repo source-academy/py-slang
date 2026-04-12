@@ -214,7 +214,7 @@ export function evaluateBinaryExpression(
 ): Value {
   // Handle expanded equality semantics for Python §3,
   // where equality and inequality comparisons between non-list values of different types are allowed
-  if ((operator == TokenType.EQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
+  if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
     return handleExpandedEquality(code, command, context, operator, left, right);
   }
 
