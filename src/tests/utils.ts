@@ -10,8 +10,7 @@ import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import { Group } from "../stdlib/utils";
-import { RecursivePartial, Result } from "../types";
-import { PyComplexNumber } from "../types";
+import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import Stmt = StmtNS.Stmt;
 
@@ -237,8 +236,8 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
               expect.objectContaining({
                 type: "complex",
                 value: expect.objectContaining({
-                  real: expect.closeTo(expected.real),
-                  imag: expect.closeTo(expected.imag),
+                  real: isNaN(expected.real) ? NaN : expect.closeTo(expected.real),
+                  imag: isNaN(expected.imag) ? NaN : expect.closeTo(expected.imag),
                 }),
               }),
             );

@@ -26,50 +26,64 @@ export class PyComplexNumber {
   }
 
   public static fromString(str: string): PyComplexNumber {
-    str = str.replace(/_/g, ""); // Remove underscores for easier parsing
-    if (!/[jJ]/.test(str)) {
-      const realVal = Number(str);
-      if (isNaN(realVal)) {
-        throw new Error(`Invalid complex string: ${str}`);
-      }
-      return new PyComplexNumber(realVal, 0);
-    }
-    const match = str.match(
-      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-](?:\d+)?(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
-    );
-    if (match) {
-      const realPart = Number(match[1]);
-      let imagPart = 0;
+    const originalStr = str;
+    str = str.trim().replace(/_/g, "").toLowerCase();
 
-      if (match[4] !== undefined) {
-        if (match[4] === "+j" || match[4] === "j") {
-          imagPart = 1;
-        } else if (match[4] === "-j") {
-          imagPart = -1;
-        } else {
-          imagPart = Number(match[4].substring(0, match[4].length - 1)); // Remove the trailing 'j' or 'J'
+    const parts = str.split(/(?<!e)(?=[+-])/, 2).filter(part => part !== "");
+    const mappings = {
+      infinity: Infinity,
+      "+infinity": Infinity,
+      "-infinity": -Infinity,
+      inf: Infinity,
+      "+inf": Infinity,
+      "-inf": -Infinity,
+      nan: NaN,
+      "+nan": NaN,
+      "-nan": NaN,
+    };
+    if (parts.length === 0) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    if (parts.length === 1) {
+      const isImag = str.endsWith("j");
+      if (str.endsWith("j")) {
+        str = str.slice(0, -1);
+        if (str == "" || str === "+" || str === "-") {
+          return new PyComplexNumber(0, str === "-" ? -1 : 1);
         }
       }
-
-      return new PyComplexNumber(realPart, imagPart);
-    }
-
-    const lower = str.toLowerCase();
-    if (lower.endsWith("j")) {
-      const numericPart = str.substring(0, str.length - 1);
-      if (numericPart === "" || numericPart === "+" || numericPart === "-") {
-        const sign = numericPart === "-" ? -1 : 1;
-        return new PyComplexNumber(0, sign * 1);
+      if (str in mappings) {
+        const val = mappings[str as keyof typeof mappings];
+        return new PyComplexNumber(isImag ? 0 : val, isImag ? val : 0);
       }
-
-      const imagVal = Number(numericPart);
-      if (isNaN(imagVal)) {
-        throw new Error(`Invalid complex string: ${str}`);
+      const num = Number(str);
+      if (isNaN(num)) {
+        throw new Error(`Invalid complex string: ${originalStr}`);
       }
-      return new PyComplexNumber(0, imagVal);
+      return new PyComplexNumber(isImag ? 0 : num, isImag ? num : 0);
     }
-
-    throw new Error(`Invalid complex string: ${str}`);
+    const [realPart, imagPart] = parts;
+    const imagStr = imagPart.slice(0, -1);
+    if (!imagPart.endsWith("j")) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    if (!(realPart in mappings) && isNaN(Number(realPart))) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    if (!(imagStr in mappings) && !["+", "-", ""].includes(imagStr) && isNaN(Number(imagStr))) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    const real =
+      realPart in mappings ? mappings[realPart as keyof typeof mappings] : Number(realPart);
+    const imag =
+      imagStr in mappings
+        ? mappings[imagStr as keyof typeof mappings]
+        : imagStr === "+" || imagStr === ""
+          ? 1
+          : imagStr === "-"
+            ? -1
+            : Number(imagStr);
+    return new PyComplexNumber(real, imag);
   }
 
   public static fromValue(

@@ -13,7 +13,6 @@ import { Context } from "./engines/cse/context";
 import { ControlItem } from "./engines/cse/control";
 import { handleRuntimeError } from "./engines/cse/error";
 import { displayOutput, receiveInput } from "./engines/cse/streams";
-import { stringify } from "./utils/stringify";
 import {
   MissingRequiredPositionalError,
   TooManyPositionalArgumentsError,
@@ -21,6 +20,7 @@ import {
   UserError,
   ValueError,
 } from "./errors/errors";
+import { stringify } from "./utils/stringify";
 
 export const minArgMap = new Map<string, number>();
 
@@ -273,7 +273,13 @@ export class BuiltInFunctions {
     if (invalidType.length > 0) {
       handleRuntimeError(
         context,
-        new TypeError(source, command as ExprNS.Expr, context, invalidType[0].type, "complex"),
+        new TypeError(
+          source,
+          command as ExprNS.Expr,
+          context,
+          invalidType[0].type,
+          "'int', 'float', 'bool' or 'complex'",
+        ),
       );
     }
     const [real, imag] = args as (BigIntValue | NumberValue | BoolValue | ComplexValue)[];
