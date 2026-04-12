@@ -5,6 +5,7 @@ import json from "@rollup/plugin-json";
 import commonjs from "@rollup/plugin-commonjs";
 import nodePolyfills from "rollup-plugin-polyfill-node";
 import replace from "@rollup/plugin-replace";
+import wasm from "@rollup/plugin-wasm";
 
 // Env EVALUATOR is set by scripts/build.ts.
 const EVALUATOR = process.env.EVALUATOR;
@@ -18,13 +19,14 @@ function plugins() {
       preventAssignment: true,
       values: { __EVALUATOR__: EVALUATOR },
     }),
-    commonjs({ include: "node_modules/**" }),
+    commonjs({ include: ["node_modules/**", "src/engines/svml/sinter/sinterwasm.js"] }),
     json(),
+    wasm({ maxFileSize: 100 * 1024 }),
     typescript(),
     nodeResolve(),
     nodePolyfills(),
     terser({
-      compress: { drop_console: true, dead_code: true, passes: 3 },
+      compress: { dead_code: true, passes: 3 },
     }),
   ];
 }

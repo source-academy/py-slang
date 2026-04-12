@@ -14,9 +14,8 @@ export default defineConfig([
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ["src/tests/*.ts"],
-        },
+        project: ["./tsconfig.json", "./tsconfig.test.json"],
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     plugins: {
