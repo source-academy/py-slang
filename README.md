@@ -45,23 +45,23 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 
 ### List of evaluators
 
-| Name                                                                                                                                             | Description                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| [PyCseEvaluator1](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L95)  | Interprets Python §1 programs using the CSE machine      |
-| [PyCseEvaluator2](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L101) | Interprets Python §2 programs using the CSE machine      |
-| [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine      |
-| [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine      |
-| [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it |
-| [PySvmlEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlEvaluator.ts)                                         | ???                                                      |
-| [PySvmlSinterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlSinterEvaluator.ts)                             | ???                                                      |
+| Name                                                                                                                                             | Description                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [PyCseEvaluator1](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L95)  | Interprets Python §1 programs using the CSE machine                                                                                                                                                |
+| [PyCseEvaluator2](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L101) | Interprets Python §2 programs using the CSE machine                                                                                                                                                |
+| [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine                                                                                                                                                |
+| [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine                                                                                                                                                |
+| [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it                                                                                                                                           |
+| [PySvmlEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlEvaluator.ts)                                         | Evaluates the Python AST via a handwritten Typescript compiler and interpreter                                                                                                                     |
+| [PySvmlSinterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlSinterEvaluator.ts)                             | Evaluates the Python AST with the same compiler as `PySvmlEvaluator`, but a different interpreter. It uses the WebAssembly port of the [Sinter](https://github.com/source-academy/sinter) project. |
 
 ### Using the evaluators
 
 Refer to the [Conductor's Quick Start Guide](https://github.com/source-academy/conductor?tab=readme-ov-file#quick-start-guide)
 
-### Running the WASM evaluator locally
+### Running the Wasm evaluator locally
 
-To run the WASM compiler locally, run
+To run the Wasm compiler locally, run
 
 ```shell
 yarn wasm <path to python file>
@@ -110,7 +110,7 @@ The evaluation of the program generally consists of several stages
 - Execution -- the actual code execution, logically depends on the evaluator used.
 - Output -- The outputs and errors are sent via the Conductor framework
 
-_Note: the WASM compiler uses a different resolver and validator, refer to `src/engines/wasm/builderGenerator.ts`_
+_Note: the Wasm compiler uses a different resolver and validator, refer to `src/engines/wasm/builderGenerator.ts`_
 
 ## Acknowledgements
 
