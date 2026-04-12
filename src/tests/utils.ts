@@ -10,8 +10,7 @@ import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import { Group } from "../stdlib/utils";
-import { RecursivePartial, Result } from "../types";
-import { PyComplexNumber } from "../types";
+import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import Stmt = StmtNS.Stmt;
 
@@ -169,6 +168,14 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
     },
   };
 };
+
+/**
+ * Generates test cases for a given variant of the CSE evaluator based on the provided TestCases object.
+ * It
+ * @param testCases The test cases to generate, organized by function name and consisting of tuples of [code, expected, output].
+ * @param variant The variant of the CSE evaluator to test (e.g., 1 for Python §1)
+ * @param groups The groups to load into the context before running the test cases (e.g., [`linkedList`, `list`]).
+ */
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
   for (const [funcName, tests] of Object.entries(testCases)) {
     describe(funcName, () => {

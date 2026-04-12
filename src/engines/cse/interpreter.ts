@@ -352,20 +352,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       popEnvironment(context);
     }
 
-    // if (hasDeclarations(command as es.BlockStatement) || hasImportDeclarations(command as es.BlockStatement)) {
-    //   if (currentEnvironment(context).name != 'programEnvironment') {
-    //     const programEnv = createProgramEnvironment(context, isPrelude)
-    //     pushEnvironment(context, programEnv)
-    //   }
-    //   const environment = currentEnvironment(context)
-    //   evaluateImports(command as unknown as es.Program, context)
-    //   declareFunctionsAndVariables(context, command as es.BlockStatement, environment)
-    // }
-
+    // Create a new program environment if needed.
     if (node.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment") {
       const programEnv = createProgramEnvironment(context, isPrelude);
       pushEnvironment(context, programEnv);
     }
+
     // Push the block body as a sequence of statements onto the control stack
     const seq = node.statements.slice().reverse();
     control.push(...seq);
@@ -380,6 +372,8 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _isPrelude: boolean,
   ) {
     const simpleExpr = command as StmtNS.SimpleExpr;
+    // Discard the evaluated expression off the stack,
+    // since Python statements are not value producing
     control.push(instrCreator.popInstr(command as Node));
     control.push(simpleExpr.expression);
   },

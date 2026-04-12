@@ -332,10 +332,20 @@ export function pythonMod(a: number | bigint, b: number | bigint): number | bigi
   }
 }
 
+/**
+ * Checks if a value is a number or bigint, which are the numeric types in our interpreter.
+ * @param value The value to check
+ * @returns `true` if the value is a number or bigint, else `false`
+ */
 export function isNumeric(value: Value): value is NumberValue | BigIntValue {
   return value.type === "number" || value.type === "bigint";
 }
 
+/**
+ * Checks if a value is complex or numeric.
+ * @param value The value to check
+ * @returns `true` if the value is a number, bigint, or complex, else `false`
+ */
 export function isCoercedComplex(value: Value): value is NumberValue | BigIntValue | ComplexValue {
   return value.type === "number" || value.type === "bigint" || value.type === "complex";
 }

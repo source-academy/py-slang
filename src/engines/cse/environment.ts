@@ -10,14 +10,40 @@ export interface Frame {
   [name: string]: Value;
 }
 
+/**
+ * An Environment represents a scope in the execution of the program.
+ */
 export interface Environment {
   readonly id: string;
+
+  /**
+   * The name of the environment, for debugging purposes.
+   * For example, the global environment is named "global", the environment created by a function call is named after the function, and block environments are named "blockEnvironment".
+   */
   name: string;
+
+  /**
+   * The parent environment, or null if this is the global environment.
+   * Environments form a linked list, with the global environment at the end.
+   */
   tail: Environment | null;
+
+  /**
+   * The expression that led to the creation of this environment, if applicable.
+   */
   callExpression?: ExprNS.Call;
+
+  /**
+   * The variable bindings created in the innermost scope.
+   */
   head: Frame;
+
   heap: Heap;
   thisContext?: Value;
+
+  /**
+   * The closure associated with this environment, if this environment was created as part of a function call.
+   */
   closure?: Closure;
 }
 
