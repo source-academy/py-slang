@@ -25,7 +25,7 @@ export type Group = {
 
   /**
    * The builtins are primitive built-in values implemented in TypeScript. They are to provide functionalities that are not easily implemented in the required sublanguage of Python,
-   * such as variadic functions in Python 2 (e.g., `linked_list`)
+   * such as variadic functions in Python §2 (e.g., `linked_list`)
    *
    * They are stored as a map from the name of the built-in value to its corresponding implementation.
    */
