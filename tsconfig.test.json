@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "include": ["src/tests"],
+  "exclude": [
+    "docs",
+    "coverage",
+    "jest.config.js",
+    "node_modules",
+    "dist",
+    "src/parser/python-grammar.ts"
+  ]
+}

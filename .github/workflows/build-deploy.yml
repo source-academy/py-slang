@@ -20,8 +20,8 @@ jobs:
           cache: yarn
       - name: Install dependencies
         run: yarn install --frozen-lockfile
-      - name: yarn run build
-        run: yarn run build
+      - name: yarn run build --all
+        run: yarn run build --all
       - name: Upload artifacts
         id: deployment
         uses: actions/upload-pages-artifact@v3

@@ -62,8 +62,8 @@ at the time when ``Run'' was last pressed.
   && \textit{names}        && ::= &\quad && \epsilon\ | \  \textit{name} \ (\ \textbf{\texttt{,}} \ \textit{name}\ )\ \ldots
                                                             && \texttt{linked\_list of  } \langle \textit{name}\rangle                                                                                                                       \\
   && \textit{if-statement} && ::= &\quad && \term{if}\ \textit{expression}_1\ \term{:}\ \textit{block}_1 \\
-  &&                       && |   &\quad && (\ \term{elif}\ \textit{expression}_2\ \term{:}\ \textit{block}_2\ )...                                                                                                                          \\
-  &&                       && |   &\quad && \term{else}\ \term{:}\ \textit{block}_3
+  &&                       &&     &\quad && (\ \term{elif}\ \textit{expression}_2\ \term{:}\ \textit{block}_2\ )...                                                                                                                          \\
+  &&                       &&     &\quad && \term{else}\ \term{:}\ \textit{block}_3
                                                             && \texttt{linked\_list("conditional\_statement",  } \langle \textit{expression}_1\rangle \textit{, }                                                                            \\
                                                             &&&&&&&&&\ \ \ \ \ \ \texttt{ } \langle \textit{block}_1\rangle \textit{,  } \langle \textit{block}_3\rangle \ \textrm{or}\ \langle \textit{if-statement} \rangle \texttt{)}     \\
   && \textit{block}        && ::= &\quad && \textit{statement}... \quad

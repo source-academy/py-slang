@@ -78,6 +78,7 @@ export class AstWriter {
       "Call      -> callee: Expr, args: Expr[]",
       "List      -> elements: Expr[]",
       "Subscript -> value: Expr, index: Expr",
+      "Starred   -> value: Expr",
       "None      -> ()",
       "Complex   -> value: string",
     ]);

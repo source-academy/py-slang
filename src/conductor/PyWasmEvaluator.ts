@@ -3,17 +3,27 @@
 // Original author(s): Source Academy Team
 
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { compileToWasmAndRun } from "../wasm-compiler";
+import { compileToWasmAndRun } from "../engines/wasm";
 
-export default class PyEvaluator extends BasicEvaluator {
+export class PyWasmEvaluator extends BasicEvaluator {
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      const result = await compileToWasmAndRun(chunk);
-      this.conductor.sendOutput(result.toString());
+      const { prints, renderedResult } = await compileToWasmAndRun(chunk, true);
+      prints.forEach(print => this.conductor.sendOutput(print));
+      this.conductor.sendOutput(renderedResult);
+    } catch (error) {
+      this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
+    }
+  }
+
+  async evaluateFile(fileName: string, fileContent: string): Promise<void> {
+    try {
+      const { prints } = await compileToWasmAndRun(fileContent);
+      prints.forEach(print => this.conductor.sendOutput(print));
     } catch (error) {
       this.conductor.sendOutput(`Error: ${error instanceof Error ? error.message : error}`);
     }

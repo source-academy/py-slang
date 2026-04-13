@@ -1,18 +1,4 @@
 /**
- * Takes a <CODE>string</CODE> <CODE>s</CODE> as the first argument and a nonnegative
- * integer <CODE>i</CODE> as the second argument. If <CODE>i</CODE> is less than
- * the length of <CODE>s</CODE>, this function returns a one-character <CODE>string</CODE> that
- * contains the character of <CODE>s</CODE> at position <CODE>i</CODE>, counting from <CODE>0</CODE>.
- * If <CODE>i</CODE> is larger than or equal to the length of <CODE>s</CODE>, this function returns
- * <CODE>None</CODE>.
- *
- * @param {string} <CODE>s</CODE> - the given <CODE>string</CODE>
- * @param {int} <CODE>i</CODE> - the <CODE>index</CODE>
- * @returns {string} one-character <CODE>string</CODE> or <CODE>None</CODE>
- */
-function char_at(s, i) {}
-
-/**
  * A simplified version of the Python built-in <CODE>print</CODE> function.
  * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
  * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
@@ -127,6 +113,16 @@ function float(value = 0) {}
 function bool(value) {}
 
 /**
+ * Return a complex number constructed from a <CODE>value</CODE>, or return <CODE>0j</CODE>
+ * if no arguments are given.
+ *
+ * @param {int | float | string | bool | complex} <CODE>value</CODE> - If possible, <CODE>value</CODE> is converted
+ * to a complex number. If omitted, it defaults to <CODE>0j</CODE>.
+ * @returns {complex} a complex number constructed from the given <CODE>value</CODE>
+ */
+function complex(value = 0) {}
+
+/**
  * Return a <CODE>string</CODE> version of <CODE>object</CODE>. If <CODE>object</CODE> is not provided, returns
  * the empty <CODE>string</CODE>.
  *
@@ -137,19 +133,13 @@ function bool(value) {}
 function str(object = "") {}
 
 /**
- * Return an integer object constructed from a <CODE>string</CODE>. If <CODE>base</CODE> is given,
- * the <CODE>string</CODE> is parsed as an integer in radix <CODE>base</CODE>. Otherwise, it defaults
- * to base 10.The <CODE>string</CODE> may include optional whitespace, a leading sign (<CODE>+</CODE>
- * or <CODE>-</CODE>), and underscores between digits.
- *
- * @param {string} <CODE>string</CODE> - A <CODE>string</CODE> representing an integer in a given base.
- * The string may include optional whitespace, a leading sign, and underscores between digits.
- * @param {int} <CODE>base</CODE> - The base (radix) for conversion. It must be <CODE>0</CODE>
- * or an integer in the range <CODE>2</CODE>–<CODE>36</CODE>. The default is <CODE>10</CODE>.
- * @returns {int} an integer object parsed from the provided <CODE>string</CODE> using the specified
- * <CODE>base</CODE>
+ * Return a <CODE>string</CODE> representation of <CODE>object</CODE> that is unambiguous and suitable for debugging.
+ * For many values, this string can be used to reconstruct <CODE>object</CODE>
+ * 
+ * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
+ * @returns {string} the unambiguous <CODE>string</CODE> representation of <CODE>object</CODE>
  */
-function parse_int(string, base = 10) {}
+function repr(object) {}
 
 /**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
@@ -179,6 +169,14 @@ function is_int(x) {}
 function is_float(x) {}
 
 /**
+ * Returns True if x is a complex number, and False otherwise.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {bool} whether x is a complex number
+ */
+function is_complex(x) {}
+
+/**
  * Returns True if x is a string, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value
@@ -192,7 +190,7 @@ function is_string(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a boolean
  */
-function is_bool(x) {}
+function is_boolean(x) {}
 
 /**
  * Returns True if x is a function, and False otherwise.
@@ -217,6 +215,30 @@ function is_none(x) {}
  * @returns {int} the number of arguments accepted by <CODE>f</CODE>
  */
 function arity(f) {}
+
+/**
+ * Return the real part of a complex number <CODE>x</CODE>.
+ * 
+ * @param {complex} <CODE>x</CODE> - a complex number
+ * @returns {float} the real part of <CODE>x</CODE>
+ */
+function real(x) {}
+
+/**
+ * Return the imaginary part of a complex number <CODE>x</CODE>.
+ * 
+ * @param {complex} <CODE>x</CODE> - a complex number
+ * @returns {float} the imaginary part of <CODE>x</CODE>
+ */
+function imag(x) {}
+
+/**
+ * Return the length of an object <CODE>s</CODE>, where <CODE>s</CODE> is a container for a finite number of values (e.g., a string).
+ * 
+ * @param {string | list} <CODE>s</CODE> - a container object whose length is to be computed
+ * @returns {int} the length of <CODE>s</CODE>
+ */
+function len(s) {}
 
 /**
  *

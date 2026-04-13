@@ -70,20 +70,6 @@ def is_none(x):
     pass
 
 
-def is_linked_list(xs):
-    """
-    PRIMITIVE
-    Returns True if xs is a linked list as defined in the textbook, and
-    False otherwise.
-
-    Parameters:
-        xs (value): given value
-
-    Returns:
-        boolean: whether xs is a linked list
-    """
-    pass
-
 
 def linked_list(*values):
     """
@@ -111,6 +97,23 @@ def draw_data(value1, value2, *values):
     """
     pass
 
+def is_linked_list(xs):
+    """
+    Returns True if xs is a linked list as defined in the textbook, and
+    False otherwise.
+
+    Parameters:
+        xs (value): given value
+
+    Returns:
+        boolean: whether xs is a linked list
+    """
+    if is_none(xs):
+        return True
+    elif is_pair(xs):
+        return is_linked_list(tail(xs))
+    else:
+        return False
 
 def equal(xs, ys):
     """
@@ -125,10 +128,8 @@ def equal(xs, ys):
         )
     elif is_none(xs):
         return is_none(ys)
-    elif is_int(xs):
-        return is_int(ys) and xs == ys
-    elif is_float(xs):
-        return is_float(ys) and xs == ys
+    elif is_int(xs) or is_float(xs) or is_complex(xs):
+        return (is_int(ys) or is_float(ys) or is_complex(ys)) and xs == ys
     elif is_boolean(xs):
         return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
     elif is_string(xs):
@@ -206,11 +207,11 @@ def _linked_list_to_string(xs, cont):
         return _linked_list_to_string(
             head(xs),
             lambda x_str: _linked_list_to_string(
-                tail(xs), lambda y_str: cont(f"[{x_str},{y_str}]")
+                tail(xs), lambda y_str: cont("[" + x_str + ", " + y_str + "]")
             ),
         )
     else:
-        return cont(stringify(xs))
+        return cont(repr(xs))
 
 
 def reverse_linked_list(xs):
@@ -317,13 +318,11 @@ def ref_linked_list(xs, n):
     """
     if n == 0:
         if is_none(xs):
-            raise IndexError(
-                "linked_list_ref: index out of bounds on None linked list"
-            )
+            error("linked_list_ref: index out of bounds on None linked list")
         return head(xs)
     else:
         if is_none(xs):
-            raise IndexError("linked_list_ref: index out of bounds")
+            error("linked_list_ref: index out of bounds")
         return ref_linked_list(tail(xs), n - 1)
 
 

@@ -1,13 +1,20 @@
-import { StmtNS, ExprNS } from "../ast-types";
-type Expr = ExprNS.Expr;
-type Stmt = StmtNS.Stmt;
+import { ExprNS, StmtNS } from "../ast-types";
+import constants from "../stdlib/py_s1_constants.json";
+import { Group } from "../stdlib/utils";
 import { Token } from "../tokenizer/tokenizer";
 import { TokenType } from "../tokens";
-import { ResolverErrors } from "./errors";
 import { FeatureValidator } from "../validator/types";
+import { ResolverErrors } from "./errors";
+type Expr = ExprNS.Expr;
+type Stmt = StmtNS.Stmt;
 
 import levenshtein from "fast-levenshtein";
 // const levenshtein = require('fast-levenshtein');
+
+export type FunctionEnvironments = Map<
+  StmtNS.FileInput | StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda,
+  Environment
+>;
 
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
@@ -50,6 +57,22 @@ export class Environment {
       curr = curr.enclosing;
     }
     return curr === null ? -1 : distance;
+  }
+
+  /**
+   * Looks up the name in the environment chain.
+   * Returns the Environment where the name is found, or null if not found.
+   */
+  lookupNameEnv(identifier: Token): Environment | null {
+    if (this.names.has(identifier.lexeme)) {
+      return this;
+    }
+    for (let curr = this.enclosing; curr !== null; curr = curr.enclosing) {
+      if (curr.names.has(identifier.lexeme)) {
+        return curr;
+      }
+    }
+    return null;
   }
 
   /* Looks up the name but only for the current environment. */
@@ -145,113 +168,87 @@ export class Environment {
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   source: string;
   ast: Stmt;
-  // change the environment to be suite scope as in python
   environment: Environment | null;
   functionScope: Environment | null;
+  errors: Error[];
+  functionEnvironments: FunctionEnvironments;
   private validators: FeatureValidator[];
 
-  constructor(source: string, ast: Stmt, validators: FeatureValidator[] = []) {
+  constructor(
+    source: string,
+    ast: Stmt,
+    validators: FeatureValidator[] = [],
+    groups: Group[] = [],
+    preludeNames: string[] = [],
+  ) {
+    this.source = source;
+    this.ast = ast;
     this.source = source;
     this.ast = ast;
     this.validators = validators;
+    this.errors = [];
+    this.functionEnvironments = new Map();
     // The global environment
     this.environment = new Environment(
       source,
       null,
       new Map([
         // misc library
-        ["_int", new Token(TokenType.NAME, "_int", 0, 0, 0)],
-        ["_int_from_string", new Token(TokenType.NAME, "_int_from_string", 0, 0, 0)],
-        ["abs", new Token(TokenType.NAME, "abs", 0, 0, 0)],
-        ["char_at", new Token(TokenType.NAME, "char_at", 0, 0, 0)],
-        ["error", new Token(TokenType.NAME, "error", 0, 0, 0)],
-        ["input", new Token(TokenType.NAME, "input", 0, 0, 0)],
-        ["isinstance", new Token(TokenType.NAME, "isinstance", 0, 0, 0)],
-        ["max", new Token(TokenType.NAME, "max", 0, 0, 0)],
-        ["min", new Token(TokenType.NAME, "min", 0, 0, 0)],
-        ["print", new Token(TokenType.NAME, "print", 0, 0, 0)],
+        ...constants.builtInFuncs.map(
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+        ),
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
-        ["random_random", new Token(TokenType.NAME, "random_random", 0, 0, 0)],
-        ["round", new Token(TokenType.NAME, "round", 0, 0, 0)],
-        ["str", new Token(TokenType.NAME, "str", 0, 0, 0)],
-        ["time_time", new Token(TokenType.NAME, "time_time", 0, 0, 0)],
-
-        // math constants
-        ["math_pi", new Token(TokenType.NAME, "math_pi", 0, 0, 0)],
-        ["math_e", new Token(TokenType.NAME, "math_e", 0, 0, 0)],
-        ["math_inf", new Token(TokenType.NAME, "math_inf", 0, 0, 0)],
-        ["math_nan", new Token(TokenType.NAME, "math_nan", 0, 0, 0)],
-        ["math_tau", new Token(TokenType.NAME, "math_tau", 0, 0, 0)],
-
-        // math library
-        ["math_acos", new Token(TokenType.NAME, "math_acos", 0, 0, 0)],
-        ["math_acosh", new Token(TokenType.NAME, "math_acosh", 0, 0, 0)],
-        ["math_asin", new Token(TokenType.NAME, "math_asin", 0, 0, 0)],
-        ["math_asinh", new Token(TokenType.NAME, "math_asinh", 0, 0, 0)],
-        ["math_atan", new Token(TokenType.NAME, "math_atan", 0, 0, 0)],
-        ["math_atan2", new Token(TokenType.NAME, "math_atan2", 0, 0, 0)],
-        ["math_atanh", new Token(TokenType.NAME, "math_atanh", 0, 0, 0)],
-        ["math_cbrt", new Token(TokenType.NAME, "math_cbrt", 0, 0, 0)],
-        ["math_ceil", new Token(TokenType.NAME, "math_ceil", 0, 0, 0)],
-        ["math_comb", new Token(TokenType.NAME, "math_comb", 0, 0, 0)],
-        ["math_copysign", new Token(TokenType.NAME, "math_copysign", 0, 0, 0)],
-        ["math_cos", new Token(TokenType.NAME, "math_cos", 0, 0, 0)],
-        ["math_cosh", new Token(TokenType.NAME, "math_cosh", 0, 0, 0)],
-        ["math_degrees", new Token(TokenType.NAME, "math_degrees", 0, 0, 0)],
-        ["math_erf", new Token(TokenType.NAME, "math_erf", 0, 0, 0)],
-        ["math_erfc", new Token(TokenType.NAME, "math_erfc", 0, 0, 0)],
-        ["math_exp", new Token(TokenType.NAME, "math_exp", 0, 0, 0)],
-        ["math_exp2", new Token(TokenType.NAME, "math_exp2", 0, 0, 0)],
-        ["math_expm1", new Token(TokenType.NAME, "math_expm1", 0, 0, 0)],
-        ["math_fabs", new Token(TokenType.NAME, "math_fabs", 0, 0, 0)],
-        ["math_factorial", new Token(TokenType.NAME, "math_factorial", 0, 0, 0)],
-        ["math_floor", new Token(TokenType.NAME, "math_floor", 0, 0, 0)],
-        ["math_fma", new Token(TokenType.NAME, "math_fma", 0, 0, 0)],
-        ["math_fmod", new Token(TokenType.NAME, "math_fmod", 0, 0, 0)],
-        ["math_gamma", new Token(TokenType.NAME, "math_gamma", 0, 0, 0)],
-        ["math_gcd", new Token(TokenType.NAME, "math_gcd", 0, 0, 0)],
-        ["math_isfinite", new Token(TokenType.NAME, "math_isfinite", 0, 0, 0)],
-        ["math_isinf", new Token(TokenType.NAME, "math_isinf", 0, 0, 0)],
-        ["math_isnan", new Token(TokenType.NAME, "math_isnan", 0, 0, 0)],
-        ["math_isqrt", new Token(TokenType.NAME, "math_isqrt", 0, 0, 0)],
-        ["math_lcm", new Token(TokenType.NAME, "math_lcm", 0, 0, 0)],
-        ["math_ldexp", new Token(TokenType.NAME, "math_ldexp", 0, 0, 0)],
-        ["math_lgamma", new Token(TokenType.NAME, "math_lgamma", 0, 0, 0)],
-        ["math_log", new Token(TokenType.NAME, "math_log", 0, 0, 0)],
-        ["math_log10", new Token(TokenType.NAME, "math_log10", 0, 0, 0)],
-        ["math_log1p", new Token(TokenType.NAME, "math_log1p", 0, 0, 0)],
-        ["math_log2", new Token(TokenType.NAME, "math_log2", 0, 0, 0)],
-        ["math_nextafter", new Token(TokenType.NAME, "math_nextafter", 0, 0, 0)],
-        ["math_perm", new Token(TokenType.NAME, "math_perm", 0, 0, 0)],
-        ["math_pow", new Token(TokenType.NAME, "math_pow", 0, 0, 0)],
-        ["math_radians", new Token(TokenType.NAME, "math_radians", 0, 0, 0)],
-        ["math_remainder", new Token(TokenType.NAME, "math_remainder", 0, 0, 0)],
-        ["math_sin", new Token(TokenType.NAME, "math_sin", 0, 0, 0)],
-        ["math_sinh", new Token(TokenType.NAME, "math_sinh", 0, 0, 0)],
-        ["math_sqrt", new Token(TokenType.NAME, "math_sqrt", 0, 0, 0)],
-        ["math_tan", new Token(TokenType.NAME, "math_tan", 0, 0, 0)],
-        ["math_tanh", new Token(TokenType.NAME, "math_tanh", 0, 0, 0)],
-        ["math_trunc", new Token(TokenType.NAME, "math_trunc", 0, 0, 0)],
-        ["math_ulp", new Token(TokenType.NAME, "math_ulp", 0, 0, 0)],
+        ...constants.constants.map(
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+        ),
+        ...groups.flatMap(group =>
+          Array.from(group.builtins.entries()).map(
+            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          ),
+        ),
+        ...preludeNames.map(
+          name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+        ),
       ]),
     );
     this.functionScope = null;
   }
 
-  private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
-    for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+  resolveEnvironments(program: StmtNS.FileInput): FunctionEnvironments {
+    this.resolve(program);
+    return this.functionEnvironments;
   }
 
-  resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null) {
+  private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
+    try {
+      for (const v of this.validators) v.validate(node, this.environment ?? undefined);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
+  }
+
+  resolve(stmt: Stmt[] | Stmt | Expr[] | Expr | null): Error[] {
     if (stmt === null) {
-      return;
+      return this.errors;
     }
     if (stmt instanceof Array) {
       // Resolve all top-level functions first. Python allows functions declared after
       // another function to be used in that function.
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          this.environment?.declarePlaceholderName(st.name);
+          try {
+            this.environment?.declarePlaceholderName(st.name);
+          } catch (e) {
+            if (e instanceof Error) {
+              this.errors.push(e);
+              continue;
+            }
+            throw e;
+          }
         }
       }
       for (const st of stmt) {
@@ -262,6 +259,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       this.runValidators(stmt);
       stmt.accept(this);
     }
+    return this.errors;
   }
 
   varDeclNames(names: Map<string, Token>): Token[] | null {
@@ -285,16 +283,21 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
         const token = curr.names.get(identifier.lexeme);
         if (token === undefined) {
-          throw new Error("placeholder error");
+          this.errors.push(new Error("placeholder error"));
+          return;
         }
-        throw new ResolverErrors.NameReassignmentError(
-          identifier.line,
-          identifier.col,
-          this.source,
-          identifier.indexInSource,
-          identifier.indexInSource + identifier.lexeme.length,
-          token,
+
+        this.errors.push(
+          new ResolverErrors.NameReassignmentError(
+            identifier.line,
+            identifier.col,
+            this.source,
+            identifier.indexInSource,
+            identifier.indexInSource + identifier.lexeme.length,
+            token,
+          ),
         );
+        return;
       }
       curr = curr?.enclosing ?? null;
     }
@@ -305,6 +308,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Create a new environment.
     const oldEnv = this.environment;
     this.environment = new Environment(this.source, this.environment, new Map());
+    this.functionEnvironments.set(stmt, this.environment);
     this.resolve(stmt.statements);
     // Grab identifiers from that new environment. That are NOT functions.
     // stmt.varDecls = this.varDeclNames(this.environment.names)
@@ -320,12 +324,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(stmt.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
-    // const params = new Map(
-    //     stmt.parameters.map(param => [param.lexeme, param])
-    // );
-    // if (this.environment !== null) {
-    //     this.environment.names = params;
-    // }
+    this.functionEnvironments.set(stmt, this.environment);
     this.functionScope = this.environment;
     this.resolve(stmt.body);
     // Grab identifiers from that new environment. That are NOT functions.
@@ -377,7 +376,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // @TODO nonlocals mean that any variable following that name in the current env
   // should not create a variable declaration, but instead point to an outer variable.
   visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    this.environment?.lookupNameParentEnvWithError(stmt.name);
+    try {
+      this.environment?.lookupNameParentEnvWithError(stmt.name);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
   }
 
   visitReturnStmt(stmt: StmtNS.Return): void {
@@ -408,7 +415,15 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
-    this.environment?.lookupNameCurrentEnvWithError(expr.name);
+    try {
+      this.environment?.lookupNameCurrentEnvWithError(expr.name);
+    } catch (e) {
+      if (e instanceof Error) {
+        this.errors.push(e);
+        return;
+      }
+      throw e;
+    }
   }
   visitLambdaExpr(expr: ExprNS.Lambda): void {
     // Create a new environment.
@@ -416,6 +431,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
+    this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Restore old environment
     this.environment = oldEnv;
@@ -426,6 +442,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
+    this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Grab identifiers from that new environment.
     expr.varDecls = Array.from(this.environment.names.values());
@@ -454,6 +471,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitCallExpr(expr: ExprNS.Call): void {
     this.resolve(expr.callee);
     this.resolve(expr.args);
+  }
+  visitStarredExpr(expr: ExprNS.Starred): void {
+    this.resolve(expr.value);
   }
   visitTernaryExpr(expr: ExprNS.Ternary): void {
     this.resolve(expr.predicate);
