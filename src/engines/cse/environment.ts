@@ -1,4 +1,4 @@
-import { ExprNS, StmtNS } from "../../ast-types";
+import { ExprNS } from "../../ast-types";
 import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../../errors";
 import { Closure } from "./closure";
 import { Context } from "./context";
@@ -60,8 +60,8 @@ export const createEnvironment = (
 ): Environment => {
   const environment: Environment = {
     name:
-      closure.node.constructor.name === "FunctionDef"
-        ? (closure.node as StmtNS.FunctionDef).name.lexeme
+      closure.node.kind === "FunctionDef"
+        ? closure.node.name.lexeme
         : "lambda",
     tail: closure.environment,
     head: {},

@@ -290,7 +290,7 @@ export async function* generateCSEMachineStateStream(
 
     if (isNode(command)) {
       const node = command as Node;
-      const nodeType = node.constructor.name;
+      const nodeType = node.kind;
 
       context.runtime.nodes.shift();
       context.runtime.nodes.unshift(command);
@@ -665,7 +665,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const whileNode = command as StmtNS.While;
     const instr = instrCreator.whileInstr(whileNode, whileNode.condition, {
-      type: "StatementSequence",
+      kind: "StatementSequence",
       body: whileNode.body,
     });
     control.push(instr);
@@ -704,11 +704,11 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   ) {
     const ifNode = command as StmtNS.If;
     const branch = instrCreator.branchInstr(
-      { type: "StatementSequence", body: ifNode.body },
+      { kind: "StatementSequence", body: ifNode.body },
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
           ? // 'else' block
-            { type: "StatementSequence", body: ifNode.elseBlock }
+            { kind: "StatementSequence", body: ifNode.elseBlock }
           : // 'elif' block
             ifNode.elseBlock
         : // 'else' block dont exist
@@ -1065,8 +1065,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (callable?.type == "closure") {
       const closure = callable.closure;
       control.push(instrCreator.resetInstr(instr.srcNode));
-
-      if (closure.node.constructor.name === "FunctionDef") {
+      if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
 
@@ -1074,13 +1073,14 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       pushEnvironment(context, newEnv);
 
       const closureNode = closure.node;
-      if (closureNode.constructor.name === "FunctionDef") {
-        const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
+      if (closureNode.kind === "FunctionDef") {
+        const bodyStmts = closureNode.body.slice().reverse();
         control.push(...bodyStmts);
       } else {
-        const bodyExpr = (closureNode as ExprNS.Lambda).body;
+        const bodyExpr = closureNode.body;
         control.push(bodyExpr);
       }
+      console.log(control);
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
       stash.push(result);

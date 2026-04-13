@@ -235,7 +235,7 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
   }
   let setter: Transformer | undefined;
   if (isNode(item)) {
-    const key = "type" in item && typeof item.type === "string" ? item.type : item.constructor.name;
+    const key = item.kind;
     setter = propertySetter.get(key);
   } else if (isInstr(item)) {
     setter = propertySetter.get(item.instrType);
@@ -367,7 +367,7 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
       return;
     }
 
-    const nodeType = curNode.constructor.name;
+    const nodeType = curNode.kind;
 
     if (nodeType === "Assign") {
       const assignNode = curNode as StmtNS.Assign;

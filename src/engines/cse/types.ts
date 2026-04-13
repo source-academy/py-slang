@@ -6,7 +6,7 @@ import { Value } from "./stash";
 export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
 
 export interface StatementSequence {
-  type: "StatementSequence";
+  kind: "StatementSequence";
   body: StmtNS.Stmt[];
   loc?: {
     start: { line: number; column: number };
