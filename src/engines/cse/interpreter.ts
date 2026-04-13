@@ -14,7 +14,7 @@ import { builtIns, toPythonString } from "../../stdlib";
 import { Group } from "../../stdlib/utils";
 import { TokenType } from "../../tokens";
 import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
-import { Closure } from "./closure";
+import { Closure, isStatementSequence } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import {
@@ -36,13 +36,11 @@ import {
   BoolOpInstr,
   BranchInstr,
   EnvInstr,
-  Instr,
   InstrType,
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
   Node,
-  StatementSequence,
   UnOpInstr,
   WhileInstr,
 } from "./types";
@@ -306,7 +304,7 @@ export async function* generateCSEMachineStateStream(
       }
     } else {
       // Command is an instruction
-      const instr = command as Instr;
+      const instr = command;
       await cmdEvaluators[instr.instrType](
         code,
         command,
@@ -843,10 +841,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (!top) {
       return;
     }
-    if (
-      isNode(top) ||
-      ((top as Instr).instrType !== InstrType.WHILE && (top as Instr).instrType !== InstrType.FOR)
-    ) {
+    if (isNode(top) || (top.instrType !== InstrType.WHILE && top.instrType !== InstrType.FOR)) {
       control.pop();
       control.push(command);
     }
@@ -870,10 +865,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       control.push(top);
       return;
     }
-    if (
-      isNode(top2) ||
-      ((top2 as Instr).instrType !== InstrType.WHILE && (top2 as Instr).instrType !== InstrType.FOR)
-    ) {
+    if (isNode(top2) || (top2.instrType !== InstrType.WHILE && top2.instrType !== InstrType.FOR)) {
       control.push(command);
       return;
     }
@@ -1010,11 +1002,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (condition && !isFalsy(condition)) {
       control.push(instr);
       control.push(instr.test);
-      if (instr.body && "type" in instr.body && instr.body.type === "StatementSequence") {
-        control.push(...instr.body.body.slice().reverse());
-      } else {
-        control.push(instr.body);
-      }
+      control.push(...instr.body.body.slice().reverse());
     }
   },
   [InstrType.APPLICATION]: async function (
@@ -1045,19 +1033,18 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         : rawArgs.flatMap((val, i) => {
             if (!spreadSet.has(i)) return val;
             if (val?.type === "list") {
-              return (val as { type: "list"; value: Value[] }).value;
+              return val.value;
             }
             handleRuntimeError(
               context,
               new error.TypeError(
                 code,
-                instr.srcNode as ExprNS.Call,
+                instr.srcNode,
                 context,
                 val ? val.type : "NoneType",
                 "iterable",
               ),
             );
-            return []; // unreachable, satisfies TypeScript
           });
 
     const callable = stash.pop();
@@ -1069,7 +1056,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
 
-      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode as ExprNS.Call);
+      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode);
       pushEnvironment(context, newEnv);
 
       const closureNode = closure.node;
@@ -1088,7 +1075,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         context,
         new error.TypeError(
           code,
-          instr.srcNode as ExprNS.Call,
+          instr.srcNode,
           context,
           callable ? callable.type : "NoneType",
           "callable",
@@ -1127,7 +1114,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
           code,
           instr.srcNode as ExprNS.Expr,
           context,
-          (index as Value).type,
+          index?.type || "NoneType",
           "int",
         ),
       );
@@ -1160,15 +1147,15 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;
-      if (consequent && "type" in consequent && consequent.type === "StatementSequence") {
-        control.push(...(consequent as StatementSequence).body.slice().reverse());
+      if (isStatementSequence(consequent)) {
+        control.push(...consequent.body.slice().reverse());
       } else if (consequent) {
         control.push(consequent);
       }
     } else if (instr.alternate) {
       const alternate = instr.alternate;
-      if (alternate && "type" in alternate && alternate.type === "StatementSequence") {
-        control.push(...(alternate as StatementSequence).body.slice().reverse());
+      if (isStatementSequence(alternate)) {
+        control.push(...alternate.body.slice().reverse());
       } else if (alternate) {
         control.push(alternate);
       }

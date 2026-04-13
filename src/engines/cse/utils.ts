@@ -249,7 +249,7 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
 }
 
 function isInstr(item: ControlItem): item is Instr & { isEnvDependent?: boolean } {
-  return (item as Instr).instrType !== undefined;
+  return "instrType" in item;
 }
 
 export const envChanging = (command: ControlItem): boolean => {
@@ -310,7 +310,8 @@ export const checkStackOverFlow = (_context: Context, _control: Control) => {
 //     return block.body.length === 1 && block.body[0].type === 'ReturnStatement'
 //   }
 // }
-
+export function pythonMod(a: bigint, b: bigint): bigint;
+export function pythonMod(a: number, b: number): number;
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {
   if (typeof a === "bigint" || typeof b === "bigint") {
     const big_a = BigInt(a);

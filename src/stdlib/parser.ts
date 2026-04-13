@@ -1,24 +1,19 @@
-import { parse } from "../parser";
-import pythonLexer from "../parser/lexer";
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
+import { handleRuntimeError } from "../engines/cse/error";
 import {
-  Value,
   BuiltinValue,
   ListValue,
   NoneValue,
   StringValue,
-  BoolValue,
-  BigIntValue,
-  NumberValue,
-  ComplexValue,
+  Value
 } from "../engines/cse/stash";
-import { handleRuntimeError } from "../engines/cse/error";
-import { TypeError } from "../errors/errors";
-import { ControlItem } from "../engines/cse/control";
-import { minArgMap, Validate } from "../stdlib";
-import { Group, GroupName } from "./utils";
 import { operatorTranslator } from "../engines/cse/types";
+import { TypeError } from "../errors/errors";
+import { parse } from "../parser";
+import pythonLexer from "../parser/lexer";
+import { minArgMap, Validate } from "../stdlib";
+import { GroupName } from "./utils";
 
 const None: NoneValue = { type: "none" };
 
@@ -57,7 +52,7 @@ function makeSequenceIfNeeded(
     return transform(statements[0], declaredNames);
   }
   return vector_to_linked_list([
-    { type: "string", value: "sequence" } as StringValue,
+    { type: "string", value: "sequence" },
     vector_to_linked_list(statements.map(stmt => transform(stmt, declaredNames))),
   ]);
 }
@@ -65,7 +60,7 @@ function makeSequenceIfNeeded(
 function makeBlockIfNeeded(statements: StmtNS.Stmt[], declaredNames: Set<string>): Value {
   return hasDeclaration(statements)
     ? vector_to_linked_list([
-        { type: "string", value: "block" } as StringValue,
+        { type: "string", value: "block" },
         makeSequenceIfNeeded(statements, declaredNames),
       ])
     : makeSequenceIfNeeded(statements, declaredNames);
@@ -73,12 +68,12 @@ function makeBlockIfNeeded(statements: StmtNS.Stmt[], declaredNames: Set<string>
 
 function transformParam(p: FunctionParam): Value {
   const nameNode = vector_to_linked_list([
-    { type: "string", value: "name" } as StringValue,
-    { type: "string", value: p.lexeme } as StringValue,
+    { type: "string", value: "name" },
+    { type: "string", value: p.lexeme },
   ]);
   if (p.isStarred) {
     return vector_to_linked_list([
-      { type: "string", value: "rest_element" } as StringValue,
+      { type: "string", value: "rest_element" },
       nameNode,
     ]);
   }
@@ -99,68 +94,68 @@ function transform(
     case "Literal": {
       const lit = node as ExprNS.Literal;
       let val: Value;
-      if (typeof lit.value === "number") val = { type: "number", value: lit.value } as NumberValue;
+      if (typeof lit.value === "number") val = { type: "number", value: lit.value };
       else if (typeof lit.value === "boolean")
-        val = { type: "bool", value: lit.value } as BoolValue;
+        val = { type: "bool", value: lit.value };
       else if (typeof lit.value === "string")
-        val = { type: "string", value: lit.value } as StringValue;
+        val = { type: "string", value: lit.value };
       else val = None;
-      return vector_to_linked_list([{ type: "string", value: "literal" } as StringValue, val]);
+      return vector_to_linked_list([{ type: "string", value: "literal" }, val]);
     }
     case "BigIntLiteral":
       return vector_to_linked_list([
-        { type: "string", value: "literal" } as StringValue,
-        { type: "bigint", value: BigInt((node as ExprNS.BigIntLiteral).value) } as BigIntValue,
+        { type: "string", value: "literal" },
+        { type: "bigint", value: BigInt((node as ExprNS.BigIntLiteral).value) },
       ]);
     case "Complex":
       return vector_to_linked_list([
-        { type: "string", value: "literal" } as StringValue,
-        { type: "complex", value: (node as ExprNS.Complex).value } as ComplexValue,
+        { type: "string", value: "literal" },
+        { type: "complex", value: (node as ExprNS.Complex).value },
       ]);
     case "None":
-      return vector_to_linked_list([{ type: "string", value: "literal" } as StringValue, None]);
+      return vector_to_linked_list([{ type: "string", value: "literal" }, None]);
     case "Variable":
       return vector_to_linked_list([
-        { type: "string", value: "name" } as StringValue,
-        { type: "string", value: (node as ExprNS.Variable).name.lexeme } as StringValue,
+        { type: "string", value: "name" },
+        { type: "string", value: (node as ExprNS.Variable).name.lexeme },
       ]);
     case "Binary":
       return vector_to_linked_list([
-        { type: "string", value: "binary_operator_combination" } as StringValue,
+        { type: "string", value: "binary_operator_combination" },
         {
           type: "string",
           value: operatorTranslator((node as ExprNS.Binary).operator.type),
-        } as StringValue,
+        },
         transform((node as ExprNS.Binary).left, declaredNames),
         transform((node as ExprNS.Binary).right, declaredNames),
       ]);
     case "BoolOp":
       return vector_to_linked_list([
-        { type: "string", value: "logical_composition" } as StringValue,
+        { type: "string", value: "logical_composition" },
         {
           type: "string",
           value: operatorTranslator((node as ExprNS.BoolOp).operator.type),
-        } as StringValue,
+        },
         transform((node as ExprNS.BoolOp).left, declaredNames),
         transform((node as ExprNS.BoolOp).right, declaredNames),
       ]);
     case "Compare":
       return vector_to_linked_list([
-        { type: "string", value: "comparison" } as StringValue,
+        { type: "string", value: "comparison" },
         {
           type: "string",
           value: operatorTranslator((node as ExprNS.Compare).operator.type),
-        } as StringValue,
+        },
         transform((node as ExprNS.Compare).left, declaredNames),
         transform((node as ExprNS.Compare).right, declaredNames),
       ]);
     case "Unary":
       return vector_to_linked_list([
-        { type: "string", value: "unary_operator_combination" } as StringValue,
+        { type: "string", value: "unary_operator_combination" },
         {
           type: "string",
           value: operatorTranslator((node as ExprNS.Unary).operator.type),
-        } as StringValue,
+        },
         transform((node as ExprNS.Unary).right, declaredNames),
       ]);
     case "Assign": {
@@ -171,45 +166,45 @@ function transform(
         declaredNames.add(assign.target.name.lexeme);
       }
       return vector_to_linked_list([
-        { type: "string", value: isDecl ? "declaration" : "assignment" } as StringValue,
+        { type: "string", value: isDecl ? "declaration" : "assignment" },
         transform(assign.target, declaredNames),
         transform(assign.value, declaredNames),
       ]);
     }
     case "AnnAssign":
       return vector_to_linked_list([
-        { type: "string", value: "annotated_assignment" } as StringValue,
+        { type: "string", value: "annotated_assignment" },
         transform((node as StmtNS.AnnAssign).target, declaredNames),
         transform((node as StmtNS.AnnAssign).ann, declaredNames),
         transform((node as StmtNS.AnnAssign).value, declaredNames),
       ]);
     case "If":
       return vector_to_linked_list([
-        { type: "string", value: "conditional_statement" } as StringValue,
+        { type: "string", value: "conditional_statement" },
         transform((node as StmtNS.If).condition, declaredNames),
         makeSequenceIfNeeded((node as StmtNS.If).body, declaredNames),
         makeSequenceIfNeeded((node as StmtNS.If).elseBlock, declaredNames),
       ]);
     case "Ternary":
       return vector_to_linked_list([
-        { type: "string", value: "conditional_expression" } as StringValue,
+        { type: "string", value: "conditional_expression" },
         transform((node as ExprNS.Ternary).predicate, declaredNames),
         transform((node as ExprNS.Ternary).consequent, declaredNames),
         transform((node as ExprNS.Ternary).alternative, declaredNames),
       ]);
     case "While":
       return vector_to_linked_list([
-        { type: "string", value: "while_loop" } as StringValue,
+        { type: "string", value: "while_loop" },
         transform((node as StmtNS.While).condition, declaredNames),
         makeSequenceIfNeeded((node as StmtNS.While).body, declaredNames),
       ]);
     case "For": {
       const forNode = node as StmtNS.For;
       return vector_to_linked_list([
-        { type: "string", value: "for_loop" } as StringValue,
+        { type: "string", value: "for_loop" },
         vector_to_linked_list([
-          { type: "string", value: "name" } as StringValue,
-          { type: "string", value: forNode.target.lexeme } as StringValue,
+          { type: "string", value: "name" },
+          { type: "string", value: forNode.target.lexeme },
         ]),
         transform(forNode.iter, declaredNames),
         makeSequenceIfNeeded(forNode.body, declaredNames),
@@ -218,10 +213,10 @@ function transform(
     case "FunctionDef": {
       const fn = node as StmtNS.FunctionDef;
       return vector_to_linked_list([
-        { type: "string", value: "function_definition" } as StringValue,
+        { type: "string", value: "function_definition" },
         vector_to_linked_list([
-          { type: "string", value: "name" } as StringValue,
-          { type: "string", value: fn.name.lexeme } as StringValue,
+          { type: "string", value: "name" },
+          { type: "string", value: fn.name.lexeme },
         ]),
         vector_to_linked_list(fn.parameters.map(transformParam)),
         makeBlockIfNeeded(fn.body, declaredNames),
@@ -230,10 +225,10 @@ function transform(
     case "Lambda": {
       const lam = node as ExprNS.Lambda;
       return vector_to_linked_list([
-        { type: "string", value: "lambda_expression" } as StringValue,
+        { type: "string", value: "lambda_expression" },
         vector_to_linked_list(lam.parameters.map(transformParam)),
         vector_to_linked_list([
-          { type: "string", value: "return_statement" } as StringValue,
+          { type: "string", value: "return_statement" },
           transform(lam.body, declaredNames),
         ]),
       ]);
@@ -241,72 +236,72 @@ function transform(
     case "MultiLambda": {
       const lam = node as ExprNS.MultiLambda;
       return vector_to_linked_list([
-        { type: "string", value: "lambda_expression" } as StringValue,
+        { type: "string", value: "lambda_expression" },
         vector_to_linked_list(lam.parameters.map(transformParam)),
         makeBlockIfNeeded(lam.body, declaredNames),
       ]);
     }
     case "Return":
       return vector_to_linked_list([
-        { type: "string", value: "return_statement" } as StringValue,
+        { type: "string", value: "return_statement" },
         transform((node as StmtNS.Return).value, declaredNames),
       ]);
     case "Call":
       return vector_to_linked_list([
-        { type: "string", value: "application" } as StringValue,
+        { type: "string", value: "application" },
         transform((node as ExprNS.Call).callee, declaredNames),
         vector_to_linked_list((node as ExprNS.Call).args.map(arg => transform(arg, declaredNames))),
       ]);
     case "List":
       return vector_to_linked_list([
-        { type: "string", value: "array_expression" } as StringValue,
+        { type: "string", value: "array_expression" },
         vector_to_linked_list(
           (node as ExprNS.List).elements.map(el => transform(el, declaredNames)),
         ),
       ]);
     case "Subscript":
       return vector_to_linked_list([
-        { type: "string", value: "object_access" } as StringValue,
+        { type: "string", value: "object_access" },
         transform((node as ExprNS.Subscript).value, declaredNames),
         transform((node as ExprNS.Subscript).index, declaredNames),
       ]);
     case "Starred":
       return vector_to_linked_list([
-        { type: "string", value: "starred_expression" } as StringValue,
+        { type: "string", value: "starred_expression" },
         transform((node as ExprNS.Starred).value, declaredNames),
       ]);
     case "FromImport":
       return vector_to_linked_list([
-        { type: "string", value: "import_from" } as StringValue,
-        { type: "string", value: (node as StmtNS.FromImport).module.lexeme } as StringValue,
+        { type: "string", value: "import_from" },
+        { type: "string", value: (node as StmtNS.FromImport).module.lexeme },
         vector_to_linked_list(
           (node as StmtNS.FromImport).names.map(
-            n => ({ type: "string", value: n.name.lexeme }) as StringValue,
+            n => ({ type: "string", value: n.name.lexeme }),
           ),
         ),
       ]);
     case "Global":
       return vector_to_linked_list([
-        { type: "string", value: "global_statement" } as StringValue,
-        { type: "string", value: (node as StmtNS.Global).name.lexeme } as StringValue,
+        { type: "string", value: "global_statement" },
+        { type: "string", value: (node as StmtNS.Global).name.lexeme },
       ]);
     case "NonLocal":
       return vector_to_linked_list([
-        { type: "string", value: "nonlocal_statement" } as StringValue,
-        { type: "string", value: (node as StmtNS.NonLocal).name.lexeme } as StringValue,
+        { type: "string", value: "nonlocal_statement" },
+        { type: "string", value: (node as StmtNS.NonLocal).name.lexeme },
       ]);
     case "Assert":
       return vector_to_linked_list([
-        { type: "string", value: "assert_statement" } as StringValue,
+        { type: "string", value: "assert_statement" },
         transform((node as StmtNS.Assert).value, declaredNames),
       ]);
     case "Pass":
-      return vector_to_linked_list([{ type: "string", value: "pass_statement" } as StringValue]);
+      return vector_to_linked_list([{ type: "string", value: "pass_statement" }]);
     case "Break":
-      return vector_to_linked_list([{ type: "string", value: "break_statement" } as StringValue]);
+      return vector_to_linked_list([{ type: "string", value: "break_statement" }]);
     case "Continue":
       return vector_to_linked_list([
-        { type: "string", value: "continue_statement" } as StringValue,
+        { type: "string", value: "continue_statement" },
       ]);
     default:
       throw new Error("Cannot transform unknown type: " + type);
@@ -315,11 +310,11 @@ function transform(
 
 class ParserBuiltins {
   @Validate(1, 1, "parse", false)
-  static parse(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static parse(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
       handleRuntimeError(
         context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
+        new TypeError(source, command, context, args[0].type, "string"),
       );
     }
     const x = args[0].value;
@@ -329,12 +324,12 @@ class ParserBuiltins {
   }
 
   @Validate(2, 2, "apply_in_underlying_python", false)
-  static apply_in_underlying_python(
+  static async apply_in_underlying_python(
     args: Value[],
     source: string,
-    command: ControlItem,
+    command: ExprNS.Expr,
     context: Context,
-  ): Value {
+  ): Promise<Value> {
     const func = args[0];
     const argList = args[1];
     const argArray: Value[] = [];
@@ -345,20 +340,20 @@ class ParserBuiltins {
     }
 
     if (func.type === "builtin") {
-      return func.func(argArray, source, command, context) as Value;
+      return func.func(argArray, source, command, context);
     }
     return handleRuntimeError(
       context,
-      new TypeError(source, command as ExprNS.Expr, context, func.type, "primitive function"),
+      new TypeError(source, command, context, func.type, "primitive function"),
     );
   }
 
   @Validate(1, 1, "tokenize", false)
-  static tokenize(args: Value[], source: string, command: ControlItem, context: Context): Value {
+  static tokenize(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
       handleRuntimeError(
         context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "string"),
+        new TypeError(source, command, context, args[0].type, "string"),
       );
     }
     const x = args[0].value;
@@ -366,7 +361,7 @@ class ParserBuiltins {
     const tokens: StringValue[] = [];
     let tok;
     while ((tok = pythonLexer.next())) {
-      tokens.push({ type: "string", value: tok.value } as StringValue);
+      tokens.push({ type: "string", value: tok.value });
     }
     return vector_to_linked_list(tokens);
   }
@@ -390,4 +385,4 @@ export default {
   name: GroupName.MCE,
   prelude: "",
   builtins: parserBuiltins,
-} as Group;
+};

@@ -40,7 +40,7 @@ export const assmtInstr = (
 
 export const appInstr = (
   numOfArgs: number,
-  srcNode: Node,
+  srcNode: ExprNS.Call,
   spreadIndices: number[] = [],
 ): AppInstr => ({
   instrType: InstrType.APPLICATION,

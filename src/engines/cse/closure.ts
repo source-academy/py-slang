@@ -3,6 +3,7 @@ import { Context } from "./context";
 import { ControlItem } from "./control";
 import { Environment, uniqueId } from "./environment";
 import { StatementSequence } from "./types";
+import { isNode } from "./utils";
 
 /**
  * Represents a python closure, the class is a runtime representation of a function.
@@ -65,5 +66,5 @@ export class Closure {
 }
 
 export const isStatementSequence = (node: ControlItem): node is StatementSequence => {
-  return (node as StatementSequence).kind == "StatementSequence";
+  return isNode(node) && node.kind == "StatementSequence";
 };

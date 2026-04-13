@@ -102,7 +102,7 @@ export interface AppInstr extends BaseInstr {
   instrType: InstrType.APPLICATION;
   numOfArgs: number;
   spreadIndices: number[];
-  srcNode: Node;
+  srcNode: ExprNS.Call;
 }
 
 export interface BranchInstr extends BaseInstr {

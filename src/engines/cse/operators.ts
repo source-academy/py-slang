@@ -362,11 +362,6 @@ export function evaluateBinaryExpression(
     );
   }
 
-  const leftNum = left.value;
-  const rightNum = right.value;
-  const leftType = left.type;
-  const rightType = right.type;
-
   // Numeric Operations (number or bigint)
   switch (operator) {
     case TokenType.PLUS:
@@ -379,9 +374,9 @@ export function evaluateBinaryExpression(
       // If either operand is a number, perform the operation with numbers (with potential loss of precision for bigints),
       // otherwise perform the operation using bigints if both operands are bigints. This mimics Python's behavior of coercing to float for mixed int/float operations,
       // while allowing for arbitrary precision with bigints.
-      if (leftType === "number" || rightType === "number") {
-        const l = Number(leftNum);
-        const r = Number(rightNum);
+      if (left.type === "number" || right.type === "number") {
+        const l = Number(left.value);
+        const r = Number(right.value);
         switch (operator) {
           case TokenType.PLUS:
             return { type: "number", value: l + r };
@@ -415,9 +410,9 @@ export function evaluateBinaryExpression(
             return { type: "number", value: l ** r };
         }
       }
-      if (leftType === "bigint" && rightType === "bigint") {
-        const l = leftNum as bigint;
-        const r = rightNum as bigint;
+      if (left.type === "bigint" && right.type === "bigint") {
+        const l = left.value;
+        const r = right.value;
         switch (operator) {
           case TokenType.PLUS:
             return { type: "bigint", value: l + r };
@@ -434,7 +429,7 @@ export function evaluateBinaryExpression(
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
-            return { type: "bigint", value: (l - (pythonMod(l, r) as bigint)) / r };
+            return { type: "bigint", value: (l - (pythonMod(l, r))) / r };
           case TokenType.PERCENT:
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command));

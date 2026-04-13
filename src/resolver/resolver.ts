@@ -195,19 +195,19 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       new Map([
         // misc library
         ...constants.builtInFuncs.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
         ),
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
         ...constants.constants.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
         ),
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
-            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
           ),
         ),
         ...preludeNames.map(
-          name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
         ),
       ]),
     );
