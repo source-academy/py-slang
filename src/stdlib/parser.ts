@@ -327,7 +327,7 @@ class ParserBuiltins {
   static async apply_in_underlying_python(
     args: Value[],
     source: string,
-    command: ExprNS.Expr,
+    command: ExprNS.Call,
     context: Context,
   ): Promise<Value> {
     const func = args[0];

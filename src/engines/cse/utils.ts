@@ -8,8 +8,7 @@ import {
   UnboundLocalError,
 } from "../../errors/errors";
 import { builtInConstants, builtIns } from "../../stdlib";
-import { Token } from "../../tokenizer";
-import { TokenType } from "../../tokens";
+import { Token, TokenType } from "../../tokenizer";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";
@@ -302,14 +301,6 @@ export const checkStackOverFlow = (_context: Context, _control: Control) => {
   // TODO
 };
 
-// export const isSimpleFunction = (node: ) => {
-//   if (node.body.type !== 'BlockStatement' && node.body.type !== 'StatementSequence') {
-//     return true
-//   } else {
-//     const block = node.body
-//     return block.body.length === 1 && block.body[0].type === 'ReturnStatement'
-//   }
-// }
 export function pythonMod(a: bigint, b: bigint): bigint;
 export function pythonMod(a: number, b: number): number;
 export function pythonMod(a: number | bigint, b: number | bigint): number | bigint {

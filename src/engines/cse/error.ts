@@ -1,33 +1,7 @@
 import {
-  ErrorSeverity,
-  ErrorType,
-  RuntimeSourceError,
-  SourceError,
-  SourceLocation,
-  UNKNOWN_LOCATION,
+  RuntimeSourceError
 } from "../../errors";
-import { Context } from "./context";
-
-export class CseError implements SourceError {
-  public type = ErrorType.RUNTIME;
-  public severity = ErrorSeverity.ERROR;
-  public location: SourceLocation;
-
-  constructor(
-    public message: string,
-    location?: SourceLocation,
-  ) {
-    this.location = location ?? UNKNOWN_LOCATION;
-  }
-
-  public explain() {
-    return this.message;
-  }
-
-  public elaborate() {
-    return "There is an error in the CSE machine.";
-  }
-}
+import type { Context } from "./context";
 
 export function handleRuntimeError(context: Context, error: RuntimeSourceError): never {
   context.errors.push(error);

@@ -1,11 +1,10 @@
 import { ConductorError } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../../ast-types";
+import { RuntimeSourceError } from "../../errors";
 import { ModuleContext, NativeStorage } from "../../types";
 import { Control } from "./control";
 import { Environment } from "./environment";
-import { CseError } from "./error";
-import { Heap } from "./heap";
-import { BuiltinValue, Stash, Value } from "./stash";
+import { BuiltinValue, Stash } from "./stash";
 import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
@@ -28,7 +27,7 @@ export class Context {
         stderr: WritableContext<ConductorError>;
         stdin: ReadableContext<string>;
       };
-  public errors: CseError[] = [];
+  public errors: RuntimeSourceError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
   public prelude: string | null = null;
 
@@ -36,7 +35,6 @@ export class Context {
     break: boolean;
     debuggerOn: boolean;
     isRunning: boolean;
-    environmentTree: EnvTree;
     environments: Environment[];
     nodes: Node[];
     control: Control | null;
@@ -61,15 +59,11 @@ export class Context {
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment();
       this.runtime.environments.push(globalEnvironment);
-      this.runtime.environmentTree.insert(globalEnvironment);
     }
     this.streams = this.createEmptyStreams();
     this.nativeStorage = {
       builtins: new Map<string, BuiltinValue>(),
-      previousProgramsIdentifiers: new Set<string>(),
-      operators: new Map<string, (...operands: Value[]) => Value>(),
       maxExecTime: 1000,
-      //evaller: null,
       loadedModules: {},
       loadedModuleTypes: {},
     };
@@ -79,7 +73,6 @@ export class Context {
     tail: null,
     name: "global",
     head: {},
-    heap: new Heap(),
     id: "-1",
   });
 
@@ -87,7 +80,6 @@ export class Context {
     break: false,
     debuggerOn: true,
     isRunning: false,
-    environmentTree: new EnvTree(),
     environments: [],
     value: undefined,
     nodes: [],
@@ -126,72 +118,9 @@ export class Context {
       name: env.name,
       tail: newTail,
       head: { ...env.head },
-      heap: new Heap(),
       callExpression: env.callExpression,
-      thisContext: env.thisContext,
+      closure: env.closure
     };
     return newEnv;
-  }
-}
-
-export class EnvTree {
-  private _root: EnvTreeNode | null = null;
-  private map = new Map<Environment, EnvTreeNode>();
-
-  get root(): EnvTreeNode | null {
-    return this._root;
-  }
-
-  public insert(environment: Environment): void {
-    const tailEnvironment = environment.tail;
-    if (tailEnvironment === null) {
-      if (this._root === null) {
-        this._root = new EnvTreeNode(environment, null);
-        this.map.set(environment, this._root);
-      }
-    } else {
-      const parentNode = this.map.get(tailEnvironment);
-      if (parentNode) {
-        const childNode = new EnvTreeNode(environment, parentNode);
-        parentNode.addChild(childNode);
-        this.map.set(environment, childNode);
-      }
-    }
-  }
-
-  public getTreeNode(environment: Environment): EnvTreeNode | undefined {
-    return this.map.get(environment);
-  }
-}
-
-export class EnvTreeNode {
-  private _children: EnvTreeNode[] = [];
-
-  constructor(
-    readonly environment: Environment,
-    public parent: EnvTreeNode | null,
-  ) {}
-
-  get children(): EnvTreeNode[] {
-    return this._children;
-  }
-
-  public resetChildren(newChildren: EnvTreeNode[]): void {
-    this.clearChildren();
-    this.addChildren(newChildren);
-    newChildren.forEach(c => (c.parent = this));
-  }
-
-  private clearChildren(): void {
-    this._children = [];
-  }
-
-  private addChildren(newChildren: EnvTreeNode[]): void {
-    this._children.push(...newChildren);
-  }
-
-  public addChild(newChild: EnvTreeNode): EnvTreeNode {
-    this._children.push(newChild);
-    return newChild;
   }
 }

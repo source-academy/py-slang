@@ -1,8 +1,7 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import constants from "../stdlib/py_s1_constants.json";
 import { Group } from "../stdlib/utils";
-import { Token } from "../tokenizer/tokenizer";
-import { TokenType } from "../tokens";
+import { Token, TokenType } from "../tokenizer/tokenizer";
 import { FeatureValidator } from "../validator/types";
 import { ResolverErrors } from "./errors";
 type Expr = ExprNS.Expr;

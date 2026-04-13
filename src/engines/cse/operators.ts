@@ -1,6 +1,6 @@
 import { ExprNS } from "../../ast-types";
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "../../errors/errors";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { PyComplexNumber } from "../../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";

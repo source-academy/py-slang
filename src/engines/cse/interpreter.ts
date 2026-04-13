@@ -10,10 +10,10 @@ import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
 import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
-import { builtIns, toPythonString } from "../../stdlib";
+import { builtIns } from "../../stdlib";
 import { Group } from "../../stdlib/utils";
-import { TokenType } from "../../tokens";
-import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
+import { TokenType } from "../../tokenizer";
+import { CSEBreak, RecursivePartial, Result } from "../../types";
 import { Closure, isStatementSequence } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
@@ -83,12 +83,9 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
     if (value instanceof CSEBreak) {
       resolve({ status: "suspended-cse-eval", context });
     } else if (value.type === "error") {
-      const msg = value.message;
-      const representation = new Representation(msg);
-      resolve({ status: "finished", context, value, representation });
+      resolve({ status: "finished", context, value });
     } else {
-      const representation = new Representation(toPythonString(value));
-      resolve({ status: "finished", context, value, representation });
+      resolve({ status: "finished", context, value });
     }
   });
 }
@@ -276,7 +273,9 @@ export async function* generateCSEMachineStateStream(
 
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
-      handleRuntimeError(context, new error.StepLimitExceededError(source, command));
+      const node = isNode(command) ? command : command.srcNode;
+      const stmtOrExpr = isStatementSequence(node) ? node.body[0] : node;
+      handleRuntimeError(context, new error.StepLimitExceededError(source, stmtOrExpr));
     }
 
     if (!isPrelude && envChanging(command)) {
