@@ -8,7 +8,7 @@
  * @param {any} <CODE>*object</CODE> - object(s) to be printed to the standard output
  * @returns {NoneType} the <CODE>None</CODE> value
  */
-function print(...object) {}
+function print(...object) { }
 
 /**
  * Prints the provided <CODE>*object</CODE> arguments to the standard output (similar to a simplified
@@ -19,14 +19,14 @@ function print(...object) {}
  * @param {any} <CODE>*object</CODE> - Objects to be printed to the standard output
  * @returns {NoneType} the <CODE>None</CODE> value
  */
-function error(...object) {}
+function error(...object) { }
 
 /**
  * Return the number of milliseconds elapsed since <CODE>January 1, 1970 00:00:00 UTC</CODE>.
  *
  * @returns {float} current time in milliseconds
  */
-function time_time() {}
+function time_time() { }
 
 /**
  * Return the absolute value of <CODE>x</CODE>.
@@ -38,7 +38,7 @@ function time_time() {}
  * @param {int | float | complex} <CODE>x</CODE> - The number whose absolute value is computed.
  * @returns {int | float | complex} the absolute value of <CODE>x</CODE>
  */
-function abs(x) {}
+function abs(x) { }
 
 /**
  * Returns the largest of the provided values. If multiple items are equal to the maximum,
@@ -49,7 +49,7 @@ function abs(x) {}
  * @param {int | float | string} <CODE>*args</CODE> - Additional items to compare.
  * @returns {int | float | string} the largest of the provided values
  */
-function max(arg1, arg2, ...args) {}
+function max(arg1, arg2, ...args) { }
 
 /**
  * Returns the smallest of the provided values. If multiple items are equal to the minimum,
@@ -60,7 +60,7 @@ function max(arg1, arg2, ...args) {}
  * @param {int | float | string} <CODE>*args</CODE> - Additional items to compare.
  * @returns {int | float | string} the smallest of the provided values
  */
-function min(arg1, arg2, ...args) {}
+function min(arg1, arg2, ...args) { }
 
 /**
  * Return <CODE>number</CODE> rounded to <CODE>ndigits</CODE> precision after the decimal point. If
@@ -72,14 +72,14 @@ function min(arg1, arg2, ...args) {}
  * or <CODE>None</CODE>, the function rounds to the nearest integer.
  * @returns {float} the number rounded to <CODE>ndigits</CODE> precision
  */
-function round(number, ndigits) {}
+function round(number, ndigits) { }
 
 /**
  * Return the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>.
  *
  * @returns {float} the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>
  */
-function random_random() {}
+function random_random() { }
 
 /**
  * Return an integer object constructed from a <CODE>value</CODE>, or return <CODE>0</CODE>
@@ -91,7 +91,7 @@ function random_random() {}
  * If omitted, it defaults to <CODE>0</CODE>.
  * @returns {int} an integer object constructed from the given <CODE>value</CODE>
  */
-function int(value = 0) {}
+function int(value = 0) { }
 
 /**
  * Return a floating point number constructed from a <CODE>value</CODE>, or return <CODE>0.0</CODE>
@@ -101,7 +101,7 @@ function int(value = 0) {}
  * to a floating point number.  If omitted, it defaults to <CODE>0.0</CODE>.
  * @returns {float} a floating point number constructed from the given <CODE>value</CODE>
  */
-function float(value = 0) {}
+function float(value = 0) { }
 
 /**
  * Return a boolean value constructed from a <CODE>value</CODE>, or return <CODE>False</CODE>
@@ -110,17 +110,19 @@ function float(value = 0) {}
  * @param {any} <CODE>value</CODE> - The value to be converted to a boolean.
  * @returns {bool} a boolean value constructed from the given <CODE>value</CODE>
  */
-function bool(value) {}
+function bool(value) { }
 
 /**
- * Return a complex number constructed from a <CODE>value</CODE>, or return <CODE>0j</CODE>
- * if no arguments are given.
+ * Returns a complex number constructed from either zero, one or two arguments.
+ * If no arguments are given, returns <CODE>0j</CODE>. If one argument is given, it is converted to a complex number and returned.
+ * If two arguments are given, they are interpreted as the real and imaginary parts of a complex number, respectively.
  *
- * @param {int | float | string | bool | complex} <CODE>value</CODE> - If possible, <CODE>value</CODE> is converted
- * to a complex number. If omitted, it defaults to <CODE>0j</CODE>.
+ * @param {int | float | string | bool | complex} <CODE>v</CODE> - If possible, <CODE>value</CODE> is converted
+ * to a complex number. If omitted, it defaults to <CODE>0j</CODE>. If a second argument <CODE>i</CODE> is given, the first argument cannot be a string
+ * @param {int | float | bool | complex} <CODE>i</CODE> - The imaginary part of the complex number. If omitted, it defaults to <CODE>0</CODE>.
  * @returns {complex} a complex number constructed from the given <CODE>value</CODE>
  */
-function complex(value = 0) {}
+function complex(v = 0, i = 0) { }
 
 /**
  * Return a <CODE>string</CODE> version of <CODE>object</CODE>. If <CODE>object</CODE> is not provided, returns
@@ -130,7 +132,7 @@ function complex(value = 0) {}
  * If not provided, an empty <CODE>string</CODE> is returned.
  * @returns {string} the informal <CODE>string</CODE> representation of <CODE>object</CODE>
  */
-function str(object = "") {}
+function str(object = "") { }
 
 /**
  * Return a <CODE>string</CODE> representation of <CODE>object</CODE> that is unambiguous and suitable for debugging.
@@ -139,7 +141,7 @@ function str(object = "") {}
  * @param {any} <CODE>object</CODE> - The object to be converted to a <CODE>string</CODE>.
  * @returns {string} the unambiguous <CODE>string</CODE> representation of <CODE>object</CODE>
  */
-function repr(object) {}
+function repr(object) { }
 
 /**
  * If the <CODE>prompt</CODE> argument is present, it is written to standard output without a trailing newline.
@@ -150,7 +152,7 @@ function repr(object) {}
  * (without a trailing newline) before input is read.
  * @returns {string} the input read from the user as a <CODE>string</CODE>, with any trailing newline removed
  */
-function input(prompt) {}
+function input(prompt) { }
 
 /**
  * Returns True if x is an integer, and False otherwise.
@@ -158,7 +160,7 @@ function input(prompt) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is an integer
  */
-function is_int(x) {}
+function is_int(x) { }
 
 /**
  * Returns True if x is a floating-point number, and False otherwise.
@@ -166,7 +168,7 @@ function is_int(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a floating-point number
  */
-function is_float(x) {}
+function is_float(x) { }
 
 /**
  * Returns True if x is a complex number, and False otherwise.
@@ -174,7 +176,7 @@ function is_float(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a complex number
  */
-function is_complex(x) {}
+function is_complex(x) { }
 
 /**
  * Returns True if x is a string, and False otherwise.
@@ -182,7 +184,7 @@ function is_complex(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a string
  */
-function is_string(x) {}
+function is_string(x) { }
 
 /**
  * Returns True if x is a boolean, and False otherwise.
@@ -190,7 +192,7 @@ function is_string(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a boolean
  */
-function is_boolean(x) {}
+function is_boolean(x) { }
 
 /**
  * Returns True if x is a function, and False otherwise.
@@ -198,7 +200,7 @@ function is_boolean(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is a function
  */
-function is_function(x) {}
+function is_function(x) { }
 
 /**
  * Returns True if x is the None value, and False otherwise.
@@ -206,7 +208,7 @@ function is_function(x) {}
  * @param {any} <CODE>x</CODE> - given value
  * @returns {bool} whether x is the None value
  */
-function is_none(x) {}
+function is_none(x) { }
 
 /**
  * Returns the number of parameters the given function <CODE>f</CODE> expects, excluding the rest parameter.
@@ -214,7 +216,7 @@ function is_none(x) {}
  * @param {function} <CODE>f</CODE> - given function
  * @returns {int} the number of arguments accepted by <CODE>f</CODE>
  */
-function arity(f) {}
+function arity(f) { }
 
 /**
  * Return the real part of a complex number <CODE>x</CODE>.
@@ -222,7 +224,7 @@ function arity(f) {}
  * @param {complex} <CODE>x</CODE> - a complex number
  * @returns {float} the real part of <CODE>x</CODE>
  */
-function real(x) {}
+function real(x) { }
 
 /**
  * Return the imaginary part of a complex number <CODE>x</CODE>.
@@ -230,7 +232,7 @@ function real(x) {}
  * @param {complex} <CODE>x</CODE> - a complex number
  * @returns {float} the imaginary part of <CODE>x</CODE>
  */
-function imag(x) {}
+function imag(x) { }
 
 /**
  * Return the length of an object <CODE>s</CODE>, where <CODE>s</CODE> is a container for a finite number of values (e.g., a string).
@@ -238,7 +240,7 @@ function imag(x) {}
  * @param {string | list} <CODE>s</CODE> - a container object whose length is to be computed
  * @returns {int} the length of <CODE>s</CODE>
  */
-function len(s) {}
+function len(s) { }
 
 /**
  *
