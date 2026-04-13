@@ -243,8 +243,8 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
               expect.objectContaining({
                 type: "complex",
                 value: expect.objectContaining({
-                  real: expect.closeTo(expected.real),
-                  imag: expect.closeTo(expected.imag),
+                  real: isNaN(expected.real) ? NaN : expect.closeTo(expected.real),
+                  imag: isNaN(expected.imag) ? NaN : expect.closeTo(expected.imag),
                 }),
               }),
             );
