@@ -373,12 +373,8 @@ export class BuiltInFunctions {
     );
   }
 
-  static toStr(val: Value): string {
-    return toPythonString(val);
-  }
-
   static error(args: Value[], _source: string, command: ControlItem, context: Context): Value {
-    const output = "Error: " + args.map(arg => BuiltInFunctions.toStr(arg)).join(" ") + "\n";
+    const output = "Error: " + args.map(arg => toPythonString(arg)).join(" ") + "\n";
     handleRuntimeError(context, new UserError(output, command as ExprNS.Expr));
   }
 

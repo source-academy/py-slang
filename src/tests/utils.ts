@@ -77,9 +77,9 @@ export type TestExpectedValue =
   | Class<Error>;
 /**
  * TestCases is a mapping from arguments to `describe` blocks, which map to an array of tuples of the form [code, expected, output], where:
- * - code is the code to be executed
- * - expected is the expected value of the expression, which can be a primitive value, null (for None), or an error class (for expected errors)
- * - output is the expected output to be printed to the console, or null if no output is expected
+ * - `code` is the code to be executed
+ * - `expected` is the expected value of the expression, which can be a primitive value, null (for None), or an error class (for expected errors)
+ * - `output` is the expected output to be printed to the console, or null if no output is expected
  */
 export type TestCases = Record<string, [string, TestExpectedValue, string[] | null][]>;
 
@@ -168,6 +168,13 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
     },
   };
 };
+
+/**
+ * Generates test cases for a given variant of the CSE evaluator based on the provided TestCases object.
+ * @param testCases The test cases to generate, organized by function name and consisting of tuples of [code, expected, output].
+ * @param variant The variant of the CSE evaluator to test (e.g., 1 for Python §1)
+ * @param groups The groups to load into the context before running the test cases (e.g., [`linkedList`, `list`]).
+ */
 export const generateTestCases = (testCases: TestCases, variant: number, groups: Group[]) => {
   for (const [funcName, tests] of Object.entries(testCases)) {
     describe(funcName, () => {

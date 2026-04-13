@@ -9,6 +9,11 @@ import { BuiltinValue, Stash, Value } from "./stash";
 import { ReadableContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
+/**
+ * Stores the global context of the CSE engine,
+ * including the control and stash, as well as other relevant information
+ * such as the environment tree and loaded modules. This context is passed around and mutated during the evaluation of a program.
+ */
 export class Context {
   public control: Control;
   public stash: Stash;
@@ -23,7 +28,6 @@ export class Context {
         stderr: WritableContext<ConductorError>;
         stdin: ReadableContext<string>;
       };
-  //public environment: Environment;
   public errors: CseError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
   public prelude: string | null = null;

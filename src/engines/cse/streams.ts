@@ -7,6 +7,7 @@ export type WritableContext<T> = {
   stream: WritableStream<T>;
   writer: WritableStreamDefaultWriter<T>;
 };
+
 export type ReadableContext<T> = {
   stream: ReadableStream<T>;
   reader: ReadableStreamDefaultReader<T>;
