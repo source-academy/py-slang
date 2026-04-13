@@ -18,4 +18,4 @@ for file in "$LIB"/*.js; do
 done
 wait
 
-yarn ts-node src/generate-autocomplete.mts
+yarn tsx src/generate-autocomplete.mts
