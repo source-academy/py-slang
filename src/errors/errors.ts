@@ -1,6 +1,9 @@
 import { ExprNS, StmtNS } from "../ast-types";
+import { isStatementSequence } from "../engines/cse/closure";
 import { Context } from "../engines/cse/context";
+import { ControlItem } from "../engines/cse/control";
 import { operatorTranslator } from "../engines/cse/types";
+import { isNode } from "../engines/cse/utils";
 import { Token } from "../tokenizer";
 import { TokenType } from "../tokens";
 
@@ -377,15 +380,22 @@ export class ZeroDivisionError extends RuntimeSourceError {
 }
 
 export class StepLimitExceededError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Binary | ExprNS.Expr) {
-    super(node);
+  constructor(source: string, node: ControlItem) {
+    const srcNode = isNode(node) ? node : node.srcNode;
+    const locatable = isStatementSequence(srcNode)
+        ? srcNode.body[0]
+        : srcNode;
+
+    super(locatable);
     this.type = ErrorType.RUNTIME;
-    const index = node.startToken.indexInSource;
+    const index = locatable.startToken.indexInSource;
 
     const { lineIndex, fullLine } = getFullLine(source, index);
 
     const errorPos =
-      "operator" in node ? node.operator.indexInSource - node.startToken.indexInSource : 0;
+      "operator" in locatable && locatable.operator instanceof Token
+        ? locatable.operator.indexInSource - locatable.startToken.indexInSource
+        : 0;
 
     const indicator = createErrorIndicator(fullLine, errorPos); // no target symbol
 

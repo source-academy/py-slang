@@ -116,7 +116,7 @@ export async function evaluate(
     isPrelude: false,
     groups: [],
     envSteps: 100000,
-    stepLimit: 100000,
+    stepLimit: -1,
     variant: 4,
     ...(options as Partial<IOptions>),
   };
@@ -278,7 +278,7 @@ export async function* generateCSEMachineStateStream(
 
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
-      handleRuntimeError(context, new error.StepLimitExceededError(source, command as ExprNS.Expr));
+      handleRuntimeError(context, new error.StepLimitExceededError(source, command));
     }
 
     if (!isPrelude && envChanging(command)) {
@@ -289,7 +289,7 @@ export async function* generateCSEMachineStateStream(
     control.pop();
 
     if (isNode(command)) {
-      const node = command as Node;
+      const node = command;
       const nodeType = node.kind;
 
       context.runtime.nodes.shift();
@@ -1080,7 +1080,6 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         const bodyExpr = closureNode.body;
         control.push(bodyExpr);
       }
-      console.log(control);
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
       stash.push(result);

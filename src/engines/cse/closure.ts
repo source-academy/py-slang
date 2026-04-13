@@ -65,5 +65,5 @@ export class Closure {
 }
 
 export const isStatementSequence = (node: ControlItem): node is StatementSequence => {
-  return (node as StatementSequence).type == "StatementSequence";
+  return (node as StatementSequence).kind == "StatementSequence";
 };
