@@ -184,9 +184,8 @@ export function handleExpandedEquality(
 
   // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
   if ("value" in left && "value" in right) {
-    if (left.value !== right.value) {
-      return { type: "bool", value: operator == TokenType.NOTEQUAL };
-    }
+    return { type: "bool", value: (left.value === right.value) !== (operator == TokenType.NOTEQUAL) };
+    
   }
   return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
 }
