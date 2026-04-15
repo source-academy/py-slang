@@ -55,6 +55,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           });
         }
       }
+      console.log(this.context.runtime.environments);
     });
   }
 

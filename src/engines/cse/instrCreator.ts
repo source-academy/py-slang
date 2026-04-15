@@ -12,18 +12,19 @@ import {
   EndOfFunctionBodyInstr,
   EnvInstr,
   ForInstr,
-  Instr,
   InstrType,
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
   Node,
+  PopInstr,
+  ResetInstr,
   StatementSequence,
   UnOpInstr,
   WhileInstr,
 } from "./types";
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
+export const popInstr = (srcNode: Node): PopInstr => ({ instrType: InstrType.POP, srcNode });
 
 export const assmtInstr = (
   symbol: string,
@@ -60,11 +61,6 @@ export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   srcNode,
 });
 
-export const markerInstr = (srcNode: Node): Instr => ({
-  instrType: InstrType.MARKER,
-  srcNode,
-});
-
 export const continueInstr = (srcNode: Node): ContinueInstr => ({
   instrType: InstrType.CONTINUE,
   srcNode,
@@ -76,7 +72,7 @@ export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   srcNode,
 });
 
-export const resetInstr = (srcNode: Node): Instr => ({
+export const resetInstr = (srcNode: Node): ResetInstr => ({
   instrType: InstrType.RESET,
   srcNode,
 });

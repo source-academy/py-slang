@@ -21,3 +21,11 @@ export class AssertionError extends RuntimeSourceError {
     return "Please contact the administrators to let them know that this error has occurred";
   }
 }
+
+export class UnknownEvaluatorError extends RuntimeSourceError {
+  constructor(public readonly evaluatorName: string) {
+    super();
+    this.message = `Unknown evaluator error: ${evaluatorName}\nIf you see this error, please report it to the administrators.`;
+  }
+}
+

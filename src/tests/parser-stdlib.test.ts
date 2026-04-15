@@ -1,10 +1,10 @@
+import { TypeError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import pairmutator from "../stdlib/pairmutator";
-import stream from "../stdlib/stream";
 import parser from "../stdlib/parser";
+import stream from "../stdlib/stream";
 import { generateTestCases, TestCases } from "./utils";
-import { TypeError } from "../errors";
 
 const groups = [linkedList, list, pairmutator, stream, parser];
 
@@ -239,7 +239,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(x):\\n    return x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -248,7 +248,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(x, y):\\n    return x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -257,7 +257,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    return 1\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
         ],
       ],
     ],
@@ -266,7 +266,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(*args):\\n    return args\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['rest_element', [['name', ['args', None]], None]], None],\n[['return_statement', [['name', ['args', None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['rest_element', [['name', ['args', None]], None]], None],\n[['return_statement', [['name', ['args', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -275,7 +275,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    return x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -390,7 +390,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(a):\\n    pass\\nx = [1]\\nf(*x)"))',
         null,
         [
-          "[ 'sequence',\n[ [ [ 'function_definition',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'declaration',\n    [ ['name', ['x', None]],\n    [['array_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
+          "[ 'sequence',\n[ [ [ 'function_declaration',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'declaration',\n    [ ['name', ['x', None]],\n    [['array_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
         ],
       ],
     ],
@@ -404,7 +404,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    return 1\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
         ],
       ],
     ],
@@ -413,7 +413,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    return\\n"))',
         null,
         [
-          "[ 'function_definition',\n[['name', ['f', None]], [None, [['return_statement', [None, None]], None]]]]",
+          "[ 'function_declaration',\n[['name', ['f', None]], [None, [['return_statement', [None, None]], None]]]]",
         ],
       ],
     ],
@@ -426,7 +426,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    global x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[['name', ['f', None]], [None, [['global_statement', ['x', None]], None]]]]",
+          "[ 'function_declaration',\n[['name', ['f', None]], [None, [['global_statement', ['x', None]], None]]]]",
         ],
       ],
     ],
@@ -435,7 +435,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    def g():\\n        nonlocal x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ [ 'function_definition',\n        [['name', ['g', None]], [None, [['nonlocal_statement', ['x', None]], None]]]],\n      None]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ [ 'function_declaration',\n        [['name', ['g', None]], [None, [['nonlocal_statement', ['x', None]], None]]]],\n      None]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -527,7 +527,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    y = 2\\n    return x\\n"))',
         null,
         [
-          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
