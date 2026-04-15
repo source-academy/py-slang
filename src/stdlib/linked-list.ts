@@ -14,9 +14,13 @@ import { displayOutput } from "../engines/cse/streams";
 import { TypeError } from "../errors";
 import { minArgMap, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
-import { Group, GroupName } from "./utils";
+import { GroupName } from "./utils";
 
 const linkedListBuiltins = new Map<string, BuiltinValue>();
+
+const isPair = (value: Value): value is ListValue => {
+  return value.type === "list" && value.value.length === 2;
+};
 
 class LinkedListBuiltins {
   @Validate(2, 2, "pair", true)
@@ -28,7 +32,7 @@ class LinkedListBuiltins {
   static linked_list(
     args: Value[],
     source: string,
-    command: ControlItem,
+    command: ExprNS.Call,
     context: Context,
   ): ListValue | NoneValue {
     if (args.length === 0) {
@@ -43,30 +47,24 @@ class LinkedListBuiltins {
   static is_pair(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): BoolValue {
-    return { type: "bool", value: args[0].type === "list" && args[0].value.length === 2 };
+    return { type: "bool", value: isPair(args[0]) };
   }
 
   @Validate(1, 1, "head", true)
-  static head(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    if (args[0].type !== "list" || args[0].value.length !== 2) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"),
-      );
+  static head(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
+    if (!isPair(args[0])) {
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
     }
     return args[0].value[0];
   }
 
   @Validate(1, 1, "tail", true)
-  static tail(args: Value[], source: string, command: ControlItem, context: Context): Value {
-    if (args[0].type !== "list" || args[0].value.length !== 2) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command as ExprNS.Expr, context, args[0].type, "pair"),
-      );
+  static tail(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
+    if (!isPair(args[0])) {
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
     }
     return args[0].value[1];
   }
@@ -75,32 +73,27 @@ class LinkedListBuiltins {
     if (value.type === "none") {
       return true;
     }
-    return (
-      value.type === "list" &&
-      value.value.length === 2 &&
-      LinkedListBuiltins._is_linked_list(value.value[1])
-    );
+    return isPair(value) && LinkedListBuiltins._is_linked_list(value.value[1]);
   }
 
   static _print_linked_list(
     value: Value,
     source: string,
-    command: ControlItem,
+    command: ExprNS.Call,
     context: Context,
   ): StringValue {
     if (!LinkedListBuiltins._is_linked_list(value)) {
-      const isPairResult = LinkedListBuiltins.is_pair([value], source, command, context);
-      if (!isPairResult.value) {
+      if (!isPair(value)) {
         return { type: "string", value: toPythonString(value) };
       }
       const string1 = LinkedListBuiltins._print_linked_list(
-        (value as ListValue).value[0],
+        value.value[0],
         source,
         command,
         context,
       );
       const string2 = LinkedListBuiltins._print_linked_list(
-        (value as ListValue).value[1],
+        value.value[1],
         source,
         command,
         context,
@@ -131,7 +124,7 @@ class LinkedListBuiltins {
   static async print_linked_list(
     args: Value[],
     source: string,
-    command: ControlItem,
+    command: ExprNS.Call,
     context: Context,
   ): Promise<NoneValue> {
     const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
@@ -156,4 +149,4 @@ export default {
   name: GroupName.LINKED_LISTS,
   prelude: linkedListPrelude,
   builtins: linkedListBuiltins,
-} as Group;
+};

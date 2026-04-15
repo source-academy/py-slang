@@ -1,9 +1,9 @@
+import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { ControlItem } from "../engines/cse/control";
 import { BigIntValue, BoolValue, BuiltinValue, Value } from "../engines/cse/stash";
 import { minArgMap, Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
-import { Group, GroupName } from "./utils";
+import { GroupName } from "./utils";
 
 const listBuiltins = new Map<string, BuiltinValue>();
 
@@ -12,7 +12,7 @@ class ListBuiltins {
   static list_length(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): BigIntValue {
     const list = args[0];
@@ -26,7 +26,7 @@ class ListBuiltins {
   static is_list(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): BoolValue {
     const list = args[0];
@@ -38,7 +38,7 @@ class ListBuiltins {
   static _gen_list(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): Value {
     const length = args[0];
@@ -69,4 +69,4 @@ export default {
   name: GroupName.LIST,
   prelude: listPrelude,
   builtins: listBuiltins,
-} as Group;
+};

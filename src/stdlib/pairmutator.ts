@@ -1,8 +1,8 @@
+import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { ControlItem } from "../engines/cse/control";
 import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
 import { minArgMap, Validate } from "../stdlib";
-import { Group, GroupName } from "./utils";
+import { GroupName } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();
 
@@ -11,7 +11,7 @@ class PairmutatorBuiltins {
   static set_head(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): NoneValue {
     const head = args[0];
@@ -27,7 +27,7 @@ class PairmutatorBuiltins {
   static set_tail(
     args: Value[],
     _source: string,
-    _command: ControlItem,
+    _command: ExprNS.Call,
     _context: Context,
   ): NoneValue {
     const head = args[0];
@@ -58,4 +58,4 @@ export default {
   name: GroupName.PAIRMUTATORS,
   prelude: ``,
   builtins: pairmutatorBuiltins,
-} as Group;
+};

@@ -1,5 +1,5 @@
 import { ExprNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { ASTNode, FeatureNotSupportedError, FeatureValidator } from "../types";
 
 export const NoIsOperatorValidator: FeatureValidator = {

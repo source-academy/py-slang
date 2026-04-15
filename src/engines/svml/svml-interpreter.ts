@@ -1,7 +1,7 @@
 import { pythonMod } from "../cse/utils";
+import { executePrimitive } from "./builtins";
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
 import OpCodes from "./opcodes";
-import { executePrimitive } from "./builtins";
 import {
   getSVMLType,
   isSVMLObject,
@@ -303,7 +303,7 @@ export class SVMLInterpreter {
             const a = left as number;
             const b = right as number;
             if (b === 0) throw new ZeroDivisionError("integer modulo by zero");
-            this.push(pythonMod(a, b) as number);
+            this.push(pythonMod(a, b));
           } else {
             throw new UnsupportedOperandTypeError("%", leftType, rightType);
           }
@@ -313,7 +313,7 @@ export class SVMLInterpreter {
           const right = this.pop() as number;
           const left = this.pop() as number;
           if (right === 0) throw new ZeroDivisionError("integer modulo by zero");
-          this.push(pythonMod(left, right) as number);
+          this.push(pythonMod(left, right));
           break;
         }
         // Unary operations

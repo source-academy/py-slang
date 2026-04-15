@@ -1,9 +1,9 @@
+import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { ControlItem } from "../engines/cse/control";
 import { BuiltinValue, ListValue, NoneValue, Value } from "../engines/cse/stash";
 import { minArgMap, Validate } from "../stdlib";
 import streamPrelude from "./stream.prelude";
-import { Group, GroupName } from "./utils";
+import { GroupName } from "./utils";
 
 const streamBuiltins = new Map<string, BuiltinValue>();
 
@@ -12,7 +12,7 @@ class StreamBuiltins {
   static stream(
     args: Value[],
     source: string,
-    command: ControlItem,
+    command: ExprNS.Call,
     context: Context,
   ): ListValue | NoneValue {
     if (args.length === 0) {
@@ -50,4 +50,4 @@ export default {
   name: GroupName.STREAMS,
   prelude: streamPrelude,
   builtins: streamBuiltins,
-} as Group;
+};

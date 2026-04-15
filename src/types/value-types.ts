@@ -4,7 +4,6 @@ import { handleRuntimeError } from "../engines/cse/error";
 import { BuiltinValue, Value } from "../engines/cse/stash";
 import { ValueError, ZeroDivisionError } from "../errors";
 import { ModuleFunctions } from "../modules/moduleTypes";
-import { toPythonString } from "../stdlib";
 
 export class CSEBreak {}
 
@@ -26,44 +25,64 @@ export class PyComplexNumber {
   }
 
   public static fromString(str: string): PyComplexNumber {
-    str = str.replace(/_/g, ""); // Remove underscores for easier parsing
-    if (!/[jJ]/.test(str)) {
-      const realVal = Number(str);
-      if (isNaN(realVal)) {
-        throw new Error(`Invalid complex string: ${str}`);
-      }
-      return new PyComplexNumber(realVal, 0);
+    const originalStr = str;
+    str = str.trim().replace(/_/g, "").toLowerCase();
+
+    const parts = str.split(/(?<!e)(?=[+-])/, 2).filter(part => part !== "");
+    const mappings = {
+      infinity: Infinity,
+      "+infinity": Infinity,
+      "-infinity": -Infinity,
+      inf: Infinity,
+      "+inf": Infinity,
+      "-inf": -Infinity,
+      nan: NaN,
+      "+nan": NaN,
+      "-nan": NaN,
+    };
+    if (parts.length === 0) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
     }
-    const match = str.match(
-      /^([\+\-]?\d+(\.\d+)?([eE][+\-]?\d+)?)([\+\-]\d+(\.\d+)?([eE][+\-]?\d+)?[jJ])?$/,
-    );
-    if (match) {
-      const realPart = Number(match[1]);
-      let imagPart = 0;
-
-      if (match[4]) {
-        imagPart = Number(match[4].substring(0, match[4].length - 1)); // Remove the trailing 'j' or 'J'
+    if (parts.length === 1) {
+      const isImag = str.endsWith("j");
+      if (str.endsWith("j")) {
+        str = str.slice(0, -1);
+        if (str == "" || str === "+" || str === "-") {
+          return new PyComplexNumber(0, str === "-" ? -1 : 1);
+        }
       }
-
-      return new PyComplexNumber(realPart, imagPart);
+      if (str in mappings) {
+        const val = mappings[str as keyof typeof mappings];
+        return new PyComplexNumber(isImag ? 0 : val, isImag ? val : 0);
+      }
+      const num = Number(str);
+      if (isNaN(num)) {
+        throw new Error(`Invalid complex string: ${originalStr}`);
+      }
+      return new PyComplexNumber(isImag ? 0 : num, isImag ? num : 0);
     }
-
-    const lower = str.toLowerCase();
-    if (lower.endsWith("j")) {
-      const numericPart = str.substring(0, str.length - 1);
-      if (numericPart === "" || numericPart === "+" || numericPart === "-") {
-        const sign = numericPart === "-" ? -1 : 1;
-        return new PyComplexNumber(0, sign * 1);
-      }
-
-      const imagVal = Number(numericPart);
-      if (isNaN(imagVal)) {
-        throw new Error(`Invalid complex string: ${str}`);
-      }
-      return new PyComplexNumber(0, imagVal);
+    const [realPart, imagPart] = parts;
+    const imagStr = imagPart.slice(0, -1);
+    if (!imagPart.endsWith("j")) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
     }
-
-    throw new Error(`Invalid complex string: ${str}`);
+    if (!(realPart in mappings) && isNaN(Number(realPart))) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    if (!(imagStr in mappings) && !["+", "-", ""].includes(imagStr) && isNaN(Number(imagStr))) {
+      throw new Error(`Invalid complex string: ${originalStr}`);
+    }
+    const real =
+      realPart in mappings ? mappings[realPart as keyof typeof mappings] : Number(realPart);
+    const imag =
+      imagStr in mappings
+        ? mappings[imagStr as keyof typeof mappings]
+        : imagStr === "+" || imagStr === ""
+          ? 1
+          : imagStr === "-"
+            ? -1
+            : Number(imagStr);
+    return new PyComplexNumber(real, imag);
   }
 
   public static fromValue(
@@ -254,14 +273,6 @@ export type RecursivePartial<T> =
 // The CSE machine either finishes evaluating (to an error or a result) or it has a suspended evaluation.
 export type Result = Finished | SuspendedCseEval;
 
-// TODO: should allow debug
-// export interface Suspended {
-//     status: 'suspended'
-//     it: IterableIterator<Value>
-//     scheduler: Scheduler
-//     context: Context
-// }
-
 export interface SuspendedCseEval {
   status: "suspended-cse-eval";
   context: Context;
@@ -271,34 +282,11 @@ export interface Finished {
   status: "finished";
   context: Context;
   value: Value;
-  representation: Representation; // if the returned value needs a unique representation,
-  // (for example if the language used is not JS),
-  // the display of the result will use the representation
-  // field instead
-}
-
-export class Representation {
-  constructor(public representation: string) {}
-
-  toString(value: Value): string {
-    // call str(value) in stdlib
-    // TODO: mapping
-    const result = toPythonString(value);
-    return result;
-  }
 }
 
 export interface NativeStorage {
   builtins: Map<string, BuiltinValue>;
-  previousProgramsIdentifiers: Set<string>;
-  operators: Map<string, (...operands: Value[]) => Value>;
   maxExecTime: number;
-  //evaller: null | ((program: string) => Value)
-  /*
-    the first time evaller is used, it must be used directly like `eval(code)` to inherit
-    surrounding scope, so we cannot set evaller to `eval` directly. subsequent assignments to evaller will
-    close in the surrounding values, so no problem
-     */
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;
 }

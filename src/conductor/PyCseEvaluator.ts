@@ -24,6 +24,10 @@ function once<T>(fn: () => Promise<T>): () => Promise<T> {
   return () => (promise ??= fn());
 }
 
+/**
+ * The abstract class PyCseEvaluatorBase implements the common logic for all variants of
+ * the CSE evaluator, which includes setting up the context, loading preludes, and evaluating chunks of code.
+ */
 abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
@@ -52,6 +56,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           });
         }
       }
+      console.log(this.context.runtime.environments);
     });
   }
 
@@ -65,10 +70,18 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       };
 
       await this.ensurePreludesLoaded();
-
       const script = chunk + "\n";
       const ast = parse(script);
-      const errors = analyze(ast, script, this.variant, this.groups);
+      const errors = analyze(
+        ast,
+        script,
+        this.variant,
+        this.groups,
+        this.context.runtime.environments
+          .filter(env => env.name === "prelude")
+          .map(env => Object.keys(env.head))
+          .flat(),
+      );
 
       if (errors.length > 0) {
         for (const error of errors.slice(0, -1)) {
@@ -77,7 +90,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         throw errors[errors.length - 1];
       }
 
-      await evaluate("", ast, this.context, {
+      await evaluate(script, ast, this.context, {
         variant: this.variant,
         groups: this.groups,
       });

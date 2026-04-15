@@ -1,6 +1,5 @@
 import { FunctionParam } from "../ast-types";
-import { Token } from "../tokenizer/tokenizer";
-import { TokenType } from "../tokens";
+import { Token, TokenType } from "../tokenizer/tokenizer";
 
 const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
   name: TokenType.NAME,

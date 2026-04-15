@@ -1,12 +1,12 @@
 import { ExprNS, StmtNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { Environment } from "./environment";
 import { Value } from "./stash";
 
 export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
 
 export interface StatementSequence {
-  type: "StatementSequence";
+  kind: "StatementSequence";
   body: StmtNS.Stmt[];
   loc?: {
     start: { line: number; column: number };
@@ -19,36 +19,17 @@ export enum InstrType {
   WHILE = "WhileInstr",
   FOR = "ForInstr",
   ASSIGNMENT = "Assignment",
-  ANN_ASSIGNMENT = "AnnAssignment",
   LIST_ASSIGNMENT = "ListAssignment",
   APPLICATION = "Application",
   UNARY_OP = "UnaryOperation",
   BINARY_OP = "BinaryOperation",
   BOOL_OP = "BoolOperation",
-  COMPARE = "Compare",
-  CALL = "Call",
-  RETURN = "Return",
   BREAK = "BreakInstr",
   CONTINUE = "ContinueInstr",
-  IF = "If",
-  FUNCTION_DEF = "FunctionDef",
-  LAMBDA = "Lambda",
   LIST = "ListLiteral",
-  MULTI_LAMBDA = "MultiLambda",
-  GROUPING = "Grouping",
-  LITERAL = "Literal",
-  VARIABLE = "Variable",
-  TERNARY = "Ternary",
-  PASS = "Pass",
-  ASSERT = "Assert",
-  IMPORT = "Import",
-  GLOBAL = "Global",
-  NONLOCAL = "NonLocal",
-  Program = "Program",
   BRANCH = "Branch",
   POP = "Pop",
   ENVIRONMENT = "environment",
-  MARKER = "marker",
   END_OF_FUNCTION_BODY = "EndOfFunctionBody",
   LIST_ACCESS = "ListAccess",
 }
@@ -102,7 +83,7 @@ export interface AppInstr extends BaseInstr {
   instrType: InstrType.APPLICATION;
   numOfArgs: number;
   spreadIndices: number[];
-  srcNode: Node;
+  srcNode: ExprNS.Call;
 }
 
 export interface BranchInstr extends BaseInstr {
@@ -129,10 +110,6 @@ export interface EnvInstr extends BaseInstr {
   env: Environment;
 }
 
-export interface ArrLitInstr extends BaseInstr {
-  arity: number;
-}
-
 export interface EndOfFunctionBodyInstr extends BaseInstr {
   instrType: InstrType.END_OF_FUNCTION_BODY;
 }
@@ -151,7 +128,6 @@ export interface BoolOpInstr extends BaseInstr {
 }
 
 export type Instr =
-  | BaseInstr
   | WhileInstr
   | ForInstr
   | AssmtInstr
@@ -160,11 +136,15 @@ export type Instr =
   | AppInstr
   | BranchInstr
   | EnvInstr
-  | ArrLitInstr
   | EndOfFunctionBodyInstr
   | ResetInstr
   | PopInstr
-  | BoolOpInstr;
+  | BoolOpInstr
+  | ListAccessInstr
+  | ListInstr
+  | ListAssmtInstr
+  | BreakInstr
+  | ContinueInstr;
 
 export function typeTranslator(type: Value["type"]): string {
   switch (type) {

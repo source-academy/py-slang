@@ -1,6 +1,6 @@
 import { ExprNS } from "../../ast-types";
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "../../errors/errors";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { PyComplexNumber } from "../../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
@@ -32,6 +32,15 @@ export type BinaryOperator =
   | "in"
   | "instanceof";
 
+/**
+ * Evaluates a unary expression with the given operator and operand value, following Python semantics.
+ * @param code The original source code being evaluated
+ * @param command The AST node corresponding to the unary expression
+ * @param context The global context state
+ * @param operator The operator of the unary expression (e.g., TokenType.MINUS for negation)
+ * @param value The operand value to apply the unary operator to
+ * @returns The result of the unary operation
+ */
 export function evaluateUnaryExpression(
   code: string,
   command: ExprNS.Unary,
@@ -41,6 +50,7 @@ export function evaluateUnaryExpression(
 ): Value {
   switch (operator) {
     case TokenType.NOT:
+      // The `not` operator can only be applied to booleans
       if (value.type === "bool") {
         return { type: "bool", value: isFalsy(value) };
       }
@@ -109,6 +119,19 @@ export function evaluateUnaryExpression(
       );
   }
 }
+
+/**
+ * Handles equality and inequality comparisons between any two non-list values, following Python §3 semantics.
+ * This compares to the logic for Python §1 and §2 where equality and inequality for non-list values only applied to values of the same type.
+ *
+ * @param code The original source code being evaluated
+ * @param command The AST node corresponding to the binary expression
+ * @param context The global context state
+ * @param operator The operator of the binary expression (either TokenType.DOUBLEEQUAL for equality or TokenType.NOTEQUAL for inequality)
+ * @param left The left operand value
+ * @param right The right operand value
+ * @returns The result of the equality comparison
+ */
 export function handleExpandedEquality(
   code: string,
   command: ExprNS.Binary,
@@ -117,6 +140,7 @@ export function handleExpandedEquality(
   left: Value,
   right: Value,
 ): Value {
+  // List equality is not supported via the equality operators, only via `is`.
   if (left.type == "list" && right.type == "list") {
     handleRuntimeError(
       context,
@@ -160,12 +184,26 @@ export function handleExpandedEquality(
 
   // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
   if ("value" in left && "value" in right) {
-    if (left.value !== right.value) {
-      return { type: "bool", value: operator == TokenType.NOTEQUAL };
-    }
+    return {
+      type: "bool",
+      value: (left.value === right.value) !== (operator == TokenType.NOTEQUAL),
+    };
   }
   return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
 }
+
+/**
+ * The main function for evaluating a binary expression, which dispatches to the appropriate logic based on the operator and operand types.
+ * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded equality semantics for Python §3.
+ * @param code The original source code being evaluated
+ * @param command The AST node corresponding to the binary expression
+ * @param context The global context state
+ * @param operator The operator of the binary expression (e.g., TokenType.PLUS for addition)
+ * @param left The left operand value
+ * @param right The right operand value
+ * @param variant The Python variant being evaluated (1, 2, 3 or 4), which may affect the semantics of certain operators (e.g., equality)
+ * @returns The result of the binary operation
+ */
 export function evaluateBinaryExpression(
   code: string,
   command: ExprNS.Binary,
@@ -175,7 +213,9 @@ export function evaluateBinaryExpression(
   right: Value,
   variant: number,
 ): Value {
-  if ((operator == TokenType.EQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
+  // Handle expanded equality semantics for Python §3,
+  // where equality and inequality comparisons between non-list values of different types are allowed
+  if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
     return handleExpandedEquality(code, command, context, operator, left, right);
   }
 
@@ -323,11 +363,6 @@ export function evaluateBinaryExpression(
     );
   }
 
-  const leftNum = left.value;
-  const rightNum = right.value;
-  const leftType = left.type;
-  const rightType = right.type;
-
   // Numeric Operations (number or bigint)
   switch (operator) {
     case TokenType.PLUS:
@@ -337,9 +372,12 @@ export function evaluateBinaryExpression(
     case TokenType.DOUBLESLASH:
     case TokenType.PERCENT:
     case TokenType.DOUBLESTAR:
-      if (leftType === "number" || rightType === "number") {
-        const l = Number(leftNum);
-        const r = Number(rightNum);
+      // If either operand is a number, perform the operation with numbers (with potential loss of precision for bigints),
+      // otherwise perform the operation using bigints if both operands are bigints. This mimics Python's behavior of coercing to float for mixed int/float operations,
+      // while allowing for arbitrary precision with bigints.
+      if (left.type === "number" || right.type === "number") {
+        const l = Number(left.value);
+        const r = Number(right.value);
         switch (operator) {
           case TokenType.PLUS:
             return { type: "number", value: l + r };
@@ -373,9 +411,9 @@ export function evaluateBinaryExpression(
             return { type: "number", value: l ** r };
         }
       }
-      if (leftType === "bigint" && rightType === "bigint") {
-        const l = leftNum as bigint;
-        const r = rightNum as bigint;
+      if (left.type === "bigint" && right.type === "bigint") {
+        const l = left.value;
+        const r = right.value;
         switch (operator) {
           case TokenType.PLUS:
             return { type: "bigint", value: l + r };
@@ -392,7 +430,7 @@ export function evaluateBinaryExpression(
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command));
             }
-            return { type: "bigint", value: (l - (pythonMod(l, r) as bigint)) / r };
+            return { type: "bigint", value: (l - pythonMod(l, r)) / r };
           case TokenType.PERCENT:
             if (r === 0n) {
               handleRuntimeError(context, new ZeroDivisionError(code, command));

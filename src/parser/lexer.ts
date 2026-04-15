@@ -266,8 +266,8 @@ class PythonLexer implements moo.Lexer {
   private pos = 0;
 
   reset(data?: string, state?: moo.LexerState): this {
-    if (state && "pos" in state) {
-      this.pos = (state as PythonLexerState).pos;
+    if (state && "pos" in state && typeof state.pos === "number") {
+      this.pos = state.pos;
     } else if (data !== undefined) {
       mooLexer.reset(data);
       const raw: moo.Token[] = [];
@@ -294,8 +294,8 @@ class PythonLexer implements moo.Lexer {
     return name === "indent" || name === "dedent" || mooLexer.has(name);
   }
 
-  formatError(token?: moo.Token, message?: string): string {
-    return mooLexer.formatError(token as moo.Token, message);
+  formatError(token: moo.Token, message: string): string {
+    return mooLexer.formatError(token, message);
   }
 
   pushState(state: string): void {
@@ -319,5 +319,5 @@ class PythonLexer implements moo.Lexer {
     };
   }
 }
-const pythonLexer: moo.Lexer = new PythonLexer();
+const pythonLexer = new PythonLexer();
 export default pythonLexer;

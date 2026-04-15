@@ -1,33 +1,5 @@
-import {
-  ErrorSeverity,
-  ErrorType,
-  RuntimeSourceError,
-  SourceError,
-  SourceLocation,
-  UNKNOWN_LOCATION,
-} from "../../errors";
-import { Context } from "./context";
-
-export class CseError implements SourceError {
-  public type = ErrorType.RUNTIME;
-  public severity = ErrorSeverity.ERROR;
-  public location: SourceLocation;
-
-  constructor(
-    public message: string,
-    location?: SourceLocation,
-  ) {
-    this.location = location ?? UNKNOWN_LOCATION;
-  }
-
-  public explain() {
-    return this.message;
-  }
-
-  public elaborate() {
-    return "There is an error in the CSE machine.";
-  }
-}
+import { RuntimeSourceError } from "../../errors";
+import type { Context } from "./context";
 
 export function handleRuntimeError(context: Context, error: RuntimeSourceError): never {
   context.errors.push(error);
@@ -45,5 +17,12 @@ export class AssertionError extends RuntimeSourceError {
 
   public elaborate(): string {
     return "Please contact the administrators to let them know that this error has occurred";
+  }
+}
+
+export class UnknownEvaluatorError extends RuntimeSourceError {
+  constructor(public readonly evaluatorName: string) {
+    super();
+    this.message = `Unknown evaluator error: ${evaluatorName}\nIf you see this error, please report it to the administrators.`;
   }
 }
