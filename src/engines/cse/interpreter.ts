@@ -26,6 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError } from "./error";
 import * as instrCreator from "./instrCreator";
+import { forInstr } from "./instrCreator";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -36,6 +37,7 @@ import {
   BoolOpInstr,
   BranchInstr,
   EnvInstr,
+  ForInstr,
   Instr,
   InstrType,
   ListAccessInstr,
@@ -48,7 +50,9 @@ import {
 } from "./types";
 import {
   envChanging,
+  evaluateForIterator,
   evaluateListAssignment,
+  generateForIncrement,
   isNode,
   pyDefineVariable,
   pyGetVariable,
@@ -639,20 +643,20 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   For: function (
-    _code: string,
-    _command: ControlItem,
-    _context: Context,
-    _control: Control,
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    // TODO: Implement for loops
-    // const forNode = command as StmtNS.For;
-    // const instr = instrCreator.forInstr(forNode, forNode.target, forNode.iter, {
-    //   type: "StatementSequence",
-    //   body: forNode.body,
-    // });
-    // control.push(instr);
+    const forNode = command as StmtNS.For;
+    const iterator = evaluateForIterator(code, context, forNode);
+
+    control.push(forInstr(forNode, forNode.body));
+    control.push(iterator.step);
+    control.push(iterator.end);
+    control.push(iterator.start);
   },
 
   While: function (
@@ -1015,6 +1019,43 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
       } else {
         control.push(instr.body);
       }
+    }
+  },
+  [InstrType.FOR]: function (
+    code: string,
+    command: ControlItem,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    _isPrelude: boolean,
+  ) {
+    const instr = command as ForInstr;
+    const step = stash.pop();
+    const end = stash.pop();
+    const start = stash.pop();
+    if (start && end && step) {
+      const node = instr.srcNode as StmtNS.For;
+      if (start.type !== "bigint" || end.type !== "bigint" || step.type !== "bigint") {
+        handleRuntimeError(
+          context,
+          new error.TypeError(
+            code,
+            instr.srcNode as ExprNS.Expr,
+            context,
+            [start.type, end.type, step.type].filter((t) => t !== "bigint")[0],
+            "int",
+          ),
+        );
+      }
+      if ((step.value <= 0 && end.value >= start.value) || (step.value >= 0 && end.value <= start.value)) {
+        return;
+      }
+      control.push(instr);
+      stash.push({ type: "bigint", value: start.value + step.value });
+      stash.push({ type: "bigint", value: end.value });
+      stash.push({ type: "bigint", value: step.value });
+      control.push(...instr.body.reverse());
+      control.push(generateForIncrement(node.target.lexeme, start.value));
     }
   },
   [InstrType.APPLICATION]: async function (

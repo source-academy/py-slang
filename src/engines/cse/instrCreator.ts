@@ -1,4 +1,4 @@
-import { ExprNS } from "../../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
 import { Environment } from "./environment";
 import {
@@ -127,16 +127,10 @@ export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr =>
 
 export const forInstr = (
   srcNode: Node,
-  init: ExprNS.Variable,
-  test: ExprNS.Expr,
-  update: Node,
-  body: StatementSequence,
+  body: StmtNS.Stmt[],
 ): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
-  init,
-  test,
-  update,
   body,
 });
 
