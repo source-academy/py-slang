@@ -54,8 +54,7 @@ class ListBuiltins {
 }
 for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
   if (
-    typeof ListBuiltins[builtin as keyof typeof ListBuiltins] === "function" &&
-    !builtin.startsWith("_")
+    typeof ListBuiltins[builtin as keyof typeof ListBuiltins] === "function"
   ) {
     listBuiltins.set(builtin, {
       type: "builtin",
