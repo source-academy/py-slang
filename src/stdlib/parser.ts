@@ -1,13 +1,7 @@
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
-import {
-  BuiltinValue,
-  ListValue,
-  NoneValue,
-  StringValue,
-  Value
-} from "../engines/cse/stash";
+import { BuiltinValue, ListValue, NoneValue, StringValue, Value } from "../engines/cse/stash";
 import { operatorTranslator } from "../engines/cse/types";
 import { TypeError } from "../errors/errors";
 import { parse } from "../parser";
@@ -72,10 +66,7 @@ function transformParam(p: FunctionParam): Value {
     { type: "string", value: p.lexeme },
   ]);
   if (p.isStarred) {
-    return vector_to_linked_list([
-      { type: "string", value: "rest_element" },
-      nameNode,
-    ]);
+    return vector_to_linked_list([{ type: "string", value: "rest_element" }, nameNode]);
   }
   return nameNode;
 }
@@ -95,10 +86,8 @@ function transform(
       const lit = node as ExprNS.Literal;
       let val: Value;
       if (typeof lit.value === "number") val = { type: "number", value: lit.value };
-      else if (typeof lit.value === "boolean")
-        val = { type: "bool", value: lit.value };
-      else if (typeof lit.value === "string")
-        val = { type: "string", value: lit.value };
+      else if (typeof lit.value === "boolean") val = { type: "bool", value: lit.value };
+      else if (typeof lit.value === "string") val = { type: "string", value: lit.value };
       else val = None;
       return vector_to_linked_list([{ type: "string", value: "literal" }, val]);
     }
@@ -277,9 +266,7 @@ function transform(
         { type: "string", value: "import_from" },
         { type: "string", value: (node as StmtNS.FromImport).module.lexeme },
         vector_to_linked_list(
-          (node as StmtNS.FromImport).names.map(
-            n => ({ type: "string", value: n.name.lexeme }),
-          ),
+          (node as StmtNS.FromImport).names.map(n => ({ type: "string", value: n.name.lexeme })),
         ),
       ]);
     case "Global":
@@ -302,9 +289,7 @@ function transform(
     case "Break":
       return vector_to_linked_list([{ type: "string", value: "break_statement" }]);
     case "Continue":
-      return vector_to_linked_list([
-        { type: "string", value: "continue_statement" },
-      ]);
+      return vector_to_linked_list([{ type: "string", value: "continue_statement" }]);
     default:
       throw new Error("Cannot transform unknown type: " + type);
   }
@@ -314,10 +299,7 @@ class ParserBuiltins {
   @Validate(1, 1, "parse", false)
   static parse(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "string"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "string"));
     }
     const x = args[0].value;
     const program = parse(x + "\n");
@@ -353,10 +335,7 @@ class ParserBuiltins {
   @Validate(1, 1, "tokenize", false)
   static tokenize(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "string"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "string"));
     }
     const x = args[0].value;
     pythonLexer.reset(x);

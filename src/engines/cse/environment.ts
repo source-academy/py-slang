@@ -55,17 +55,14 @@ export const createEnvironment = (
   callExpression: ExprNS.Call,
 ): Environment => {
   const environment: Environment = {
-    name:
-      closure.node.kind === "FunctionDef"
-        ? closure.node.name.lexeme
-        : "lambda",
+    name: closure.node.kind === "FunctionDef" ? closure.node.name.lexeme : "lambda",
     tail: closure.environment,
     head: {},
     id: uniqueId(context),
     callExpression: callExpression,
     closure: closure,
   };
-  
+
   const isVariadic = closure.node.parameters.some(param => param.isStarred);
   let consumed = false;
   closure.node.parameters.forEach((paramToken, index) => {

@@ -94,13 +94,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       });
     } catch (e) {
       const errors = Array.isArray(e) ? e : [e];
-      await Promise.all(errors.map(e => {
-        if (e instanceof SyntaxError) {
-          return displayError(this.context, e, ErrorType.EVALUATOR_SYNTAX);
-        }
-        return displayError(this.context, e, ErrorType.INTERNAL);
-      }));
-
+      await Promise.all(
+        errors.map(e => {
+          if (e instanceof SyntaxError) {
+            return displayError(this.context, e, ErrorType.EVALUATOR_SYNTAX);
+          }
+          return displayError(this.context, e, ErrorType.INTERNAL);
+        }),
+      );
     } finally {
       await destroyStreams(this.context);
     }

@@ -14,7 +14,7 @@ const allTargets = [
   "PySvmlSinterEvaluator",
 ] as const;
 
-type EvaluatorName = typeof allTargets[number];
+type EvaluatorName = (typeof allTargets)[number];
 
 function buildTarget(target: EvaluatorName, extraArgs: string[] = []): Promise<void> {
   console.log(`\nBuilding ${target}...\n`);

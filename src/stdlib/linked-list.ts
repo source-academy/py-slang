@@ -56,10 +56,7 @@ class LinkedListBuiltins {
   @Validate(1, 1, "head", true)
   static head(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (!isPair(args[0])) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "pair"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
     }
     return args[0].value[0];
   }
@@ -67,10 +64,7 @@ class LinkedListBuiltins {
   @Validate(1, 1, "tail", true)
   static tail(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (!isPair(args[0])) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "pair"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
     }
     return args[0].value[1];
   }
@@ -79,10 +73,7 @@ class LinkedListBuiltins {
     if (value.type === "none") {
       return true;
     }
-    return (
-      isPair(value) &&
-      LinkedListBuiltins._is_linked_list(value.value[1])
-    );
+    return isPair(value) && LinkedListBuiltins._is_linked_list(value.value[1]);
   }
 
   static _print_linked_list(

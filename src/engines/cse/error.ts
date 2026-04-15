@@ -1,6 +1,4 @@
-import {
-  RuntimeSourceError
-} from "../../errors";
+import { RuntimeSourceError } from "../../errors";
 import type { Context } from "./context";
 
 export function handleRuntimeError(context: Context, error: RuntimeSourceError): never {
@@ -28,4 +26,3 @@ export class UnknownEvaluatorError extends RuntimeSourceError {
     this.message = `Unknown evaluator error: ${evaluatorName}\nIf you see this error, please report it to the administrators.`;
   }
 }
-

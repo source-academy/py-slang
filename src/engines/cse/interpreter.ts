@@ -47,7 +47,7 @@ import {
   PopInstr,
   ResetInstr,
   UnOpInstr,
-  WhileInstr
+  WhileInstr,
 } from "./types";
 import {
   envChanging,
@@ -297,14 +297,17 @@ export async function* generateCSEMachineStateStream(
       context.runtime.nodes.unshift(command);
       const nodeKind = node.kind;
       if (!isDeclaredEvaluator(nodeKind)) {
-        handleRuntimeError(
-          context,
-          new UnknownEvaluatorError(
-            node.kind
-          )
-        );
+        handleRuntimeError(context, new UnknownEvaluatorError(node.kind));
       }
-      await cmdEvaluators[nodeKind](code, node as never, context, control, stash, isPrelude, variant);
+      await cmdEvaluators[nodeKind](
+        code,
+        node as never,
+        context,
+        control,
+        stash,
+        isPrelude,
+        variant,
+      );
 
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -318,12 +321,7 @@ export async function* generateCSEMachineStateStream(
       // Command is an instruction
       const instrType = command.instrType;
       if (!isDeclaredEvaluator(instrType)) {
-        handleRuntimeError(
-          context,
-          new UnknownEvaluatorError(
-            command.instrType
-          )
-        );
+        handleRuntimeError(context, new UnknownEvaluatorError(command.instrType));
       }
       await cmdEvaluators[instrType](
         code,
@@ -350,12 +348,18 @@ function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
 type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
-type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Global" | "Assert" | "NonLocal">;
-type InstrKeys = Exclude<InstrType, "ForInstr" | "Assert" | "Global" | "NonLocal" | "Import" | "Program" >;
+type StmtKeys = Exclude<
+  keyof typeof StmtNS,
+  "Stmt" | "AnnAssign" | "Global" | "Assert" | "NonLocal"
+>;
+type InstrKeys = Exclude<
+  InstrType,
+  "ForInstr" | "Assert" | "Global" | "NonLocal" | "Import" | "Program"
+>;
 type CmdEvaluators = {
-  [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>
+  [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
 } & {
-  [K in StmtKeys]: CmdEvaluator<InstanceType<(typeof StmtNS)[K]>>
+  [K in StmtKeys]: CmdEvaluator<InstanceType<(typeof StmtNS)[K]>>;
 } & {
   [K in InstrKeys]: CmdEvaluator<Extract<Instr, { instrType: K }>>;
 };
@@ -382,7 +386,10 @@ const cmdEvaluators: CmdEvaluators = {
     }
 
     // Create a new program environment if needed.
-    if (fileInput.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment") {
+    if (
+      fileInput.statements.length > 0 &&
+      currentEnvironment(context).name !== "programEnvironment"
+    ) {
       const programEnv = createProgramEnvironment(context, isPrelude);
       pushEnvironment(context, programEnv);
     }
@@ -510,7 +517,7 @@ const cmdEvaluators: CmdEvaluators = {
 
   Variable: function (
     code: string,
-    variable:  ExprNS.Variable,
+    variable: ExprNS.Variable,
     context: Context,
     _control: Control,
     stash: Stash,
@@ -737,9 +744,7 @@ const cmdEvaluators: CmdEvaluators = {
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    control.push(
-      instrCreator.listInstr(command.elements.length, command),
-    );
+    control.push(instrCreator.listInstr(command.elements.length, command));
 
     for (let i = command.elements.length - 1; i >= 0; i--) {
       control.push(command.elements[i]);

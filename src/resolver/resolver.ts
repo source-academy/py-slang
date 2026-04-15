@@ -205,9 +205,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
           ),
         ),
-        ...preludeNames.map(
-          name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
-        ),
+        ...preludeNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const),
       ]),
     );
     this.functionScope = null;

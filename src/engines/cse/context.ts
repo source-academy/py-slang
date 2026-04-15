@@ -119,7 +119,7 @@ export class Context {
       tail: newTail,
       head: { ...env.head },
       callExpression: env.callExpression,
-      closure: env.closure
+      closure: env.closure,
     };
     return newEnv;
   }

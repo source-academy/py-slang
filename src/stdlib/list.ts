@@ -53,9 +53,7 @@ class ListBuiltins {
   }
 }
 for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
-  if (
-    typeof ListBuiltins[builtin as keyof typeof ListBuiltins] === "function"
-  ) {
+  if (typeof ListBuiltins[builtin as keyof typeof ListBuiltins] === "function") {
     listBuiltins.set(builtin, {
       type: "builtin",
       func: ListBuiltins[builtin as keyof typeof ListBuiltins] as BuiltinValue["func"],

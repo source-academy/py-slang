@@ -48,28 +48,14 @@ export function Validate<T extends Value | Promise<Value>>(
       if (minArgs !== null && args.length < minArgs) {
         handleRuntimeError(
           context,
-          new MissingRequiredPositionalError(
-            source,
-            command,
-            functionName,
-            minArgs,
-            args,
-            strict,
-          ),
+          new MissingRequiredPositionalError(source, command, functionName, minArgs, args, strict),
         );
       }
 
       if (maxArgs !== null && args.length > maxArgs) {
         handleRuntimeError(
           context,
-          new TooManyPositionalArgumentsError(
-            source,
-            command,
-            functionName,
-            maxArgs,
-            args,
-            strict,
-          ),
+          new TooManyPositionalArgumentsError(source, command, functionName, maxArgs, args, strict),
         );
       }
 
@@ -83,10 +69,7 @@ export class BuiltInFunctions {
   static arity(args: Value[], source: string, command: ExprNS.Call, context: Context): BigIntValue {
     const func = args[0];
     if (func.type !== "builtin" && func.type !== "closure") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, func.type, "function"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, func.type, "function"));
     }
     if (func.type === "closure") {
       const variadicInstance = func.closure.node.parameters.findIndex(param => param.isStarred);
@@ -122,10 +105,7 @@ export class BuiltInFunctions {
       if (arg.type === "string") {
         const str = arg.value.trim().replace(/_/g, "");
         if (!/^[+-]?\d+$/.test(str)) {
-          handleRuntimeError(
-            context,
-            new ValueError(source, command, context, "int"),
-          );
+          handleRuntimeError(context, new ValueError(source, command, context, "int"));
         }
         return { type: "bigint", value: BigInt(str) };
       }
@@ -133,16 +113,10 @@ export class BuiltInFunctions {
     }
     const baseArg = args[1];
     if (arg.type !== "string") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, arg.type, "string"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
     }
     if (baseArg.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, baseArg.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, baseArg.type, "int"));
     }
 
     let base = Number(baseArg.value);
@@ -215,22 +189,13 @@ export class BuiltInFunctions {
       }
       const num = Number(str);
       if (isNaN(num)) {
-        handleRuntimeError(
-          context,
-          new ValueError(source, command, context, "float"),
-        );
+        handleRuntimeError(context, new ValueError(source, command, context, "float"));
       }
       return { type: "number", value: num };
     }
     handleRuntimeError(
       context,
-      new TypeError(
-        source,
-        command,
-        context,
-        val.type,
-        "'float', 'int', 'bool' or 'str'",
-      ),
+      new TypeError(source, command, context, val.type, "'float', 'int', 'bool' or 'str'"),
     );
   }
 
@@ -253,10 +218,7 @@ export class BuiltInFunctions {
         val.type !== "string" &&
         val.type !== "complex"
       ) {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, val.type, "complex"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
       }
       return {
         type: "complex",
@@ -292,10 +254,7 @@ export class BuiltInFunctions {
   static real(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, val.type, "complex"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
     }
     return { type: "number", value: val.value.real };
   }
@@ -304,10 +263,7 @@ export class BuiltInFunctions {
   static imag(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, val.type, "complex"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
     }
     return { type: "number", value: val.value.imag };
   }
@@ -348,13 +304,7 @@ export class BuiltInFunctions {
       default:
         handleRuntimeError(
           context,
-          new TypeError(
-            source,
-            command,
-            context,
-            args[0].type,
-            "float', 'int' or 'complex",
-          ),
+          new TypeError(source, command, context, args[0].type, "float', 'int' or 'complex"),
         );
     }
   }
@@ -401,10 +351,7 @@ export class BuiltInFunctions {
     }
 
     if (num < -1 || num > 1) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_acos"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_acos"));
     }
 
     const result = Math.acos(num);
@@ -435,10 +382,7 @@ export class BuiltInFunctions {
     }
 
     if (num < 1) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_acosh"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_acosh"));
     }
 
     const result = Math.acosh(num);
@@ -468,10 +412,7 @@ export class BuiltInFunctions {
     }
 
     if (num < -1 || num > 1) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_asin"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_asin"));
     }
 
     const result = Math.asin(num);
@@ -591,10 +532,7 @@ export class BuiltInFunctions {
     }
 
     if (num <= -1 || num >= 1) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_atanh"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_atanh"));
     }
 
     const result = Math.atanh(num);
@@ -737,25 +675,16 @@ export class BuiltInFunctions {
     const k = args[1];
 
     if (n.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, n.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, n.type, "int"));
     } else if (k.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, k.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, k.type, "int"));
     }
 
     const nVal = BigInt(n.value);
     const kVal = BigInt(k.value);
 
     if (nVal < 0 || kVal < 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_comb"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_comb"));
     }
 
     if (kVal > nVal) {
@@ -782,19 +711,13 @@ export class BuiltInFunctions {
     const n = args[0];
 
     if (n.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, n.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, n.type, "int"));
     }
 
     const nVal = BigInt(n.value);
 
     if (nVal < 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_factorial"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_factorial"));
     }
 
     // 0! = 1
@@ -822,10 +745,7 @@ export class BuiltInFunctions {
 
     const values = args.map(v => {
       if (v.type !== "bigint") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, v.type, "int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, v.type, "int"));
       }
       return BigInt(v.value);
     });
@@ -866,19 +786,13 @@ export class BuiltInFunctions {
   ): BigIntValue {
     const nValObj = args[0];
     if (nValObj.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, nValObj.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type, "int"));
     }
 
     const n: bigint = nValObj.value;
 
     if (n < 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_isqrt"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_isqrt"));
     }
 
     if (n < 2) {
@@ -913,10 +827,7 @@ export class BuiltInFunctions {
 
     const values = args.map(val => {
       if (val.type !== "bigint") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, val.type, "int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, val.type, "int"));
       }
       return BigInt(val.value);
     });
@@ -954,10 +865,7 @@ export class BuiltInFunctions {
   ): BigIntValue {
     const nValObj = args[0];
     if (nValObj.type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, nValObj.type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type, "int"));
     }
     const n = BigInt(nValObj.value);
 
@@ -977,10 +885,7 @@ export class BuiltInFunctions {
     }
 
     if (n < 0 || k < 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_perm"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_perm"));
     }
 
     if (k > n) {
@@ -1014,10 +919,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: ceiled };
     }
 
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, x.type, "float' or 'int"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
   }
 
   @Validate(1, 1, "math_fabs", false)
@@ -1047,10 +949,7 @@ export class BuiltInFunctions {
       return { type: "number", value: absVal };
     }
 
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, x.type, "float' or 'int"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
   }
 
   @Validate(1, 1, "math_floor", false)
@@ -1078,10 +977,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: floored };
     }
 
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, x.type, "float' or 'int"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
   }
 
   // Computes the product of a and b along with the rounding error using Dekker's algorithm.
@@ -1160,10 +1056,7 @@ export class BuiltInFunctions {
 
     // Divisor cannot be zero
     if (yVal === 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_fmod"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_fmod"));
     }
 
     // JavaScript's % operator behaves similarly to C's fmod
@@ -1225,10 +1118,7 @@ export class BuiltInFunctions {
     }
 
     if (yValue === 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_remainder"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_remainder"));
     }
 
     const quotient = xValue / yValue;
@@ -1265,10 +1155,7 @@ export class BuiltInFunctions {
       return { type: "bigint", value: BigInt(truncated) };
     }
 
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, x.type, "float' or 'int"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
   }
 
   @Validate(2, 2, "math_copysign", false)
@@ -1375,10 +1262,7 @@ export class BuiltInFunctions {
     const xVal = BuiltInFunctions.toNumber(args[0], source, command, context);
 
     if (args[1].type !== "bigint") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[1].type, "int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[1].type, "int"));
     }
     const expVal = args[1].value;
 
@@ -1584,10 +1468,7 @@ export class BuiltInFunctions {
     }
 
     if (num <= 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_log"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_log"));
     }
 
     if (args.length === 1) {
@@ -1608,10 +1489,7 @@ export class BuiltInFunctions {
       baseNum = Number(baseArg.value);
     }
     if (baseNum <= 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_log"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_log"));
     }
 
     const result = Math.log(num) / Math.log(baseNum);
@@ -1639,10 +1517,7 @@ export class BuiltInFunctions {
       num = Number(x.value);
     }
     if (num <= 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_log10"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_log10"));
     }
 
     const result = Math.log10(num);
@@ -1670,10 +1545,7 @@ export class BuiltInFunctions {
       num = Number(x.value);
     }
     if (1 + num <= 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_log1p"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_log1p"));
     }
 
     const result = Math.log1p(num);
@@ -1701,10 +1573,7 @@ export class BuiltInFunctions {
       num = Number(x.value);
     }
     if (num <= 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_log2"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_log2"));
     }
 
     const result = Math.log2(num);
@@ -1889,10 +1758,7 @@ export class BuiltInFunctions {
     }
 
     if (num < 0) {
-      handleRuntimeError(
-        context,
-        new ValueError(source, command, context, "math_sqrt"),
-      );
+      handleRuntimeError(context, new ValueError(source, command, context, "math_sqrt"));
     }
 
     const result = Math.sqrt(num);
@@ -1958,19 +1824,13 @@ export class BuiltInFunctions {
         }
       } else {
         if (args[0].type !== "bigint") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, args[0].type, "int"),
-          );
+          handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "int"));
         }
         let maxVal: bigint = args[0].value;
         for (let i = 1; i < args.length; i++) {
           const arg = args[i];
           if (arg.type !== "bigint") {
-            handleRuntimeError(
-              context,
-              new TypeError(source, command, context, arg.type, "int"),
-            );
+            handleRuntimeError(context, new TypeError(source, command, context, arg.type, "int"));
           }
           const curr: bigint = arg.value;
           if (curr > maxVal) {
@@ -1990,10 +1850,7 @@ export class BuiltInFunctions {
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg.type !== "string") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, arg.type, "string"),
-          );
+          handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
         }
         const curr = arg.value;
         if (curr > maxVal) {
@@ -2014,14 +1871,7 @@ export class BuiltInFunctions {
     if (args.length < 2) {
       handleRuntimeError(
         context,
-        new MissingRequiredPositionalError(
-          source,
-          command,
-          "min",
-          Number(2),
-          args,
-          true,
-        ),
+        new MissingRequiredPositionalError(source, command, "min", Number(2), args, true),
       );
     }
 
@@ -2082,19 +1932,13 @@ export class BuiltInFunctions {
         }
       } else {
         if (args[0].type !== "bigint") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, args[0].type, "int"),
-          );
+          handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "int"));
         }
         let maxVal: bigint = args[0].value;
         for (let i = 1; i < args.length; i++) {
           const arg = args[i];
           if (arg.type !== "bigint") {
-            handleRuntimeError(
-              context,
-              new TypeError(source, command, context, arg.type, "int"),
-            );
+            handleRuntimeError(context, new TypeError(source, command, context, arg.type, "int"));
           }
           const curr: bigint = arg.value;
           if (curr < maxVal) {
@@ -2114,10 +1958,7 @@ export class BuiltInFunctions {
       for (let i = 1; i < args.length; i++) {
         const arg = args[i];
         if (arg.type !== "string") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, arg.type, "string"),
-          );
+          handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
         }
         const curr = arg.value;
         if (curr < maxVal) {
@@ -2162,10 +2003,7 @@ export class BuiltInFunctions {
     let ndigitsArg: BigIntValue = { type: "bigint", value: BigInt(0) };
     if (args.length === 2 && args[1].type !== "none") {
       if (args[1].type !== "bigint") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[1].type, "int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, args[1].type, "int"));
       }
       ndigitsArg = args[1];
     } else {
