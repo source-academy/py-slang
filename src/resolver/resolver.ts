@@ -11,6 +11,11 @@ type Stmt = StmtNS.Stmt;
 import levenshtein from "fast-levenshtein";
 // const levenshtein = require('fast-levenshtein');
 
+export type FunctionEnvironments = Map<
+  StmtNS.FileInput | StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda,
+  Environment
+>;
+
 const RedefineableTokenSentinel = new Token(TokenType.AT, "", 0, 0, 0);
 
 export class Environment {
@@ -52,6 +57,22 @@ export class Environment {
       curr = curr.enclosing;
     }
     return curr === null ? -1 : distance;
+  }
+
+  /**
+   * Looks up the name in the environment chain.
+   * Returns the Environment where the name is found, or null if not found.
+   */
+  lookupNameEnv(identifier: Token): Environment | null {
+    if (this.names.has(identifier.lexeme)) {
+      return this;
+    }
+    for (let curr = this.enclosing; curr !== null; curr = curr.enclosing) {
+      if (curr.names.has(identifier.lexeme)) {
+        return curr;
+      }
+    }
+    return null;
   }
 
   /* Looks up the name but only for the current environment. */
@@ -150,6 +171,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   environment: Environment | null;
   functionScope: Environment | null;
   errors: Error[];
+  functionEnvironments: FunctionEnvironments;
   private validators: FeatureValidator[];
 
   constructor(
@@ -165,6 +187,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.ast = ast;
     this.validators = validators;
     this.errors = [];
+    this.functionEnvironments = new Map();
     // The global environment
     this.environment = new Environment(
       source,
@@ -189,6 +212,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       ]),
     );
     this.functionScope = null;
+  }
+
+  resolveEnvironments(program: StmtNS.FileInput): FunctionEnvironments {
+    this.resolve(program);
+    return this.functionEnvironments;
   }
 
   private runValidators(node: StmtNS.Stmt | ExprNS.Expr): void {
@@ -280,6 +308,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Create a new environment.
     const oldEnv = this.environment;
     this.environment = new Environment(this.source, this.environment, new Map());
+    this.functionEnvironments.set(stmt, this.environment);
     this.resolve(stmt.statements);
     // Grab identifiers from that new environment. That are NOT functions.
     // stmt.varDecls = this.varDeclNames(this.environment.names)
@@ -295,12 +324,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(stmt.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
-    // const params = new Map(
-    //     stmt.parameters.map(param => [param.lexeme, param])
-    // );
-    // if (this.environment !== null) {
-    //     this.environment.names = params;
-    // }
+    this.functionEnvironments.set(stmt, this.environment);
     this.functionScope = this.environment;
     this.resolve(stmt.body);
     // Grab identifiers from that new environment. That are NOT functions.
@@ -407,6 +431,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
+    this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Restore old environment
     this.environment = oldEnv;
@@ -417,6 +442,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
     this.environment = new Environment(this.source, this.environment, newEnv);
+    this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Grab identifiers from that new environment.
     expr.varDecls = Array.from(this.environment.names.values());

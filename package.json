@@ -7,7 +7,7 @@
   "scripts": {
     "regen": "tsx src/generate.ts && prettier --write src/ast-types.ts",
     "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
-    "build": "tsx scripts/build.ts --all",
+    "build": "tsx scripts/build.ts",
     "dev": "tsx scripts/build.ts --watch",
     "start": "yarn run build && node dist/index.js",
     "jsdoc": "./scripts/jsdoc.sh prepare",
