@@ -13,7 +13,6 @@ import { Context } from "./engines/cse/context";
 import { ControlItem } from "./engines/cse/control";
 import { handleRuntimeError } from "./engines/cse/error";
 import { displayOutput, receiveInput } from "./engines/cse/streams";
-import { stringify } from "./utils/stringify";
 import {
   MissingRequiredPositionalError,
   TooManyPositionalArgumentsError,
@@ -21,6 +20,7 @@ import {
   UserError,
   ValueError,
 } from "./errors/errors";
+import { stringify } from "./utils/stringify";
 
 export const minArgMap = new Map<string, number>();
 
@@ -234,7 +234,7 @@ export class BuiltInFunctions {
     );
   }
 
-  @Validate(null, 1, "complex", true)
+  @Validate(null, 2, "complex", true)
   static complex(
     args: Value[],
     source: string,
@@ -244,23 +244,48 @@ export class BuiltInFunctions {
     if (args.length === 0) {
       return { type: "complex", value: new PyComplexNumber(0, 0) };
     }
-    const val = args[0];
-    if (
-      val.type !== "bigint" &&
-      val.type !== "number" &&
-      val.type !== "bool" &&
-      val.type !== "string" &&
-      val.type !== "complex"
-    ) {
+    if (args.length == 1) {
+      const val = args[0];
+      if (
+        val.type !== "bigint" &&
+        val.type !== "number" &&
+        val.type !== "bool" &&
+        val.type !== "string" &&
+        val.type !== "complex"
+      ) {
+        handleRuntimeError(
+          context,
+          new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
+        );
+      }
+      return {
+        type: "complex",
+        value: PyComplexNumber.fromValue(context, source, command as ExprNS.Expr, val.value),
+      };
+    }
+    const invalidType = args.filter(
+      val =>
+        val.type !== "bigint" &&
+        val.type !== "number" &&
+        val.type !== "bool" &&
+        val.type !== "complex",
+    );
+    if (invalidType.length > 0) {
       handleRuntimeError(
         context,
-        new TypeError(source, command as ExprNS.Expr, context, val.type, "complex"),
+        new TypeError(
+          source,
+          command as ExprNS.Expr,
+          context,
+          invalidType[0].type,
+          "'int', 'float', 'bool' or 'complex'",
+        ),
       );
     }
-    return {
-      type: "complex",
-      value: PyComplexNumber.fromValue(context, source, command as ExprNS.Expr, val.value),
-    };
+    const [real, imag] = args as (BigIntValue | NumberValue | BoolValue | ComplexValue)[];
+    const realPart = PyComplexNumber.fromValue(context, source, command as ExprNS.Expr, real.value);
+    const imagPart = PyComplexNumber.fromValue(context, source, command as ExprNS.Expr, imag.value);
+    return { type: "complex", value: realPart.add(imagPart.mul(new PyComplexNumber(0, 1))) };
   }
 
   @Validate(1, 1, "real", true)
@@ -348,12 +373,8 @@ export class BuiltInFunctions {
     );
   }
 
-  static toStr(val: Value): string {
-    return toPythonString(val);
-  }
-
   static error(args: Value[], _source: string, command: ControlItem, context: Context): Value {
-    const output = "Error: " + args.map(arg => BuiltInFunctions.toStr(arg)).join(" ") + "\n";
+    const output = "Error: " + args.map(arg => toPythonString(arg)).join(" ") + "\n";
     handleRuntimeError(context, new UserError(output, command as ExprNS.Expr));
   }
 

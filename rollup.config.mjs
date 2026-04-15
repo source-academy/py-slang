@@ -27,6 +27,7 @@ function plugins() {
     nodePolyfills(),
     terser({
       compress: { dead_code: true, passes: 3 },
+      keep_fnames: true,
     }),
   ];
 }

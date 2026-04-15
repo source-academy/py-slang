@@ -8,6 +8,9 @@ export type ControlItem = (Node | Instr) & {
   skipEnv?: boolean;
 };
 
+/**
+ * The control stores the remaining instructions to be executed
+ */
 export class Control extends Stack<ControlItem> {
   private numEnvDependentItems: number;
   public constructor(program?: StmtNS.Stmt) {

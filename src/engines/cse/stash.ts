@@ -93,6 +93,9 @@ export interface BuiltinValue {
   minArgs: number;
 }
 
+/**
+ * The stash is used for storing intermediate values during evaluation, such as function arguments and return values.
+ */
 export class Stash extends Stack<Value> {
   public constructor() {
     super();

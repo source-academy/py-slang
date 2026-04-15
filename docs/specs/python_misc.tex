@@ -13,6 +13,11 @@ names are provided by the MISC library:
   \item \verb#int#\texttt{(s, i)}: \textit{primitive},
     interprets the \emph{string} \texttt{s} as an integer, using the
     positive integer \texttt{i} as radix, and returns the respective value.
+  \item \verb#complex#\texttt{(r, i)}: \textit{primitive},
+    takes in two numbers \texttt{r} and \texttt{i}, and returns the complex number 
+    with real part \texttt{r} and imaginary part \texttt{i}.
+  \item \verb#complex#\texttt{()}: \textit{primitive},
+    returns the complex number with real part 0 and imaginary part 0.
   \item \verb#repr#\texttt{(s)}: \textit{primitive},
     returns a string representation of \texttt{s} that is unambiguous and suitable for
     debugging; for many values, this string can be used to reconstruct \texttt{s}. 
