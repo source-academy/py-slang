@@ -1,7 +1,7 @@
 import {
-    MissingRequiredPositionalError,
-    TooManyPositionalArgumentsError,
-    TypeError,
+  MissingRequiredPositionalError,
+  TooManyPositionalArgumentsError,
+  TypeError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import pairmutator from "../stdlib/pairmutator";
@@ -22,7 +22,7 @@ head(p)`,
         `p = pair('a', 'b')
 set_head(p, 'x')
 head(p)`,
-        'x',
+        "x",
         null,
       ],
       [
@@ -52,14 +52,14 @@ tail(p)`,
         `p = pair('a', 'b')
 set_tail(p, 'y')
 tail(p)`,
-        'y',
+        "y",
         null,
       ],
       [
         `p = pair('first', None)
 set_tail(p, 'second')
 tail(p)`,
-        'second',
+        "second",
         null,
       ],
       [
@@ -185,9 +185,9 @@ head(s)`,
 build_linked_list_mut(5)`,
         [5n, [4n, [3n, [2n, [1n, null]]]]],
         null,
-      ]
+      ],
     ],
-"mutation does affecting equality of different pairs": [
+    "mutation does affecting equality of different pairs": [
       [
         `p = pair(1, 2)
 q = pair(1, 2)

@@ -1,4 +1,8 @@
-import { MissingRequiredPositionalError, TooManyPositionalArgumentsError, UserError } from "../errors";
+import {
+  MissingRequiredPositionalError,
+  TooManyPositionalArgumentsError,
+  UserError,
+} from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import pairmutator from "../stdlib/pairmutator";

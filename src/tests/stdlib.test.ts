@@ -778,9 +778,9 @@ describe("Standard Library Tests", () => {
         ['is_string("")', true, null],
         ['is_string("abc")', true, null],
       ],
-      
+
       coercing: [
-        ['int()', 0n, null], // int() with no arguments returns 0
+        ["int()", 0n, null], // int() with no arguments returns 0
         ["int(1)", 1n, null],
         ["int(1.0)", 1n, null],
         ["int(3.14)", 3n, null],
@@ -804,7 +804,7 @@ describe("Standard Library Tests", () => {
         ['int("0o77.3", 0)', ValueError, null],
         ['int("0o77e+2", 0)', ValueError, null],
         ['int("1_000", 0)', 1000n, null],
-        ['int(True, 0)', TypeError, null],
+        ["int(True, 0)", TypeError, null],
         ['int("13", 256)', ValueError, null], // base must be between 2 and 36, or 0
 
         // TODO: Add more coercion test cases for int() where double underscores between digits is prohibited

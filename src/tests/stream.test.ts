@@ -1,7 +1,7 @@
 import {
   MissingRequiredPositionalError,
   TooManyPositionalArgumentsError,
-  UserError
+  UserError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import pairmutator from "../stdlib/pairmutator";
@@ -72,7 +72,11 @@ describe("Stream Tests", () => {
     "for_each, reverse and append": [
       ["stream_for_each(lambda x: x, None)", true, []],
       ["stream_for_each(print, stream(1, 2, 3))", true, ["1", "2", "3"]],
-      ["equal(stream_to_linked_list(stream_reverse(stream(1, 2, 3))), linked_list(3, 2, 1))", true, null],
+      [
+        "equal(stream_to_linked_list(stream_reverse(stream(1, 2, 3))), linked_list(3, 2, 1))",
+        true,
+        null,
+      ],
       ["equal(stream_reverse(None), None)", true, null],
       [
         "equal(stream_to_linked_list(stream_append(stream(1, 2), stream(3, 4))), linked_list(1, 2, 3, 4))",
@@ -84,8 +88,16 @@ describe("Stream Tests", () => {
         true,
         null,
       ],
-      ["equal(stream_to_linked_list(stream_append(None, stream(3, 4))), linked_list(3, 4))", true, null],
-      ["equal(stream_to_linked_list(stream_append(stream(1, 2), None)), linked_list(1, 2))", true, null],
+      [
+        "equal(stream_to_linked_list(stream_append(None, stream(3, 4))), linked_list(3, 4))",
+        true,
+        null,
+      ],
+      [
+        "equal(stream_to_linked_list(stream_append(stream(1, 2), None)), linked_list(1, 2))",
+        true,
+        null,
+      ],
     ],
     "member, remove and filter": [
       [
@@ -94,13 +106,21 @@ describe("Stream Tests", () => {
         null,
       ],
       ["equal(stream_member(9, stream(1, 2, 3, 4)), None)", true, null],
-      ["equal(stream_to_linked_list(stream_remove(2, stream(1, 2, 3, 2))), linked_list(1, 3, 2))", true, null],
+      [
+        "equal(stream_to_linked_list(stream_remove(2, stream(1, 2, 3, 2))), linked_list(1, 3, 2))",
+        true,
+        null,
+      ],
       [
         "equal(stream_to_linked_list(stream_remove(9, stream(1, 2, 3, 2))), linked_list(1, 2, 3, 2))",
         true,
         null,
       ],
-      ["equal(stream_to_linked_list(stream_remove_all(2, stream(1, 2, 3, 2))), linked_list(1, 3))", true, null],
+      [
+        "equal(stream_to_linked_list(stream_remove_all(2, stream(1, 2, 3, 2))), linked_list(1, 3))",
+        true,
+        null,
+      ],
       ["equal(stream_remove_all(1, stream(1, 1)), None)", true, null],
       [
         "equal(stream_to_linked_list(stream_filter(lambda x: x % 2 == 0, stream(1, 2, 3, 4))), linked_list(2, 4))",
@@ -114,7 +134,11 @@ describe("Stream Tests", () => {
       ["equal(enum_stream(6, 3), None)", true, null],
       ["equal(eval_stream(stream(7, 8, 9), 2), linked_list(7, 8))", true, null],
       ["equal(eval_stream(integers_from(5), 4), linked_list(5, 6, 7, 8))", true, null],
-      ["equal(eval_stream(pair(1, lambda: pair(2, lambda: None)), 2), linked_list(1, 2))", true, null],
+      [
+        "equal(eval_stream(pair(1, lambda: pair(2, lambda: None)), 2), linked_list(1, 2))",
+        true,
+        null,
+      ],
       ["equal(eval_stream(stream(1, 2, 3), 0), None)", true, null],
       ["stream_ref(stream(10, 20, 30), 0)", 10n, null],
       ["stream_ref(stream(10, 20, 30), 2)", 30n, null],
