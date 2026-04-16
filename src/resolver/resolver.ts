@@ -233,19 +233,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       return this.errors;
     }
     if (stmt instanceof Array) {
-      // Resolve all top-level functions first. Python allows functions declared after
-      // another function to be used in that function.
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          try {
-            this.environment?.declarePlaceholderName(st.name);
-          } catch (e) {
-            if (e instanceof Error) {
-              this.errors.push(e);
-              continue;
-            }
-            throw e;
-          }
+          this.environment?.declareName(st.name);
+        }
+        if (st instanceof StmtNS.Assign && st.target instanceof ExprNS.Variable) {
+          this.environment?.declareName(st.target.name);
         }
       }
       for (const st of stmt) {
@@ -313,7 +306,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
-    this.environment?.declareName(stmt.name);
     this.environment?.functions.add(stmt.name.lexeme);
 
     // Create a new environment.
@@ -335,7 +327,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.ann);
     this.resolve(stmt.value);
     this.functionVarConstraint(stmt.target.name);
-    this.environment?.declareName(stmt.target.name);
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): void {
@@ -347,7 +338,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
-    this.environment?.declareName(target.name);
   }
 
   visitAssertStmt(stmt: StmtNS.Assert): void {
