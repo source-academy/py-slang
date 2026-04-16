@@ -1030,7 +1030,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
           context,
           new error.TypeError(
             code,
-            instr.srcNode as ExprNS.Expr,
+            node.iter,
             context,
             [start.type, end.type, step.type].filter(t => t !== "bigint")[0],
             "int",
