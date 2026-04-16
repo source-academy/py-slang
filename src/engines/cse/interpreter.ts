@@ -12,6 +12,7 @@ import * as error from "../../errors/errors";
 import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
 import { builtIns, toPythonString } from "../../stdlib";
 import { Group } from "../../stdlib/utils";
+import { Token } from "../../tokenizer";
 import { TokenType } from "../../tokens";
 import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
 import { Closure } from "./closure";
@@ -26,7 +27,6 @@ import {
 } from "./environment";
 import { handleRuntimeError } from "./error";
 import * as instrCreator from "./instrCreator";
-import { forInstr } from "./instrCreator";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -291,7 +291,6 @@ export async function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
     control.pop();
-
     if (isNode(command)) {
       const node = command as Node;
       const nodeType = node.constructor.name;
@@ -653,7 +652,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const forNode = command as StmtNS.For;
     const iterator = evaluateForIterator(code, context, forNode);
 
-    control.push(forInstr(forNode, forNode.body));
+    control.push(instrCreator.forInstr(forNode, forNode.body));
     control.push(iterator.step);
     control.push(iterator.end);
     control.push(iterator.start);
@@ -853,6 +852,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     ) {
       control.pop();
       control.push(command);
+      return;
     }
     control.pop();
   },
@@ -865,23 +865,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const top = control.pop();
-    const top2 = control.peek();
-    if (!top) {
-      return;
-    }
-    if (!top2) {
-      control.push(top);
-      return;
-    }
-    if (
-      isNode(top2) ||
-      ((top2 as Instr).instrType !== InstrType.WHILE && (top2 as Instr).instrType !== InstrType.FOR)
-    ) {
+    const top = control.peek();
+    if (!top) return;
+    control.pop();
+    if (isNode(top) || top.instrType !== InstrType.CONTINUE_MARKER) { 
       control.push(command);
-      return;
     }
-    control.push(top);
   },
 
   [InstrType.UNARY_OP]: function (
@@ -1014,6 +1003,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (condition && !isFalsy(condition)) {
       control.push(instr);
       control.push(instr.test);
+      control.push(instrCreator.continueMarkerInstr(instr.srcNode));
       if (instr.body && "type" in instr.body && instr.body.type === "StatementSequence") {
         control.push(...instr.body.body.slice().reverse());
       } else {
@@ -1051,13 +1041,19 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         return;
       }
       control.push(instr);
-      stash.push({ type: "bigint", value: start.value + step.value });
-      stash.push({ type: "bigint", value: end.value });
-      stash.push({ type: "bigint", value: step.value });
-      control.push(...instr.body.reverse());
+      const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
+        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
+        return new ExprNS.BigIntLiteral(token, token, value.toString());
+      }
+      control.push(generateBigIntLiteral(step.value));
+      control.push(generateBigIntLiteral(end.value));
+      control.push(generateBigIntLiteral(start.value + step.value));
+      control.push(instrCreator.continueMarkerInstr(node));
+      control.push(...instr.body.slice().reverse());
       control.push(generateForIncrement(node.target.lexeme, start.value));
     }
   },
+  [InstrType.CONTINUE_MARKER]: function () {},
   [InstrType.APPLICATION]: async function (
     code: string,
     command: ControlItem,

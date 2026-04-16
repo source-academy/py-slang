@@ -48,7 +48,7 @@ export enum InstrType {
   BRANCH = "Branch",
   POP = "Pop",
   ENVIRONMENT = "environment",
-  MARKER = "marker",
+  CONTINUE_MARKER = "continueMarker",
   END_OF_FUNCTION_BODY = "EndOfFunctionBody",
   LIST_ACCESS = "ListAccess",
 }
@@ -147,6 +147,10 @@ export interface BoolOpInstr extends BaseInstr {
   symbol: TokenType;
 }
 
+export interface ContinueMarkerInstr extends BaseInstr {
+  instrType: InstrType.CONTINUE_MARKER;
+}
+
 export type Instr =
   | BaseInstr
   | WhileInstr
@@ -161,7 +165,9 @@ export type Instr =
   | EndOfFunctionBodyInstr
   | ResetInstr
   | PopInstr
-  | BoolOpInstr;
+  | BoolOpInstr
+  | ContinueInstr
+  | ContinueMarkerInstr;
 
 export function typeTranslator(type: Value["type"]): string {
   switch (type) {

@@ -9,6 +9,7 @@ import {
   BranchInstr,
   BreakInstr,
   ContinueInstr,
+  ContinueMarkerInstr,
   EndOfFunctionBodyInstr,
   EnvInstr,
   ForInstr,
@@ -60,8 +61,8 @@ export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   srcNode,
 });
 
-export const markerInstr = (srcNode: Node): Instr => ({
-  instrType: InstrType.MARKER,
+export const continueMarkerInstr = (srcNode: Node): ContinueMarkerInstr => ({
+  instrType: InstrType.CONTINUE_MARKER,
   srcNode,
 });
 
