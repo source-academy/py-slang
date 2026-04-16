@@ -1,6 +1,8 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
+import { handleRuntimeError } from "../engines/cse/error";
 import { BigIntValue, BoolValue, BuiltinValue, Value } from "../engines/cse/stash";
+import { TypeError } from "../errors";
 import { minArgMap, Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
 import { GroupName } from "./utils";
@@ -11,13 +13,16 @@ class ListBuiltins {
   @Validate(1, 1, "list_length", true)
   static list_length(
     args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
   ): BigIntValue {
     const list = args[0];
     if (list.type !== "list") {
-      throw new Error("list_length expects a list as the first argument");
+      handleRuntimeError(
+        context,
+        new TypeError(source, command, context, list.type, "list")
+      );
     }
     return { type: "bigint", value: BigInt(list.value.length) };
   }
