@@ -516,11 +516,7 @@ export function evaluateForIterator(
   };
 }
 
-
-export function generateForIncrement(
-  variableName: string,
-  value: bigint,
-): StmtNS.Stmt {
+export function generateForIncrement(variableName: string, value: bigint): StmtNS.Stmt {
   const token = new Token(TokenType.NAME, variableName, 0, 0, 0);
   const variable = new ExprNS.Variable(token, token, token);
 

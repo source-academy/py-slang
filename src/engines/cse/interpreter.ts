@@ -868,7 +868,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     const top = control.peek();
     if (!top) return;
     control.pop();
-    if (isNode(top) || top.instrType !== InstrType.CONTINUE_MARKER) { 
+    if (isNode(top) || top.instrType !== InstrType.CONTINUE_MARKER) {
       control.push(command);
     }
   },
@@ -1032,19 +1032,22 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
             code,
             instr.srcNode as ExprNS.Expr,
             context,
-            [start.type, end.type, step.type].filter((t) => t !== "bigint")[0],
+            [start.type, end.type, step.type].filter(t => t !== "bigint")[0],
             "int",
           ),
         );
       }
-      if ((step.value <= 0 && end.value >= start.value) || (step.value >= 0 && end.value <= start.value)) {
+      if (
+        (step.value <= 0 && end.value >= start.value) ||
+        (step.value >= 0 && end.value <= start.value)
+      ) {
         return;
       }
       control.push(instr);
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
         const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
         return new ExprNS.BigIntLiteral(token, token, value.toString());
-      }
+      };
       control.push(generateBigIntLiteral(step.value));
       control.push(generateBigIntLiteral(end.value));
       control.push(generateBigIntLiteral(start.value + step.value));

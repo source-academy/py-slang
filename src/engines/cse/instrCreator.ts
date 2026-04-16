@@ -126,10 +126,7 @@ export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr =>
   srcNode,
 });
 
-export const forInstr = (
-  srcNode: Node,
-  body: StmtNS.Stmt[],
-): ForInstr => ({
+export const forInstr = (srcNode: Node, body: StmtNS.Stmt[]): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
   body,
