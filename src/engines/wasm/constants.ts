@@ -249,19 +249,9 @@ export const COPY_FX = wasm
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX))).then(
       local.set("$ptr", i32.wrap_i64(local.get("$val"))),
 
-      // forwarding metadata is encoded in from-space memory at $ptr as an i64:
-      // upper 32 bits = forwarding address, lower 32 bits carries forwarding bit (2nd leftmost bit)
-      wasm
-        .if(i32.eq(i32.load(i32.add(local.get("$ptr"), i32.const(4))), i32.const(ENV_FORWARDING_BIT)))
-        .then(wasm.return(i64.extend_i32_u(i32.load(local.get("$ptr"))))),
-
       local.set("$new_ptr", global.get(HEAP_PTR)),
       global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.const(16))),
       memory.copy(local.get("$new_ptr"), local.get("$ptr"), i32.const(16)),
-
-      // install forwarding metadata in from-space memory
-      i32.store(local.get("$ptr"), local.get("$new_ptr")),
-      i32.store(i32.add(local.get("$ptr"), i32.const(4)), i32.const(ENV_FORWARDING_BIT)),
 
       wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
     ),
@@ -523,7 +513,9 @@ export const MAKE_FLOAT_FX = wasm
   .results(i32, i64)
   .body(i32.const(TYPE_TAG.FLOAT), i64.reinterpret_f64(local.get("$value")));
 
-// upper 32: pointer to f64 real part; lower 32: pointer to f64 imaginary part
+// payload is a pointer to a 16-byte heap block laid out as:
+// [0..7]   = real part (f64)
+// [8..15]  = imaginary part (f64)
 export const MAKE_COMPLEX_FX = wasm
   .func("$_make_complex")
   .params({ $real: f64, $img: f64 })
