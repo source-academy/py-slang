@@ -1101,11 +1101,6 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       )
       .then(
-        wasm.call(POP_SHADOW_STACK_FX),
-        wasm.raw`(local.set $y_val) (local.set $y_tag)`,
-        wasm.call(POP_SHADOW_STACK_FX),
-        wasm.raw`(local.set $x_val) (local.set $x_tag)`,
-
         local.set(
           "$str_ptr",
           wasm
@@ -1117,6 +1112,12 @@ export const ARITHMETIC_OP_FX = wasm
               ),
             ),
         ),
+
+        wasm.call(POP_SHADOW_STACK_FX),
+        wasm.raw`(local.set $y_val) (local.set $y_tag)`,
+        wasm.call(POP_SHADOW_STACK_FX),
+        wasm.raw`(local.set $x_val) (local.set $x_tag)`,
+
         i64.store(local.get("$str_ptr"), i64.const(0)),
         memory.copy(
           i32.add(local.get("$str_ptr"), i32.const(GC_OBJECT_HEADER_SIZE)),

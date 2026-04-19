@@ -88,3 +88,16 @@ export function isFunctionOfName(
     instruction.name === (typeof functionName === "string" ? functionName : functionName.name)
   );
 }
+
+export function isIfInstruction(
+  instruction: unknown,
+): instruction is { op: "if"; thenBody: unknown[] } {
+  return (
+    instruction != null &&
+    typeof instruction === "object" &&
+    "op" in instruction &&
+    instruction.op === "if" &&
+    "thenBody" in instruction &&
+    Array.isArray(instruction.thenBody)
+  );
+}

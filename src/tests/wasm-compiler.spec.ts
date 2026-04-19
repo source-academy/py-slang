@@ -17,7 +17,12 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
 } from "../engines/wasm/constants";
-import { insertInArray, isFunctionCall, isFunctionOfName } from "../engines/wasm/irHelpers";
+import {
+  insertInArray,
+  isFunctionCall,
+  isFunctionOfName,
+  isIfInstruction,
+} from "../engines/wasm/irHelpers";
 
 it = it.concurrent;
 
@@ -3317,6 +3322,40 @@ f(1073741824, 1)
     expect(afterPtr).toBeGreaterThan(beforePtr);
     expect(beforeLen).toBe(6);
     expect(afterLen).toBe(6);
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("foobar");
+  });
+
+  it("keeps both string operands on shadow stack until concat malloc", async () => {
+    const pythonCode = `"foo" + "bar"`;
+
+    const inspectShadowStackBeforeConcatMalloc = insertInArray(
+      node => {
+        const body = isFunctionOfName(node, ARITHMETIC_OP_FX) && node.body;
+        const ifBody = body && body.filter(isIfInstruction)[0];
+        return ifBody && ifBody.thenBody;
+      },
+      instruction =>
+        instruction != null &&
+        typeof instruction === "object" &&
+        "op" in instruction &&
+        instruction.op === "local.set",
+      [
+        wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0))),
+        wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(1))),
+      ],
+      { before: true },
+    );
+
+    const { rawOutputs, rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [inspectShadowStackBeforeConcatMalloc],
+    });
+
+    expect(rawOutputs).toHaveLength(2);
+    expect(rawOutputs[0][0]).toBe(TYPE_TAG.STRING);
+    expect(rawOutputs[1][0]).toBe(TYPE_TAG.STRING);
+    expect(Number(rawOutputs[0][1] & 0xffffffffn)).toBe(3);
+    expect(Number(rawOutputs[1][1] & 0xffffffffn)).toBe(3);
     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
     expect(renderedResult).toBe("foobar");
   });
