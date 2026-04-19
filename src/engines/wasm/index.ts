@@ -220,7 +220,9 @@ export async function compileToWasmAndRun(
             for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
               dataView.setUint8(heapPointer + i, 0);
             }
-            bytes.forEach((byte, i) => dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte));
+            bytes.forEach((byte, i) =>
+              dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte),
+            );
             return makeString(heapPointer, bytes.length);
           })
           .reduceRight((tail, [tag, value]) => makePair(tag, value, tail[0], tail[1]), makeNone());

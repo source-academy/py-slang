@@ -24,6 +24,7 @@ import {
   BOOL_NOT_FX,
   BOOLISE_FX,
   CHECK_INT_FX,
+  CLEAR_GC_HEADER_FX,
   COLLECT_FX,
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
@@ -32,16 +33,15 @@ import {
   DEBUG_GET_LIST_ELEMENT_FX,
   DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
-  CLEAR_GC_HEADER_FX,
   FROM_SPACE_END_PTR,
   FROM_SPACE_START_PTR,
+  GC_OBJECT_HEADER_SIZE,
   GET_LAST_EXPR_RESULT_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
   IS_TAG_GCABLE,
-  GC_OBJECT_HEADER_SIZE,
   LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
@@ -612,7 +612,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
 
       wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(
-        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH packed call env state: upper 32 = env pointer, lower 32 = WIP arg count
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH packed call env state: upper 32 = env pointer
         i64.shl(
           i64.extend_i32_u(
             wasm.call(PRE_APPLY_FX).args(
@@ -862,11 +862,16 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         .call(SILENT_PUSH_SHADOW_STACK_FX)
         .args(
           i32.const(SHADOW_STACK_TAG.LIST_STATE),
-          i64.shl(
-            i64.extend_i32_u(
-              wasm.call(CLEAR_GC_HEADER_FX).args(wasm.call(MALLOC_FX).args(i32.const(length * 12 + GC_OBJECT_HEADER_SIZE))),
+          i64.or(
+            i64.shl(
+              i64.extend_i32_u(
+                wasm
+                  .call(CLEAR_GC_HEADER_FX)
+                  .args(wasm.call(MALLOC_FX).args(i32.const(length * 12 + GC_OBJECT_HEADER_SIZE))),
+              ),
+              i64.const(32),
             ),
-            i64.const(32),
+            i64.extend_i32_u(i32.const(length)),
           ),
         ),
 

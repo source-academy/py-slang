@@ -20,7 +20,7 @@ export const TYPE_TAG = {
 export const SHADOW_STACK_TAG = {
   LIST_STATE: -1, // upper 32: pointer; lower 32: length
   CALL_RETURN_ADDR: -2,
-  CALL_NEW_ENV: -3, // upper 32: pointer; lower 32: length
+  CALL_NEW_ENV: -3, // upper 32: pointer
 } as const;
 
 export const GC_SPECIAL_TAG = {
@@ -406,7 +406,7 @@ export const COPY_FX = wasm
         ),
       ),
 
-    // call env state: upper 32 = env pointer, lower 32 = WIP arg count
+    // call env state: upper 32 = env pointer
     wasm.if(i32.eq(local.get("$tag"), i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV))).then(
       local.set("$new_ptr", i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))),
 
@@ -1988,8 +1988,7 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
     wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)),
     wasm.raw`(local.set $state_val) (drop)`,
 
-    // top shadow stack payload packs pointer in upper 32 bits and WIP length in lower 32 bits.
-    // This works for both CALL_NEW_ENV and LIST_STATE.
+    // state payload stores pointer in upper 32 bits for both CALL_NEW_ENV and LIST_STATE
     local.set("$addr", i32.wrap_i64(i64.shr_u(local.get("$state_val"), i64.const(32)))),
 
     i32.store(
@@ -2004,8 +2003,6 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
       local.get("$value"),
     ),
 
-    // increment WIP length/count by 1 in top state payload (lower 32 bits)
-    i64.store(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)), i64.add(local.get("$state_val"), i64.const(1))),
   );
 
 export const TOKENIZE_FX = wasm

@@ -2655,7 +2655,7 @@ x
   });
 
   describe("list-related tests", () => {
-    it("LIST_STATE tracks stable pointer and WIP length during list construction", async () => {
+    it("LIST_STATE tracks stable pointer and total length during list construction", async () => {
       const pythonCode = `[1, 2, 3]`;
 
       const log = wasm.call("$_log_raw").args(wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)));
@@ -2693,12 +2693,12 @@ x
       expect(rawOutputs).toHaveLength(4);
       rawOutputs.forEach(([tag]) => expect(tag).toBe(SHADOW_STACK_TAG.LIST_STATE));
 
-      rawOutputs.forEach(([, val], index) => {
+      rawOutputs.forEach(([, val]) => {
         const pointer = (val >> 32n) & 0xffffffffn;
         const length = Number(val & 0xffffffffn);
 
         expect(pointer).toBe(rawResult![1] >> 32n);
-        expect(length).toBe(index);
+        expect(length).toBe(3);
       });
     });
 
@@ -2851,7 +2851,7 @@ f(10)
       expect(rawOutputs[2][0]).toBe(SHADOW_STACK_TAG.CALL_RETURN_ADDR);
     });
 
-    it("CALL_NEW_ENV tracks stable pointer and WIP arg length during call setup", async () => {
+    it("CALL_NEW_ENV tracks stable pointer during call setup", async () => {
       const pythonCode = `
 def f(a, b, c):
     return a
@@ -2894,12 +2894,9 @@ f(10, 20, 30)
 
       const basePointer = (rawOutputs[0][1] >> 32n) & 0xffffffffn;
 
-      rawOutputs.forEach(([, val], index) => {
+      rawOutputs.forEach(([, val]) => {
         const pointer = (val >> 32n) & 0xffffffffn;
-        const length = Number(val & 0xffffffffn);
-
         expect(pointer).toBe(basePointer);
-        expect(length).toBe(index);
       });
     });
 
@@ -3247,13 +3244,88 @@ describe("GC collect/copy tests", () => {
     const afterLen = Number(rawOutputs[1][1] & 0xffffffffn);
 
     expect(afterPtr).toBeGreaterThan(beforePtr);
-    expect(beforeLen).toBe(1);
-    expect(afterLen).toBe(1);
+    expect(beforeLen).toBe(2);
+    expect(afterLen).toBe(2);
 
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
     expect(renderedResult).toBe("[1073741824, 1]");
     expect(getListElement(TYPE_TAG.LIST, rawResult[1], 0)).toEqual([TYPE_TAG.INT, 1073741824n]);
     expect(getListElement(TYPE_TAG.LIST, rawResult[1], 1)).toEqual([TYPE_TAG.INT, 1n]);
+  });
+
+  it("preserves list capacity when GC runs during LIST_STATE build", async () => {
+    const pythonCode = `
+x = [11, 99]
+"a" + "b"
+x[1]
+`;
+
+    const forceCollectDuringListBuild = insertInArray(
+      node => isFunctionCall(node, MAKE_LIST_FX) && node.arguments,
+      instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+      { matchIndex: 0 },
+    );
+
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectDuringListBuild],
+    });
+
+    // expect(rawOutputs).toHaveLength(2);
+    // expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.LIST_STATE);
+    // expect(rawOutputs[1][0]).toBe(SHADOW_STACK_TAG.LIST_STATE);
+
+    // const beforePtr = rawOutputs[0][1] >> 32n;
+    // const afterPtr = rawOutputs[1][1] >> 32n;
+    // const beforeLen = Number(rawOutputs[0][1] & 0xffffffffn);
+    // const afterLen = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    // expect(afterPtr).toBeGreaterThan(beforePtr);
+    // expect(beforeLen).toBe(2);
+    // expect(afterLen).toBe(2);
+
+    // Correct behavior: GC during list construction must preserve full backing capacity.
+    // The later heap allocation for string concat must not overlap list slots.
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("99");
+  });
+
+  it("preserves argument capacity when GC runs during CALL_NEW_ENV build", async () => {
+    const pythonCode = `
+def second(a, b):
+    return b
+
+x = second(11, 99)
+"a" + "b"
+x
+`;
+
+    const forceCollectDuringCallBuild = insertInArray(
+      node => isFunctionCall(node, APPLY_FX_NAME) && node.arguments,
+      instruction => isFunctionCall(instruction, SET_CONTIGUOUS_BLOCK_FX),
+      [topOfShadowStack, wasm.call(COLLECT_FX), topOfShadowStack],
+      { matchIndex: 0 },
+    );
+
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      irPasses: [forceCollectDuringCallBuild],
+    });
+
+    // expect(rawOutputs).toHaveLength(2);
+    // expect(rawOutputs[0][0]).toBe(SHADOW_STACK_TAG.CALL_NEW_ENV);
+    // expect(rawOutputs[1][0]).toBe(SHADOW_STACK_TAG.CALL_NEW_ENV);
+
+    // const beforePtr = rawOutputs[0][1] >> 32n;
+    // const afterPtr = rawOutputs[1][1] >> 32n;
+    // const beforeLen = Number(rawOutputs[0][1] & 0xffffffffn);
+    // const afterLen = Number(rawOutputs[1][1] & 0xffffffffn);
+
+    // expect(afterPtr).toBeGreaterThan(beforePtr);
+    // expect(beforeLen).toBe(2);
+    // expect(afterLen).toBe(2);
+
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("99");
   });
 
   it("moves tuple payload from variadic call even when first element value at +4 matches forwarding bit", async () => {
