@@ -71,6 +71,7 @@ export const SHADOW_STACK_PTR = "$_shadow_stack_pointer";
 export const CURR_ENV = "$_current_env";
 
 export const ENV_HEAD_SIZE = 8;
+export const GC_OBJECT_HEADER_SIZE = 8;
 export const SHADOW_STACK_SLOT_SIZE = 12;
 export const SHADOW_STACK_RESERVED_SIZE = 1024 * 8; // 8KB reserved for shadow stack
 export const ENV_FORWARDING_BIT = 0x40000000;
@@ -245,7 +246,7 @@ export const COPY_FX = wasm
       wasm.return(i64.extend_i32_u(local.get("$new_ptr"))),
     ),
 
-    // complex
+    // complex (no forwarding, see test)
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX))).then(
       local.set("$ptr", i32.wrap_i64(local.get("$val"))),
 
@@ -279,9 +280,12 @@ export const COPY_FX = wasm
         ),
 
       local.set("$new_ptr", global.get(HEAP_PTR)),
-      local.set("$alloc_size", wasm.select(i32.const(8), local.get("$len"), i32.lt_u(local.get("$len"), i32.const(8)))),
-      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$alloc_size"))),
-      memory.copy(local.get("$new_ptr"), local.get("$ptr"), local.get("$len")),
+      global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), i32.add(local.get("$len"), i32.const(GC_OBJECT_HEADER_SIZE)))),
+      memory.copy(
+        local.get("$new_ptr"),
+        local.get("$ptr"),
+        i32.add(local.get("$len"), i32.const(GC_OBJECT_HEADER_SIZE)),
+      ),
 
       // forwarding metadata is encoded in from-space memory at $ptr as an i64:
       // upper 32 bits = forwarding address, lower 32 bits carries forwarding bit (2nd leftmost bit)
@@ -351,13 +355,18 @@ export const COPY_FX = wasm
           ),
 
         local.set("$new_ptr", global.get(HEAP_PTR)),
-        local.set("$alloc_size", i32.mul(local.get("$len"), i32.const(12))),
-        local.set(
-          "$alloc_size",
-          wasm.select(i32.const(8), local.get("$alloc_size"), i32.lt_u(local.get("$alloc_size"), i32.const(8))),
+        global.set(
+          HEAP_PTR,
+          i32.add(
+            global.get(HEAP_PTR),
+            i32.add(i32.mul(local.get("$len"), i32.const(12)), i32.const(GC_OBJECT_HEADER_SIZE)),
+          ),
         ),
-        global.set(HEAP_PTR, i32.add(global.get(HEAP_PTR), local.get("$alloc_size"))),
-        memory.copy(local.get("$new_ptr"), local.get("$ptr"), i32.mul(local.get("$len"), i32.const(12))),
+        memory.copy(
+          local.get("$new_ptr"),
+          local.get("$ptr"),
+          i32.add(i32.mul(local.get("$len"), i32.const(12)), i32.const(GC_OBJECT_HEADER_SIZE)),
+        ),
 
         // install forwarding metadata in from-space memory
         // (overwrite length with the forwarding bit)
@@ -367,7 +376,13 @@ export const COPY_FX = wasm
         local.set("$i", i32.const(0)),
         wasm.loop("$copy_list_fields").body(
           wasm.if(i32.lt_u(local.get("$i"), local.get("$len"))).then(
-            local.set("$elem_ptr", i32.add(local.get("$new_ptr"), i32.mul(local.get("$i"), i32.const(12)))),
+            local.set(
+              "$elem_ptr",
+              i32.add(
+                i32.add(local.get("$new_ptr"), i32.const(GC_OBJECT_HEADER_SIZE)),
+                i32.mul(local.get("$i"), i32.const(12)),
+              ),
+            ),
             local.set("$elem_tag", i32.load(local.get("$elem_ptr"))),
 
             wasm
@@ -460,20 +475,14 @@ export const COLLECT_FX = wasm
 export const MALLOC_FX = wasm
   .func("$_malloc")
   .params({ $amount: i32 })
-  .locals({ $new_heap: i32, $alloc_amount: i32 })
+  .locals({ $new_heap: i32 })
   .results(i32)
   .body(
-    // All heap-allocated values that can be moved by GC need at least 8 bytes
-    // so forwarding metadata (bit + address) can always be installed in from-space.
-    local.set(
-      "$alloc_amount",
-      wasm.select(i32.const(8), local.get("$amount"), i32.lt_u(local.get("$amount"), i32.const(8))),
-    ),
-    local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$alloc_amount"))),
+    local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
 
     wasm.if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR))).then(
       wasm.call(COLLECT_FX),
-      local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$alloc_amount"))),
+      local.set("$new_heap", i32.add(global.get(HEAP_PTR), local.get("$amount"))),
 
       wasm
         .if(i32.gt_u(local.get("$new_heap"), global.get(FROM_SPACE_END_PTR)))
@@ -483,6 +492,12 @@ export const MALLOC_FX = wasm
     global.get(HEAP_PTR),
     global.set(HEAP_PTR, local.get("$new_heap")),
   );
+
+export const CLEAR_GC_HEADER_FX = wasm
+  .func("$_clear_gc_header")
+  .params({ $ptr: i32 })
+  .results(i32)
+  .body(i64.store(local.get("$ptr"), i64.const(0)), local.get("$ptr"));
 
 // boxing functions
 
@@ -616,10 +631,62 @@ export const MAKE_TUPLE_FX = wasm
   );
 
 // list related functions
+export const LIST_SLOT_TAG_LOAD_FX = wasm
+  .func("$_list_slot_tag_load")
+  .params({ $list_val: i64, $index: i32 })
+  .results(i32)
+  .body(
+    i32.load(
+      i32.add(
+        i32.add(i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))), i32.const(GC_OBJECT_HEADER_SIZE)),
+        i32.mul(local.get("$index"), i32.const(12)),
+      ),
+    ),
+  );
+
+export const LIST_SLOT_VAL_LOAD_FX = wasm
+  .func("$_list_slot_val_load")
+  .params({ $list_val: i64, $index: i32 })
+  .results(i64)
+  .body(
+    i64.load(
+      i32.add(
+        i32.add(
+          i32.add(i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))), i32.const(GC_OBJECT_HEADER_SIZE)),
+          i32.mul(local.get("$index"), i32.const(12)),
+        ),
+        i32.const(4),
+      ),
+    ),
+  );
+
+export const LIST_SLOT_STORE_FX = wasm
+  .func("$_list_slot_store")
+  .params({ $list_val: i64, $index: i32, $tag: i32, $val: i64 })
+  .body(
+    i32.store(
+      i32.add(
+        i32.add(i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))), i32.const(GC_OBJECT_HEADER_SIZE)),
+        i32.mul(local.get("$index"), i32.const(12)),
+      ),
+      local.get("$tag"),
+    ),
+    i64.store(
+      i32.add(
+        i32.add(
+          i32.add(i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))), i32.const(GC_OBJECT_HEADER_SIZE)),
+          i32.mul(local.get("$index"), i32.const(12)),
+        ),
+        i32.const(4),
+      ),
+      local.get("$val"),
+    ),
+  );
+
 export const GET_LIST_ELEMENT_FX = wasm
   .func("$_get_list_element")
   .params({ $tag: i32, $val: i64, $index_tag: i32, $index_val: i64 })
-  .locals({ $elem_tag: i32, $elem_val: i64 })
+  .locals({ $elem_tag: i32, $elem_val: i64, $index: i32 })
   .results(i32, i64)
   .body(
     // allow tuples to be accessed also
@@ -648,24 +715,10 @@ export const GET_LIST_ELEMENT_FX = wasm
     wasm.call(POP_SHADOW_STACK_FX), // pop list reference from shadow stack to get actual pointer and length
     wasm.raw`(local.set $val) (local.set $tag)`,
 
-    local.tee(
-      "$elem_tag",
-      i32.load(
-        i32.add(
-          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-          i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
-        ),
-      ),
-    ),
-    local.tee(
-      "$elem_val",
-      i64.load(
-        i32.add(
-          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-          i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
-        ),
-      ),
-    ),
+    local.set("$index", i32.wrap_i64(local.get("$index_val"))),
+
+    local.tee("$elem_tag", wasm.call(LIST_SLOT_TAG_LOAD_FX).args(local.get("$val"), local.get("$index"))),
+    local.tee("$elem_val", wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$val"), local.get("$index"))),
 
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
@@ -678,21 +731,8 @@ export const DEBUG_GET_LIST_ELEMENT_FX = wasm
   .locals({ $elem_tag: i32, $elem_val: i64 })
   .results(i32, i64)
   .body(
-    local.tee(
-      "$elem_tag",
-      i32.load(
-        i32.add(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.mul(local.get("$index"), i32.const(12))),
-      ),
-    ),
-    local.tee(
-      "$elem_val",
-      i64.load(
-        i32.add(
-          i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-          i32.add(i32.mul(local.get("$index"), i32.const(12)), i32.const(4)),
-        ),
-      ),
-    ),
+    local.tee("$elem_tag", wasm.call(LIST_SLOT_TAG_LOAD_FX).args(local.get("$val"), local.get("$index"))),
+    local.tee("$elem_val", wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$val"), local.get("$index"))),
 
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$elem_tag")))
@@ -702,6 +742,7 @@ export const DEBUG_GET_LIST_ELEMENT_FX = wasm
 export const SET_LIST_ELEMENT_FX = wasm
   .func("$_set_list_element")
   .params({ $list_tag: i32, $list_val: i64, $index_tag: i32, $index_val: i64, $tag: i32, $val: i64 })
+  .locals({ $index: i32 })
   .body(
     wasm
       .if(i32.eq(local.get("$list_tag"), i32.const(TYPE_TAG.TUPLE)))
@@ -730,20 +771,11 @@ export const SET_LIST_ELEMENT_FX = wasm
     wasm.call(POP_SHADOW_STACK_FX), // pop list reference from shadow stack to get actual pointer and length
     wasm.raw`(local.set $list_val) (local.set $list_tag)`,
 
-    i32.store(
-      i32.add(
-        i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))),
-        i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)),
-      ),
-      local.get("$tag"),
-    ),
-    i64.store(
-      i32.add(
-        i32.wrap_i64(i64.shr_u(local.get("$list_val"), i64.const(32))),
-        i32.add(i32.mul(i32.wrap_i64(local.get("$index_val")), i32.const(12)), i32.const(4)),
-      ),
-      local.get("$val"),
-    ),
+    local.set("$index", i32.wrap_i64(local.get("$index_val"))),
+
+    wasm
+      .call(LIST_SLOT_STORE_FX)
+      .args(local.get("$list_val"), local.get("$index"), local.get("$tag"), local.get("$val")),
   );
 
 export const LIST_LENGTH_FX = wasm
@@ -794,7 +826,8 @@ export const MAKE_PAIR_FX = wasm
   .locals({ $ptr: i32 })
   .results(i32, i64)
   .body(
-    local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(24))),
+    local.set("$ptr", wasm.call(MALLOC_FX).args(i32.const(32))),
+    i64.store(local.get("$ptr"), i64.const(0)),
 
     wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tail_tag")))
@@ -804,10 +837,10 @@ export const MAKE_PAIR_FX = wasm
       .if(wasm.call(IS_TAG_GCABLE).args(local.get("$head_tag")))
       .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $head_val) (local.set $head_tag)`),
 
-    i32.store(local.get("$ptr"), local.get("$head_tag")),
-    i64.store(i32.add(local.get("$ptr"), i32.const(4)), local.get("$head_val")),
-    i32.store(i32.add(local.get("$ptr"), i32.const(12)), local.get("$tail_tag")),
-    i64.store(i32.add(local.get("$ptr"), i32.const(16)), local.get("$tail_val")),
+    i32.store(i32.add(local.get("$ptr"), i32.const(GC_OBJECT_HEADER_SIZE)), local.get("$head_tag")),
+    i64.store(i32.add(local.get("$ptr"), i32.const(GC_OBJECT_HEADER_SIZE + 4)), local.get("$head_val")),
+    i32.store(i32.add(local.get("$ptr"), i32.const(GC_OBJECT_HEADER_SIZE + 12)), local.get("$tail_tag")),
+    i64.store(i32.add(local.get("$ptr"), i32.const(GC_OBJECT_HEADER_SIZE + 16)), local.get("$tail_val")),
 
     wasm.call(MAKE_LIST_FX).args(local.get("$ptr"), i32.const(2)),
   );
@@ -869,21 +902,8 @@ export const MAKE_LINKED_LIST_FX = wasm
         wasm.call(PEEK_SHADOW_STACK_FX).args(i32.const(0)), // peek list reference to get actual pointer and length
         wasm.raw`(local.set $val) (local.set $tag)`,
 
-        local.tee(
-          "$elem_tag",
-          i32.load(
-            i32.add(i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))), i32.mul(local.get("$i"), i32.const(12))),
-          ),
-        ),
-        local.tee(
-          "$elem_val",
-          i64.load(
-            i32.add(
-              i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32))),
-              i32.add(i32.mul(local.get("$i"), i32.const(12)), i32.const(4)),
-            ),
-          ),
-        ),
+        local.tee("$elem_tag", wasm.call(LIST_SLOT_TAG_LOAD_FX).args(local.get("$val"), local.get("$i"))),
+        local.tee("$elem_val", wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$val"), local.get("$i"))),
         local.get("$acc_tag"),
         local.get("$acc_val"),
 
@@ -980,7 +1000,17 @@ export const LOG_FX = wasm
       .then(
         wasm
           .call("$_log_string")
-          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
+          .args(
+            i32.add(
+              i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))),
+              wasm.select(
+                i32.const(0),
+                i32.const(GC_OBJECT_HEADER_SIZE),
+                i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), global.get(DATA_END)),
+              ),
+            ),
+            i32.wrap_i64(local.get("$value")),
+          ),
         wasm.return(),
       ),
     wasm
@@ -998,11 +1028,19 @@ export const LOG_FX = wasm
       ),
     wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))).then(wasm.call("$_log_none"), wasm.return()),
     wasm
-      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)))
+      .if(
+        i32.or(
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+          i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+        ),
+      )
       .then(
         wasm
           .call("$_log_list")
-          .args(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.wrap_i64(local.get("$value"))),
+          .args(
+            i32.add(i32.wrap_i64(i64.shr_u(local.get("$value"), i64.const(32))), i32.const(GC_OBJECT_HEADER_SIZE)),
+            i32.wrap_i64(local.get("$value")),
+          ),
         wasm.return(),
       ),
 
@@ -1068,17 +1106,40 @@ export const ARITHMETIC_OP_FX = wasm
         wasm.call(POP_SHADOW_STACK_FX),
         wasm.raw`(local.set $x_val) (local.set $x_tag)`,
 
+        local.set(
+          "$str_ptr",
+          wasm
+            .call(MALLOC_FX)
+            .args(
+              i32.add(
+                i32.add(i32.wrap_i64(local.get("$x_val")), i32.wrap_i64(local.get("$y_val"))),
+                i32.const(GC_OBJECT_HEADER_SIZE),
+              ),
+            ),
+        ),
+        i64.store(local.get("$str_ptr"), i64.const(0)),
         memory.copy(
-          local.tee(
-            "$str_ptr",
-            wasm.call(MALLOC_FX).args(i32.add(i32.wrap_i64(local.get("$x_val")), i32.wrap_i64(local.get("$y_val")))),
+          i32.add(local.get("$str_ptr"), i32.const(GC_OBJECT_HEADER_SIZE)),
+          i32.add(
+            i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))),
+            wasm.select(
+              i32.const(0),
+              i32.const(GC_OBJECT_HEADER_SIZE),
+              i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))), global.get(DATA_END)),
+            ),
           ),
-          i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))),
           i32.wrap_i64(local.get("$x_val")),
         ),
         memory.copy(
-          i32.add(local.get("$str_ptr"), i32.wrap_i64(local.get("$x_val"))),
-          i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))),
+          i32.add(i32.add(local.get("$str_ptr"), i32.const(GC_OBJECT_HEADER_SIZE)), i32.wrap_i64(local.get("$x_val"))),
+          i32.add(
+            i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))),
+            wasm.select(
+              i32.const(0),
+              i32.const(GC_OBJECT_HEADER_SIZE),
+              i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))), global.get(DATA_END)),
+            ),
+          ),
           i32.wrap_i64(local.get("$y_val")),
         ),
 
@@ -1287,9 +1348,23 @@ export const COMPARISON_OP_FX = wasm
           wasm
             .call(STRING_COMPARE_FX)
             .args(
-              i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))),
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))),
+                wasm.select(
+                  i32.const(0),
+                  i32.const(GC_OBJECT_HEADER_SIZE),
+                  i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$x_val"), i64.const(32))), global.get(DATA_END)),
+                ),
+              ),
               i32.wrap_i64(local.get("$x_val")),
-              i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))),
+              i32.add(
+                i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))),
+                wasm.select(
+                  i32.const(0),
+                  i32.const(GC_OBJECT_HEADER_SIZE),
+                  i32.lt_u(i32.wrap_i64(i64.shr_u(local.get("$y_val"), i64.const(32))), global.get(DATA_END)),
+                ),
+              ),
               i32.wrap_i64(local.get("$y_val")),
             ),
         ),
@@ -1618,6 +1693,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       $i: i32,
       $arg_ptr: i32,
       $write_ptr: i32,
+      $tuple_ptr: i32,
       $new_env: i32,
       $arity: i32,
       $env_size: i32,
@@ -1705,7 +1781,10 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
                 // copy over the list
                 memory.copy(
                   local.get("$write_ptr"),
-                  i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
+                  i32.add(
+                    i32.wrap_i64(i64.shr_u(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4))), i64.const(32))),
+                    i32.const(GC_OBJECT_HEADER_SIZE),
+                  ),
                   i32.mul(i32.wrap_i64(i64.load(i32.add(local.get("$arg_ptr"), i32.const(4)))), i32.const(12)),
                 ),
                 local.set(
@@ -1742,11 +1821,21 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
 
       // if has varargs
       wasm.if(local.get("$has_varargs")).then(
+        local.set(
+          "$tuple_ptr",
+          wasm
+            .call(MALLOC_FX)
+            .args(
+              i32.add(
+                i32.mul(i32.sub(local.get("$arg_len"), local.get("$arity")), i32.const(12)),
+                i32.const(GC_OBJECT_HEADER_SIZE),
+              ),
+            ),
+        ),
+        i64.store(local.get("$tuple_ptr"), i64.const(0)),
+
         memory.copy(
-          i32.add(
-            i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
-            i32.mul(local.get("$env_size"), i32.const(12)),
-          ),
+          i32.add(local.get("$tuple_ptr"), i32.const(GC_OBJECT_HEADER_SIZE)),
           i32.add(i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)), i32.mul(local.get("$arity"), i32.const(12))),
           i32.mul(i32.sub(local.get("$arg_len"), local.get("$arity")), i32.const(12)),
         ),
@@ -1766,15 +1855,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             i32.const(4),
           ),
           i64.or(
-            i64.shl(
-              i64.extend_i32_u(
-                i32.add(
-                  i32.add(global.get(CURR_ENV), i32.const(ENV_HEAD_SIZE)),
-                  i32.mul(local.get("$env_size"), i32.const(12)),
-                ),
-              ),
-              i64.const(32),
-            ),
+            i64.shl(i64.extend_i32_u(local.get("$tuple_ptr")), i64.const(32)),
             i64.extend_i32_u(i32.sub(local.get("$arg_len"), local.get("$arity"))),
           ),
         ),
@@ -1977,6 +2058,7 @@ export const GET_LAST_EXPR_RESULT_FX = wasm
 export const nativeFunctions = [
   COPY_FX,
   COLLECT_FX,
+  CLEAR_GC_HEADER_FX,
   MALLOC_FX,
   PUSH_SHADOW_STACK_FX,
   SILENT_PUSH_SHADOW_STACK_FX,
@@ -1994,6 +2076,9 @@ export const nativeFunctions = [
   MAKE_NONE_FX,
   MAKE_LIST_FX,
   MAKE_TUPLE_FX,
+  LIST_SLOT_TAG_LOAD_FX,
+  LIST_SLOT_VAL_LOAD_FX,
+  LIST_SLOT_STORE_FX,
   GET_LIST_ELEMENT_FX,
   DEBUG_GET_LIST_ELEMENT_FX,
   SET_LIST_ELEMENT_FX,

@@ -32,6 +32,7 @@ import {
   DEBUG_GET_LIST_ELEMENT_FX,
   DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
+  CLEAR_GC_HEADER_FX,
   FROM_SPACE_END_PTR,
   FROM_SPACE_START_PTR,
   GET_LAST_EXPR_RESULT_FX,
@@ -40,6 +41,7 @@ import {
   HEAP_PTR,
   importedLogs,
   IS_TAG_GCABLE,
+  GC_OBJECT_HEADER_SIZE,
   LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
@@ -861,13 +863,17 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         .args(
           i32.const(SHADOW_STACK_TAG.LIST_STATE),
           i64.shl(
-            i64.extend_i32_u(wasm.call(MALLOC_FX).args(i32.const(length * 12))),
+            i64.extend_i32_u(
+              wasm.call(CLEAR_GC_HEADER_FX).args(wasm.call(MALLOC_FX).args(i32.const(length * 12 + GC_OBJECT_HEADER_SIZE))),
+            ),
             i64.const(32),
           ),
         ),
 
       ...elements.map((element, i) =>
-        wasm.call(SET_CONTIGUOUS_BLOCK_FX).args(i32.const(i), element, i32.const(0), i32.const(0)),
+        wasm
+          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .args(i32.const(i), element, i32.const(GC_OBJECT_HEADER_SIZE), i32.const(0)),
       ),
 
       /* ! */ i32.wrap_i64(

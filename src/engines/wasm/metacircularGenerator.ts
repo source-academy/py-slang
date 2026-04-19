@@ -1,6 +1,7 @@
 import { PARSE_TREE_STRINGS, WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokens";
+import { GC_OBJECT_HEADER_SIZE } from "./constants";
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt): S;
@@ -73,10 +74,13 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   private dynamicString(str: string): [number, bigint] {
     const bytes = MetacircularGenerator.encoder.encode(str);
-    const offset = this.wasmExports.malloc(bytes.length);
+    const offset = this.wasmExports.malloc(bytes.length + GC_OBJECT_HEADER_SIZE);
 
-    const dataView = new DataView(this.memory.buffer, offset, bytes.length);
-    bytes.forEach((byte, i) => dataView.setUint8(i, byte));
+    const dataView = new DataView(this.memory.buffer, offset, bytes.length + GC_OBJECT_HEADER_SIZE);
+    for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
+      dataView.setUint8(i, 0);
+    }
+    bytes.forEach((byte, i) => dataView.setUint8(GC_OBJECT_HEADER_SIZE + i, byte));
 
     return this.wasmExports.makeString(offset, bytes.length);
   }

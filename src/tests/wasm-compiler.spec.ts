@@ -3410,6 +3410,11 @@ f(1073741824, 1)
     // Complex forwarding is intentionally disabled. If we want to forward
     // complex numbers in the future, we need to add a dedicated complex
     // object header to hold forwarding metadata.
+
+    // This is because it's rare that we would have multiple references to the
+    // same complex number (complex numbers are probably themselves rare).
+    // Not worth to handle forwarding logic and metadata updates for this edge
+    // case.
     const pythonCode = `
 z = 2j
 [0, z, z]

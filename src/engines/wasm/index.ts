@@ -4,7 +4,7 @@ import { parse } from "../../parser";
 import pythonLexer from "../../parser/lexer";
 import { toAstToken } from "../../parser/token-bridge";
 import { BuilderGenerator } from "./builderGenerator";
-import { ERROR_MAP } from "./constants";
+import { ERROR_MAP, GC_OBJECT_HEADER_SIZE } from "./constants";
 import { disableGcIrPass } from "./irHelpers";
 import { libraryFunctions } from "./library";
 import { MetacircularGenerator } from "./metacircularGenerator";
@@ -198,8 +198,11 @@ export async function compileToWasmAndRun(
           .map(t => toAstToken(t))
           .map(({ lexeme }) => {
             const bytes = encoder.encode(lexeme);
-            const heapPointer = malloc(bytes.length);
-            bytes.forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+            const heapPointer = malloc(bytes.length + GC_OBJECT_HEADER_SIZE);
+            for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
+              dataView.setUint8(heapPointer + i, 0);
+            }
+            bytes.forEach((byte, i) => dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte));
             return makeString(heapPointer, bytes.length);
           })
           .reduceRight((tail, [tag, value]) => makePair(tag, value, tail[0], tail[1]), makeNone());
