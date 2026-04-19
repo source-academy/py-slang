@@ -2002,7 +2002,6 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
       ),
       local.get("$value"),
     ),
-
   );
 
 export const TOKENIZE_FX = wasm
