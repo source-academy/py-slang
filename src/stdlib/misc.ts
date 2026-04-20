@@ -14,7 +14,7 @@ import {
 } from "../engines/cse/stash";
 import { displayOutput, receiveInput } from "../engines/cse/streams";
 import { isNumeric } from "../engines/cse/utils";
-import { MissingRequiredPositionalError, TypeError, UserError, ValueError } from "../errors";
+import { TypeError, UserError, ValueError } from "../errors";
 import { PyComplexNumber } from "../types";
 import { GroupName, minArgMap, toPythonString, Validate } from "./utils";
 
@@ -151,7 +151,7 @@ export class MiscBuiltins {
     }
     handleRuntimeError(
       context,
-      new TypeError(source, command, context, val.type, "'float', 'int', 'bool' or 'str'"),
+      new TypeError(source, command, context, val.type, "float', 'int', 'bool' or 'str"),
     );
   }
 
@@ -286,211 +286,58 @@ export class MiscBuiltins {
 
   @Validate(2, null, "max", true)
   static max(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
-    const numericTypes = ["bigint", "number"];
-    const firstType = args[0].type;
-    const isNumericValue = numericTypes.includes(firstType);
-    const isString = firstType === "string";
-
-    for (let i = 1; i < args.length; i++) {
-      const t = args[i].type;
-      if (isNumericValue && !numericTypes.includes(t)) {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[i].type, "float' or 'int"),
-        );
-      }
-      if (isString && t !== "string") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[i].type, "string"),
-        );
-      }
-    }
-
-    let useFloat = false;
-    if (isNumericValue) {
-      for (const arg of args) {
-        if (arg.type === "number") {
-          useFloat = true;
-          break;
-        }
-      }
-    }
-
-    let maxIndex = 0;
-    if (isNumericValue) {
-      if (useFloat) {
-        if (args[0].type !== "number" && args[0].type !== "bigint") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, args[0].type, "float' or 'int"),
-          );
-        }
-        let maxVal: number = Number(args[0].value);
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          if (!isNumeric(arg)) {
-            handleRuntimeError(
-              context,
-              new TypeError(source, command, context, arg.type, "float' or 'int"),
-            );
-          }
-          const curr: number = Number(arg.value);
-          if (curr > maxVal) {
-            maxVal = curr;
-            maxIndex = i;
-          }
-        }
-      } else {
-        if (args[0].type !== "bigint") {
-          handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "int"));
-        }
-        let maxVal: bigint = args[0].value;
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          if (arg.type !== "bigint") {
-            handleRuntimeError(context, new TypeError(source, command, context, arg.type, "int"));
-          }
-          const curr: bigint = arg.value;
-          if (curr > maxVal) {
-            maxVal = curr;
-            maxIndex = i;
-          }
-        }
-      }
-    } else if (isString) {
-      if (args[0].type !== "string") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[0].type, "string"),
-        );
-      }
-      let maxVal = args[0].value;
+    if (args.every(isNumeric) || args.every(arg => arg.type === "string")) {
+      let maxIndex = 0;
       for (let i = 1; i < args.length; i++) {
-        const arg = args[i];
-        if (arg.type !== "string") {
-          handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
-        }
-        const curr = arg.value;
-        if (curr > maxVal) {
-          maxVal = curr;
+        if (args[i].value > args[maxIndex].value) {
           maxIndex = i;
         }
       }
-    } else {
-      // Won't happen
-      throw new Error(`max: unsupported type ${firstType}`);
+      return args[maxIndex];
     }
-
-    return args[maxIndex];
+    if (isNumeric(args[0])) {
+      const invalidType = args.find(arg => !isNumeric(arg))!;
+      handleRuntimeError(
+        context,
+        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
+      );
+    } else if (args[0].type === "string") {
+      const invalidType = args.find(arg => arg.type !== "string")!;
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+    } else {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
+      );
+    }
   }
 
   @Validate(2, null, "min", true)
   static min(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
-    if (args.length < 2) {
+    if (args.every(isNumeric) || args.every(arg => arg.type === "string")) {
+      let minIndex = 0;
+      for (let i = 1; i < args.length; i++) {
+        if (args[i].value < args[minIndex].value) {
+          minIndex = i;
+        }
+      }
+      return args[minIndex];
+    }
+    if (isNumeric(args[0])) {
+      const invalidType = args.find(arg => !isNumeric(arg))!;
       handleRuntimeError(
         context,
-        new MissingRequiredPositionalError(source, command, "min", Number(2), args, true),
+        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
+      );
+    } else if (args[0].type === "string") {
+      const invalidType = args.find(arg => arg.type !== "string")!;
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+    } else {
+      handleRuntimeError(
+        context,
+        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
       );
     }
-
-    const numericTypes = ["bigint", "number"];
-    const firstType = args[0].type;
-    const isNumericValue = numericTypes.includes(firstType);
-    const isString = firstType === "string";
-
-    for (let i = 1; i < args.length; i++) {
-      const t = args[i].type;
-      if (isNumericValue && !numericTypes.includes(t)) {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[i].type, "float' or 'int"),
-        );
-      }
-      if (isString && t !== "string") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[i].type, "string"),
-        );
-      }
-    }
-
-    let useFloat = false;
-    if (isNumericValue) {
-      for (const arg of args) {
-        if (arg.type === "number") {
-          useFloat = true;
-          break;
-        }
-      }
-    }
-
-    let maxIndex = 0;
-    if (isNumericValue) {
-      if (useFloat) {
-        if (args[0].type !== "number" && args[0].type !== "bigint") {
-          handleRuntimeError(
-            context,
-            new TypeError(source, command, context, args[0].type, "float' or 'int"),
-          );
-        }
-        let maxVal: number = Number(args[0].value);
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          if (!isNumeric(arg)) {
-            handleRuntimeError(
-              context,
-              new TypeError(source, command, context, arg.type, "float' or 'int"),
-            );
-          }
-          const curr: number = Number(arg.value);
-          if (curr < maxVal) {
-            maxVal = curr;
-            maxIndex = i;
-          }
-        }
-      } else {
-        if (args[0].type !== "bigint") {
-          handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "int"));
-        }
-        let maxVal: bigint = args[0].value;
-        for (let i = 1; i < args.length; i++) {
-          const arg = args[i];
-          if (arg.type !== "bigint") {
-            handleRuntimeError(context, new TypeError(source, command, context, arg.type, "int"));
-          }
-          const curr: bigint = arg.value;
-          if (curr < maxVal) {
-            maxVal = curr;
-            maxIndex = i;
-          }
-        }
-      }
-    } else if (isString) {
-      if (args[0].type !== "string") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[0].type, "string"),
-        );
-      }
-      let maxVal = args[0].value;
-      for (let i = 1; i < args.length; i++) {
-        const arg = args[i];
-        if (arg.type !== "string") {
-          handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
-        }
-        const curr = arg.value;
-        if (curr < maxVal) {
-          maxVal = curr;
-          maxIndex = i;
-        }
-      }
-    } else {
-      // Won't happen
-      throw new Error(`min: unsupported type ${firstType}`);
-    }
-
-    return args[maxIndex];
   }
 
   @Validate(null, 0, "random_random", true)
