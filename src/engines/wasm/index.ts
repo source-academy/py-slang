@@ -6,10 +6,10 @@ import { toAstToken } from "../../parser/token-bridge";
 import { analyze } from "../../resolver";
 import { Group } from "../../stdlib/utils";
 import { BuilderGenerator } from "./builderGenerator";
-import { ERROR_MAP, GC_OBJECT_HEADER_SIZE } from "./constants";
 import { disableGcIrPass } from "./irHelpers";
 import { makeLibraryFunctions } from "./library";
 import { MetacircularGenerator } from "./metacircularGenerator";
+import { ERROR_MAP, GC_OBJECT_HEADER_SIZE } from "./runtime";
 
 export type WasmExports = {
   main: () => [number, bigint];

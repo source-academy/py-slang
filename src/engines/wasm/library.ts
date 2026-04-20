@@ -26,7 +26,7 @@ import {
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
   TYPE_TAG,
-} from "./constants";
+} from "./runtime";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
   ? R

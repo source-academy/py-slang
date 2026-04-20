@@ -1,6 +1,12 @@
 import { i32, wasm } from "@sourceacademy/wasm-util";
 import { CompileOptions, compileToWasmAndRun } from "../engines/wasm";
 import {
+  insertInArray,
+  isFunctionCall,
+  isFunctionOfName,
+  isIfInstruction,
+} from "../engines/wasm/irHelpers";
+import {
   APPLY_FX_NAME,
   ARITHMETIC_OP_FX,
   COLLECT_FX,
@@ -16,13 +22,7 @@ import {
   SHADOW_STACK_TAG,
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
-} from "../engines/wasm/constants";
-import {
-  insertInArray,
-  isFunctionCall,
-  isFunctionOfName,
-  isIfInstruction,
-} from "../engines/wasm/irHelpers";
+} from "../engines/wasm/runtime";
 import { ResolverErrors } from "../resolver/errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";

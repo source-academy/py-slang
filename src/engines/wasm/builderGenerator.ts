@@ -15,6 +15,7 @@ import {
 import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
+import { LibFuncType } from "./library";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
@@ -70,8 +71,7 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TO_SPACE_END_PTR,
   TO_SPACE_START_PTR,
-} from "./constants";
-import { LibFuncType } from "./library";
+} from "./runtime";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";
