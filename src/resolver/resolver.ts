@@ -1,8 +1,7 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import constants from "../stdlib/py_s1_constants.json";
 import { Group } from "../stdlib/utils";
-import { Token } from "../tokenizer/tokenizer";
-import { TokenType } from "../tokens";
+import { Token, TokenType } from "../tokenizer/tokenizer";
 import { FeatureValidator } from "../validator/types";
 import { ResolverErrors } from "./errors";
 type Expr = ExprNS.Expr;
@@ -195,20 +194,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       new Map([
         // misc library
         ...constants.builtInFuncs.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
         ),
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
         ...constants.constants.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
         ),
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
-            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
+            ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
           ),
         ),
-        ...preludeNames.map(
-          name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as [string, Token],
-        ),
+        ...preludeNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const),
       ]),
     );
     this.functionScope = null;
@@ -236,19 +233,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       return this.errors;
     }
     if (stmt instanceof Array) {
-      // Resolve all top-level functions first. Python allows functions declared after
-      // another function to be used in that function.
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          try {
-            this.environment?.declarePlaceholderName(st.name);
-          } catch (e) {
-            if (e instanceof Error) {
-              this.errors.push(e);
-              continue;
-            }
-            throw e;
-          }
+          this.environment?.declareName(st.name);
+        }
+        if (st instanceof StmtNS.Assign && st.target instanceof ExprNS.Variable) {
+          this.environment?.declareName(st.target.name);
         }
       }
       for (const st of stmt) {
@@ -316,7 +306,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
-    this.environment?.declareName(stmt.name);
     this.environment?.functions.add(stmt.name.lexeme);
 
     // Create a new environment.
@@ -338,7 +327,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.ann);
     this.resolve(stmt.value);
     this.functionVarConstraint(stmt.target.name);
-    this.environment?.declareName(stmt.target.name);
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): void {
@@ -350,7 +338,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
-    this.environment?.declareName(target.name);
   }
 
   visitAssertStmt(stmt: StmtNS.Assert): void {

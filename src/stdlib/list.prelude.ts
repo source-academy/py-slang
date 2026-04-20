@@ -17,9 +17,11 @@ def equal(xs, ys):
     elif is_list(xs):
         if not is_list(ys) or list_length(xs) != list_length(ys):
             return False
-        for i in range(list_length(xs)):
+        i = 0
+        while i < list_length(xs):
             if not equal(xs[i], ys[i]):
                 return False
+            i = i + 1
         return True
     else:
         return False

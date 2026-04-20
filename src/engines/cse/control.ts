@@ -3,10 +3,7 @@ import { Stack } from "./stack";
 import { Instr, Node } from "./types";
 import { isEnvDependent } from "./utils";
 
-export type ControlItem = (Node | Instr) & {
-  isEnvDependent?: boolean;
-  skipEnv?: boolean;
-};
+export type ControlItem = Node | Instr;
 
 /**
  * The control stores the remaining instructions to be executed

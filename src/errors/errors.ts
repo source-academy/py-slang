@@ -2,8 +2,7 @@ import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { operatorTranslator } from "../engines/cse/types";
 import { Token } from "../tokenizer";
-import { TokenType } from "../tokens";
-
+import { TokenType } from "../tokenizer/tokenizer";
 export enum ErrorType {
   IMPORT = "Import",
   RUNTIME = "Runtime",
@@ -377,7 +376,7 @@ export class ZeroDivisionError extends RuntimeSourceError {
 }
 
 export class StepLimitExceededError extends RuntimeSourceError {
-  constructor(source: string, node: ExprNS.Binary | ExprNS.Expr) {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt) {
     super(node);
     this.type = ErrorType.RUNTIME;
     const index = node.startToken.indexInSource;
@@ -385,7 +384,9 @@ export class StepLimitExceededError extends RuntimeSourceError {
     const { lineIndex, fullLine } = getFullLine(source, index);
 
     const errorPos =
-      "operator" in node ? node.operator.indexInSource - node.startToken.indexInSource : 0;
+      "operator" in node && node.operator instanceof Token
+        ? node.operator.indexInSource - node.startToken.indexInSource
+        : 0;
 
     const indicator = createErrorIndicator(fullLine, errorPos); // no target symbol
 

@@ -4,7 +4,6 @@ import { handleRuntimeError } from "../engines/cse/error";
 import { BuiltinValue, Value } from "../engines/cse/stash";
 import { ValueError, ZeroDivisionError } from "../errors";
 import { ModuleFunctions } from "../modules/moduleTypes";
-import { toPythonString } from "../stdlib";
 
 export class CSEBreak {}
 
@@ -274,14 +273,6 @@ export type RecursivePartial<T> =
 // The CSE machine either finishes evaluating (to an error or a result) or it has a suspended evaluation.
 export type Result = Finished | SuspendedCseEval;
 
-// TODO: should allow debug
-// export interface Suspended {
-//     status: 'suspended'
-//     it: IterableIterator<Value>
-//     scheduler: Scheduler
-//     context: Context
-// }
-
 export interface SuspendedCseEval {
   status: "suspended-cse-eval";
   context: Context;
@@ -291,34 +282,11 @@ export interface Finished {
   status: "finished";
   context: Context;
   value: Value;
-  representation: Representation; // if the returned value needs a unique representation,
-  // (for example if the language used is not JS),
-  // the display of the result will use the representation
-  // field instead
-}
-
-export class Representation {
-  constructor(public representation: string) {}
-
-  toString(value: Value): string {
-    // call str(value) in stdlib
-    // TODO: mapping
-    const result = toPythonString(value);
-    return result;
-  }
 }
 
 export interface NativeStorage {
   builtins: Map<string, BuiltinValue>;
-  previousProgramsIdentifiers: Set<string>;
-  operators: Map<string, (...operands: Value[]) => Value>;
   maxExecTime: number;
-  //evaller: null | ((program: string) => Value)
-  /*
-    the first time evaller is used, it must be used directly like `eval(code)` to inherit
-    surrounding scope, so we cannot set evaller to `eval` directly. subsequent assignments to evaller will
-    close in the surrounding values, so no problem
-     */
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;
 }
