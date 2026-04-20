@@ -184,9 +184,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           throw new Error(`No binding for nonlocal ${l} found!`);
         }
 
-        // tag this binding as nonlocal so
-        // if it's accessed before its nonlocal statement,
-        // throw error
+        // tag this binding as nonlocal so if it's accessed before its nonlocal statement, error
         bindings.forEach(binding => {
           if (binding.name === l) binding.tag = "nonlocal";
         });

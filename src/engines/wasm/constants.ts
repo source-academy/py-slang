@@ -53,6 +53,8 @@ export const ERROR_MAP = {
   OUT_OF_MEMORY: "Out of memory.",
   STACK_OVERFLOW: "Stack overflow.",
   STACK_UNDERFLOW: "Stack underflow.",
+  GEN_LIST_NOT_INT: "Trying to generate a list of non-integer length.",
+  ARITY_NOT_CLOSURE: "Trying to get arity of a non-closure value.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -800,6 +802,31 @@ export const LIST_LENGTH_FX = wasm
     wasm.call(MAKE_INT_FX).args(i64.and(local.get("$val"), i64.const(0xffffffff))),
   );
 
+export const GEN_LIST_FX = wasm
+  .func("$_gen_list")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.INT)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.GEN_LIST_NOT_INT))), wasm.unreachable()),
+
+    wasm
+      .call(PUSH_SHADOW_STACK_FX)
+      .args(
+        wasm
+          .call(MAKE_LIST_FX)
+          .args(
+            wasm
+              .call(MALLOC_FX)
+              .args(
+                i32.add(i32.mul(i32.wrap_i64(local.get("$val")), i32.const(12)), i32.const(GC_OBJECT_HEADER_SIZE)),
+                i32.wrap_i64(local.get("$val")),
+              ),
+          ),
+      ),
+  );
+
 export const IS_LIST_FX = wasm
   .func("$_is_list")
   .params({ $tag: i32, $val: i64 })
@@ -928,33 +955,6 @@ export const MAKE_LINKED_LIST_FX = wasm
     wasm.call(DISCARD_SHADOW_STACK_FX),
 
     wasm.call(PUSH_SHADOW_STACK_FX).args(local.get("$acc_tag"), local.get("$acc_val")),
-  );
-
-export const IS_LINKED_LIST_FX = wasm
-  .func("$_is_linked_list")
-  .params({ $tag: i32, $val: i64 })
-  .results(i32, i64)
-  .body(
-    wasm
-      .loop("$loop")
-      .body(
-        wasm
-          .if(
-            i32.and(
-              i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
-              i32.eq(i32.wrap_i64(local.get("$val")), i32.const(2)),
-            ),
-          )
-          .then(
-            wasm
-              .call(GET_LIST_ELEMENT_FX)
-              .args(local.get("$tag"), local.get("$val"), wasm.call(MAKE_INT_FX).args(i64.const(1))),
-            wasm.raw`(local.set $val) (local.set $tag)`,
-            wasm.br("$loop"),
-          ),
-      ),
-
-    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.NONE))),
   );
 
 // logging functions
@@ -1589,7 +1589,7 @@ export const ALLOC_ENV_FX = wasm
     // if there's a callee on the stack, we need to reload the parent from it after MALLOC.
     // if there's no callee, the parent is 0, so this doesn't change anything
     wasm
-      .if(i32.lt_s(global.get(SHADOW_STACK_PTR), global.get(SHADOW_STACK_TOP)))
+      .if(i32.lt_u(global.get(SHADOW_STACK_PTR), global.get(SHADOW_STACK_TOP)))
       .then(
         wasm
           .if(i32.eq(i32.load(global.get(SHADOW_STACK_PTR)), i32.const(TYPE_TAG.CLOSURE)))
@@ -1615,6 +1615,78 @@ export const ALLOC_ENV_FX = wasm
       ),
 
     local.get("$env"),
+  );
+
+export const IS_INT_FX = wasm
+  .func("$_is_int")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.INT))),
+  );
+
+export const IS_FLOAT_FX = wasm
+  .func("$_is_float")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.FLOAT))),
+  );
+
+export const IS_COMPLEX_FX = wasm
+  .func("$_is_complex")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.COMPLEX))),
+  );
+
+export const IS_STRING_FX = wasm
+  .func("$_is_string")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING))),
+  );
+
+export const IS_BOOL_FX = wasm
+  .func("$_is_bool")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.BOOL))),
+  );
+
+export const IS_FUNCTION_FX = wasm
+  .func("$_is_function")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_BOOL_FX).args(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE))),
   );
 
 export const IS_NONE_FX = wasm
@@ -2052,6 +2124,22 @@ export const GET_LAST_EXPR_RESULT_FX = wasm
       .else(local.get("$tag"), local.get("$value")),
   );
 
+export const ARITY_FX = wasm
+  .func("$_arity")
+  .params({ $tag: i32, $val: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
+      .then(wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ARITY_NOT_CLOSURE))), wasm.unreachable()),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $val) (local.set $tag)`),
+
+    wasm.call(MAKE_INT_FX).args(i64.and(i64.shr_u(local.get("$val"), i64.const(40)), i64.const(255))),
+  );
+
 export const nativeFunctions = [
   COPY_FX,
   COLLECT_FX,
@@ -2084,7 +2172,6 @@ export const nativeFunctions = [
   MAKE_PAIR_FX,
   IS_PAIR_FX,
   MAKE_LINKED_LIST_FX,
-  IS_LINKED_LIST_FX,
   LOG_FX,
   NEG_FX,
   ARITHMETIC_OP_FX,
@@ -2093,6 +2180,12 @@ export const nativeFunctions = [
   BOOLISE_FX,
   BOOL_NOT_FX,
   IS_NONE_FX,
+  IS_INT_FX,
+  IS_FLOAT_FX,
+  IS_COMPLEX_FX,
+  IS_STRING_FX,
+  IS_BOOL_FX,
+  IS_FUNCTION_FX,
   ALLOC_ENV_FX,
   PRE_APPLY_FX,
   GET_LEX_ADDR_FX,
@@ -2101,4 +2194,6 @@ export const nativeFunctions = [
   TOKENIZE_FX,
   PARSE_FX,
   GET_LAST_EXPR_RESULT_FX,
+  ARITY_FX,
+  GEN_LIST_FX,
 ];

@@ -23,6 +23,12 @@ import {
   isFunctionOfName,
   isIfInstruction,
 } from "../engines/wasm/irHelpers";
+import { ResolverErrors } from "../resolver/errors";
+import linkedList from "../stdlib/linked-list";
+import list from "../stdlib/list";
+import pairMutator from "../stdlib/pairmutator";
+import mce from "../stdlib/parser";
+import { FeatureNotSupportedError } from "../validator";
 
 it = it.concurrent;
 
@@ -271,7 +277,9 @@ describe("Boolean tests", () => {
 p = pair(1, 2)
 bool(p)
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
@@ -346,7 +354,9 @@ bool(p)
 p = pair(1,2)
 p and None
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
     expect(rawResult[0]).toBe(TYPE_TAG.NONE);
     expect(renderedResult).toBe("None");
   });
@@ -375,7 +385,9 @@ p and None
 
   it("None or pair(1,2) -> pair", async () => {
     const pythonCode = `None or pair(1,2)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
     expect(rawResult[0]).not.toBe(TYPE_TAG.NONE);
     expect(renderedResult).toBe("[1, 2]");
   });
@@ -408,9 +420,12 @@ def boom():
 });
 
 describe("Pair tests", () => {
+  const compileWithLinkedList = (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [linkedList, pairMutator] });
+
   it("pairs are lists", async () => {
     const pythonCode = `pair(1, 2)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
     expect(renderedResult).toBe("[1, 2]");
   });
@@ -420,7 +435,7 @@ describe("Pair tests", () => {
 p = pair(1, 2)
 head(p) + tail(p)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
@@ -431,7 +446,7 @@ p = pair(10, 20)
 set_head(p, 99)
 head(p)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("99");
   });
@@ -442,7 +457,7 @@ p = pair(10, 20)
 set_tail(p, 7)
 tail(p)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("7");
   });
@@ -452,58 +467,61 @@ tail(p)
 p = pair(1, pair(2, pair(3, None)))
 head(tail(tail(p)))
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
 
   it("is_pair identifies pairs correctly", async () => {
     const pythonCode = `is_pair(pair(1, 2))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_pair identifies list of length 2 as pair", async () => {
     const pythonCode = `is_pair([1, 2])`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_pair identifies list of length != 2 as non-pair", async () => {
     const pythonCode = `is_pair([1, 2, 3])`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
   it("is_pair identifies non-pairs correctly", async () => {
     const pythonCode = `is_pair(42)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
   it("head on non-list should error", async () => {
     const pythonCode = `head(42)`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithLinkedList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.HEAD_NOT_PAIR),
     );
   });
 
   it("tail on non-list should error", async () => {
     const pythonCode = `tail(42)`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithLinkedList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.TAIL_NOT_PAIR),
     );
   });
 });
 
 describe("Linked list tests", () => {
+  const compileWithLinkedList = (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [linkedList, pairMutator] });
+
   it("linked_list constructs a linked list from a Python list", async () => {
     const pythonCode = `head(tail(linked_list(1, 2, 3)))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("2");
   });
@@ -514,49 +532,49 @@ l = linked_list(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("99");
   });
 
   it("is_none identifies None correctly", async () => {
     const pythonCode = `is_none(None)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_none identifies non-None correctly", async () => {
     const pythonCode = `is_none(42)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
   it("is_linked_list identifies linked list correctly", async () => {
     const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_linked_list identifies linked lists created with nested pairs", async () => {
     const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, None))))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_linked_list identifies non-linked lists correctly", async () => {
     const pythonCode = `is_linked_list([1, 2, 3])`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
   it("is_linked_list identifies non-linked lists created with pairs correctly", async () => {
     const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, 4))))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
@@ -623,8 +641,8 @@ def f():
     return g()
 f()
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("No binding for nonlocal x found!"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(ResolverErrors.NameNotFoundError),
     );
   });
 
@@ -636,8 +654,8 @@ def f():
     return x
 f()
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("No binding for nonlocal x found!"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(ResolverErrors.NameNotFoundError),
     );
   });
 
@@ -654,7 +672,7 @@ def f():
 f()
 `;
 
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
       new Error("Name x is used prior to nonlocal declaration!"),
     );
   });
@@ -667,15 +685,15 @@ def f(x):
     return x
 f(5)
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("x is a parameter and cannot be declared nonlocal!"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(ResolverErrors.NameNotFoundError),
     );
   });
 
   it("undefined name error", async () => {
     const pythonCode = `undefined_variable`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Name undefined_variable not defined!"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(ResolverErrors.NameNotFoundError),
     );
   });
 
@@ -963,8 +981,8 @@ describe("Loop semantics tests", () => {
 for i in [1, 2, 3]:
     pass
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("Only range() is supported in for loops"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(FeatureNotSupportedError),
     );
   });
 
@@ -973,8 +991,8 @@ for i in [1, 2, 3]:
 for i in range():
     pass
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("range() requires at least one argument"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(FeatureNotSupportedError),
     );
   });
 
@@ -983,8 +1001,8 @@ for i in range():
 for i in range(1, 2, 3, 4):
     pass
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error("range() accepts at most 3 arguments"),
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
+      expect.any(FeatureNotSupportedError),
     );
   });
 
@@ -1370,12 +1388,15 @@ x
 });
 
 describe("List semantics tests", () => {
+  const compileWithList = (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [linkedList, list] });
+
   it("list literal creation", async () => {
     const pythonCode = `
 x = [1, 2, 3]
 x[0] + x[1] + x[2]
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("6");
   });
@@ -1385,7 +1406,7 @@ x[0] + x[1] + x[2]
 x = [10, 20, 30]
 x[1]
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("20");
   });
@@ -1396,7 +1417,7 @@ x = [1, 2, 3]
 x[1] = 100
 x[0] + x[1] + x[2]
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("104");
   });
@@ -1406,7 +1427,7 @@ x[0] + x[1] + x[2]
 x = 42
 x[0]
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.GET_ELEMENT_NOT_LIST),
     );
   });
@@ -1416,7 +1437,7 @@ x[0]
 x = 42
 x[0] = 1
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.SET_ELEMENT_NOT_LIST),
     );
   });
@@ -1426,9 +1447,7 @@ x[0] = 1
 x = [1, 2, 3]
 x[1.5]
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.INDEX_NOT_INT),
-    );
+    await expect(compileWithList(pythonCode)).rejects.toThrow(new Error(ERROR_MAP.INDEX_NOT_INT));
   });
 
   it("list indexing out of range should error", async () => {
@@ -1436,7 +1455,7 @@ x[1.5]
 x = [1, 2, 3]
 x[3]
 `;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.LIST_OUT_OF_RANGE),
     );
   });
@@ -1446,7 +1465,7 @@ x[3]
 x = [[1, 2], [3, 4]]
 x[1][0]
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
@@ -1457,7 +1476,7 @@ x = [[1, 2], [3, 4]]
 x[0][1] = 9
 x[0][0] + x[0][1]
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("10");
   });
@@ -1469,7 +1488,7 @@ y = x
 y[0] = 100
 x[0]
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("100");
   });
@@ -1483,7 +1502,7 @@ x = [1, 2]
 change(x)
 x[0]
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("42");
   });
@@ -1497,7 +1516,7 @@ x = [1, 2]
 change(x)
 x[0]
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("1");
   });
@@ -1510,7 +1529,7 @@ for i in range(3):
     sum = sum + x[i]
 sum
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("6");
   });
@@ -1522,7 +1541,7 @@ for i in range(3):
     x[i] = i
 x[0] + x[1] + x[2]
   `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
@@ -1540,7 +1559,7 @@ def outer():
     return x
 outer()
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
@@ -1550,28 +1569,28 @@ outer()
 x = [1, True, 3]
 x[0] + x[2]
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("4");
   });
 
   it("is_list identifies lists correctly", async () => {
     const pythonCode = `is_list([1, 2, 3])`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_list identifies pairs as lists", async () => {
     const pythonCode = `is_list(pair(1, 2))`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("is_list identifies non-lists correctly", async () => {
     const pythonCode = `is_list(42)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
@@ -1583,27 +1602,30 @@ def f(*args):
 
 f(1, 2, 3)
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
   it("list length function", async () => {
     const pythonCode = `list_length([10, 20, 30])`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
 
   it("list length on non-list should error", async () => {
     const pythonCode = `list_length(42)`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.GET_LENGTH_NOT_LIST),
     );
   });
 });
 
 describe("Function *args & unpacking tests", () => {
+  const compileWithList = (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [linkedList, list] });
+
   describe("*args tests", () => {
     it("no extra arguments: *args is empty", async () => {
       const pythonCode = `
@@ -1612,7 +1634,7 @@ def f(a, b, *c):
 
 f(1, 2)
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("0");
     });
@@ -1624,7 +1646,7 @@ def f(a, b, *c):
 
 f(1, 2, 10, 20)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("30");
     });
@@ -1639,7 +1661,7 @@ def f(a, *args):
 
 f(1, 2, 3, 4)
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("9");
     });
@@ -1651,7 +1673,7 @@ def f(*args):
 
 f(7, 8)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("15");
     });
@@ -1663,7 +1685,7 @@ def f(a, *args):
 
 f(0, 3, 4.5)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
       expect(renderedResult).toBe("7.5");
     });
@@ -1675,8 +1697,8 @@ def f(*args, a):
 
 f(1, 2, 3)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-        new Error("Starred parameter must be the last parameter"),
+      expect((await compileWithList(pythonCode)).errors).toContainEqual(
+        expect.objectContaining(new Error("Starred parameter must be the last parameter")),
       );
     });
 
@@ -1687,7 +1709,7 @@ def f(a, b, *args):
 
 f(1)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.FUNC_WRONG_ARITY),
       );
     });
@@ -1700,9 +1722,7 @@ def f(*args):
 
 f(10, 20, 30)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-        new Error(ERROR_MAP.UNBOUND),
-      );
+      await expect(compileWithList(pythonCode)).rejects.toThrow(new Error(ERROR_MAP.UNBOUND));
     });
 
     it("*args cannot be mutated inside function", async () => {
@@ -1712,7 +1732,7 @@ def f(*args):
 
 f(1, 2, 3)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.SET_ELEMENT_TUPLE),
       );
     });
@@ -1724,8 +1744,8 @@ def f(*args1, *args2):
 
 f(1, 2, 3)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-        new Error("Only one starred parameter is allowed"),
+      expect((await compileWithList(pythonCode)).errors).toContainEqual(
+        expect.objectContaining(new Error("Only one starred parameter is allowed")),
       );
     });
 
@@ -1734,7 +1754,7 @@ f(1, 2, 3)
 f = lambda a, *args: args[0] + args[1]
 f(1, 2, 3)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("5");
     });
@@ -1744,7 +1764,7 @@ f(1, 2, 3)
 f = lambda *args: list_length(args)
 f(1, 2, 3)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("3");
     });
@@ -1754,7 +1774,7 @@ f(1, 2, 3)
 f = lambda a, *args: a
 f()
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.FUNC_WRONG_ARITY),
       );
     });
@@ -1764,8 +1784,8 @@ f()
 f = lambda *args1, *args2: list_length(args1)
 f(1, 2, 3)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-        new Error("Only one starred parameter is allowed"),
+      expect((await compileWithList(pythonCode)).errors).toContainEqual(
+        expect.objectContaining(new Error("Only one starred parameter is allowed")),
       );
     });
 
@@ -1774,8 +1794,8 @@ f(1, 2, 3)
 f = lambda *args, a: a
 f(1, 2, 3)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-        new Error("Starred parameter must be the last parameter"),
+      expect((await compileWithList(pythonCode)).errors).toContainEqual(
+        expect.objectContaining(new Error("Starred parameter must be the last parameter")),
       );
     });
   });
@@ -1789,7 +1809,7 @@ def f(a, b, c):
 args = [2, 3]
 f(1, *args)
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("6");
     });
@@ -1802,7 +1822,7 @@ def f(a, b):
 not_a_list = 42
 f(1, *not_a_list)
   `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.STARRED_NOT_LIST),
       );
     });
@@ -1816,7 +1836,7 @@ args1 = [2, 3]
 args2 = [4]
 f(1, *args1, *args2)
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("10");
     });
@@ -1829,7 +1849,7 @@ def f(a, b, c):
 args = [2]
 f(1, *args)
   `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.FUNC_WRONG_ARITY),
       );
     });
@@ -1842,7 +1862,7 @@ def f(a, b, c):
 args = [2, 3]
 f(1, *args, 4)
   `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.FUNC_WRONG_ARITY),
       );
     });
@@ -1853,7 +1873,7 @@ f = lambda a, b, c: a + b + c
 args = [2, 3]
 f(1, *args)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("6");
     });
@@ -1863,7 +1883,7 @@ f(1, *args)
 f = lambda a, b: a + b
 f(1, *42)
 `;
-      await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      await expect(compileWithList(pythonCode)).rejects.toThrow(
         new Error(ERROR_MAP.STARRED_NOT_LIST),
       );
     });
@@ -1881,7 +1901,7 @@ def f(a, *args):
 args = [2, 3, 4]
 f(1, *args)
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("10");
     });
@@ -1899,7 +1919,7 @@ def f(a, b):
     return test
 f(*[1, 2])
   `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("5");
     });
@@ -1910,7 +1930,7 @@ f = lambda a, *args: a + args[0] + args[1]
 rest = [2, 3]
 f(1, *rest)
 `;
-      const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+      const { rawResult, renderedResult } = await compileWithList(pythonCode);
       expect(rawResult[0]).toBe(TYPE_TAG.INT);
       expect(renderedResult).toBe("6");
     });
@@ -1926,106 +1946,112 @@ const linkedListBuilder = (...elements: string[]) => {
 };
 
 describe("tokenize function tests", () => {
+  const compileWithMce = async (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [mce] });
+
   it("returns tokens in source order", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`tokenize("x = 1 + 2")`, true);
+    const { renderedResult } = await compileWithMce(`tokenize("x = 1 + 2")`);
     expect(renderedResult).toBe(linkedListBuilder("x", "=", "1", "+", "2"));
   });
 
   it("ignores redundant whitespace", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`tokenize("x    +   y   ")`, true);
+    const { renderedResult } = await compileWithMce(`tokenize("x    +   y   ")`);
     expect(renderedResult).toBe(linkedListBuilder("x", "+", "y"));
   });
 
   it("returns None for empty input", async () => {
-    const { rawResult, renderedResult } = await compileToWasmAndRun(`tokenize("")`, true);
+    const { rawResult, renderedResult } = await compileWithMce(`tokenize("")`);
     expect(rawResult[0]).toBe(TYPE_TAG.NONE);
     expect(renderedResult).toBe("None");
   });
 
   it("tokenizes punctuation-heavy expressions", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`tokenize("f(x, y[0])")`, true);
+    const { renderedResult } = await compileWithMce(`tokenize("f(x, y[0])")`);
     expect(renderedResult).toBe(linkedListBuilder("f", "(", "x", ",", "y", "[", "0", "]", ")"));
   });
 
   it("tokenizes multibyte UTF-8 string lexemes", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`tokenize('"😀é"')`, true);
+    const { renderedResult } = await compileWithMce(`tokenize('"😀é"')`);
     expect(renderedResult).toBe(linkedListBuilder('"😀é"'));
   });
 
   it("tokenize on non-string should error", async () => {
-    await expect(compileToWasmAndRun(`tokenize(42)`, true)).rejects.toThrow(
+    await expect(compileWithMce(`tokenize(42)`)).rejects.toThrow(
       new Error(ERROR_MAP.PARSE_NOT_STRING),
     );
   });
 });
 
 describe("parse function tests", () => {
+  const compileWithMce = async (pythonCode: string) =>
+    compileToWasmAndRun(pythonCode, true, { groups: [mce] });
+
   // A single top-level statement is returned directly; multiple statements are wrapped in a sequence.
   const seqOf = (...stmt: string[]) => linkedListBuilder("sequence", linkedListBuilder(...stmt));
 
   it("parse on non-string should error", async () => {
-    await expect(compileToWasmAndRun(`parse(42)`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse(42)`)).rejects.toThrow(
       new Error(ERROR_MAP.PARSE_NOT_STRING),
     );
   });
 
   it("empty input returns sequence(None)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("")`, true);
+    const { renderedResult } = await compileWithMce(`parse("")`);
     expect(renderedResult).toBe(linkedListBuilder("sequence", linkedListBuilder("None")));
   });
 
   it("integer literal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("42")`, true);
+    const { renderedResult } = await compileWithMce(`parse("42")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "42"));
   });
 
   it("float literal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("3.5")`, true);
+    const { renderedResult } = await compileWithMce(`parse("3.5")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "3.5"));
   });
 
   it("complex literal (pure imaginary)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("2j")`, true);
+    const { renderedResult } = await compileWithMce(`parse("2j")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "2j"));
   });
 
   it("bool literal True", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("True")`, true);
+    const { renderedResult } = await compileWithMce(`parse("True")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "True"));
   });
 
   it("bool literal False", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("False")`, true);
+    const { renderedResult } = await compileWithMce(`parse("False")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "False"));
   });
 
   it("None literal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("None")`, true);
+    const { renderedResult } = await compileWithMce(`parse("None")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "None"));
   });
 
   it("string literal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse('"hello"')`, true);
+    const { renderedResult } = await compileWithMce(`parse('"hello"')`);
     expect(renderedResult).toBe(linkedListBuilder("literal", '"hello"'));
   });
 
   it("string literal with multibyte UTF-8 characters", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse('"😀é"')`, true);
+    const { renderedResult } = await compileWithMce(`parse('"😀é"')`);
     expect(renderedResult).toBe(linkedListBuilder("literal", '"😀é"'));
   });
 
   it("name", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("x")`, true);
+    const { renderedResult } = await compileWithMce(`parse("x")`);
     expect(renderedResult).toBe(linkedListBuilder("name", '"x"'));
   });
 
   it("grouping expression unwraps to inner expression", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("(1)")`, true);
+    const { renderedResult } = await compileWithMce(`parse("(1)")`);
     expect(renderedResult).toBe(linkedListBuilder("literal", "1"));
   });
 
   it("multiple top-level statements", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("x = 1\\ny")`, true);
+    const { renderedResult } = await compileWithMce(`parse("x = 1\\ny")`);
     expect(renderedResult).toBe(
       seqOf(
         linkedListBuilder(
@@ -2039,7 +2065,7 @@ describe("parse function tests", () => {
   });
 
   it("binary addition", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 + 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 + 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2051,7 +2077,7 @@ describe("parse function tests", () => {
   });
 
   it("binary subtraction", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("5 - 3")`, true);
+    const { renderedResult } = await compileWithMce(`parse("5 - 3")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2063,7 +2089,7 @@ describe("parse function tests", () => {
   });
 
   it("binary multiplication", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("5 * 3")`, true);
+    const { renderedResult } = await compileWithMce(`parse("5 * 3")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2075,7 +2101,7 @@ describe("parse function tests", () => {
   });
 
   it("binary division", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("5 / 3")`, true);
+    const { renderedResult } = await compileWithMce(`parse("5 / 3")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2087,7 +2113,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison equal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 == 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 == 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2099,7 +2125,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison not equal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 != 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 != 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2111,7 +2137,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison less than", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 < 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 < 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2123,7 +2149,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison less than or equal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 <= 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 <= 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2135,7 +2161,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison greater than", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 > 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 > 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2147,7 +2173,7 @@ describe("parse function tests", () => {
   });
 
   it("comparison greater than or equal", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 >= 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 >= 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "binary_operator_combination",
@@ -2159,7 +2185,7 @@ describe("parse function tests", () => {
   });
 
   it("unary not", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("not True")`, true);
+    const { renderedResult } = await compileWithMce(`parse("not True")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "unary_operator_combination",
@@ -2170,14 +2196,14 @@ describe("parse function tests", () => {
   });
 
   it("unary negation", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("-x")`, true);
+    const { renderedResult } = await compileWithMce(`parse("-x")`);
     expect(renderedResult).toBe(
       linkedListBuilder("unary_operator_combination", '"-unary"', linkedListBuilder("name", '"x"')),
     );
   });
 
   it("logical and", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("True and False")`, true);
+    const { renderedResult } = await compileWithMce(`parse("True and False")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "logical_composition",
@@ -2189,7 +2215,7 @@ describe("parse function tests", () => {
   });
 
   it("logical or", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("True or False")`, true);
+    const { renderedResult } = await compileWithMce(`parse("True or False")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "logical_composition",
@@ -2201,7 +2227,7 @@ describe("parse function tests", () => {
   });
 
   it("ternary (conditional expression)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("1 if True else 2")`, true);
+    const { renderedResult } = await compileWithMce(`parse("1 if True else 2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "conditional_expression",
@@ -2213,7 +2239,7 @@ describe("parse function tests", () => {
   });
 
   it("assignment", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("x = 5")`, true);
+    const { renderedResult } = await compileWithMce(`parse("x = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "assignment",
@@ -2224,7 +2250,7 @@ describe("parse function tests", () => {
   });
 
   it("object assignment", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("x[0] = 5")`, true);
+    const { renderedResult } = await compileWithMce(`parse("x[0] = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "object_assignment",
@@ -2239,7 +2265,7 @@ describe("parse function tests", () => {
   });
 
   it("function declaration: single statement body (no sequence)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("def f(x):\\n    return x")`, true);
+    const { renderedResult } = await compileWithMce(`parse("def f(x):\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "function_declaration",
@@ -2251,9 +2277,8 @@ describe("parse function tests", () => {
   });
 
   it("function declaration: multiple statement body (sequence)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
+    const { renderedResult } = await compileWithMce(
       `parse("def f(x, y):\\n    return x\\n    return y")`,
-      true,
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
@@ -2272,10 +2297,7 @@ describe("parse function tests", () => {
   });
 
   it("function declaration: local declaration wraps body in block", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("def f():\\n    x = 5\\n    return x")`,
-      true,
-    );
+    const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "function_declaration",
@@ -2300,7 +2322,7 @@ describe("parse function tests", () => {
   });
 
   it("function declaration: only one local declaration (block but no sequence)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("def f():\\n    x = 5")`, true);
+    const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "function_declaration",
@@ -2319,9 +2341,8 @@ describe("parse function tests", () => {
   });
 
   it("function declaration: nonlocal exempts name from block wrapping", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
+    const { renderedResult } = await compileWithMce(
       `parse("def f():\\n    nonlocal x\\n    x = 5\\n    return x")`,
-      true,
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
@@ -2345,7 +2366,7 @@ describe("parse function tests", () => {
   });
 
   it("lambda expression", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("lambda x, y: x + y")`, true);
+    const { renderedResult } = await compileWithMce(`parse("lambda x, y: x + y")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "lambda_expression",
@@ -2364,43 +2385,43 @@ describe("parse function tests", () => {
   });
 
   it("return statement", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("return 1")`, true);
+    const { renderedResult } = await compileWithMce(`parse("return 1")`);
     expect(renderedResult).toBe(
       linkedListBuilder("return_statement", linkedListBuilder("literal", "1")),
     );
   });
 
   it("bare return statement returns None", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("return")`, true);
+    const { renderedResult } = await compileWithMce(`parse("return")`);
     expect(renderedResult).toBe(
       linkedListBuilder("return_statement", linkedListBuilder("literal", "None")),
     );
   });
 
   it("break statement", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("break")`, true);
+    const { renderedResult } = await compileWithMce(`parse("break")`);
     expect(renderedResult).toBe(linkedListBuilder("break_statement"));
   });
 
   it("continue statement", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("continue")`, true);
+    const { renderedResult } = await compileWithMce(`parse("continue")`);
     expect(renderedResult).toBe(linkedListBuilder("continue_statement"));
   });
 
   it("pass statement", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("pass")`, true);
+    const { renderedResult } = await compileWithMce(`parse("pass")`);
     expect(renderedResult).toBe(linkedListBuilder("pass_statement"));
   });
 
   it("nonlocal declaration", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("nonlocal x")`, true);
+    const { renderedResult } = await compileWithMce(`parse("nonlocal x")`);
     expect(renderedResult).toBe(
       linkedListBuilder("nonlocal_declaration", linkedListBuilder("name", '"x"')),
     );
   });
 
   it("list expression", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("[1, 2, 3]")`, true);
+    const { renderedResult } = await compileWithMce(`parse("[1, 2, 3]")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "list_expression",
@@ -2414,7 +2435,7 @@ describe("parse function tests", () => {
   });
 
   it("subscript (object access)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("x[0]")`, true);
+    const { renderedResult } = await compileWithMce(`parse("x[0]")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "object_access",
@@ -2425,7 +2446,7 @@ describe("parse function tests", () => {
   });
 
   it("function call (application)", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("f(1, 2)")`, true);
+    const { renderedResult } = await compileWithMce(`parse("f(1, 2)")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "application",
@@ -2436,10 +2457,7 @@ describe("parse function tests", () => {
   });
 
   it("if-else statement", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
-      `parse("if True:\\n    1\\nelse:\\n    2")`,
-      true,
-    );
+    const { renderedResult } = await compileWithMce(`parse("if True:\\n    1\\nelse:\\n    2")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "conditional_statement",
@@ -2451,7 +2469,7 @@ describe("parse function tests", () => {
   });
 
   it("if statement without else uses None as else branch", async () => {
-    const { renderedResult } = await compileToWasmAndRun(`parse("if True:\\n    1")`, true);
+    const { renderedResult } = await compileWithMce(`parse("if True:\\n    1")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "conditional_statement",
@@ -2463,9 +2481,8 @@ describe("parse function tests", () => {
   });
 
   it("if-else statement with multiple statements per branch", async () => {
-    const { renderedResult } = await compileToWasmAndRun(
+    const { renderedResult } = await compileWithMce(
       `parse("if True:\\n    x = 1\\n    y\\nelse:\\n    pass\\n    z")`,
-      true,
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
@@ -2491,37 +2508,37 @@ describe("parse function tests", () => {
   });
 
   it("while loop is not supported in parse tree generation", async () => {
-    await expect(compileToWasmAndRun(`parse("while True:\\n    1")`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse("while True:\\n    1")`)).rejects.toThrow(
       new Error("While loops are not supported in parse tree generation"),
     );
   });
 
   it("for loop is not supported in parse tree generation", async () => {
-    await expect(compileToWasmAndRun(`parse("for i in range(5):\\n    1")`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse("for i in range(5):\\n    1")`)).rejects.toThrow(
       new Error("For loops are not supported in parse tree generation"),
     );
   });
 
   it("function declaration with starred parameter is not supported in parse tree generation", async () => {
-    await expect(
-      compileToWasmAndRun(`parse("def f(*args):\\n    return 1")`, true),
-    ).rejects.toThrow(new Error("Starred parameters are not supported in parse tree generation"));
+    await expect(compileWithMce(`parse("def f(*args):\\n    return 1")`)).rejects.toThrow(
+      new Error("Starred parameters are not supported in parse tree generation"),
+    );
   });
 
   it("lambda with starred parameter is not supported in parse tree generation", async () => {
-    await expect(compileToWasmAndRun(`parse("lambda *args: 1")`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse("lambda *args: 1")`)).rejects.toThrow(
       new Error("Starred parameters are not supported in parse tree generation"),
     );
   });
 
   it("starred expression in call is not supported in parse tree generation", async () => {
-    await expect(compileToWasmAndRun(`parse("f(*x)")`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse("f(*x)")`)).rejects.toThrow(
       new Error("Starred expressions are not supported in parse tree generation"),
     );
   });
 
   it("multiple starred expressions in call are not supported in parse tree generation", async () => {
-    await expect(compileToWasmAndRun(`parse("f(*x, *y)")`, true)).rejects.toThrow(
+    await expect(compileWithMce(`parse("f(*x, *y)")`)).rejects.toThrow(
       new Error("Starred expressions are not supported in parse tree generation"),
     );
   });
@@ -2535,8 +2552,14 @@ describe("Shadow stack manipulation tests", () => {
     interactiveMode: boolean = true,
   ) => {
     const results = interactiveMode
-      ? await compileToWasmAndRun(pythonCode, true, compileOptions)
-      : await compileToWasmAndRun(pythonCode, false, compileOptions);
+      ? await compileToWasmAndRun(pythonCode, true, {
+          ...compileOptions,
+          groups: [linkedList, pairMutator, list, mce],
+        })
+      : await compileToWasmAndRun(pythonCode, false, {
+          ...compileOptions,
+          groups: [linkedList, pairMutator, list, mce],
+        });
 
     // Check each frame's tag on the stack
     expectedTags.forEach((expectedTag, index) =>
@@ -3749,7 +3772,9 @@ def reverse(xs):
 
 reverse(linked_list(${[...Array(50).keys()].join(", ")}))
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
 
     const frontPart = [...Array(50).keys()].map(i => `[${49 - i}`).join(", ");
@@ -3770,9 +3795,9 @@ def reverse(xs):
 
 reverse(linked_list(${[...Array(50).keys()].join(", ")}))
 `;
-    await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
-      new Error(ERROR_MAP.OUT_OF_MEMORY),
-    );
+    await expect(
+      compileToWasmAndRun(pythonCode, false, { disableGC: true, groups: [linkedList] }),
+    ).rejects.toThrow(new Error(ERROR_MAP.OUT_OF_MEMORY));
   });
 });
 
@@ -3816,5 +3841,150 @@ y = 10
     const { rawResult, renderedResult } = await compileToWasmAndRun(``);
     expect(rawResult).toBeNull();
     expect(renderedResult).toBeNull();
+  });
+});
+
+describe("Feature gate tests", () => {
+  const expectFeatureGateError = async (pythonCode: string, chapter: number) => {
+    const result = await compileToWasmAndRun(pythonCode, true, { chapter });
+    expect(result.errors).toContainEqual(expect.any(FeatureNotSupportedError));
+  };
+
+  const expectFeatureGateOk = async (pythonCode: string, chapter: number) => {
+    const result = await compileToWasmAndRun(pythonCode, true, { chapter });
+    expect(result.errors).toEqual([]);
+  };
+
+  describe("Chapter 1 — most restrictive", () => {
+    it("simple function definition passes", async () => {
+      await expectFeatureGateOk("def f(x):\n    x", 1);
+    });
+
+    it("while loop is banned", async () => {
+      await expectFeatureGateError("while True:\n    pass", 1);
+    });
+
+    it("for loop is banned", async () => {
+      await expectFeatureGateError("xs = 1\nfor i in xs:\n    pass", 1);
+    });
+
+    it("list literal is banned", async () => {
+      await expectFeatureGateError("x = []", 1);
+    });
+
+    it("subscript assignment is banned", async () => {
+      await expectFeatureGateError("xs = 1\nxs[0] = 3", 1);
+    });
+
+    it("break and continue are banned", async () => {
+      await expectFeatureGateError("def f():\n    break", 1);
+      await expectFeatureGateError("def f():\n    continue", 1);
+    });
+
+    it("nonlocal is banned", async () => {
+      await expectFeatureGateError("def f():\n    x = 1\n    def g():\n        nonlocal x", 1);
+    });
+
+    it("rest params are banned", async () => {
+      await expectFeatureGateError("def f(*args):\n    pass", 1);
+    });
+
+    it("spread in call is banned", async () => {
+      await expectFeatureGateError("def f(a):\n    pass\nf(*f)", 1);
+    });
+
+    it("lambda *args is banned", async () => {
+      await expectFeatureGateError("f = lambda *args: args", 1);
+    });
+  });
+
+  describe("Chapter 2 — loops and reassignment still banned", () => {
+    it("while loop is banned", async () => {
+      await expectFeatureGateError("while True:\n    pass", 2);
+    });
+
+    it("for loop is banned", async () => {
+      await expectFeatureGateError("xs = 1\nfor i in xs:\n    pass", 2);
+    });
+
+    it("list literal is banned", async () => {
+      await expectFeatureGateError("x = []", 2);
+    });
+
+    it("nonlocal is banned", async () => {
+      await expectFeatureGateError("def f():\n    x = 1\n    def g():\n        nonlocal x", 2);
+    });
+
+    it("rest params are banned", async () => {
+      await expectFeatureGateError("def f(*args):\n    pass", 2);
+    });
+
+    it("spread in call is banned", async () => {
+      await expectFeatureGateError("def f(a):\n    pass\nf(*f)", 2);
+    });
+
+    it("lambda *args is banned", async () => {
+      await expectFeatureGateError("f = lambda *args: args", 2);
+    });
+  });
+
+  describe("Chapter 3 — loops and lists allowed", () => {
+    it("while loop is allowed", async () => {
+      await expectFeatureGateOk("while False:\n    pass", 3);
+    });
+
+    it("list literal is allowed", async () => {
+      await expectFeatureGateOk("x = []", 3);
+    });
+
+    it("nonlocal is allowed", async () => {
+      await expectFeatureGateOk("def f():\n    x = 1\n    def g():\n        nonlocal x", 3);
+    });
+
+    it("for with range() is allowed", async () => {
+      await expectFeatureGateOk("for i in range(3):\n    pass", 3);
+    });
+
+    it("for without range() is banned", async () => {
+      await expectFeatureGateError("xs = 1\nfor i in xs:\n    pass", 3);
+    });
+
+    it("subscript assignment is allowed", async () => {
+      await expectFeatureGateOk("xs = [1, 2]\nxs[0] = 3", 3);
+    });
+
+    it("rest params are allowed", async () => {
+      await expectFeatureGateOk("def f(*args):\n    pass", 3);
+    });
+
+    it("spread in call is allowed", async () => {
+      await expectFeatureGateOk("def f(a):\n    pass\nx = [1]\nf(*x)", 3);
+    });
+
+    it("lambda *args is allowed", async () => {
+      await expectFeatureGateOk("f = lambda *args: args", 3);
+    });
+  });
+
+  describe("Chapter 4 — no restrictions", () => {
+    it("while loop is allowed", async () => {
+      await expectFeatureGateOk("while False:\n    pass", 4);
+    });
+
+    it("list literal is allowed", async () => {
+      await expectFeatureGateOk("x = [1, 2, 3]", 4);
+    });
+
+    it("lambda is allowed", async () => {
+      await expectFeatureGateOk("f = lambda x: x", 4);
+    });
+
+    it("annotated assignment is banned", async () => {
+      await expectFeatureGateError("x: abs = 5", 4);
+    });
+
+    it("annotated assignment is banned after normal assignment", async () => {
+      await expectFeatureGateError("x = 5\nx: abs = 10", 4);
+    });
   });
 });
