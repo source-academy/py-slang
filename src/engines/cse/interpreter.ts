@@ -354,10 +354,7 @@ type StmtKeys = Exclude<
   keyof typeof StmtNS,
   "Stmt" | "AnnAssign" | "Global" | "Assert" | "NonLocal"
 >;
-type InstrKeys = Exclude<
-  InstrType,
-  "Assert" | "Global" | "NonLocal" | "Import" | "Program"
->;
+type InstrKeys = Exclude<InstrType, "Assert" | "Global" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
 } & {
