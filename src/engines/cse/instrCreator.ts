@@ -1,5 +1,5 @@
-import { ExprNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { TokenType } from "../../tokenizer";
 import { Environment } from "./environment";
 import {
   AppInstr,
@@ -9,21 +9,23 @@ import {
   BranchInstr,
   BreakInstr,
   ContinueInstr,
+  ContinueMarkerInstr,
   EndOfFunctionBodyInstr,
   EnvInstr,
   ForInstr,
-  Instr,
   InstrType,
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
   Node,
+  PopInstr,
+  ResetInstr,
   StatementSequence,
   UnOpInstr,
   WhileInstr,
 } from "./types";
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
+export const popInstr = (srcNode: Node): PopInstr => ({ instrType: InstrType.POP, srcNode });
 
 export const assmtInstr = (
   symbol: string,
@@ -40,7 +42,7 @@ export const assmtInstr = (
 
 export const appInstr = (
   numOfArgs: number,
-  srcNode: Node,
+  srcNode: ExprNS.Call,
   spreadIndices: number[] = [],
 ): AppInstr => ({
   instrType: InstrType.APPLICATION,
@@ -60,8 +62,8 @@ export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   srcNode,
 });
 
-export const markerInstr = (srcNode: Node): Instr => ({
-  instrType: InstrType.MARKER,
+export const continueMarkerInstr = (srcNode: Node): ContinueMarkerInstr => ({
+  instrType: InstrType.CONTINUE_MARKER,
   srcNode,
 });
 
@@ -76,7 +78,7 @@ export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   srcNode,
 });
 
-export const resetInstr = (srcNode: Node): Instr => ({
+export const resetInstr = (srcNode: Node): ResetInstr => ({
   instrType: InstrType.RESET,
   srcNode,
 });
@@ -125,18 +127,9 @@ export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr =>
   srcNode,
 });
 
-export const forInstr = (
-  srcNode: Node,
-  init: ExprNS.Variable,
-  test: ExprNS.Expr,
-  update: Node,
-  body: StatementSequence,
-): ForInstr => ({
+export const forInstr = (srcNode: Node, body: StmtNS.Stmt[]): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
-  init,
-  test,
-  update,
   body,
 });
 

@@ -1,11 +1,10 @@
-import { StmtNS, ExprNS } from "../../ast-types";
-import { Token } from "../../tokenizer";
-import { TokenType } from "../../tokens";
-import { PRIMITIVE_FUNCTIONS } from "./builtins";
-import { SVMLProgram } from "./types";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
+import { Token, TokenType } from "../../tokenizer";
 import { SVMLIRBuilder } from "./SVMLIRBuilder";
+import { PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
-import { FunctionEnvironments, Environment, Resolver } from "../../resolver";
+import { SVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;

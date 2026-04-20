@@ -14,7 +14,7 @@ import {
 } from "@sourceacademy/wasm-util";
 import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,

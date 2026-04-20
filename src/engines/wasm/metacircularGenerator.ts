@@ -1,6 +1,6 @@
 import { PARSE_TREE_STRINGS, WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { GC_OBJECT_HEADER_SIZE } from "./constants";
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {

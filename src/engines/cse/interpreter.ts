@@ -10,11 +10,11 @@ import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
 import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
-import { builtIns, toPythonString } from "../../stdlib";
+import { builtIns } from "../../stdlib";
 import { Group } from "../../stdlib/utils";
-import { TokenType } from "../../tokens";
-import { CSEBreak, RecursivePartial, Representation, Result } from "../../types";
-import { Closure } from "./closure";
+import { Token, TokenType } from "../../tokenizer";
+import { CSEBreak, RecursivePartial, Result } from "../../types";
+import { Closure, isStatementSequence } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import {
@@ -24,7 +24,7 @@ import {
   popEnvironment,
   pushEnvironment,
 } from "./environment";
-import { handleRuntimeError } from "./error";
+import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
@@ -35,20 +35,26 @@ import {
   BinOpInstr,
   BoolOpInstr,
   BranchInstr,
+  BreakInstr,
+  ContinueInstr,
+  EndOfFunctionBodyInstr,
   EnvInstr,
+  ForInstr,
   Instr,
   InstrType,
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
-  Node,
-  StatementSequence,
+  PopInstr,
+  ResetInstr,
   UnOpInstr,
   WhileInstr,
 } from "./types";
 import {
   envChanging,
+  evaluateForIterator,
   evaluateListAssignment,
+  generateForIncrement,
   isNode,
   pyDefineVariable,
   pyGetVariable,
@@ -63,9 +69,9 @@ export interface IOptions {
   variant: number;
 }
 
-type CmdEvaluator = (
+type CmdEvaluator<T extends ControlItem> = (
   code: string,
-  command: ControlItem,
+  command: T,
   context: Context,
   control: Control,
   stash: Stash,
@@ -85,12 +91,9 @@ export function CSEResultPromise(context: Context, value: Value): Promise<Result
     if (value instanceof CSEBreak) {
       resolve({ status: "suspended-cse-eval", context });
     } else if (value.type === "error") {
-      const msg = value.message;
-      const representation = new Representation(msg);
-      resolve({ status: "finished", context, value, representation });
+      resolve({ status: "finished", context, value });
     } else {
-      const representation = new Representation(toPythonString(value));
-      resolve({ status: "finished", context, value, representation });
+      resolve({ status: "finished", context, value });
     }
   });
 }
@@ -116,7 +119,7 @@ export async function evaluate(
     isPrelude: false,
     groups: [],
     envSteps: 100000,
-    stepLimit: 100000,
+    stepLimit: -1,
     variant: 4,
     ...(options as Partial<IOptions>),
   };
@@ -278,7 +281,9 @@ export async function* generateCSEMachineStateStream(
 
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
-      handleRuntimeError(context, new error.StepLimitExceededError(source, command as ExprNS.Expr));
+      const node = isNode(command) ? command : command.srcNode;
+      const stmtOrExpr = isStatementSequence(node) ? node.body[0] : node;
+      handleRuntimeError(context, new error.StepLimitExceededError(source, stmtOrExpr));
     }
 
     if (!isPrelude && envChanging(command)) {
@@ -287,14 +292,24 @@ export async function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
     control.pop();
-
     if (isNode(command)) {
-      const node = command as Node;
-      const nodeType = node.constructor.name;
+      const node = command;
 
       context.runtime.nodes.shift();
       context.runtime.nodes.unshift(command);
-      await cmdEvaluators[nodeType](code, command, context, control, stash, isPrelude, variant);
+      const nodeKind = node.kind;
+      if (!isDeclaredEvaluator(nodeKind)) {
+        handleRuntimeError(context, new UnknownEvaluatorError(node.kind));
+      }
+      await cmdEvaluators[nodeKind](
+        code,
+        node as never,
+        context,
+        control,
+        stash,
+        isPrelude,
+        variant,
+      );
 
       if (context.runtime.break && context.runtime.debuggerOn) {
         // TODO
@@ -306,10 +321,13 @@ export async function* generateCSEMachineStateStream(
       }
     } else {
       // Command is an instruction
-      const instr = command as Instr;
-      await cmdEvaluators[instr.instrType](
+      const instrType = command.instrType;
+      if (!isDeclaredEvaluator(instrType)) {
+        handleRuntimeError(context, new UnknownEvaluatorError(command.instrType));
+      }
+      await cmdEvaluators[instrType](
         code,
-        command,
+        command as never,
         context,
         control,
         stash,
@@ -328,21 +346,35 @@ export async function* generateCSEMachineStateStream(
     yield { stash, control, steps };
   }
 }
-
-const cmdEvaluators: { [type: string]: CmdEvaluator } = {
+function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
+  return kind in cmdEvaluators;
+}
+type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
+type StmtKeys = Exclude<
+  keyof typeof StmtNS,
+  "Stmt" | "AnnAssign" | "Global" | "Assert" | "NonLocal"
+>;
+type InstrKeys = Exclude<InstrType, "Assert" | "Global" | "NonLocal" | "Import" | "Program">;
+type CmdEvaluators = {
+  [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
+} & {
+  [K in StmtKeys]: CmdEvaluator<InstanceType<(typeof StmtNS)[K]>>;
+} & {
+  [K in InstrKeys]: CmdEvaluator<Extract<Instr, { instrType: K }>>;
+};
+const cmdEvaluators: CmdEvaluators = {
   /**
    * AST Nodes
    */
 
   FileInput: function (
     _code: string,
-    command: ControlItem,
+    fileInput: StmtNS.FileInput,
     context: Context,
     control: Control,
     _stash: Stash,
     isPrelude: boolean,
   ) {
-    const node = command as StmtNS.FileInput;
     // Clean up non-global, non-program, and non-preparation environments
     while (
       currentEnvironment(context).name !== "global" &&
@@ -353,40 +385,41 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     }
 
     // Create a new program environment if needed.
-    if (node.statements.length > 0 && currentEnvironment(context).name !== "programEnvironment") {
+    if (
+      fileInput.statements.length > 0 &&
+      currentEnvironment(context).name !== "programEnvironment"
+    ) {
       const programEnv = createProgramEnvironment(context, isPrelude);
       pushEnvironment(context, programEnv);
     }
 
     // Push the block body as a sequence of statements onto the control stack
-    const seq = node.statements.slice().reverse();
+    const seq = fileInput.statements.slice().reverse();
     control.push(...seq);
   },
 
   SimpleExpr: function (
     _code: string,
-    command: ControlItem,
+    simpleExpr: StmtNS.SimpleExpr,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const simpleExpr = command as StmtNS.SimpleExpr;
     // Discard the evaluated expression off the stack,
     // since Python statements are not value producing
-    control.push(instrCreator.popInstr(command as Node));
+    control.push(instrCreator.popInstr(simpleExpr));
     control.push(simpleExpr.expression);
   },
 
   Literal: function (
     _code: string,
-    command: ControlItem,
+    literal: ExprNS.Literal,
     _context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const literal = command as ExprNS.Literal;
     if (typeof literal.value === "number") {
       stash.push({ type: "number", value: literal.value });
     } else if (typeof literal.value === "boolean") {
@@ -400,25 +433,23 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   BigIntLiteral: function (
     _code: string,
-    command: ControlItem,
+    bigIntLiteral: ExprNS.BigIntLiteral,
     _context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const literal = command as ExprNS.BigIntLiteral;
-    stash.push({ type: "bigint", value: BigInt(literal.value) });
+    stash.push({ type: "bigint", value: BigInt(bigIntLiteral.value) });
   },
 
   Unary: function (
     _code: string,
-    command: ControlItem,
+    unary: ExprNS.Unary,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const unary = command as ExprNS.Unary;
     const op_instr = instrCreator.unOpInstr(unary.operator.type, unary);
     control.push(op_instr);
     control.push(unary.right);
@@ -426,13 +457,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Binary: function (
     _code: string,
-    command: ControlItem,
+    binary: ExprNS.Binary,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const binary = command as ExprNS.Binary;
     const op_instr = instrCreator.binOpInstr(binary.operator.type, binary);
     control.push(op_instr);
     control.push(binary.right);
@@ -441,44 +471,41 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   BoolOp: function (
     _code: string,
-    command: ControlItem,
+    boolOp: ExprNS.BoolOp,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const boolOp = command as ExprNS.BoolOp;
     control.push(instrCreator.boolOpInstr(boolOp.operator.type, boolOp));
     control.push(boolOp.left);
   },
 
   Grouping: function (
     _code: string,
-    command: ControlItem,
+    grouping: ExprNS.Grouping,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const groupingNode = command as ExprNS.Grouping;
-    control.push(groupingNode.expression);
+    control.push(grouping.expression);
   },
 
   Complex: function (
     _code: string,
-    command: ControlItem,
+    complex: ExprNS.Complex,
     _context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const complexNode = command as ExprNS.Complex;
-    stash.push({ type: "complex", value: complexNode.value });
+    stash.push({ type: "complex", value: complex.value });
   },
 
   None: function (
     _code: string,
-    _command: ControlItem,
+    _command: ExprNS.None,
     _context: Context,
     _control: Control,
     stash: Stash,
@@ -489,29 +516,27 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Variable: function (
     code: string,
-    command: ControlItem,
+    variable: ExprNS.Variable,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const variableNode = command as ExprNS.Variable;
-    const name = variableNode.name.lexeme;
+    const name = variable.name.lexeme;
 
     // if not built in, look up in environment
-    const value = pyGetVariable(code, context, name, variableNode);
+    const value = pyGetVariable(code, context, name, variable);
     stash.push(value);
   },
 
   Compare: function (
     _code: string,
-    command: ControlItem,
+    compareNode: ExprNS.Compare,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const compareNode = command as ExprNS.Compare;
     const op_instr = instrCreator.binOpInstr(compareNode.operator.type, compareNode);
 
     control.push(op_instr);
@@ -521,14 +546,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Assign: function (
     _code: string,
-    command: ControlItem,
+    assignNode: StmtNS.Assign,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const assignNode = command as StmtNS.Assign;
-
     if (assignNode.target instanceof ExprNS.Subscript) {
       control.push(instrCreator.listAssmtInstr(assignNode.target));
       control.push(assignNode.value);
@@ -550,14 +573,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Call: function (
     _code: string,
-    command: ControlItem,
+    callNode: ExprNS.Call,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const callNode = command as ExprNS.Call;
-
     const spreadIndices = callNode.args.reduce<number[]>((acc, arg, i) => {
       if (arg instanceof ExprNS.Starred) acc.push(i);
       return acc;
@@ -575,13 +596,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   FunctionDef: function (
     _code: string,
-    command: ControlItem,
+    functionDefNode: StmtNS.FunctionDef,
     context: Context,
     _control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const functionDefNode = command as StmtNS.FunctionDef;
     const localVariables = scanForAssignments(functionDefNode.body);
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
@@ -594,13 +614,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Lambda: function (
     _code: string,
-    command: ControlItem,
+    lambdaNode: ExprNS.Lambda,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const lambdaNode = command as ExprNS.Lambda;
     const localVariables = scanForAssignments(lambdaNode.body);
     const closure = Closure.makeFromLambda(
       lambdaNode,
@@ -613,13 +632,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Return: function (
     _code: string,
-    command: ControlItem,
+    returnNode: StmtNS.Return,
     _context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const returnNode = command as StmtNS.Return;
     let head;
     while (true) {
       head = control.pop();
@@ -639,33 +657,31 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
   },
 
   For: function (
-    _code: string,
-    _command: ControlItem,
-    _context: Context,
-    _control: Control,
+    code: string,
+    command: StmtNS.For,
+    context: Context,
+    control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    // TODO: Implement for loops
-    // const forNode = command as StmtNS.For;
-    // const instr = instrCreator.forInstr(forNode, forNode.target, forNode.iter, {
-    //   type: "StatementSequence",
-    //   body: forNode.body,
-    // });
-    // control.push(instr);
+    const iterator = evaluateForIterator(code, context, command);
+
+    control.push(instrCreator.forInstr(command, command.body));
+    control.push(iterator.step);
+    control.push(iterator.end);
+    control.push(iterator.start);
   },
 
   While: function (
     _code: string,
-    command: ControlItem,
+    whileNode: StmtNS.While,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const whileNode = command as StmtNS.While;
     const instr = instrCreator.whileInstr(whileNode, whileNode.condition, {
-      type: "StatementSequence",
+      kind: "StatementSequence",
       body: whileNode.body,
     });
     control.push(instr);
@@ -674,41 +690,40 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Break: function (
     _code: string,
-    command: ControlItem,
+    command: StmtNS.Break,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    control.push(instrCreator.breakInstr(command as StmtNS.Break));
+    control.push(instrCreator.breakInstr(command));
   },
 
   Continue: function (
     _code: string,
-    command: ControlItem,
+    command: StmtNS.Continue,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    control.push(instrCreator.continueInstr(command as StmtNS.Continue));
+    control.push(instrCreator.continueInstr(command));
   },
 
   If: function (
     _code: string,
-    command: ControlItem,
+    ifNode: StmtNS.If,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const ifNode = command as StmtNS.If;
     const branch = instrCreator.branchInstr(
-      { type: "StatementSequence", body: ifNode.body },
+      { kind: "StatementSequence", body: ifNode.body },
       ifNode.elseBlock
         ? Array.isArray(ifNode.elseBlock)
           ? // 'else' block
-            { type: "StatementSequence", body: ifNode.elseBlock }
+            { kind: "StatementSequence", body: ifNode.elseBlock }
           : // 'elif' block
             ifNode.elseBlock
         : // 'else' block dont exist
@@ -721,30 +736,27 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   List: function (
     _code: string,
-    command: ControlItem,
+    command: ExprNS.List,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    control.push(
-      instrCreator.listInstr((command as ExprNS.List).elements.length, command as ExprNS.List),
-    );
+    control.push(instrCreator.listInstr(command.elements.length, command));
 
-    for (let i = (command as ExprNS.List).elements.length - 1; i >= 0; i--) {
-      control.push((command as ExprNS.List).elements[i]);
+    for (let i = command.elements.length - 1; i >= 0; i--) {
+      control.push(command.elements[i]);
     }
   },
 
   Subscript: function (
     _code: string,
-    command: ControlItem,
+    subscriptNode: ExprNS.Subscript,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const subscriptNode = command as ExprNS.Subscript;
     control.push(instrCreator.listAccessInstr(subscriptNode));
     control.push(subscriptNode.index);
     control.push(subscriptNode.value);
@@ -752,13 +764,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   Ternary: function (
     _code: string,
-    command: ControlItem,
+    ternaryNode: ExprNS.Ternary,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const ternaryNode = command as ExprNS.Ternary;
     const branch = instrCreator.branchInstr(
       ternaryNode.consequent,
       ternaryNode.alternative,
@@ -784,7 +795,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
    */
   [InstrType.RESET]: function (
     _code: string,
-    _command: ControlItem,
+    _command: ResetInstr,
     context: Context,
     _control: Control,
     _stash: Stash,
@@ -795,13 +806,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.ASSIGNMENT]: function (
     code: string,
-    command: ControlItem,
+    instr: AssmtInstr,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as AssmtInstr;
     const value = stash.pop();
 
     if (value) {
@@ -817,13 +827,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.LIST_ASSIGNMENT]: function (
     code: string,
-    command: ControlItem,
+    instr: ListAssmtInstr,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ListAssmtInstr;
     const value = stash.pop();
     const index = stash.pop();
     const list = stash.pop();
@@ -833,7 +842,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.BREAK]: function (
     _code: string,
-    command: ControlItem,
+    command: BreakInstr,
     _context: Context,
     control: Control,
     _stash: Stash,
@@ -843,52 +852,37 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (!top) {
       return;
     }
-    if (
-      isNode(top) ||
-      ((top as Instr).instrType !== InstrType.WHILE && (top as Instr).instrType !== InstrType.FOR)
-    ) {
+    if (isNode(top) || (top.instrType !== InstrType.WHILE && top.instrType !== InstrType.FOR)) {
       control.pop();
       control.push(command);
+      return;
     }
     control.pop();
   },
 
   [InstrType.CONTINUE]: function (
     _code: string,
-    command: ControlItem,
+    command: ContinueInstr,
     _context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
     const top = control.pop();
-    const top2 = control.peek();
-    if (!top) {
-      return;
-    }
-    if (!top2) {
-      control.push(top);
-      return;
-    }
-    if (
-      isNode(top2) ||
-      ((top2 as Instr).instrType !== InstrType.WHILE && (top2 as Instr).instrType !== InstrType.FOR)
-    ) {
+    if (!top) return;
+    if (isNode(top) || top.instrType !== InstrType.CONTINUE_MARKER) {
       control.push(command);
-      return;
     }
-    control.push(top);
   },
 
   [InstrType.UNARY_OP]: function (
     code: string,
-    command: ControlItem,
+    instr: UnOpInstr,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as UnOpInstr;
     const argument = stash.pop();
     if (argument) {
       const result = evaluateUnaryExpression(
@@ -904,14 +898,13 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.BINARY_OP]: function (
     code: string,
-    command: ControlItem,
+    instr: BinOpInstr,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
     variant: number,
   ) {
-    const instr = command as BinOpInstr;
     const right = stash.pop();
     const left = stash.pop();
     if (left && right && variant) {
@@ -930,13 +923,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.BOOL_OP]: function (
     code: string,
-    command: ControlItem,
+    instr: BoolOpInstr,
     context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as BoolOpInstr;
     const left = stash.pop();
     const boolOpNode = instr.srcNode as ExprNS.BoolOp;
     const right = boolOpNode.right;
@@ -969,7 +961,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.POP]: function (
     _code: string,
-    _command: ControlItem,
+    _command: PopInstr,
     _context: Context,
     _control: Control,
     stash: Stash,
@@ -980,13 +972,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.LIST]: function (
     _code: string,
-    command: ControlItem,
+    instr: ListInstr,
     _context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ListInstr;
     const elements: Value[] = [];
     for (let i = 0; i < instr.numOfElements; i++) {
       const element = stash.pop();
@@ -999,25 +990,21 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.WHILE]: function (
     _code: string,
-    command: ControlItem,
+    instr: WhileInstr,
     _context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as WhileInstr;
     const condition = stash.pop();
     if (condition && !isFalsy(condition)) {
       control.push(instr);
       control.push(instr.test);
-      if (instr.body && "type" in instr.body && instr.body.type === "StatementSequence") {
-        control.push(...instr.body.body.slice().reverse());
-      } else {
-        control.push(instr.body);
-      }
+      control.push(instrCreator.continueMarkerInstr(instr.srcNode));
+      control.push(...instr.body.body.slice().reverse());
     }
   },
-  [InstrType.APPLICATION]: async function (
+  [InstrType.FOR]: function (
     code: string,
     command: ControlItem,
     context: Context,
@@ -1025,7 +1012,52 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as AppInstr;
+    const instr = command as ForInstr;
+    const step = stash.pop();
+    const end = stash.pop();
+    const start = stash.pop();
+    if (start && end && step) {
+      const node = instr.srcNode as StmtNS.For;
+      if (start.type !== "bigint" || end.type !== "bigint" || step.type !== "bigint") {
+        handleRuntimeError(
+          context,
+          new error.TypeError(
+            code,
+            node.iter,
+            context,
+            [start.type, end.type, step.type].filter(t => t !== "bigint")[0],
+            "int",
+          ),
+        );
+      }
+      if (
+        (step.value <= 0 && end.value >= start.value) ||
+        (step.value >= 0 && end.value <= start.value)
+      ) {
+        return;
+      }
+      control.push(instr);
+      const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
+        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
+        return new ExprNS.BigIntLiteral(token, token, value.toString());
+      };
+      control.push(generateBigIntLiteral(step.value));
+      control.push(generateBigIntLiteral(end.value));
+      control.push(generateBigIntLiteral(start.value + step.value));
+      control.push(instrCreator.continueMarkerInstr(node));
+      control.push(...instr.body.slice().reverse());
+      control.push(generateForIncrement(node.target.lexeme, start.value));
+    }
+  },
+  [InstrType.CONTINUE_MARKER]: function () {},
+  [InstrType.APPLICATION]: async function (
+    code: string,
+    instr: AppInstr,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    _isPrelude: boolean,
+  ) {
     const numOfArgs = instr.numOfArgs;
 
     const rawArgs: Value[] = [];
@@ -1045,19 +1077,18 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         : rawArgs.flatMap((val, i) => {
             if (!spreadSet.has(i)) return val;
             if (val?.type === "list") {
-              return (val as { type: "list"; value: Value[] }).value;
+              return val.value;
             }
             handleRuntimeError(
               context,
               new error.TypeError(
                 code,
-                instr.srcNode as ExprNS.Call,
+                instr.srcNode,
                 context,
                 val ? val.type : "NoneType",
                 "iterable",
               ),
             );
-            return []; // unreachable, satisfies TypeScript
           });
 
     const callable = stash.pop();
@@ -1065,20 +1096,19 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
     if (callable?.type == "closure") {
       const closure = callable.closure;
       control.push(instrCreator.resetInstr(instr.srcNode));
-
-      if (closure.node.constructor.name === "FunctionDef") {
+      if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
 
-      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode as ExprNS.Call);
+      const newEnv = createEnvironment(code, context, closure, args, instr.srcNode);
       pushEnvironment(context, newEnv);
 
       const closureNode = closure.node;
-      if (closureNode.constructor.name === "FunctionDef") {
-        const bodyStmts = (closureNode as StmtNS.FunctionDef).body.slice().reverse();
+      if (closureNode.kind === "FunctionDef") {
+        const bodyStmts = closureNode.body.slice().reverse();
         control.push(...bodyStmts);
       } else {
-        const bodyExpr = (closureNode as ExprNS.Lambda).body;
+        const bodyExpr = closureNode.body;
         control.push(bodyExpr);
       }
     } else if (callable?.type === "builtin") {
@@ -1089,7 +1119,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
         context,
         new error.TypeError(
           code,
-          instr.srcNode as ExprNS.Call,
+          instr.srcNode,
           context,
           callable ? callable.type : "NoneType",
           "callable",
@@ -1100,13 +1130,12 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.LIST_ACCESS]: function (
     code: string,
-    command: ControlItem,
+    instr: ListAccessInstr,
     context: Context,
     _control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ListAccessInstr;
     const index = stash.pop();
     const list = stash.pop();
     if (!list || (list.type !== "list" && list.type !== "string")) {
@@ -1128,7 +1157,7 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
           code,
           instr.srcNode as ExprNS.Expr,
           context,
-          (index as Value).type,
+          index?.type || "NoneType",
           "int",
         ),
       );
@@ -1150,26 +1179,25 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.BRANCH]: function (
     _code: string,
-    command: ControlItem,
+    instr: BranchInstr,
     _context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as BranchInstr;
     const condition = stash.pop();
 
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;
-      if (consequent && "type" in consequent && consequent.type === "StatementSequence") {
-        control.push(...(consequent as StatementSequence).body.slice().reverse());
+      if (isStatementSequence(consequent)) {
+        control.push(...consequent.body.slice().reverse());
       } else if (consequent) {
         control.push(consequent);
       }
     } else if (instr.alternate) {
       const alternate = instr.alternate;
-      if (alternate && "type" in alternate && alternate.type === "StatementSequence") {
-        control.push(...(alternate as StatementSequence).body.slice().reverse());
+      if (isStatementSequence(alternate)) {
+        control.push(...alternate.body.slice().reverse());
       } else if (alternate) {
         control.push(alternate);
       }
@@ -1178,20 +1206,20 @@ const cmdEvaluators: { [type: string]: CmdEvaluator } = {
 
   [InstrType.ENVIRONMENT]: function (
     _code: string,
-    command: ControlItem,
+    command: EnvInstr,
     context: Context,
     _control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    while (currentEnvironment(context).id !== (command as EnvInstr).env.id) {
+    while (currentEnvironment(context).id !== command.env.id) {
       popEnvironment(context);
     }
   },
 
   [InstrType.END_OF_FUNCTION_BODY]: function (
     _code: string,
-    _command: ControlItem,
+    _command: EndOfFunctionBodyInstr,
     _context: Context,
     _control: Control,
     stash: Stash,
