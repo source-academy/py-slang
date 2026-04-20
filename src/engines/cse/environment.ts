@@ -1,9 +1,8 @@
-import { ExprNS, StmtNS } from "../../ast-types";
+import { ExprNS } from "../../ast-types";
 import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../../errors";
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
-import { Heap } from "./heap";
 import { Value } from "./stash";
 
 export interface Frame {
@@ -38,9 +37,6 @@ export interface Environment {
    */
   head: Frame;
 
-  heap: Heap;
-  thisContext?: Value;
-
   /**
    * The closure associated with this environment, if this environment was created as part of a function call.
    */
@@ -59,20 +55,14 @@ export const createEnvironment = (
   callExpression: ExprNS.Call,
 ): Environment => {
   const environment: Environment = {
-    name:
-      closure.node.constructor.name === "FunctionDef"
-        ? (closure.node as StmtNS.FunctionDef).name.lexeme
-        : "lambda",
+    name: closure.node.kind === "FunctionDef" ? closure.node.name.lexeme : "lambda",
     tail: closure.environment,
     head: {},
-    heap: new Heap(),
     id: uniqueId(context),
     callExpression: callExpression,
     closure: closure,
   };
 
-  // console.info('closure.node.params:', closure.node.params);
-  // console.info('Number of params:', closure.node.params.length);
   const isVariadic = closure.node.parameters.some(param => param.isStarred);
   let consumed = false;
   closure.node.parameters.forEach((paramToken, index) => {
@@ -133,8 +123,7 @@ export const createSimpleEnvironment = (
     name,
     tail,
     head: {},
-    heap: new Heap(),
-    // TODO: callExpression and thisContext are optional and can be provided as needed.
+    // TODO: callExpression is optional and can be provided as needed.
   };
 };
 
@@ -154,23 +143,9 @@ export const createBlockEnvironment = (
     name,
     tail: currentEnvironment(context),
     head: {},
-    heap: new Heap(),
     id: uniqueId(context),
   };
 };
-
-// export const handleArrayCreation = (
-//   context: Context,
-//   array: Value[],
-//   envOverride?: Environment
-// ): void => {
-//   const environment = envOverride ?? currentEnvironment(context)
-//   Object.defineProperties(array, {
-//     id: { value: uniqueId(context) },
-//     environment: { value: environment, writable: true }
-//   })
-//   environment.heap.add(array)
-// }
 
 export const currentEnvironment = (context: Context): Environment => {
   return context.runtime.environments[0];
@@ -190,5 +165,4 @@ export const popEnvironment = (context: Context) => context.runtime.environments
 
 export const pushEnvironment = (context: Context, environment: Environment) => {
   context.runtime.environments.unshift(environment);
-  context.runtime.environmentTree.insert(environment);
 };

@@ -143,6 +143,14 @@ describe("Chapter 1 — most restrictive", () => {
   test("lambda *args is banned in chapter 1", () => {
     analyzeThrows("f = lambda *args: args", 1, [FeatureNotSupportedError]);
   });
+
+  test("function-name reassignment is banned in chapter 1", () => {
+    analyzeThrows("def f():\n    pass\nf = 1", 1);
+  });
+
+  test("function reassignment is banned in chapter 1", () => {
+    analyzeThrows("def f():\n    pass\ndef f():\n    pass", 1);
+  });
 });
 
 describe("Chapter 2 — loops and reassignment still banned", () => {

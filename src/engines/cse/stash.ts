@@ -1,9 +1,8 @@
 // Value.ts
-import { StmtNS } from "../../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import { PyComplexNumber } from "../../types";
 import { Closure } from "./closure";
 import { Context } from "./context";
-import { ControlItem } from "./control";
 import { Environment } from "./environment";
 import { Stack } from "./stack";
 
@@ -88,8 +87,8 @@ export interface BuiltinValue {
   type: "builtin";
   name: string;
   func:
-    | ((args: Value[], code: string, command: ControlItem, context: Context) => Value)
-    | ((args: Value[], code: string, command: ControlItem, context: Context) => Promise<Value>);
+    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Value)
+    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Promise<Value>);
   minArgs: number;
 }
 

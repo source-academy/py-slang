@@ -1,5 +1,5 @@
 import { ExprNS, StmtNS } from "../../ast-types";
-import { TokenType } from "../../tokens";
+import { TokenType } from "../../tokenizer";
 import { Environment } from "./environment";
 import {
   AppInstr,
@@ -13,18 +13,19 @@ import {
   EndOfFunctionBodyInstr,
   EnvInstr,
   ForInstr,
-  Instr,
   InstrType,
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
   Node,
+  PopInstr,
+  ResetInstr,
   StatementSequence,
   UnOpInstr,
   WhileInstr,
 } from "./types";
 
-export const popInstr = (srcNode: Node): Instr => ({ instrType: InstrType.POP, srcNode });
+export const popInstr = (srcNode: Node): PopInstr => ({ instrType: InstrType.POP, srcNode });
 
 export const assmtInstr = (
   symbol: string,
@@ -41,7 +42,7 @@ export const assmtInstr = (
 
 export const appInstr = (
   numOfArgs: number,
-  srcNode: Node,
+  srcNode: ExprNS.Call,
   spreadIndices: number[] = [],
 ): AppInstr => ({
   instrType: InstrType.APPLICATION,
@@ -77,7 +78,7 @@ export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   srcNode,
 });
 
-export const resetInstr = (srcNode: Node): Instr => ({
+export const resetInstr = (srcNode: Node): ResetInstr => ({
   instrType: InstrType.RESET,
   srcNode,
 });

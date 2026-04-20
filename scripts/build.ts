@@ -14,7 +14,7 @@ const allTargets = [
   "PySvmlSinterEvaluator",
 ] as const;
 
-type EvaluatorName = string;
+type EvaluatorName = (typeof allTargets)[number];
 
 function buildTarget(target: EvaluatorName, extraArgs: string[] = []): Promise<void> {
   console.log(`\nBuilding ${target}...\n`);
@@ -61,7 +61,7 @@ async function resolveTargets(evaluator?: string, all?: boolean): Promise<Evalua
     default: "all",
   });
 
-  return choice === "all" ? [...allTargets] : [choice as EvaluatorName];
+  return choice === "all" ? [...allTargets] : [choice];
 }
 
 async function main() {

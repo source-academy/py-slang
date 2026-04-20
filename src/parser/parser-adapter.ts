@@ -27,7 +27,7 @@ export class NearleyParser {
     const parser = new nearley.Parser(
       nearley.Grammar.fromCompiled({
         ...(grammar as unknown as nearley.CompiledRules),
-        Lexer: pythonLexer as nearley.Lexer,
+        Lexer: pythonLexer,
       }),
     );
 

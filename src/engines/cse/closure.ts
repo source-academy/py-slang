@@ -3,13 +3,15 @@ import { Context } from "./context";
 import { ControlItem } from "./control";
 import { Environment, uniqueId } from "./environment";
 import { StatementSequence } from "./types";
+import { isNode } from "./utils";
 
 /**
- * Represents a python closure, the class is a runtime representation of a function.
+ * Represents a Python closure, the class is a runtime representation of a function.
  * Bundles the function's code (AST node) with environment in which its defined.
  * When Closure is called, a new environment will be created whose parent is the 'Environment' captured
  */
 export class Closure {
+  /** Unique ID defined for closure */
   public readonly id: string;
   /** AST node for function, either a 'def' or 'lambda' */
   public node: StmtNS.FunctionDef | ExprNS.Lambda;
@@ -20,12 +22,6 @@ export class Closure {
   public originalNode?: StmtNS.FunctionDef | ExprNS.Lambda;
   /** Stores local variables for scope check */
   public localVariables: Set<string>;
-
-  /** Unique ID defined for closure */
-  //public readonly id: string
-
-  /** Name of the constant declaration that the closure is assigned to */
-  public declaredName?: string;
 
   constructor(
     node: StmtNS.FunctionDef | ExprNS.Lambda,
@@ -65,5 +61,5 @@ export class Closure {
 }
 
 export const isStatementSequence = (node: ControlItem): node is StatementSequence => {
-  return (node as StatementSequence).type == "StatementSequence";
+  return isNode(node) && node.kind == "StatementSequence";
 };
