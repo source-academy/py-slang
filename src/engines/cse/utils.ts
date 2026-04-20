@@ -7,7 +7,6 @@ import {
   TypeError,
   UnboundLocalError,
 } from "../../errors/errors";
-import { builtInConstants, builtIns } from "../../stdlib";
 import { Token, TokenType } from "../../tokenizer";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
@@ -279,12 +278,6 @@ export function pyGetVariable(code: string, context: Context, name: string, node
     } else {
       currentEnv = currentEnv.tail;
     }
-  }
-  if (builtIns.has(name)) {
-    return builtIns.get(name)!;
-  }
-  if (builtInConstants.has(name)) {
-    return builtInConstants.get(name)!;
   }
 
   if (context.nativeStorage.builtins.has(name)) {

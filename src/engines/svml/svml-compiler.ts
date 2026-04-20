@@ -1,5 +1,7 @@
 import { ExprNS, StmtNS } from "../../ast-types";
 import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
+import math from "../../stdlib/math";
+import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer";
 import { SVMLIRBuilder } from "./SVMLIRBuilder";
 import { PRIMITIVE_FUNCTIONS } from "./builtins";
@@ -60,7 +62,7 @@ export class SVMLCompiler
     functionEnvironments?: FunctionEnvironments,
   ): SVMLCompiler {
     if (!functionEnvironments) {
-      const resolver = new Resolver("", program);
+      const resolver = new Resolver("", program, [], [misc, math]);
       functionEnvironments = resolver.resolveEnvironments(program);
     }
     const mainEnv = functionEnvironments.get(program);

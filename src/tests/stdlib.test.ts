@@ -1,6 +1,8 @@
 import { TypeError, UnsupportedOperandTypeError, ValueError, ZeroDivisionError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
@@ -994,8 +996,8 @@ describe("Standard Library Tests", () => {
       ],
     };
 
-    generateTestCases(mathTests, 1, []);
-    generateTestCases(miscTests, 1, []);
+    generateTestCases(mathTests, 1, [misc, math]);
+    generateTestCases(miscTests, 1, [misc, math]);
   });
 
   describe("Chapter 3 Builtins", () => {
@@ -1072,6 +1074,6 @@ describe("Standard Library Tests", () => {
         ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
       ],
     };
-    generateTestCases(miscTests, 3, [linkedList, stream, list, pairmutator]);
+    generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
   });
 });

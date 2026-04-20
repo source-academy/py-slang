@@ -3,8 +3,7 @@ import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
 import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
 import { TypeError } from "../errors";
-import { minArgMap, Validate } from "../stdlib";
-import { GroupName } from "./utils";
+import { GroupName, minArgMap, Validate } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();
 
