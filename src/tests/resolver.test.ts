@@ -40,16 +40,15 @@ foo()
   });
 
   describe("Variant Specific Syntax", () => {
-    // TODO: Uncomment when we want to support for loops in Python 3
-    //         test('For loops throw errors for Python 1 and 2', () => {
-    //             const code = `
-    // for i in range(5):
-    //     print(i)
-    //             `;
-    //             expect(() => toPythonAstAndResolve(code, 1)).toThrow()
-    //             expect(() => toPythonAstAndResolve(code, 2)).toThrow()
-    //             expect(toPythonAstAndResolve(code, 3)).toMatchObject({})
-    //         })
+    test("For loops throw errors for Python 1 and 2", () => {
+      const code = `
+for i in range(5):
+    print(i)
+                `;
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow();
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow();
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+    });
 
     test("While loops throw errors for Python 1 and 2", () => {
       const code = `
