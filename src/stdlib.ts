@@ -7,8 +7,7 @@ import {
   StringValue,
   Value,
 } from "./engines/cse/stash";
-// npm install mathjs
-import { erf, gamma, lgamma } from "mathjs";
+import { erf, gamma, lgamma } from "mathjs/number";
 import { Context } from "./engines/cse/context";
 import { ControlItem } from "./engines/cse/control";
 import { handleRuntimeError } from "./engines/cse/error";
