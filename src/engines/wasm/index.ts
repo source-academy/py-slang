@@ -1,3 +1,4 @@
+import misc from "../../stdlib/misc";
 import { compileScriptToWasmBinary } from "./compiler";
 import { createHostImports, HostRuntimeState } from "./hostImports";
 import {
@@ -23,7 +24,7 @@ export async function compileToWasmAndRun(
   interactiveMode: boolean = false,
   options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
-  const groups = options.groups ?? [];
+  const groups = [...(options.groups ?? []), misc];
   const prelude = groups.map(group => group.prelude).join("\n");
 
   const script = prelude + "\n" + code + "\n";

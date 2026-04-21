@@ -66,7 +66,7 @@ const funcHelper = <Arity extends number, HasVarArgs extends boolean = false>(
   },
 });
 
-const stdlib: LibFuncType[] = [
+const miscLib: LibFuncType[] = [
   funcHelper("print", 1, true).body(x => wasm.call(LOG_FX).args(x)),
   funcHelper("repr", 1, true).body(x => wasm.call(LOG_FX).args(x)),
   funcHelper("error", 1, true).body(x => [wasm.call(LOG_FX).args(x), wasm.unreachable()]),
@@ -128,13 +128,9 @@ const mceLib: LibFuncType[] = [
   funcHelper("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),
 ];
 
-export function makeLibraryFunctions(groups?: Group[]): LibFuncType[] {
-  if (groups == null) {
-    return [...stdlib, ...linkedListLib, ...pairMutatorLib, ...listLib, ...mceLib];
-  }
-
+export function makeLibraryFunctions(groups: Group[]): LibFuncType[] {
   return [
-    ...stdlib,
+    ...(groups.some(group => group.name === GroupName.MISC) ? miscLib : []),
     ...(groups.some(group => group.name === GroupName.LINKED_LISTS) ? linkedListLib : []),
     ...(groups.some(group => group.name === GroupName.PAIRMUTATORS) ? pairMutatorLib : []),
     ...(groups.some(group => group.name === GroupName.LIST) ? listLib : []),
