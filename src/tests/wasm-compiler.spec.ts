@@ -2508,15 +2508,104 @@ describe("parse function tests", () => {
     );
   });
 
-  it("while loop is not supported in parse tree generation", async () => {
-    await expect(compileWithMce(`parse("while True:\\n    1")`)).rejects.toThrow(
-      new Error("While loops are not supported in parse tree generation"),
+  it("while loop: single statement body (no sequence)", async () => {
+    const { renderedResult } = await compileWithMce(`parse("while True:\\n    1")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "while_loop",
+        linkedListBuilder("literal", "True"),
+        linkedListBuilder("literal", "1"),
+      ),
     );
   });
 
-  it("for loop is not supported in parse tree generation", async () => {
-    await expect(compileWithMce(`parse("for i in range(5):\\n    1")`)).rejects.toThrow(
-      new Error("For loops are not supported in parse tree generation"),
+  it("while loop: multiple statement body (sequence)", async () => {
+    const { renderedResult } = await compileWithMce(`parse("while True:\\n    x = 1\\n    x")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "while_loop",
+        linkedListBuilder("literal", "True"),
+        linkedListBuilder(
+          "sequence",
+          linkedListBuilder(
+            linkedListBuilder(
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "1"),
+            ),
+            linkedListBuilder("name", '"x"'),
+          ),
+        ),
+      ),
+    );
+  });
+
+  it("for loop: range(stop)", async () => {
+    const { renderedResult } = await compileWithMce(`parse("for i in range(5):\\n    1")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "for_loop",
+        linkedListBuilder("name", '"i"'),
+        linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
+        linkedListBuilder("literal", "1"),
+      ),
+    );
+  });
+
+  it("for loop: range(start, stop)", async () => {
+    const { renderedResult } = await compileWithMce(`parse("for i in range(2, 5):\\n    1")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "for_loop",
+        linkedListBuilder("name", '"i"'),
+        linkedListBuilder(
+          "range_args",
+          linkedListBuilder("literal", "2"),
+          linkedListBuilder("literal", "5"),
+        ),
+        linkedListBuilder("literal", "1"),
+      ),
+    );
+  });
+
+  it("for loop: range(start, stop, step)", async () => {
+    const { renderedResult } = await compileWithMce(`parse("for i in range(1, 10, 2):\\n    1")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "for_loop",
+        linkedListBuilder("name", '"i"'),
+        linkedListBuilder(
+          "range_args",
+          linkedListBuilder("literal", "1"),
+          linkedListBuilder("literal", "10"),
+          linkedListBuilder("literal", "2"),
+        ),
+        linkedListBuilder("literal", "1"),
+      ),
+    );
+  });
+
+  it("for loop with multiple statements in body", async () => {
+    const { renderedResult } = await compileWithMce(
+      `parse("for i in range(5):\\n    x = 1\\n    i")`,
+    );
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "for_loop",
+        linkedListBuilder("name", '"i"'),
+        linkedListBuilder("range_args", linkedListBuilder("literal", "5")),
+        linkedListBuilder(
+          "sequence",
+          linkedListBuilder(
+            linkedListBuilder(
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "1"),
+            ),
+            linkedListBuilder("name", '"i"'),
+          ),
+        ),
+      ),
     );
   });
 
