@@ -6,8 +6,7 @@ import { operatorTranslator } from "../engines/cse/types";
 import { TypeError } from "../errors/errors";
 import { parse } from "../parser";
 import pythonLexer from "../parser/lexer";
-import { minArgMap, Validate } from "../stdlib";
-import { GroupName } from "./utils";
+import { GroupName, minArgMap, Validate } from "./utils";
 
 const None: NoneValue = { type: "none" };
 

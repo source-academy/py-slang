@@ -1,5 +1,8 @@
 import linkedList from "../stdlib/linked-list";
+
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { FeatureNotSupportedError } from "../validator";
@@ -73,6 +76,6 @@ describe("Loop Tests", () => {
       ],
     },
     3,
-    [linkedList, stream, pairmutator, list],
+    [misc, math, linkedList, stream, pairmutator, list],
   );
 });

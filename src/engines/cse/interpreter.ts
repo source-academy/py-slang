@@ -10,7 +10,6 @@ import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
 import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
-import { builtIns } from "../../stdlib";
 import { Group } from "../../stdlib/utils";
 import { Token, TokenType } from "../../tokenizer";
 import { CSEBreak, RecursivePartial, Result } from "../../types";
@@ -815,7 +814,7 @@ const cmdEvaluators: CmdEvaluators = {
     const value = stash.pop();
 
     if (value) {
-      if (builtIns.has(instr.symbol)) {
+      if (context.nativeStorage.builtins.has(instr.symbol)) {
         handleRuntimeError(
           context,
           new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr),

@@ -3,9 +3,8 @@ import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
 import { BigIntValue, BoolValue, BuiltinValue, Value } from "../engines/cse/stash";
 import { TypeError } from "../errors";
-import { minArgMap, Validate } from "../stdlib";
 import listPrelude from "./list.prelude";
-import { GroupName } from "./utils";
+import { GroupName, minArgMap, Validate } from "./utils";
 
 const listBuiltins = new Map<string, BuiltinValue>();
 
