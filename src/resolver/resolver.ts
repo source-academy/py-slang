@@ -1,5 +1,4 @@
 import { ExprNS, StmtNS } from "../ast-types";
-import constants from "../stdlib/py_s1_constants.json";
 import { Group } from "../stdlib/utils";
 import { Token, TokenType } from "../tokenizer/tokenizer";
 import { FeatureValidator } from "../validator/types";
@@ -193,13 +192,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       null,
       new Map([
         // misc library
-        ...constants.builtInFuncs.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
-        ),
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
-        ...constants.constants.map(
-          (name: string) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
-        ),
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
             ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,

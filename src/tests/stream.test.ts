@@ -4,6 +4,8 @@ import {
   UserError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { generateTestCases, TestCases } from "./utils";
@@ -194,5 +196,5 @@ equal(eval_stream(primes, 10), linked_list(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`
     ],
   };
 
-  generateTestCases(streamTests, 2, [linkedList, stream, pairmutator]);
+  generateTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
 });

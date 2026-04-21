@@ -1,10 +1,12 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import initSinter, { SinterValue } from "../engines/svml/sinter/sinter";
 import { SINTER_OPCODE_MAX } from "../engines/svml/opcodes";
+import initSinter, { SinterValue } from "../engines/svml/sinter/sinter";
 import { assemble } from "../engines/svml/svml-assembler";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
 
 function sinterValueToNative(value: SinterValue): unknown {
@@ -29,7 +31,7 @@ export class PySvmlSinterEvaluator extends BasicEvaluator {
     try {
       const script = chunk + "\n";
       const ast = parse(script);
-      const { errors, environments } = analyzeWithEnvironments(ast, script, 4);
+      const { errors, environments } = analyzeWithEnvironments(ast, script, 4, [misc, math]);
       if (errors.length > 0) {
         throw errors[0];
       }
