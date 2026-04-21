@@ -1,5 +1,5 @@
 import { i32, wasm } from "@sourceacademy/wasm-util";
-import { CompileOptions, compileToWasmAndRun } from "../engines/wasm";
+import { compileToWasmAndRun } from "../engines/wasm";
 import {
   insertInArray,
   isFunctionCall,
@@ -23,6 +23,7 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TYPE_TAG,
 } from "../engines/wasm/runtime";
+import { CompileOptions } from "../engines/wasm/types";
 import { ResolverErrors } from "../resolver/errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
@@ -2563,11 +2564,11 @@ describe("Shadow stack manipulation tests", () => {
 
     // Check each frame's tag on the stack
     expectedTags.forEach((expectedTag, index) =>
-      expect(results.debugFunctions.getStackAt(index)[0]).toBe(expectedTag),
+      expect(results.debugFunctions.peekShadowStack(index)[0]).toBe(expectedTag),
     );
 
     // Verify accessing one position past the stack throws STACK_UNDERFLOW
-    expect(() => results.debugFunctions.getStackAt(expectedTags.length)).toThrow(
+    expect(() => results.debugFunctions.peekShadowStack(expectedTags.length)).toThrow(
       new Error(ERROR_MAP.STACK_UNDERFLOW),
     );
 

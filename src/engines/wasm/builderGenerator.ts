@@ -12,7 +12,6 @@ import {
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
-import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
 import { LibFuncType } from "./library";
@@ -72,6 +71,7 @@ import {
   TO_SPACE_END_PTR,
   TO_SPACE_START_PTR,
 } from "./runtime";
+import { WasmExports } from "./types";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";

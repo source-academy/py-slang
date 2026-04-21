@@ -1,6 +1,6 @@
 import { wasm, WasmFunction, WasmInstruction } from "@sourceacademy/wasm-util";
-import { IrPass } from ".";
 import { COLLECT_FX } from "./runtime";
+import { IrPass } from "./types";
 
 type InsertInArrayOptions = {
   matchIndex?: number;
