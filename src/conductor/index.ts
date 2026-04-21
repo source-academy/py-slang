@@ -5,5 +5,10 @@ export {
   PyCseEvaluator4,
 } from "./PyCseEvaluator";
 export { PySvmlEvaluator } from "./PySvmlEvaluator";
-export { PyWasmEvaluator } from "./PyWasmEvaluator";
 export { PySvmlSinterEvaluator } from "./PySvmlSinterEvaluator";
+export {
+  PyWasmEvaluator1,
+  PyWasmEvaluator2,
+  PyWasmEvaluator3,
+  PyWasmEvaluator4,
+} from "./PyWasmEvaluator";

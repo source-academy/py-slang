@@ -12,9 +12,9 @@ import {
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
-import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
+import { LibFuncType } from "./library";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
@@ -70,8 +70,8 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TO_SPACE_END_PTR,
   TO_SPACE_START_PTR,
-} from "./constants";
-import { LibFuncType } from "./library";
+} from "./runtime";
+import { WasmExports } from "./types";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";
@@ -184,9 +184,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           throw new Error(`No binding for nonlocal ${l} found!`);
         }
 
-        // tag this binding as nonlocal so
-        // if it's accessed before its nonlocal statement,
-        // throw error
+        // tag this binding as nonlocal so if it's accessed before its nonlocal statement, error
         bindings.forEach(binding => {
           if (binding.name === l) binding.tag = "nonlocal";
         });
