@@ -3,7 +3,6 @@ import {
   global,
   i32,
   i64,
-  local,
   mut,
   wasm,
   WasmCall,
@@ -24,14 +23,25 @@ import {
   ARITHMETIC_OP_TAG,
   BOOL_NOT_FX,
   BOOLISE_FX,
+  CHECK_INT_FX,
+  CLEAR_GC_HEADER_FX,
+  COLLECT_FX,
   COMPARISON_OP_FX,
   COMPARISON_OP_TAG,
   CURR_ENV,
+  DATA_END,
+  DEBUG_GET_LIST_ELEMENT_FX,
+  DISCARD_SHADOW_STACK_FX,
   ENV_HEAD_SIZE,
+  FROM_SPACE_END_PTR,
+  FROM_SPACE_START_PTR,
+  GC_OBJECT_HEADER_SIZE,
+  GET_LAST_EXPR_RESULT_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   HEAP_PTR,
   importedLogs,
+  IS_TAG_GCABLE,
   LOG_FX,
   MAKE_BOOL_FX,
   MAKE_CLOSURE_FX,
@@ -45,11 +55,21 @@ import {
   MALLOC_FX,
   nativeFunctions,
   NEG_FX,
+  PEEK_SHADOW_STACK_FX,
   PRE_APPLY_FX,
-  RETURN_ENV_NAME,
+  RETURN_NONVOID_SUFFIX,
+  RETURN_VOID_SUFFIX,
   SET_CONTIGUOUS_BLOCK_FX,
   SET_LEX_ADDR_FX,
   SET_LIST_ELEMENT_FX,
+  SHADOW_STACK_BOTTOM,
+  SHADOW_STACK_PTR,
+  SHADOW_STACK_RESERVED_SIZE,
+  SHADOW_STACK_TAG,
+  SHADOW_STACK_TOP,
+  SILENT_PUSH_SHADOW_STACK_FX,
+  TO_SPACE_END_PTR,
+  TO_SPACE_START_PTR,
 } from "./constants";
 import { LibFuncType } from "./library";
 
@@ -87,6 +107,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   private strings: string[] = [];
   private builtIns: WasmCall[];
   private interactiveMode = false;
+  private pageCount: number;
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
@@ -100,7 +121,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration`);
+        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration!`);
       }
 
       return [this.environment.length - 1 - i, index];
@@ -153,14 +174,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       .filter(s => s instanceof StmtNS.NonLocal)
       .map(s => s.name.lexeme)
       .forEach(l => {
+        // cannot declare parameter name as nonlocal
+        if (parameters && parameters.map(p => p.lexeme).includes(l)) {
+          throw new Error(`${l} is a parameter and cannot be declared nonlocal!`);
+        }
+
         // nonlocal declaration must exist in a nonlocal scope
         if (!this.environment.find((frame, i) => i !== 0 && frame.find(({ name }) => name === l))) {
           throw new Error(`No binding for nonlocal ${l} found!`);
-        }
-
-        // cannot declare parameter name as nonlocal
-        if (parameters && parameters.map(p => p.lexeme).includes(l)) {
-          throw new Error(`${l} is parameter and nonlocal`);
         }
 
         // tag this binding as nonlocal so
@@ -177,18 +198,21 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     ];
   }
 
-  constructor(initialStrings: string[], builtInFunctions: LibFuncType[], interactiveMode: boolean) {
+  constructor(
+    initialStrings: string[],
+    builtInFunctions: LibFuncType[],
+    interactiveMode: boolean,
+    pageCount: number,
+  ) {
     this.strings = initialStrings;
+    this.pageCount = pageCount;
 
     this.builtIns = builtInFunctions.map(({ name, arity, body, isVoid, hasVarArgs }, i) => {
       this.environment[0].push({ name, tag: "local" });
       const tag = this.userFunctions.length;
       const newBody = [
         ...body,
-        wasm.return(
-          ...(isVoid ? [wasm.call(MAKE_NONE_FX)] : []),
-          global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
-        ),
+        wasm.return(...(isVoid ? RETURN_VOID_SUFFIX : RETURN_NONVOID_SUFFIX)),
       ];
       this.userFunctions.push(newBody);
 
@@ -218,22 +242,18 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitFileInputStmt(stmt: StmtNS.FileInput): WasmInstruction {
-    if (stmt.statements.length <= 0) {
-      console.log("No statements found");
-      throw new Error("No statements found");
-    }
-
     this.environment[0].push(...this.collectDeclarations(stmt.statements));
 
-    const body = stmt.statements.map(s => this.visit(s));
-
-    // this matches the format of drop in visitSimpleExpr
-    const lastInstr = body.at(-1);
-    const hasLastInstr =
-      this.interactiveMode &&
-      lastInstr?.op === "drop" &&
-      lastInstr.value?.op === "drop" &&
-      lastInstr.value.value;
+    // In interactive mode, handle the last expression specially,
+    // since we want to return its value instead of None
+    const lastStmt = stmt.statements.at(-1);
+    const hasLastExprForReturn = this.interactiveMode && lastStmt instanceof StmtNS.SimpleExpr;
+    const body = hasLastExprForReturn
+      ? [
+          ...stmt.statements.slice(0, -1).map(s => this.visit(s)),
+          wasm.call(GET_LAST_EXPR_RESULT_FX).args(this.visit(lastStmt.expression)),
+        ]
+      : [...stmt.statements.map(s => this.visit(s)), wasm.call(MAKE_NONE_FX)];
 
     // collect all strings
     const strings: WasmData[] = [];
@@ -247,6 +267,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // exported functions for parse
     const exports: { [key in keyof WasmExports]: WasmExport } = {
       main: wasm.export("main").func("$main"),
+      collect: wasm.export("collect").func(COLLECT_FX.name),
       log: wasm.export("log").func(LOG_FX.name),
       makeInt: wasm.export("makeInt").func(MAKE_INT_FX.name),
       makeFloat: wasm.export("makeFloat").func(MAKE_FLOAT_FX.name),
@@ -254,13 +275,20 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       makeString: wasm.export("makeString").func(MAKE_STRING_FX.name),
       makePair: wasm.export("makePair").func(MAKE_PAIR_FX.name),
       makeNone: wasm.export("makeNone").func(MAKE_NONE_FX.name),
+      makeComplex: wasm.export("makeComplex").func(MAKE_COMPLEX_FX.name),
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
+      peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
+      getListElement: wasm.export("getListElement").func(DEBUG_GET_LIST_ELEMENT_FX.name),
     };
+
+    const memoryEndPointer = this.pageCount * 64 * 1024;
+    const semispaceEndPointer = memoryEndPointer - SHADOW_STACK_RESERVED_SIZE;
+    const fromSpaceEndPointer = Math.floor(semispaceEndPointer / 2);
 
     return wasm
       .module()
       .imports(
-        wasm.import("js", "memory").memory(1),
+        wasm.import("js", "memory").memory(this.pageCount),
         ...importedLogs,
         wasm
           .import("metacircular", "tokenize")
@@ -274,7 +302,15 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .results(i32, i64),
       )
       .globals(
+        wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
         wasm.global(HEAP_PTR, mut.i32).init(i32.const(heapPointer)),
+        wasm.global(FROM_SPACE_START_PTR, mut.i32).init(i32.const(heapPointer)),
+        wasm.global(FROM_SPACE_END_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
+        wasm.global(TO_SPACE_START_PTR, mut.i32).init(i32.const(fromSpaceEndPointer)),
+        wasm.global(TO_SPACE_END_PTR, mut.i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_BOTTOM, i32).init(i32.const(semispaceEndPointer)),
+        wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),
+        wasm.global(SHADOW_STACK_PTR, mut.i32).init(i32.const(memoryEndPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
       )
       .datas(...strings)
@@ -284,17 +320,17 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
         wasm
           .func("$main")
-          .results(...(hasLastInstr ? [i32, i64] : []))
+          .results(i32, i64)
           .body(
             global.set(
               CURR_ENV,
-              wasm.call(ALLOC_ENV_FX).args(i32.const(this.environment[0].length), i32.const(0)),
+              wasm.call(ALLOC_ENV_FX).args(i32.const(this.environment[0].length)),
             ),
 
             // declare built-in constants/functions in the global environment before user code
             ...this.builtIns,
 
-            ...(hasLastInstr ? [...body.slice(0, -1), hasLastInstr] : body),
+            ...body,
           ),
       )
       .exports(...Object.values(exports))
@@ -302,8 +338,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   }
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): WasmInstruction {
+    // Regardless of mode, drop value and check at runtime if tag is gcable
+    // If gcable, discard the shadow stack
+
     const expr = this.visit(stmt.expression);
-    return wasm.drop(wasm.drop(expr));
+    return wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(wasm.raw`${expr} (drop)`))
+      .then(wasm.call(DISCARD_SHADOW_STACK_FX));
   }
 
   visitGroupingExpr(expr: ExprNS.Grouping): WasmNumeric {
@@ -394,8 +435,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): WasmNumeric {
     const value = BigInt(expr.value);
-    const min = BigInt("-9223372036854775808"); // -(2^63)
-    const max = BigInt("9223372036854775807"); // (2^63) - 1
+    const min = -9223372036854775808n; // -(2^63)
+    const max = 9223372036854775807n; // (2^63) - 1
     if (value < min || value > max) {
       throw new Error(`BigInt literal out of bounds: ${expr.value}`);
     }
@@ -538,51 +579,64 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       );
   }
 
-  visitCallExpr(expr: ExprNS.Call): WasmRaw {
+  visitCallExpr(expr: ExprNS.Call): WasmCall {
     const callee = this.visit(expr.callee);
     const args = expr.args.map(arg => ({
       arg: this.visit(arg),
       isStarred: arg instanceof ExprNS.Starred,
     }));
 
-    // get the CURR_ENV first - this saves the current environment as the return env
-    // on the stack for APPLY later
+    // push the return address onto the shadow stack first (for APPLY later).
 
-    // we call PRE_APPLY first, which verifies the callee is a closure and arity matches
-    // AND creates a new environment for the function call, but does not set CURR_ENV yet
-    // this is so that we can set the arguments in the new environment first
-    // PRE_APPLY creates an environment the size of the function'call argument length
-    // PRE_APPLY returns (1, 2) callee tag and value, (3) pointer to new environment
+    // we call PRE_APPLY next, which verifies the callee is a closure and arity matches
+    // AND creates a new environment for the function call the size of the function call
+    // argument length. it returns the pointer to this env, which we push onto the
+    // shadow stack.
 
-    // so we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
-    // which takes in the pointer to the new env as its first parameter
-    // the SET_CONTIGUOUS_BLOCK function returns the env address after setting the parameter
-    // so we can chain the calls together
+    // we manually set the arguments in the new environment using SET_CONTIGUOUS_BLOCK_FX
+    // which reads the pointer to the new env from the shadow stack.
 
-    // we set CURR_ENV only after all arguments have been set to prevent overlapping
-    // environments in nested function calls
-
-    // APPLY expects (1) pointer to return environment, (2, 3) callee tag and value
+    // APPLY takes in the argument length. it reads the (3) call-state shadow stack values
+    // directly. it also sets CURR_ENV, only after all arguments have been set to prevent
+    // overlapping environments in nested function calls
 
     // if has varargs, the list elements are set directly after the last parameter
     // so we need to, in the APPLY_FX:
     // 1. set HEAP_PTR to the end of the varargs list,
     // 2. shift all the list elements over by 1 to make space for the varargs list
     // 3. make the list variable
-    return wasm.raw`
-${global.get(CURR_ENV)}
 
-${wasm.call(PRE_APPLY_FX).args(callee, i32.const(args.length))}
-(i32.const ${ENV_HEAD_SIZE}) (i32.add)
-${args.map(
-  ({ arg, isStarred }, i) =>
-    wasm.raw`
-(i32.const ${i}) ${arg} (i32.const ${isStarred ? 1 : 0}) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
-)}
+    return wasm.call(APPLY_FX_NAME).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX) // (1) PUSH return address
+        .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
 
-(i32.const ${ENV_HEAD_SIZE}) (i32.sub) (global.set ${CURR_ENV})
-(i32.const ${args.length}) (call ${APPLY_FX_NAME})
-`;
+      wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV), // (3) PUSH packed call env state: upper 32 = env pointer
+        i64.shl(
+          i64.extend_i32_u(
+            wasm.call(PRE_APPLY_FX).args(
+              callee, // (2) callee is already PUSHED at this point
+              i32.const(args.length),
+            ),
+          ),
+          i64.const(32),
+        ),
+      ),
+
+      ...args.map((element, i) =>
+        wasm
+          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .args(
+            i32.const(i),
+            element.arg,
+            i32.const(ENV_HEAD_SIZE),
+            i32.const(element.isStarred ? 1 : 0),
+          ),
+      ),
+
+      /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
+    );
   }
 
   visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
@@ -594,7 +648,7 @@ ${args.map(
 
     return wasm.return(
       value ? this.visit(value) : wasm.call(MAKE_NONE_FX),
-      global.set(CURR_ENV, local.get(RETURN_ENV_NAME)),
+      ...RETURN_NONVOID_SUFFIX,
     );
   }
 
@@ -705,11 +759,12 @@ ${args.map(
         );
 
     const rangeArgs = stmt.iter.args;
+    const checkedRangeArg = (arg: ExprNS.Expr) => wasm.call(CHECK_INT_FX).args(this.visit(arg));
 
     if (rangeArgs.length === 1 || rangeArgs.length === 2) {
       return wasm.raw`
-      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : this.visit(rangeArgs[0]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? this.visit(rangeArgs[0]) : this.visit(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, rangeArgs.length === 1 ? wasm.call(MAKE_INT_FX).args(i64.const(0)) : checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, rangeArgs.length === 1 ? checkedRangeArg(rangeArgs[0]) : checkedRangeArg(rangeArgs[1]))}
       
       ${wasm
         .block("$exit")
@@ -728,9 +783,9 @@ ${args.map(
         )}`;
     } else {
       return wasm.raw`
-      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, this.visit(rangeArgs[0]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, this.visit(rangeArgs[1]))}
-      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, this.visit(rangeArgs[2]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...iterLex, checkedRangeArg(rangeArgs[0]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...endLex, checkedRangeArg(rangeArgs[1]))}
+      ${wasm.call(SET_LEX_ADDR_FX).args(...stepLex, checkedRangeArg(rangeArgs[2]))}
 
       ${wasm
         .if(
@@ -793,24 +848,45 @@ ${args.map(
     return wasm.br("$continue");
   }
 
-  visitListExpr(expr: ExprNS.List): WasmRaw {
+  visitListExpr(expr: ExprNS.List): WasmCall {
     const length = expr.elements.length;
     const elements = expr.elements.map(el => this.visit(el));
 
-    // repurposing SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
+    // SET_CONTIGUOUS_BLOCK_FX to set list elements in a contiguous block
     // in the heap, and then make the list with MAKE_LIST_FX
-    return wasm.raw`
-${wasm.call(MALLOC_FX).args(i32.const(length * 12))}
 
-${elements.map(
-  (element, i) =>
-    wasm.raw`
-(i32.const ${i}) ${element} (i32.const 0) (call ${SET_CONTIGUOUS_BLOCK_FX.name})`,
-)}
+    // ! indicates actual arguments - the rest are for setting up the list
+    // in the shadow stack for SET_CONTIGUOUS_BLOCK_FX to write to
+    return wasm.call(MAKE_LIST_FX).args(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX)
+        .args(
+          i32.const(SHADOW_STACK_TAG.LIST_STATE),
+          i64.or(
+            i64.shl(
+              i64.extend_i32_u(
+                wasm
+                  .call(CLEAR_GC_HEADER_FX)
+                  .args(wasm.call(MALLOC_FX).args(i32.const(length * 12 + GC_OBJECT_HEADER_SIZE))),
+              ),
+              i64.const(32),
+            ),
+            i64.extend_i32_u(i32.const(length)),
+          ),
+        ),
 
-(i32.const ${length})
-(call ${MAKE_LIST_FX.name})
-`;
+      ...elements.map((element, i) =>
+        wasm
+          .call(SET_CONTIGUOUS_BLOCK_FX)
+          .args(i32.const(i), element, i32.const(GC_OBJECT_HEADER_SIZE), i32.const(0)),
+      ),
+
+      /* ! */ i32.wrap_i64(
+        i64.shr_u(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4))), i64.const(32)),
+      ),
+      /* ! */ i32.wrap_i64(i64.load(i32.add(global.get(SHADOW_STACK_PTR), i32.const(4)))),
+      wasm.call(DISCARD_SHADOW_STACK_FX), // discard the list state from the shadow stack
+    );
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): WasmNumeric {
