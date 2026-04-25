@@ -272,7 +272,7 @@ export async function* generateCSEMachineStateStream(
     context.runtime.nodes.unshift(command);
   }
 
-  // Define the program 
+  // Define the program
   const globalEnvironment = getGlobalEnvironment(context);
   if (globalEnvironment) {
     pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
@@ -1120,7 +1120,7 @@ const cmdEvaluators: CmdEvaluators = {
       const result = await callable.func(args, code, instr.srcNode, context);
       if (result) {
         stash.push(result);
-      } 
+      }
     } else {
       handleRuntimeError(
         context,

@@ -994,9 +994,7 @@ describe("Standard Library Tests", () => {
         ["hello = 'hello'\r\n\r\nhello", "hello", null],
         ["hello = 'hello'\r\n# This is a comment\r\nhello", "hello", null],
       ],
-      "predefined variables": [
-        ["a = 1\n__program__", "a = 1\n__program__", null],
-      ]
+      "predefined variables": [["a = 1\n__program__", "a = 1\n__program__", null]],
     };
 
     generateTestCases(mathTests, 1, [misc, math]);

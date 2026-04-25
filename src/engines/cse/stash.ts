@@ -88,7 +88,12 @@ export interface BuiltinValue {
   name: string;
   func:
     | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Value | undefined)
-    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Promise<Value | undefined>);
+    | ((
+        args: Value[],
+        code: string,
+        command: ExprNS.Call,
+        context: Context,
+      ) => Promise<Value | undefined>);
   minArgs: number;
 }
 

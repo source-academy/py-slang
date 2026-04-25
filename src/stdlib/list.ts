@@ -36,12 +36,7 @@ class ListBuiltins {
 
   // A helper function to generate a list of a given length
   @Validate(1, 1, "_gen_list", true)
-  static _gen_list(
-    args: Value[],
-    source: string,
-    command: ExprNS.Call,
-    context: Context,
-  ): Value {
+  static _gen_list(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     const length = args[0];
     if (length.type !== "bigint") {
       handleRuntimeError(context, new TypeError(source, command, context, length.type, "bigint"));

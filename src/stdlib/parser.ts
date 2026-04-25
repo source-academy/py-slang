@@ -328,7 +328,7 @@ class ParserBuiltins {
     }
     context.stash.push(func);
     argArray.forEach(arg => context.stash.push(arg));
-    context.control.push(appInstr(argArray.length, command))
+    context.control.push(appInstr(argArray.length, command));
   }
 
   @Validate(1, 1, "tokenize", false)

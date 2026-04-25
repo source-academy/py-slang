@@ -131,7 +131,9 @@ export const createProgramEnvironment = (context: Context, isPrelude: boolean): 
   return createSimpleEnvironment(
     context,
     isPrelude ? "prelude" : "programEnvironment",
-    isPrelude ? getGlobalEnvironment(context) : (getPreludeEnvironment(context) || getGlobalEnvironment(context)),
+    isPrelude
+      ? getGlobalEnvironment(context)
+      : getPreludeEnvironment(context) || getGlobalEnvironment(context),
   );
 };
 
