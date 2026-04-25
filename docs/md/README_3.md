@@ -19,13 +19,13 @@ these groups:
       <a href="../LINKED LISTS/index.html">LINKED LISTS</a>: Support for linked lists
     </li>
     <li>
-      <a href="../PAIR MUTATOR/index.html">PAIR MUTATOR</a>: Mutating pairs
+      <a href="../PAIR MUTATORS/index.html">PAIR MUTATORS</a>: Mutating pairs
     </li>
     <li>
-      <a href="../LIST/index.html">LIST</a>: Support for lists
+      <a href="../LISTS/index.html">LISTS</a>: Support for lists
     </li>
     <li>
-      <a href="../STREAM/index.html">STREAM</a>: Support for streams
+      <a href="../STREAMS/index.html">STREAMS</a>: Support for streams
     </li>
   </ul>
 

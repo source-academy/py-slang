@@ -20,6 +20,7 @@ import {
   createEnvironment,
   createProgramEnvironment,
   currentEnvironment,
+  getGlobalEnvironment,
   popEnvironment,
   pushEnvironment,
 } from "./environment";
@@ -50,10 +51,12 @@ import {
   WhileInstr,
 } from "./types";
 import {
+  checkStackOverFlow,
   envChanging,
   evaluateForIterator,
   evaluateListAssignment,
   generateForIncrement,
+  isInstr,
   isNode,
   pyDefineVariable,
   pyGetVariable,
@@ -271,6 +274,11 @@ export async function* generateCSEMachineStateStream(
     context.runtime.nodes.unshift(command);
   }
 
+  // Define the program
+  const globalEnvironment = getGlobalEnvironment(context);
+  if (globalEnvironment) {
+    pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
+  }
   while (command) {
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {
@@ -640,7 +648,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || ("instrType" in head && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
         break;
       }
     }
@@ -1057,6 +1065,19 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    checkStackOverFlow(code, instr.srcNode, context, control);
+
+    // Tail-Call Optimisation
+    const topElement = control.peek();
+    if (
+      topElement !== undefined &&
+      isInstr(topElement) &&
+      topElement.instrType === InstrType.RESET
+    ) {
+      control.pop();
+      popEnvironment(context);
+    }
+
     const numOfArgs = instr.numOfArgs;
 
     const rawArgs: Value[] = [];
@@ -1112,7 +1133,9 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      stash.push(result);
+      if (result) {
+        stash.push(result);
+      }
     } else {
       handleRuntimeError(
         context,
