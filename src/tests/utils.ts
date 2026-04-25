@@ -61,7 +61,7 @@ async function runInContext(
   }
 
   // Evaluate
-  const result = await evaluate(code, pyAst, context, options as Partial<IOptions>);
+  const result = await evaluate(code, pyAst, context, options);
   return CSEResultPromise(context, result);
 }
 
@@ -114,10 +114,10 @@ type InternalTestCase = {
 export const createInternalTestCases = (tests: TestCases[string]): InternalTestCase[] => {
   return tests.map(([code, expected, output]) => ({
     label:
-      expected instanceof Function &&
+      JSON.stringify(code) + " should " + (expected instanceof Function &&
       (expected.prototype instanceof RuntimeSourceError || expected.prototype instanceof Error)
-        ? expected.name
-        : expected,
+        ? "throw " + expected.name
+        : "return " + expected),
     code,
     expected,
     output,
@@ -187,7 +187,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
         jest.restoreAllMocks(); // Automatically restores all spyOn mocks
       });
       test.each(createInternalTestCases(tests))(
-        `$code should return $label`,
+        `$label`,
         async ({ code, expected, output }) => {
           const spy = jest.spyOn(Stash.prototype, "pop");
           const context = new Context();
@@ -195,7 +195,6 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           const outputLst: OutputType[] = [];
           generateMockStreams(context, outputLst);
           const result = await runInContext(code, context, { variant, groups });
-          expect(result).toBeDefined();
           expect(result.status).toBe("finished");
 
           if (typeof expected === "function" && expected.prototype instanceof RuntimeSourceError) {
@@ -203,11 +202,11 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
             expect(context.errors[0]).toHaveProperty("constructor", expected);
             return;
           }
-
           if (typeof expected === "function" && expected.prototype instanceof Error) {
             expect(result).toHaveProperty("value.message", expect.stringContaining(expected.name));
             return;
           }
+          expect(outputLst.filter(item => item.type === "stderr")).toStrictEqual([]);
 
           expect(result.status).not.toHaveProperty("value.type", "error");
           if (output !== null) {

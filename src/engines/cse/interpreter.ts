@@ -20,6 +20,7 @@ import {
   createEnvironment,
   createProgramEnvironment,
   currentEnvironment,
+  getGlobalEnvironment,
   popEnvironment,
   pushEnvironment,
 } from "./environment";
@@ -271,6 +272,11 @@ export async function* generateCSEMachineStateStream(
     context.runtime.nodes.unshift(command);
   }
 
+  // Define the program 
+  const globalEnvironment = getGlobalEnvironment(context);
+  if (globalEnvironment) {
+    pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
+  }
   while (command) {
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {

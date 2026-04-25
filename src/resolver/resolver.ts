@@ -191,8 +191,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       source,
       null,
       new Map([
-        // misc library
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
+        ["__program__", new Token(TokenType.NAME, "__program__", 0, 0, 0)],
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
             ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,

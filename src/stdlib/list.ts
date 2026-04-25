@@ -38,13 +38,13 @@ class ListBuiltins {
   @Validate(1, 1, "_gen_list", true)
   static _gen_list(
     args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
   ): Value {
     const length = args[0];
     if (length.type !== "bigint") {
-      throw new Error("_gen_list expects a bigint as the first argument");
+      handleRuntimeError(context, new TypeError(source, command, context, length.type, "bigint"));
     }
     const list: Value[] = [];
     for (let i = BigInt(0); i < length.value; i++) {
