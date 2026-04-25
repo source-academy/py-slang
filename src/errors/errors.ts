@@ -213,7 +213,6 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
   }
 }
 
-// TODO: fix this class, since it doesn't seem to be functional
 export class MissingRequiredPositionalError extends RuntimeSourceError {
   private functionName: string;
   private missingParamCnt: number;
