@@ -1,6 +1,7 @@
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
+import { appInstr } from "../engines/cse/instrCreator";
 import { BuiltinValue, ListValue, NoneValue, StringValue, Value } from "../engines/cse/stash";
 import { operatorTranslator } from "../engines/cse/types";
 import { TypeError } from "../errors/errors";
@@ -312,7 +313,7 @@ class ParserBuiltins {
     source: string,
     command: ExprNS.Call,
     context: Context,
-  ): Promise<Value> {
+  ): Promise<Value | undefined> {
     const func = args[0];
     const argList = args[1];
     const argArray: Value[] = [];
@@ -325,10 +326,9 @@ class ParserBuiltins {
     if (func.type === "builtin") {
       return func.func(argArray, source, command, context);
     }
-    return handleRuntimeError(
-      context,
-      new TypeError(source, command, context, func.type, "primitive function"),
-    );
+    context.stash.push(func);
+    argArray.forEach(arg => context.stash.push(arg));
+    context.control.push(appInstr(argArray.length, command))
   }
 
   @Validate(1, 1, "tokenize", false)

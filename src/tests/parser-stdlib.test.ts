@@ -599,6 +599,12 @@ describe("Parser Stdlib Tests", () => {
       ["apply_in_underlying_python(True, linked_list(1))", TypeError, null],
       ["apply_in_underlying_python(None, linked_list(1))", TypeError, null],
     ],
+    "apply_in_underlying_python — non-primitive functions": [
+      ["apply_in_underlying_python(lambda x: x + 1, linked_list(5))", 6n, null],
+      ["def f(x, y, *args):\n    return x + y + (f(*args) if len(args) > 0 else 0)\napply_in_underlying_python(f, linked_list(1, 2, 3, 4))", 10n, null],
+      ["def g(x, y): return x + \" \" + y\napply_in_underlying_python(g, linked_list(\"hello\", \"world\"))", "hello world", null],
+    ],
+
   };
 
   generateTestCases(literalTests, 4, groups);

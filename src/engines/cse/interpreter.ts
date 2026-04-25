@@ -1118,7 +1118,9 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      stash.push(result);
+      if (result) {
+        stash.push(result);
+      } 
     } else {
       handleRuntimeError(
         context,
