@@ -408,6 +408,36 @@ export class StepLimitExceededError extends RuntimeSourceError {
   }
 }
 
+export class RecursionError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt) {
+    super(node);
+    this.type = ErrorType.RUNTIME;
+    const index = node.startToken.indexInSource;
+
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+
+    const name = "RecursionError";
+    const hint = "The evaluation has exceeded the maximum recursion depth.";
+
+    const msg = [
+      `${name} at line ${lineIndex}`,
+      "",
+      "    " + fullLine,
+      "    " + " ".repeat(adjustedOffset) + indicator,
+      hint,
+    ].join("\n");
+
+    this.message = msg;
+  }
+}
 export class ValueError extends RuntimeSourceError {
   constructor(source: string, node: ExprNS.Expr, context: Context, functionName: string) {
     super(node);

@@ -3,6 +3,7 @@ import {
   IndexError,
   MissingRequiredPositionalError,
   NameError,
+  RecursionError,
   TooManyPositionalArgumentsError,
   TypeError,
   UnboundLocalError,
@@ -242,9 +243,9 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
   return false;
 }
 
-function isInstr(item: ControlItem): item is Instr & { isEnvDependent?: boolean } {
+export const isInstr = (item: ControlItem): item is Instr & { isEnvDependent?: boolean } => {
   return "instrType" in item;
-}
+};
 
 export const envChanging = (command: ControlItem): boolean => {
   return isEnvDependent(command);
@@ -286,8 +287,15 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
 
-export const checkStackOverFlow = (_context: Context, _control: Control) => {
-  // TODO
+export const checkStackOverFlow = (
+  code: string,
+  callExpr: ExprNS.Call,
+  context: Context,
+  control: Control,
+) => {
+  if (control.getNumFunctionResets() > 1024) {
+    handleRuntimeError(context, new RecursionError(code, callExpr));
+  }
 };
 
 export function pythonMod(a: bigint, b: bigint): bigint;

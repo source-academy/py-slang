@@ -51,10 +51,12 @@ import {
   WhileInstr,
 } from "./types";
 import {
+  checkStackOverFlow,
   envChanging,
   evaluateForIterator,
   evaluateListAssignment,
   generateForIncrement,
+  isInstr,
   isNode,
   pyDefineVariable,
   pyGetVariable,
@@ -646,7 +648,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || ("instrType" in head && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
         break;
       }
     }
@@ -1063,6 +1065,19 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    checkStackOverFlow(code, instr.srcNode, context, control);
+
+    // Tail-Call Optimisation
+    const topElement = control.peek();
+    if (
+      topElement !== undefined &&
+      isInstr(topElement) &&
+      topElement.instrType === InstrType.RESET
+    ) {
+      control.pop();
+      popEnvironment(context);
+    }
+
     const numOfArgs = instr.numOfArgs;
 
     const rawArgs: Value[] = [];
