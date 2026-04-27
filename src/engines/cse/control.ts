@@ -1,7 +1,7 @@
 import { StmtNS } from "../../ast-types";
 import { Stack } from "./stack";
-import { Instr, Node } from "./types";
-import { isEnvDependent } from "./utils";
+import { Instr, InstrType, Node } from "./types";
+import { isEnvDependent, isInstr } from "./utils";
 
 export type ControlItem = Node | Instr;
 
@@ -10,9 +10,12 @@ export type ControlItem = Node | Instr;
  */
 export class Control extends Stack<ControlItem> {
   private numEnvDependentItems: number;
+  private numFunctionResets: number;
+
   public constructor(program?: StmtNS.Stmt) {
     super();
     this.numEnvDependentItems = 0;
+    this.numFunctionResets = 0;
     // Load program into control stack
     if (program) this.push(program);
   }
@@ -26,10 +29,17 @@ export class Control extends Stack<ControlItem> {
     return this.numEnvDependentItems;
   }
 
+  public getNumFunctionResets(): number {
+    return this.numFunctionResets;
+  }
+
   public pop(): ControlItem | undefined {
     const item = super.pop();
     if (item !== undefined && isEnvDependent(item)) {
       this.numEnvDependentItems--;
+    }
+    if (item !== undefined && isInstr(item) && item.instrType === InstrType.RESET) {
+      this.numFunctionResets--;
     }
     return item;
   }
@@ -38,6 +48,9 @@ export class Control extends Stack<ControlItem> {
     items.forEach((item: ControlItem) => {
       if (isEnvDependent(item)) {
         this.numEnvDependentItems++;
+      }
+      if (isInstr(item) && item.instrType === InstrType.RESET) {
+        this.numFunctionResets++;
       }
     });
     super.push(...items);

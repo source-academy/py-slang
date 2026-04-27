@@ -2,14 +2,7 @@ import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { ControlItem } from "../engines/cse/control";
 import { handleRuntimeError } from "../engines/cse/error";
-import {
-  BoolValue,
-  BuiltinValue,
-  ListValue,
-  NoneValue,
-  StringValue,
-  Value,
-} from "../engines/cse/stash";
+import { BoolValue, BuiltinValue, ListValue, NoneValue, Value } from "../engines/cse/stash";
 import { displayOutput } from "../engines/cse/streams";
 import { TypeError } from "../errors";
 import linkedListPrelude from "./linked-list.prelude";
@@ -80,10 +73,10 @@ class LinkedListBuiltins {
     source: string,
     command: ExprNS.Call,
     context: Context,
-  ): StringValue {
+  ): string {
     if (!LinkedListBuiltins._is_linked_list(value)) {
       if (!isPair(value)) {
-        return { type: "string", value: toPythonString(value) };
+        return toPythonString(value, true);
       }
       const string1 = LinkedListBuiltins._print_linked_list(
         value.value[0],
@@ -97,19 +90,14 @@ class LinkedListBuiltins {
         command,
         context,
       );
-      return { type: "string", value: "[" + string1.value + ", " + string2.value + "]" };
+      return "[" + string1 + ", " + string2 + "]";
     }
 
     let string = "linked_list(";
     let current = value;
 
     while (current.type == "list" && current.value.length === 2) {
-      string += LinkedListBuiltins._print_linked_list(
-        current.value[0],
-        source,
-        command,
-        context,
-      ).value;
+      string += LinkedListBuiltins._print_linked_list(current.value[0], source, command, context);
       string += ", ";
       current = LinkedListBuiltins.tail([current], source, command, context);
     }
@@ -117,7 +105,7 @@ class LinkedListBuiltins {
       string = string.slice(0, -2);
     }
     string += ")";
-    return { type: "string", value: string };
+    return string;
   }
   @Validate(1, 1, "print_linked_list", true)
   static async print_linked_list(
@@ -127,7 +115,7 @@ class LinkedListBuiltins {
     context: Context,
   ): Promise<NoneValue> {
     const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
-    await displayOutput(context, stringValue.value);
+    await displayOutput(context, stringValue);
     return { type: "none" };
   }
 }

@@ -41,7 +41,7 @@ export type Group = {
 
 export const minArgMap = new Map<string, number>();
 
-export function Validate<T extends Value | Promise<Value>>(
+export function Validate<T extends Value | undefined | Promise<Value | undefined>>(
   minArgs: number | null,
   maxArgs: number | null,
   functionName: string,

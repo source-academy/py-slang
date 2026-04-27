@@ -20,6 +20,7 @@ import {
   createEnvironment,
   createProgramEnvironment,
   currentEnvironment,
+  getGlobalEnvironment,
   popEnvironment,
   pushEnvironment,
 } from "./environment";
@@ -50,10 +51,12 @@ import {
   WhileInstr,
 } from "./types";
 import {
+  checkStackOverFlow,
   envChanging,
   evaluateForIterator,
   evaluateListAssignment,
   generateForIncrement,
+  isInstr,
   isNode,
   pyDefineVariable,
   pyGetVariable,
@@ -66,6 +69,7 @@ export interface IOptions {
   envSteps: number;
   stepLimit: number;
   variant: number;
+  recursionLimit: number;
 }
 
 type CmdEvaluator<T extends ControlItem> = (
@@ -119,6 +123,7 @@ export async function evaluate(
     groups: [],
     envSteps: 100000,
     stepLimit: -1,
+    recursionLimit: 1024,
     variant: 4,
     ...(options as Partial<IOptions>),
   };
@@ -145,6 +150,7 @@ export async function evaluate(
       context.stash,
       opts.envSteps,
       opts.stepLimit,
+      opts.recursionLimit,
       opts.variant,
       opts.isPrelude,
     );
@@ -203,6 +209,7 @@ export async function evaluate(
  * @param stash Points to the current Stash.
  * @param envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
+ * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
  * @param isPrelude Whether the program is the prelude.
  * @returns The top value of the stash after execution.
@@ -214,6 +221,7 @@ export async function runCSEMachine(
   stash: Stash,
   envSteps: number,
   stepLimit: number,
+  recursionLimit: number,
   variant: number,
   isPrelude: boolean = false,
 ): Promise<Value> {
@@ -224,6 +232,7 @@ export async function runCSEMachine(
     stash,
     envSteps,
     stepLimit,
+    recursionLimit,
     variant,
     isPrelude,
   );
@@ -246,6 +255,7 @@ export async function runCSEMachine(
  * @param stash The stash storage.
  * @param _envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
+ * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
  * @param isPrelude Whether the program is the prelude.
  * @yields The current state of the stash, control stack, and step count.
@@ -257,6 +267,7 @@ export async function* generateCSEMachineStateStream(
   stash: Stash,
   _envSteps: number,
   stepLimit: number,
+  recursionLimit: number,
   variant: number,
   isPrelude: boolean = false,
 ) {
@@ -271,6 +282,11 @@ export async function* generateCSEMachineStateStream(
     context.runtime.nodes.unshift(command);
   }
 
+  // Define the program
+  const globalEnvironment = getGlobalEnvironment(context);
+  if (globalEnvironment) {
+    pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
+  }
   while (command) {
     // Return to capture a snapshot of the control and stash after the target step count is reached
     // if (!isPrelude && steps === envSteps) {
@@ -333,6 +349,7 @@ export async function* generateCSEMachineStateStream(
         isPrelude,
         variant,
       );
+      checkStackOverFlow(code, command, context, control, recursionLimit);
     }
 
     command = control.peek();
@@ -640,7 +657,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || ("instrType" in head && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
         break;
       }
     }
@@ -1057,6 +1074,17 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    // Tail-Call Optimisation
+    const topElement = control.peek();
+    if (
+      topElement !== undefined &&
+      isInstr(topElement) &&
+      topElement.instrType === InstrType.RESET
+    ) {
+      control.pop();
+      popEnvironment(context);
+    }
+
     const numOfArgs = instr.numOfArgs;
 
     const rawArgs: Value[] = [];
@@ -1112,7 +1140,9 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      stash.push(result);
+      if (result !== undefined) {
+        stash.push(result);
+      }
     } else {
       handleRuntimeError(
         context,
