@@ -30,7 +30,6 @@ export class Context {
   public errors: RuntimeSourceError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
   public prelude: string | null = null;
-
   runtime: {
     break: boolean;
     debuggerOn: boolean;

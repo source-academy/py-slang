@@ -10,7 +10,8 @@ export type ControlItem = Node | Instr;
  */
 export class Control extends Stack<ControlItem> {
   private numEnvDependentItems: number;
-  private numFunctionResets: number = 0;
+  private numFunctionResets: number;
+
   public constructor(program?: StmtNS.Stmt) {
     super();
     this.numEnvDependentItems = 0;
