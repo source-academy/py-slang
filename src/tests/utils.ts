@@ -9,6 +9,8 @@ import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
@@ -94,7 +96,7 @@ export function toPythonAst(text: string): Stmt {
 export function toPythonAstAndResolve(text: string, variant: number): Stmt {
   const script = text + "\n";
   const ast = toPythonAst(text);
-  const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant));
+  const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant), [misc, math]);
   const errors = resolver.resolve(ast);
   if (errors.length > 0) {
     throw errors[0];

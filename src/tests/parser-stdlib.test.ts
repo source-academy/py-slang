@@ -1,12 +1,14 @@
 import { TypeError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { generateTestCases, TestCases } from "./utils";
 
-const groups = [linkedList, list, pairmutator, stream, parser];
+const groups = [misc, math, linkedList, list, pairmutator, stream, parser];
 
 describe("Parser Stdlib Tests", () => {
   // parse — Literals

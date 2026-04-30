@@ -5,6 +5,8 @@ import {
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { generateTestCases, TestCases } from "./utils";
@@ -73,5 +75,5 @@ describe("List Tests", () => {
     ],
   };
 
-  generateTestCases(listTests, 3, [linkedList, pairmutator, stream, list]);
+  generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
 });

@@ -12,9 +12,8 @@ import {
 } from "../engines/cse/stash";
 import { displayOutput } from "../engines/cse/streams";
 import { TypeError } from "../errors";
-import { minArgMap, toPythonString, Validate } from "../stdlib";
 import linkedListPrelude from "./linked-list.prelude";
-import { GroupName } from "./utils";
+import { GroupName, minArgMap, toPythonString, Validate } from "./utils";
 
 const linkedListBuiltins = new Map<string, BuiltinValue>();
 

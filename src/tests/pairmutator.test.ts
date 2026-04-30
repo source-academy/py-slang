@@ -4,6 +4,8 @@ import {
   TypeError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { generateTestCases, TestCases } from "./utils";
@@ -223,5 +225,5 @@ result`,
     ],
   };
 
-  generateTestCases(pairmutatorTests, 2, [linkedList, pairmutator, stream]);
+  generateTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
 });
