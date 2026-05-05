@@ -29,16 +29,21 @@
  */
 
 import { AceRules } from "@sourceacademy/autocomplete";
-import constants from "../../../stdlib/py_s1_constants.json";
+import math from "../../../stdlib/math";
+import misc from "../../../stdlib/misc";
 import { getIllegalKeywords, getKeywords } from "./keywords";
 
 export default (variant: number) => {
   const keywords = getKeywords(variant).join("|");
   const illegalKeywords = getIllegalKeywords(variant).join("|");
+  const stdlibBuiltins = new Map([...math.builtins, ...misc.builtins]);
+  const builtinConstants = [...stdlibBuiltins.keys()]
+    .filter(x => stdlibBuiltins.get(x)?.type !== "builtin")
+    .join("|");
 
-  const builtinConstants = constants.constants.join("|");
-
-  const builtinFunctions = constants.builtInFuncs.join("|");
+  const builtinFunctions = [...stdlibBuiltins.keys()]
+    .filter(x => stdlibBuiltins.get(x)?.type === "builtin")
+    .join("|");
 
   //var futureReserved = "";
   const keywordMapper = {
