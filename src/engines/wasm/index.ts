@@ -1,24 +1,60 @@
-import { WatGenerator } from "@sourceacademy/wasm-util";
+import { WatGenerator, type WasmInstruction } from "@sourceacademy/wasm-util";
 import wabt from "wabt";
 import { parse } from "../../parser";
 import pythonLexer from "../../parser/lexer";
 import { toAstToken } from "../../parser/token-bridge";
 import { BuilderGenerator } from "./builderGenerator";
-import { ERROR_MAP } from "./constants";
+import { ERROR_MAP, GC_OBJECT_HEADER_SIZE } from "./constants";
+import { disableGcIrPass } from "./irHelpers";
 import { libraryFunctions } from "./library";
 import { MetacircularGenerator } from "./metacircularGenerator";
 
 export type WasmExports = {
   main: () => [number, bigint];
+  collect: () => void;
   log: (tag: number, value: bigint) => void;
   makeInt: (value: bigint) => [number, bigint];
   makeFloat: (value: number) => [number, bigint];
+  makeComplex: (real: number, imag: number) => [number, bigint];
   makeBool: (value: number) => [number, bigint];
   makeString: (offset: number, length: number) => [number, bigint];
   makePair: (tag1: number, value1: bigint, tag2: number, value2: bigint) => [number, bigint];
   makeNone: () => [number, bigint];
   malloc: (amount: number) => number;
+  peekShadowStack: (index: number) => [number, bigint];
+  getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
 };
+
+export type IrPass = (ir: WasmInstruction) => WasmInstruction;
+
+export type CompileOptions = {
+  irPasses?: IrPass[];
+  pageCount?: number;
+  disableGC?: boolean;
+};
+
+function cloneIr<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(item => cloneIr(item)) as T;
+  }
+
+  if (value != null && typeof value === "object") {
+    const cloned: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      cloned[key] = cloneIr(item);
+    }
+    return cloned as T;
+  }
+
+  return value;
+}
+
+function applyIrPasses(ir: WasmInstruction, passes: IrPass[] = []): WasmInstruction {
+  // IR nodes include shared function templates; clone first so test/debug passes stay isolated.
+  const isolatedIr = cloneIr(ir);
+  return passes.reduce((acc, pass) => pass(acc), isolatedIr);
+}
+
 export const PARSE_TREE_STRINGS = [
   // node / construct tags
   "sequence",
@@ -62,14 +98,21 @@ export const PARSE_TREE_STRINGS = [
   '"not"',
 ] as const;
 
-type WasmRunResult = {
+type BaseWasmRunResult = {
   prints: string[];
+  rawOutputs: [number, bigint][];
+  debugFunctions: {
+    getStackAt: (index: number) => [number, bigint];
+    getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
+  };
+};
+
+type WasmRunResult = BaseWasmRunResult & {
   rawResult: null;
   renderedResult: null;
 };
 
-type WasmInteractiveRunResult = {
-  prints: string[];
+type WasmInteractiveRunResult = BaseWasmRunResult & {
   rawResult: [number, bigint];
   renderedResult: string;
 };
@@ -77,14 +120,17 @@ type WasmInteractiveRunResult = {
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode?: false,
+  options?: CompileOptions,
 ): Promise<WasmRunResult>;
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode: true,
+  options?: CompileOptions,
 ): Promise<WasmInteractiveRunResult>;
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode: boolean = false,
+  options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
   const script = code + "\n";
   const ast = parse(script);
@@ -93,8 +139,13 @@ export async function compileToWasmAndRun(
     [...PARSE_TREE_STRINGS],
     libraryFunctions,
     interactiveMode,
+    options.pageCount ?? 1,
   );
-  const watIR = builderGenerator.visit(ast);
+  const passes: IrPass[] = [
+    ...(options.irPasses ?? []),
+    ...(options.disableGC ? [disableGcIrPass] : []),
+  ];
+  const watIR = applyIrPasses(builderGenerator.visit(ast), passes);
 
   const watGenerator = new WatGenerator();
   const wat = watGenerator.visit(watIR);
@@ -102,19 +153,22 @@ export async function compileToWasmAndRun(
   const w = await wabt();
   const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
-  const memory = new WebAssembly.Memory({ initial: 1 });
+  const memory = new WebAssembly.Memory({ initial: options.pageCount ?? 1 });
 
   let wasmExports: WasmExports | null = null;
 
   const output: string[] = [];
   const capture = (value: string) => void output.push(value);
 
+  const rawOutputs: [number, bigint][] = [];
+  const captureRaw = (tag: number, value: bigint) => void rawOutputs.push([tag, value]);
+
   const instantiated = await WebAssembly.instantiate(wasm, {
     console: {
       log: (value: bigint) => capture(value.toString()),
       log_complex: (real: number, imag: number) =>
-        capture(`${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
-      log_bool: (value: bigint) => capture(value === BigInt(0) ? "False" : "True"),
+        capture(real === 0 ? `${imag}j` : `${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
+      log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
       log_string: (offset: number, length: number) =>
         capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
       log_closure: (tag: number, arity: number, envSize: number, parentEnv: number) =>
@@ -126,9 +180,7 @@ export async function compileToWasmAndRun(
         throw new Error(Object.values(ERROR_MAP).at(tag) ?? "Unknown Error");
       },
       log_list: (pointer: number, length: number) => {
-        if (!wasmExports) {
-          throw new Error("WASM exports not initialised");
-        }
+        if (!wasmExports) throw new Error("WASM exports not initialised");
 
         const renderedItems: string[] = [];
         const dataView = new DataView(memory.buffer, pointer, length * 12);
@@ -147,6 +199,7 @@ export async function compileToWasmAndRun(
 
         capture(`[${renderedItems.join(", ")}]`);
       },
+      log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
     },
     metacircular: {
       tokenize: (offset: number, length: number) => {
@@ -163,14 +216,16 @@ export async function compileToWasmAndRun(
           .map(t => toAstToken(t))
           .map(({ lexeme }) => {
             const bytes = encoder.encode(lexeme);
-            const heapPointer = malloc(bytes.length);
-            bytes.forEach((byte, i) => dataView.setUint8(heapPointer + i, byte));
+            const heapPointer = malloc(bytes.length + GC_OBJECT_HEADER_SIZE);
+            for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
+              dataView.setUint8(heapPointer + i, 0);
+            }
+            bytes.forEach((byte, i) =>
+              dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte),
+            );
             return makeString(heapPointer, bytes.length);
           })
-          .reduceRight(
-            (tail, [tag, value]) => makePair(tag, BigInt(value), tail[0], BigInt(tail[1])),
-            makeNone(),
-          );
+          .reduceRight((tail, [tag, value]) => makePair(tag, value, tail[0], tail[1]), makeNone());
       },
 
       parse: (offset: number, length: number) => {
@@ -190,9 +245,25 @@ export async function compileToWasmAndRun(
 
   wasmExports = instantiated.instance.exports as WasmExports;
 
+  const getStackAt = (index: number) => {
+    if (!wasmExports) throw new Error("WASM exports not initialised");
+    return wasmExports.peekShadowStack(index);
+  };
+
+  const getListElement = (listTag: number, listValue: bigint, index: number) => {
+    if (!wasmExports) throw new Error("WASM exports not initialised");
+    return wasmExports.getListElement(listTag, listValue, index);
+  };
+
   if (!interactiveMode) {
     wasmExports.main();
-    return { prints: output, rawResult: null, renderedResult: null };
+    return {
+      prints: output,
+      rawOutputs,
+      rawResult: null,
+      renderedResult: null,
+      debugFunctions: { getStackAt, getListElement },
+    };
   }
 
   const rawResult = wasmExports.main();
@@ -203,5 +274,11 @@ export async function compileToWasmAndRun(
     throw new Error("Main function did not produce any output");
   }
 
-  return { prints: output, rawResult, renderedResult };
+  return {
+    prints: output,
+    rawOutputs,
+    rawResult,
+    renderedResult,
+    debugFunctions: { getStackAt, getListElement },
+  };
 }

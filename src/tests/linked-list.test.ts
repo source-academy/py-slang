@@ -5,6 +5,8 @@ import {
   UserError,
 } from "../errors";
 import linkedList from "../stdlib/linked-list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import { generateTestCases, TestCases } from "./utils";
 
 describe("Linked List Tests", () => {
@@ -169,5 +171,5 @@ describe("Linked List Tests", () => {
     ],
   };
 
-  generateTestCases(linkedListTests, 2, [linkedList]);
+  generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
 });

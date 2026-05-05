@@ -30,6 +30,7 @@ export enum InstrType {
   BRANCH = "Branch",
   POP = "Pop",
   ENVIRONMENT = "environment",
+  CONTINUE_MARKER = "continueMarker",
   END_OF_FUNCTION_BODY = "EndOfFunctionBody",
   LIST_ACCESS = "ListAccess",
 }
@@ -48,10 +49,7 @@ export interface WhileInstr extends BaseInstr {
 
 export interface ForInstr extends BaseInstr {
   instrType: InstrType.FOR;
-  init: ExprNS.Variable;
-  test: ExprNS.Expr;
-  update: Node;
-  body: StatementSequence;
+  body: StmtNS.Stmt[];
 }
 
 export interface ContinueInstr extends BaseInstr {
@@ -127,6 +125,10 @@ export interface BoolOpInstr extends BaseInstr {
   symbol: TokenType;
 }
 
+export interface ContinueMarkerInstr extends BaseInstr {
+  instrType: InstrType.CONTINUE_MARKER;
+}
+
 export type Instr =
   | WhileInstr
   | ForInstr
@@ -144,7 +146,8 @@ export type Instr =
   | ListInstr
   | ListAssmtInstr
   | BreakInstr
-  | ContinueInstr;
+  | ContinueInstr
+  | ContinueMarkerInstr;
 
 export function typeTranslator(type: Value["type"]): string {
   switch (type) {

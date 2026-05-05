@@ -7,7 +7,6 @@ import {
   TypeError,
   UnboundLocalError,
 } from "../../errors/errors";
-import { builtInConstants, builtIns } from "../../stdlib";
 import { Token, TokenType } from "../../tokenizer";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
@@ -181,6 +180,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
   [InstrType.BINARY_OP, setToFalse],
   [InstrType.BOOL_OP, setToFalse],
   [InstrType.POP, setToFalse],
+  [InstrType.CONTINUE_MARKER, setToFalse],
   [InstrType.ASSIGNMENT, setToFalse],
   [InstrType.ENVIRONMENT, setToFalse],
   [InstrType.APPLICATION, setToFalse],
@@ -196,11 +196,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     "InstrType.FOR",
     (item: ControlItem) => {
       const instr = item as ForInstr;
-      item.isEnvDependent =
-        isEnvDependent(instr.body) ||
-        isEnvDependent(instr.init) ||
-        isEnvDependent(instr.test) ||
-        isEnvDependent(instr.update);
+      item.isEnvDependent = isEnvDependent({ kind: "StatementSequence", body: instr.body });
       return item;
     },
   ],
@@ -282,12 +278,6 @@ export function pyGetVariable(code: string, context: Context, name: string, node
     } else {
       currentEnv = currentEnv.tail;
     }
-  }
-  if (builtIns.has(name)) {
-    return builtIns.get(name)!;
-  }
-  if (builtInConstants.has(name)) {
-    return builtInConstants.get(name)!;
   }
 
   if (context.nativeStorage.builtins.has(name)) {
@@ -490,9 +480,9 @@ export function evaluateForIterator(
   const tempTokenOne = new Token(TokenType.NUMBER, "1", 0, 0, 0);
   if (rangeArguments.length === 1) {
     return {
-      start: new ExprNS.Literal(tempTokenZero, tempTokenZero, 0),
+      start: new ExprNS.BigIntLiteral(tempTokenZero, tempTokenZero, "0"),
       end: rangeArguments[0],
-      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1),
+      step: new ExprNS.BigIntLiteral(tempTokenOne, tempTokenOne, "1"),
     };
   }
 
@@ -500,7 +490,7 @@ export function evaluateForIterator(
     return {
       start: rangeArguments[0],
       end: rangeArguments[1],
-      step: new ExprNS.Literal(tempTokenOne, tempTokenOne, 1),
+      step: new ExprNS.BigIntLiteral(tempTokenOne, tempTokenOne, "1"),
     };
   }
 
@@ -509,4 +499,13 @@ export function evaluateForIterator(
     end: rangeArguments[1],
     step: rangeArguments[2],
   };
+}
+
+export function generateForIncrement(variableName: string, value: bigint): StmtNS.Stmt {
+  const token = new Token(TokenType.NAME, variableName, 0, 0, 0);
+  const variable = new ExprNS.Variable(token, token, token);
+
+  const literalToken = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
+  const literal = new ExprNS.BigIntLiteral(literalToken, literalToken, value.toString());
+  return new StmtNS.Assign(token, literalToken, variable, literal);
 }

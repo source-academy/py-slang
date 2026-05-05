@@ -1,9 +1,8 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { BuiltinValue, ListValue, NoneValue, Value } from "../engines/cse/stash";
-import { minArgMap, Validate } from "../stdlib";
 import streamPrelude from "./stream.prelude";
-import { GroupName } from "./utils";
+import { GroupName, minArgMap, Validate } from "./utils";
 
 const streamBuiltins = new Map<string, BuiltinValue>();
 

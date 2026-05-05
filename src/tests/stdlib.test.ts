@@ -1,6 +1,8 @@
 import { TypeError, UnsupportedOperandTypeError, ValueError, ZeroDivisionError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
@@ -780,6 +782,7 @@ describe("Standard Library Tests", () => {
       ],
 
       coercing: [
+        ["int()", 0n, null], // int() with no arguments returns 0
         ["int(1)", 1n, null],
         ["int(1.0)", 1n, null],
         ["int(3.14)", 3n, null],
@@ -793,9 +796,22 @@ describe("Standard Library Tests", () => {
         ['int("1")', 1n, null],
         ['int("1_000")', 1000n, null],
         ['int("1_000e+2")', ValueError, null],
-        ['int("-13")', -13n, null],
+        ['int("13", 1)', ValueError, null], // base must be between 2 and 36, or 0
+        ['int("13", 2)', ValueError, null], // invalid literal for int() with base 2: '13'
+        ['int("101", 2)', 5n, null],
+        ['int("0xFF", 0)', 255n, null],
+        ['int("0b101", 0)', 5n, null],
+        ['int("0o77", 0)', 63n, null],
+        ['int("-0o77", 0)', -63n, null],
+        ['int("0o77.3", 0)', ValueError, null],
+        ['int("0o77e+2", 0)', ValueError, null],
+        ['int("1_000", 0)', 1000n, null],
+        ["int(True, 0)", TypeError, null],
+        ['int("13", 256)', ValueError, null], // base must be between 2 and 36, or 0
+
         // TODO: Add more coercion test cases for int() where double underscores between digits is prohibited
 
+        ["float()", 0, null],
         ["float(1)", 1, null],
         ["float(1.0)", 1, null],
         ["float(3.14)", 3.14, null],
@@ -822,6 +838,7 @@ describe("Standard Library Tests", () => {
         ['float("-infinity")', -Infinity, null],
         // TODO: Add more coercion test cases for float() where double underscores between digits is prohibited
 
+        ["complex()", new PyComplexNumber(0, 0), null], // complex() with no arguments returns 0j
         ["complex(1)", PyComplexNumber.fromBigInt(1n), null],
         ["complex(1.0)", PyComplexNumber.fromNumber(1), null],
         ["complex(3.14)", PyComplexNumber.fromNumber(3.14), null],
@@ -858,6 +875,7 @@ describe("Standard Library Tests", () => {
         ["complex(1, lambda x: x)", TypeError, null],
         ["complex(0, 1j)", new PyComplexNumber(-1, 0), null],
 
+        ["bool()", false, null], // bool() with no arguments returns False
         ["bool(1)", true, null],
         ["bool(0)", false, null],
         ["bool(1.0)", true, null],
@@ -978,8 +996,8 @@ describe("Standard Library Tests", () => {
       ],
     };
 
-    generateTestCases(mathTests, 1, []);
-    generateTestCases(miscTests, 1, []);
+    generateTestCases(mathTests, 1, [misc, math]);
+    generateTestCases(miscTests, 1, [misc, math]);
   });
 
   describe("Chapter 3 Builtins", () => {
@@ -1056,6 +1074,6 @@ describe("Standard Library Tests", () => {
         ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
       ],
     };
-    generateTestCases(miscTests, 3, [linkedList, stream, list, pairmutator]);
+    generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
   });
 });

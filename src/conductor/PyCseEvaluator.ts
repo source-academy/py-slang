@@ -13,6 +13,8 @@ import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
@@ -46,17 +48,21 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     }
 
     this.ensurePreludesLoaded = once(async () => {
+      let prelude = "";
       for (const group of this.groups) {
         if (group.prelude) {
-          const ast = parse(group.prelude + "\n");
-          await evaluate("", ast, this.context, {
-            isPrelude: true,
-            variant: this.variant,
-            groups: [],
-          });
+          prelude += group.prelude + "\n";
         }
       }
-      console.log(this.context.runtime.environments);
+      const ast = parse(prelude + "\n");
+      await evaluate(prelude, ast, this.context, {
+        isPrelude: true,
+        variant: this.variant,
+        groups: [],
+      });
+      if (this.context.errors.length > 0) {
+        throw this.context.errors;
+      }
     });
   }
 
@@ -77,17 +83,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         script,
         this.variant,
         this.groups,
-        this.context.runtime.environments
-          .filter(env => env.name === "prelude")
-          .map(env => Object.keys(env.head))
-          .flat(),
+        Object.keys(this.context.runtime.environments[0].head),
       );
 
       if (errors.length > 0) {
-        for (const error of errors.slice(0, -1)) {
-          await displayError(this.context, error, ErrorType.EVALUATOR_SYNTAX);
-        }
-        throw errors[errors.length - 1];
+        throw errors;
       }
 
       await evaluate(script, ast, this.context, {
@@ -95,11 +95,15 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         groups: this.groups,
       });
     } catch (e) {
-      if (e instanceof SyntaxError) {
-        await displayError(this.context, e, ErrorType.EVALUATOR_SYNTAX);
-        return;
-      }
-      await displayError(this.context, e, ErrorType.INTERNAL);
+      const errors = Array.isArray(e) ? e : [e];
+      await Promise.all(
+        errors.map(e => {
+          if (e instanceof SyntaxError) {
+            return displayError(this.context, e, ErrorType.EVALUATOR_SYNTAX);
+          }
+          return displayError(this.context, e, ErrorType.INTERNAL);
+        }),
+      );
     } finally {
       await destroyStreams(this.context);
     }
@@ -108,24 +112,24 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
 export class PyCseEvaluator1 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 1, []);
+    super(conductor, 1, [misc, math]);
   }
 }
 
 export class PyCseEvaluator2 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [linkedList]);
+    super(conductor, 2, [misc, math, linkedList]);
   }
 }
 
 export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
   }
 }
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [linkedList, list, pairmutator, stream, parser]);
+    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
   }
 }

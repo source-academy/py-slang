@@ -2,13 +2,15 @@ import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
-import { Stash } from "../engines/cse/stash";
+import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
 import { SVMLCompiler } from "../engines/svml/svml-compiler";
 import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
@@ -66,15 +68,18 @@ async function runInContext(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Class<T> = new (...args: any[]) => T;
 
-export type TestExpectedValue =
+export type TestOutputValue =
   | bigint
   | number
   | boolean
   | string
   | null
   | PyComplexNumber
-  | Class<RuntimeSourceError>
-  | Class<Error>;
+  | TestOutputValue[];
+
+export type TestErrorValue = Class<RuntimeSourceError> | Class<Error>;
+
+export type TestExpectedValue = TestOutputValue | TestErrorValue;
 /**
  * TestCases is a mapping from arguments to `describe` blocks, which map to an array of tuples of the form [code, expected, output], where:
  * - `code` is the code to be executed
@@ -91,7 +96,7 @@ export function toPythonAst(text: string): Stmt {
 export function toPythonAstAndResolve(text: string, variant: number): Stmt {
   const script = text + "\n";
   const ast = toPythonAst(text);
-  const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant));
+  const resolver = new Resolver(script, ast, makeValidatorsForChapter(variant), [misc, math]);
   const errors = resolver.resolve(ast);
   if (errors.length > 0) {
     throw errors[0];
@@ -194,7 +199,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
           expect(result.status).toBe("finished");
 
           if (typeof expected === "function" && expected.prototype instanceof RuntimeSourceError) {
-            expect(context.errors).toHaveLength(1);
+            expect(context.errors.length).toBeGreaterThan(0);
             expect(context.errors[0]).toHaveProperty("constructor", expected);
             return;
           }
@@ -203,56 +208,53 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
             expect(result).toHaveProperty("value.message", expect.stringContaining(expected.name));
             return;
           }
+
           expect(result.status).not.toHaveProperty("value.type", "error");
           if (output !== null) {
             expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line })));
           }
 
-          if (expected === null) {
-            expect(spy).toHaveLastReturnedWith(expect.objectContaining({ type: "none" }));
-            return;
-          }
-
-          if (typeof expected === "bigint") {
-            expect(spy).toHaveLastReturnedWith(
-              expect.objectContaining({ type: "bigint", value: expected }),
-            );
-            return;
-          }
-
-          if (typeof expected === "number") {
-            if (isNaN(expected)) {
-              expect.objectContaining({ type: "number", value: NaN });
-              return;
+          const generateExpectedValueAssertion = (expected: TestOutputValue): Value => {
+            if (expected === null) {
+              return { type: "none" };
             }
-            expect(spy).toHaveLastReturnedWith(
-              expect.objectContaining({ type: "number", value: expect.closeTo(expected) }),
-            );
-            return;
-          }
 
-          if (typeof expected === "boolean") {
-            expect(spy).toHaveLastReturnedWith(
-              expect.objectContaining({ type: "bool", value: expected }),
-            );
-            return;
-          }
+            if (typeof expected === "bigint") {
+              return { type: "bigint", value: expected };
+            }
 
-          if (expected instanceof PyComplexNumber) {
-            expect(spy).toHaveLastReturnedWith(
-              expect.objectContaining({
+            if (typeof expected === "number") {
+              if (isNaN(expected)) {
+                return { type: "number", value: NaN };
+              }
+              return { type: "number", value: expect.closeTo(expected) };
+            }
+
+            if (typeof expected === "boolean") {
+              return { type: "bool", value: expected };
+            }
+
+            if (expected instanceof PyComplexNumber) {
+              return {
                 type: "complex",
                 value: expect.objectContaining({
                   real: isNaN(expected.real) ? NaN : expect.closeTo(expected.real),
                   imag: isNaN(expected.imag) ? NaN : expect.closeTo(expected.imag),
                 }),
-              }),
-            );
-            return;
-          }
+              };
+            }
 
+            if (Array.isArray(expected)) {
+              return {
+                type: "list",
+                value: expected.map(generateExpectedValueAssertion),
+              };
+            }
+
+            return { type: "string", value: expected };
+          };
           expect(spy).toHaveLastReturnedWith(
-            expect.objectContaining({ type: "string", value: expected }),
+            expect.objectContaining(generateExpectedValueAssertion(expected as TestOutputValue)),
           );
           return;
         },

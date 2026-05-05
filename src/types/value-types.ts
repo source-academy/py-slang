@@ -1,7 +1,7 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
-import { BuiltinValue, Value } from "../engines/cse/stash";
+import { Value } from "../engines/cse/stash";
 import { ValueError, ZeroDivisionError } from "../errors";
 import { ModuleFunctions } from "../modules/moduleTypes";
 
@@ -285,7 +285,7 @@ export interface Finished {
 }
 
 export interface NativeStorage {
-  builtins: Map<string, BuiltinValue>;
+  builtins: Map<string, Value>;
   maxExecTime: number;
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;

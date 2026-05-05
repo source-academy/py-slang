@@ -1,7 +1,8 @@
 import { ExprNS, StmtNS } from "../../ast-types";
-import { ASTNode, FeatureValidator } from "../types";
-import { Environment } from "../../resolver/resolver";
 import { ResolverErrors } from "../../resolver/errors";
+import { Environment } from "../../resolver/resolver";
+import { Token } from "../../tokenizer";
+import { ASTNode, FeatureValidator } from "../types";
 
 /**
  * Scope-aware validator that throws NameReassignmentError if a name is assigned more than once
@@ -14,16 +15,18 @@ export function createNoReassignmentValidator(): FeatureValidator {
     validate(node: ASTNode, env?: Environment): void {
       if (!env) return;
 
-      let target: ExprNS.Variable | null = null;
+      let target: Token | null = null;
 
       if (node instanceof StmtNS.Assign) {
         // Subscript assignment (e.g. xs[0] = 1) is not a name reassignment
         if (node.target instanceof ExprNS.Subscript) return;
         if (node.target instanceof ExprNS.Variable) {
-          target = node.target;
+          target = node.target.name;
         }
       } else if (node instanceof StmtNS.AnnAssign) {
-        target = node.target;
+        target = node.target.name;
+      } else if (node instanceof StmtNS.FunctionDef) {
+        target = node.name;
       } else {
         return;
       }
@@ -35,14 +38,14 @@ export function createNoReassignmentValidator(): FeatureValidator {
         declared = new Set();
         declaredPerScope.set(env, declared);
       }
-      const name = target.name.lexeme;
+      const name = target.lexeme;
       if (declared.has(name)) {
         throw new ResolverErrors.NameReassignmentError(
-          target.name.line,
-          target.name.col,
+          target.line,
+          target.col,
           env.source,
-          target.name.indexInSource,
-          target.name.indexInSource + name.length,
+          target.indexInSource,
+          target.indexInSource + name.length,
           env.names.get(name)!,
         );
       }

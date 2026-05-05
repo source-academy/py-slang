@@ -8,6 +8,8 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 import { FeatureNotSupportedError } from "../validator";
 import { traverseAST } from "../validator/traverse";
 
@@ -22,13 +24,13 @@ function parseSource(src: string): StmtNS.FileInput {
 function analyzeOk(src: string, chapter = 4) {
   const script = src.endsWith("\n") ? src : src + "\n";
   const ast = parseSource(script);
-  expect(analyze(ast, script, chapter)).toEqual([]);
+  expect(analyze(ast, script, chapter, [misc, math])).toEqual([]);
 }
 
 function analyzeThrows(src: string, chapter = 4, errors: jest.Constructable[] = [Error]) {
   const script = src.endsWith("\n") ? src : src + "\n";
   const ast = parseSource(script);
-  const analysisErrors = analyze(ast, script, chapter);
+  const analysisErrors = analyze(ast, script, chapter, [misc, math]);
   expect(analysisErrors).toEqual(errors.map(ErrorConstructor => expect.any(ErrorConstructor)));
 }
 
@@ -142,6 +144,14 @@ describe("Chapter 1 — most restrictive", () => {
 
   test("lambda *args is banned in chapter 1", () => {
     analyzeThrows("f = lambda *args: args", 1, [FeatureNotSupportedError]);
+  });
+
+  test("function-name reassignment is banned in chapter 1", () => {
+    analyzeThrows("def f():\n    pass\nf = 1", 1);
+  });
+
+  test("function reassignment is banned in chapter 1", () => {
+    analyzeThrows("def f():\n    pass\ndef f():\n    pass", 1);
   });
 });
 
@@ -451,8 +461,13 @@ import { Value } from "../engines/cse/stash";
 async function run(src: string, chapter = 4): Promise<Value> {
   const code = src.endsWith("\n") ? src : src + "\n";
   const ast = parse(code);
-  analyze(ast, code, chapter);
+  analyze(ast, code, chapter, [misc, math]);
   const ctx = new Context();
+  for (const group of [misc, math]) {
+    for (const [name, builtin] of group.builtins) {
+      ctx.nativeStorage.builtins.set(name, builtin);
+    }
+  }
   return evaluate(code, ast, ctx);
 }
 

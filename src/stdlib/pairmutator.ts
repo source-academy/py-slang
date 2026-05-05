@@ -1,8 +1,9 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
+import { handleRuntimeError } from "../engines/cse/error";
 import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
-import { minArgMap, Validate } from "../stdlib";
-import { GroupName } from "./utils";
+import { TypeError } from "../errors";
+import { GroupName, minArgMap, Validate } from "./utils";
 
 const pairmutatorBuiltins = new Map<string, BuiltinValue>();
 
@@ -10,14 +11,14 @@ class PairmutatorBuiltins {
   @Validate(2, 2, "set_head", true)
   static set_head(
     args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
   ): NoneValue {
     const head = args[0];
     const tail = args[1];
     if (head.type !== "list" || head.value.length !== 2) {
-      throw new Error("set_head expects a pair as the first argument");
+      handleRuntimeError(context, new TypeError(source, command, context, head.type, "pair"));
     }
     head.value[0] = tail;
     return { type: "none" };
@@ -26,14 +27,14 @@ class PairmutatorBuiltins {
   @Validate(2, 2, "set_tail", true)
   static set_tail(
     args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    source: string,
+    command: ExprNS.Call,
+    context: Context,
   ): NoneValue {
     const head = args[0];
     const tail = args[1];
     if (head.type !== "list" || head.value.length !== 2) {
-      throw new Error("set_tail expects a pair as the first argument");
+      handleRuntimeError(context, new TypeError(source, command, context, head.type, "pair"));
     }
     head.value[1] = tail;
     return { type: "none" };

@@ -1,4 +1,4 @@
-import { ExprNS } from "../../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
 import { Environment } from "./environment";
 import {
@@ -9,6 +9,7 @@ import {
   BranchInstr,
   BreakInstr,
   ContinueInstr,
+  ContinueMarkerInstr,
   EndOfFunctionBodyInstr,
   EnvInstr,
   ForInstr,
@@ -58,6 +59,11 @@ export const breakInstr = (srcNode: Node): BreakInstr => ({
 export const envInstr = (env: Environment, srcNode: Node): EnvInstr => ({
   instrType: InstrType.ENVIRONMENT,
   env,
+  srcNode,
+});
+
+export const continueMarkerInstr = (srcNode: Node): ContinueMarkerInstr => ({
+  instrType: InstrType.CONTINUE_MARKER,
   srcNode,
 });
 
@@ -121,18 +127,9 @@ export const endOfFunctionBodyInstr = (srcNode: Node): EndOfFunctionBodyInstr =>
   srcNode,
 });
 
-export const forInstr = (
-  srcNode: Node,
-  init: ExprNS.Variable,
-  test: ExprNS.Expr,
-  update: Node,
-  body: StatementSequence,
-): ForInstr => ({
+export const forInstr = (srcNode: Node, body: StmtNS.Stmt[]): ForInstr => ({
   instrType: InstrType.FOR,
   srcNode,
-  init,
-  test,
-  update,
   body,
 });
 
