@@ -35,13 +35,12 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly variant: number;
   private readonly groups: Group[];
   private readonly ensurePreludesLoaded: () => Promise<void>;
-  
 
   protected constructor(
-    conductor: IRunnerPlugin, 
-    variant: number, 
+    conductor: IRunnerPlugin,
+    variant: number,
     groups: Group[],
-    evaluatorName: string
+    evaluatorName: string,
   ) {
     super(conductor);
     this.variant = variant;
@@ -136,6 +135,11 @@ export class PyCseEvaluator3 extends PyCseEvaluatorBase {
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser], "PyCseEvaluator4");
+    super(
+      conductor,
+      4,
+      [misc, math, linkedList, list, pairmutator, stream, parser],
+      "PyCseEvaluator4",
+    );
   }
 }
