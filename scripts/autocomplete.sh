@@ -14,7 +14,7 @@ mkdir -p "src/conductor/plugins/autocomplete/builtins"
 # outputting the AST as JSON to the src/conductor/plugins/autocomplete/builtins directory.
 for file in "$LIB"/*.js; do
   echo "Processing $file..."
-  $JSDOC -X -c "$CONF" "$file" > "src/conductor/plugins/autocomplete/builtins/$(basename "$file" .js).json" &
+  "$JSDOC" -X -c "$CONF" "$file" > "src/conductor/plugins/autocomplete/builtins/$(basename "$file" .js).json" &
 done
 wait
 
