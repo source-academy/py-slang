@@ -99,14 +99,14 @@ describe("Chapter 3 Autocomplete", () => {
       { name: "y", meta: CompletionItemKind.Variable },
       6,
       2,
-      1,
+      3,
     );
     testNotContains(
       "x = 10\nwhile x > 0:\n    y = x + 5\n    x -= 1\n    zab = y * 2\ny",
       { name: "zab", meta: CompletionItemKind.Variable },
       6,
       1,
-      1,
+      3,
     );
   });
   test("for loop internals should not be visible", () => {
@@ -115,21 +115,21 @@ describe("Chapter 3 Autocomplete", () => {
       { name: "zab", meta: CompletionItemKind.Variable },
       5,
       2,
-      1,
+      3,
     );
     testNotContains(
       "x = 10\nfor i in range(x):\n    y = i + 5\n    zab = y * 2\ny",
       { name: "y", meta: CompletionItemKind.Variable },
       5,
       1,
-      1,
+      3,
     );
     testNotContains(
       "x = 10\nfor i in range(x):\n    y = i + 5\n    zab = y * 2\ni",
       { name: "i", meta: CompletionItemKind.Variable },
       5,
       1,
-      1,
+      3,
     );
   });
 });
