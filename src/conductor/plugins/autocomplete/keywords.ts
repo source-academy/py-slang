@@ -17,7 +17,7 @@ export const getKeywords = (variant: number): string[] => {
   ];
 
   if (variant >= 3) {
-    keywords = keywords.concat(["while", "for", "break", "continue"]);
+    keywords = keywords.concat(["while", "for", "in", "break", "continue"]);
   }
   return keywords;
 };
@@ -42,7 +42,7 @@ export const getIllegalKeywords = (variant: number): string[] => {
   ];
 
   if (variant < 3) {
-    illegalKeywords = illegalKeywords.concat(["while", "for", "break", "continue"]);
+    illegalKeywords = illegalKeywords.concat(["while", "for", "break", "continue", "in"]);
   }
   return illegalKeywords;
 };

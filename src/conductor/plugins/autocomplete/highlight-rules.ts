@@ -41,16 +41,17 @@ export default (variant: number) => {
     .filter(x => stdlibBuiltins.get(x)?.type !== "builtin")
     .join("|");
 
-  const builtinFunctions = [...stdlibBuiltins.keys()]
+  let builtinFunctions = [...stdlibBuiltins.keys()]
     .filter(x => stdlibBuiltins.get(x)?.type === "builtin")
     .join("|");
+  if (variant >= 3) {
+    builtinFunctions += "|range";
+  }
 
   //var futureReserved = "";
   const keywordMapper = {
     map: {
-      "invalid.deprecated": "debugger",
       "support.function": builtinFunctions,
-      "variable.language": "self|cls",
       "constant.language": builtinConstants,
       keyword: keywords,
       "invalid.illegal": illegalKeywords,
@@ -118,7 +119,7 @@ export default (variant: number) => {
       },
       {
         token: ["keyword", "text", "entity.name.function"],
-        regex: "(def|class)(\\s+)([\\u00BF-\\u1FFF\\u2C00-\\uD7FF\\w]+)",
+        regex: "def(\\s+)([\\u00BF-\\u1FFF\\u2C00-\\uD7FF\\w]+)",
       },
       {
         token: "text",

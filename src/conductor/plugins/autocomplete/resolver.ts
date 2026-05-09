@@ -195,6 +195,7 @@ export const getNames = (
       meta: CompletionItemKind.Keyword,
       score: score, // Keywords are given the highest score
     }))
+    .filter(s => isSubsequence(query, s.name))
     .forEach(s => entries.push(s));
 
   // TODO: Add docstrings for user-defined functions to autocomplete suggestions?
@@ -203,10 +204,21 @@ export const getNames = (
     symbols.push(...linkedListJSON);
   }
   if (variant >= 3) {
+    symbols.push({
+      name: "range",
+      title: "range(<CODE>start</CODE>, [<CODE>stop</CODE>], [<CODE>step</CODE>]) -> range",
+      description:
+        "PRIMITIVE\nUsed with the <CODE>for</CODE> statement to create a loop that iterates a specific number of times. If given one argument, it iterates from 0 to that number (exclusive). If given two arguments, it iterates from the first (inclusive) to the second (exclusive). If given three arguments, it iterates from the first to the second in steps of the third.",
+      meta: "func",
+    });
     symbols.push(...listJSON);
     symbols.push(...pairmutatorJSON);
     symbols.push(...streamJSON);
   }
+  // TODO: add when MCE documentation is pushed into main
+  // if (variant >= 4) {
+  //   symbols.push(...mceJSON);
+  // }
   symbols
     .map(v => ({
       name: v.name,
