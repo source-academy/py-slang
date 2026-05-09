@@ -119,7 +119,7 @@ export default (variant: number) => {
       },
       {
         token: ["keyword", "text", "entity.name.function"],
-        regex: "def(\\s+)([\\u00BF-\\u1FFF\\u2C00-\\uD7FF\\w]+)",
+        regex: "(def)(\\s+)([\\u00BF-\\u1FFF\\u2C00-\\uD7FF\\w]+)",
       },
       {
         token: "text",

@@ -42,9 +42,12 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
   let currentEnv = topEnv;
   do {
     if (iter.node.type.name === "ParamList") {
+      // If the position is inside a function parameter list,
+      // we don't want to suggest any names
       return null;
     }
     if (iter.node.type.name === "ForStatement") {
+      // Add loop variable to current environment
       const target = iter.node.getChild("VariableName");
       if (target) {
         currentEnv.variables.push(getNodeText(target, doc));
@@ -95,6 +98,8 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
     currentEnv.child = nextEnv;
     currentEnv = nextEnv;
   } while (iter.enter(pos, -1));
+
+  // If the node is a function name or loop variable, we don't want to include it in the autocomplete suggestions since it's not in scope at the cursor position. We check for this case by looking at the parent node of the current position - if it's a FunctionDefinition or ForStatement, we return null to indicate that no environment should be extracted.
   if (
     iter.node.parent &&
     ["FunctionDefinition", "ForStatement"].includes(iter.node.parent.type.name)
@@ -171,7 +176,9 @@ export const getNames = (
   const query = getNodeText(node, doc);
 
   let env: Environment | null = extractEnvironment(tree.cursor(), pos, doc);
-
+  if (env === null) {
+    return [];
+  }
   const entries: AutoCompleteEntry[] = [];
   let score = 1; // The score is used to prioritize suggestions from inner scopes over outer scopes. Built-ins will have the lowest score.
   while (env) {
