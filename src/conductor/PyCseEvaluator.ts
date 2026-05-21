@@ -1,5 +1,6 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { ArrayIdentifier, ClosureIdentifier, DataType, ExternCallable, IDataHandler, IFunctionSignature, OpaqueIdentifier, PairIdentifier, TypedValue } from "@sourceacademy/conductor/types";
 import { Context } from "../engines/cse/context";
 import { evaluate } from "../engines/cse/interpreter";
 import {
@@ -29,7 +30,7 @@ function once<T>(fn: () => Promise<T>): () => Promise<T> {
  * The abstract class PyCseEvaluatorBase implements the common logic for all variants of
  * the CSE evaluator, which includes setting up the context, loading preludes, and evaluating chunks of code.
  */
-abstract class PyCseEvaluatorBase extends BasicEvaluator {
+abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
@@ -107,6 +108,346 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     } finally {
       await destroyStreams(this.context);
     }
+  }
+  hasDataInterface = true as const;
+  private pairMap = new Map<
+    PairIdentifier,
+    { head: TypedValue<DataType>; tail: TypedValue<DataType> }
+  >();
+  private arrayMap = new Map<
+    TypedValue<DataType.ARRAY>,
+    { type: DataType; elements: TypedValue<DataType>[] }
+  >();
+  private closureMap = new Map<
+    TypedValue<DataType.CLOSURE>,
+    {
+      sig: IFunctionSignature<any, any>;
+      func: ExternCallable<any, any>;
+      dependsOn?: (TypedValue<DataType> | null)[];
+      isVararg?: boolean;
+    }
+  >();
+  private opaqueMap = new Map<TypedValue<DataType.OPAQUE>, { value: any; immutable: boolean }>();
+  private uniqueId = 0;
+  pair_make(
+    head: TypedValue<DataType>,
+    tail: TypedValue<DataType>,
+  ): Promise<TypedValue<DataType.PAIR>> {
+    this.pairMap.set(this.uniqueId++ as PairIdentifier, { head, tail });
+    return Promise.resolve({ type: DataType.PAIR, value: (this.uniqueId - 1) as PairIdentifier });
+  }
+  pair_head(p: TypedValue<DataType.PAIR>): Promise<TypedValue<DataType>> {
+    const pair = this.pairMap.get(p.value);
+    if (!pair) {
+      throw new Error(`Invalid pair identifier: ${p.value}`);
+    }
+    return Promise.resolve(pair.head);
+  }
+  pair_sethead(p: TypedValue<DataType.PAIR>, tv: TypedValue<DataType>): Promise<void> {
+    const pair = this.pairMap.get(p.value);
+    if (!pair) {
+      throw new Error(`Invalid pair identifier: ${p.value}`);
+    }
+    pair.head = tv;
+    return Promise.resolve();
+  }
+  pair_tail(p: TypedValue<DataType.PAIR>): Promise<TypedValue<DataType>> {
+    const pair = this.pairMap.get(p.value);
+    if (!pair) {
+      throw new Error(`Invalid pair identifier: ${p.value}`);
+    }
+    return Promise.resolve(pair.tail);
+  }
+  pair_settail(p: TypedValue<DataType.PAIR>, tv: TypedValue<DataType>): Promise<void> {
+    const pair = this.pairMap.get(p.value);
+    if (!pair) {
+      throw new Error(`Invalid pair identifier: ${p.value}`);
+    }
+    pair.tail = tv;
+    return Promise.resolve();
+  }
+  pair_assert(
+    p: TypedValue<DataType.PAIR>,
+    headType?: DataType,
+    tailType?: DataType,
+  ): Promise<void> {
+    const pair = this.pairMap.get(p.value);
+    if (!pair) {
+      throw new Error(`Invalid pair identifier: ${p.value}`);
+    }
+    if (headType && pair.head.type !== headType) {
+      throw new Error(`Expected head of type ${headType}, got ${pair.head.type}`);
+    }
+    if (tailType && pair.tail.type !== tailType) {
+      throw new Error(`Expected tail of type ${tailType}, got ${pair.tail.type}`);
+    }
+    return Promise.resolve();
+  }
+  array_make<T extends DataType>(
+    t: T,
+    len: number,
+    init?: TypedValue<NoInfer<T>>,
+  ): Promise<TypedValue<DataType.ARRAY, NoInfer<T>>> {
+    const elements = new Array(len).fill(init ?? { type: t, value: undefined }) as TypedValue<
+      NoInfer<T>
+    >[];
+    const arrayValue: TypedValue<DataType.ARRAY, NoInfer<T>> = {
+      type: DataType.ARRAY,
+      value: this.uniqueId++ as ArrayIdentifier<typeof t>,
+    };
+    this.arrayMap.set(arrayValue, { type: t, elements });
+    return Promise.resolve(arrayValue);
+  }
+  array_length(a: TypedValue<DataType.ARRAY>): Promise<number> {
+    const array = this.arrayMap.get(a);
+    if (!array) {
+      throw new Error(`Invalid array identifier: ${a.value}`);
+    }
+    return Promise.resolve(array.elements.length);
+  }
+
+  array_get(
+    a: TypedValue<DataType.ARRAY, DataType.VOID>,
+    idx: number,
+  ): Promise<TypedValue<DataType>>;
+  array_get<T extends DataType>(
+    a: TypedValue<DataType.ARRAY, T>,
+    idx: number,
+  ): Promise<TypedValue<NoInfer<T>>> {
+    const array = this.arrayMap.get(a) as
+      | { type: T; elements: TypedValue<NoInfer<T>>[] }
+      | undefined;
+
+    if (!array) {
+      throw new Error(`Invalid array identifier: ${a.value}`);
+    }
+
+    if (idx < 0 || idx >= array.elements.length) {
+      throw new Error(`Index out of bounds: ${idx}`);
+    }
+
+    const value = array.elements[idx];
+
+    if (!value) {
+      throw new Error(`Missing element at index ${idx}`);
+    }
+
+    return Promise.resolve(value);
+  }
+
+  array_type<T extends DataType>(a: TypedValue<DataType.ARRAY, T>): Promise<NoInfer<T>> {
+    return Promise.resolve(a.value.__type);
+  }
+  array_set(
+    a: TypedValue<DataType.ARRAY, DataType.VOID>,
+    idx: number,
+    tv: TypedValue<DataType>,
+  ): Promise<void>;
+  array_set<T extends DataType>(
+    a: TypedValue<DataType.ARRAY, T>,
+    idx: number,
+    tv: TypedValue<NoInfer<T>>,
+  ): Promise<void> {
+    const array = this.arrayMap.get(a) as
+      | { type: T; elements: TypedValue<NoInfer<T>>[] }
+      | undefined;
+
+    if (!array) {
+      throw new Error(`Invalid array identifier: ${a.value}`);
+    }
+
+    if (idx < 0 || idx >= array.elements.length) {
+      throw new Error(`Index out of bounds: ${idx}`);
+    }
+
+    array.elements[idx] = tv;
+
+    return Promise.resolve();
+  }
+  array_assert<T extends DataType>(
+    a: TypedValue<DataType.ARRAY>,
+    type?: T,
+    length?: number,
+  ): Promise<void> {
+    const array = this.arrayMap.get(a);
+    if (!array) {
+      throw new Error(`Invalid array identifier: ${a.value}`);
+    }
+    if (type !== undefined && array.type !== type) {
+      throw new Error(`Expected array of type ${type}, got ${array.type}`);
+    }
+    if (length !== undefined && array.elements.length !== length) {
+      throw new Error(`Expected array of length ${length}, got ${array.elements.length}`);
+    }
+    return Promise.resolve();
+  }
+  closure_make<const Arg extends readonly DataType[], const Ret extends DataType>(
+    sig: IFunctionSignature<Arg, Ret>,
+    func: ExternCallable<Arg, Ret>,
+    dependsOn?: (TypedValue<DataType> | null)[],
+  ): Promise<TypedValue<DataType.CLOSURE, Ret>> {
+    const closureValue: TypedValue<DataType.CLOSURE, Ret> = {
+      type: DataType.CLOSURE,
+      value: this.uniqueId++ as ClosureIdentifier<Ret>,
+    };
+    this.closureMap.set(closureValue, { sig, func, dependsOn });
+    return Promise.resolve(closureValue);
+  }
+  closure_is_vararg(c: TypedValue<DataType.CLOSURE>): Promise<boolean> {
+    return Promise.resolve(this.closureMap.get(c)?.isVararg ?? false);
+  }
+  closure_arity(c: TypedValue<DataType.CLOSURE>): Promise<number> {
+    return Promise.resolve(this.closureMap.get(c)?.sig.args.length ?? 0);
+  }
+  closure_call<T extends DataType>(
+    c: TypedValue<DataType.CLOSURE, T>,
+    args: TypedValue<DataType>[],
+    returnType: T,
+  ): Promise<TypedValue<NoInfer<T>>> {
+    const value = this.closureMap.get(c)?.func(...args);
+    if (value === undefined) {
+      throw new Error(`Invalid closure identifier: ${c.value}`);
+    }
+    if (returnType !== DataType.VOID) {
+      const expectedReturnType = this.closureMap.get(c)?.sig.returnType;
+      if (expectedReturnType !== returnType) {
+        throw new Error(`Expected return type ${returnType}, got ${expectedReturnType}`);
+      }
+    }
+    return Promise.resolve(value as TypedValue<NoInfer<T>>);
+  }
+  closure_call_unchecked<T extends DataType>(
+    c: TypedValue<DataType.CLOSURE, T>,
+    args: TypedValue<DataType>[],
+  ): Promise<TypedValue<NoInfer<T>>> {
+    return Promise.resolve(this.closureMap.get(c)?.func(...args) as TypedValue<NoInfer<T>>);
+  }
+  closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
+    const closure = this.closureMap.get(c);
+    if (!closure) {
+      throw new Error(`Invalid closure identifier: ${c.value}`);
+    }
+    if (closure.sig.args.length !== arity && !closure.isVararg) {
+      throw new Error(`Expected closure of arity ${arity}, got ${closure.sig.args.length}`);
+    }
+    return Promise.resolve();
+  }
+  opaque_make(v: any, immutable?: boolean): Promise<TypedValue<DataType.OPAQUE>> {
+    const opaqueValue: TypedValue<DataType.OPAQUE> = {
+      type: DataType.OPAQUE,
+      value: this.uniqueId++ as OpaqueIdentifier,
+    };
+    this.opaqueMap.set(opaqueValue, { value: v, immutable: immutable || false });
+    return Promise.resolve(opaqueValue);
+  }
+  opaque_get(o: TypedValue<DataType.OPAQUE>): Promise<any> {
+    const opaque = this.opaqueMap.get(o);
+    if (!opaque) {
+      throw new Error(`Invalid opaque identifier: ${o.value}`);
+    }
+    return Promise.resolve(opaque.value);
+  }
+  opaque_update(o: TypedValue<DataType.OPAQUE>, v: any): Promise<void> {
+    const opaque = this.opaqueMap.get(o);
+    if (!opaque) {
+      throw new Error(`Invalid opaque identifier: ${o.value}`);
+    }
+    if (opaque.immutable) {
+      throw new Error(`Cannot update immutable opaque value with identifier: ${o.value}`);
+    }
+    opaque.value = v;
+    return Promise.resolve();
+  }
+  tie(dependent: TypedValue<DataType>, dependee: TypedValue<DataType> | null): Promise<void> {
+    throw new Error("Method not implemented.");
+  }
+  untie(dependent: TypedValue<DataType>, dependee: TypedValue<DataType> | null): Promise<void> {
+    throw new Error("Method not implemented.");
+  }
+  async list(...elements: TypedValue<DataType>[]): Promise<TypedValue<DataType.LIST>> {
+    const list = await elements.reduceRight(
+      async (acc, el) => {
+        return this.pair_make(el, await acc);
+      },
+      Promise.resolve({ type: DataType.EMPTY_LIST, value: null }) as Promise<
+        TypedValue<DataType.LIST>
+      >,
+    );
+    return list;
+  }
+  is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
+    return Promise.resolve(
+      xs.type === DataType.EMPTY_LIST ||
+        (xs.type === DataType.PAIR &&
+          this.pairMap.has(xs.value) &&
+          this.is_list(this.pairMap.get(xs.value)!.tail as TypedValue<DataType.LIST>)),
+    );
+  }
+  list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
+    return new Promise((resolve, reject) => {
+      const result: TypedValue<DataType>[] = [];
+      let current: TypedValue<DataType> = xs;
+      while (current.type !== DataType.EMPTY_LIST) {
+        if (current.type !== DataType.PAIR) {
+          reject(new Error(`Expected a list, got type ${current.type}`));
+          return;
+        }
+        const pair = this.pairMap.get(current.value);
+        if (!pair) {
+          reject(new Error(`Invalid pair identifier: ${current.value}`));
+          return;
+        }
+        result.push(pair.head);
+        current = pair.tail;
+      }
+      resolve(result);
+    });
+  }
+  accumulate<T extends Exclude<DataType, DataType.VOID>>(
+    op: TypedValue<DataType.CLOSURE, T>,
+    initial: TypedValue<T>,
+    sequence: TypedValue<DataType.LIST>,
+    resultType: T,
+  ): Promise<TypedValue<T>> {
+    return new Promise(async (resolve, reject) => {
+      let acc = initial;
+      let current: TypedValue<DataType> = sequence;
+      while (current.type !== DataType.EMPTY_LIST) {
+        if (current.type !== DataType.PAIR) {
+          reject(new Error(`Expected a list, got type ${current.type}`));
+          return;
+        }
+        const pair = this.pairMap.get(current.value);
+        if (!pair) {
+          reject(new Error(`Invalid pair identifier: ${current.value}`));
+          return;
+        }
+        try {
+          acc = await this.closure_call(op, [acc, pair.head], resultType);
+        } catch (e) {
+          reject(e);
+          return;
+        }
+        current = pair.tail;
+      }
+      resolve(acc);
+    });
+  }
+  length(xs: TypedValue<DataType.LIST>): Promise<number> {
+    let length = 0;
+    let current: TypedValue<DataType> = xs;
+    while (current.type !== DataType.EMPTY_LIST) {
+        if (current.type !== DataType.PAIR) {
+            throw new Error(`Expected a list, got type ${current.type}`);
+        }
+        const pair = this.pairMap.get(current.value);
+        if (!pair) {
+            throw new Error(`Invalid pair identifier: ${current.value}`);
+        }
+        length++;
+        current = pair.tail;
+    }
+    return Promise.resolve(length);
   }
 }
 
