@@ -1643,6 +1643,12 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/common-stepper@portal:../plugins/src/common/stepper::locator=py-slang%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/common-stepper@portal:../plugins/src/common/stepper::locator=py-slang%40workspace%3A."
+  languageName: node
+  linkType: soft
+
 "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#0.5.0":
   version: 0.5.0
   resolution: "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#commit=2349aa912b32ff4f8b5bad2666243c6adad5677e"
@@ -1659,6 +1665,14 @@ __metadata:
   checksum: 10c0/9ff119df2783e9c2fc21a8107c5e87df26a914880bda442a9ddd562c39bb56b3889ee88bdaa1810a10206184ab15fabf6d6a95644e88d5dbe206525cbf409930
   languageName: node
   linkType: hard
+
+"@sourceacademy/runner-stepper@portal:../plugins/src/runner/stepper::locator=py-slang%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/runner-stepper@portal:../plugins/src/runner/stepper::locator=py-slang%40workspace%3A."
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  languageName: node
+  linkType: soft
 
 "@sourceacademy/wasm-util@npm:^1.0.6":
   version: 1.0.6
@@ -4785,8 +4799,10 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.1.0"
+    "@sourceacademy/common-stepper": "portal:../plugins/src/common/stepper"
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
     "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
+    "@sourceacademy/runner-stepper": "portal:../plugins/src/runner/stepper"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

@@ -12,6 +12,7 @@ const allTargets = [
   "PyWasmEvaluator",
   "PySvmlEvaluator",
   "PySvmlSinterEvaluator",
+  "PythonStepperEvaluator1",
 ] as const;
 
 type EvaluatorName = (typeof allTargets)[number];
