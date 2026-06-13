@@ -1,7 +1,9 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../engines/cse/context";
+import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
+import { Stash } from "../engines/cse/stash";
 import {
   createErrorStream,
   createInputStream,
@@ -19,6 +21,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { collectSnapshots, PyCseMachinePlugin } from "./plugins/PyCseMachinePlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -34,11 +37,13 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly variant: number;
   private readonly groups: Group[];
   private readonly ensurePreludesLoaded: () => Promise<void>;
+  private readonly csePlugin: PyCseMachinePlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
+    this.csePlugin = conductor.registerPlugin(PyCseMachinePlugin);
 
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
@@ -90,10 +95,21 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         throw errors;
       }
 
-      await evaluate(script, ast, this.context, {
-        variant: this.variant,
-        groups: this.groups,
-      });
+      const control = new Control(ast);
+      const stash = new Stash();
+      this.context.control = control;
+      this.context.stash = stash;
+
+      const snapshots = await collectSnapshots(
+        this.context,
+        control,
+        stash,
+        100000,
+        -1,
+        this.variant,
+        script,
+      );
+      this.csePlugin.sendSnapshots(snapshots);
     } catch (e) {
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(
