@@ -46,6 +46,7 @@ module.exports = {
         },
       },
     ],
+    "\\.py$": "<rootDir>/src/tests/raw-text-transformer.js",
   },
   transformIgnorePatterns: [
     "/node_modules/(?!(@sourceacademy/wasm-util|@sourceacademy/conductor)/).+\\.js$",

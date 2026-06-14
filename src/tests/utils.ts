@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
