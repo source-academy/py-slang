@@ -219,8 +219,8 @@ describe("Chapter 3 — loops and lists allowed", () => {
     analyzeThrows("xs = 1\nfor i in xs:\n    pass", 3, [FeatureNotSupportedError]);
   });
 
-  test("for without range() is allowed in chapter 4", () => {
-    analyzeOk("xs = 1\nfor i in xs:\n    pass", 4);
+  test("for without range() is banned in chapter 4", () => {
+    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 4, [FeatureNotSupportedError]);
   });
 
   test("subscript assignment resolves in chapter 3", () => {

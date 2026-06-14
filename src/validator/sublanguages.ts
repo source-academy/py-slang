@@ -59,7 +59,7 @@ export function makeChapter3Validators(): FeatureValidator[] {
  * Source Chapter 4: unrestricted. No validators except for break/continue validation and annotated assignment validation.
  */
 export function makeChapter4Validators(): FeatureValidator[] {
-  return [createBreakContinueValidator(), NoAnnAssignValidator];
+  return [ForRangeOnlyValidator, createBreakContinueValidator(), NoAnnAssignValidator];
 }
 
 export function makeValidatorsForChapter(chapter: number): FeatureValidator[] {

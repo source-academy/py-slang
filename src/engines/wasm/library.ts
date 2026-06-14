@@ -1,14 +1,22 @@
 import { i32, i64, wasm, WasmCall, WasmInstruction } from "@sourceacademy/wasm-util";
+import { Group, GroupName } from "../../stdlib/utils";
 import {
+  ARITY_FX,
   BOOLISE_FX,
   ERROR_MAP,
+  GEN_LIST_FX,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
   getErrorIndex,
-  IS_LINKED_LIST_FX,
+  IS_BOOL_FX,
+  IS_COMPLEX_FX,
+  IS_FLOAT_FX,
+  IS_FUNCTION_FX,
+  IS_INT_FX,
   IS_LIST_FX,
   IS_NONE_FX,
   IS_PAIR_FX,
+  IS_STRING_FX,
   LIST_LENGTH_FX,
   LOG_FX,
   MAKE_INT_FX,
@@ -18,7 +26,7 @@ import {
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
   TYPE_TAG,
-} from "./constants";
+} from "./runtime";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
   ? R
@@ -32,7 +40,7 @@ export type LibFuncType = {
   body: WasmInstruction[];
 };
 
-const libFunc = <Arity extends number, HasVarArgs extends boolean = false>(
+const funcHelper = <Arity extends number, HasVarArgs extends boolean = false>(
   name: string,
   arity: Arity,
   isVoid?: boolean,
@@ -58,13 +66,27 @@ const libFunc = <Arity extends number, HasVarArgs extends boolean = false>(
   },
 });
 
-export const libraryFunctions: LibFuncType[] = [
-  libFunc("print", 1, true).body(x => wasm.call(LOG_FX).args(x)),
+const miscLib: LibFuncType[] = [
+  funcHelper("print", 1, true).body(x => wasm.call(LOG_FX).args(x)),
+  funcHelper("repr", 1, true).body(x => wasm.call(LOG_FX).args(x)),
+  funcHelper("error", 1, true).body(x => [wasm.call(LOG_FX).args(x), wasm.unreachable()]),
+  funcHelper("_gen_list", 1).body(x => wasm.call(GEN_LIST_FX).args(x)),
+  funcHelper("arity", 1).body(x => wasm.call(ARITY_FX).args(x)),
 
-  // pair & linked list functions
-  libFunc("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
-  libFunc("is_pair", 1).body(x => wasm.call(IS_PAIR_FX).args(x)),
-  libFunc("head", 1).body(x => [
+  funcHelper("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
+  funcHelper("is_int", 1).body(x => wasm.call(IS_INT_FX).args(x)),
+  funcHelper("is_float", 1).body(x => wasm.call(IS_FLOAT_FX).args(x)),
+  funcHelper("is_complex", 1).body(x => wasm.call(IS_COMPLEX_FX).args(x)),
+  funcHelper("is_string", 1).body(x => wasm.call(IS_STRING_FX).args(x)),
+  funcHelper("is_boolean", 1).body(x => wasm.call(IS_BOOL_FX).args(x)),
+  funcHelper("is_function", 1).body(x => wasm.call(IS_FUNCTION_FX).args(x)),
+  funcHelper("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
+];
+
+const linkedListLib: LibFuncType[] = [
+  funcHelper("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
+  funcHelper("is_pair", 1).body(x => wasm.call(IS_PAIR_FX).args(x)),
+  funcHelper("head", 1).body(x => [
     wasm
       .if(i32.eqz(wasm.raw`${wasm.call(IS_PAIR_FX).args(x)} (i32.wrap_i64)`))
       .then(
@@ -74,7 +96,7 @@ export const libraryFunctions: LibFuncType[] = [
 
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(0))),
   ]),
-  libFunc("tail", 1).body(x => [
+  funcHelper("tail", 1).body(x => [
     wasm
       .if(i32.eqz(wasm.raw`${wasm.call(IS_PAIR_FX).args(x)} (i32.wrap_i64)`))
       .then(
@@ -84,22 +106,34 @@ export const libraryFunctions: LibFuncType[] = [
 
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
   ]),
-  libFunc("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
-  libFunc("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
-  libFunc("is_linked_list", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
-  libFunc("set_head", 2, true).body((x, y) =>
+  funcHelper("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
+];
+
+const pairMutatorLib: LibFuncType[] = [
+  funcHelper("set_head", 2, true).body((x, y) =>
     wasm.call(SET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(0)), y),
   ),
-  libFunc("set_tail", 2, true).body((x, y) =>
+  funcHelper("set_tail", 2, true).body((x, y) =>
     wasm.call(SET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1)), y),
   ),
-
-  // list functions
-  libFunc("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
-  libFunc("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
-
-  libFunc("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
-
-  libFunc("tokenize", 1).body(x => wasm.call(TOKENIZE_FX).args(x)),
-  libFunc("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),
 ];
+
+const listLib: LibFuncType[] = [
+  funcHelper("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
+  funcHelper("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
+];
+
+const mceLib: LibFuncType[] = [
+  funcHelper("tokenize", 1).body(x => wasm.call(TOKENIZE_FX).args(x)),
+  funcHelper("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),
+];
+
+export function makeLibraryFunctions(groups: Group[]): LibFuncType[] {
+  return [
+    ...(groups.some(group => group.name === GroupName.MISC) ? miscLib : []),
+    ...(groups.some(group => group.name === GroupName.LINKED_LISTS) ? linkedListLib : []),
+    ...(groups.some(group => group.name === GroupName.PAIRMUTATORS) ? pairMutatorLib : []),
+    ...(groups.some(group => group.name === GroupName.LIST) ? listLib : []),
+    ...(groups.some(group => group.name === GroupName.MCE) ? mceLib : []),
+  ];
+}
