@@ -17,7 +17,8 @@
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
-    "wasm": "tsx src/engines/wasm/runFile.ts"
+    "wasm": "tsx src/engines/wasm/runFile.ts",
+    "fake-sling": "tsx --tsconfig tsconfig.scripts.json scripts/fake-sling-server.ts"
   },
   "keywords": [
     "Python",
