@@ -5,6 +5,7 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
+import { TypeError, UserError } from "../errors/errors";
 import { FeatureNotSupportedError } from "../validator";
 import { generateTestCases } from "./utils";
 
@@ -20,6 +21,12 @@ describe("Loop Tests", () => {
         ["for i in range(0):\n    print(i)\n3", 3n, []],
         ["for i in range(5):\n    i = 0\n    print(i)\ni", 0n, ["0", "0", "0", "0", "0"]],
         ["x = 3\nfor x in range(x, x + 5):\n    print(x)\nx", 7n, ["3", "4", "5", "6", "7"]],
+        // ValueError: step of zero
+        ["for i in range(1, 10, 0):\n    print(i)", UserError, null],
+        // Empty ranges (start == stop, or start past stop with positive/negative step)
+        ["for i in range(5, 5, 1):\n    print(i)\n3", 3n, []],
+        ["for i in range(5, 3, 1):\n    print(i)\n3", 3n, []],
+        ["for i in range(3, 5, -1):\n    print(i)\n3", 3n, []],
         [
           "for i in range(5):\n    for j in range(3):\n        print(i, j)\ni",
           4n,
@@ -56,6 +63,11 @@ describe("Loop Tests", () => {
           5n,
           ["0", "1", "3", "4"],
         ],
+        // TypeError: condition must be a boolean
+        ["y = 1\nwhile y + 1:\n    y = y + 1", TypeError, null],
+        ["while 1:\n    pass", TypeError, null],
+        ["while 0:\n    pass", TypeError, null],
+        ["while None:\n    pass", TypeError, null],
       ],
       "break and continue": [
         [
