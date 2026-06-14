@@ -362,6 +362,7 @@ export async function* generateCSEMachineStateStream(
     yield { stash, control, steps };
   }
 }
+
 function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
@@ -1005,15 +1006,23 @@ const cmdEvaluators: CmdEvaluators = {
   },
 
   [InstrType.WHILE]: function (
-    _code: string,
+    code: string,
     instr: WhileInstr,
-    _context: Context,
+    context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
     const condition = stash.pop();
-    if (condition && !isFalsy(condition)) {
+    if (!condition) return;
+    if (condition.type !== "bool") {
+      handleRuntimeError(
+        context,
+        new error.TypeError(code, instr.srcNode as StmtNS.Stmt, context, condition.type, "bool"),
+      );
+      return;
+    }
+    if (!isFalsy(condition)) {
       control.push(instr);
       control.push(instr.test);
       control.push(instrCreator.continueMarkerInstr(instr.srcNode));
@@ -1046,20 +1055,32 @@ const cmdEvaluators: CmdEvaluators = {
           ),
         );
       }
+      if (step.value === 0n) {
+        handleRuntimeError(
+          context,
+          new error.UserError("ValueError: range() arg 3 must not be zero", node.iter),
+        );
+        return;
+      }
       if (
-        (step.value <= 0 && end.value >= start.value) ||
-        (step.value >= 0 && end.value <= start.value)
+        (step.value < 0 && end.value >= start.value) ||
+        (step.value > 0 && end.value <= start.value)
       ) {
         return;
       }
       control.push(instr);
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
-        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
+        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
+      const v1Lit = generateBigIntLiteral(start.value);
+      const v3Lit = generateBigIntLiteral(step.value);
+      const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
+      Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));
       control.push(generateBigIntLiteral(end.value));
-      control.push(generateBigIntLiteral(start.value + step.value));
+      control.push(nextStartExpr);
       control.push(instrCreator.continueMarkerInstr(node));
       control.push(...instr.body.slice().reverse());
       control.push(generateForIncrement(node.target.lexeme, start.value));
@@ -1122,6 +1143,8 @@ const cmdEvaluators: CmdEvaluators = {
 
     if (callable?.type == "closure") {
       const closure = callable.closure;
+      const callerEnv = currentEnvironment(context);
+      control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
       control.push(instrCreator.resetInstr(instr.srcNode));
       if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));

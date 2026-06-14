@@ -379,9 +379,12 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
       if (assignNode.target instanceof ExprNS.Variable) {
         assignments.add(assignNode.target.name.lexeme);
       }
-    } else if (nodeType === "FunctionDef" || nodeType === "Lambda") {
-      // detach here, nested functions have their own scope
-      return;
+    } else if (nodeType === "FunctionDef") {
+      // def f(...) creates a binding for the function name in the current scope
+      assignments.add((curNode as StmtNS.FunctionDef).name.lexeme);
+      return; // don't recurse into the nested function's body
+    } else if (nodeType === "Lambda") {
+      return; // lambda is anonymous, no name binding in current scope
     }
 
     // Recurse through all other properties of the node
@@ -526,10 +529,10 @@ export function evaluateForIterator(
 }
 
 export function generateForIncrement(variableName: string, value: bigint): StmtNS.Stmt {
-  const token = new Token(TokenType.NAME, variableName, 0, 0, 0);
+  const token = new Token(TokenType.NAME, variableName, 0, 0, -1);
   const variable = new ExprNS.Variable(token, token, token);
 
-  const literalToken = new Token(TokenType.BIGINT, value.toString(), 0, 0, 0);
+  const literalToken = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
   const literal = new ExprNS.BigIntLiteral(literalToken, literalToken, value.toString());
   return new StmtNS.Assign(token, literalToken, variable, literal);
 }
