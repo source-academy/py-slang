@@ -1636,12 +1636,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@sourceacademy/conductor@npm:0.3.0"
-  checksum: 10c0/e6d50cc0b9188fa5ec54c3bb2e6b9a0f9391ba37449e74a326c89c4e14deb00c4882700062427737e6f6fca556fd95d91fa9d7f6e125fe1d43938a65cc3c0c4d
+"@sourceacademy/conductor@portal:../conductor::locator=py-slang%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/conductor@portal:../conductor::locator=py-slang%40workspace%3A."
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "@sourceacademy/wasm-util@npm:^1.0.6":
   version: 1.0.6
@@ -4767,7 +4766,7 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/conductor": "npm:^0.3.0"
+    "@sourceacademy/conductor": "portal:../conductor"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

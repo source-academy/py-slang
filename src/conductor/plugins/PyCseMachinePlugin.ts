@@ -119,12 +119,62 @@ const KIND_LABELS: Record<string, string> = {
   Continue: "continue",
 };
 
+// Map py-slang InstrType string values → js-slang InstrType string values so the
+// frontend animation system can dispatch on the correct type.  Values that differ
+// between the two enum declarations are listed; identical values fall through.
+const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
+  [InstrType.APPLICATION]:    "Application",
+  [InstrType.ASSIGNMENT]:     "Assignment",
+  [InstrType.BINARY_OP]:      "BinaryOperation",
+  [InstrType.BOOL_OP]:        "BinaryOperation",  // no separate BoolOp in js-slang
+  [InstrType.UNARY_OP]:       "UnaryOperation",
+  [InstrType.POP]:            "Pop",
+  [InstrType.BRANCH]:         "Branch",
+  [InstrType.WHILE]:          "While",            // py: "WhileInstr" → js: "While"
+  [InstrType.FOR]:            "For",              // py: "ForInstr"   → js: "For"
+  [InstrType.RESET]:          "Reset",
+  [InstrType.LIST]:           "ArrayLiteral",     // py: "ListLiteral" → js: "ArrayLiteral"
+  [InstrType.LIST_ACCESS]:    "ArrayAccess",      // py: "ListAccess"  → js: "ArrayAccess"
+  [InstrType.LIST_ASSIGNMENT]:"ArrayAssignment",  // py: "ListAssignment" → js: "ArrayAssignment"
+  [InstrType.CONTINUE_MARKER]:"ContinueMarker",   // py: "continueMarker" → js: "ContinueMarker"
+  [InstrType.BREAK]:          "Break",            // py: "BreakInstr"  → js: "Break"
+  [InstrType.CONTINUE]:       "Continue",         // py: "ContinueInstr" → js: "Continue"
+};
+
+// Map py-slang AST node kinds → js-slang ESTree node type names so the animation
+// system dispatches the right animation (ControlExpansionAnimation, LookupAnimation, etc.).
+const PY_TO_JS_NODE_TYPE: Record<string, string> = {
+  FileInput:         "StatementSequence",
+  StatementSequence: "StatementSequence",
+  FunctionDef:       "FunctionDeclaration",
+  Lambda:            "ArrowFunctionExpression",
+  Return:            "ReturnStatement",
+  Assign:            "VariableDeclaration",
+  If:                "IfStatement",
+  While:             "WhileStatement",
+  For:               "ForStatement",
+  Binary:            "BinaryExpression",
+  Compare:           "BinaryExpression",
+  BoolOp:            "BinaryExpression",
+  Unary:             "UnaryExpression",
+  Call:              "CallExpression",
+  Variable:          "Identifier",
+  Literal:           "Literal",
+  BigIntLiteral:     "Literal",
+  None:              "Literal",
+  List:              "ArrayExpression",
+  Subscript:         "MemberExpression",
+  Ternary:           "ConditionalExpression",
+  SimpleExpr:        "ExpressionStatement",
+  Grouping:          "ExpressionStatement",
+};
+
 function instrDisplayText(item: any): string {
   switch (item.instrType as InstrType) {
     case InstrType.RESET:
       return "return";
     case InstrType.END_OF_FUNCTION_BODY:
-      return "end fn body";
+      return "return None";
     case InstrType.POP:
       return "pop";
     case InstrType.CONTINUE_MARKER:
@@ -164,7 +214,32 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
     if (item.instrType === InstrType.ENVIRONMENT && item.env?.id !== undefined) {
       return { displayText: "ENVIRONMENT", metadata: { envId: item.env.id as string } };
     }
-    return { displayText: instrDisplayText(item) };
+    const jsInstrType = PY_TO_JS_INSTR_TYPE[item.instrType as InstrType];
+    const meta: Record<string, unknown> = {};
+    if (jsInstrType !== undefined) {
+      meta.instrType = jsInstrType;
+    }
+    // Extra fields consumed by specific animations.
+    if (item.instrType === InstrType.APPLICATION && item.numOfArgs !== undefined) {
+      meta.numOfArgs = item.numOfArgs;
+    }
+    if (item.instrType === InstrType.ASSIGNMENT && item.symbol !== undefined) {
+      meta.symbol = item.symbol;
+    }
+    if (
+      (item.instrType === InstrType.BINARY_OP ||
+        item.instrType === InstrType.BOOL_OP ||
+        item.instrType === InstrType.UNARY_OP) &&
+      item.symbol !== undefined
+    ) {
+      meta.symbol = operatorTranslator(item.symbol);
+    }
+    if (item.instrType === InstrType.LIST && item.numOfElements !== undefined) {
+      meta.arity = item.numOfElements;
+    }
+    return Object.keys(meta).length > 0
+      ? { displayText: instrDisplayText(item), metadata: meta }
+      : { displayText: instrDisplayText(item) };
   }
 
   // AST nodes have 'kind' and startToken/endToken with source positions.
@@ -195,7 +270,31 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
     if (item.syntheticLabel) {
       displayText = item.syntheticLabel as string;
     }
-    return loc ? { displayText, metadata: loc } : { displayText };
+
+    const jsNodeType = PY_TO_JS_NODE_TYPE[item.kind];
+    const nodeMeta: Record<string, unknown> = {};
+    if (loc) {
+      nodeMeta.startLine = loc.startLine;
+      nodeMeta.endLine = loc.endLine;
+    }
+    if (jsNodeType !== undefined) {
+      nodeMeta.nodeType = jsNodeType;
+    }
+    // For block-like nodes pass body length and child types so the adapter can build
+    // stub body arrays (used by ControlExpansionAnimation / StatementSequence handling).
+    if (
+      jsNodeType === "StatementSequence" ||
+      jsNodeType === "FunctionDeclaration" ||
+      jsNodeType === "ArrowFunctionExpression"
+    ) {
+      const body: any[] = item.body ?? [];
+      nodeMeta.bodyLength = body.length;
+      nodeMeta.bodyNodeTypes = body.map((n: any) => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
+    }
+
+    return Object.keys(nodeMeta).length > 0
+      ? { displayText, metadata: nodeMeta }
+      : { displayText };
   }
 
   return { displayText: "<unknown>" };
@@ -268,6 +367,7 @@ export async function collectSnapshots(
   stepLimit: number,
   variant: number,
   code: string,
+  maxSnapshots: number = 1000,
 ): Promise<CseSnapshot[]> {
   const snapshots: CseSnapshot[] = [];
 
@@ -283,6 +383,11 @@ export async function collectSnapshots(
   );
 
   for await (const { stash: s, control: c, steps } of stream) {
+    // maxSnapshots === 0 → run the program to completion (for stdout/errors) but
+    // collect nothing. Used for chapters where the CSE machine is disabled.
+    if (maxSnapshots === 0) continue;
+    if (snapshots.length >= maxSnapshots) break;
+
     const activeEnv = context.runtime.environments[0];
     const rawControlStack = c.getStack();
     const controlItems = rawControlStack
@@ -301,11 +406,18 @@ export async function collectSnapshots(
       activeEnv,
     );
 
+    // The node most recently evaluated at this step. Mirrors the non-conductor CSE
+    // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
+    // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
+    const currentNode = context.runtime.nodes[0] as any;
+    const currentLine: number | undefined = currentNode?.startToken?.line;
+
     snapshots.push({
       stepIndex: steps - 1,
       control: controlItems,
       stash: stashItems,
       environments,
+      currentLine,
     });
   }
 
@@ -315,7 +427,7 @@ export async function collectSnapshots(
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
 export class PyCseMachinePlugin implements IPlugin {
-  readonly id = "__cse_runner";
+  readonly name = "__cse_runner";
 
   private readonly __cseChannel: IChannel<CseSnapshotMessage>;
 

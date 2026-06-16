@@ -100,16 +100,32 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.control = control;
       this.context.stash = stash;
 
-      const snapshots = await collectSnapshots(
-        this.context,
-        control,
-        stash,
-        100000,
-        -1,
-        this.variant,
-        script,
-      );
-      this.csePlugin.sendSnapshots(snapshots);
+      // The CSE machine visualiser is only available for Python chapters 3 and 4
+      // (mirrors Source, where chapters 1-2 use the substituter/stepper instead).
+      // For chapters 1-2 we still evaluate the program but emit no snapshots, so the
+      // CSE machine tab never appears (it is shown via hasCseSnapshots on the frontend).
+      if (this.variant >= 3) {
+        const configRaw = await this.conductor.requestFile('/__cse_config__');
+        const maxSnapshots: number = configRaw
+          ? (JSON.parse(configRaw) as { stepLimit?: number }).stepLimit ?? 1000
+          : 1000;
+
+        const snapshots = await collectSnapshots(
+          this.context,
+          control,
+          stash,
+          100000,
+          -1,
+          this.variant,
+          script,
+          maxSnapshots,
+        );
+        this.csePlugin.sendSnapshots(snapshots);
+      } else {
+        // Chapters 1-2: run the program to completion (for stdout/errors) without
+        // collecting snapshots.
+        await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+      }
     } catch (e) {
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(

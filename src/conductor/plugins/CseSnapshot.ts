@@ -39,6 +39,8 @@ export interface CseSnapshot {
   control: SerializedInstruction[];
   stash: SerializedValue[];
   environments: SerializedEnvFrame[];
+  /** 1-based line of the node most recently evaluated (context.runtime.nodes[0]). */
+  currentLine?: number;
 }
 
 export interface CseSnapshotMessage {
