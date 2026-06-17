@@ -1,4 +1,3 @@
-import { IChannel, IConduit, IPlugin } from "@sourceacademy/conductor/conduit";
 import { Context } from "../../engines/cse/context";
 import { Control } from "../../engines/cse/control";
 import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
@@ -7,15 +6,12 @@ import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse
 import { Environment } from "../../engines/cse/environment";
 import { Closure } from "../../engines/cse/closure";
 import {
-  CSE_CHANNEL,
-  CSE_MESSAGE_TYPE_SNAPSHOTS,
-  CseSnapshot,
-  CseSnapshotMessage,
-  SerializedBinding,
-  SerializedEnvFrame,
-  SerializedInstruction,
-  SerializedValue,
-} from "./CseSnapshot";
+  type CseSnapshot,
+  type CseSerializedBinding as SerializedBinding,
+  type CseSerializedEnvFrame as SerializedEnvFrame,
+  type CseSerializedInstruction as SerializedInstruction,
+  type CseSerializedValue as SerializedValue,
+} from "@sourceacademy/common-cse-machine";
 
 // ── Value serialisation ───────────────────────────────────────────────────────
 
@@ -424,23 +420,6 @@ export async function collectSnapshots(
   return snapshots;
 }
 
-// ── Plugin ────────────────────────────────────────────────────────────────────
-
-export class PyCseMachinePlugin implements IPlugin {
-  readonly name = "__cse_runner";
-
-  private readonly __cseChannel: IChannel<CseSnapshotMessage>;
-
-  sendSnapshots(snapshots: CseSnapshot[]): void {
-    this.__cseChannel.send({
-      type: CSE_MESSAGE_TYPE_SNAPSHOTS,
-      snapshots,
-      totalSteps: snapshots.length,
-    });
-  }
-
-  static readonly channelAttach = [CSE_CHANNEL];
-  constructor(_conduit: IConduit, [cseChannel]: IChannel<any>[]) {
-    this.__cseChannel = cseChannel;
-  }
-}
+// The runner-side plugin that transports these snapshots now lives in
+// @sourceacademy/runner-cse-machine (CseMachinePlugin). This module only owns the
+// Python-specific serialization of control/stash/environment into CseSnapshots.

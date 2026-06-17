@@ -1636,9 +1636,23 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/common-cse-machine@portal:../plugins/src/common/cse-machine::locator=py-slang%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/common-cse-machine@portal:../plugins/src/common/cse-machine::locator=py-slang%40workspace%3A."
+  languageName: node
+  linkType: soft
+
 "@sourceacademy/conductor@portal:../conductor::locator=py-slang%40workspace%3A.":
   version: 0.0.0-use.local
   resolution: "@sourceacademy/conductor@portal:../conductor::locator=py-slang%40workspace%3A."
+  languageName: node
+  linkType: soft
+
+"@sourceacademy/runner-cse-machine@portal:../plugins/src/runner/cse-machine::locator=py-slang%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/runner-cse-machine@portal:../plugins/src/runner/cse-machine::locator=py-slang%40workspace%3A."
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
   languageName: node
   linkType: soft
 
@@ -4766,7 +4780,9 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
+    "@sourceacademy/common-cse-machine": "portal:../plugins/src/common/cse-machine"
     "@sourceacademy/conductor": "portal:../conductor"
+    "@sourceacademy/runner-cse-machine": "portal:../plugins/src/runner/cse-machine"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

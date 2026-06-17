@@ -21,7 +21,8 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
-import { collectSnapshots, PyCseMachinePlugin } from "./plugins/PyCseMachinePlugin";
+import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
+import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -37,13 +38,18 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly variant: number;
   private readonly groups: Group[];
   private readonly ensurePreludesLoaded: () => Promise<void>;
-  private readonly csePlugin: PyCseMachinePlugin;
+  private readonly csePlugin: CseMachinePlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
-    this.csePlugin = conductor.registerPlugin(PyCseMachinePlugin);
+    // Cast bridges the IPlugin type difference between this repo's (local/portal)
+    // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
+    // use the same published conductor, the cast can be removed.
+    this.csePlugin = conductor.registerPlugin(
+      CseMachinePlugin as never,
+    ) as unknown as CseMachinePlugin;
 
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
