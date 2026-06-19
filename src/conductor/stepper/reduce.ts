@@ -114,6 +114,12 @@ function contractBinary(node: StepNode): ReduceResult | null {
   if (op === '+' && typeof l === 'string' && typeof r === 'string') {
     result = literal(l + r, `'${l + r}'`);
   } else if (typeof l === 'number' && typeof r === 'number') {
+    if (r === 0 && (op === '/' || op === '//' || op === '%')) {
+      throw new Error('ZeroDivisionError: division by zero');
+    }
+    if (l === 0 && r < 0 && op === '**') {
+      throw new Error('ZeroDivisionError: 0.0 cannot be raised to a negative power');
+    }
     const pyFloat = Boolean(left.pyFloat) || Boolean(right.pyFloat) || op === '/';
     switch (op) {
       case '+': result = numberLiteral(l + r, pyFloat); break;
