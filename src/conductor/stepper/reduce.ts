@@ -91,6 +91,8 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
     case 'FunctionDeclaration':
       if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
       return { ...node, body: substitute(node.body as StepNode, name, value) };
+    case 'VariableDeclarator':
+      return { ...node, init: substitute(node.init as StepNode, name, value) };
     default:
       return mapChildren(node, child => substitute(child, name, value));
   }
