@@ -5,7 +5,7 @@
  * renderer that dispatches on a node's `type` string and reads estree-style field names
  * (`left`/`right`/`operator`, `test`/`consequent`/`alternate`, `callee`/`arguments`, ...). To reuse
  * that renderer unchanged, the Python stepper does not operate on py-slang's class-based AST
- * directly: it first {@link ../stepper/translate translates} the Python AST into these plain
+ * directly: it first {@link ./translate translates} the Python AST into these plain
  * estree-shaped objects, reduces them with the substitution model, and serializes the result.
  *
  * Nodes are intentionally plain, structured-clone-able objects (no methods, no class instances) so

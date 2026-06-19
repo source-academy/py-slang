@@ -28,10 +28,8 @@ function param(p: FunctionParam): StepNode {
 function translateExpr(expr: ExprNS.Expr): StepNode {
   switch (expr.kind) {
     case 'BigIntLiteral': {
-      // Python ints are arbitrary-precision; the stepper computes in JS `number`, which is exact for
-      // the small integers used in teaching examples.
       const e = expr as ExprNS.BigIntLiteral;
-      return literal(Number(e.value), e.value, false);
+      return literal(BigInt(e.value), e.value, false);
     }
     case 'Literal': {
       const value = (expr as ExprNS.Literal).value;
@@ -169,7 +167,7 @@ function translateStmt(stmt: StmtNS.Stmt): StepNode {
       };
     }
     case 'Pass':
-      return { type: 'ExpressionStatement', expression: identifier('pass') };
+      return { type: 'PassStatement' };
     default:
       return { type: 'ExpressionStatement', expression: identifier(`<${stmt.kind}>`) };
   }

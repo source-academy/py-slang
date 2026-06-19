@@ -12,9 +12,10 @@
  * Each {@link reduceProgram} call performs exactly one contraction and reports the redex/result so
  * the driver can emit before/after markers. It returns `null` once the program is in normal form.
  *
- * Known limitations (acceptable for a teaching stepper): integer arithmetic is computed in JS
- * `number`; recursion is not supported (it would expand without a fixpoint and is bounded only by
- * the step limit); re-binding an already-substituted name in a later statement is not tracked.
+ * Known limitations (acceptable for a teaching stepper): integers use JS `bigint` (exact, but large
+ * exponents may be slow); float arithmetic uses JS `number` (IEEE 754); recursion is not supported
+ * (it would expand without a fixpoint and is bounded only by the step limit); re-binding an
+ * already-substituted name in a later statement is not tracked.
  */
 
 import { type StepNode, clone, isFunctionValue, isValue, literal, unparse } from './ast';
@@ -50,6 +51,7 @@ function isTruthy(node: StepNode): boolean {
   if (v === null || v === false) return false;
   if (v === true) return true;
   if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'bigint') return v !== 0n;
   if (typeof v === 'string') return v.length > 0;
   return true;
 }
@@ -113,6 +115,44 @@ function contractBinary(node: StepNode): ReduceResult | null {
   let result: StepNode | null = null;
   if (op === '+' && typeof l === 'string' && typeof r === 'string') {
     result = literal(l + r, `'${l + r}'`);
+  } else if (typeof l === 'bigint' && typeof r === 'bigint') {
+    if (r === 0n && (op === '/' || op === '//' || op === '%')) {
+      throw new Error('ZeroDivisionError: division by zero');
+    }
+    if (l === 0n && r < 0n && op === '**') {
+      throw new Error('ZeroDivisionError: 0.0 cannot be raised to a negative power');
+    }
+    switch (op) {
+      case '+': result = literal(l + r, String(l + r), false); break;
+      case '-': result = literal(l - r, String(l - r), false); break;
+      case '*': result = literal(l * r, String(l * r), false); break;
+      case '/': result = numberLiteral(Number(l) / Number(r), true); break;
+      case '//': {
+        const q = l / r;
+        const floored = l % r !== 0n && (l < 0n) !== (r < 0n) ? q - 1n : q;
+        result = literal(floored, String(floored), false); break;
+      }
+      case '%': {
+        const rem = ((l % r) + r) % r;
+        result = literal(rem, String(rem), false); break;
+      }
+      case '**': {
+        if (r < 0n) {
+          result = numberLiteral(Number(l) ** Number(r), true);
+        } else {
+          const pw = l ** r;
+          result = literal(pw, String(pw), false);
+        }
+        break;
+      }
+      case '<': result = literal(l < r, l < r ? 'True' : 'False'); break;
+      case '>': result = literal(l > r, l > r ? 'True' : 'False'); break;
+      case '<=': result = literal(l <= r, l <= r ? 'True' : 'False'); break;
+      case '>=': result = literal(l >= r, l >= r ? 'True' : 'False'); break;
+      case '==': result = literal(l === r, l === r ? 'True' : 'False'); break;
+      case '!=': result = literal(l !== r, l !== r ? 'True' : 'False'); break;
+      default: return null;
+    }
   } else if (typeof l === 'number' && typeof r === 'number') {
     if (r === 0 && (op === '/' || op === '//' || op === '%')) {
       throw new Error('ZeroDivisionError: division by zero');
@@ -158,6 +198,9 @@ function contractUnary(node: StepNode): ReduceResult | null {
   if (op === 'not') {
     const value = !isTruthy(arg);
     result = literal(value, value ? 'True' : 'False');
+  } else if (arg.type === 'Literal' && typeof arg.value === 'bigint') {
+    if (op === '-') result = literal(-arg.value, String(-arg.value), false);
+    else if (op === '+') result = literal(arg.value, String(arg.value), false);
   } else if (arg.type === 'Literal' && typeof arg.value === 'number') {
     if (op === '-') result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
     else if (op === '+') result = numberLiteral(arg.value, Boolean(arg.pyFloat));
@@ -305,8 +348,9 @@ function declaratorOf(stmt: StepNode): StepNode {
 /**
  * Reduces a `Program` by a single step. Processes the leading statement: an unfinished expression or
  * initializer takes one expression step; a finished binding (assignment / function definition)
- * substitutes its value into the rest of the program; a finished `if` selects a branch; a leftover
- * value statement is discarded. Returns `null` when the program is in normal form.
+ * substitutes its value into the rest of the program; a finished `if` selects a branch; a `pass`
+ * statement is dropped; a leftover value statement is discarded. Returns `null` when the program is
+ * in normal form.
  */
 export function reduceProgram(prog: StepNode): ReduceResult | null {
   const body = prog.body as StepNode[];
@@ -363,6 +407,10 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         explanation: `Define ${name} and substitute it into the rest of the program`,
       });
     }
+    case 'PassStatement':
+      return rest.length === 0
+        ? null
+        : replaceWith(rest, { preRedex: head, explanation: 'pass: no-op' });
     case 'IfStatement': {
       const reduced = reduceExpr(head.test as StepNode);
       if (reduced) {

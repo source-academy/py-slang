@@ -18,7 +18,7 @@ import { PythonStepperRunnerPlugin } from './stepper/PythonStepperRunnerPlugin';
  * This mirrors js-slang's `SourceStepperEvaluator`; only parsing and step production are
  * Python-specific.
  */
-abstract class PythonStepperEvaluatorBase extends BasicEvaluator {
+abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private readonly stepper: PythonStepperRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin) {
@@ -77,7 +77,7 @@ abstract class PythonStepperEvaluatorBase extends BasicEvaluator {
   }
 }
 
-export class PythonStepperEvaluator1 extends PythonStepperEvaluatorBase {
+export class PyStepperEvaluator1 extends PyStepperEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
     super(conductor);
   }
