@@ -1,4 +1,4 @@
-import { ErrorType } from "@sourceacademy/conductor/common";
+import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
@@ -10,6 +10,8 @@ import {
   createOutputStream,
   destroyStreams,
   displayError,
+  ReadableContext,
+  WritableContext,
 } from "../engines/cse/streams";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
@@ -24,6 +26,19 @@ import { Group } from "../stdlib/utils";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 
+function nullOutputStream(): WritableContext<string> {
+  const s = new WritableStream<string>({ write: () => {} });
+  return { stream: s, writer: s.getWriter() };
+}
+function nullErrorStream(): WritableContext<ConductorError> {
+  const s = new WritableStream<ConductorError>({ write: () => {} });
+  return { stream: s, writer: s.getWriter() };
+}
+function nullInputStream(): ReadableContext<string> {
+  const s = new ReadableStream<string>({ pull: () => {} });
+  return { stream: s, reader: s.getReader() };
+}
+
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
   return () => (promise ??= fn());
@@ -37,6 +52,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
+  private readonly preludeText: string;
   private readonly ensurePreludesLoaded: () => Promise<void>;
   private readonly csePlugin: CseMachinePlugin;
 
@@ -44,6 +60,8 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
+    this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
+
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.
@@ -58,22 +76,47 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     }
 
     this.ensurePreludesLoaded = once(async () => {
-      let prelude = "";
-      for (const group of this.groups) {
-        if (group.prelude) {
-          prelude += group.prelude + "\n";
-        }
+      if (this.preludeText.trim()) {
+        const ast = parse(this.preludeText + "\n");
+        await evaluate(this.preludeText + "\n", ast, this.context, {
+          isPrelude: true,
+          variant: this.variant,
+          groups: [],
+        });
       }
-      const ast = parse(prelude + "\n");
-      await evaluate(prelude, ast, this.context, {
-        isPrelude: true,
-        variant: this.variant,
-        groups: [],
-      });
       if (this.context.errors.length > 0) {
         throw this.context.errors;
       }
     });
+  }
+
+  /**
+   * Builds a fresh context with builtins + preludes loaded and null streams.
+   * Used as the snapshot-collection context so the CSE generator's side effects
+   * (stdout, errors) don't double-fire to the user.
+   */
+  private async makeSnapshotContext(): Promise<Context> {
+    const ctx = new Context();
+    for (const group of this.groups) {
+      for (const [name, value] of group.builtins) {
+        ctx.nativeStorage.builtins.set(name, value);
+      }
+    }
+    ctx.streams = {
+      initialised: true,
+      stdout: nullOutputStream(),
+      stderr: nullErrorStream(),
+      stdin: nullInputStream(),
+    };
+    if (this.preludeText.trim()) {
+      const ast = parse(this.preludeText + "\n");
+      await evaluate(this.preludeText + "\n", ast, ctx, {
+        isPrelude: true,
+        variant: this.variant,
+        groups: [],
+      });
+    }
+    return ctx;
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
@@ -106,10 +149,20 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.control = control;
       this.context.stash = stash;
 
-      // The CSE machine visualiser is only available for Python chapters 3 and 4
-      // (mirrors Source, where chapters 1-2 use the substituter/stepper instead).
-      // For chapters 1-2 we still evaluate the program but emit no snapshots, so the
-      // CSE machine tab never appears (it is shown via hasCseSnapshots on the frontend).
+      // Pass 1: run to completion via non-generator evaluate.
+      // Handles side effects (stdout, errors) for ALL chapters.
+      await evaluate(script, ast, this.context, {
+        isPrelude: false,
+        variant: this.variant,
+        groups: this.groups,
+      });
+      if (this.context.errors.length > 0) {
+        throw this.context.errors;
+      }
+
+      // Pass 2 (CSE chapters only): collect snapshots on an isolated context so the
+      // generator can break at the step cap without dropping side effects, and without
+      // re-emitting any output to the user.
       if (this.variant >= 3) {
         const configRaw = await this.conductor.requestFile('/__cse_config__');
         let maxSnapshots = 1000;
@@ -121,21 +174,30 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           }
         }
 
-        const snapshots = await collectSnapshots(
-          this.context,
-          control,
-          stash,
-          100000,
-          -1,
-          this.variant,
-          script,
-          maxSnapshots,
-        );
-        this.csePlugin.sendSnapshots(snapshots);
-      } else {
-        // Chapters 1-2: run the program to completion (for stdout/errors) without
-        // collecting snapshots.
-        await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+        try {
+          const snapshotCtx = await this.makeSnapshotContext();
+          const snapshotControl = new Control(ast);
+          const snapshotStash = new Stash();
+          snapshotCtx.control = snapshotControl;
+          snapshotCtx.stash = snapshotStash;
+
+          const snapshots = await collectSnapshots(
+            snapshotCtx,
+            snapshotControl,
+            snapshotStash,
+            100000,
+            -1,
+            this.variant,
+            script,
+            maxSnapshots,
+          );
+          this.csePlugin.sendSnapshots(snapshots);
+        } catch {
+          // Snapshot collection failed; send empty array so the CSE tab doesn't appear.
+          this.csePlugin.sendSnapshots([]);
+        } finally {
+          // No-op streams don't need destroyStreams; they self-contain.
+        }
       }
     } catch (e) {
       const errors = Array.isArray(e) ? e : [e];

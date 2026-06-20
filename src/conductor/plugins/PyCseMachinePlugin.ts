@@ -384,7 +384,7 @@ export async function collectSnapshots(
     // maxSnapshots === 0 → run the program to completion (for stdout/errors) but
     // collect nothing. Used for chapters where the CSE machine is disabled.
     if (maxSnapshots === 0) continue;
-    if (snapshots.length >= maxSnapshots) continue; // run to completion; stop collecting
+    if (snapshots.length >= maxSnapshots) break;
 
     const activeEnv = context.runtime.environments[0];
     const rawControlStack = c.getStack();
