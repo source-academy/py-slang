@@ -27,6 +27,7 @@ function getListId(v: object): number {
 }
 
 function formatValue(v: Value, depth = 0): string {
+  if (v === undefined || v === null) return "None";
   if (depth > 2) return "...";
   switch (v.type) {
     case "bigint":
@@ -60,6 +61,7 @@ function formatValue(v: Value, depth = 0): string {
 }
 
 function serializeValue(v: Value, envId = ""): SerializedValue {
+  if (v === undefined || v === null) return { displayValue: "None", label: "NoneType" };
   const base = { displayValue: formatValue(v), label: typeTranslator(v.type) };
   if (v.type === "closure") {
     const cl = v.closure;
@@ -324,7 +326,7 @@ function serializeEnvChain(
 
   // Also follow closures sitting on the stash whose environments may not be on the active stack
   for (const item of stashValues) {
-    if (item.type === "closure") visit(item.closure.environment);
+    if (item && item.type === "closure") visit(item.closure.environment);
   }
 
   // ENV instructions on the control stack keep frames alive that are not on the
@@ -382,7 +384,7 @@ export async function collectSnapshots(
     // maxSnapshots === 0 → run the program to completion (for stdout/errors) but
     // collect nothing. Used for chapters where the CSE machine is disabled.
     if (maxSnapshots === 0) continue;
-    if (snapshots.length >= maxSnapshots) break;
+    if (snapshots.length >= maxSnapshots) continue; // run to completion; stop collecting
 
     const activeEnv = context.runtime.environments[0];
     const rawControlStack = c.getStack();

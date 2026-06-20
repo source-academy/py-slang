@@ -112,9 +112,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       // CSE machine tab never appears (it is shown via hasCseSnapshots on the frontend).
       if (this.variant >= 3) {
         const configRaw = await this.conductor.requestFile('/__cse_config__');
-        const maxSnapshots: number = configRaw
-          ? (JSON.parse(configRaw) as { stepLimit?: number }).stepLimit ?? 1000
-          : 1000;
+        let maxSnapshots = 1000;
+        if (configRaw) {
+          try {
+            maxSnapshots = (JSON.parse(configRaw) as { stepLimit?: number }).stepLimit ?? 1000;
+          } catch {
+            // malformed config — fall back to default step limit
+          }
+        }
 
         const snapshots = await collectSnapshots(
           this.context,
