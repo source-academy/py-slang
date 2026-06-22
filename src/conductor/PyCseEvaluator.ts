@@ -164,7 +164,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       // generator can break at the step cap without dropping side effects, and without
       // re-emitting any output to the user.
       if (this.variant >= 3) {
-        const configRaw = await this.conductor.requestFile('/__cse_config__');
+        const configRaw = await this.conductor.requestFile("/__cse_config__");
         let maxSnapshots = 1000;
         if (configRaw) {
           try {

@@ -121,50 +121,50 @@ const KIND_LABELS: Record<string, string> = {
 // frontend animation system can dispatch on the correct type.  Values that differ
 // between the two enum declarations are listed; identical values fall through.
 const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
-  [InstrType.APPLICATION]:    "Application",
-  [InstrType.ASSIGNMENT]:     "Assignment",
-  [InstrType.BINARY_OP]:      "BinaryOperation",
-  [InstrType.BOOL_OP]:        "BinaryOperation",  // no separate BoolOp in js-slang
-  [InstrType.UNARY_OP]:       "UnaryOperation",
-  [InstrType.POP]:            "Pop",
-  [InstrType.BRANCH]:         "Branch",
-  [InstrType.WHILE]:          "While",            // py: "WhileInstr" → js: "While"
-  [InstrType.FOR]:            "For",              // py: "ForInstr"   → js: "For"
-  [InstrType.RESET]:          "Reset",
-  [InstrType.LIST]:           "ArrayLiteral",     // py: "ListLiteral" → js: "ArrayLiteral"
-  [InstrType.LIST_ACCESS]:    "ArrayAccess",      // py: "ListAccess"  → js: "ArrayAccess"
-  [InstrType.LIST_ASSIGNMENT]:"ArrayAssignment",  // py: "ListAssignment" → js: "ArrayAssignment"
-  [InstrType.CONTINUE_MARKER]:"ContinueMarker",   // py: "continueMarker" → js: "ContinueMarker"
-  [InstrType.BREAK]:          "Break",            // py: "BreakInstr"  → js: "Break"
-  [InstrType.CONTINUE]:       "Continue",         // py: "ContinueInstr" → js: "Continue"
+  [InstrType.APPLICATION]: "Application",
+  [InstrType.ASSIGNMENT]: "Assignment",
+  [InstrType.BINARY_OP]: "BinaryOperation",
+  [InstrType.BOOL_OP]: "BinaryOperation", // no separate BoolOp in js-slang
+  [InstrType.UNARY_OP]: "UnaryOperation",
+  [InstrType.POP]: "Pop",
+  [InstrType.BRANCH]: "Branch",
+  [InstrType.WHILE]: "While", // py: "WhileInstr" → js: "While"
+  [InstrType.FOR]: "For", // py: "ForInstr"   → js: "For"
+  [InstrType.RESET]: "Reset",
+  [InstrType.LIST]: "ArrayLiteral", // py: "ListLiteral" → js: "ArrayLiteral"
+  [InstrType.LIST_ACCESS]: "ArrayAccess", // py: "ListAccess"  → js: "ArrayAccess"
+  [InstrType.LIST_ASSIGNMENT]: "ArrayAssignment", // py: "ListAssignment" → js: "ArrayAssignment"
+  [InstrType.CONTINUE_MARKER]: "ContinueMarker", // py: "continueMarker" → js: "ContinueMarker"
+  [InstrType.BREAK]: "Break", // py: "BreakInstr"  → js: "Break"
+  [InstrType.CONTINUE]: "Continue", // py: "ContinueInstr" → js: "Continue"
 };
 
 // Map py-slang AST node kinds → js-slang ESTree node type names so the animation
 // system dispatches the right animation (ControlExpansionAnimation, LookupAnimation, etc.).
 const PY_TO_JS_NODE_TYPE: Record<string, string> = {
-  FileInput:         "StatementSequence",
+  FileInput: "StatementSequence",
   StatementSequence: "StatementSequence",
-  FunctionDef:       "FunctionDeclaration",
-  Lambda:            "ArrowFunctionExpression",
-  Return:            "ReturnStatement",
-  Assign:            "VariableDeclaration",
-  If:                "IfStatement",
-  While:             "WhileStatement",
-  For:               "ForStatement",
-  Binary:            "BinaryExpression",
-  Compare:           "BinaryExpression",
-  BoolOp:            "BinaryExpression",
-  Unary:             "UnaryExpression",
-  Call:              "CallExpression",
-  Variable:          "Identifier",
-  Literal:           "Literal",
-  BigIntLiteral:     "Literal",
-  None:              "Literal",
-  List:              "ArrayExpression",
-  Subscript:         "MemberExpression",
-  Ternary:           "ConditionalExpression",
-  SimpleExpr:        "ExpressionStatement",
-  Grouping:          "ExpressionStatement",
+  FunctionDef: "FunctionDeclaration",
+  Lambda: "ArrowFunctionExpression",
+  Return: "ReturnStatement",
+  Assign: "VariableDeclaration",
+  If: "IfStatement",
+  While: "WhileStatement",
+  For: "ForStatement",
+  Binary: "BinaryExpression",
+  Compare: "BinaryExpression",
+  BoolOp: "BinaryExpression",
+  Unary: "UnaryExpression",
+  Call: "CallExpression",
+  Variable: "Identifier",
+  Literal: "Literal",
+  BigIntLiteral: "Literal",
+  None: "Literal",
+  List: "ArrayExpression",
+  Subscript: "MemberExpression",
+  Ternary: "ConditionalExpression",
+  SimpleExpr: "ExpressionStatement",
+  Grouping: "ExpressionStatement",
 };
 
 function instrDisplayText(item: any): string {
@@ -290,9 +290,7 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
       nodeMeta.bodyNodeTypes = body.map((n: any) => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
 
-    return Object.keys(nodeMeta).length > 0
-      ? { displayText, metadata: nodeMeta }
-      : { displayText };
+    return Object.keys(nodeMeta).length > 0 ? { displayText, metadata: nodeMeta } : { displayText };
   }
 
   return { displayText: "<unknown>" };
