@@ -5,13 +5,26 @@ import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { Environment } from "../../engines/cse/environment";
 import { Closure } from "../../engines/cse/closure";
-import {
-  type CseSnapshot,
-  type CseSerializedBinding as SerializedBinding,
-  type CseSerializedEnvFrame as SerializedEnvFrame,
-  type CseSerializedInstruction as SerializedInstruction,
-  type CseSerializedValue as SerializedValue,
+import type {
+  CseSnapshot,
+  CseSerializedEnvFrame as SerializedEnvFrame,
+  CseSerializedInstruction as SerializedInstruction,
+  CseSerializedValue as SerializedValue,
 } from "@sourceacademy/common-cse-machine";
+
+type ControlStackItem = {
+  instrType?: string;
+  env?: Environment;
+  kind?: string;
+  startToken?: { indexInSource?: number; line?: number; lexeme?: string };
+  endToken?: { indexInSource?: number; line?: number; lexeme?: string } | null;
+  body?: Array<{ kind: string }>;
+  syntheticLabel?: string;
+  numOfArgs?: number;
+  numOfElements?: number;
+  symbol?: string;
+  value?: unknown;
+};
 
 // ── Value serialisation ───────────────────────────────────────────────────────
 
@@ -56,7 +69,7 @@ function formatValue(v: Value, depth = 0): string {
     case "builtin":
       return `<builtin ${v.name}>`;
     default:
-      return String((v as any).value ?? "?");
+      return String((v as { value: unknown }).value ?? "?");
   }
 }
 
@@ -66,7 +79,7 @@ function serializeValue(v: Value, envId = ""): SerializedValue {
   if (v.type === "closure") {
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
-    const params = cl.node.parameters.map((p: any) => p.lexeme);
+    const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
     return { ...base, metadata: { closureFrameId: cl.environment.id, params, funcName } };
   }
   if (v.type === "list") {
@@ -167,7 +180,7 @@ const PY_TO_JS_NODE_TYPE: Record<string, string> = {
   Grouping: "ExpressionStatement",
 };
 
-function instrDisplayText(item: any): string {
+function instrDisplayText(item: ControlStackItem): string {
   switch (item.instrType as InstrType) {
     case InstrType.RESET:
       return "return";
@@ -200,17 +213,17 @@ function instrDisplayText(item: any): string {
     case InstrType.UNARY_OP:
     case InstrType.BINARY_OP:
     case InstrType.BOOL_OP:
-      return operatorTranslator(item.symbol);
+      return operatorTranslator(item.symbol!);
     default:
       return String(item.instrType);
   }
 }
 
-function serializeControlItem(item: any, code: string): SerializedInstruction {
+function serializeControlItem(item: ControlStackItem, code: string): SerializedInstruction {
   // Instructions have 'instrType'.
   if (item.instrType !== undefined) {
     if (item.instrType === InstrType.ENVIRONMENT && item.env?.id !== undefined) {
-      return { displayText: "ENVIRONMENT", metadata: { envId: item.env.id as string } };
+      return { displayText: "ENVIRONMENT", metadata: { envId: item.env.id } };
     }
     const jsInstrType = PY_TO_JS_INSTR_TYPE[item.instrType as InstrType];
     const meta: Record<string, unknown> = {};
@@ -266,7 +279,7 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
       displayText = KIND_LABELS[item.kind] ?? `<${item.kind}>`;
     }
     if (item.syntheticLabel) {
-      displayText = item.syntheticLabel as string;
+      displayText = item.syntheticLabel;
     }
 
     const jsNodeType = PY_TO_JS_NODE_TYPE[item.kind];
@@ -285,9 +298,9 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
       jsNodeType === "FunctionDeclaration" ||
       jsNodeType === "ArrowFunctionExpression"
     ) {
-      const body: any[] = item.body ?? [];
+      const body = item.body ?? [];
       nodeMeta.bodyLength = body.length;
-      nodeMeta.bodyNodeTypes = body.map((n: any) => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
+      nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
 
     return Object.keys(nodeMeta).length > 0 ? { displayText, metadata: nodeMeta } : { displayText };
@@ -301,7 +314,7 @@ function serializeControlItem(item: any, code: string): SerializedInstruction {
 function serializeEnvChain(
   environments: Environment[],
   stashValues: Value[],
-  controlItems: any[],
+  controlItems: ControlStackItem[],
   activeEnv: Environment,
 ): SerializedEnvFrame[] {
   const seen = new Set<string>();
@@ -316,7 +329,7 @@ function serializeEnvChain(
     queue.push(env);
     visit(env.tail);
     for (const val of Object.values(env.head)) {
-      if ((val as any)?.type === "closure") visit((val as any).closure?.environment);
+      if (val && val.type === "closure") visit(val.closure?.environment);
     }
   };
 
@@ -332,8 +345,8 @@ function serializeEnvChain(
   // Without this seed, those frames die and then "resurrect" when control returns —
   // violating the invariant that dead frames never come back.
   for (const item of controlItems) {
-    if ((item as any)?.instrType === "environment" && (item as any)?.env) {
-      visit((item as any).env as Environment);
+    if (item.instrType === "environment" && item.env) {
+      visit(item.env);
     }
   }
 
@@ -346,7 +359,7 @@ function serializeEnvChain(
     closureFrameId: env.closure?.environment?.id,
     bindings: Object.entries(env.head).map(([name, val]) => ({
       name,
-      value: serializeValue(val as Value, env.id),
+      value: serializeValue(val, env.id),
     })),
     isActive: env.id === activeEnv.id,
     isOnCallStack: callStackIds.has(env.id),
@@ -405,7 +418,7 @@ export async function collectSnapshots(
     // The node most recently evaluated at this step. Mirrors the non-conductor CSE
     // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
     // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
-    const currentNode = context.runtime.nodes[0] as any;
+    const currentNode = context.runtime.nodes[0] as { startToken?: { line?: number } } | undefined;
     const currentLine: number | undefined = currentNode?.startToken?.line;
 
     snapshots.push({
