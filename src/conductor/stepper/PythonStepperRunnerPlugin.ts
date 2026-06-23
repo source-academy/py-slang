@@ -1,9 +1,10 @@
-import type { SerializedStepperStep } from '@sourceacademy/common-stepper';
+import type { SerializedStepperStep, SyntaxProfile } from '@sourceacademy/common-stepper';
 import type { IChannel, IConduit } from '@sourceacademy/conductor/conduit';
 import { BaseStepperRunnerPlugin } from '@sourceacademy/runner-stepper';
 
 import type { StmtNS } from '../../ast-types';
 import { getPythonSteps } from './getSteps';
+import { pythonSyntaxProfile } from './syntaxProfile';
 
 const DEFAULT_STEP_LIMIT = 1000;
 
@@ -28,5 +29,10 @@ export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.Fi
 
   getSteps(ast: StmtNS.FileInput): SerializedStepperStep[] {
     return getPythonSteps(ast, this.stepLimit);
+  }
+
+  /** Ships Python's rendering rules so the host displays Python syntax with no per-language host code. */
+  protected override getSyntaxProfile(): SyntaxProfile {
+    return pythonSyntaxProfile;
   }
 }
