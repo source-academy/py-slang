@@ -1,4 +1,10 @@
-import { TypeError, UnsupportedOperandTypeError, ValueError, ZeroDivisionError } from "../errors";
+import {
+  RecursionError,
+  TypeError,
+  UnsupportedOperandTypeError,
+  ValueError,
+  ZeroDivisionError,
+} from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -685,6 +691,8 @@ describe("Standard Library Tests", () => {
         ["a = 18446744073709551616\nrepr(a)", "18446744073709551616", null],
         ["a = 18446744073709551616\nb = 2**64\na == b", true, null],
         ["a = 18446744073709551616\nb = int('18446744073709551615')\na != b", true, null],
+        ["def f(x): return 1 + f(x)\nf(2)", RecursionError, null],
+        ["def f(x): return f(x - 1) if x > 0 else 0\nf(10240)", 0n, null],
       ],
       "is functions": [
         ["is_int(1)", true, null],
@@ -994,6 +1002,7 @@ describe("Standard Library Tests", () => {
         ["hello = 'hello'\r\n\r\nhello", "hello", null],
         ["hello = 'hello'\r\n# This is a comment\r\nhello", "hello", null],
       ],
+      "predefined variables": [["a = 1\n__program__", "a = 1\n__program__", null]],
     };
 
     generateTestCases(mathTests, 1, [misc, math]);

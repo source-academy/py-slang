@@ -61,7 +61,7 @@ async function runInContext(
   }
 
   // Evaluate
-  const result = await evaluate(code, pyAst, context, options as Partial<IOptions>);
+  const result = await evaluate(code, pyAst, context, options);
   return CSEResultPromise(context, result);
 }
 
@@ -114,10 +114,12 @@ type InternalTestCase = {
 export const createInternalTestCases = (tests: TestCases[string]): InternalTestCase[] => {
   return tests.map(([code, expected, output]) => ({
     label:
-      expected instanceof Function &&
+      JSON.stringify(code) +
+      " should " +
+      (expected instanceof Function &&
       (expected.prototype instanceof RuntimeSourceError || expected.prototype instanceof Error)
-        ? expected.name
-        : expected,
+        ? "throw " + expected.name
+        : "return " + expected),
     code,
     expected,
     output,
@@ -186,79 +188,75 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
       afterEach(() => {
         jest.restoreAllMocks(); // Automatically restores all spyOn mocks
       });
-      test.each(createInternalTestCases(tests))(
-        `$code should return $label`,
-        async ({ code, expected, output }) => {
-          const spy = jest.spyOn(Stash.prototype, "pop");
-          const context = new Context();
+      test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
+        const spy = jest.spyOn(Stash.prototype, "pop");
+        const context = new Context();
 
-          const outputLst: OutputType[] = [];
-          generateMockStreams(context, outputLst);
-          const result = await runInContext(code, context, { variant, groups });
-          expect(result).toBeDefined();
-          expect(result.status).toBe("finished");
+        const outputLst: OutputType[] = [];
+        generateMockStreams(context, outputLst);
+        const result = await runInContext(code, context, { variant, groups });
+        expect(result.status).toBe("finished");
 
-          if (typeof expected === "function" && expected.prototype instanceof RuntimeSourceError) {
-            expect(context.errors.length).toBeGreaterThan(0);
-            expect(context.errors[0]).toHaveProperty("constructor", expected);
-            return;
-          }
-
-          if (typeof expected === "function" && expected.prototype instanceof Error) {
-            expect(result).toHaveProperty("value.message", expect.stringContaining(expected.name));
-            return;
-          }
-
-          expect(result.status).not.toHaveProperty("value.type", "error");
-          if (output !== null) {
-            expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line })));
-          }
-
-          const generateExpectedValueAssertion = (expected: TestOutputValue): Value => {
-            if (expected === null) {
-              return { type: "none" };
-            }
-
-            if (typeof expected === "bigint") {
-              return { type: "bigint", value: expected };
-            }
-
-            if (typeof expected === "number") {
-              if (isNaN(expected)) {
-                return { type: "number", value: NaN };
-              }
-              return { type: "number", value: expect.closeTo(expected) };
-            }
-
-            if (typeof expected === "boolean") {
-              return { type: "bool", value: expected };
-            }
-
-            if (expected instanceof PyComplexNumber) {
-              return {
-                type: "complex",
-                value: expect.objectContaining({
-                  real: isNaN(expected.real) ? NaN : expect.closeTo(expected.real),
-                  imag: isNaN(expected.imag) ? NaN : expect.closeTo(expected.imag),
-                }),
-              };
-            }
-
-            if (Array.isArray(expected)) {
-              return {
-                type: "list",
-                value: expected.map(generateExpectedValueAssertion),
-              };
-            }
-
-            return { type: "string", value: expected };
-          };
-          expect(spy).toHaveLastReturnedWith(
-            expect.objectContaining(generateExpectedValueAssertion(expected as TestOutputValue)),
-          );
+        if (typeof expected === "function" && expected.prototype instanceof RuntimeSourceError) {
+          expect(context.errors.length).toBeGreaterThan(0);
+          expect(context.errors[0]).toHaveProperty("constructor", expected);
           return;
-        },
-      );
+        }
+        if (typeof expected === "function" && expected.prototype instanceof Error) {
+          expect(result).toHaveProperty("value.message", expect.stringContaining(expected.name));
+          return;
+        }
+        expect(outputLst.filter(item => item.type === "stderr")).toStrictEqual([]);
+
+        expect(result.status).not.toHaveProperty("value.type", "error");
+        if (output !== null) {
+          expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line })));
+        }
+
+        const generateExpectedValueAssertion = (expected: TestOutputValue): Value => {
+          if (expected === null) {
+            return { type: "none" };
+          }
+
+          if (typeof expected === "bigint") {
+            return { type: "bigint", value: expected };
+          }
+
+          if (typeof expected === "number") {
+            if (isNaN(expected)) {
+              return { type: "number", value: NaN };
+            }
+            return { type: "number", value: expect.closeTo(expected) };
+          }
+
+          if (typeof expected === "boolean") {
+            return { type: "bool", value: expected };
+          }
+
+          if (expected instanceof PyComplexNumber) {
+            return {
+              type: "complex",
+              value: expect.objectContaining({
+                real: isNaN(expected.real) ? NaN : expect.closeTo(expected.real),
+                imag: isNaN(expected.imag) ? NaN : expect.closeTo(expected.imag),
+              }),
+            };
+          }
+
+          if (Array.isArray(expected)) {
+            return {
+              type: "list",
+              value: expected.map(generateExpectedValueAssertion),
+            };
+          }
+
+          return { type: "string", value: expected };
+        };
+        expect(spy).toHaveLastReturnedWith(
+          expect.objectContaining(generateExpectedValueAssertion(expected as TestOutputValue)),
+        );
+        return;
+      });
     });
   }
 };
