@@ -3,11 +3,13 @@ import {
   IndexError,
   MissingRequiredPositionalError,
   NameError,
+  RecursionError,
   TooManyPositionalArgumentsError,
   TypeError,
   UnboundLocalError,
 } from "../../errors/errors";
 import { Token, TokenType } from "../../tokenizer";
+import { isStatementSequence } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";
@@ -242,9 +244,9 @@ export function isEnvDependent(item: ControlItem | null | undefined): boolean {
   return false;
 }
 
-function isInstr(item: ControlItem): item is Instr & { isEnvDependent?: boolean } {
+export const isInstr = (item: ControlItem): item is Instr & { isEnvDependent?: boolean } => {
   return "instrType" in item;
-}
+};
 
 export const envChanging = (command: ControlItem): boolean => {
   return isEnvDependent(command);
@@ -286,8 +288,30 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
 
-export const checkStackOverFlow = (_context: Context, _control: Control) => {
-  // TODO
+/**
+ * Check whether the stack has exceeded the max recursion limit
+ * (It only accepts instructions since a new function call can only be pushed onto the control
+ *  after the `InstrType.APPLICATION` instruction is pushed)
+ *
+ * It checks the number of `InstrType.RESET` in the control stack, which corresponds to the number of function calls currently on the stack.
+ * If this number exceeds the specified recursion limit, it throws a `RecursionError`.
+ *
+ * @param code The code being executed, used for error reporting
+ * @param instr The executed instruction
+ * @param context The execution context
+ * @param control The control stack
+ * @param recursionLimit The maximum allowed recursion depth before throwing an error
+ */
+export const checkStackOverFlow = (
+  code: string,
+  instr: Instr,
+  context: Context,
+  control: Control,
+  recursionLimit: number,
+) => {
+  if (control.getNumFunctionResets() > recursionLimit && !isStatementSequence(instr.srcNode)) {
+    handleRuntimeError(context, new RecursionError(code, instr.srcNode));
+  }
 };
 
 export function pythonMod(a: bigint, b: bigint): bigint;
