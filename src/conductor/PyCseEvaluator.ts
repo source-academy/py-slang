@@ -19,6 +19,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import AutoCompletePlugin from "./plugins/autocomplete";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -35,11 +36,16 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly groups: Group[];
   private readonly ensurePreludesLoaded: () => Promise<void>;
 
-  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
+  protected constructor(
+    conductor: IRunnerPlugin,
+    variant: number,
+    groups: Group[],
+    evaluatorName: string,
+  ) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
-
+    conductor.registerPlugin(AutoCompletePlugin, variant, evaluatorName);
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
         this.context.nativeStorage.builtins.set(name, value);
@@ -75,7 +81,6 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       };
 
       await this.ensurePreludesLoaded();
-
       const script = chunk + "\n";
       const ast = parse(script);
       const errors = analyze(
@@ -112,24 +117,29 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
 export class PyCseEvaluator1 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 1, [misc, math]);
+    super(conductor, 1, [misc, math], "PyCseEvaluator1");
   }
 }
 
 export class PyCseEvaluator2 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList]);
+    super(conductor, 2, [misc, math, linkedList], "PyCseEvaluator2");
   }
 }
 
 export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream], "PyCseEvaluator3");
   }
 }
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+    super(
+      conductor,
+      4,
+      [misc, math, linkedList, list, pairmutator, stream, parser],
+      "PyCseEvaluator4",
+    );
   }
 }

@@ -1031,13 +1031,12 @@ const cmdEvaluators: CmdEvaluators = {
   },
   [InstrType.FOR]: function (
     code: string,
-    command: ControlItem,
+    instr: ForInstr,
     context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ForInstr;
     const step = stash.pop();
     const end = stash.pop();
     const start = stash.pop();
