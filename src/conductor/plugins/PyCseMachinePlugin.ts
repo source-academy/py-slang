@@ -3,6 +3,7 @@ import { Control } from "../../engines/cse/control";
 import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
+import { toPythonFloat } from "../../stdlib/utils";
 import { Environment } from "../../engines/cse/environment";
 import { Closure } from "../../engines/cse/closure";
 import type {
@@ -39,14 +40,13 @@ function getListId(v: object): number {
   return _listIdMap.get(v)!;
 }
 
-function formatValue(v: Value, depth = 0): string {
+function formatValue(v: Value): string {
   if (v === undefined || v === null) return "None";
-  if (depth > 2) return "...";
   switch (v.type) {
     case "bigint":
       return v.value.toString();
     case "number":
-      return String(v.value);
+      return toPythonFloat(v.value);
     case "bool":
       return v.value ? "True" : "False";
     case "string":
@@ -54,22 +54,27 @@ function formatValue(v: Value, depth = 0): string {
     case "none":
       return "None";
     case "complex":
-      return `${v.value.real}+${v.value.imag}j`;
+      return v.value.toString();
     case "closure": {
       const cl: Closure = v.closure;
-      const name = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
-      const params = cl.node.parameters.map(p => p.lexeme).join(", ");
-      return `${name}(${params})`;
+      return cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     }
+    case "function":
+      return v.name || "function";
+    case "multi_lambda":
+      return "lambda";
+    case "error":
+      return v.message;
     case "list": {
-      const items = v.value.slice(0, 4).map(i => formatValue(i, depth + 1));
+      const items = v.value.slice(0, 4).map(i => formatValue(i));
       const suffix = v.value.length > 4 ? ", ..." : "";
       return `[${items.join(", ")}${suffix}]`;
     }
     case "builtin":
-      return `<builtin ${v.name}>`;
+      return `<built-in function ${v.name}>`;
     default:
-      return String((v as { value: unknown }).value ?? "?");
+      v satisfies never;
+      return "?";
   }
 }
 
