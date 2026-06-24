@@ -406,6 +406,7 @@ export async function collectSnapshots(
     stash,
     envSteps,
     stepLimit,
+    1024,
     variant,
     false,
   );
