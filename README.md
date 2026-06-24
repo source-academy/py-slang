@@ -91,6 +91,10 @@ the Python grammar in `python.ne`.
 yarn compile-grammar
 ```
 
+## Documentation
+
+Python is documented here: <https://docs.sourceacademy.org/python/>
+
 ## Prior Reading
 
 These repositories are relevant to `py-slang`, and may be useful if stuck
