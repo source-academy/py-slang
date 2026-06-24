@@ -93,7 +93,7 @@ yarn compile-grammar
 
 ## Documentation
 
-Python is documented here: <https://docs.sourceacademy.org/python/>
+SICPPy Python is documented here: <https://docs.sourceacademy.org/python/>
 
 ## Prior Reading
 
