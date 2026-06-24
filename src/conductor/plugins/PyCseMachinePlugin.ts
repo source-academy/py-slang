@@ -303,7 +303,7 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       jsNodeType === "FunctionDeclaration" ||
       jsNodeType === "ArrowFunctionExpression"
     ) {
-      const body = item.body ?? [];
+      const body = Array.isArray(item.body) ? item.body : [];
       nodeMeta.bodyLength = body.length;
       nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
@@ -357,18 +357,32 @@ function serializeEnvChain(
 
   const callStackIds = new Set(environments.map(e => e.id));
 
-  return queue.map(env => ({
-    id: env.id,
-    name: env.name,
-    parentId: env.tail?.id ?? null,
-    closureFrameId: env.closure?.environment?.id,
-    bindings: Object.entries(env.head).map(([name, val]) => ({
-      name,
-      value: serializeValue(val, env.id),
-    })),
-    isActive: env.id === activeEnv.id,
-    isOnCallStack: callStackIds.has(env.id),
-  }));
+  // Walk up the tail chain skipping any filtered frames to find the visible parent.
+  const visibleParentId = (env: Environment): string | null => {
+    let cur = env.tail;
+    while (cur) {
+      if (cur.name !== "prelude") return cur.id;
+      cur = cur.tail;
+    }
+    return null;
+  };
+
+  return queue
+    .filter(env => env.name !== "prelude")
+    .map(env => ({
+      id: env.id,
+      name: env.name,
+      parentId: visibleParentId(env),
+      closureFrameId: env.closure?.environment?.id,
+      bindings: Object.entries(env.head)
+        .filter(([name]) => name !== "__program__")
+        .map(([name, val]) => ({
+          name,
+          value: serializeValue(val, env.id),
+        })),
+      isActive: env.id === activeEnv.id,
+      isOnCallStack: callStackIds.has(env.id),
+    }));
 }
 
 // ── Snapshot collection ───────────────────────────────────────────────────────
