@@ -58,7 +58,11 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
   const stdoutStream = new WritableStream<string>({ write: onOutput });
   const stderrStream = new WritableStream<unknown>({
     write(chunk) {
-      onError(typeof chunk === "string" ? chunk : ((chunk as { message?: string })?.message ?? String(chunk)));
+      onError(
+        typeof chunk === "string"
+          ? chunk
+          : ((chunk as { message?: string })?.message ?? String(chunk)),
+      );
     },
   });
   const stdinStream = new ReadableStream<string>({
