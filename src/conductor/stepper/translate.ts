@@ -9,17 +9,15 @@
  */
 
 import { ExprNS, StmtNS, type FunctionParam } from '../../ast-types';
-import { type StepNode, identifier, literal, program } from './ast';
+import { type StepNode, identifier, literal, numberRepr, program, pythonStringRepr } from './ast';
 
 /** Python `repr` for a float: integers print with a trailing `.0` (e.g. `2.0`), matching Python. */
 function floatRepr(n: number): string {
-  return Number.isInteger(n) ? `${n}.0` : String(n);
+  return numberRepr(n, true);
 }
 
-/** Python `repr` for a string: single-quoted with the common escapes. */
-function stringRepr(s: string): string {
-  return `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
-}
+/** Python `repr` for a string (CPython quote preference), shared with the reducer and builtins. */
+const stringRepr = pythonStringRepr;
 
 function param(p: FunctionParam): StepNode {
   return identifier(p.lexeme);

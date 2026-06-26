@@ -7,4 +7,4 @@ export {
 export { PySvmlEvaluator } from "./PySvmlEvaluator";
 export { PyWasmEvaluator } from "./PyWasmEvaluator";
 export { PySvmlSinterEvaluator } from "./PySvmlSinterEvaluator";
-export { PyStepperEvaluator1 } from "./PythonStepperEvaluator";
+export { PyStepperEvaluator1 } from "./PyStepperEvaluator";

@@ -24,7 +24,8 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     VariableDeclarator: [{ child: 'id' }, ' = ', { child: 'init' }],
     FunctionDeclaration: [
       { token: 'def ', cls: 'identifier' },
-      { child: 'id' },
+      // The function name is part of the `def` keyword group, coloured like Source's `function map`.
+      { prop: 'id.name', cls: 'identifier' },
       '(',
       { list: 'params', sep: ', ' },
       '):',
@@ -43,7 +44,9 @@ export const pythonSyntaxProfile: SyntaxProfile = {
 
     // Atoms
     Literal: [{ prop: 'raw', cls: 'literal' }],
-    Identifier: [{ prop: 'name', cls: 'identifier' }],
+    // Plain names are uncoloured (white), like Source — only keywords/operators are coloured. A
+    // function name shown as a value collapses to a bold mu-term (see `functionValues` below).
+    Identifier: [{ prop: 'name' }],
 
     // Expressions
     BinaryExpression: [
@@ -116,4 +119,13 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     ArrowFunctionExpression: 1,
     FunctionDeclaration: 1,
   },
+
+  // Function values in the substitution model. A named one (a `def`, or a `lambda` bound to a name)
+  // is substituted into the program carrying a `name`; the host then renders it collapsed as that
+  // name — a bold mu-term you hover to reveal the body — instead of expanding the whole body inline
+  // at every use, exactly like Source. An anonymous `lambda` (no `name`) keeps rendering inline.
+  functionValues: [
+    { type: 'ArrowFunctionExpression', nameProp: 'name' },
+    { type: 'FunctionDeclaration', nameProp: 'name' },
+  ],
 };

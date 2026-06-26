@@ -27,6 +27,36 @@ export function literal(value: unknown, raw: string, pyFloat = false): StepNode 
   return { type: 'Literal', value, raw, pyFloat };
 }
 
+/** Python's textual form of a JS `number`: `inf`/`-inf`/`nan` for the specials, and a trailing `.0`
+ * for an integer-valued float (so `4 / 2` reads `2.0`, like Python). Shared by the reducer and the
+ * builtin library so all float results display consistently. */
+export function numberRepr(n: number, pyFloat: boolean): string {
+  if (Number.isNaN(n)) return 'nan';
+  if (n === Infinity) return 'inf';
+  if (n === -Infinity) return '-inf';
+  return pyFloat && Number.isInteger(n) ? `${n}.0` : String(n);
+}
+
+/** Builds a numeric `Literal`, formatting its `raw` with {@link numberRepr}. */
+export function numberLiteral(n: number, pyFloat: boolean): StepNode {
+  return literal(n, numberRepr(n, pyFloat), pyFloat);
+}
+
+/** Python `repr` of a string: CPython prefers single quotes, switching to double quotes when the
+ * string contains a single quote but no double quote (so `"it's"` shows as `"it's"`, not `'it\'s'`).
+ * Shared by `translate` (source literals), the reducer (string concatenation) and the builtin library
+ * so every string displays the same way. */
+export function pythonStringRepr(s: string): string {
+  const escaped = s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
+  if (s.includes("'") && !s.includes('"')) return `"${escaped}"`;
+  return `'${escaped.replace(/'/g, "\\'")}'`;
+}
+
+/** Builds a string `Literal` whose value is `s`, displayed with {@link pythonStringRepr}. */
+export function stringLiteral(s: string): StepNode {
+  return literal(s, pythonStringRepr(s));
+}
+
 export function identifier(name: string): StepNode {
   return { type: 'Identifier', name };
 }
@@ -65,6 +95,25 @@ export function isValue(node: StepNode): boolean {
 /** A callable function value produced by a `lambda` or a single-`return` `def`. */
 export function isFunctionValue(node: StepNode): boolean {
   return node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration';
+}
+
+/**
+ * Whether `node` is a *final result* — a normal form a program may legitimately end on. Unlike
+ * {@link isValue} this excludes a bare `Identifier`: by the time evaluation finishes every binding has
+ * been resolved by substitution, so a leftover name is unbound (a `NameError` in Python) and means
+ * evaluation is **stuck**, not done. Used to tell "Evaluation complete" from "Evaluation stuck".
+ */
+export function isResultValue(node: StepNode): boolean {
+  switch (node.type) {
+    case 'Literal':
+    case 'ArrowFunctionExpression':
+    case 'FunctionDeclaration':
+      return true;
+    case 'ArrayExpression':
+      return (node.elements as StepNode[]).every(isResultValue);
+    default:
+      return false;
+  }
 }
 
 /* -------------------------------------------------------------------------- */

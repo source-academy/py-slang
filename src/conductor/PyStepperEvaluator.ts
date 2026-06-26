@@ -5,7 +5,8 @@ import { RunnerStatus } from '@sourceacademy/conductor/types';
 
 import { parse } from '../parser';
 import { evaluatePython } from './stepper/getSteps';
-import { PythonStepperRunnerPlugin } from './stepper/PythonStepperRunnerPlugin';
+import { preprocessPython } from './stepper/preprocess';
+import { PythonStepperRunnerPlugin } from './stepper/PyStepperRunnerPlugin';
 
 /**
  * A Conductor evaluator for Python that drives the stepper.
@@ -51,6 +52,15 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     try {
       const script = chunk + '\n';
       const ast = parse(script);
+
+      // Preprocessing: reject an undefined variable as a (preprocessing) error and do NOT run the
+      // stepper — a free name has no meaning in the substitution model. Mirrors Source's
+      // `checkProgramForUndefinedVariables`, which likewise blocks stepping rather than faulting
+      // mid-reduction. `parse` already covers syntax errors above; this covers name resolution.
+      const preprocessError = preprocessPython(ast);
+      if (preprocessError !== null) {
+        throw new EvaluatorSyntaxError(preprocessError);
+      }
 
       // Push evaluation steps to the host for the Stepper tab.
       await this.stepper.sendSteps(ast);

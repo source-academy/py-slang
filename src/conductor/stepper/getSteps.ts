@@ -16,6 +16,7 @@ import type {
 
 import type { StmtNS } from '../../ast-types';
 import { type StepNode, unparse } from './ast';
+import { isStepperValue } from './builtins';
 import { reduceProgram } from './reduce';
 import { translateProgram } from './translate';
 
@@ -33,13 +34,46 @@ interface Step {
   markers?: Marker[];
 }
 
+/**
+ * Whether `prog` is a finished result — empty, or a single expression statement holding a final value
+ * — as opposed to a tree that simply cannot reduce any further (a stuck non-value, e.g. `5(3)` or an
+ * unbound name). Distinguishes the terminal "Evaluation complete" from "Evaluation stuck".
+ */
+function isComplete(prog: StepNode): boolean {
+  const body = prog.body as StepNode[];
+  if (body.length === 0) return true;
+  if (body.length === 1 && body[0].type === 'ExpressionStatement') {
+    return isStepperValue(body[0].expression as StepNode);
+  }
+  return false;
+}
+
 function drive(prog: StepNode, contractionLimit: number): Step[] {
   const steps: Step[] = [{ ast: prog, markers: [{ explanation: 'Start of evaluation' }] }];
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
-    const result = reduceProgram(current);
-    if (result === null) break;
+    let result: ReturnType<typeof reduceProgram>;
+    try {
+      result = reduceProgram(current);
+    } catch (error) {
+      // A runtime error during reduction (e.g. ZeroDivisionError): evaluation is stuck. Show the
+      // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
+      // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
+      const message = error instanceof Error ? error.message : String(error);
+      steps.push({ ast: current, markers: [{ redexType: 'beforeMarker', explanation: message }] });
+      steps.push({ ast: current, markers: [{ explanation: 'Evaluation stuck' }] });
+      return steps;
+    }
+    if (result === null) {
+      // No further contraction: the program is either a finished value ("Evaluation complete") or a
+      // tree that cannot reduce yet is not a value ("Evaluation stuck"), exactly as Source reports.
+      steps.push({
+        ast: current,
+        markers: [{ explanation: isComplete(current) ? 'Evaluation complete' : 'Evaluation stuck' }],
+      });
+      return steps;
+    }
 
     steps.push({
       ast: current,
@@ -158,10 +192,17 @@ export function getPythonSteps(
  */
 export function evaluatePython(fileInput: StmtNS.FileInput): string {
   let current = translateProgram(fileInput);
-  for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
-    const result = reduceProgram(current);
-    if (result === null) break;
-    current = result.node;
+  try {
+    for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
+      const result = reduceProgram(current);
+      if (result === null) break;
+      current = result.node;
+    }
+  } catch (error) {
+    // A runtime error (e.g. ZeroDivisionError) surfaces in the REPL as its message; the stepper
+    // separately shows an "Evaluation stuck" step. We never throw here, so a runtime fault is not
+    // mistaken for a syntax/preprocessing error (which is what switches the host to the home tab).
+    return error instanceof Error ? error.message : String(error);
   }
 
   const body = current.body as StepNode[];
