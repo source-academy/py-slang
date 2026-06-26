@@ -210,7 +210,7 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 
         expect(result.status).not.toHaveProperty("value.type", "error");
         if (output !== null) {
-          expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line })));
+          expect(outputLst).toEqual(output.map(line => ({ type: "stdout", value: line + "\n" })));
         }
 
         const generateExpectedValueAssertion = (expected: TestOutputValue): Value => {
