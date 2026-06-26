@@ -56,9 +56,9 @@ export interface RunOptions {
  */
 function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) => void) {
   const stdoutStream = new WritableStream<string>({ write: onOutput });
-  const stderrStream = new WritableStream<any>({
+  const stderrStream = new WritableStream<unknown>({
     write(chunk) {
-      onError(typeof chunk === "string" ? chunk : (chunk?.message ?? String(chunk)));
+      onError(typeof chunk === "string" ? chunk : ((chunk as { message?: string })?.message ?? String(chunk)));
     },
   });
   const stdinStream = new ReadableStream<string>({
@@ -144,8 +144,8 @@ export async function runCode(
     let ast;
     try {
       ast = parse(script);
-    } catch (e: any) {
-      throw new RunError("parse", String(e?.message ?? e));
+    } catch (e: unknown) {
+      throw new RunError("parse", String((e as { message?: string })?.message ?? e));
     }
 
     const analysisErrors = analyze(
