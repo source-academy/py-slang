@@ -9,6 +9,7 @@
     "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
     "build": "tsx scripts/build.ts",
     "build:repl": "rollup -c rollup.repl.mjs",
+    "build:lib": "rollup -c rollup.lib.mjs",
     "dev": "tsx scripts/build.ts --watch",
     "repl": "node dist/repl.cjs",
     "jsdoc": "./scripts/jsdoc.sh prepare",
