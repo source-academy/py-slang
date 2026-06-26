@@ -62,13 +62,15 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
     },
   });
   const stdinStream = new ReadableStream<string>({
-    start(controller) { controller.close(); },
+    start(controller) {
+      controller.close();
+    },
   });
   return {
     initialised: true as const,
     stdout: { stream: stdoutStream, writer: stdoutStream.getWriter() },
     stderr: { stream: stderrStream, writer: stderrStream.getWriter() },
-    stdin:  { stream: stdinStream,  reader: stdinStream.getReader() },
+    stdin: { stream: stdinStream, reader: stdinStream.getReader() },
   };
 }
 
@@ -78,7 +80,11 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
  * Returns all output produced by print() calls, concatenated.
  * Throws `RunError` on any parse, analysis, or runtime error.
  */
-export async function runCode(code: string, variant: number, options: RunOptions = {}): Promise<string> {
+export async function runCode(
+  code: string,
+  variant: number,
+  options: RunOptions = {},
+): Promise<string> {
   const { envSteps = 100000, stepLimit = -1 } = options;
 
   const groups = VARIANT_GROUPS[variant];
@@ -94,15 +100,24 @@ export async function runCode(code: string, variant: number, options: RunOptions
   }
 
   // Load group preludes (e.g. list, stream definitions written in SICPy itself).
-  const preludeText = groups.map((g) => g.prelude ?? "").join("\n");
+  const preludeText = groups.map(g => g.prelude ?? "").join("\n");
   if (preludeText.trim()) {
     const preludeErrors: string[] = [];
-    context.streams = makeMemoryStreams(() => {}, (e) => preludeErrors.push(e));
+    context.streams = makeMemoryStreams(
+      () => {},
+      e => preludeErrors.push(e),
+    );
     try {
       const preludeAst = parse(preludeText + "\n");
       await collectSnapshots(
-        context, new Control(preludeAst), new Stash(),
-        envSteps, stepLimit, variant, preludeText + "\n", 0,
+        context,
+        new Control(preludeAst),
+        new Stash(),
+        envSteps,
+        stepLimit,
+        variant,
+        preludeText + "\n",
+        0,
       );
     } finally {
       await destroyStreams(context);
@@ -111,7 +126,7 @@ export async function runCode(code: string, variant: number, options: RunOptions
       throw new RunError(
         "runtime",
         preludeErrors.join("\n") ||
-          context.errors.map((e) => e.message).join("\n") ||
+          context.errors.map(e => e.message).join("\n") ||
           "Prelude failed",
       );
     }
@@ -122,8 +137,8 @@ export async function runCode(code: string, variant: number, options: RunOptions
 
   try {
     context.streams = makeMemoryStreams(
-      (s) => output.push(s),
-      (e) => errors.push(e),
+      s => output.push(s),
+      e => errors.push(e),
     );
 
     let ast;
@@ -134,12 +149,15 @@ export async function runCode(code: string, variant: number, options: RunOptions
     }
 
     const analysisErrors = analyze(
-      ast, script, variant, groups,
+      ast,
+      script,
+      variant,
+      groups,
       Object.keys(context.runtime.environments[0].head),
     );
     if (analysisErrors.length > 0) {
       await Promise.all(
-        analysisErrors.map((e) => displayError(context, e, ErrorType.EVALUATOR_SYNTAX)),
+        analysisErrors.map(e => displayError(context, e, ErrorType.EVALUATOR_SYNTAX)),
       );
       throw new RunError("analysis", errors.join("\n"));
     }
@@ -155,7 +173,7 @@ export async function runCode(code: string, variant: number, options: RunOptions
       throw new RunError(
         "runtime",
         errors.join("\n") ||
-          context.errors.map((e) => e.message).join("\n") ||
+          context.errors.map(e => e.message).join("\n") ||
           "Unknown runtime error",
       );
     }

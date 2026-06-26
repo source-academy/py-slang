@@ -10,11 +10,28 @@ import commonjs from "@rollup/plugin-commonjs";
 import replace from "@rollup/plugin-replace";
 
 const NODE_BUILTINS = [
-  "fs", "path", "os", "util", "stream", "buffer",
-  "readline", "events", "child_process", "crypto",
-  "http", "https", "net", "tls", "zlib",
-  "module", "url", "assert", "string_decoder",
-  "perf_hooks", "worker_threads", "tty",
+  "fs",
+  "path",
+  "os",
+  "util",
+  "stream",
+  "buffer",
+  "readline",
+  "events",
+  "child_process",
+  "crypto",
+  "http",
+  "https",
+  "net",
+  "tls",
+  "zlib",
+  "module",
+  "url",
+  "assert",
+  "string_decoder",
+  "perf_hooks",
+  "worker_threads",
+  "tty",
 ];
 
 /**
