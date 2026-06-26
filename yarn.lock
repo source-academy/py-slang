@@ -1643,11 +1643,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-stepper@portal:../plugins/src/common/stepper::locator=py-slang%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@sourceacademy/common-stepper@portal:../plugins/src/common/stepper::locator=py-slang%40workspace%3A."
+"@sourceacademy/common-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-stepper@npm:0.0.1"
+  checksum: 10c0/e3a79fb07f68e24a045553a8c5c66e652df12d3b80150a20b4b4603936605e3a2e10c5636e48ba180b2a3473287727340c4b791abe8df301d00e0984d07667a4
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#0.5.0":
   version: 0.5.0
@@ -1666,13 +1667,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/runner-stepper@portal:../plugins/src/runner/stepper::locator=py-slang%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@sourceacademy/runner-stepper@portal:../plugins/src/runner/stepper::locator=py-slang%40workspace%3A."
+"@sourceacademy/runner-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-stepper@npm:0.0.1"
   peerDependencies:
     "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/0c454960bba50f1f0cfbe5d08a4c0f079100a3044ef24171104ee82594646a1fcea5e2b154dfcd7963d2b85cfb88b9e35bdcbadd85a68362c7b8b4fcb443e34d
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@sourceacademy/wasm-util@npm:^1.0.6":
   version: 1.0.6
@@ -4799,10 +4801,10 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.1.0"
-    "@sourceacademy/common-stepper": "portal:../plugins/src/common/stepper"
+    "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
     "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
-    "@sourceacademy/runner-stepper": "portal:../plugins/src/runner/stepper"
+    "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

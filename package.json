@@ -62,10 +62,10 @@
   },
   "dependencies": {
     "@sourceacademy/common-cse-machine": "^0.1.0",
-    "@sourceacademy/common-stepper": "portal:../plugins/src/common/stepper",
+    "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0",
     "@sourceacademy/runner-cse-machine": "^1.0.0",
-    "@sourceacademy/runner-stepper": "portal:../plugins/src/runner/stepper",
+    "@sourceacademy/runner-stepper": "^0.0.1",
     "@sourceacademy/wasm-util": "^1.0.6",
     "commander": "^14.0.3",
     "fast-levenshtein": "^3.0.0",
