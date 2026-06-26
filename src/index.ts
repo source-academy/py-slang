@@ -1,1 +1,1 @@
-export { runCode, RunError, VARIANT_GROUPS } from "./runner";
+export { runCode, RunError, RunOptions, VARIANT_GROUPS } from "./runner";

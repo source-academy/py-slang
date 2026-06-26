@@ -41,6 +41,13 @@ export class RunError extends Error {
   }
 }
 
+export interface RunOptions {
+  /** Maximum number of environment steps before stopping. Default: 100000. */
+  envSteps?: number;
+  /** Hard step limit (-1 = unlimited). Default: -1. */
+  stepLimit?: number;
+}
+
 /**
  * Build a set of in-memory streams.
  *
@@ -71,7 +78,9 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
  * Returns all output produced by print() calls, concatenated.
  * Throws `RunError` on any parse, analysis, or runtime error.
  */
-export async function runCode(code: string, variant: number): Promise<string> {
+export async function runCode(code: string, variant: number, options: RunOptions = {}): Promise<string> {
+  const { envSteps = 100000, stepLimit = -1 } = options;
+
   const groups = VARIANT_GROUPS[variant];
   if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
 
@@ -89,14 +98,22 @@ export async function runCode(code: string, variant: number): Promise<string> {
   if (preludeText.trim()) {
     const preludeErrors: string[] = [];
     context.streams = makeMemoryStreams(() => {}, (e) => preludeErrors.push(e));
-    const preludeAst = parse(preludeText + "\n");
-    await collectSnapshots(
-      context, new Control(preludeAst), new Stash(),
-      100000, -1, variant, preludeText + "\n", 0,
-    );
-    await destroyStreams(context);
+    try {
+      const preludeAst = parse(preludeText + "\n");
+      await collectSnapshots(
+        context, new Control(preludeAst), new Stash(),
+        envSteps, stepLimit, variant, preludeText + "\n", 0,
+      );
+    } finally {
+      await destroyStreams(context);
+    }
     if (context.errors.length > 0 || preludeErrors.length > 0) {
-      throw new RunError("runtime", preludeErrors.join("\n") || "Prelude failed");
+      throw new RunError(
+        "runtime",
+        preludeErrors.join("\n") ||
+          context.errors.map((e) => e.message).join("\n") ||
+          "Prelude failed",
+      );
     }
   }
 
@@ -121,8 +138,6 @@ export async function runCode(code: string, variant: number): Promise<string> {
       Object.keys(context.runtime.environments[0].head),
     );
     if (analysisErrors.length > 0) {
-      // Surface them through the error stream so the message is formatted the
-      // same way as runtime errors, then throw.
       await Promise.all(
         analysisErrors.map((e) => displayError(context, e, ErrorType.EVALUATOR_SYNTAX)),
       );
@@ -134,10 +149,15 @@ export async function runCode(code: string, variant: number): Promise<string> {
     context.control = control;
     context.stash = stash;
 
-    await collectSnapshots(context, control, stash, 100000, -1, variant, script, 0);
+    await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
 
     if (context.errors.length > 0 || errors.length > 0) {
-      throw new RunError("runtime", errors.join("\n"));
+      throw new RunError(
+        "runtime",
+        errors.join("\n") ||
+          context.errors.map((e) => e.message).join("\n") ||
+          "Unknown runtime error",
+      );
     }
   } finally {
     await destroyStreams(context);
