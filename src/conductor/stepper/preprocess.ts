@@ -12,10 +12,10 @@
  * assignments to function/module scope, so order within a scope does not matter for definedness).
  */
 
-import type { StmtNS } from '../../ast-types';
-import type { StepNode } from './ast';
-import { isBuiltinConstantName, isBuiltinFunctionName } from './builtins';
-import { translateProgram } from './translate';
+import type { StmtNS } from "../../ast-types";
+import type { StepNode } from "./ast";
+import { isBuiltinConstantName, isBuiltinFunctionName } from "./builtins";
+import { translateProgram } from "./translate";
 
 /** A real Python identifier (so translation's `<Unsupported>` placeholders are ignored). */
 const IDENTIFIER = /^[A-Za-z_]\w*$/;
@@ -32,13 +32,13 @@ function paramNames(fn: StepNode): string[] {
 function collectBindings(statements: StepNode[], into: Set<string>): void {
   for (const stmt of statements) {
     switch (stmt.type) {
-      case 'VariableDeclaration':
+      case "VariableDeclaration":
         for (const d of stmt.declarations as StepNode[]) into.add(String((d.id as StepNode).name));
         break;
-      case 'FunctionDeclaration':
+      case "FunctionDeclaration":
         into.add(String((stmt.id as StepNode).name));
         break;
-      case 'IfStatement': {
+      case "IfStatement": {
         const cons = stmt.consequent as StepNode | null;
         const alt = stmt.alternate as StepNode | null;
         if (cons) collectBindings(cons.body as StepNode[], into);
@@ -62,30 +62,30 @@ export function findUndefinedName(program: StepNode): string | null {
   const visit = (node: StepNode, scopes: Set<string>[]): void => {
     if (found !== null) return;
     switch (node.type) {
-      case 'Identifier': {
+      case "Identifier": {
         const name = String(node.name);
         if (IDENTIFIER.test(name) && !isDefined(name, scopes)) found = name;
         return;
       }
-      case 'VariableDeclarator':
+      case "VariableDeclarator":
         // `id` is a binding, not a reference; only the initializer contains references.
         visit(node.init as StepNode, scopes);
         return;
-      case 'FunctionDeclaration': {
+      case "FunctionDeclaration": {
         // `id` and params are bindings; the body opens a new scope (params + its own bindings).
         const inner = new Set<string>(paramNames(node));
         collectBindings((node.body as StepNode).body as StepNode[], inner);
         visit(node.body as StepNode, [...scopes, inner]);
         return;
       }
-      case 'ArrowFunctionExpression': {
+      case "ArrowFunctionExpression": {
         // A lambda's body is a single expression; its only new bindings are the parameters.
         visit(node.body as StepNode, [...scopes, new Set<string>(paramNames(node))]);
         return;
       }
       default:
         for (const key of Object.keys(node)) {
-          if (key === 'type') continue;
+          if (key === "type") continue;
           visitValue(node[key], scopes);
         }
     }
@@ -95,7 +95,11 @@ export function findUndefinedName(program: StepNode): string | null {
     if (found !== null) return;
     if (Array.isArray(value)) {
       value.forEach(v => visitValue(v, scopes));
-    } else if (value !== null && typeof value === 'object' && typeof (value as StepNode).type === 'string') {
+    } else if (
+      value !== null &&
+      typeof value === "object" &&
+      typeof (value as StepNode).type === "string"
+    ) {
       visit(value as StepNode, scopes);
     }
   };

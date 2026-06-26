@@ -32,14 +32,14 @@ import {
   numberLiteral,
   stringLiteral,
   unparse,
-} from './ast';
+} from "./ast";
 import {
   applyBuiltin,
   getBuiltinConstant,
   isBuiltinConstantName,
   isBuiltinFunctionName,
   isStepperValue,
-} from './builtins';
+} from "./builtins";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction. */
@@ -58,14 +58,14 @@ export interface ReduceResult {
 
 /** Python truthiness for the value subset the stepper handles. */
 function isTruthy(node: StepNode): boolean {
-  if (node.type === 'ArrayExpression') return (node.elements as StepNode[]).length > 0;
-  if (node.type !== 'Literal') return true; // function values are truthy
+  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
+  if (node.type !== "Literal") return true; // function values are truthy
   const v = node.value;
   if (v === null || v === false) return false;
   if (v === true) return true;
-  if (typeof v === 'number') return v !== 0;
-  if (typeof v === 'bigint') return v !== 0n;
-  if (typeof v === 'string') return v.length > 0;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "bigint") return v !== 0n;
+  if (typeof v === "string") return v.length > 0;
   return true;
 }
 
@@ -75,7 +75,7 @@ function isTruthy(node: StepNode): boolean {
 
 function mapValue(value: unknown, fn: (node: StepNode) => StepNode): unknown {
   if (Array.isArray(value)) return value.map(v => mapValue(v, fn));
-  if (value !== null && typeof value === 'object' && typeof (value as StepNode).type === 'string') {
+  if (value !== null && typeof value === "object" && typeof (value as StepNode).type === "string") {
     return fn(value as StepNode);
   }
   return value;
@@ -98,15 +98,15 @@ function paramNames(node: StepNode): string[] {
  */
 export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
   switch (node.type) {
-    case 'Identifier':
+    case "Identifier":
       return node.name === name ? clone(value) : node;
-    case 'ArrowFunctionExpression':
+    case "ArrowFunctionExpression":
       if (paramNames(node).includes(name)) return node;
       return { ...node, body: substitute(node.body as StepNode, name, value) };
-    case 'FunctionDeclaration':
+    case "FunctionDeclaration":
       if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
       return { ...node, body: substitute(node.body as StepNode, name, value) };
-    case 'VariableDeclarator':
+    case "VariableDeclarator":
       return { ...node, init: substitute(node.init as StepNode, name, value) };
     default:
       return mapChildren(node, child => substitute(child, name, value));
@@ -117,98 +117,126 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
 /*                          Expression contractions                           */
 /* -------------------------------------------------------------------------- */
 
-const boolLiteral = (b: boolean): StepNode => literal(b, b ? 'True' : 'False');
+const boolLiteral = (b: boolean): StepNode => literal(b, b ? "True" : "False");
 
 /** A JS value that is a Python numeric (int = `bigint`, float = `number`, or `bool`). */
 function isNumericValue(v: unknown): v is bigint | number | boolean {
-  return typeof v === 'bigint' || typeof v === 'number' || typeof v === 'boolean';
+  return typeof v === "bigint" || typeof v === "number" || typeof v === "boolean";
 }
 
 /** Exact integer arithmetic (Python ints and bools, which are ints). */
 function intBinary(op: string, l: bigint, r: bigint): StepNode | null {
-  if (r === 0n && (op === '/' || op === '//' || op === '%')) {
-    throw new Error('ZeroDivisionError: division by zero');
+  if (r === 0n && (op === "/" || op === "//" || op === "%")) {
+    throw new Error("ZeroDivisionError: division by zero");
   }
-  if (l === 0n && r < 0n && op === '**') {
-    throw new Error('ZeroDivisionError: 0.0 cannot be raised to a negative power');
+  if (l === 0n && r < 0n && op === "**") {
+    throw new Error("ZeroDivisionError: 0.0 cannot be raised to a negative power");
   }
   switch (op) {
-    case '+': return literal(l + r, String(l + r), false);
-    case '-': return literal(l - r, String(l - r), false);
-    case '*': return literal(l * r, String(l * r), false);
-    case '/': return numberLiteral(Number(l) / Number(r), true);
-    case '//': {
+    case "+":
+      return literal(l + r, String(l + r), false);
+    case "-":
+      return literal(l - r, String(l - r), false);
+    case "*":
+      return literal(l * r, String(l * r), false);
+    case "/":
+      return numberLiteral(Number(l) / Number(r), true);
+    case "//": {
       const q = l / r;
-      const floored = l % r !== 0n && (l < 0n) !== (r < 0n) ? q - 1n : q;
+      const floored = l % r !== 0n && l < 0n !== r < 0n ? q - 1n : q;
       return literal(floored, String(floored), false);
     }
-    case '%': {
+    case "%": {
       const rem = ((l % r) + r) % r;
       return literal(rem, String(rem), false);
     }
-    case '**': return r < 0n ? numberLiteral(Number(l) ** Number(r), true) : literal(l ** r, String(l ** r), false);
-    case '<': return boolLiteral(l < r);
-    case '>': return boolLiteral(l > r);
-    case '<=': return boolLiteral(l <= r);
-    case '>=': return boolLiteral(l >= r);
-    case '==': return boolLiteral(l === r);
-    case '!=': return boolLiteral(l !== r);
-    default: return null;
+    case "**":
+      return r < 0n
+        ? numberLiteral(Number(l) ** Number(r), true)
+        : literal(l ** r, String(l ** r), false);
+    case "<":
+      return boolLiteral(l < r);
+    case ">":
+      return boolLiteral(l > r);
+    case "<=":
+      return boolLiteral(l <= r);
+    case ">=":
+      return boolLiteral(l >= r);
+    case "==":
+      return boolLiteral(l === r);
+    case "!=":
+      return boolLiteral(l !== r);
+    default:
+      return null;
   }
 }
 
 /** Floating-point arithmetic (used when any operand is a float; Python promotes int→float). */
 function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNode | null {
-  if (r === 0 && (op === '/' || op === '//' || op === '%')) {
-    throw new Error('ZeroDivisionError: division by zero');
+  if (r === 0 && (op === "/" || op === "//" || op === "%")) {
+    throw new Error("ZeroDivisionError: division by zero");
   }
-  if (l === 0 && r < 0 && op === '**') {
-    throw new Error('ZeroDivisionError: 0.0 cannot be raised to a negative power');
+  if (l === 0 && r < 0 && op === "**") {
+    throw new Error("ZeroDivisionError: 0.0 cannot be raised to a negative power");
   }
   switch (op) {
-    case '+': return numberLiteral(l + r, pyFloat);
-    case '-': return numberLiteral(l - r, pyFloat);
-    case '*': return numberLiteral(l * r, pyFloat);
-    case '/': return numberLiteral(l / r, true);
-    case '//': return numberLiteral(Math.floor(l / r), pyFloat);
-    case '%': return numberLiteral(((l % r) + r) % r, pyFloat);
-    case '**': return numberLiteral(l ** r, pyFloat || l ** r !== Math.floor(l ** r));
-    case '<': return boolLiteral(l < r);
-    case '>': return boolLiteral(l > r);
-    case '<=': return boolLiteral(l <= r);
-    case '>=': return boolLiteral(l >= r);
-    case '==': return boolLiteral(l === r);
-    case '!=': return boolLiteral(l !== r);
-    default: return null;
+    case "+":
+      return numberLiteral(l + r, pyFloat);
+    case "-":
+      return numberLiteral(l - r, pyFloat);
+    case "*":
+      return numberLiteral(l * r, pyFloat);
+    case "/":
+      return numberLiteral(l / r, true);
+    case "//":
+      return numberLiteral(Math.floor(l / r), pyFloat);
+    case "%":
+      return numberLiteral(((l % r) + r) % r, pyFloat);
+    case "**":
+      return numberLiteral(l ** r, pyFloat || l ** r !== Math.floor(l ** r));
+    case "<":
+      return boolLiteral(l < r);
+    case ">":
+      return boolLiteral(l > r);
+    case "<=":
+      return boolLiteral(l <= r);
+    case ">=":
+      return boolLiteral(l >= r);
+    case "==":
+      return boolLiteral(l === r);
+    case "!=":
+      return boolLiteral(l !== r);
+    default:
+      return null;
   }
 }
 
-const toBig = (v: bigint | boolean): bigint => (typeof v === 'boolean' ? (v ? 1n : 0n) : v);
+const toBig = (v: bigint | boolean): bigint => (typeof v === "boolean" ? (v ? 1n : 0n) : v);
 
 function contractBinary(node: StepNode): ReduceResult | null {
   const left = node.left as StepNode;
   const right = node.right as StepNode;
-  if (left.type !== 'Literal' || right.type !== 'Literal') return null;
+  if (left.type !== "Literal" || right.type !== "Literal") return null;
   const op = node.operator as string;
   const l = left.value;
   const r = right.value;
 
   let result: StepNode | null = null;
-  if (op === '+' && typeof l === 'string' && typeof r === 'string') {
+  if (op === "+" && typeof l === "string" && typeof r === "string") {
     result = stringLiteral(l + r);
   } else if (isNumericValue(l) && isNumericValue(r)) {
     // A `bool` counts as an `int`; if either operand is a `float`, the operation promotes to float
     // (Python semantics), so `3.14 * 0` is `0.0` and `1 == 1.0` is `True`.
-    if (typeof l !== 'number' && typeof r !== 'number') {
+    if (typeof l !== "number" && typeof r !== "number") {
       result = intBinary(op, toBig(l), toBig(r));
     } else {
-      const ln = typeof l === 'number' ? l : Number(toBig(l));
-      const rn = typeof r === 'number' ? r : Number(toBig(r));
+      const ln = typeof l === "number" ? l : Number(toBig(l));
+      const rn = typeof r === "number" ? r : Number(toBig(r));
       result = floatBinary(op, ln, rn, true);
     }
-  } else if (op === '==' || op === '!=') {
+  } else if (op === "==" || op === "!=") {
     const eq = l === r;
-    result = boolLiteral(op === '==' ? eq : !eq);
+    result = boolLiteral(op === "==" ? eq : !eq);
   }
 
   if (result === null) return null;
@@ -224,22 +252,22 @@ function contractUnary(node: StepNode): ReduceResult | null {
   const arg = node.argument as StepNode;
   const op = (node.operator as string).trim();
   let result: StepNode | null = null;
-  if (op === 'not') {
+  if (op === "not") {
     const value = !isTruthy(arg);
-    result = literal(value, value ? 'True' : 'False');
-  } else if (arg.type === 'Literal' && typeof arg.value === 'bigint') {
-    if (op === '-') result = literal(-arg.value, String(-arg.value), false);
-    else if (op === '+') result = literal(arg.value, String(arg.value), false);
-  } else if (arg.type === 'Literal' && typeof arg.value === 'number') {
-    if (op === '-') result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
-    else if (op === '+') result = numberLiteral(arg.value, Boolean(arg.pyFloat));
+    result = literal(value, value ? "True" : "False");
+  } else if (arg.type === "Literal" && typeof arg.value === "bigint") {
+    if (op === "-") result = literal(-arg.value, String(-arg.value), false);
+    else if (op === "+") result = literal(arg.value, String(arg.value), false);
+  } else if (arg.type === "Literal" && typeof arg.value === "number") {
+    if (op === "-") result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
+    else if (op === "+") result = numberLiteral(arg.value, Boolean(arg.pyFloat));
   }
   if (result === null) return null;
   const argRepr = unparse(arg);
   const explanation =
-    op === 'not'
+    op === "not"
       ? `Unary expression evaluated, boolean ${argRepr} negated.`
-      : op === '-'
+      : op === "-"
         ? `Unary expression evaluated, value ${argRepr} negated.`
         : `Unary expression ${unparse(node)} evaluated`;
   return { node: result, preRedex: node, postRedex: result, explanation };
@@ -250,16 +278,16 @@ function contractLogical(node: StepNode): ReduceResult {
   const right = node.right as StepNode;
   const op = node.operator as string;
   const leftTruthy = isTruthy(left);
-  const takeLeft = op === 'and' ? !leftTruthy : leftTruthy;
+  const takeLeft = op === "and" ? !leftTruthy : leftTruthy;
   const chosen = clone(takeLeft ? left : right);
   const explanation =
-    op === 'and'
+    op === "and"
       ? leftTruthy
-        ? 'AND operation evaluated, left of operator is truthy, continue evaluating right of operator'
-        : 'AND operation evaluated, left of operator is falsy, stop evaluation'
+        ? "AND operation evaluated, left of operator is truthy, continue evaluating right of operator"
+        : "AND operation evaluated, left of operator is falsy, stop evaluation"
       : leftTruthy
-        ? 'OR operation evaluated, left of operator is truthy, stop evaluation'
-        : 'OR operation evaluated, left of operator is falsy, continue evaluating right of operator';
+        ? "OR operation evaluated, left of operator is truthy, stop evaluation"
+        : "OR operation evaluated, left of operator is falsy, continue evaluating right of operator";
   return { node: chosen, preRedex: node, postRedex: chosen, explanation };
 }
 
@@ -270,7 +298,7 @@ function contractConditional(node: StepNode): ReduceResult {
     node: chosen,
     preRedex: node,
     postRedex: chosen,
-    explanation: `Conditional expression evaluated, condition is ${truthy ? 'true' : 'false'}, ${truthy ? 'consequent' : 'alternate'} evaluated`,
+    explanation: `Conditional expression evaluated, condition is ${truthy ? "true" : "false"}, ${truthy ? "consequent" : "alternate"} evaluated`,
   };
 }
 
@@ -281,10 +309,15 @@ function contractCall(node: StepNode): ReduceResult | null {
   // A built-in called by name (e.g. `abs(-5)`, `math_sqrt(2)`). Once every argument is a value,
   // contract the whole call to the computed result in one step, like Source's stepper. `applyBuiltin`
   // throws on misuse (wrong type/arity), which the driver turns into an "Evaluation stuck" step.
-  if (callee.type === 'Identifier' && isBuiltinFunctionName(String(callee.name))) {
+  if (callee.type === "Identifier" && isBuiltinFunctionName(String(callee.name))) {
     if (!args.every(isValue)) return null;
     const result = applyBuiltin(String(callee.name), args);
-    return { node: result, preRedex: node, postRedex: result, explanation: `${String(callee.name)} runs` };
+    return {
+      node: result,
+      preRedex: node,
+      postRedex: result,
+      explanation: `${String(callee.name)} runs`,
+    };
   }
 
   if (!isFunctionValue(callee)) return null;
@@ -298,14 +331,14 @@ function contractCall(node: StepNode): ReduceResult | null {
   // any `if`/local bindings until a `return` exits with the function's value. Mirrors Source's
   // `StepperBlockExpression`, so multi-statement bodies (e.g. an `if/else` with `return`s) work.
   let body: StepNode;
-  if (callee.type === 'ArrowFunctionExpression') {
+  if (callee.type === "ArrowFunctionExpression") {
     body = callee.body as StepNode;
   } else {
     const stmts = (callee.body as StepNode).body as StepNode[];
     body =
-      stmts.length >= 1 && stmts[0].type === 'ReturnStatement' && stmts[0].argument != null
+      stmts.length >= 1 && stmts[0].type === "ReturnStatement" && stmts[0].argument != null
         ? (stmts[0].argument as StepNode)
-        : { type: 'BlockStatement', body: stmts };
+        : { type: "BlockStatement", body: stmts };
   }
 
   let result = clone(body);
@@ -314,9 +347,9 @@ function contractCall(node: StepNode): ReduceResult | null {
   // the same name shadows it, so skip that case — and `substitute` never descends into the bound
   // copy's own parameter/name, so applying it later re-binds correctly without capture.
   const selfName =
-    callee.type === 'FunctionDeclaration'
+    callee.type === "FunctionDeclaration"
       ? String((callee.id as StepNode).name)
-      : typeof callee.name === 'string'
+      : typeof callee.name === "string"
         ? callee.name
         : undefined;
   if (selfName !== undefined && !params.includes(selfName)) {
@@ -331,7 +364,7 @@ function contractCall(node: StepNode): ReduceResult | null {
   const explanation =
     params.length === 0
       ? `${functionDisplay} runs`
-      : `${args.map(unparse).join(', ')} substituted into ${params.join(', ')} of ${functionDisplay}`;
+      : `${args.map(unparse).join(", ")} substituted into ${params.join(", ")} of ${functionDisplay}`;
   return { node: result, preRedex: node, postRedex: result, explanation };
 }
 
@@ -343,7 +376,12 @@ function rebuild(parent: StepNode, key: string, child: ReduceResult): ReduceResu
   return { ...child, node: { ...parent, [key]: child.node } };
 }
 
-function rebuildIndex(parent: StepNode, key: string, index: number, child: ReduceResult): ReduceResult {
+function rebuildIndex(
+  parent: StepNode,
+  key: string,
+  index: number,
+  child: ReduceResult,
+): ReduceResult {
   const arr = (parent[key] as StepNode[]).slice();
   arr[index] = child.node;
   return { ...child, node: { ...parent, [key]: arr } };
@@ -352,57 +390,62 @@ function rebuildIndex(parent: StepNode, key: string, index: number, child: Reduc
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
 export function reduceExpr(node: StepNode): ReduceResult | null {
   switch (node.type) {
-    case 'Identifier': {
+    case "Identifier": {
       // A leftover name is either a built-in constant (reduce to its value) or an atom (a built-in
       // function name / an unbound name) that does not reduce on its own.
       const name = String(node.name);
       if (isBuiltinConstantName(name)) {
         const value = getBuiltinConstant(name);
-        return { node: value, preRedex: node, postRedex: value, explanation: `${name} is ${unparse(value)}` };
+        return {
+          node: value,
+          preRedex: node,
+          postRedex: value,
+          explanation: `${name} is ${unparse(value)}`,
+        };
       }
       return null;
     }
-    case 'BinaryExpression': {
+    case "BinaryExpression": {
       const left = reduceExpr(node.left as StepNode);
-      if (left) return rebuild(node, 'left', left);
+      if (left) return rebuild(node, "left", left);
       const right = reduceExpr(node.right as StepNode);
-      if (right) return rebuild(node, 'right', right);
+      if (right) return rebuild(node, "right", right);
       return contractBinary(node);
     }
-    case 'LogicalExpression': {
+    case "LogicalExpression": {
       const left = reduceExpr(node.left as StepNode);
-      if (left) return rebuild(node, 'left', left);
+      if (left) return rebuild(node, "left", left);
       return contractLogical(node);
     }
-    case 'UnaryExpression': {
+    case "UnaryExpression": {
       const arg = reduceExpr(node.argument as StepNode);
-      if (arg) return rebuild(node, 'argument', arg);
+      if (arg) return rebuild(node, "argument", arg);
       return contractUnary(node);
     }
-    case 'ConditionalExpression': {
+    case "ConditionalExpression": {
       const test = reduceExpr(node.test as StepNode);
-      if (test) return rebuild(node, 'test', test);
+      if (test) return rebuild(node, "test", test);
       return contractConditional(node);
     }
-    case 'CallExpression': {
+    case "CallExpression": {
       const callee = reduceExpr(node.callee as StepNode);
-      if (callee) return rebuild(node, 'callee', callee);
+      if (callee) return rebuild(node, "callee", callee);
       const args = node.arguments as StepNode[];
       for (let i = 0; i < args.length; i++) {
         const reduced = reduceExpr(args[i]);
-        if (reduced) return rebuildIndex(node, 'arguments', i, reduced);
+        if (reduced) return rebuildIndex(node, "arguments", i, reduced);
       }
       return contractCall(node);
     }
-    case 'ArrayExpression': {
+    case "ArrayExpression": {
       const elements = node.elements as StepNode[];
       for (let i = 0; i < elements.length; i++) {
         const reduced = reduceExpr(elements[i]);
-        if (reduced) return rebuildIndex(node, 'elements', i, reduced);
+        if (reduced) return rebuildIndex(node, "elements", i, reduced);
       }
       return null;
     }
-    case 'BlockStatement':
+    case "BlockStatement":
       // A function body in expression position (produced by applying a multi-statement `def`).
       return reduceBlock(node);
     default:
@@ -427,15 +470,15 @@ function declaratorOf(stmt: StepNode): StepNode {
 type HeadOutcome =
   | {
       // The head (or a binding it introduces) was reduced one step; `newBody` is the resulting list.
-      kind: 'step';
+      kind: "step";
       newBody: StepNode[];
       preRedex: StepNode;
       postRedex?: StepNode;
       explanation: string;
     }
-  | { kind: 'finished-expression' } // head is a fully-evaluated `ExpressionStatement` (a value)
-  | { kind: 'return' } //              head is a `ReturnStatement` (exits a function body)
-  | { kind: 'irreducible' }; //        head cannot be reduced and is not a value statement
+  | { kind: "finished-expression" } // head is a fully-evaluated `ExpressionStatement` (a value)
+  | { kind: "return" } //              head is a `ReturnStatement` (exits a function body)
+  | { kind: "irreducible" }; //        head cannot be reduced and is not a value statement
 
 /**
  * Performs the contraction common to both statement contexts on the leading statement: an unfinished
@@ -446,12 +489,12 @@ type HeadOutcome =
  */
 function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
   switch (head.type) {
-    case 'ExpressionStatement': {
+    case "ExpressionStatement": {
       const expr = head.expression as StepNode;
       const reduced = reduceExpr(expr);
       if (reduced) {
         return {
-          kind: 'step',
+          kind: "step",
           newBody: [{ ...head, expression: reduced.node }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
@@ -460,40 +503,40 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       }
       // A finished expression statement is a value to discard (or the program's result); one that
       // cannot reduce and is *not* a value (e.g. `5(3)`, an unbound name) is stuck, not finished.
-      return isStepperValue(expr) ? { kind: 'finished-expression' } : { kind: 'irreducible' };
+      return isStepperValue(expr) ? { kind: "finished-expression" } : { kind: "irreducible" };
     }
-    case 'VariableDeclaration': {
+    case "VariableDeclaration": {
       const decl = declaratorOf(head);
       const init = decl.init as StepNode;
       if (!isValue(init)) {
         const reduced = reduceExpr(init);
         if (reduced) {
           return {
-            kind: 'step',
+            kind: "step",
             newBody: [{ ...head, declarations: [{ ...decl, init: reduced.node }] }, ...rest],
             preRedex: reduced.preRedex,
             postRedex: reduced.postRedex,
             explanation: reduced.explanation,
           };
         }
-        return { kind: 'irreducible' };
+        return { kind: "irreducible" };
       }
       // The initializer is a value: bind the name by substituting it into the rest of the list.
       const name = String((decl.id as StepNode).name);
       // Naming an (anonymous) function value makes its uses render as a mu-term `name`, like Source's
       // `const f = x => ...`; any other value is substituted unchanged.
       const boundValue: StepNode =
-        init.type === 'ArrowFunctionExpression' && init.name === undefined
+        init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
       return {
-        kind: 'step',
+        kind: "step",
         newBody: rest.map(stmt => substitute(stmt, name, boundValue)),
         preRedex: head,
         explanation: `${name} declared and substituted into the rest of the program`,
       };
     }
-    case 'FunctionDeclaration': {
+    case "FunctionDeclaration": {
       const name = String((head.id as StepNode).name);
       // Substitute the function as a *named value* (the `name` marker) so each use renders as a
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
@@ -501,21 +544,26 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       const value: StepNode = { ...head, name };
       const params = paramNames(head);
       return {
-        kind: 'step',
+        kind: "step",
         newBody: rest.map(stmt => substitute(stmt, name, value)),
         preRedex: head,
         explanation: params.length
-          ? `Function ${name} declared, parameter(s) ${params.join(', ')} required`
+          ? `Function ${name} declared, parameter(s) ${params.join(", ")} required`
           : `Function ${name} declared`,
       };
     }
-    case 'PassStatement':
-      return { kind: 'step', newBody: rest, preRedex: head, explanation: 'Pass statement evaluated' };
-    case 'IfStatement': {
+    case "PassStatement":
+      return {
+        kind: "step",
+        newBody: rest,
+        preRedex: head,
+        explanation: "Pass statement evaluated",
+      };
+    case "IfStatement": {
       const reduced = reduceExpr(head.test as StepNode);
       if (reduced) {
         return {
-          kind: 'step',
+          kind: "step",
           newBody: [{ ...head, test: reduced.node }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
@@ -526,16 +574,16 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       const branch = (truthy ? head.consequent : head.alternate) as StepNode | null;
       const branchBody = branch ? (branch.body as StepNode[]) : [];
       return {
-        kind: 'step',
+        kind: "step",
         newBody: [...branchBody, ...rest],
         preRedex: head,
-        explanation: `If statement evaluated, condition ${truthy ? 'true' : 'false'}, proceed to ${truthy ? 'if' : 'else'} block`,
+        explanation: `If statement evaluated, condition ${truthy ? "true" : "false"}, proceed to ${truthy ? "if" : "else"} block`,
       };
     }
-    case 'ReturnStatement':
-      return { kind: 'return' };
+    case "ReturnStatement":
+      return { kind: "return" };
     default:
-      return { kind: 'irreducible' };
+      return { kind: "irreducible" };
   }
 }
 
@@ -553,14 +601,14 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
   const outcome = stepHead(head, rest);
 
   switch (outcome.kind) {
-    case 'step':
+    case "step":
       return {
         node: { ...prog, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
         explanation: outcome.explanation,
       };
-    case 'finished-expression':
+    case "finished-expression":
       // A fully-evaluated expression statement: it is the program's value only if it is last.
       if (rest.length === 0) return null;
       return {
@@ -568,8 +616,8 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         preRedex: head,
         explanation: `${unparse(head.expression as StepNode)} finished evaluating`,
       };
-    case 'return': // A `return` at the top level is not valid Python; treat the program as done.
-    case 'irreducible':
+    case "return": // A `return` at the top level is not valid Python; treat the program as done.
+    case "irreducible":
       return null;
   }
 }
@@ -582,10 +630,10 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
  * Mirrors Source's `StepperBlockExpression`.
  */
 function reduceBlock(node: StepNode): ReduceResult | null {
-  const none = (): StepNode => literal(null, 'None');
+  const none = (): StepNode => literal(null, "None");
   const fallOff = (preRedex: StepNode): ReduceResult => {
     const result = none();
-    return { node: result, preRedex, postRedex: result, explanation: 'Function returns None' };
+    return { node: result, preRedex, postRedex: result, explanation: "Function returns None" };
   };
 
   const body = node.body as StepNode[];
@@ -596,20 +644,20 @@ function reduceBlock(node: StepNode): ReduceResult | null {
   const outcome = stepHead(head, rest);
 
   switch (outcome.kind) {
-    case 'step':
+    case "step":
       return {
         node: { ...node, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
         explanation: outcome.explanation,
       };
-    case 'return': {
+    case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a
       // bare `return`); the argument then reduces in place. Anything after it is dead code, dropped.
       const arg = (head.argument as StepNode | null) ?? none();
       return { node: arg, preRedex: head, postRedex: arg, explanation: `${unparse(arg)} returned` };
     }
-    case 'finished-expression':
+    case "finished-expression":
       // A bare expression value in a function body is not the function's result: discard it; if it
       // was the last statement, the function fell off the end → None.
       return rest.length === 0
@@ -619,7 +667,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
             preRedex: head,
             explanation: `${unparse(head.expression as StepNode)} finished evaluating`,
           };
-    case 'irreducible':
+    case "irreducible":
       // A statement in the body is stuck (cannot reduce and is not a value/return). Signal no
       // progress so the driver reports the whole evaluation as stuck, rather than inventing a value.
       return null;

@@ -1,10 +1,14 @@
-import type { SerializedStepperStep, SyntaxProfile } from '@sourceacademy/common-stepper';
-import type { IChannel, IConduit } from '@sourceacademy/conductor/conduit';
-import { BaseStepperRunnerPlugin } from '@sourceacademy/runner-stepper';
+import type {
+  SerializedStepperStep,
+  StepperMessage,
+  SyntaxProfile,
+} from "@sourceacademy/common-stepper";
+import type { IChannel, IConduit } from "@sourceacademy/conductor/conduit";
+import { BaseStepperRunnerPlugin } from "@sourceacademy/runner-stepper";
 
-import type { StmtNS } from '../../ast-types';
-import { getPythonSteps } from './getSteps';
-import { pythonSyntaxProfile } from './syntaxProfile';
+import type { StmtNS } from "../../ast-types";
+import { getPythonSteps } from "./getSteps";
+import { pythonSyntaxProfile } from "./syntaxProfile";
 
 const DEFAULT_STEP_LIMIT = 1000;
 
@@ -20,7 +24,7 @@ export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.Fi
 
   constructor(
     conduit: IConduit,
-    channels: IChannel<any>[],
+    channels: IChannel<StepperMessage>[],
     stepLimit: number = DEFAULT_STEP_LIMIT,
   ) {
     super(conduit, channels);

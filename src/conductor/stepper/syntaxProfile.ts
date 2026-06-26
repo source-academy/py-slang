@@ -13,73 +13,73 @@
  * (`when`). The precedence maps let the host insert parentheses generically (e.g. `(1 + 2) * 3`).
  */
 
-import type { SyntaxProfile } from '@sourceacademy/common-stepper';
+import type { SyntaxProfile } from "@sourceacademy/common-stepper";
 
 export const pythonSyntaxProfile: SyntaxProfile = {
   templates: {
     // Program / statements
-    Program: [{ lines: 'body' }],
-    ExpressionStatement: [{ child: 'expression' }],
-    VariableDeclaration: [{ list: 'declarations', sep: ', ' }],
-    VariableDeclarator: [{ child: 'id' }, ' = ', { child: 'init' }],
+    Program: [{ lines: "body" }],
+    ExpressionStatement: [{ child: "expression" }],
+    VariableDeclaration: [{ list: "declarations", sep: ", " }],
+    VariableDeclarator: [{ child: "id" }, " = ", { child: "init" }],
     FunctionDeclaration: [
-      { token: 'def ', cls: 'identifier' },
+      { token: "def ", cls: "identifier" },
       // The function name is part of the `def` keyword group, coloured like Source's `function map`.
-      { prop: 'id.name', cls: 'identifier' },
-      '(',
-      { list: 'params', sep: ', ' },
-      '):',
-      { child: 'body' },
+      { prop: "id.name", cls: "identifier" },
+      "(",
+      { list: "params", sep: ", " },
+      "):",
+      { child: "body" },
     ],
-    BlockStatement: [{ block: 'body' }],
-    ReturnStatement: [{ token: 'return ', cls: 'operator' }, { child: 'argument' }],
+    BlockStatement: [{ block: "body" }],
+    ReturnStatement: [{ token: "return ", cls: "operator" }, { child: "argument" }],
     IfStatement: [
-      { token: 'if ', cls: 'identifier' },
-      { child: 'test' },
-      { token: ':', cls: 'identifier' },
-      { child: 'consequent' },
-      { when: 'alternate', parts: [{ token: 'else:', cls: 'identifier' }, { child: 'alternate' }] },
+      { token: "if ", cls: "identifier" },
+      { child: "test" },
+      { token: ":", cls: "identifier" },
+      { child: "consequent" },
+      { when: "alternate", parts: [{ token: "else:", cls: "identifier" }, { child: "alternate" }] },
     ],
-    PassStatement: [{ token: 'pass', cls: 'identifier' }],
+    PassStatement: [{ token: "pass", cls: "identifier" }],
 
     // Atoms
-    Literal: [{ prop: 'raw', cls: 'literal' }],
+    Literal: [{ prop: "raw", cls: "literal" }],
     // Plain names are uncoloured (white), like Source — only keywords/operators are coloured. A
     // function name shown as a value collapses to a bold mu-term (see `functionValues` below).
-    Identifier: [{ prop: 'name' }],
+    Identifier: [{ prop: "name" }],
 
     // Expressions
     BinaryExpression: [
-      { child: 'left' },
-      ' ',
-      { prop: 'operator', cls: 'operator' },
-      ' ',
-      { child: 'right', isRight: true },
+      { child: "left" },
+      " ",
+      { prop: "operator", cls: "operator" },
+      " ",
+      { child: "right", isRight: true },
     ],
     LogicalExpression: [
-      { child: 'left' },
-      ' ',
-      { prop: 'operator', cls: 'operator' },
-      ' ',
-      { child: 'right', isRight: true },
+      { child: "left" },
+      " ",
+      { prop: "operator", cls: "operator" },
+      " ",
+      { child: "right", isRight: true },
     ],
-    UnaryExpression: [{ prop: 'operator', cls: 'operator' }, { child: 'argument' }],
+    UnaryExpression: [{ prop: "operator", cls: "operator" }, { child: "argument" }],
     ConditionalExpression: [
-      { child: 'consequent' },
-      { token: ' if ', cls: 'conditional' },
-      { child: 'test' },
-      { token: ' else ', cls: 'conditional' },
-      { child: 'alternate' },
+      { child: "consequent" },
+      { token: " if ", cls: "conditional" },
+      { child: "test" },
+      { token: " else ", cls: "conditional" },
+      { child: "alternate" },
     ],
-    CallExpression: [{ child: 'callee' }, '(', { list: 'arguments', sep: ', ' }, ')'],
+    CallExpression: [{ child: "callee" }, "(", { list: "arguments", sep: ", " }, ")"],
     // Python lambdas never parenthesise their parameters: `lambda x, y: body` / `lambda: body`.
     ArrowFunctionExpression: [
-      { token: 'lambda', cls: 'identifier' },
-      { list: 'params', sep: ', ', prefix: ' ' },
-      { token: ': ', cls: 'identifier' },
-      { child: 'body' },
+      { token: "lambda", cls: "identifier" },
+      { list: "params", sep: ", ", prefix: " " },
+      { token: ": ", cls: "identifier" },
+      { child: "body" },
     ],
-    ArrayExpression: ['[', { list: 'elements', sep: ', ' }, ']'],
+    ArrayExpression: ["[", { list: "elements", sep: ", " }, "]"],
   },
 
   // Parenthesisation precedence (higher binds tighter). Mirrors Python's grammar; the host wraps a
@@ -87,23 +87,23 @@ export const pythonSyntaxProfile: SyntaxProfile = {
   operatorPrecedence: {
     or: 2,
     and: 4,
-    '==': 8,
-    '!=': 8,
-    '<': 9,
-    '>': 9,
-    '<=': 9,
-    '>=': 9,
+    "==": 8,
+    "!=": 8,
+    "<": 9,
+    ">": 9,
+    "<=": 9,
+    ">=": 9,
     in: 9,
-    'not in': 9,
+    "not in": 9,
     is: 9,
-    'is not': 9,
-    '+': 11,
-    '-': 11,
-    '*': 12,
-    '/': 12,
-    '//': 12,
-    '%': 12,
-    '**': 13,
+    "is not": 9,
+    "+": 11,
+    "-": 11,
+    "*": 12,
+    "/": 12,
+    "//": 12,
+    "%": 12,
+    "**": 13,
   },
   expressionPrecedence: {
     Identifier: 20,
@@ -125,7 +125,7 @@ export const pythonSyntaxProfile: SyntaxProfile = {
   // name — a bold mu-term you hover to reveal the body — instead of expanding the whole body inline
   // at every use, exactly like Source. An anonymous `lambda` (no `name`) keeps rendering inline.
   functionValues: [
-    { type: 'ArrowFunctionExpression', nameProp: 'name' },
-    { type: 'FunctionDeclaration', nameProp: 'name' },
+    { type: "ArrowFunctionExpression", nameProp: "name" },
+    { type: "FunctionDeclaration", nameProp: "name" },
   ],
 };

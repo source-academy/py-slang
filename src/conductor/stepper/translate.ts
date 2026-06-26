@@ -8,8 +8,8 @@
  * instead of failing the whole run.
  */
 
-import { ExprNS, StmtNS, type FunctionParam } from '../../ast-types';
-import { type StepNode, identifier, literal, numberRepr, program, pythonStringRepr } from './ast';
+import { ExprNS, StmtNS, type FunctionParam } from "../../ast-types";
+import { type StepNode, identifier, literal, numberRepr, program, pythonStringRepr } from "./ast";
 
 /** Python `repr` for a float: integers print with a trailing `.0` (e.g. `2.0`), matching Python. */
 function floatRepr(n: number): string {
@@ -25,88 +25,88 @@ function param(p: FunctionParam): StepNode {
 
 function translateExpr(expr: ExprNS.Expr): StepNode {
   switch (expr.kind) {
-    case 'BigIntLiteral': {
+    case "BigIntLiteral": {
       const e = expr as ExprNS.BigIntLiteral;
       return literal(BigInt(e.value), e.value, false);
     }
-    case 'Literal': {
+    case "Literal": {
       const value = (expr as ExprNS.Literal).value;
-      if (value === true || value === false) return literal(value, value ? 'True' : 'False');
-      if (typeof value === 'number') return literal(value, floatRepr(value), true);
+      if (value === true || value === false) return literal(value, value ? "True" : "False");
+      if (typeof value === "number") return literal(value, floatRepr(value), true);
       return literal(value, stringRepr(String(value)));
     }
-    case 'Complex': {
+    case "Complex": {
       const value = (expr as ExprNS.Complex).value;
       return literal(String(value), String(value));
     }
-    case 'None':
-      return literal(null, 'None');
-    case 'Variable':
+    case "None":
+      return literal(null, "None");
+    case "Variable":
       return identifier((expr as ExprNS.Variable).name.lexeme);
-    case 'Binary': {
+    case "Binary": {
       const e = expr as ExprNS.Binary;
       return {
-        type: 'BinaryExpression',
+        type: "BinaryExpression",
         operator: e.operator.lexeme,
         left: translateExpr(e.left),
         right: translateExpr(e.right),
       };
     }
-    case 'Compare': {
+    case "Compare": {
       const e = expr as ExprNS.Compare;
       return {
-        type: 'BinaryExpression',
+        type: "BinaryExpression",
         operator: e.operator.lexeme,
         left: translateExpr(e.left),
         right: translateExpr(e.right),
       };
     }
-    case 'BoolOp': {
+    case "BoolOp": {
       const e = expr as ExprNS.BoolOp;
       return {
-        type: 'LogicalExpression',
+        type: "LogicalExpression",
         operator: e.operator.lexeme,
         left: translateExpr(e.left),
         right: translateExpr(e.right),
       };
     }
-    case 'Unary': {
+    case "Unary": {
       const e = expr as ExprNS.Unary;
       // `not` needs a trailing space so it reads `not x`; symbolic operators like `-` do not.
-      const operator = e.operator.lexeme === 'not' ? 'not ' : e.operator.lexeme;
-      return { type: 'UnaryExpression', operator, argument: translateExpr(e.right) };
+      const operator = e.operator.lexeme === "not" ? "not " : e.operator.lexeme;
+      return { type: "UnaryExpression", operator, argument: translateExpr(e.right) };
     }
-    case 'Grouping':
+    case "Grouping":
       // Parentheses are reintroduced by the host renderer's precedence logic, so unwrap them.
       return translateExpr((expr as ExprNS.Grouping).expression);
-    case 'Ternary': {
+    case "Ternary": {
       const e = expr as ExprNS.Ternary;
       return {
-        type: 'ConditionalExpression',
+        type: "ConditionalExpression",
         test: translateExpr(e.predicate),
         consequent: translateExpr(e.consequent),
         alternate: translateExpr(e.alternative),
       };
     }
-    case 'Lambda': {
+    case "Lambda": {
       const e = expr as ExprNS.Lambda;
       return {
-        type: 'ArrowFunctionExpression',
+        type: "ArrowFunctionExpression",
         params: e.parameters.map(param),
         body: translateExpr(e.body),
       };
     }
-    case 'Call': {
+    case "Call": {
       const e = expr as ExprNS.Call;
       return {
-        type: 'CallExpression',
+        type: "CallExpression",
         callee: translateExpr(e.callee),
         arguments: e.args.map(translateExpr),
       };
     }
-    case 'List': {
+    case "List": {
       const e = expr as ExprNS.List;
-      return { type: 'ArrayExpression', elements: e.elements.map(translateExpr) };
+      return { type: "ArrayExpression", elements: e.elements.map(translateExpr) };
     }
     default:
       // Inert placeholder: renders as plain text and never reduces.
@@ -115,59 +115,62 @@ function translateExpr(expr: ExprNS.Expr): StepNode {
 }
 
 function block(statements: StmtNS.Stmt[]): StepNode {
-  return { type: 'BlockStatement', body: statements.map(translateStmt) };
+  return { type: "BlockStatement", body: statements.map(translateStmt) };
 }
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
-    case 'SimpleExpr':
-      return { type: 'ExpressionStatement', expression: translateExpr((stmt as StmtNS.SimpleExpr).expression) };
-    case 'Assign': {
+    case "SimpleExpr":
+      return {
+        type: "ExpressionStatement",
+        expression: translateExpr((stmt as StmtNS.SimpleExpr).expression),
+      };
+    case "Assign": {
       const s = stmt as StmtNS.Assign;
-      if (s.target.kind === 'Variable') {
+      if (s.target.kind === "Variable") {
         return {
-          type: 'VariableDeclaration',
-          kind: '',
+          type: "VariableDeclaration",
+          kind: "",
           declarations: [
             {
-              type: 'VariableDeclarator',
-              id: identifier((s.target as ExprNS.Variable).name.lexeme),
+              type: "VariableDeclarator",
+              id: identifier(s.target.name.lexeme),
               init: translateExpr(s.value),
             },
           ],
         };
       }
-      return { type: 'ExpressionStatement', expression: identifier('<Assign>') };
+      return { type: "ExpressionStatement", expression: identifier("<Assign>") };
     }
-    case 'FunctionDef': {
+    case "FunctionDef": {
       const s = stmt as StmtNS.FunctionDef;
       return {
-        type: 'FunctionDeclaration',
+        type: "FunctionDeclaration",
         id: identifier(s.name.lexeme),
         params: s.parameters.map(param),
         body: block(s.body),
       };
     }
-    case 'Return': {
+    case "Return": {
       const s = stmt as StmtNS.Return;
       return {
-        type: 'ReturnStatement',
+        type: "ReturnStatement",
         argument: s.value ? translateExpr(s.value) : null,
       };
     }
-    case 'If': {
+    case "If": {
       const s = stmt as StmtNS.If;
       return {
-        type: 'IfStatement',
+        type: "IfStatement",
         test: translateExpr(s.condition),
         consequent: block(s.body),
         alternate: s.elseBlock ? block(s.elseBlock) : null,
       };
     }
-    case 'Pass':
-      return { type: 'PassStatement' };
+    case "Pass":
+      return { type: "PassStatement" };
     default:
-      return { type: 'ExpressionStatement', expression: identifier(`<${stmt.kind}>`) };
+      return { type: "ExpressionStatement", expression: identifier(`<${stmt.kind}>`) };
   }
 }
 

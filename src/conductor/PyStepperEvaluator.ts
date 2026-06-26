@@ -1,12 +1,12 @@
-import { STEPPER_DIRECTORY_ID } from '@sourceacademy/common-stepper';
-import { ConductorError, EvaluatorSyntaxError } from '@sourceacademy/conductor/common';
-import { BasicEvaluator, type IRunnerPlugin } from '@sourceacademy/conductor/runner';
-import { RunnerStatus } from '@sourceacademy/conductor/types';
+import { STEPPER_DIRECTORY_ID } from "@sourceacademy/common-stepper";
+import { ConductorError, EvaluatorSyntaxError } from "@sourceacademy/conductor/common";
+import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { RunnerStatus } from "@sourceacademy/conductor/types";
 
-import { parse } from '../parser';
-import { evaluatePython } from './stepper/getSteps';
-import { preprocessPython } from './stepper/preprocess';
-import { PythonStepperRunnerPlugin } from './stepper/PyStepperRunnerPlugin';
+import { parse } from "../parser";
+import { evaluatePython } from "./stepper/getSteps";
+import { preprocessPython } from "./stepper/preprocess";
+import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
 
 /**
  * A Conductor evaluator for Python that drives the stepper.
@@ -39,7 +39,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   override async startEvaluator(entryPoint: string): Promise<void> {
     const code = await this.conductor.requestFile(entryPoint);
     if (code === undefined) {
-      this.conductor.sendError(new ConductorError('Cannot load entrypoint file'));
+      this.conductor.sendError(new ConductorError("Cannot load entrypoint file"));
     } else {
       await this.runChunk(code);
     }
@@ -50,7 +50,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private async runChunk(chunk: string): Promise<void> {
     this.conductor.updateStatus(RunnerStatus.RUNNING, true);
     try {
-      const script = chunk + '\n';
+      const script = chunk + "\n";
       const ast = parse(script);
 
       // Preprocessing: reject an undefined variable as a (preprocessing) error and do NOT run the

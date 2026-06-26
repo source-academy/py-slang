@@ -24,16 +24,16 @@ export interface StepNode {
 
 /** Builds a `Literal` whose displayed text is `raw` (so Python reprs like `True`/`None` survive). */
 export function literal(value: unknown, raw: string, pyFloat = false): StepNode {
-  return { type: 'Literal', value, raw, pyFloat };
+  return { type: "Literal", value, raw, pyFloat };
 }
 
 /** Python's textual form of a JS `number`: `inf`/`-inf`/`nan` for the specials, and a trailing `.0`
  * for an integer-valued float (so `4 / 2` reads `2.0`, like Python). Shared by the reducer and the
  * builtin library so all float results display consistently. */
 export function numberRepr(n: number, pyFloat: boolean): string {
-  if (Number.isNaN(n)) return 'nan';
-  if (n === Infinity) return 'inf';
-  if (n === -Infinity) return '-inf';
+  if (Number.isNaN(n)) return "nan";
+  if (n === Infinity) return "inf";
+  if (n === -Infinity) return "-inf";
   return pyFloat && Number.isInteger(n) ? `${n}.0` : String(n);
 }
 
@@ -47,7 +47,7 @@ export function numberLiteral(n: number, pyFloat: boolean): StepNode {
  * Shared by `translate` (source literals), the reducer (string concatenation) and the builtin library
  * so every string displays the same way. */
 export function pythonStringRepr(s: string): string {
-  const escaped = s.replace(/\\/g, '\\\\').replace(/\n/g, '\\n');
+  const escaped = s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n");
   if (s.includes("'") && !s.includes('"')) return `"${escaped}"`;
   return `'${escaped.replace(/'/g, "\\'")}'`;
 }
@@ -58,15 +58,15 @@ export function stringLiteral(s: string): StepNode {
 }
 
 export function identifier(name: string): StepNode {
-  return { type: 'Identifier', name };
+  return { type: "Identifier", name };
 }
 
 export function program(body: StepNode[]): StepNode {
-  return { type: 'Program', body };
+  return { type: "Program", body };
 }
 
 export function expressionStatement(expression: StepNode): StepNode {
-  return { type: 'ExpressionStatement', expression };
+  return { type: "ExpressionStatement", expression };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -80,12 +80,12 @@ export function expressionStatement(expression: StepNode): StepNode {
  */
 export function isValue(node: StepNode): boolean {
   switch (node.type) {
-    case 'Literal':
-    case 'Identifier':
-    case 'ArrowFunctionExpression':
-    case 'FunctionDeclaration':
+    case "Literal":
+    case "Identifier":
+    case "ArrowFunctionExpression":
+    case "FunctionDeclaration":
       return true;
-    case 'ArrayExpression':
+    case "ArrayExpression":
       return (node.elements as StepNode[]).every(isValue);
     default:
       return false;
@@ -94,7 +94,7 @@ export function isValue(node: StepNode): boolean {
 
 /** A callable function value produced by a `lambda` or a single-`return` `def`. */
 export function isFunctionValue(node: StepNode): boolean {
-  return node.type === 'ArrowFunctionExpression' || node.type === 'FunctionDeclaration';
+  return node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration";
 }
 
 /**
@@ -105,11 +105,11 @@ export function isFunctionValue(node: StepNode): boolean {
  */
 export function isResultValue(node: StepNode): boolean {
   switch (node.type) {
-    case 'Literal':
-    case 'ArrowFunctionExpression':
-    case 'FunctionDeclaration':
+    case "Literal":
+    case "ArrowFunctionExpression":
+    case "FunctionDeclaration":
       return true;
-    case 'ArrayExpression':
+    case "ArrayExpression":
       return (node.elements as StepNode[]).every(isResultValue);
     default:
       return false;
@@ -127,7 +127,7 @@ export function isResultValue(node: StepNode): boolean {
  */
 export function clone<T>(value: T): T {
   if (Array.isArray(value)) return value.map(clone) as unknown as T;
-  if (value !== null && typeof value === 'object') {
+  if (value !== null && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(value as Record<string, unknown>)) {
       out[key] = clone((value as Record<string, unknown>)[key]);
@@ -146,29 +146,29 @@ export function clone<T>(value: T): T {
  * (e.g. `"1 + 2"`); the host does the real rendering, so this need not be perfectly faithful.
  */
 export function unparse(node: StepNode | null | undefined): string {
-  if (!node) return '';
+  if (!node) return "";
   switch (node.type) {
-    case 'Literal':
+    case "Literal":
       return String(node.raw ?? node.value);
-    case 'Identifier':
+    case "Identifier":
       return String(node.name);
-    case 'BinaryExpression':
-    case 'LogicalExpression':
+    case "BinaryExpression":
+    case "LogicalExpression":
       return `${unparse(node.left as StepNode)} ${node.operator} ${unparse(node.right as StepNode)}`;
-    case 'UnaryExpression':
+    case "UnaryExpression":
       return `${node.operator}${unparse(node.argument as StepNode)}`;
-    case 'ConditionalExpression':
+    case "ConditionalExpression":
       return `${unparse(node.consequent as StepNode)} if ${unparse(node.test as StepNode)} else ${unparse(node.alternate as StepNode)}`;
-    case 'CallExpression':
-      return `${unparse(node.callee as StepNode)}(${(node.arguments as StepNode[]).map(unparse).join(', ')})`;
-    case 'ArrowFunctionExpression':
+    case "CallExpression":
+      return `${unparse(node.callee as StepNode)}(${(node.arguments as StepNode[]).map(unparse).join(", ")})`;
+    case "ArrowFunctionExpression":
       return node.name
         ? String(node.name)
-        : `lambda ${(node.params as StepNode[]).map(unparse).join(', ')}: ${unparse(node.body as StepNode)}`;
-    case 'FunctionDeclaration':
+        : `lambda ${(node.params as StepNode[]).map(unparse).join(", ")}: ${unparse(node.body as StepNode)}`;
+    case "FunctionDeclaration":
       return String((node.id as StepNode).name);
-    case 'ArrayExpression':
-      return `[${(node.elements as StepNode[]).map(unparse).join(', ')}]`;
+    case "ArrayExpression":
+      return `[${(node.elements as StepNode[]).map(unparse).join(", ")}]`;
     default:
       return `<${node.type}>`;
   }

@@ -12,20 +12,20 @@ import type {
   SerializedMarker,
   SerializedStepperNode,
   SerializedStepperStep,
-} from '@sourceacademy/common-stepper';
+} from "@sourceacademy/common-stepper";
 
-import type { StmtNS } from '../../ast-types';
-import { type StepNode, unparse } from './ast';
-import { isStepperValue } from './builtins';
-import { reduceProgram } from './reduce';
-import { translateProgram } from './translate';
+import type { StmtNS } from "../../ast-types";
+import { type StepNode, unparse } from "./ast";
+import { isStepperValue } from "./builtins";
+import { reduceProgram } from "./reduce";
+import { translateProgram } from "./translate";
 
 /** Default cap on the number of *contractions*; each contraction emits two steps. */
 const DEFAULT_CONTRACTION_LIMIT = 500;
 
 interface Marker {
   redex?: StepNode;
-  redexType?: 'beforeMarker' | 'afterMarker';
+  redexType?: "beforeMarker" | "afterMarker";
   explanation?: string;
 }
 
@@ -42,14 +42,14 @@ interface Step {
 function isComplete(prog: StepNode): boolean {
   const body = prog.body as StepNode[];
   if (body.length === 0) return true;
-  if (body.length === 1 && body[0].type === 'ExpressionStatement') {
+  if (body.length === 1 && body[0].type === "ExpressionStatement") {
     return isStepperValue(body[0].expression as StepNode);
   }
   return false;
 }
 
 function drive(prog: StepNode, contractionLimit: number): Step[] {
-  const steps: Step[] = [{ ast: prog, markers: [{ explanation: 'Start of evaluation' }] }];
+  const steps: Step[] = [{ ast: prog, markers: [{ explanation: "Start of evaluation" }] }];
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
@@ -61,8 +61,8 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
       const message = error instanceof Error ? error.message : String(error);
-      steps.push({ ast: current, markers: [{ redexType: 'beforeMarker', explanation: message }] });
-      steps.push({ ast: current, markers: [{ explanation: 'Evaluation stuck' }] });
+      steps.push({ ast: current, markers: [{ redexType: "beforeMarker", explanation: message }] });
+      steps.push({ ast: current, markers: [{ explanation: "Evaluation stuck" }] });
       return steps;
     }
     if (result === null) {
@@ -70,27 +70,31 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
       // tree that cannot reduce yet is not a value ("Evaluation stuck"), exactly as Source reports.
       steps.push({
         ast: current,
-        markers: [{ explanation: isComplete(current) ? 'Evaluation complete' : 'Evaluation stuck' }],
+        markers: [
+          { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
+        ],
       });
       return steps;
     }
 
     steps.push({
       ast: current,
-      markers: [{ redex: result.preRedex, redexType: 'beforeMarker', explanation: result.explanation }],
+      markers: [
+        { redex: result.preRedex, redexType: "beforeMarker", explanation: result.explanation },
+      ],
     });
     steps.push({
       ast: result.node,
       markers: [
         result.postRedex
-          ? { redex: result.postRedex, redexType: 'afterMarker', explanation: result.explanation }
-          : { redexType: 'afterMarker', explanation: result.explanation },
+          ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
+          : { redexType: "afterMarker", explanation: result.explanation },
       ],
     });
 
     current = result.node;
     if (i === contractionLimit - 1) {
-      steps.push({ ast: current, markers: [{ explanation: 'Maximum number of steps exceeded' }] });
+      steps.push({ ast: current, markers: [{ explanation: "Maximum number of steps exceeded" }] });
     }
   }
 
@@ -102,7 +106,9 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
 /* -------------------------------------------------------------------------- */
 
 function isNode(value: unknown): value is StepNode {
-  return value !== null && typeof value === 'object' && typeof (value as StepNode).type === 'string';
+  return (
+    value !== null && typeof value === "object" && typeof (value as StepNode).type === "string"
+  );
 }
 
 /**
@@ -131,7 +137,7 @@ function serializeStep(step: Step): SerializedStepperStep {
     onPath.add(node);
     const out: SerializedStepperNode = { type: node.type, nodeId };
     for (const key of Object.keys(node)) {
-      if (key === 'type') continue;
+      if (key === "type") continue;
       out[key] = serializeValue(node[key]);
     }
     onPath.delete(node);
@@ -139,7 +145,7 @@ function serializeStep(step: Step): SerializedStepperStep {
   };
 
   const serializeValue = (value: unknown): unknown => {
-    if (value === null || typeof value !== 'object') return value;
+    if (value === null || typeof value !== "object") return value;
     if (Array.isArray(value)) return value.map(serializeValue);
     if (isNode(value)) return serializeNode(value);
     const out: Record<string, unknown> = {};
@@ -206,11 +212,11 @@ export function evaluatePython(fileInput: StmtNS.FileInput): string {
   }
 
   const body = current.body as StepNode[];
-  if (body.length === 0) return '';
+  if (body.length === 0) return "";
   const last = body[body.length - 1];
-  if (last.type === 'ExpressionStatement') {
+  if (last.type === "ExpressionStatement") {
     const expr = last.expression as StepNode;
-    return expr.type === 'Literal' ? String(expr.raw ?? expr.value) : unparse(expr);
+    return expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
   }
-  return '';
+  return "";
 }
