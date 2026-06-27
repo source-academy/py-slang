@@ -20,7 +20,7 @@ type ControlStackItem = {
   kind?: string;
   startToken?: { indexInSource?: number; line?: number; lexeme?: string };
   endToken?: { indexInSource?: number; line?: number; lexeme?: string } | null;
-  body?: unknown;
+  body?: Array<{ kind: string }> | { kind: string; body: Array<{ kind: string }> };
   syntheticLabel?: string;
   numOfArgs?: number;
   numOfElements?: number;
@@ -305,7 +305,11 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       jsNodeType === "FunctionDeclaration" ||
       jsNodeType === "ArrowFunctionExpression"
     ) {
-      const body = Array.isArray(item.body) ? item.body : [];
+      const body = Array.isArray(item.body)
+        ? item.body
+        : item.body !== undefined && "body" in item.body
+          ? item.body.body
+          : [];
       nodeMeta.bodyLength = body.length;
       nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
