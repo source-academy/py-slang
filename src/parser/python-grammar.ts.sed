@@ -1,4 +1,3 @@
-1s/^\/\/ Generated/\/\/ @ts-nocheck\n\/\/ Generated/
 /^declare var/d
 s/(pythonLexer.has("\([^"]*\)") ? {type: "\1"} : \1)/{type: "\1"}/g
 s/^\(type NearleySymbol =\)/\1 { type: any }|/
