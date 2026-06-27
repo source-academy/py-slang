@@ -263,7 +263,8 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
   if (item.kind !== undefined) {
     const start: number = item.startToken?.indexInSource ?? -1;
     const endTok = item.endToken;
-    const end: number = endTok != null ? (endTok.indexInSource ?? 0) + (endTok.lexeme?.length ?? 0) : -1;
+    const end: number =
+      endTok != null ? (endTok.indexInSource ?? 0) + (endTok.lexeme?.length ?? 0) : -1;
     // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) have both
     // tokens pinned to position 0. Require start > 0 OR end token at a real position
     // to guard against slicing the wrong source text.
