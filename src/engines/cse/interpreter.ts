@@ -56,11 +56,14 @@ import {
   evaluateForIterator,
   evaluateListAssignment,
   generateForIncrement,
+  getProgramEnvironment,
   isInstr,
   isNode,
   pyDefineVariable,
+  pyGetGlobalVariable,
   pyGetVariable,
   scanForAssignments,
+  scanForGlobalDeclarations,
 } from "./utils";
 
 export interface IOptions {
@@ -367,11 +370,8 @@ function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
 type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
-type StmtKeys = Exclude<
-  keyof typeof StmtNS,
-  "Stmt" | "AnnAssign" | "Global" | "Assert" | "NonLocal"
->;
-type InstrKeys = Exclude<InstrType, "Assert" | "Global" | "NonLocal" | "Import" | "Program">;
+type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert" | "NonLocal">;
+type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
 } & {
@@ -531,6 +531,12 @@ const cmdEvaluators: CmdEvaluators = {
     stash.push({ type: "none" });
   },
 
+  Global: function () {
+    // `global x` is a declaration — no runtime effect; the interpreter uses
+    // closure.globalVariables (populated at FunctionDef time) to route reads
+    // and writes to the module-level environment.
+  },
+
   Variable: function (
     code: string,
     variable: ExprNS.Variable,
@@ -540,9 +546,11 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const name = variable.name.lexeme;
-
-    // if not built in, look up in environment
-    const value = pyGetVariable(code, context, name, variable);
+    const currentEnv = currentEnvironment(context);
+    const isGlobal = currentEnv.closure?.globalVariables.has(name) ?? false;
+    const value = isGlobal
+      ? pyGetGlobalVariable(code, context, name, variable)
+      : pyGetVariable(code, context, name, variable);
     stash.push(value);
   },
 
@@ -619,12 +627,14 @@ const cmdEvaluators: CmdEvaluators = {
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    const localVariables = scanForAssignments(functionDefNode.body);
+    const globalVariables = scanForGlobalDeclarations(functionDefNode.body);
+    const localVariables = scanForAssignments(functionDefNode.body, globalVariables);
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
       currentEnvironment(context),
       context,
       localVariables,
+      globalVariables,
     );
     pyDefineVariable(context, functionDefNode.name.lexeme, { type: "closure", closure });
   },
@@ -838,7 +848,14 @@ const cmdEvaluators: CmdEvaluators = {
           new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr),
         );
       }
-      pyDefineVariable(context, instr.symbol, value);
+      const currentEnv = currentEnvironment(context);
+      const isGlobal = currentEnv.closure?.globalVariables.has(instr.symbol) ?? false;
+      if (isGlobal) {
+        const progEnv = getProgramEnvironment(context) ?? currentEnv;
+        pyDefineVariable(context, instr.symbol, value, progEnv);
+      } else {
+        pyDefineVariable(context, instr.symbol, value);
+      }
     }
   },
 

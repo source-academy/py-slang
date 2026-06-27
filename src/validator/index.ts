@@ -9,6 +9,7 @@ export { NoIsOperatorValidator } from "./features/no-is-operator";
 export { NoLambdaValidator } from "./features/no-lambda";
 export { NoListsValidator } from "./features/no-lists";
 export { NoLoopsValidator } from "./features/no-loops";
+export { NoGlobalValidator } from "./features/no-global";
 export { NoNonlocalValidator } from "./features/no-nonlocal";
 export { createNoReassignmentValidator, NoReassignmentValidator } from "./features/no-reassignment";
 export { NoRestParamsValidator } from "./features/no-rest-params";
