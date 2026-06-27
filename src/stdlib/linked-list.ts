@@ -115,7 +115,7 @@ class LinkedListBuiltins {
     context: Context,
   ): Promise<NoneValue> {
     const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
-    await displayOutput(context, stringValue);
+    await displayOutput(context, stringValue + "\n");
     return { type: "none" };
   }
 }
