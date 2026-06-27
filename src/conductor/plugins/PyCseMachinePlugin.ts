@@ -3,6 +3,7 @@ import { Control } from "../../engines/cse/control";
 import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
+import { TokenType } from "../../tokenizer";
 import { toPythonFloat } from "../../stdlib/utils";
 import { Environment } from "../../engines/cse/environment";
 import { Closure } from "../../engines/cse/closure";
@@ -19,11 +20,11 @@ type ControlStackItem = {
   kind?: string;
   startToken?: { indexInSource?: number; line?: number; lexeme?: string };
   endToken?: { indexInSource?: number; line?: number; lexeme?: string } | null;
-  body?: Array<{ kind: string }>;
+  body?: Array<{ kind: string }> | { kind: string; body: Array<{ kind: string }> };
   syntheticLabel?: string;
   numOfArgs?: number;
   numOfElements?: number;
-  symbol?: string;
+  symbol?: string | TokenType;
   value?: unknown;
 };
 
@@ -262,7 +263,8 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
   if (item.kind !== undefined) {
     const start: number = item.startToken?.indexInSource ?? -1;
     const endTok = item.endToken;
-    const end: number = endTok != null ? endTok.indexInSource + (endTok.lexeme?.length ?? 0) : -1;
+    const end: number =
+      endTok != null ? (endTok.indexInSource ?? 0) + (endTok.lexeme?.length ?? 0) : -1;
     // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) have both
     // tokens pinned to position 0. Require start > 0 OR end token at a real position
     // to guard against slicing the wrong source text.
@@ -303,7 +305,11 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       jsNodeType === "FunctionDeclaration" ||
       jsNodeType === "ArrowFunctionExpression"
     ) {
-      const body = Array.isArray(item.body) ? item.body : [];
+      const body = Array.isArray(item.body)
+        ? item.body
+        : item.body !== undefined && "body" in item.body
+          ? item.body.body
+          : [];
       nodeMeta.bodyLength = body.length;
       nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
