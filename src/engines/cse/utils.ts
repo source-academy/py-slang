@@ -408,8 +408,15 @@ export function scanForGlobalDeclarations(node: Node | Node[]): Set<string> {
         const child = (curNode as unknown as Record<string, unknown>)[key];
         if (Array.isArray(child)) {
           child.forEach(c => {
-            if (c && typeof c === "object") visitor(c as Node);
+            if (c !== undefined && c !== null && typeof c === "object") visitor(c as Node);
           });
+        } else if (
+          child !== undefined &&
+          child !== null &&
+          typeof child === "object" &&
+          (child as { kind?: string }).kind !== undefined
+        ) {
+          visitor(child as Node);
         }
       }
     }
