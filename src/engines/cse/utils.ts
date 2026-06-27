@@ -14,6 +14,10 @@ import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";
 import { AssertionError, handleRuntimeError } from "./error";
+
+export function getProgramEnvironment(context: Context): Environment | null {
+  return context.runtime.environments.find(env => env.name === "programEnvironment") ?? null;
+}
 import { BigIntValue, ComplexValue, NumberValue, Value } from "./stash";
 import {
   BranchInstr,
@@ -84,6 +88,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
     },
   ],
   ["FromImport", setToTrue],
+  ["Global", setToFalse],
   ["Pass", setToFalse],
   ["Break", setToFalse],
   ["Continue", setToFalse],
@@ -288,6 +293,27 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
 
+// Reads `name` starting from the module-level (programEnvironment), bypassing any
+// enclosing function frames. Used when a function declares `global name`.
+export function pyGetGlobalVariable(
+  code: string,
+  context: Context,
+  name: string,
+  node: Node,
+): Value {
+  let currentEnv: Environment | null = getProgramEnvironment(context);
+  while (currentEnv) {
+    if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
+      return currentEnv.head[name];
+    }
+    currentEnv = currentEnv.tail;
+  }
+  if (context.nativeStorage.builtins.has(name)) {
+    return context.nativeStorage.builtins.get(name)!;
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
+}
+
 /**
  * Check whether the stack has exceeded the max recursion limit
  * (It only accepts instructions since a new function call can only be pushed onto the control
@@ -365,7 +391,38 @@ export default function assert(
   }
 }
 
-export function scanForAssignments(node: Node | Node[]): Set<string> {
+// Returns the set of names declared with `global` anywhere in the given function body,
+// without recursing into nested function definitions.
+export function scanForGlobalDeclarations(node: Node | Node[]): Set<string> {
+  const globals = new Set<string>();
+  const visitor = (curNode: Node) => {
+    if (!curNode || typeof curNode !== "object") return;
+    const kind = (curNode as { kind?: string }).kind;
+    if (kind === "Global") {
+      globals.add((curNode as unknown as StmtNS.Global).name.lexeme);
+      return;
+    }
+    if (kind === "FunctionDef" || kind === "Lambda") return;
+    for (const key in curNode) {
+      if (Object.prototype.hasOwnProperty.call(curNode, key)) {
+        const child = (curNode as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+          child.forEach(c => {
+            if (c && typeof c === "object") visitor(c as Node);
+          });
+        }
+      }
+    }
+  };
+  if (Array.isArray(node)) node.forEach(visitor);
+  else visitor(node);
+  return globals;
+}
+
+export function scanForAssignments(
+  node: Node | Node[],
+  globalNames: Set<string> = new Set(),
+): Set<string> {
   const assignments = new Set<string>();
   const visitor = (curNode: Node) => {
     if (!curNode || typeof curNode !== "object") {
@@ -377,11 +434,17 @@ export function scanForAssignments(node: Node | Node[]): Set<string> {
     if (nodeType === "Assign") {
       const assignNode = curNode as StmtNS.Assign;
       if (assignNode.target instanceof ExprNS.Variable) {
-        assignments.add(assignNode.target.name.lexeme);
+        const name = assignNode.target.name.lexeme;
+        if (!globalNames.has(name)) {
+          assignments.add(name);
+        }
       }
     } else if (nodeType === "FunctionDef") {
       // def f(...) creates a binding for the function name in the current scope
-      assignments.add((curNode as StmtNS.FunctionDef).name.lexeme);
+      const name = (curNode as StmtNS.FunctionDef).name.lexeme;
+      if (!globalNames.has(name)) {
+        assignments.add(name);
+      }
       return; // don't recurse into the nested function's body
     } else if (nodeType === "Lambda") {
       return; // lambda is anonymous, no name binding in current scope
