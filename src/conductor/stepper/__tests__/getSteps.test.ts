@@ -392,6 +392,81 @@ describe('Python stepper — runtime errors end with "Evaluation stuck"', () => 
   });
 });
 
+describe("Python stepper — a runtime error is named in the step before the stuck step", () => {
+  // Like ZeroDivisionError, the specific error appears as the step immediately before the terminal
+  // "Evaluation stuck" (the driver turns a thrown error into a beforeMarker step then the stuck step).
+  // This covers the errors the reducer used to swallow into a bare, message-less "Evaluation stuck".
+  const errorStep = (src: string): string | undefined => {
+    const e = explanations(src);
+    expect(e[e.length - 1]).toBe("Evaluation stuck");
+    return e[e.length - 2];
+  };
+
+  test("calling a non-callable value reports a TypeError", () => {
+    expect(errorStep("5(3)")).toBe("TypeError: 'int' object is not callable");
+    expect(errorStep("(3.5)(1)")).toBe("TypeError: 'float' object is not callable");
+    expect(errorStep("None()")).toBe("TypeError: 'NoneType' object is not callable");
+    expect(errorStep('"hi"()')).toBe("TypeError: 'str' object is not callable");
+  });
+
+  test("wrong number of arguments to a user function reports a TypeError", () => {
+    expect(errorStep("f = lambda x: x\nf(1, 2)")).toBe(
+      "TypeError: f() takes 1 argument(s) but 2 were given",
+    );
+    expect(errorStep("def g(a, b):\n  return a + b\ng(1)")).toBe(
+      "TypeError: g() takes 2 argument(s) but 1 were given",
+    );
+    expect(errorStep("(lambda a: a)(1, 2, 3)")).toBe(
+      "TypeError: <lambda>() takes 1 argument(s) but 3 were given",
+    );
+  });
+
+  test("unsupported binary operand types report a TypeError", () => {
+    expect(errorStep('1 + "a"')).toBe(
+      "TypeError: unsupported operand type(s) for +: 'int' and 'str'",
+    );
+    expect(errorStep('"a" - "b"')).toBe(
+      "TypeError: unsupported operand type(s) for -: 'str' and 'str'",
+    );
+    expect(errorStep("None + 1")).toBe(
+      "TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'",
+    );
+    expect(errorStep("x = lambda a: a\nx - 1")).toBe(
+      "TypeError: unsupported operand type(s) for -: 'function' and 'int'",
+    );
+  });
+
+  test("unsupported ordering comparisons report a TypeError", () => {
+    expect(errorStep("None < 1")).toBe(
+      "TypeError: '<' not supported between instances of 'NoneType' and 'int'",
+    );
+    expect(errorStep('1 < "a"')).toBe(
+      "TypeError: '<' not supported between instances of 'int' and 'str'",
+    );
+  });
+
+  test("unary minus/plus on a non-numeric reports a TypeError", () => {
+    expect(errorStep('-"a"')).toBe("TypeError: bad operand type for unary -: 'str'");
+    expect(errorStep("-None")).toBe("TypeError: bad operand type for unary -: 'NoneType'");
+  });
+
+  test("legal-but-unmodelled operations stay a silent stuck (never a false error)", () => {
+    // These are valid Python the teaching stepper just does not evaluate (string repetition, string
+    // ordering, %-formatting); they must remain a plain "Evaluation stuck" with no TypeError step.
+    for (const src of ['"ab" * 2', '2 * "ab"', '"a" < "b"', '"a" % "b"']) {
+      const e = explanations(src);
+      expect(e[e.length - 1]).toBe("Evaluation stuck");
+      expect(e.some(x => x.includes("TypeError"))).toBe(false);
+    }
+  });
+
+  test("the REPL value surfaces the same error message", () => {
+    expect(result("5(3)")).toBe("TypeError: 'int' object is not callable");
+    expect(result('1 + "a"')).toBe("TypeError: unsupported operand type(s) for +: 'int' and 'str'");
+    expect(() => result("5(3)")).not.toThrow();
+  });
+});
+
 describe("Python stepper — function values render as mu-terms (not inline bodies)", () => {
   // A substituted `def` must NOT expand its whole body at every use: it is substituted as a *named*
   // value (the `name` marker) so the host collapses it to a hoverable mu-term, exactly like Source.

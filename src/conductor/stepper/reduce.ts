@@ -171,33 +171,89 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
 
 const toBig = (v: bigint | boolean): bigint => (typeof v === "boolean" ? (v ? 1n : 0n) : v);
 
+const ARITHMETIC_OPS = new Set(["+", "-", "*", "/", "//", "%", "**"]);
+const ORDER_OPS = new Set(["<", ">", "<=", ">="]);
+
+/**
+ * The Python type name of a *concrete value* operand (for an operator error message), or `null` when
+ * `node` is something we deliberately do not diagnose — a bare `Identifier` (a built-in/unbound name),
+ * an `ArrayExpression` (a pair/list, whose operators Python *does* define), or an unreduced term — so
+ * those stay a graceful "stuck" rather than risk reporting a wrong error.
+ */
+function valueTypeName(node: StepNode): string | null {
+  if (node.type === "Literal") {
+    const v = node.value;
+    if (typeof v === "bigint") return "int";
+    if (typeof v === "number") return "float";
+    if (typeof v === "boolean") return "bool";
+    if (typeof v === "string") return "str";
+    if (v === null) return "NoneType";
+  }
+  if (isFunctionValue(node)) return "function";
+  return null;
+}
+
+/**
+ * Throws a Python `TypeError` for a binary operation that produced no result because its operand types
+ * are genuinely unsupported (e.g. `1 + "a"`, `None < 2`, a function in arithmetic). The driver turns
+ * the throw into an error step before "Evaluation stuck", exactly as it already does for
+ * `ZeroDivisionError`. Combinations Python *does* allow but this teaching stepper simply does not model
+ * — `str * int` repetition, `str % …` formatting, `str`-vs-`str` ordering, and anything on pairs/lists
+ * — are left as a silent "stuck" instead, so a valid operation is never mislabelled as an error.
+ */
+function reportBinaryTypeError(op: string, left: StepNode, right: StepNode): void {
+  const lt = valueTypeName(left);
+  const rt = valueTypeName(right);
+  if (lt === null || rt === null) return;
+  const order = ORDER_OPS.has(op);
+  if (!ARITHMETIC_OPS.has(op) && !order) return; // `==`/`!=` are defined for all values
+
+  const intish = (t: string): boolean => t === "int" || t === "bool";
+  if (op === "*" && ((lt === "str" && intish(rt)) || (intish(lt) && rt === "str"))) return; // repeat
+  if (op === "%" && lt === "str") return; // %-formatting
+  if (order && lt === "str" && rt === "str") return; // lexicographic string ordering is valid
+
+  throw new Error(
+    order
+      ? `TypeError: '${op}' not supported between instances of '${lt}' and '${rt}'`
+      : `TypeError: unsupported operand type(s) for ${op}: '${lt}' and '${rt}'`,
+  );
+}
+
 function contractBinary(node: StepNode): ReduceResult | null {
   const left = node.left as StepNode;
   const right = node.right as StepNode;
-  if (left.type !== "Literal" || right.type !== "Literal") return null;
   const op = node.operator as string;
-  const l = left.value;
-  const r = right.value;
 
   let result: StepNode | null = null;
-  if (op === "+" && typeof l === "string" && typeof r === "string") {
-    result = stringLiteral(l + r);
-  } else if (isNumericValue(l) && isNumericValue(r)) {
-    // A `bool` counts as an `int`; if either operand is a `float`, the operation promotes to float
-    // (Python semantics), so `3.14 * 0` is `0.0` and `1 == 1.0` is `True`.
-    if (typeof l !== "number" && typeof r !== "number") {
-      result = intBinary(op, toBig(l), toBig(r));
-    } else {
-      const ln = typeof l === "number" ? l : Number(toBig(l));
-      const rn = typeof r === "number" ? r : Number(toBig(r));
-      result = floatBinary(op, ln, rn, true);
+  if (left.type === "Literal" && right.type === "Literal") {
+    const l = left.value;
+    const r = right.value;
+    if (op === "+" && typeof l === "string" && typeof r === "string") {
+      result = stringLiteral(l + r);
+    } else if (isNumericValue(l) && isNumericValue(r)) {
+      // A `bool` counts as an `int`; if either operand is a `float`, the operation promotes to float
+      // (Python semantics), so `3.14 * 0` is `0.0` and `1 == 1.0` is `True`.
+      if (typeof l !== "number" && typeof r !== "number") {
+        result = intBinary(op, toBig(l), toBig(r));
+      } else {
+        const ln = typeof l === "number" ? l : Number(toBig(l));
+        const rn = typeof r === "number" ? r : Number(toBig(r));
+        result = floatBinary(op, ln, rn, true);
+      }
+    } else if (op === "==" || op === "!=") {
+      const eq = l === r;
+      result = boolLiteral(op === "==" ? eq : !eq);
     }
-  } else if (op === "==" || op === "!=") {
-    const eq = l === r;
-    result = boolLiteral(op === "==" ? eq : !eq);
   }
 
-  if (result === null) return null;
+  if (result === null) {
+    // The operation did not apply. If both operands are concrete values and the combination is a
+    // genuine Python error, report it (so the stepper shows the error before "Evaluation stuck");
+    // otherwise — unmodelled-but-valid, or an operand not yet a value — leave it a graceful "stuck".
+    reportBinaryTypeError(op, left, right);
+    return null;
+  }
   return {
     node: result,
     preRedex: node,
@@ -220,7 +276,15 @@ function contractUnary(node: StepNode): ReduceResult | null {
     if (op === "-") result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
     else if (op === "+") result = numberLiteral(arg.value, Boolean(arg.pyFloat));
   }
-  if (result === null) return null;
+  if (result === null) {
+    // `-x` / `+x` on a non-numeric *value* is a Python TypeError (e.g. `-"a"`, `-None`); `not` always
+    // applies (truthiness), and a non-value argument stays a graceful "stuck".
+    const t = valueTypeName(arg);
+    if ((op === "-" || op === "+") && t !== null) {
+      throw new Error(`TypeError: bad operand type for unary ${op}: '${t}'`);
+    }
+    return null;
+  }
   const argRepr = unparse(arg);
   const explanation =
     op === "not"
@@ -278,10 +342,29 @@ function contractCall(node: StepNode): ReduceResult | null {
     };
   }
 
-  if (!isFunctionValue(callee)) return null;
+  if (!isFunctionValue(callee)) {
+    // A fully-reduced callee that is a value but not callable (`5(3)`, `None()`, `"s"()`) is a Python
+    // TypeError; report it so the error shows before "Evaluation stuck" rather than a silent stuck. A
+    // non-value callee (a leftover/unbound name) is not diagnosed here and stays a graceful "stuck".
+    const t = valueTypeName(callee);
+    if (t !== null) throw new Error(`TypeError: '${t}' object is not callable`);
+    return null;
+  }
 
   const params = paramNames(callee);
-  if (params.length !== args.length) return null;
+  if (params.length !== args.length) {
+    // Too few / too many arguments for a user function is a Python TypeError. The wording mirrors the
+    // built-ins' arity message (`checkArity` in ./builtins) for a consistent explanation box.
+    const fname =
+      callee.type === "FunctionDeclaration"
+        ? String((callee.id as StepNode).name)
+        : typeof callee.name === "string"
+          ? callee.name
+          : "<lambda>";
+    throw new Error(
+      `TypeError: ${fname}() takes ${params.length} argument(s) but ${args.length} were given`,
+    );
+  }
 
   // The body to reduce. A lambda's body is its expression. A `def`'s body is a block: when it begins
   // with a `return`, reduce straight to that argument (anything after it is dead code) — Source's fast
