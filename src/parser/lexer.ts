@@ -261,7 +261,7 @@ interface PythonLexerState extends moo.LexerState {
   pos: number;
 }
 
-class PythonLexer implements moo.Lexer {
+export class PythonLexer implements moo.Lexer {
   private tokens: moo.Token[] = [];
   private pos = 0;
 
