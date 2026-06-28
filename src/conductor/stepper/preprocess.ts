@@ -111,10 +111,54 @@ export function findUndefinedName(program: StepNode): string | null {
 }
 
 /**
+ * Comparison operators Python accepts but the substitution stepper does not model: identity (`is`,
+ * `is not`) and membership (`in`, `not in`). They parse fine, but the reducer has no rule for them,
+ * so a program using one would otherwise silently get "stuck" mid-reduction. We reject them up front
+ * as a preprocessing error instead — mirroring Source's `noUnspecifiedOperator` rule.
+ */
+const UNSUPPORTED_OPERATORS = new Set(["is", "is not", "in", "not in"]);
+
+/** Walks `program` (already translated) and returns the first unsupported operator used (see
+ * {@link UNSUPPORTED_OPERATORS}), or `null` if none appears. */
+export function findUnsupportedOperator(program: StepNode): string | null {
+  let found: string | null = null;
+
+  const visit = (value: unknown): void => {
+    if (found !== null) return;
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+    } else if (
+      value !== null &&
+      typeof value === "object" &&
+      typeof (value as StepNode).type === "string"
+    ) {
+      const node = value as StepNode;
+      if (node.type === "BinaryExpression" && UNSUPPORTED_OPERATORS.has(String(node.operator))) {
+        found = String(node.operator);
+        return;
+      }
+      for (const key of Object.keys(node)) {
+        if (key === "type") continue;
+        visit(node[key]);
+      }
+    }
+  };
+
+  visit(program);
+  return found;
+}
+
+/**
  * The stepper's preprocessing pass for a parsed Python program: returns an error message if it must
- * not run (currently: an undefined variable), or `null` if it is clear to step.
+ * not run — an unsupported operator (`is`/`is not`/`in`/`not in`) or an undefined variable — or
+ * `null` if it is clear to step.
  */
 export function preprocessPython(fileInput: StmtNS.FileInput): string | null {
-  const name = findUndefinedName(translateProgram(fileInput));
+  const program = translateProgram(fileInput);
+
+  const operator = findUnsupportedOperator(program);
+  if (operator !== null) return `Operator '${operator}' is not allowed.`;
+
+  const name = findUndefinedName(program);
   return name === null ? null : `NameError: name '${name}' is not defined`;
 }

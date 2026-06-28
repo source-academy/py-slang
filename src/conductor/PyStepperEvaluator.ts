@@ -40,6 +40,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     const code = await this.conductor.requestFile(entryPoint);
     if (code === undefined) {
       this.conductor.sendError(new ConductorError("Cannot load entrypoint file"));
+      return;
     } else {
       await this.runChunk(code);
     }

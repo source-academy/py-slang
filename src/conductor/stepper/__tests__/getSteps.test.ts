@@ -284,6 +284,38 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
   });
 });
 
+describe("Python stepper — unsupported operators are a preprocessing error", () => {
+  test("identity and membership operators are rejected up front", () => {
+    // `is`/`is not`/`in`/`not in` parse, but the substitution stepper has no rule for them, so they
+    // are reported as a preprocessing error rather than silently getting "stuck" mid-reduction.
+    expect(preprocess("1 is 1")).toBe("Operator 'is' is not allowed.");
+    expect(preprocess("1 is not 2")).toBe("Operator 'is not' is not allowed.");
+    expect(preprocess("1 in 2")).toBe("Operator 'in' is not allowed.");
+    expect(preprocess("1 not in 2")).toBe("Operator 'not in' is not allowed.");
+  });
+
+  test("rejected wherever they appear (nested, function bodies, conditions, lambdas)", () => {
+    expect(preprocess("x = 5\nx is None")).toBe("Operator 'is' is not allowed.");
+    expect(preprocess("def f(a, b):\n  return a in b\nf(1, 2)")).toBe(
+      "Operator 'in' is not allowed.",
+    );
+    expect(preprocess("y = 1 if 2 is 3 else 4")).toBe("Operator 'is' is not allowed.");
+    expect(preprocess("g = lambda a: a is not None")).toBe("Operator 'is not' is not allowed.");
+  });
+
+  test("the operator is reported even alongside an undefined name", () => {
+    // The operator check runs first: this construct is unsupported regardless of its operands.
+    expect(preprocess("undefined_thing in undefined_other")).toBe("Operator 'in' is not allowed.");
+  });
+
+  test("supported comparison operators are unaffected", () => {
+    expect(preprocess("1 == 2")).toBeNull();
+    expect(preprocess("1 != 2")).toBeNull();
+    expect(preprocess("1 < 2")).toBeNull();
+    expect(preprocess("1 >= 2")).toBeNull();
+  });
+});
+
 describe("Python stepper — step structure", () => {
   test('begins with a "Start of evaluation" step and alternates before/after', () => {
     const e = explanations("1 + 2 * 3");
