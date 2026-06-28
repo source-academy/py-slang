@@ -2,8 +2,10 @@ import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
 import { preprocessPython } from "../preprocess";
 
-function preprocess(src: string) {
-  return preprocessPython(parse(src + "\n"));
+// `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
+// chapter-gating tests pass an explicit chapter (1 to forbid §2 names, 2 to allow them).
+function preprocess(src: string, chapter = 2) {
+  return preprocessPython(parse(src + "\n"), chapter);
 }
 
 function steps(src: string) {
@@ -281,6 +283,58 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
   test("a name used before its assignment still counts as defined (hoisted scope)", () => {
     // Python module scope is not order-sensitive for *definedness* (this is not a NameError).
     expect(preprocess("y = x\nx = 5")).toBeNull();
+  });
+});
+
+describe("Python stepper — Python §2 features are unavailable in Python §1 (chapter gating)", () => {
+  // The stepper is a teaching tool: a student on the Python §1 sublanguage must not reach §2 features
+  // (the pair / linked-list library) before they are taught. A §2 name used in a §1 program resolves
+  // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
+  test("§1 rejects §2 list-library functions as unknown names", () => {
+    expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
+    expect(preprocess("linked_list(1, 2, 3)", 1)).toBe(
+      "NameError: name 'linked_list' is not defined",
+    );
+    expect(preprocess("map_linked_list(lambda x: x, None)", 1)).toBe(
+      "NameError: name 'map_linked_list' is not defined",
+    );
+    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+  });
+
+  test("a §2 name in §1 is reported exactly like an undefined variable", () => {
+    expect(preprocess("head(None)", 1)).toBe("NameError: name 'head' is not defined");
+    expect(preprocess("undefined_name", 1)).toBe("NameError: name 'undefined_name' is not defined");
+  });
+
+  test("a §2 name is rejected wherever it appears in a §1 program", () => {
+    expect(preprocess("xs = pair(1, 2)\nhead(xs)", 1)).toBe(
+      "NameError: name 'pair' is not defined",
+    );
+    expect(preprocess("def f(x):\n  return head(x)\nf(None)", 1)).toBe(
+      "NameError: name 'head' is not defined",
+    );
+    expect(preprocess("g = lambda xs: tail(xs)", 1)).toBe("NameError: name 'tail' is not defined");
+  });
+
+  test("§1 core (math, MISC predicates, conversions, user bindings) stays available in §1", () => {
+    expect(preprocess("math_sqrt(2) + math_pi", 1)).toBeNull();
+    expect(preprocess('abs(-5) + len("hi")', 1)).toBeNull();
+    expect(preprocess("is_none(None)", 1)).toBeNull(); // is_none is a §1 MISC predicate
+    expect(preprocess('int("3") + round(2.5)', 1)).toBeNull();
+    expect(preprocess("x = 5\nx + 1", 1)).toBeNull();
+  });
+
+  test("the same §2 names resolve once Python §2 is selected", () => {
+    expect(preprocess("pair(1, 2)", 2)).toBeNull();
+    expect(preprocess("head(pair(1, 2))", 2)).toBeNull();
+    expect(preprocess("map_linked_list(lambda x: x, linked_list(1, 2))", 2)).toBeNull();
+    expect(preprocess("is_pair(pair(1, 2))", 2)).toBeNull();
+  });
+
+  test("is_none (§1) and is_pair (§2) are split by chapter", () => {
+    expect(preprocess("is_none(5)", 1)).toBeNull(); // available in every chapter
+    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+    expect(preprocess("is_pair(5)", 2)).toBeNull();
   });
 });
 

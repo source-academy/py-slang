@@ -14,7 +14,7 @@
 
 import type { StmtNS } from "../../ast-types";
 import type { StepNode } from "./ast";
-import { isBuiltinConstantName, isBuiltinFunctionName } from "./builtins";
+import { isBuiltinConstantName, isBuiltinFunctionAvailable } from "./builtins";
 import { translateProgram } from "./translate";
 
 /** A real Python identifier (so translation's `<Unsupported>` placeholders are ignored). */
@@ -51,12 +51,15 @@ function collectBindings(statements: StepNode[], into: Set<string>): void {
   }
 }
 
-const isDefined = (name: string, scopes: Set<string>[]): boolean =>
-  isBuiltinFunctionName(name) || isBuiltinConstantName(name) || scopes.some(s => s.has(name));
+const isDefined = (name: string, scopes: Set<string>[], chapter: number): boolean =>
+  isBuiltinFunctionAvailable(name, chapter) ||
+  isBuiltinConstantName(name) ||
+  scopes.some(s => s.has(name));
 
-/** Walks `program` (already translated) and returns the first undefined name, or `null` if all
- * referenced names resolve. */
-export function findUndefinedName(program: StepNode): string | null {
+/** Walks `program` (already translated) and returns the first name that does not resolve in `chapter`
+ * — an unbound variable, or a built-in not yet available at this chapter (a §2 list-library name in a
+ * §1 program) — or `null` if every referenced name resolves. */
+export function findUndefinedName(program: StepNode, chapter: number): string | null {
   let found: string | null = null;
 
   const visit = (node: StepNode, scopes: Set<string>[]): void => {
@@ -64,7 +67,7 @@ export function findUndefinedName(program: StepNode): string | null {
     switch (node.type) {
       case "Identifier": {
         const name = String(node.name);
-        if (IDENTIFIER.test(name) && !isDefined(name, scopes)) found = name;
+        if (IDENTIFIER.test(name) && !isDefined(name, scopes, chapter)) found = name;
         return;
       }
       case "VariableDeclarator":
@@ -150,15 +153,17 @@ export function findUnsupportedOperator(program: StepNode): string | null {
 
 /**
  * The stepper's preprocessing pass for a parsed Python program: returns an error message if it must
- * not run — an unsupported operator (`is`/`is not`/`in`/`not in`) or an undefined variable — or
- * `null` if it is clear to step.
+ * not run — an unsupported operator (`is`/`is not`/`in`/`not in`) or an undefined name — or `null` if
+ * it is clear to step. `chapter` is the selected SICPy sublanguage (1–4): a §2 list-library name used
+ * in a §1 program does not resolve and is reported as a `NameError`, so students cannot reach a
+ * feature before it is taught.
  */
-export function preprocessPython(fileInput: StmtNS.FileInput): string | null {
+export function preprocessPython(fileInput: StmtNS.FileInput, chapter: number): string | null {
   const program = translateProgram(fileInput);
 
   const operator = findUnsupportedOperator(program);
   if (operator !== null) return `Operator '${operator}' is not allowed.`;
 
-  const name = findUndefinedName(program);
+  const name = findUndefinedName(program, chapter);
   return name === null ? null : `NameError: name '${name}' is not defined`;
 }

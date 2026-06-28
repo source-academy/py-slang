@@ -430,6 +430,23 @@ export function isBuiltinFunctionName(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(BUILTIN_FUNCTIONS, name);
 }
 
+/** The Python §2 built-in names (the linked-list library — see {@link ./lists}). They are *not* part
+ * of the §1 core, so they only become available from chapter 2 on. */
+const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
+
+/**
+ * Whether built-in function `name` is available in SICPy `chapter`. The §1 core (the `math_*`
+ * functions and the MISC library) is available in every chapter; the §2 linked-list library
+ * (`pair`/`head`/`map_linked_list`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
+ * name is treated as referencing an *unknown* name — the preprocessing pass reports it as a
+ * `NameError`, exactly like an undefined variable, instead of letting the student reach a feature
+ * before it is taught. (All built-in *constants* are `math_*`, i.e. §1, so they need no gating.)
+ */
+export function isBuiltinFunctionAvailable(name: string, chapter: number): boolean {
+  if (!isBuiltinFunctionName(name)) return false;
+  return chapter >= 2 || !CHAPTER_2_FUNCTION_NAMES.has(name);
+}
+
 /** Applies the built-in `name` to already-reduced value `args`. Throws on misuse (→ stuck). */
 export function applyBuiltin(name: string, args: StepNode[]): StepNode {
   const fn = BUILTIN_FUNCTIONS[name];

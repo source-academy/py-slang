@@ -21,9 +21,13 @@ import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
  */
 abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private readonly stepper: PythonStepperRunnerPlugin;
+  /** The selected SICPy sublanguage (1–4). Gates which built-ins preprocessing accepts, so e.g. a
+   * §1 program cannot use the §2 list library — see {@link preprocessPython}. */
+  private readonly chapter: number;
 
-  protected constructor(conductor: IRunnerPlugin) {
+  protected constructor(conductor: IRunnerPlugin, chapter: number) {
     super(conductor);
+    this.chapter = chapter;
     // Register the language-agnostic stepper runner (Python binding) and load its host (web) half.
     this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin);
     conductor.hostLoadPlugin(STEPPER_DIRECTORY_ID);
@@ -58,7 +62,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
       // stepper — a free name has no meaning in the substitution model. Mirrors Source's
       // `checkProgramForUndefinedVariables`, which likewise blocks stepping rather than faulting
       // mid-reduction. `parse` already covers syntax errors above; this covers name resolution.
-      const preprocessError = preprocessPython(ast);
+      const preprocessError = preprocessPython(ast, this.chapter);
       if (preprocessError !== null) {
         throw new EvaluatorSyntaxError(preprocessError);
       }
@@ -88,8 +92,18 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   }
 }
 
+// One concrete evaluator per SICPy chapter, mirroring `PyCseEvaluator1..4`: the host loads
+// `PyStepperEvaluator<chapter>` for the selected sublanguage (see `scripts/build.ts` / the conductor
+// `index`). The chapter is what gates the built-ins preprocessing accepts, so the §1 stepper forbids
+// the §2 list library (`pair`/`head`/`map_linked_list`/…) while the §2 stepper allows it.
 export class PyStepperEvaluator1 extends PyStepperEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor);
+    super(conductor, 1);
+  }
+}
+
+export class PyStepperEvaluator2 extends PyStepperEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 2);
   }
 }
