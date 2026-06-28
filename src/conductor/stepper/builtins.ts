@@ -21,6 +21,7 @@
 
 import {
   type StepNode,
+  isPairNode,
   isResultValue,
   literal,
   numberLiteral,
@@ -28,6 +29,7 @@ import {
   stringLiteral,
   unparse,
 } from "./ast";
+import { listArities, listBuiltins } from "./lists";
 
 /* -------------------------------------------------------------------------- */
 /*                                 Constants                                   */
@@ -95,6 +97,11 @@ function pyStr(node: StepNode, repr: boolean): string {
     if (typeof v === "string") return repr ? pythonStringRepr(v) : v;
     // numbers, ints, bools and None already carry their Python text in `raw`.
     return String(node.raw ?? v);
+  }
+  if (node.type === "ArrayExpression") {
+    // A pair / linked list renders in box-and-pointer notation. Elements use repr (like
+    // `linked_list_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
+    return `[${(node.elements as StepNode[]).map(e => pyStr(e, true)).join(", ")}]`;
   }
   if (node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration") {
     const name = (node.name ?? (node.id as StepNode | undefined)?.name) as string | undefined;
@@ -362,6 +369,10 @@ Object.assign(BUILTIN_FUNCTIONS, {
   is_complex: (args: StepNode[]): StepNode => predicate("is_complex", args, () => false),
 });
 
+// The Python §2 linked-list library (pairs and lists). Names follow Python (`pair`, `head`,
+// `linked_list`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
+Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
+
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */
 const BUILTIN_MIN_ARGS: Record<string, number> = {
   min: 1,
@@ -376,6 +387,7 @@ const BUILTIN_MIN_ARGS: Record<string, number> = {
   math_gcd: 1,
 };
 for (const name of Object.keys(MATH_BINARY_FLOAT)) BUILTIN_MIN_ARGS[name] = 2;
+Object.assign(BUILTIN_MIN_ARGS, listArities);
 
 function predicate(name: string, args: StepNode[], test: (n: StepNode) => boolean): StepNode {
   checkArity(name, args, 1, 1);
@@ -388,6 +400,7 @@ function pyTypeName(node: StepNode): string {
   if (isBoolNode(node)) return "bool";
   if (isStrNode(node)) return "str";
   if (isNoneNode(node)) return "NoneType";
+  if (isPairNode(node)) return "pair";
   if (isFunctionNode(node)) return "function";
   return node.type;
 }

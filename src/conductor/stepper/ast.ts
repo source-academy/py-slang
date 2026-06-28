@@ -69,6 +69,25 @@ export function expressionStatement(expression: StepNode): StepNode {
   return { type: "ExpressionStatement", expression };
 }
 
+/**
+ * The empty linked list — Python's `None`. A linked list is built from pairs terminated by `None`, so
+ * `None` doubles as both the `None` value and the empty-list terminator, exactly as Source's stepper
+ * uses its `null` literal. Displayed as `None`.
+ */
+export function emptyList(): StepNode {
+  return literal(null, "None");
+}
+
+/**
+ * A pair `pair(head, tail)`. Following Source's stepper, a pair is a two-element `ArrayExpression`, so
+ * it renders as `[head, tail]` (box-and-pointer notation) through the existing `ArrayExpression`
+ * template — no Python-specific host rendering is needed. (Python §2 has no list-literal syntax, so an
+ * `ArrayExpression` is unambiguously a pair.)
+ */
+export function pairNode(head: StepNode, tail: StepNode): StepNode {
+  return { type: "ArrayExpression", elements: [head, tail] };
+}
+
 /* -------------------------------------------------------------------------- */
 /*                                 Predicates                                  */
 /* -------------------------------------------------------------------------- */
@@ -116,6 +135,16 @@ export function isResultValue(node: StepNode): boolean {
   }
 }
 
+/** Whether `node` is a pair (a two-element `ArrayExpression`). See {@link pairNode}. */
+export function isPairNode(node: StepNode): boolean {
+  return node.type === "ArrayExpression" && (node.elements as StepNode[]).length === 2;
+}
+
+/** Whether `node` is the empty linked list `None`. See {@link emptyList}. */
+export function isEmptyList(node: StepNode): boolean {
+  return node.type === "Literal" && node.value === null;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Cloning                                       */
 /* -------------------------------------------------------------------------- */
@@ -135,6 +164,53 @@ export function clone<T>(value: T): T {
     return out as T;
   }
   return value;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               Substitution                                 */
+/* -------------------------------------------------------------------------- */
+
+function mapValue(value: unknown, fn: (node: StepNode) => StepNode): unknown {
+  if (Array.isArray(value)) return value.map(v => mapValue(v, fn));
+  if (value !== null && typeof value === "object" && typeof (value as StepNode).type === "string") {
+    return fn(value as StepNode);
+  }
+  return value;
+}
+
+function mapChildren(node: StepNode, fn: (node: StepNode) => StepNode): StepNode {
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(node)) out[key] = mapValue(node[key], fn);
+  return out as StepNode;
+}
+
+/** The parameter names of a `lambda`/`def` node. */
+export function paramNames(node: StepNode): string[] {
+  return ((node.params as StepNode[]) ?? []).map(p => String(p.name));
+}
+
+/**
+ * Capture-avoiding-by-shadowing substitution of `name` with `value` throughout `node`. Substitution
+ * does not descend into a function that binds `name` as a parameter (or, for a named `def`, as its
+ * own name), so inner bindings correctly shadow the outer one. Shared by the reducer (function
+ * application, statement-level bindings) and the linked-list library (binding a library function's
+ * parameters to its value arguments).
+ */
+export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
+  switch (node.type) {
+    case "Identifier":
+      return node.name === name ? clone(value) : node;
+    case "ArrowFunctionExpression":
+      if (paramNames(node).includes(name)) return node;
+      return { ...node, body: substitute(node.body as StepNode, name, value) };
+    case "FunctionDeclaration":
+      if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
+      return { ...node, body: substitute(node.body as StepNode, name, value) };
+    case "VariableDeclarator":
+      return { ...node, init: substitute(node.init as StepNode, name, value) };
+    default:
+      return mapChildren(node, child => substitute(child, name, value));
+  }
 }
 
 /* -------------------------------------------------------------------------- */

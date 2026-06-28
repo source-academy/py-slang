@@ -30,7 +30,9 @@ import {
   isValue,
   literal,
   numberLiteral,
+  paramNames,
   stringLiteral,
+  substitute,
   unparse,
 } from "./ast";
 import {
@@ -67,50 +69,6 @@ function isTruthy(node: StepNode): boolean {
   if (typeof v === "bigint") return v !== 0n;
   if (typeof v === "string") return v.length > 0;
   return true;
-}
-
-/* -------------------------------------------------------------------------- */
-/*                               Substitution                                 */
-/* -------------------------------------------------------------------------- */
-
-function mapValue(value: unknown, fn: (node: StepNode) => StepNode): unknown {
-  if (Array.isArray(value)) return value.map(v => mapValue(v, fn));
-  if (value !== null && typeof value === "object" && typeof (value as StepNode).type === "string") {
-    return fn(value as StepNode);
-  }
-  return value;
-}
-
-function mapChildren(node: StepNode, fn: (node: StepNode) => StepNode): StepNode {
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(node)) out[key] = mapValue(node[key], fn);
-  return out as StepNode;
-}
-
-function paramNames(node: StepNode): string[] {
-  return ((node.params as StepNode[]) ?? []).map(p => String(p.name));
-}
-
-/**
- * Capture-avoiding-by-shadowing substitution of `name` with `value` throughout `node`. Substitution
- * does not descend into a function that binds `name` as a parameter (or, for a named `def`, as its
- * own name), so inner bindings correctly shadow the outer one.
- */
-export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
-  switch (node.type) {
-    case "Identifier":
-      return node.name === name ? clone(value) : node;
-    case "ArrowFunctionExpression":
-      if (paramNames(node).includes(name)) return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
-    case "FunctionDeclaration":
-      if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
-    case "VariableDeclarator":
-      return { ...node, init: substitute(node.init as StepNode, name, value) };
-    default:
-      return mapChildren(node, child => substitute(child, name, value));
-  }
 }
 
 /* -------------------------------------------------------------------------- */
