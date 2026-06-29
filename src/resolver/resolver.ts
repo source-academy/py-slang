@@ -232,14 +232,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     if (stmt instanceof Array) {
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          if (!this.globalNamesInCurrentFunction.has(st.name.lexeme) &&
-              !this.nonlocalNamesInCurrentFunction.has(st.name.lexeme)) {
+          if (
+            !this.globalNamesInCurrentFunction.has(st.name.lexeme) &&
+            !this.nonlocalNamesInCurrentFunction.has(st.name.lexeme)
+          ) {
             this.environment?.declareName(st.name);
           }
         }
         if (st instanceof StmtNS.Assign && st.target instanceof ExprNS.Variable) {
-          if (!this.globalNamesInCurrentFunction.has(st.target.name.lexeme) &&
-              !this.nonlocalNamesInCurrentFunction.has(st.target.name.lexeme)) {
+          if (
+            !this.globalNamesInCurrentFunction.has(st.target.name.lexeme) &&
+            !this.nonlocalNamesInCurrentFunction.has(st.target.name.lexeme)
+          ) {
             this.environment?.declareName(st.target.name);
           }
         }
@@ -373,8 +377,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.value);
   }
   visitForStmt(stmt: StmtNS.For): void {
-    if (!this.globalNamesInCurrentFunction.has(stmt.target.lexeme) &&
-        !this.nonlocalNamesInCurrentFunction.has(stmt.target.lexeme)) {
+    if (
+      !this.globalNamesInCurrentFunction.has(stmt.target.lexeme) &&
+      !this.nonlocalNamesInCurrentFunction.has(stmt.target.lexeme)
+    ) {
       this.environment?.declareName(stmt.target);
     }
     this.resolve(stmt.iter);

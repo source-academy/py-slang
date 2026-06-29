@@ -55,7 +55,15 @@ export class Closure {
     globalVariables: Set<string> = new Set(),
     nonlocalVariables: Set<string> = new Set(),
   ): Closure {
-    const closure = new Closure(node, environment, context, false, localVariables, globalVariables, nonlocalVariables);
+    const closure = new Closure(
+      node,
+      environment,
+      context,
+      false,
+      localVariables,
+      globalVariables,
+      nonlocalVariables,
+    );
     return closure;
   }
 

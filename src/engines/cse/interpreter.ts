@@ -641,7 +641,11 @@ const cmdEvaluators: CmdEvaluators = {
   ) {
     const globalVariables = scanForGlobalDeclarations(functionDefNode.body);
     const nonlocalVariables = scanForNonlocalDeclarations(functionDefNode.body);
-    const localVariables = scanForAssignments(functionDefNode.body, globalVariables, nonlocalVariables);
+    const localVariables = scanForAssignments(
+      functionDefNode.body,
+      globalVariables,
+      nonlocalVariables,
+    );
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
       currentEnvironment(context),
