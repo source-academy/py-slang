@@ -8,7 +8,10 @@
     "regen": "tsx src/generate.ts && prettier --write src/ast-types.ts",
     "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
     "build": "tsx scripts/build.ts",
+    "build:repl": "rollup -c rollup.repl.mjs",
+    "build:lib": "rollup -c rollup.lib.mjs",
     "dev": "tsx scripts/build.ts --watch",
+    "repl": "node dist/repl.cjs",
     "jsdoc": "./scripts/jsdoc.sh prepare",
     "jsdoc:run": "./scripts/jsdoc.sh run",
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
@@ -18,7 +21,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
     "wasm": "tsx src/engines/wasm/runFile.ts",
-    "fake-sling": "tsx --tsconfig tsconfig.scripts.json scripts/fake-sling-server.ts"
+    "prepublishOnly": "yarn build --all && yarn build:lib && yarn build:repl"
   },
   "keywords": [
     "Python",
@@ -45,7 +48,6 @@
     "@types/moo": "^0.5.10",
     "@types/nearley": "^2.11.5",
     "@types/node": "^18.19.84",
-    "commander": "^14.0.3",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "jest": "^29.7.0",
@@ -60,8 +62,13 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
-    "@sourceacademy/conductor": "^0.3.0",
+    "@sourceacademy/common-cse-machine": "^0.1.0",
+    "@sourceacademy/common-stepper": "^0.0.1",
+    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0",
+    "@sourceacademy/runner-cse-machine": "^1.0.0",
+    "@sourceacademy/runner-stepper": "^0.0.1",
     "@sourceacademy/wasm-util": "^1.0.6",
+    "commander": "^14.0.3",
     "fast-levenshtein": "^3.0.0",
     "mathjs": "^14.9.1",
     "moo": "^0.5.2",

@@ -23,6 +23,28 @@ export function createOutputStream(conductor: IRunnerPlugin): WritableContext<st
   return { stream, writer };
 }
 
+export function createBufferedOutputStream(): {
+  context: WritableContext<string>;
+  flush: (conductor: IRunnerPlugin) => void;
+} {
+  let buffer = "";
+  const stream = new WritableStream<string>({
+    write: chunk => {
+      buffer += chunk;
+    },
+  });
+  const writer = stream.getWriter();
+  return {
+    context: { stream, writer },
+    flush: (conductor: IRunnerPlugin) => {
+      if (buffer !== "") {
+        conductor.sendOutput(buffer);
+        buffer = "";
+      }
+    },
+  };
+}
+
 export function createErrorStream(conductor: IRunnerPlugin): WritableContext<ConductorError> {
   const stream = new WritableStream<ConductorError>({
     write: chunk => {
