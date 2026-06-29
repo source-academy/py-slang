@@ -173,6 +173,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   private validators: FeatureValidator[];
   // Names declared `global` in the current function body (reset on function entry/exit).
   private globalNamesInCurrentFunction: Set<string> = new Set();
+  // Names declared `nonlocal` in the current function body (reset on function entry/exit).
+  private nonlocalNamesInCurrentFunction: Set<string> = new Set();
 
   constructor(
     source: string,
@@ -230,12 +232,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     if (stmt instanceof Array) {
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          if (!this.globalNamesInCurrentFunction.has(st.name.lexeme)) {
+          if (!this.globalNamesInCurrentFunction.has(st.name.lexeme) &&
+              !this.nonlocalNamesInCurrentFunction.has(st.name.lexeme)) {
             this.environment?.declareName(st.name);
           }
         }
         if (st instanceof StmtNS.Assign && st.target instanceof ExprNS.Variable) {
-          if (!this.globalNamesInCurrentFunction.has(st.target.name.lexeme)) {
+          if (!this.globalNamesInCurrentFunction.has(st.target.name.lexeme) &&
+              !this.nonlocalNamesInCurrentFunction.has(st.target.name.lexeme)) {
             this.environment?.declareName(st.target.name);
           }
         }
@@ -316,7 +320,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.functionScope = this.environment;
 
     const oldGlobalNames = this.globalNamesInCurrentFunction;
+    const oldNonlocalNames = this.nonlocalNamesInCurrentFunction;
     this.globalNamesInCurrentFunction = this.scanGlobalDeclarations(stmt.body);
+    this.nonlocalNamesInCurrentFunction = this.scanNonlocalDeclarations(stmt.body);
+
+    // Run scope conflict checks before resolving the body.
+    this.checkFunctionScopeConflicts(stmt);
+
     // Declare global names in the outermost (module-level) environment so that
     // variable lookups within this function can find them via the chain walk.
     if (this.globalNamesInCurrentFunction.size > 0) {
@@ -337,6 +347,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.body);
     // Restore old environment
     this.globalNamesInCurrentFunction = oldGlobalNames;
+    this.nonlocalNamesInCurrentFunction = oldNonlocalNames;
     this.functionScope = null;
     this.environment = oldEnv;
   }
@@ -362,7 +373,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.value);
   }
   visitForStmt(stmt: StmtNS.For): void {
-    if (!this.globalNamesInCurrentFunction.has(stmt.target.lexeme)) {
+    if (!this.globalNamesInCurrentFunction.has(stmt.target.lexeme) &&
+        !this.nonlocalNamesInCurrentFunction.has(stmt.target.lexeme)) {
       this.environment?.declareName(stmt.target);
     }
     this.resolve(stmt.iter);
@@ -405,17 +417,254 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     scan(stmts);
     return globals;
   }
-  // @TODO nonlocals mean that any variable following that name in the current env
-  // should not create a variable declaration, but instead point to an outer variable.
-  visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    try {
-      this.environment?.lookupNameParentEnvWithError(stmt.name);
-    } catch (e) {
-      if (e instanceof Error) {
-        this.errors.push(e);
-        return;
+
+  // Recursively collects names declared with `nonlocal` anywhere in the function body,
+  // without descending into nested function/lambda definitions.
+  private scanNonlocalDeclarations(stmts: StmtNS.Stmt[]): Set<string> {
+    const nonlocals = new Set<string>();
+    const scan = (stmts: StmtNS.Stmt[]) => {
+      for (const stmt of stmts) {
+        if (stmt instanceof StmtNS.NonLocal) {
+          nonlocals.add(stmt.name.lexeme);
+        } else if (stmt instanceof StmtNS.If) {
+          scan(stmt.body);
+          if (Array.isArray(stmt.elseBlock)) {
+            scan(stmt.elseBlock);
+          } else if (stmt.elseBlock) {
+            scan([stmt.elseBlock]);
+          }
+        } else if (stmt instanceof StmtNS.While) {
+          scan(stmt.body);
+        } else if (stmt instanceof StmtNS.For) {
+          scan(stmt.body);
+        }
+        // Do not recurse into FunctionDef or Lambda bodies.
       }
-      throw e;
+    };
+    scan(stmts);
+    return nonlocals;
+  }
+
+  // Checks scope conflicts within a FunctionDef for issues #178, #179, #180, #181.
+  private checkFunctionScopeConflicts(stmt: StmtNS.FunctionDef): void {
+    const globalTokens = this.scanScopeDeclarationTokens(stmt.body, "Global");
+    const nonlocalTokens = this.scanScopeDeclarationTokens(stmt.body, "NonLocal");
+    const paramNames = new Set(stmt.parameters.map(p => p.lexeme));
+
+    // #178: name is both global and nonlocal in the same function
+    for (const [name, token] of nonlocalTokens) {
+      if (globalTokens.has(name)) {
+        this.errors.push(
+          new ResolverErrors.ScopeConflictError(
+            token.line,
+            token.col,
+            this.source,
+            token.indexInSource,
+            token.indexInSource + name.length,
+            `name '${name}' is nonlocal and global`,
+          ),
+        );
+      }
+    }
+
+    // #179: parameter and nonlocal conflict
+    for (const [name, token] of nonlocalTokens) {
+      if (paramNames.has(name)) {
+        this.errors.push(
+          new ResolverErrors.ScopeConflictError(
+            token.line,
+            token.col,
+            this.source,
+            token.indexInSource,
+            token.indexInSource + name.length,
+            `name '${name}' is parameter and nonlocal`,
+          ),
+        );
+      }
+    }
+
+    // #180: parameter and global conflict
+    for (const [name, token] of globalTokens) {
+      if (paramNames.has(name)) {
+        this.errors.push(
+          new ResolverErrors.ScopeConflictError(
+            token.line,
+            token.col,
+            this.source,
+            token.indexInSource,
+            token.indexInSource + name.length,
+            `name '${name}' is parameter and global`,
+          ),
+        );
+      }
+    }
+
+    // #181: textual order — name used/assigned before its global/nonlocal declaration
+    this.checkDeclarationOrder(stmt.body);
+  }
+
+  // Returns a map from name to its declaration token for all `global` or `nonlocal`
+  // statements in the given body (without descending into nested functions).
+  private scanScopeDeclarationTokens(
+    stmts: StmtNS.Stmt[],
+    kind: "Global" | "NonLocal",
+  ): Map<string, Token> {
+    const result = new Map<string, Token>();
+    const scan = (stmts: StmtNS.Stmt[]) => {
+      for (const stmt of stmts) {
+        if (kind === "Global" && stmt instanceof StmtNS.Global) {
+          result.set(stmt.name.lexeme, stmt.name);
+        } else if (kind === "NonLocal" && stmt instanceof StmtNS.NonLocal) {
+          result.set(stmt.name.lexeme, stmt.name);
+        } else if (stmt instanceof StmtNS.If) {
+          scan(stmt.body);
+          if (Array.isArray(stmt.elseBlock)) {
+            scan(stmt.elseBlock);
+          } else if (stmt.elseBlock) {
+            scan([stmt.elseBlock]);
+          }
+        } else if (stmt instanceof StmtNS.While) {
+          scan(stmt.body);
+        } else if (stmt instanceof StmtNS.For) {
+          scan(stmt.body);
+        }
+        // Do not recurse into FunctionDef or Lambda bodies.
+      }
+    };
+    scan(stmts);
+    return result;
+  }
+
+  // Checks that no name is used or assigned before its `global`/`nonlocal` declaration
+  // in the function body (#181). Traverses in textual order.
+  private checkDeclarationOrder(body: StmtNS.Stmt[]): void {
+    const seen = new Map<string, { kind: "used" | "assigned"; token: Token }>();
+
+    const recordUse = (token: Token) => {
+      if (!seen.has(token.lexeme)) {
+        seen.set(token.lexeme, { kind: "used", token });
+      }
+    };
+    const recordAssign = (token: Token) => {
+      if (!seen.has(token.lexeme)) {
+        seen.set(token.lexeme, { kind: "assigned", token });
+      }
+    };
+
+    const collectExpr = (expr: ExprNS.Expr | null | undefined) => {
+      if (!expr) return;
+      if (expr instanceof ExprNS.Variable) {
+        recordUse(expr.name);
+      } else if (expr instanceof ExprNS.Binary || expr instanceof ExprNS.Compare) {
+        collectExpr(expr.left);
+        collectExpr(expr.right);
+      } else if (expr instanceof ExprNS.Unary) {
+        collectExpr(expr.right);
+      } else if (expr instanceof ExprNS.BoolOp) {
+        collectExpr(expr.left);
+        collectExpr(expr.right);
+      } else if (expr instanceof ExprNS.Call) {
+        collectExpr(expr.callee);
+        expr.args.forEach(collectExpr);
+      } else if (expr instanceof ExprNS.Grouping) {
+        collectExpr(expr.expression);
+      } else if (expr instanceof ExprNS.Ternary) {
+        collectExpr(expr.predicate);
+        collectExpr(expr.consequent);
+        collectExpr(expr.alternative);
+      } else if (expr instanceof ExprNS.List) {
+        expr.elements.forEach(collectExpr);
+      } else if (expr instanceof ExprNS.Subscript) {
+        collectExpr(expr.value);
+        collectExpr(expr.index);
+      } else if (expr instanceof ExprNS.Starred) {
+        collectExpr(expr.value);
+      }
+      // Literal, BigIntLiteral, None, Complex, Lambda: no outer-scope variable references
+    };
+
+    const scanBody = (stmts: StmtNS.Stmt[]) => {
+      for (const stmt of stmts) {
+        if (stmt instanceof StmtNS.Global || stmt instanceof StmtNS.NonLocal) {
+          const name = stmt.name.lexeme;
+          const prior = seen.get(name);
+          if (prior) {
+            const declKind = stmt instanceof StmtNS.Global ? "global" : "nonlocal";
+            const msg =
+              prior.kind === "assigned"
+                ? `name '${name}' is assigned to before ${declKind} declaration`
+                : `name '${name}' is used prior to ${declKind} declaration`;
+            this.errors.push(
+              new ResolverErrors.ScopeConflictError(
+                stmt.name.line,
+                stmt.name.col,
+                this.source,
+                stmt.name.indexInSource,
+                stmt.name.indexInSource + name.length,
+                msg,
+              ),
+            );
+          }
+        } else if (stmt instanceof StmtNS.FunctionDef) {
+          // Record the function name as an assignment; don't recurse into its body.
+          recordAssign(stmt.name);
+        } else if (stmt instanceof StmtNS.Assign) {
+          collectExpr(stmt.value);
+          if (stmt.target instanceof ExprNS.Variable) {
+            recordAssign(stmt.target.name);
+          } else {
+            collectExpr(stmt.target);
+          }
+        } else if (stmt instanceof StmtNS.SimpleExpr) {
+          collectExpr(stmt.expression);
+        } else if (stmt instanceof StmtNS.Return) {
+          if (stmt.value) collectExpr(stmt.value);
+        } else if (stmt instanceof StmtNS.If) {
+          collectExpr(stmt.condition);
+          scanBody(stmt.body);
+          if (Array.isArray(stmt.elseBlock)) scanBody(stmt.elseBlock);
+          else if (stmt.elseBlock) scanBody([stmt.elseBlock]);
+        } else if (stmt instanceof StmtNS.While) {
+          collectExpr(stmt.condition);
+          scanBody(stmt.body);
+        } else if (stmt instanceof StmtNS.For) {
+          collectExpr(stmt.iter);
+          recordAssign(stmt.target);
+          scanBody(stmt.body);
+        } else if (stmt instanceof StmtNS.Assert) {
+          collectExpr(stmt.value);
+        }
+        // Pass, Break, Continue: no variable references
+      }
+    };
+
+    scanBody(body);
+  }
+
+  visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
+    // Search the enclosing function scope chain for the name.
+    // Stop before the fileInput (module) env — identified by its parent being the global env
+    // (whose own parent is null). Only function-scope envs are valid nonlocal targets.
+    let found = false;
+    let env = this.environment?.enclosing ?? null;
+    while (env !== null && env.enclosing !== null && env.enclosing.enclosing !== null) {
+      if (env.names.has(stmt.name.lexeme)) {
+        found = true;
+        break;
+      }
+      env = env.enclosing;
+    }
+    if (!found) {
+      this.errors.push(
+        new ResolverErrors.NameNotFoundError(
+          stmt.name.line,
+          stmt.name.col,
+          this.source,
+          stmt.name.indexInSource,
+          stmt.name.indexInSource + stmt.name.lexeme.length,
+          this.environment?.suggestName(stmt.name) ?? null,
+        ),
+      );
     }
   }
 
