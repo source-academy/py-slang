@@ -37,4 +37,11 @@ export default defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+  {
+    // Test helpers walk serialized ASTs of arbitrary shape, for which there is no useful static type.
+    files: ["src/**/__tests__/**/*.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
 ]);
