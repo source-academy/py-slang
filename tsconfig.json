@@ -8,7 +8,7 @@
     "src/tests",
     "src/parser/python-grammar.ts"
   ],
-  "include": ["src"],
+  "include": ["src", "scripts/fake-sling-server.ts"],
   "compilerOptions": {
     /* Language and Environment */
     "target": "es2020",
