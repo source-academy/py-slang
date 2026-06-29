@@ -37,7 +37,10 @@ export function createBufferedOutputStream(): {
   return {
     context: { stream, writer },
     flush: (conductor: IRunnerPlugin) => {
-      if (buffer) conductor.sendOutput(buffer);
+      if (buffer !== "") {
+        conductor.sendOutput(buffer);
+        buffer = "";
+      }
     },
   };
 }
