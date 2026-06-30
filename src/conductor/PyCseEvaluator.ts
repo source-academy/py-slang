@@ -1,5 +1,6 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
@@ -21,8 +22,8 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
-import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
+import PyDataDisplayPlugin from "./plugins/PyDataDisplayPlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -40,6 +41,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly preludeText: string;
   private readonly ensurePreludesLoaded: () => Promise<void>;
   private readonly csePlugin: CseMachinePlugin;
+  private readonly dataDisplayPlugin: PyDataDisplayPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -50,10 +52,9 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.
-    this.csePlugin = conductor.registerPlugin(
-      CseMachinePlugin as never,
-    ) as unknown as CseMachinePlugin;
-
+    this.csePlugin = conductor.registerPlugin(CseMachinePlugin);
+    this.dataDisplayPlugin = conductor.registerPlugin(PyDataDisplayPlugin);
+    this.conductor.hostLoadPlugin("data-display");
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
         this.context.nativeStorage.builtins.set(name, value);

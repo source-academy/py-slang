@@ -1,4 +1,5 @@
 import { ExprNS } from "../ast-types";
+import PyDataDisplayPlugin from "../conductor/plugins/PyDataDisplayPlugin";
 import { Context } from "../engines/cse/context";
 import { ControlItem } from "../engines/cse/control";
 import { handleRuntimeError } from "../engines/cse/error";
@@ -8,6 +9,7 @@ import {
   BoolValue,
   BuiltinValue,
   ComplexValue,
+  NoneValue,
   NumberValue,
   StringValue,
   Value,
@@ -548,6 +550,18 @@ export class MiscBuiltins {
     const obj = args[0];
     const result = toPythonString(obj, true);
     return { type: "string", value: result };
+  }
+
+  @Validate(1, 1, "draw_data", true)
+  static draw_data(
+    args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
+    const obj = args[0];
+    PyDataDisplayPlugin.instance?.sendData(obj);
+    return { type: "none" };
   }
 }
 for (const builtin of Object.getOwnPropertyNames(MiscBuiltins)) {

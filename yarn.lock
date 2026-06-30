@@ -1643,10 +1643,17 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@https://github.com/source-academy/conductor.git#0.5.0":
-  version: 0.5.0
-  resolution: "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#commit=2349aa912b32ff4f8b5bad2666243c6adad5677e"
-  checksum: 10c0/6f17b0f9bbd4630d73a3c4df043e05140f9c77b735fba4956442d3574c54f5918dd6113b3d52b1ed4238febc9ff2c03676c0200f7f1c5b5a3bc5eea92ecebea9
+"@sourceacademy/common-data-display@file:../plugins/src/common/data-display::locator=py-slang%40workspace%3A.":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-data-display@file:../plugins/src/common/data-display#../plugins/src/common/data-display::hash=f0fe9d&locator=py-slang%40workspace%3A."
+  checksum: 10c0/c84a38e4353176ac95ba447b844c5fca608faa49d131dd62bb0168321231e30a240b3773fe07b61c0e0821f39030130db17577cb39efce4b71073826e5b61721
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/conductor@npm:0.3.0":
+  version: 0.3.0
+  resolution: "@sourceacademy/conductor@npm:0.3.0"
+  checksum: 10c0/e6d50cc0b9188fa5ec54c3bb2e6b9a0f9391ba37449e74a326c89c4e14deb00c4882700062427737e6f6fca556fd95d91fa9d7f6e125fe1d43938a65cc3c0c4d
   languageName: node
   linkType: hard
 
@@ -1657,6 +1664,15 @@ __metadata:
     "@sourceacademy/common-cse-machine": ">=0.1.0"
     "@sourceacademy/conductor": ">=0.3.0"
   checksum: 10c0/9ff119df2783e9c2fc21a8107c5e87df26a914880bda442a9ddd562c39bb56b3889ee88bdaa1810a10206184ab15fabf6d6a95644e88d5dbe206525cbf409930
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-data-display@file:../plugins/src/runner/data-display::locator=py-slang%40workspace%3A.":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-data-display@file:../plugins/src/runner/data-display#../plugins/src/runner/data-display::hash=4a3d71&locator=py-slang%40workspace%3A."
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/68697b00b0cae32fb075479c4b4fe2ef0c5c97c8d58b0a310bf6fe5ffeb041c4d3879a50eb1e152db35184eea89762004d2cbc1a0929a82f8a5db6dab3e90abf
   languageName: node
   linkType: hard
 
@@ -4785,8 +4801,10 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.1.0"
-    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
+    "@sourceacademy/common-data-display": ../plugins/src/common/data-display
+    "@sourceacademy/conductor": "npm:0.3.0"
     "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
+    "@sourceacademy/runner-data-display": ../plugins/src/runner/data-display
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"
