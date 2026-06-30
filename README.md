@@ -90,6 +90,34 @@ the Python grammar in `python.ne`.
 ```shell
 yarn compile-grammar
 ```
+## Documentation
+
+Our Python languages are documented here: <https://docs.sourceacademy.org/python/>
+
+### Requirements
+
+- `bash`: known working version: GNU bash, version 5.0.16
+- `latexmk`: Version 4.52c
+- `pdflatex`: known working versions
+  - pdfTeX 3.14159265-2.6-1.40.18 (TeX Live 2017)
+
+To build the documentation, run
+
+```bash
+$ git clone https://github.com/source-academy/py-slang.git
+$ cd py-slang
+$ yarn
+$ yarn install
+$ yarn jsdoc  # to make the web pages in py-slang/docs/python and the PDF documents
+```
+
+**Note:** The documentation may not build on Windows, depending on your bash setup, [see above](https://github.com/source-academy/py-slang#requirements).
+
+Documentation on the Python libraries are generated from inline documentation in the library sources, a copy of which are kept in `docs/lib/*.js`. The command `yarn jsdoc` generates the documentation and places it in the folder `docs/python`. You can test the documentation using a local server:
+
+```bash
+$ cd docs/python;  python -m http.server 8000
+```
 
 ## Prior Reading
 

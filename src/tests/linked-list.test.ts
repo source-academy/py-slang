@@ -34,6 +34,7 @@ describe("Linked List Tests", () => {
         null,
         ["linked_list(linked_list(1, 2, 3), 4, 5, 6)"],
       ],
+      ["print_linked_list(linked_list('a', 'b'))", null, ["linked_list('a', 'b')"]],
     ],
     "empty list boundaries": [
       ["equal(append_linked_list(None, None), None)", true, null],

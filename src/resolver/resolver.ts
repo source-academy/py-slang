@@ -171,6 +171,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   errors: Error[];
   functionEnvironments: FunctionEnvironments;
   private validators: FeatureValidator[];
+  // Names declared `global` in the current function body (reset on function entry/exit).
+  private globalNamesInCurrentFunction: Set<string> = new Set();
 
   constructor(
     source: string,
@@ -191,8 +193,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       source,
       null,
       new Map([
-        // misc library
         ["range", new Token(TokenType.NAME, "range", 0, 0, 0)],
+        ["__program__", new Token(TokenType.NAME, "__program__", 0, 0, 0)],
         ...groups.flatMap(group =>
           Array.from(group.builtins.entries()).map(
             ([name]) => [name, new Token(TokenType.NAME, name, 0, 0, 0)] as const,
@@ -228,10 +230,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     if (stmt instanceof Array) {
       for (const st of stmt) {
         if (st instanceof StmtNS.FunctionDef) {
-          this.environment?.declareName(st.name);
+          if (!this.globalNamesInCurrentFunction.has(st.name.lexeme)) {
+            this.environment?.declareName(st.name);
+          }
         }
         if (st instanceof StmtNS.Assign && st.target instanceof ExprNS.Variable) {
-          this.environment?.declareName(st.target.name);
+          if (!this.globalNamesInCurrentFunction.has(st.target.name.lexeme)) {
+            this.environment?.declareName(st.target.name);
+          }
         }
       }
       for (const st of stmt) {
@@ -308,10 +314,29 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = new Environment(this.source, this.environment, newEnv);
     this.functionEnvironments.set(stmt, this.environment);
     this.functionScope = this.environment;
+
+    const oldGlobalNames = this.globalNamesInCurrentFunction;
+    this.globalNamesInCurrentFunction = this.scanGlobalDeclarations(stmt.body);
+    // Declare global names in the outermost (module-level) environment so that
+    // variable lookups within this function can find them via the chain walk.
+    if (this.globalNamesInCurrentFunction.size > 0) {
+      let globalEnv: Environment | null = this.environment;
+      while (globalEnv?.enclosing !== null) {
+        globalEnv = globalEnv?.enclosing ?? null;
+      }
+      if (globalEnv) {
+        for (const name of this.globalNamesInCurrentFunction) {
+          if (!globalEnv.names.has(name)) {
+            // Use a sentinel token so the resolver accepts references to this name.
+            globalEnv.names.set(name, new Token(TokenType.NAME, name, 0, 0, 0));
+          }
+        }
+      }
+    }
+
     this.resolve(stmt.body);
-    // Grab identifiers from that new environment. That are NOT functions.
-    // stmt.varDecls = this.varDeclNames(this.environment.names)
     // Restore old environment
+    this.globalNamesInCurrentFunction = oldGlobalNames;
     this.functionScope = null;
     this.environment = oldEnv;
   }
@@ -337,7 +362,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.value);
   }
   visitForStmt(stmt: StmtNS.For): void {
-    this.environment?.declareName(stmt.target);
+    if (!this.globalNamesInCurrentFunction.has(stmt.target.lexeme)) {
+      this.environment?.declareName(stmt.target);
+    }
     this.resolve(stmt.iter);
     this.resolve(stmt.body);
   }
@@ -347,11 +374,36 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.body);
     this.resolve(stmt.elseBlock);
   }
-  // @TODO we need to treat all global statements as variable declarations in the global
-  // scope.
   visitGlobalStmt(_stmt: StmtNS.Global): void {
-    // Do nothing because global can also be declared in our
-    // own scope.
+    // All work is done in visitFunctionDefStmt (scanning + declaring in the global env).
+    // At the top level `global x` is a no-op (already in global scope).
+  }
+
+  // Recursively collects names declared with `global` anywhere in the function body,
+  // without descending into nested function/lambda definitions.
+  private scanGlobalDeclarations(stmts: StmtNS.Stmt[]): Set<string> {
+    const globals = new Set<string>();
+    const scan = (stmts: StmtNS.Stmt[]) => {
+      for (const stmt of stmts) {
+        if (stmt instanceof StmtNS.Global) {
+          globals.add(stmt.name.lexeme);
+        } else if (stmt instanceof StmtNS.If) {
+          scan(stmt.body);
+          if (Array.isArray(stmt.elseBlock)) {
+            scan(stmt.elseBlock);
+          } else if (stmt.elseBlock) {
+            scan([stmt.elseBlock]);
+          }
+        } else if (stmt instanceof StmtNS.While) {
+          scan(stmt.body);
+        } else if (stmt instanceof StmtNS.For) {
+          scan(stmt.body);
+        }
+        // Do not recurse into FunctionDef or Lambda bodies.
+      }
+    };
+    scan(stmts);
+    return globals;
   }
   // @TODO nonlocals mean that any variable following that name in the current env
   // should not create a variable declaration, but instead point to an outer variable.

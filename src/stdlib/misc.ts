@@ -521,7 +521,7 @@ export class MiscBuiltins {
     _command: ExprNS.Call,
     context: Context,
   ): Promise<Value> {
-    const output = args.map(arg => toPythonString(arg)).join(" ");
+    const output = args.map(arg => toPythonString(arg)).join(" ") + "\n";
     await displayOutput(context, output);
     return { type: "none" };
   }
