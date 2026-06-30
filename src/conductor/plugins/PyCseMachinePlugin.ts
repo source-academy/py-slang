@@ -264,7 +264,9 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     const start: number = item.startToken?.indexInSource ?? -1;
     const endTok = item.endToken;
     const end: number =
-      endTok != null ? (endTok.indexInSource ?? 0) + (endTok.lexeme?.length ?? 0) : -1;
+      endTok != null && endTok.indexInSource !== undefined
+        ? endTok.indexInSource + (endTok.lexeme?.length ?? 0)
+        : -1;
     // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) have both
     // tokens pinned to position 0. Require start > 0 OR end token at a real position
     // to guard against slicing the wrong source text.
@@ -307,7 +309,7 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     ) {
       const body = Array.isArray(item.body)
         ? item.body
-        : item.body !== undefined && "body" in item.body
+        : item.body !== undefined && item.body !== null && "body" in item.body
           ? item.body.body
           : [];
       nodeMeta.bodyLength = body.length;
@@ -462,3 +464,6 @@ export async function collectSnapshots(
 // The runner-side plugin that transports these snapshots now lives in
 // @sourceacademy/runner-cse-machine (CseMachinePlugin). This module only owns the
 // Python-specific serialization of control/stash/environment into CseSnapshots.
+
+// Exported for unit testing only — not part of the public API.
+export { formatValue, serializeValue, instrDisplayText, serializeControlItem, serializeEnvChain };
