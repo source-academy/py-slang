@@ -86,6 +86,8 @@ export const libraryFunctions: LibFuncType[] = [
   ]),
   libFunc("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
   libFunc("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
+  // `llist` is the SICPy textbook's name for the linked-list constructor.
+  libFunc("llist", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
   libFunc("is_linked_list", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
   libFunc("set_head", 2, true).body((x, y) =>
     wasm.call(SET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(0)), y),

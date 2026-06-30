@@ -514,6 +514,9 @@ export const listBuiltins: Record<string, BuiltinFn> = { ...primitives };
 for (const [name, fn] of Object.entries(library)) {
   listBuiltins[name] = args => applyLibrary(name, fn, args);
 }
+// `llist` is the SICPy textbook's name for the linked-list constructor; expose
+// it as an alias of `linked_list` so stepped programs can use either name.
+listBuiltins.llist = listBuiltins.linked_list;
 
 /** Parameter counts of the public list functions, for the `arity` built-in. */
 export const listArities: Record<string, number> = {
@@ -523,6 +526,7 @@ export const listArities: Record<string, number> = {
   tail: 1,
   is_linked_list: 1,
   linked_list: 0,
+  llist: 0,
   draw_data: 1,
   equal: 2,
   length_linked_list: 1,

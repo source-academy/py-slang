@@ -66,6 +66,17 @@ function linked_list(...values) {}
 
 /**
  * PRIMITIVE
+ * The SICPy name for <CODE>linked_list</CODE>: given n values, returns a
+ * linked list of length n. The elements of the linked list are the given
+ * values in the given order.
+ *
+ * @param {value} <CODE>value1, value2, ...values</CODE> - given values
+ * @returns {linked_list} linked list containing all values
+ */
+function llist(...values) {}
+
+/**
+ * PRIMITIVE
  * Visualizes the arguments in a separate drawing area in the Source
  * Academy using box-and-pointer diagrams.
  *

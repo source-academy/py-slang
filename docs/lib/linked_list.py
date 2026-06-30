@@ -86,6 +86,22 @@ def linked_list(*values):
     pass
 
 
+def llist(*values):
+    """
+    PRIMITIVE
+    The SICPy name for linked_list: given n values, returns a linked list
+    of length n. The elements of the linked list are the given values in
+    the given order.
+
+    Parameters:
+        value (value1, value2, ...values): given values
+
+    Returns:
+        linked list: linked list containing all values
+    """
+    pass
+
+
 def draw_data(value1, value2, *values):
     """
     PRIMITIVE
