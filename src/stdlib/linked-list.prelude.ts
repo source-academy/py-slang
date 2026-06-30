@@ -1,9 +1,5 @@
 export default `
 
-# 'llist' is the canonical SICPy name for the linked-list constructor
-# (the JavaScript edition's 'list'); 'linked_list' is the native builtin.
-llist = linked_list
-
 def is_linked_list(xs):
     """
     Returns True if xs is a linked list as defined in the textbook, and

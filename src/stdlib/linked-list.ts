@@ -20,8 +20,8 @@ class LinkedListBuiltins {
     return { type: "list", value: args };
   }
 
-  @Validate(0, null, "linked_list", true)
-  static linked_list(
+  @Validate(0, null, "llist", true)
+  static llist(
     args: Value[],
     source: string,
     command: ExprNS.Call,
@@ -31,7 +31,7 @@ class LinkedListBuiltins {
       return { type: "none" };
     }
     const head = args[0];
-    const tail = LinkedListBuiltins.linked_list(args.slice(1), source, command, context);
+    const tail = LinkedListBuiltins.llist(args.slice(1), source, command, context);
     return { type: "list", value: [head, tail] };
   }
 
@@ -93,7 +93,7 @@ class LinkedListBuiltins {
       return "[" + string1 + ", " + string2 + "]";
     }
 
-    let string = "linked_list(";
+    let string = "llist(";
     let current = value;
 
     while (current.type == "list" && current.value.length === 2) {
