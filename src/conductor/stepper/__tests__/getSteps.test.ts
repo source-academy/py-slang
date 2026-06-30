@@ -292,9 +292,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
   test("§1 rejects §2 list-library functions as unknown names", () => {
     expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
-    expect(preprocess("llist(1, 2, 3)", 1)).toBe(
-      "NameError: name 'llist' is not defined",
-    );
+    expect(preprocess("llist(1, 2, 3)", 1)).toBe("NameError: name 'llist' is not defined");
     expect(preprocess("map_linked_list(lambda x: x, None)", 1)).toBe(
       "NameError: name 'map_linked_list' is not defined",
     );
@@ -635,20 +633,14 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("map, filter and accumulate", () => {
-    expect(result("map_linked_list(lambda x: x * x, llist(1, 2, 3))")).toBe(
-      "[1, [4, [9, None]]]",
-    );
-    expect(result("filter_linked_list(lambda x: x > 1, llist(1, 2, 3))")).toBe(
-      "[2, [3, None]]",
-    );
+    expect(result("map_linked_list(lambda x: x * x, llist(1, 2, 3))")).toBe("[1, [4, [9, None]]]");
+    expect(result("filter_linked_list(lambda x: x > 1, llist(1, 2, 3))")).toBe("[2, [3, None]]");
     expect(result("accumulate_linked_list(lambda x, y: x + y, 0, llist(1, 2, 3))")).toBe("6");
   });
 
   test("reverse, append, enum and build", () => {
     expect(result("reverse_linked_list(llist(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
-    expect(result("append_linked_list(llist(1, 2), llist(3, 4))")).toBe(
-      "[1, [2, [3, [4, None]]]]",
-    );
+    expect(result("append_linked_list(llist(1, 2), llist(3, 4))")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("enum_linked_list(1, 4)")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("build_linked_list(lambda i: i * 2, 3)")).toBe("[0, [2, [4, None]]]");
   });

@@ -74,11 +74,7 @@ describe("Stream Tests", () => {
     "for_each, reverse and append": [
       ["stream_for_each(lambda x: x, None)", true, []],
       ["stream_for_each(print, stream(1, 2, 3))", true, ["1", "2", "3"]],
-      [
-        "equal(stream_to_linked_list(stream_reverse(stream(1, 2, 3))), llist(3, 2, 1))",
-        true,
-        null,
-      ],
+      ["equal(stream_to_linked_list(stream_reverse(stream(1, 2, 3))), llist(3, 2, 1))", true, null],
       ["equal(stream_reverse(None), None)", true, null],
       [
         "equal(stream_to_linked_list(stream_append(stream(1, 2), stream(3, 4))), llist(1, 2, 3, 4))",
@@ -90,16 +86,8 @@ describe("Stream Tests", () => {
         true,
         null,
       ],
-      [
-        "equal(stream_to_linked_list(stream_append(None, stream(3, 4))), llist(3, 4))",
-        true,
-        null,
-      ],
-      [
-        "equal(stream_to_linked_list(stream_append(stream(1, 2), None)), llist(1, 2))",
-        true,
-        null,
-      ],
+      ["equal(stream_to_linked_list(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
+      ["equal(stream_to_linked_list(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
     ],
     "member, remove and filter": [
       [
@@ -136,11 +124,7 @@ describe("Stream Tests", () => {
       ["equal(enum_stream(6, 3), None)", true, null],
       ["equal(eval_stream(stream(7, 8, 9), 2), llist(7, 8))", true, null],
       ["equal(eval_stream(integers_from(5), 4), llist(5, 6, 7, 8))", true, null],
-      [
-        "equal(eval_stream(pair(1, lambda: pair(2, lambda: None)), 2), llist(1, 2))",
-        true,
-        null,
-      ],
+      ["equal(eval_stream(pair(1, lambda: pair(2, lambda: None)), 2), llist(1, 2))", true, null],
       ["equal(eval_stream(stream(1, 2, 3), 0), None)", true, null],
       ["stream_ref(stream(10, 20, 30), 0)", 10n, null],
       ["stream_ref(stream(10, 20, 30), 2)", 30n, null],

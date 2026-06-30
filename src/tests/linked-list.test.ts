@@ -56,11 +56,7 @@ describe("Linked List Tests", () => {
       ["equal(remove_all_linked_list(1, llist(1, 1, 1, 1)), None)", true, null],
       ["equal(remove_linked_list(1, llist(1, 1, 1)), llist(1, 1))", true, null],
       ["equal(filter_linked_list(lambda x: False, llist(1, 2, 3)), None)", true, null],
-      [
-        "equal(filter_linked_list(lambda x: True, llist(1, 2, 3)), llist(1, 2, 3))",
-        true,
-        null,
-      ],
+      ["equal(filter_linked_list(lambda x: True, llist(1, 2, 3)), llist(1, 2, 3))", true, null],
     ],
     "equality strictness": [
       ["equal(llist(1, 2), 1)", false, null], // List vs Int
@@ -114,21 +110,13 @@ describe("Linked List Tests", () => {
       ["linked_list_to_string(None)", "None", null],
     ],
     transformations: [
-      [
-        "equal(map_linked_list(lambda x: x + 1, llist(1, 2, 3)), llist(2, 3, 4))",
-        true,
-        null,
-      ],
+      ["equal(map_linked_list(lambda x: x + 1, llist(1, 2, 3)), llist(2, 3, 4))", true, null],
       ["equal(map_linked_list(lambda x: x + 1, None), None)", true, null],
       ["equal(build_linked_list(lambda i: i * i, 4), llist(0, 1, 4, 9))", true, null],
       ["equal(build_linked_list(lambda i: i, 0), None)", true, null],
       ["equal(reverse_linked_list(llist(1, 2, 3)), llist(3, 2, 1))", true, null],
       ["equal(reverse_linked_list(None), None)", true, null],
-      [
-        "equal(append_linked_list(llist(1, 2), llist(3, 4)), llist(1, 2, 3, 4))",
-        true,
-        null,
-      ],
+      ["equal(append_linked_list(llist(1, 2), llist(3, 4)), llist(1, 2, 3, 4))", true, null],
       ["equal(append_linked_list(None, llist(3, 4)), llist(3, 4))", true, null],
       ["equal(append_linked_list(llist(1, 2), None), llist(1, 2))", true, null],
       [
@@ -141,25 +129,13 @@ describe("Linked List Tests", () => {
       ["equal(enum_linked_list(6, 3), None)", true, null],
     ],
     "search and removal": [
-      [
-        "equal(member_linked_list(1, llist(1, 2, 3, 4)), llist(1, 2, 3, 4))",
-        true,
-        null,
-      ],
+      ["equal(member_linked_list(1, llist(1, 2, 3, 4)), llist(1, 2, 3, 4))", true, null],
       ["equal(llist(1, 2, 3), pair(1, pair(2, pair(3, None))))", true, null],
       ["equal(member_linked_list(3, llist(1, 2, 3, 4)), llist(3, 4))", true, null],
       ["equal(member_linked_list(9, llist(1, 2, 3, 4)), None)", true, null],
-      [
-        "equal(remove_linked_list(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))",
-        true,
-        null,
-      ],
+      ["equal(remove_linked_list(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))", true, null],
       ["equal(remove_linked_list(2, llist(1, 2, 3, 2)), llist(1, 3, 2))", true, null],
-      [
-        "equal(remove_all_linked_list(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))",
-        true,
-        null,
-      ],
+      ["equal(remove_all_linked_list(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))", true, null],
       ["equal(remove_all_linked_list(2, llist(1, 2, 3, 2)), llist(1, 3))", true, null],
     ],
     "indexing and reducing": [
