@@ -5,9 +5,9 @@ import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
 import { Stash } from "../engines/cse/stash";
 import {
+  createBufferedOutputStream,
   createErrorStream,
   createInputStream,
-  createOutputStream,
   destroyStreams,
   displayError,
 } from "../engines/cse/streams";
@@ -76,10 +76,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
+    const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
     try {
       this.context.streams = {
         initialised: true,
-        stdout: createOutputStream(this.conductor),
+        stdout,
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
       };
@@ -130,11 +131,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           script,
           maxSnapshots,
         );
+        flushOutput(this.conductor);
         this.csePlugin.sendSnapshots(snapshots);
       } else {
         await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+        flushOutput(this.conductor);
       }
     } catch (e) {
+      flushOutput(this.conductor);
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(
         errors.map(e => {
