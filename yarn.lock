@@ -1636,10 +1636,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@sourceacademy/conductor@npm:0.3.0"
-  checksum: 10c0/e6d50cc0b9188fa5ec54c3bb2e6b9a0f9391ba37449e74a326c89c4e14deb00c4882700062427737e6f6fca556fd95d91fa9d7f6e125fe1d43938a65cc3c0c4d
+"@sourceacademy/conductor@https://github.com/source-academy/conductor#feat/switch-to-generator":
+  version: 0.4.0
+  resolution: "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#commit=da5d66340be659c12acbc350a935c4d67dec3e5e"
+  checksum: 10c0/b695adcbd0e9b379380bec42be577618556a99e603a87a6171867269d5966c413428a284bb0e22bb369985513720ce79b8d7121e60ae215d2d14524fb6f8dab9
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-module-loader@file:../plugins/src/runner/module-loader::locator=py-slang%40workspace%3A.":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-module-loader@file:../plugins/src/runner/module-loader#../plugins/src/runner/module-loader::hash=fad9c7&locator=py-slang%40workspace%3A."
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/67d672861d6f42c6b81be3390728b99e68fa5e9ec2df3fe2378ee936b13ec70e0de36003f229ee51eb07cf85fdb795815dcde46a570c01573355e0f0fd578e54
   languageName: node
   linkType: hard
 
@@ -4767,7 +4776,8 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/conductor": "npm:^0.3.0"
+    "@sourceacademy/conductor": "https://github.com/source-academy/conductor#feat/switch-to-generator"
+    "@sourceacademy/runner-module-loader": ../plugins/src/runner/module-loader
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
     "@types/jest": "npm:^29.5.14"

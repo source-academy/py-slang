@@ -17,6 +17,8 @@ import {
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
+  ModuleFunctionCallInstr,
+  ModuleFunctionGenerator,
   Node,
   PopInstr,
   ResetInstr,
@@ -142,4 +144,13 @@ export const whileInstr = (
   srcNode,
   test,
   body,
+});
+
+export const moduleFunctionCallInstr = (
+  generator: ModuleFunctionGenerator,
+  srcNode: ExprNS.Call,
+): ModuleFunctionCallInstr => ({
+  instrType: InstrType.MODULE_FUNCTION_CALL,
+  generator,
+  srcNode,
 });

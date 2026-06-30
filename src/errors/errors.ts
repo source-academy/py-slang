@@ -583,8 +583,30 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
   }
 }
 
+export class ModuleFunctionNotFoundError extends RuntimeSourceError {
+  constructor(source: string, moduleName: string, functionName: string, node: StmtNS.FromImport) {
+    super(node);
+    this.type = ErrorType.IMPORT;
+    const { lineIndex, fullLine } = getFullLine(source, node.startToken.indexInSource);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+    
+    const hint = `ImportError: cannot import name '${functionName}' from '${moduleName}'`;
+    const suggestion = `The module '${moduleName}' does not have a function named '${functionName}', or it may not be exported. Check the module's documentation to see the list of available functions and ensure that '${functionName}' is correctly defined and exported in '${moduleName}'.`;
+    const msg = `ImportError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    this.message = msg;
+  }
+}
+
 /*
     The offset is calculated as follows:    
     Current position is one after real position of end of token: 1
 */
 export const MAGIC_OFFSET = 1;
+

@@ -1,6 +1,7 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ArrayIdentifier, ClosureIdentifier, DataType, ExternCallable, IDataHandler, IFunctionSignature, OpaqueIdentifier, PairIdentifier, TypedValue } from "@sourceacademy/conductor/types";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Context } from "../engines/cse/context";
 import { evaluate } from "../engines/cse/interpreter";
 import {
@@ -46,6 +47,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
         this.context.nativeStorage.builtins.set(name, value);
       }
     }
+    this.conductor.registerPlugin(ModuleLoaderRunnerPlugin, this.conductor);
 
     this.ensurePreludesLoaded = once(async () => {
       let prelude = "";
@@ -74,7 +76,8 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
       };
-
+      this.context.conductor = this.conductor;
+      this.context.evaluator = this;
       await this.ensurePreludesLoaded();
 
       const script = chunk + "\n";
@@ -127,7 +130,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       isVararg?: boolean;
     }
   >();
-  private opaqueMap = new Map<TypedValue<DataType.OPAQUE>, { value: any; immutable: boolean }>();
+  private opaqueMap = new Map<TypedValue<DataType.OPAQUE>, { value: unknown; immutable: boolean }>();
   private uniqueId = 0;
   pair_make(
     head: TypedValue<DataType>,
@@ -205,18 +208,16 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     }
     return Promise.resolve(array.elements.length);
   }
-
-  array_get(
-    a: TypedValue<DataType.ARRAY, DataType.VOID>,
-    idx: number,
-  ): Promise<TypedValue<DataType>>;
   array_get<T extends DataType>(
     a: TypedValue<DataType.ARRAY, T>,
     idx: number,
-  ): Promise<TypedValue<NoInfer<T>>> {
-    const array = this.arrayMap.get(a) as
-      | { type: T; elements: TypedValue<NoInfer<T>>[] }
-      | undefined;
+  ): Promise<TypedValue<NoInfer<T>>>
+  array_get(
+    a: TypedValue<DataType.ARRAY, DataType.VOID>,
+    idx: number,
+  ): Promise<TypedValue<DataType>>
+   {
+    const array = this.arrayMap.get(a);
 
     if (!array) {
       throw new Error(`Invalid array identifier: ${a.value}`);
@@ -303,24 +304,24 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
     returnType: T,
-  ): Promise<TypedValue<NoInfer<T>>> {
+  ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     const value = this.closureMap.get(c)?.func(...args);
     if (value === undefined) {
       throw new Error(`Invalid closure identifier: ${c.value}`);
     }
-    if (returnType !== DataType.VOID) {
+    if (c.value.__ret !== returnType) {
       const expectedReturnType = this.closureMap.get(c)?.sig.returnType;
       if (expectedReturnType !== returnType) {
         throw new Error(`Expected return type ${returnType}, got ${expectedReturnType}`);
       }
     }
-    return Promise.resolve(value as TypedValue<NoInfer<T>>);
+    return value as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
   }
   closure_call_unchecked<T extends DataType>(
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
-  ): Promise<TypedValue<NoInfer<T>>> {
-    return Promise.resolve(this.closureMap.get(c)?.func(...args) as TypedValue<NoInfer<T>>);
+  ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
+    return this.closureMap.get(c)?.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
   }
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
     const closure = this.closureMap.get(c);
@@ -403,35 +404,27 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       resolve(result);
     });
   }
-  accumulate<T extends Exclude<DataType, DataType.VOID>>(
+  async* accumulate<T extends Exclude<DataType, DataType.VOID>>(
     op: TypedValue<DataType.CLOSURE, T>,
     initial: TypedValue<T>,
     sequence: TypedValue<DataType.LIST>,
     resultType: T,
-  ): Promise<TypedValue<T>> {
-    return new Promise(async (resolve, reject) => {
-      let acc = initial;
-      let current: TypedValue<DataType> = sequence;
-      while (current.type !== DataType.EMPTY_LIST) {
-        if (current.type !== DataType.PAIR) {
-          reject(new Error(`Expected a list, got type ${current.type}`));
-          return;
-        }
-        const pair = this.pairMap.get(current.value);
-        if (!pair) {
-          reject(new Error(`Invalid pair identifier: ${current.value}`));
-          return;
-        }
-        try {
-          acc = await this.closure_call(op, [acc, pair.head], resultType);
-        } catch (e) {
-          reject(e);
-          return;
-        }
-        current = pair.tail;
+  ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
+    
+    let acc = initial;
+    let current: TypedValue<DataType> = sequence;
+    while (current.type !== DataType.EMPTY_LIST) {
+      if (current.type !== DataType.PAIR) {
+        throw new Error(`Expected a list, got type ${current.type}`);
       }
-      resolve(acc);
-    });
+      const pair = this.pairMap.get(current.value);
+      if (!pair) {
+        throw new Error(`Invalid pair identifier: ${current.value}`);
+      }
+      acc = yield* this.closure_call_unchecked(op, [acc, pair.head]);
+      current = pair.tail;
+    }
+    return acc;
   }
   length(xs: TypedValue<DataType.LIST>): Promise<number> {
     let length = 0;

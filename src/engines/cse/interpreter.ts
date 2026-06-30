@@ -25,6 +25,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
+import { loadModules, moduleToPython } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -44,6 +45,7 @@ import {
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
+  ModuleFunctionCallInstr,
   PopInstr,
   ResetInstr,
   UnOpInstr,
@@ -132,6 +134,8 @@ export async function evaluate(
     return displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   }
 
+  await evaluateImports(program as StmtNS.FileInput, context, code);
+
   try {
     context.runtime.isRunning = true;
     context.control = new Control(program);
@@ -156,44 +160,59 @@ export async function evaluate(
   }
 }
 
-// function evaluateImports(program: StmtNS.Stmt, context: Context) {
-//   try {
-//     const [importNodeMap] = filterImportDeclarations(program)
-//     const environment = currentEnvironment(context)
-//     for (const [moduleName, nodes] of importNodeMap) {
-//       const functions = context.nativeStorage.loadedModules[moduleName]
-//       for (const node of nodes) {
-//         for (const spec of node.specifiers) {
-//           declareIdentifier(context, spec.local.name, node, environment)
-//           let obj: any
+function filterImportDeclarations(
+  program: StmtNS.FileInput,
+): Map<string, { specs: { name: string; alias: string | undefined }[]; node: StmtNS.FromImport }> {
+  const importNodeMap = new Map<
+    string,
+    { specs: { name: string; alias: string | undefined }[]; node: StmtNS.FromImport }
+  >();
+  for (const stmt of program.statements) {
+    if (stmt instanceof StmtNS.FromImport) {
+      const moduleName = stmt.module.lexeme;
+      if (!importNodeMap.has(moduleName)) {
+        importNodeMap.set(moduleName, { specs: [], node: stmt });
+      }
+      importNodeMap
+        .get(moduleName)!
+        .specs.push(
+          ...stmt.names.map(spec => ({ name: spec.name.lexeme, alias: spec.alias?.lexeme })),
+        );
+    }
+  }
+  return importNodeMap;
+}
 
-//           switch (spec.type) {
-//             case 'ImportSpecifier': {
-//               if (spec.imported.type === 'Identifier') {
-//                 obj = functions[spec.imported.name];
-//               } else {
-//                 throw new Error(`Unexpected literal import: ${spec.imported.value}`);
-//               }
-//               break
-//             }
-//             case 'ImportDefaultSpecifier': {
-//               obj = functions.default
-//               break
-//             }
-//             case 'ImportNamespaceSpecifier': {
-//               obj = functions
-//               break
-//             }
-//           }
+async function evaluateImports(
+  program: StmtNS.FileInput,
+  context: Context,
+  code: string,
+): Promise<void> {
+  if (context.evaluator === null || context.conductor === null) {
+    throw new Error("Context is not properly initialized with evaluator and conductor");
+  }
+  const importNodeMap = filterImportDeclarations(program);
 
-//           defineVariable(context, spec.local.name, obj, true, node)
-//         }
-//       }
-//     }
-//   } catch (error) {
-//     handleRuntimeError(context, error as RuntimeSourceError)
-//   }
-// }
+  await loadModules(context, [...importNodeMap.keys()]);
+  for (const [moduleName, nodes] of importNodeMap) {
+    for (const node of nodes.specs) {
+      const importedFunc = context.nativeStorage.loadedModules[moduleName]?.[node.name];
+      if (!importedFunc) {
+        throw new error.ModuleFunctionNotFoundError(moduleName, moduleName, node.name, nodes.node);
+      }
+    }
+    await Promise.all(
+      nodes.specs.map(async node => {
+        const importedFunc = context.nativeStorage.loadedModules[moduleName][node.name];
+        pyDefineVariable(
+          context,
+          node.alias || node.name,
+          await moduleToPython(context, code, undefined, importedFunc.value),
+        );
+      }),
+    );
+  }
+}
 
 /**
  * The primary runner/loop of the explicit control evaluator.
@@ -290,7 +309,7 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
-    control.pop();
+    
     if (isNode(command)) {
       const node = command;
 
@@ -1112,7 +1131,16 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      stash.push(result);
+      if ("next" in result) {
+        const funcCallInstr: ModuleFunctionCallInstr = {
+          instrType: InstrType.MODULE_FUNCTION_CALL,
+          generator: result,
+          srcNode: instr.srcNode,
+        };
+        control.push(funcCallInstr);
+      } else {
+        stash.push(result);
+      }
     } else {
       handleRuntimeError(
         context,
@@ -1225,5 +1253,21 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     stash.push({ type: "none" });
+  },
+
+  [InstrType.MODULE_FUNCTION_CALL]: async function (
+    code: string,
+    instr: ModuleFunctionCallInstr,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    _isPrelude: boolean,
+  ) {
+    control.push(instr);
+    const nextValue = await instr.generator.next();
+    if (nextValue.done) {
+      control.pop();
+      stash.push(await moduleToPython(context, code, instr.srcNode, nextValue.value));
+    }
   },
 };

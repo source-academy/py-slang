@@ -323,7 +323,11 @@ class ParserBuiltins {
     }
 
     if (func.type === "builtin") {
-      return func.func(argArray, source, command, context);
+      const result = await func.func(argArray, source, command, context);
+      if ("next" in result) {
+        throw new Error("Cannot apply module builtin in apply_in_underlying_python");
+      }
+      return result;
     }
     return handleRuntimeError(
       context,

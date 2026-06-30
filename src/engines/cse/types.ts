@@ -1,5 +1,7 @@
+import { DataType, TypedValue } from "../../../../conductor/dist/conductor/types/moduleInterface";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
+import { Context } from "./context";
 import { Environment } from "./environment";
 import { Value } from "./stash";
 
@@ -13,6 +15,9 @@ export interface StatementSequence {
     end: { line: number; column: number };
   };
 }
+
+export type ModuleFunctionGenerator = AsyncGenerator<void, TypedValue<DataType>, undefined>;
+export type ModuleFunction = (args: Value[], code: string, command: ExprNS.Call, context: Context) => ModuleFunctionGenerator;
 
 export enum InstrType {
   RESET = "Reset",
@@ -33,6 +38,7 @@ export enum InstrType {
   CONTINUE_MARKER = "continueMarker",
   END_OF_FUNCTION_BODY = "EndOfFunctionBody",
   LIST_ACCESS = "ListAccess",
+  MODULE_FUNCTION_CALL = "ModuleFunctionCall",
 }
 
 interface BaseInstr {
@@ -129,6 +135,12 @@ export interface ContinueMarkerInstr extends BaseInstr {
   instrType: InstrType.CONTINUE_MARKER;
 }
 
+export interface ModuleFunctionCallInstr extends BaseInstr {
+  instrType: InstrType.MODULE_FUNCTION_CALL;
+  generator: ModuleFunctionGenerator;
+  srcNode: ExprNS.Call;
+}
+
 export type Instr =
   | WhileInstr
   | ForInstr
@@ -147,7 +159,8 @@ export type Instr =
   | ListAssmtInstr
   | BreakInstr
   | ContinueInstr
-  | ContinueMarkerInstr;
+  | ContinueMarkerInstr
+  | ModuleFunctionCallInstr;
 
 export function typeTranslator(type: Value["type"]): string {
   switch (type) {
