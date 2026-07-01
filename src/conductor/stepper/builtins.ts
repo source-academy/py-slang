@@ -387,7 +387,7 @@ Object.assign(BUILTIN_FUNCTIONS, {
 });
 
 // The Python §2 linked-list library (pairs and lists). Names follow Python (`pair`, `head`,
-// `linked_list`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
+// `llist`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
 Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
 
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */

@@ -71,7 +71,7 @@ def is_none(x):
 
 
 
-def linked_list(*values):
+def llist(*values):
     """
     PRIMITIVE
     Given n values, returns a linked list of length n. The elements of

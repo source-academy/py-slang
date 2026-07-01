@@ -72,8 +72,8 @@ def stream_map(f, s):
     stream_map applies first arg f to the elements of the second
     argument, assumed to be a stream.
     f is applied element-by-element:
-    stream_map(f, linked_list_to_stream(linked_list(1,2)) results in
-    the same as linked_list_to_stream(linked_list(f(1),f(2)))
+    stream_map(f, linked_list_to_stream(llist(1,2)) results in
+    the same as linked_list_to_stream(llist(f(1),f(2)))
     stream_map throws an exception if the second argument is not a
     stream, and if the second argument is a nonempty stream and the
     first argument is not a function.
@@ -107,7 +107,7 @@ def stream_for_each(fun, xs):
     """
     stream_for_each applies first arg fun to the elements of the stream
     passed as second argument. fun is applied element-by-element:
-    for_each(fun, linked_list_to_stream(linked_list(1, 2,None))) results in the calls fun(1)
+    for_each(fun, linked_list_to_stream(llist(1, 2,None))) results in the calls fun(1)
     and fun(2).
     stream_for_each returns True.
     stream_for_each throws an exception if the second argument is not a
@@ -258,7 +258,7 @@ def eval_stream(s, n):
 
     def es(s, n):
         return (
-            linked_list(head(s))
+            llist(head(s))
             if n == 1
             else pair(head(s), es(stream_tail(s), n - 1))
         )

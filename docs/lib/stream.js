@@ -321,7 +321,7 @@ function integers_from(n) {
 
 function eval_stream(s, n) {
   function es(s, n) {
-    return n === 1 ? linked_list(head(s)) : pair(head(s), es(stream_tail(s), n - 1))
+    return n === 1 ? llist(head(s)) : pair(head(s), es(stream_tail(s), n - 1))
   }
   return n == 0 ? None : es(s, n)
 }
