@@ -426,7 +426,7 @@ export async function collectSnapshots(
     if (snapshots.length >= maxSnapshots) break;
 
     const activeEnv = context.runtime.environments[0];
-    const rawControlStack = c.getStack();
+    const rawControlStack = c.getStack() as unknown as ControlStackItem[];
     const controlItems = rawControlStack
       .slice()
       .reverse()
