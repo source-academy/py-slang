@@ -292,9 +292,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
   test("§1 rejects §2 list-library functions as unknown names", () => {
     expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
-    expect(preprocess("linked_list(1, 2, 3)", 1)).toBe(
-      "NameError: name 'linked_list' is not defined",
-    );
+    expect(preprocess("llist(1, 2, 3)", 1)).toBe("NameError: name 'llist' is not defined");
     expect(preprocess("map_linked_list(lambda x: x, None)", 1)).toBe(
       "NameError: name 'map_linked_list' is not defined",
     );
@@ -327,7 +325,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   test("the same §2 names resolve once Python §2 is selected", () => {
     expect(preprocess("pair(1, 2)", 2)).toBeNull();
     expect(preprocess("head(pair(1, 2))", 2)).toBeNull();
-    expect(preprocess("map_linked_list(lambda x: x, linked_list(1, 2))", 2)).toBeNull();
+    expect(preprocess("map_linked_list(lambda x: x, llist(1, 2))", 2)).toBeNull();
     expect(preprocess("is_pair(pair(1, 2))", 2)).toBeNull();
   });
 
@@ -613,61 +611,55 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     expect(result("is_none(pair(1, 2))")).toBe("False");
   });
 
-  test("linked_list builds nested pairs ending in None", () => {
-    expect(result("linked_list(1, 2, 3)")).toBe("[1, [2, [3, None]]]");
-    expect(result("linked_list()")).toBe("None");
-    expect(result("linked_list(42)")).toBe("[42, None]");
+  test("llist builds nested pairs ending in None", () => {
+    expect(result("llist(1, 2, 3)")).toBe("[1, [2, [3, None]]]");
+    expect(result("llist()")).toBe("None");
+    expect(result("llist(42)")).toBe("[42, None]");
   });
 
   test("is_linked_list distinguishes proper lists from improper pairs", () => {
-    expect(result("is_linked_list(linked_list(1, 2, 3))")).toBe("True");
+    expect(result("is_linked_list(llist(1, 2, 3))")).toBe("True");
     expect(result("is_linked_list(None)")).toBe("True");
     expect(result("is_linked_list(pair(1, 2))")).toBe("False");
     expect(result("is_linked_list(5)")).toBe("False");
   });
 
   test("length, ref and member", () => {
-    expect(result("length_linked_list(linked_list(1, 2, 3, 4))")).toBe("4");
+    expect(result("length_linked_list(llist(1, 2, 3, 4))")).toBe("4");
     expect(result("length_linked_list(None)")).toBe("0");
-    expect(result("ref_linked_list(linked_list(10, 20, 30), 1)")).toBe("20");
-    expect(result("member_linked_list(2, linked_list(1, 2, 3))")).toBe("[2, [3, None]]");
-    expect(result("member_linked_list(9, linked_list(1, 2))")).toBe("None");
+    expect(result("ref_linked_list(llist(10, 20, 30), 1)")).toBe("20");
+    expect(result("member_linked_list(2, llist(1, 2, 3))")).toBe("[2, [3, None]]");
+    expect(result("member_linked_list(9, llist(1, 2))")).toBe("None");
   });
 
   test("map, filter and accumulate", () => {
-    expect(result("map_linked_list(lambda x: x * x, linked_list(1, 2, 3))")).toBe(
-      "[1, [4, [9, None]]]",
-    );
-    expect(result("filter_linked_list(lambda x: x > 1, linked_list(1, 2, 3))")).toBe(
-      "[2, [3, None]]",
-    );
-    expect(result("accumulate_linked_list(lambda x, y: x + y, 0, linked_list(1, 2, 3))")).toBe("6");
+    expect(result("map_linked_list(lambda x: x * x, llist(1, 2, 3))")).toBe("[1, [4, [9, None]]]");
+    expect(result("filter_linked_list(lambda x: x > 1, llist(1, 2, 3))")).toBe("[2, [3, None]]");
+    expect(result("accumulate_linked_list(lambda x, y: x + y, 0, llist(1, 2, 3))")).toBe("6");
   });
 
   test("reverse, append, enum and build", () => {
-    expect(result("reverse_linked_list(linked_list(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
-    expect(result("append_linked_list(linked_list(1, 2), linked_list(3, 4))")).toBe(
-      "[1, [2, [3, [4, None]]]]",
-    );
+    expect(result("reverse_linked_list(llist(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
+    expect(result("append_linked_list(llist(1, 2), llist(3, 4))")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("enum_linked_list(1, 4)")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("build_linked_list(lambda i: i * 2, 3)")).toBe("[0, [2, [4, None]]]");
   });
 
   test("remove and remove_all", () => {
-    expect(result("remove_linked_list(2, linked_list(1, 2, 3, 2))")).toBe("[1, [3, [2, None]]]");
-    expect(result("remove_all_linked_list(2, linked_list(2, 1, 2, 3))")).toBe("[1, [3, None]]");
+    expect(result("remove_linked_list(2, llist(1, 2, 3, 2))")).toBe("[1, [3, [2, None]]]");
+    expect(result("remove_all_linked_list(2, llist(2, 1, 2, 3))")).toBe("[1, [3, None]]");
   });
 
   test("equal compares structure and leaf values", () => {
-    expect(result("equal(linked_list(1, 2, 3), linked_list(1, 2, 3))")).toBe("True");
-    expect(result("equal(linked_list(1, 2), linked_list(1, 3))")).toBe("False");
-    expect(result("equal(pair(1, pair(2, None)), linked_list(1, 2))")).toBe("True");
+    expect(result("equal(llist(1, 2, 3), llist(1, 2, 3))")).toBe("True");
+    expect(result("equal(llist(1, 2), llist(1, 3))")).toBe("False");
+    expect(result("equal(pair(1, pair(2, None)), llist(1, 2))")).toBe("True");
     expect(result("equal(None, None)")).toBe("True");
   });
 
   test("linked_list_to_string and for_each", () => {
-    expect(result("linked_list_to_string(linked_list(1, 2))")).toBe("'[1, [2, None]]'");
-    expect(result("for_each_linked_list(lambda x: x, linked_list(1, 2, 3))")).toBe("True");
+    expect(result("linked_list_to_string(llist(1, 2))")).toBe("'[1, [2, None]]'");
+    expect(result("for_each_linked_list(lambda x: x, llist(1, 2, 3))")).toBe("True");
   });
 
   test("list functions are first-class values", () => {
@@ -680,8 +672,8 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("a fully-evaluated list is a complete result", () => {
-    expect(explanations("linked_list(1, 2, 3)").pop()).toBe("Evaluation complete");
-    expect(explanations("map_linked_list(lambda x: x + 1, linked_list(1, 2))").pop()).toBe(
+    expect(explanations("llist(1, 2, 3)").pop()).toBe("Evaluation complete");
+    expect(explanations("map_linked_list(lambda x: x + 1, llist(1, 2))").pop()).toBe(
       "Evaluation complete",
     );
   });
@@ -702,8 +694,8 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("list library names resolve in preprocessing (not undefined)", () => {
-    expect(preprocess("map_linked_list(lambda x: x, linked_list(1, 2))")).toBeNull();
-    expect(preprocess("xs = linked_list(1, 2)\nhead(xs)")).toBeNull();
+    expect(preprocess("map_linked_list(lambda x: x, llist(1, 2))")).toBeNull();
+    expect(preprocess("xs = llist(1, 2)\nhead(xs)")).toBeNull();
     expect(preprocess("accumulate_linked_list(lambda a, b: a + b, 0, None)")).toBeNull();
   });
 
@@ -711,15 +703,15 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     const program =
       "def sum_list(xs):\n" +
       "  return 0 if is_none(xs) else head(xs) + sum_list(tail(xs))\n" +
-      "sum_list(linked_list(1, 2, 3, 4))";
+      "sum_list(llist(1, 2, 3, 4))";
     expect(result(program)).toBe("10");
   });
 
   test("structured-clone safe with pairs (survives the channel)", () => {
     expect(() =>
-      structuredClone(steps("map_linked_list(lambda x: x * 2, linked_list(1, 2, 3))")),
+      structuredClone(steps("map_linked_list(lambda x: x * 2, llist(1, 2, 3))")),
     ).not.toThrow();
-    for (const step of steps("reverse_linked_list(linked_list(1, 2))")) {
+    for (const step of steps("reverse_linked_list(llist(1, 2))")) {
       const marker = step.markers?.[0];
       if (marker?.redexId != null) expect(nodeIds(step.ast).has(marker.redexId)).toBe(true);
     }

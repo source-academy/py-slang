@@ -5,12 +5,12 @@
  * `docs/specs/python_2.tex` and `docs/lib/linked_list.py`). This module is the stepper's view of that
  * library. As in Source's stepper (`js-slang/src/stepper/builtins/lists.ts`), a pair is a two-element
  * `ArrayExpression` rendered `[head, tail]` and the empty list is `None`; only the surface *names*
- * differ — Python's `pair`/`head`/`tail`/`linked_list`/`map_linked_list`/… in place of Source's
+ * differ — Python's `pair`/`head`/`tail`/`llist`/`map_linked_list`/… in place of Source's
  * `pair`/`head`/`tail`/`list`/`map`/… — so a stepped Python program reads as Python while pairs and
  * lists display exactly like Source.
  *
  * The library splits into:
- *  - **primitives** (`pair`, `is_pair`, `head`, `tail`, `is_linked_list`, `linked_list`, `draw_data`),
+ *  - **primitives** (`pair`, `is_pair`, `head`, `tail`, `is_linked_list`, `llist`, `draw_data`),
  *    computed directly from already-reduced value arguments; and
  *  - **pre-declared** functions (`map_linked_list`, `filter_linked_list`, …), each modelled as a
  *    `lambda`/`def` template that the stepper expands by substituting the value arguments for the
@@ -158,8 +158,8 @@ const primitives: Record<string, BuiltinFn> = {
       isEmptyList(n) || (isPairNode(n) && ok((n.elements as StepNode[])[1]));
     return boolLit(ok(args[0]));
   },
-  linked_list: args => {
-    // Variadic: linked_list(v1, …, vn) = pair(v1, pair(…, pair(vn, None))). No arity check.
+  llist: args => {
+    // Variadic: llist(v1, …, vn) = pair(v1, pair(…, pair(vn, None))). No arity check.
     let result = none();
     for (let i = args.length - 1; i >= 0; i--) result = pairNode(args[i], result);
     return result;
@@ -291,7 +291,7 @@ const library: Record<string, StepNode> = {
     },
   },
 
-  // linked_list_to_string(xs): box-and-pointer text, e.g. linked_list(1, 2) ⇒ "[1, [2, None]]".
+  // linked_list_to_string(xs): box-and-pointer text, e.g. llist(1, 2) ⇒ "[1, [2, None]]".
   linked_list_to_string: lam(
     ["xs"],
     call("_linked_list_to_string", [id("xs"), lam(["x"], id("x"))]),
@@ -522,7 +522,7 @@ export const listArities: Record<string, number> = {
   head: 1,
   tail: 1,
   is_linked_list: 1,
-  linked_list: 0,
+  llist: 0,
   draw_data: 1,
   equal: 2,
   length_linked_list: 1,

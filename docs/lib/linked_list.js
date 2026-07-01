@@ -62,7 +62,7 @@ function is_linked_list(xs) {}
  * @param {value} <CODE>value1, value2, ...values</CODE> - given values
  * @returns {linked_list} linked list containing all values
  */
-function linked_list(...values) {}
+function llist(...values) {}
 
 /**
  * PRIMITIVE

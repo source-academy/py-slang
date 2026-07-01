@@ -581,33 +581,33 @@ describe("Parser Stdlib Tests", () => {
   // apply_in_underlying_python
   const applyTests: TestCases = {
     "apply_in_underlying_python — single arg builtins": [
-      ["apply_in_underlying_python(abs, linked_list(-5))", 5n, null],
-      ["apply_in_underlying_python(abs, linked_list(-42))", 42n, null],
-      ["apply_in_underlying_python(abs, linked_list(0))", 0n, null],
+      ["apply_in_underlying_python(abs, llist(-5))", 5n, null],
+      ["apply_in_underlying_python(abs, llist(-42))", 42n, null],
+      ["apply_in_underlying_python(abs, llist(0))", 0n, null],
     ],
     "apply_in_underlying_python — multi arg builtins": [
-      ["apply_in_underlying_python(max, linked_list(1, 2, 3))", 3n, null],
-      ["apply_in_underlying_python(min, linked_list(5, 2, 8))", 2n, null],
-      ["apply_in_underlying_python(max, linked_list(-1, -5, -2))", -1n, null],
+      ["apply_in_underlying_python(max, llist(1, 2, 3))", 3n, null],
+      ["apply_in_underlying_python(min, llist(5, 2, 8))", 2n, null],
+      ["apply_in_underlying_python(max, llist(-1, -5, -2))", -1n, null],
     ],
     "apply_in_underlying_python — empty args": [
-      ["apply_in_underlying_python(linked_list, None)", null, null],
+      ["apply_in_underlying_python(llist, None)", null, null],
     ],
     "apply_in_underlying_python — type errors": [
-      ["apply_in_underlying_python(1, linked_list(1))", TypeError, null],
-      ['apply_in_underlying_python("abs", linked_list(1))', TypeError, null],
-      ["apply_in_underlying_python(True, linked_list(1))", TypeError, null],
-      ["apply_in_underlying_python(None, linked_list(1))", TypeError, null],
+      ["apply_in_underlying_python(1, llist(1))", TypeError, null],
+      ['apply_in_underlying_python("abs", llist(1))', TypeError, null],
+      ["apply_in_underlying_python(True, llist(1))", TypeError, null],
+      ["apply_in_underlying_python(None, llist(1))", TypeError, null],
     ],
     "apply_in_underlying_python — non-primitive functions": [
-      ["apply_in_underlying_python(lambda x: x + 1, linked_list(5))", 6n, null],
+      ["apply_in_underlying_python(lambda x: x + 1, llist(5))", 6n, null],
       [
-        "def f(x, y, *args):\n    return x + y + (f(*args) if len(args) > 0 else 0)\napply_in_underlying_python(f, linked_list(1, 2, 3, 4))",
+        "def f(x, y, *args):\n    return x + y + (f(*args) if len(args) > 0 else 0)\napply_in_underlying_python(f, llist(1, 2, 3, 4))",
         10n,
         null,
       ],
       [
-        'def g(x, y): return x + " " + y\napply_in_underlying_python(g, linked_list("hello", "world"))',
+        'def g(x, y): return x + " " + y\napply_in_underlying_python(g, llist("hello", "world"))',
         "hello world",
         null,
       ],

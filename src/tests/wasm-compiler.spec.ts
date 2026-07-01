@@ -501,8 +501,8 @@ head(tail(tail(p)))
 });
 
 describe("Linked list tests", () => {
-  it("linked_list constructs a linked list from a Python list", async () => {
-    const pythonCode = `head(tail(linked_list(1, 2, 3)))`;
+  it("llist constructs a linked list from a Python list", async () => {
+    const pythonCode = `head(tail(llist(1, 2, 3)))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("2");
@@ -510,7 +510,7 @@ describe("Linked list tests", () => {
 
   it("set_head mutates linked list", async () => {
     const pythonCode = `
-l = linked_list(10, 20, 30)
+l = llist(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
@@ -534,7 +534,7 @@ head(l)
   });
 
   it("is_linked_list identifies linked list correctly", async () => {
-    const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+    const pythonCode = `is_linked_list(llist(1, 2, 3))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
@@ -3049,13 +3049,13 @@ f(10, 20)
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    it("linked_list function should push resultant list onto stack", async () => {
-      const pythonCode = `linked_list(1, 2, 3)`;
+    it("llist function should push resultant list onto stack", async () => {
+      const pythonCode = `llist(1, 2, 3)`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
     it("is_linked_list function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+      const pythonCode = `is_linked_list(llist(1, 2, 3))`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
@@ -3747,7 +3747,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
@@ -3768,7 +3768,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
       new Error(ERROR_MAP.OUT_OF_MEMORY),
