@@ -29,7 +29,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
     "wasm": "tsx src/engines/wasm/runFile.ts",
-    "prepublishOnly": "yarn build --all && yarn build:lib && yarn build:repl"
+    "prepublishOnly": "yarn build:lib && yarn build:repl"
   },
   "keywords": [
     "Python",
