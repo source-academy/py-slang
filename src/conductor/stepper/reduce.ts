@@ -635,8 +635,11 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
       };
     case "finished-expression":
-      // A fully-evaluated expression statement: it is the program's value only if it is last.
-      if (rest.length === 0) return null;
+      // A fully-evaluated top-level expression statement is a value to discard — a Python statement
+      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So
+      // we drop it even when it is the last statement: the final line's value then disappears via the
+      // same step as every other line's, and the run ends on an empty program that `drive` reports as
+      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.)
       return {
         node: { ...prog, body: rest },
         preRedex: head,

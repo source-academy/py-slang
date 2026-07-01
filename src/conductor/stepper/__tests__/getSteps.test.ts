@@ -422,6 +422,26 @@ describe("Python stepper — step structure", () => {
     const e = explanations("1 + 2");
     expect(e[e.length - 1]).toBe("Evaluation complete");
   });
+
+  test("the final line's value disappears before completion (a program yields no value)", () => {
+    // Unlike Source/js-slang, a Python program has no value: the last line's value is discarded just
+    // like every other line's, so the run ends on an *empty* program rather than lingering on it.
+    const e = explanations("1 + 1");
+    expect(e[e.length - 1]).toBe("Evaluation complete");
+    expect(e[e.length - 2]).toBe("2 finished evaluating"); // the discard step, as for any statement
+
+    const s = steps("1 + 1");
+    const terminal = s[s.length - 1].ast as any;
+    expect(terminal.type).toBe("Program");
+    expect(terminal.body).toHaveLength(0); // nothing rendered at completion
+
+    // A program ending in an assignment already completed empty; the two now behave identically.
+    const assign = steps("x = 1");
+    expect((assign[assign.length - 1].ast as any).body).toHaveLength(0);
+
+    // The REPL still echoes the final value, even though the stepper no longer lingers on it.
+    expect(result("1 + 1")).toBe("2");
+  });
 });
 
 describe('Python stepper — runtime errors end with "Evaluation stuck"', () => {
@@ -702,8 +722,12 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   test("the list reduction shows pairs/lists, not the helper implementation noise", () => {
     // `pair` contracts in one labelled step, like Source's primitives.
     expect(explanations("pair(1, 2)")).toContain("pair runs");
-    // A pair value serialises as an estree `ArrayExpression` for the host's `[...]` template.
-    const value = findNode(steps("pair(1, 2)").at(-1)!.ast, n => n.type === "ArrayExpression");
+    // A pair value serialises as an estree `ArrayExpression` for the host's `[...]` template. It shows
+    // as the contraction result and is then discarded before the terminal (empty) "Evaluation
+    // complete" step — a Python statement yields no program value — so search across the steps for it.
+    const value = steps("pair(1, 2)")
+      .map(s => findNode(s.ast, (n: any) => n.type === "ArrayExpression"))
+      .find(Boolean);
     expect(value).toBeDefined();
     expect(value.elements.map((e: any) => e.raw)).toEqual(["1", "2"]);
   });
