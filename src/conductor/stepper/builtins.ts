@@ -27,6 +27,7 @@ import {
   numberLiteral,
   pythonStringRepr,
   stringLiteral,
+  substitute,
   unparse,
 } from "./ast";
 import { listArities, listBuiltins } from "./lists";
@@ -51,6 +52,22 @@ export function isBuiltinConstantName(name: string): boolean {
 /** The value node a built-in constant reduces to. Assumes {@link isBuiltinConstantName}. */
 export function getBuiltinConstant(name: string): StepNode {
   return numberLiteral(MATH_CONSTANTS[name], true);
+}
+
+/**
+ * Substitutes every built-in constant (`math_pi`, `math_e`, …) with its literal value throughout
+ * `program`, as a preprocessing step before stepping. This mirrors js-slang's substitution stepper
+ * (`src/stepper/builtins/index.ts` `prelude`): a constant is not a thing the student reduces, so the
+ * rendered program shows `3.141592653589793` from the very first step rather than displaying
+ * `math_pi` and contracting it later. Substitution is capture-avoiding (it won't touch a `math_pi`
+ * bound as a parameter), so only free references to the constant are replaced.
+ */
+export function substituteBuiltinConstants(program: StepNode): StepNode {
+  let result = program;
+  for (const name of Object.keys(MATH_CONSTANTS)) {
+    result = substitute(result, name, getBuiltinConstant(name));
+  }
+  return result;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -445,6 +462,19 @@ const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
 export function isBuiltinFunctionAvailable(name: string, chapter: number): boolean {
   if (!isBuiltinFunctionName(name)) return false;
   return chapter >= 2 || !CHAPTER_2_FUNCTION_NAMES.has(name);
+}
+
+/**
+ * Every built-in name (functions and constants) the stepper recognises in `chapter`. This is the
+ * stepper's vocabulary of global names; it is handed to the default evaluator's analyzer as the set
+ * of predefined names so name-resolution and chapter-gating errors are detected canonically rather
+ * than by a bespoke resolver — see {@link ../preprocess}.
+ */
+export function getAvailableBuiltinNames(chapter: number): string[] {
+  const functions = Object.keys(BUILTIN_FUNCTIONS).filter(name =>
+    isBuiltinFunctionAvailable(name, chapter),
+  );
+  return [...functions, ...Object.keys(MATH_CONSTANTS)];
 }
 
 /** Applies the built-in `name` to already-reduced value `args`. Throws on misuse (→ stuck). */
