@@ -5,7 +5,8 @@ import { preprocessPython } from "../preprocess";
 // `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
 // chapter-gating tests pass an explicit chapter (1 to forbid §2 names, 2 to allow them).
 function preprocess(src: string, chapter = 2) {
-  return preprocessPython(parse(src + "\n"), chapter);
+  const script = src + "\n";
+  return preprocessPython(parse(script), script, chapter);
 }
 
 function steps(src: string) {
@@ -150,7 +151,7 @@ describe("Python stepper — short-circuit", () => {
 });
 
 describe("Python stepper — built-in functions and constants", () => {
-  test("math constants reduce to their float value", () => {
+  test("math constants evaluate to their float value", () => {
     expect(result("math_pi")).toBe(String(Math.PI));
     expect(result("math_e")).toBe(String(Math.E));
     expect(result("math_tau")).toBe(String(2 * Math.PI));
@@ -158,10 +159,16 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(result("math_nan")).toBe("nan");
   });
 
-  test("a constant is substituted before it is used", () => {
+  test("a constant is substituted in before stepping (renders as its value, not the name)", () => {
     expect(result("math_pi * 0")).toBe("0.0");
-    // The reduction shows the constant resolving to its value.
-    expect(explanations("math_pi")).toContain(`math_pi is ${Math.PI}`);
+    // Mirrors js-slang's substitution stepper: the constant is replaced up front, so there is no
+    // "math_pi is …" contraction step and the first rendered program already shows the value.
+    expect(explanations("math_pi").some(e => e.includes("math_pi is"))).toBe(false);
+    const firstAst = steps("math_pi")[0].ast as unknown;
+    expect(
+      findNode(firstAst, n => n.type === "Identifier" && n.name === "math_pi"),
+    ).toBeUndefined();
+    expect(findNode(firstAst, n => n.type === "Literal")).toBeDefined();
   });
 
   test("math functions compute on value arguments", () => {
@@ -277,7 +284,15 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
   });
 
   test("a name bound only inside an if-branch is in module scope", () => {
-    expect(preprocess("if True:\n  x = 1\nelse:\n  x = 2\nx + 1")).toBeNull();
+    // Python has no block scope, so a name assigned in an if-branch leaks to the enclosing scope.
+    expect(preprocess("if True:\n  x = 1\nx + 1")).toBeNull();
+  });
+
+  test("the chapter's feature-gates apply (no-reassignment in §1/§2)", () => {
+    // Name resolution is delegated to py-slang's analyzer, so the stepper enforces the same per-chapter
+    // restrictions as the default evaluator. Assigning the same name in both branches of an if/else is
+    // a reassignment (no block scope → both branches share the enclosing scope), which §1/§2 forbid.
+    expect(preprocess("if True:\n  x = 1\nelse:\n  x = 2\nx")).toContain("NameReassignmentError");
   });
 
   test("a name used before its assignment still counts as defined (hoisted scope)", () => {

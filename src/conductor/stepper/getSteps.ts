@@ -16,7 +16,7 @@ import type {
 
 import type { StmtNS } from "../../ast-types";
 import { type StepNode, unparse } from "./ast";
-import { isStepperValue } from "./builtins";
+import { isStepperValue, substituteBuiltinConstants } from "./builtins";
 import { reduceProgram } from "./reduce";
 import { translateProgram } from "./translate";
 
@@ -188,7 +188,10 @@ export function getPythonSteps(
   stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
 ): SerializedStepperStep[] {
   const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
-  return drive(translateProgram(fileInput), contractionLimit).map(serializeStep);
+  // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
+  // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}.
+  const program = substituteBuiltinConstants(translateProgram(fileInput));
+  return drive(program, contractionLimit).map(serializeStep);
 }
 
 /**
@@ -197,7 +200,7 @@ export function getPythonSteps(
  * so no separate interpreter is needed.
  */
 export function evaluatePython(fileInput: StmtNS.FileInput): string {
-  let current = translateProgram(fileInput);
+  let current = substituteBuiltinConstants(translateProgram(fileInput));
   try {
     for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
       const result = reduceProgram(current);

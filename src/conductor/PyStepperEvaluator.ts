@@ -62,7 +62,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
       // stepper — a free name has no meaning in the substitution model. Mirrors Source's
       // `checkProgramForUndefinedVariables`, which likewise blocks stepping rather than faulting
       // mid-reduction. `parse` already covers syntax errors above; this covers name resolution.
-      const preprocessError = preprocessPython(ast, this.chapter);
+      const preprocessError = preprocessPython(ast, script, this.chapter);
       if (preprocessError !== null) {
         throw new EvaluatorSyntaxError(preprocessError);
       }

@@ -35,13 +35,7 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import {
-  applyBuiltin,
-  getBuiltinConstant,
-  isBuiltinConstantName,
-  isBuiltinFunctionName,
-  isStepperValue,
-} from "./builtins";
+import { applyBuiltin, isBuiltinFunctionName, isStepperValue } from "./builtins";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction. */
@@ -431,21 +425,12 @@ function rebuildIndex(
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
 export function reduceExpr(node: StepNode): ReduceResult | null {
   switch (node.type) {
-    case "Identifier": {
-      // A leftover name is either a built-in constant (reduce to its value) or an atom (a built-in
-      // function name / an unbound name) that does not reduce on its own.
-      const name = String(node.name);
-      if (isBuiltinConstantName(name)) {
-        const value = getBuiltinConstant(name);
-        return {
-          node: value,
-          preRedex: node,
-          postRedex: value,
-          explanation: `${name} is ${unparse(value)}`,
-        };
-      }
+    case "Identifier":
+      // A leftover name is an atom: a built-in function name, or an unbound name that does not reduce
+      // on its own. Built-in *constants* (math_pi, …) never reach here — they are substituted with
+      // their value before stepping (see `substituteBuiltinConstants`), so they render as the value
+      // from the first step rather than contracting mid-run.
       return null;
-    }
     case "BinaryExpression": {
       const left = reduceExpr(node.left as StepNode);
       if (left) return rebuild(node, "left", left);
