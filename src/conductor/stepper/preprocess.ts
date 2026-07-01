@@ -93,7 +93,7 @@ export function preprocessPython(
   // reassignment — surfaces with its own diagnostic.
   const nameError = errors.find(e => e instanceof ResolverErrors.NameNotFoundError);
   if (nameError !== undefined) {
-    return `NameError: name '${(nameError as ResolverErrors.NameNotFoundError).varName}' is not defined`;
+    return `NameError: name '${nameError.varName}' is not defined`;
   }
   return errors[0].message;
 }
