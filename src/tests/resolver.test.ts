@@ -181,5 +181,79 @@ continue
             `;
       expect(() => toPythonAstAndResolve(code, 3)).toThrow(Error);
     });
+
+    test("Break and continue outside a loop have distinct messages, matching CPython's wording", () => {
+      try {
+        toPythonAstAndResolve("\nbreak\n", 3);
+        throw new Error("did not throw");
+      } catch (e: any) {
+        expect(e.message).toContain("'break' outside loop");
+      }
+      try {
+        toPythonAstAndResolve("\ncontinue\n", 3);
+        throw new Error("did not throw");
+      } catch (e: any) {
+        expect(e.message).toContain("'continue' not properly in loop");
+      }
+    });
+  });
+
+  // A binding construct may appear anywhere in its owning scope's body — nested inside
+  // `if`/`while`/`for`, or after a nested `def` that reads it — and real Python only fails
+  // at runtime (UnboundLocalError/NameError) for such forward references, never statically.
+  describe("Forward references to names bound later in the same scope", () => {
+    test("same-function forward reference: name used before an if-nested assignment", () => {
+      const code = `
+def f():
+    print(x)
+    if True:
+        x = 5
+f()
+`;
+      expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+    });
+
+    test("module level: nested function implicitly closes over a module global assigned later, inside an if", () => {
+      const code = `
+def g():
+    print(y)
+if True:
+    y = 5
+g()
+`;
+      expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+    });
+
+    test("nonlocal: reading the variable before its for-loop-target binding executes, called before the loop runs", () => {
+      const code = `
+def outer():
+    def inner():
+        nonlocal i
+        print(i)
+        i = 5
+    inner()
+    for i in range(3):
+        pass
+    return i
+print(outer())
+`;
+      expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+    });
+
+    test("nonlocal: same as above, but the for-loop appears before the call (still after the def)", () => {
+      const code = `
+def outer():
+    def inner():
+        nonlocal i
+        print(i)
+        i = 5
+    for i in range(3):
+        pass
+    inner()
+    return i
+print(outer())
+`;
+      expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+    });
   });
 });

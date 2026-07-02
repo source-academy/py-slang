@@ -1,5 +1,6 @@
 import { ExprNS, StmtNS } from "../../ast-types";
 import {
+  FreeVariableUnboundError,
   IndexError,
   MissingRequiredPositionalError,
   NameError,
@@ -89,6 +90,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
   ],
   ["FromImport", setToTrue],
   ["Global", setToFalse],
+  ["NonLocal", setToFalse],
   ["Pass", setToFalse],
   ["Break", setToFalse],
   ["Continue", setToFalse],
@@ -287,6 +289,22 @@ export function pyGetVariable(code: string, context: Context, name: string, node
     }
   }
 
+  // Not bound anywhere in the chain — but it may still be a legitimate implicit closure
+  // read of an enclosing function's own local (no `nonlocal` needed for reads), whose
+  // binding construct just hasn't executed yet (e.g. a `def`/assignment that appears later
+  // in that enclosing scope's body). Distinguish this from a genuinely undefined name, the
+  // same way pyGetNonlocalVariable already does for explicit `nonlocal` targets.
+  let ancestorEnv: Environment | null = env.tail;
+  while (ancestorEnv) {
+    if (ancestorEnv.closure && ancestorEnv.closure.localVariables.has(name)) {
+      handleRuntimeError(
+        context,
+        new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
+      );
+    }
+    ancestorEnv = ancestorEnv.tail;
+  }
+
   if (context.nativeStorage.builtins.has(name)) {
     return context.nativeStorage.builtins.get(name)!;
   }
@@ -310,6 +328,66 @@ export function pyGetGlobalVariable(
   }
   if (context.nativeStorage.builtins.has(name)) {
     return context.nativeStorage.builtins.get(name)!;
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
+}
+
+// Walks the environment chain (starting from the scope enclosing the current one) to
+// find the environment that *owns* `name` as a local variable — i.e. whose closure's
+// static scan (scanForAssignments) recorded a binding construct for it — rather than the
+// first environment that happens to already have the property set. This matters because
+// a binding construct (assignment/def/for-target) in the owning function may not have
+// executed yet (e.g. it's textually after the nested `nonlocal` reference, or inside an
+// `if`/`for`/`while` that hasn't run), in which case CPython still resolves to that
+// scope's (as-yet-unbound) cell rather than skipping past it to an unrelated outer scope
+// that happens to share the name.
+function findNonlocalOwningEnvironment(context: Context, name: string): Environment | null {
+  const programEnv = getProgramEnvironment(context);
+  let currentEnv: Environment | null = currentEnvironment(context).tail;
+  while (currentEnv !== null && currentEnv !== programEnv) {
+    if (currentEnv.closure && currentEnv.closure.localVariables.has(name)) {
+      return currentEnv;
+    }
+    currentEnv = currentEnv.tail;
+  }
+  return null;
+}
+
+// Reads `name` from the nearest enclosing function scope (not global scope).
+// Used when a function declares `nonlocal name`.
+export function pyGetNonlocalVariable(
+  code: string,
+  context: Context,
+  name: string,
+  node: Node,
+): Value {
+  const owningEnv = findNonlocalOwningEnvironment(context, name);
+  if (owningEnv) {
+    if (Object.prototype.hasOwnProperty.call(owningEnv.head, name)) {
+      return owningEnv.head[name];
+    }
+    // `name` is a free variable captured from an enclosing scope (via `nonlocal`), not a
+    // local of the *current* function — CPython raises NameError with "free variable ...
+    // in enclosing scope" wording here, distinct from UnboundLocalError (which is for a
+    // name that's local to the function actually doing the reading).
+    handleRuntimeError(context, new FreeVariableUnboundError(code, name, node as ExprNS.Variable));
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
+}
+
+// Writes `value` to the nearest enclosing function scope that owns `name`.
+// Used when a function declares `nonlocal name` and assigns to it.
+export function pySetNonlocalVariable(
+  code: string,
+  context: Context,
+  name: string,
+  value: Value,
+  node: Node,
+): void {
+  const owningEnv = findNonlocalOwningEnvironment(context, name);
+  if (owningEnv) {
+    pyDefineVariable(context, name, value, owningEnv);
+    return;
   }
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
@@ -426,9 +504,45 @@ export function scanForGlobalDeclarations(node: Node | Node[]): Set<string> {
   return globals;
 }
 
+// Returns the set of names declared with `nonlocal` anywhere in the given function body,
+// without recursing into nested function definitions.
+export function scanForNonlocalDeclarations(node: Node | Node[]): Set<string> {
+  const nonlocals = new Set<string>();
+  const visitor = (curNode: Node) => {
+    if (!curNode || typeof curNode !== "object") return;
+    const kind = (curNode as { kind?: string }).kind;
+    if (kind === "NonLocal") {
+      nonlocals.add((curNode as unknown as StmtNS.NonLocal).name.lexeme);
+      return;
+    }
+    if (kind === "FunctionDef" || kind === "Lambda") return;
+    for (const key in curNode) {
+      if (Object.prototype.hasOwnProperty.call(curNode, key)) {
+        const child = (curNode as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+          child.forEach(c => {
+            if (c !== undefined && c !== null && typeof c === "object") visitor(c as Node);
+          });
+        } else if (
+          child !== undefined &&
+          child !== null &&
+          typeof child === "object" &&
+          (child as { kind?: string }).kind !== undefined
+        ) {
+          visitor(child as Node);
+        }
+      }
+    }
+  };
+  if (Array.isArray(node)) node.forEach(visitor);
+  else visitor(node);
+  return nonlocals;
+}
+
 export function scanForAssignments(
   node: Node | Node[],
   globalNames: Set<string> = new Set(),
+  nonlocalNames: Set<string> = new Set(),
 ): Set<string> {
   const assignments = new Set<string>();
   const visitor = (curNode: Node) => {
@@ -442,14 +556,22 @@ export function scanForAssignments(
       const assignNode = curNode as StmtNS.Assign;
       if (assignNode.target instanceof ExprNS.Variable) {
         const name = assignNode.target.name.lexeme;
-        if (!globalNames.has(name)) {
+        if (!globalNames.has(name) && !nonlocalNames.has(name)) {
           assignments.add(name);
         }
+      }
+    } else if (nodeType === "For") {
+      // The loop target is a binding construct even if the loop body never
+      // assigns anything else (e.g. `for i in range(3): pass`).
+      const forNode = curNode as StmtNS.For;
+      const name = forNode.target.lexeme;
+      if (!globalNames.has(name) && !nonlocalNames.has(name)) {
+        assignments.add(name);
       }
     } else if (nodeType === "FunctionDef") {
       // def f(...) creates a binding for the function name in the current scope
       const name = (curNode as StmtNS.FunctionDef).name.lexeme;
-      if (!globalNames.has(name)) {
+      if (!globalNames.has(name) && !nonlocalNames.has(name)) {
         assignments.add(name);
       }
       return; // don't recurse into the nested function's body

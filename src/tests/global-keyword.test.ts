@@ -4,6 +4,7 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import list from "../stdlib/list";
 import linkedList from "../stdlib/linked-list";
+import { NameError } from "../errors/errors";
 
 // ── Resolver: global is rejected in chapters 1 and 2 ────────────────────────
 
@@ -52,6 +53,83 @@ def f():
 def f():
     global x
     x = 1
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+});
+
+// ── #181 also applies at module (file-input) scope, not just inside functions ──
+
+describe("global keyword — declaration order at module level", () => {
+  test("assignment before global at module level is rejected", () => {
+    const code = `
+i = 3
+global i
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/assigned to before global declaration/);
+  });
+
+  test("for-loop target assignment before global at module level is rejected", () => {
+    const code = `
+for i in range(1):
+    pass
+global i
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/assigned to before global declaration/);
+  });
+
+  test("use before global at module level is rejected", () => {
+    const code = `
+print(i)
+global i
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/used prior to global declaration/);
+  });
+
+  test("def before global on the same name at module level is rejected", () => {
+    const code = `
+def foo():
+    pass
+global foo
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/assigned to before global declaration/);
+  });
+
+  test("global before assignment at module level is accepted (matches real Python)", () => {
+    const code = `
+global i
+i = 3
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("bare nonlocal at module level is rejected as not allowed at module scope", () => {
+    const code = `
+nonlocal i
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(
+      /nonlocal declaration not allowed at module level/,
+    );
+  });
+
+  test("assignment before nonlocal at module level reports declaration-order error, not module-level error", () => {
+    // Matches CPython: the order check takes priority over the module-level check.
+    const code = `
+i = 1
+nonlocal i
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/assigned to before nonlocal declaration/);
+  });
+});
+
+// `global x` at module level is a semantic no-op, but it must still make `x` a recognized
+// name for the resolver (matching a real assignment) even though nothing is bound yet.
+// Real Python only fails at runtime (NameError) if `x` is never actually assigned before use.
+describe("global keyword — bare module-level declaration registers the name", () => {
+  test("global i; print(i) with i never assigned does not throw at resolve time", () => {
+    const code = `
+global i
+print(i)
 `;
     expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
   });
@@ -109,6 +187,18 @@ x
         null,
       ],
     ],
+
+    "global keyword — bare module-level declaration with no assignment raises NameError at runtime, not a resolver error":
+      [
+        [
+          `
+global i
+print(i)
+`,
+          NameError,
+          null,
+        ],
+      ],
 
     "global keyword — does not affect local of same name in other function": [
       [
