@@ -35,13 +35,7 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import {
-  applyBuiltin,
-  getBuiltinConstant,
-  isBuiltinConstantName,
-  isBuiltinFunctionName,
-  isStepperValue,
-} from "./builtins";
+import { applyBuiltin, isBuiltinFunctionName, isStepperValue } from "./builtins";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction. */
@@ -58,7 +52,8 @@ export interface ReduceResult {
 /*                          Values & Python semantics                         */
 /* -------------------------------------------------------------------------- */
 
-/** Python truthiness for the value subset the stepper handles. */
+/** Python truthiness for `if`/ternary conditions, which (unlike `and`/`or`/`not` — see
+ * `contractLogical` and `contractUnary`'s `not` case) are never type-restricted to `bool`. */
 function isTruthy(node: StepNode): boolean {
   if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
   if (node.type !== "Literal") return true; // function values are truthy
@@ -76,10 +71,15 @@ function isTruthy(node: StepNode): boolean {
 /* -------------------------------------------------------------------------- */
 
 const boolLiteral = (b: boolean): StepNode => literal(b, b ? "True" : "False");
+const isBoolNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.value === "boolean";
 
-/** A JS value that is a Python numeric (int = `bigint`, float = `number`, or `bool`). */
-function isNumericValue(v: unknown): v is bigint | number | boolean {
-  return typeof v === "bigint" || typeof v === "number" || typeof v === "boolean";
+/** A JS value that is a Python numeric (int = `bigint`, float = `number`). Unlike native Python,
+ * `bool` is not an int subtype in this dialect — it is not a valid operand to *any* arithmetic or
+ * comparison operator (only to `and`/`or`/`not`, and to explicit conversions like `int()`), so it is
+ * deliberately excluded here. See `contractLogical` and `contractUnary`'s `not` case for the
+ * `and`/`or`/`not` rule, and `reportBinaryTypeError` for how a `bool` operand is diagnosed. */
+function isNumericValue(v: unknown): v is bigint | number {
+  return typeof v === "bigint" || typeof v === "number";
 }
 
 /** Exact integer arithmetic (Python ints and bools, which are ints). */
@@ -169,9 +169,6 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
   }
 }
 
-const toBig = (v: bigint | boolean): bigint => (typeof v === "boolean" ? (v ? 1n : 0n) : v);
-
-const ARITHMETIC_OPS = new Set(["+", "-", "*", "/", "//", "%", "**"]);
 const ORDER_OPS = new Set(["<", ">", "<=", ">="]);
 
 /**
@@ -194,30 +191,66 @@ function valueTypeName(node: StepNode): string | null {
 }
 
 /**
+ * A human-readable Python type name for `and`/`or`/`not`'s non-bool-operand error. Like
+ * `valueTypeName`, but also names a pair/list value and a bare built-in function reference (e.g.
+ * `abs`) — the two stepper value shapes `valueTypeName` deliberately leaves undiagnosed for arithmetic
+ * (see its call site in `contractBinary`) — since `and`/`or`/`not` reject every non-bool *value*, not
+ * just the primitives arithmetic can misuse. Only called once `isStepperValue` has confirmed `node` is
+ * a genuine value.
+ */
+function operandTypeName(node: StepNode): string {
+  const t = valueTypeName(node);
+  if (t !== null) return t;
+  return node.type === "ArrayExpression" ? "pair" : "function";
+}
+
+/**
  * Throws a Python `TypeError` for a binary operation that produced no result because its operand types
- * are genuinely unsupported (e.g. `1 + "a"`, `None < 2`, a function in arithmetic). The driver turns
- * the throw into an error step before "Evaluation stuck", exactly as it already does for
- * `ZeroDivisionError`. Combinations Python *does* allow but this teaching stepper simply does not model
- * — `str * int` repetition, `str % …` formatting, `str`-vs-`str` ordering, and anything on pairs/lists
- * — are left as a silent "stuck" instead, so a valid operation is never mislabelled as an error.
+ * are genuinely unsupported (e.g. `1 + "a"`, `None < 2`, `True == 1`, a function in arithmetic). The
+ * driver turns the throw into an error step before "Evaluation stuck", exactly as it already does for
+ * `ZeroDivisionError`. Unlike native Python, `==`/`!=` are *not* defined for every pair of values in
+ * this dialect: outside (numeric, numeric) and (string, string) — both already contracted before this
+ * is reached — equality is itself unsupported (e.g. `None == None`, `True == 1`, two functions), so it
+ * is diagnosed like any other operator. `str * int` repetition and `str % …` formatting are
+ * combinations Python *does* allow but this teaching stepper simply does not model; they are left as a
+ * silent "stuck" instead, so a valid operation is never mislabelled as an error.
  */
 function reportBinaryTypeError(op: string, left: StepNode, right: StepNode): void {
   const lt = valueTypeName(left);
   const rt = valueTypeName(right);
   if (lt === null || rt === null) return;
-  const order = ORDER_OPS.has(op);
-  if (!ARITHMETIC_OPS.has(op) && !order) return; // `==`/`!=` are defined for all values
 
-  const intish = (t: string): boolean => t === "int" || t === "bool";
-  if (op === "*" && ((lt === "str" && intish(rt)) || (intish(lt) && rt === "str"))) return; // repeat
+  if (op === "*" && ((lt === "str" && rt === "int") || (lt === "int" && rt === "str"))) return; // repeat
   if (op === "%" && lt === "str") return; // %-formatting
-  if (order && lt === "str" && rt === "str") return; // lexicographic string ordering is valid
 
   throw new Error(
-    order
+    ORDER_OPS.has(op)
       ? `TypeError: '${op}' not supported between instances of '${lt}' and '${rt}'`
       : `TypeError: unsupported operand type(s) for ${op}: '${lt}' and '${rt}'`,
   );
+}
+
+/** String `+` (concatenation), equality and lexicographic ordering — the only binary operators this
+ * dialect defines for `(string, string)` operands (there is no string row for `-,*,/,//,%,**`). */
+function stringBinary(op: string, l: string, r: string): StepNode | null {
+  switch (op) {
+    case "+":
+      return stringLiteral(l + r);
+    case "==":
+      return boolLiteral(l === r);
+    case "!=":
+      return boolLiteral(l !== r);
+    case "<":
+      return boolLiteral(l < r);
+    case ">":
+      return boolLiteral(l > r);
+    case "<=":
+      return boolLiteral(l <= r);
+    case ">=":
+      return boolLiteral(l >= r);
+    default:
+      return null;
+  }
 }
 
 function contractBinary(node: StepNode): ReduceResult | null {
@@ -229,22 +262,22 @@ function contractBinary(node: StepNode): ReduceResult | null {
   if (left.type === "Literal" && right.type === "Literal") {
     const l = left.value;
     const r = right.value;
-    if (op === "+" && typeof l === "string" && typeof r === "string") {
-      result = stringLiteral(l + r);
+    if (typeof l === "string" && typeof r === "string") {
+      result = stringBinary(op, l, r);
     } else if (isNumericValue(l) && isNumericValue(r)) {
-      // A `bool` counts as an `int`; if either operand is a `float`, the operation promotes to float
-      // (Python semantics), so `3.14 * 0` is `0.0` and `1 == 1.0` is `True`.
+      // If either operand is a `float`, the operation promotes to float (Python semantics), so
+      // `3.14 * 0` is `0.0` and `1 == 1.0` is `True`. `bool` is deliberately excluded from
+      // `isNumericValue` (see its definition), so `l`/`r` here are `int`/`float` only.
       if (typeof l !== "number" && typeof r !== "number") {
-        result = intBinary(op, toBig(l), toBig(r));
+        result = intBinary(op, l, r);
       } else {
-        const ln = typeof l === "number" ? l : Number(toBig(l));
-        const rn = typeof r === "number" ? r : Number(toBig(r));
+        const ln = typeof l === "number" ? l : Number(l);
+        const rn = typeof r === "number" ? r : Number(r);
         result = floatBinary(op, ln, rn, true);
       }
-    } else if (op === "==" || op === "!=") {
-      const eq = l === r;
-      result = boolLiteral(op === "==" ? eq : !eq);
     }
+    // No generic `==`/`!=` fallback here: outside the two cases above, equality is itself unsupported
+    // in this dialect (e.g. `None == None`, `True == 1`) — `reportBinaryTypeError` diagnoses it below.
   }
 
   if (result === null) {
@@ -267,8 +300,13 @@ function contractUnary(node: StepNode): ReduceResult | null {
   const op = (node.operator as string).trim();
   let result: StepNode | null = null;
   if (op === "not") {
-    const value = !isTruthy(arg);
-    result = literal(value, value ? "True" : "False");
+    // Unlike native Python's truthiness, `not` requires a genuine `bool` operand in this dialect
+    // (matching the real evaluator's NOT instruction) — a non-bool value is a TypeError below, not a
+    // truthy/falsy result.
+    if (isBoolNode(arg)) {
+      const value = !(arg.value as boolean);
+      result = literal(value, value ? "True" : "False");
+    }
   } else if (arg.type === "Literal" && typeof arg.value === "bigint") {
     if (op === "-") result = literal(-arg.value, String(-arg.value), false);
     else if (op === "+") result = literal(arg.value, String(arg.value), false);
@@ -277,8 +315,14 @@ function contractUnary(node: StepNode): ReduceResult | null {
     else if (op === "+") result = numberLiteral(arg.value, Boolean(arg.pyFloat));
   }
   if (result === null) {
-    // `-x` / `+x` on a non-numeric *value* is a Python TypeError (e.g. `-"a"`, `-None`); `not` always
-    // applies (truthiness), and a non-value argument stays a graceful "stuck".
+    if (op === "not") {
+      // A non-bool *value* (e.g. `not 5`, `not None`, `not (lambda: ...)`) is a TypeError; an argument
+      // not yet reduced to a value stays a graceful "stuck".
+      if (!isStepperValue(arg)) return null;
+      throw new Error(`TypeError: bad operand type for unary not: '${operandTypeName(arg)}'`);
+    }
+    // `-x` / `+x` on a non-numeric *value* is a Python TypeError (e.g. `-"a"`, `-None`); a non-value
+    // argument stays a graceful "stuck".
     const t = valueTypeName(arg);
     if ((op === "-" || op === "+") && t !== null) {
       throw new Error(`TypeError: bad operand type for unary ${op}: '${t}'`);
@@ -295,11 +339,19 @@ function contractUnary(node: StepNode): ReduceResult | null {
   return { node: result, preRedex: node, postRedex: result, explanation };
 }
 
-function contractLogical(node: StepNode): ReduceResult {
+function contractLogical(node: StepNode): ReduceResult | null {
   const left = node.left as StepNode;
   const right = node.right as StepNode;
   const op = node.operator as string;
-  const leftTruthy = isTruthy(left);
+  if (!isBoolNode(left)) {
+    // Unlike native Python's truthiness, `and`/`or` require a genuine `bool` left operand in this
+    // dialect (matching the real evaluator's BOOL_OP instruction); the right operand's type is
+    // unrestricted (it is only ever returned, never tested). A non-bool *value* is a TypeError; a left
+    // side not yet reduced to a value (e.g. an unbound name) stays a graceful "stuck".
+    if (!isStepperValue(left)) return null;
+    throw new Error(`TypeError: unsupported operand type(s) for ${op}: '${operandTypeName(left)}'`);
+  }
+  const leftTruthy = left.value === true;
   const takeLeft = op === "and" ? !leftTruthy : leftTruthy;
   const chosen = clone(takeLeft ? left : right);
   const explanation =
@@ -431,21 +483,12 @@ function rebuildIndex(
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
 export function reduceExpr(node: StepNode): ReduceResult | null {
   switch (node.type) {
-    case "Identifier": {
-      // A leftover name is either a built-in constant (reduce to its value) or an atom (a built-in
-      // function name / an unbound name) that does not reduce on its own.
-      const name = String(node.name);
-      if (isBuiltinConstantName(name)) {
-        const value = getBuiltinConstant(name);
-        return {
-          node: value,
-          preRedex: node,
-          postRedex: value,
-          explanation: `${name} is ${unparse(value)}`,
-        };
-      }
+    case "Identifier":
+      // A leftover name is an atom: a built-in function name, or an unbound name that does not reduce
+      // on its own. Built-in *constants* (math_pi, …) never reach here — they are substituted with
+      // their value before stepping (see `substituteBuiltinConstants`), so they render as the value
+      // from the first step rather than contracting mid-run.
       return null;
-    }
     case "BinaryExpression": {
       const left = reduceExpr(node.left as StepNode);
       if (left) return rebuild(node, "left", left);
@@ -650,8 +693,11 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
       };
     case "finished-expression":
-      // A fully-evaluated expression statement: it is the program's value only if it is last.
-      if (rest.length === 0) return null;
+      // A fully-evaluated top-level expression statement is a value to discard — a Python statement
+      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So
+      // we drop it even when it is the last statement: the final line's value then disappears via the
+      // same step as every other line's, and the run ends on an empty program that `drive` reports as
+      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.)
       return {
         node: { ...prog, body: rest },
         preRedex: head,
