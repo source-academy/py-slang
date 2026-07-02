@@ -540,9 +540,10 @@ describe("Python stepper — a runtime error is named in the step before the stu
   });
 
   test("legal-but-unmodelled operations stay a silent stuck (never a false error)", () => {
-    // These are valid Python the teaching stepper just does not evaluate (string repetition, string
-    // ordering, %-formatting); they must remain a plain "Evaluation stuck" with no TypeError step.
-    for (const src of ['"ab" * 2', '2 * "ab"', '"a" < "b"', '"a" % "b"']) {
+    // These are valid Python the teaching stepper just does not evaluate (string repetition,
+    // %-formatting); they must remain a plain "Evaluation stuck" with no TypeError step. (String
+    // ordering, unlike these, *is* modelled — see "string ordering (< > <= >=)" below.)
+    for (const src of ['"ab" * 2', '2 * "ab"', '"a" % "b"']) {
       const e = explanations(src);
       expect(e[e.length - 1]).toBe("Evaluation stuck");
       expect(e.some(x => x.includes("TypeError"))).toBe(false);
@@ -802,24 +803,50 @@ describe("Python stepper — integer comparisons and edge arithmetic", () => {
     expect(explanations("0 ** -1").pop()).toBe("Evaluation stuck");
   });
 
-  test("equality is defined between non-numeric values (None, mixed types)", () => {
-    expect(result("None == None")).toBe("True");
-    expect(result("None == 1")).toBe("False");
-    expect(result("None != None")).toBe("False");
-    expect(result("None != 1")).toBe("True");
+  test("string ordering (< > <= >=) compares lexicographically", () => {
+    expect(result('"a" < "b"')).toBe("True");
+    expect(result('"b" < "a"')).toBe("False");
+    expect(result('"apple" < "banana"')).toBe("True");
+    expect(result('"a" > "b"')).toBe("False");
+    expect(result('"abc" <= "abc"')).toBe("True");
+    expect(result('"abd" >= "abc"')).toBe("True");
+    expect(explanations('"a" < "b"').pop()).toBe("Evaluation complete"); // modelled, not stuck
+  });
+
+  test("== / != are narrow in this dialect: only (numeric, numeric) or (string, string) succeed", () => {
+    // Unlike native Python, equality is not defined for every pair of values here — None, functions,
+    // and mismatched types are all a TypeError (stuck), not a structural/identity comparison.
+    for (const src of ["None == None", "None == 1", "None != None", "None != 1", "1 == '1'"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+    expect(explanations("(lambda x: x) == (lambda x: x)").pop()).toBe("Evaluation stuck");
   });
 });
 
-describe("Python stepper — truthiness of non-boolean operands", () => {
-  // `and`/`or` return an operand (not a coerced bool), selected by Python truthiness — so a non-bool
-  // controlling operand exercises the numeric/string truthiness rules.
-  test("ints, floats and strings follow Python truthiness in and/or", () => {
-    expect(result("5 and 6")).toBe("6"); // nonzero int is truthy → take the right
-    expect(result("0 or 9")).toBe("9"); //  zero int is falsy → take the right
-    expect(result("2.5 and 1")).toBe("1"); // nonzero float is truthy
-    expect(result("0.0 or 8")).toBe("8"); //  zero float is falsy
-    expect(result('"hi" and 1')).toBe("1"); // nonempty string is truthy
-    expect(result('"" or 7')).toBe("7"); //   empty string is falsy
+describe("Python stepper — and/or/not require a strict bool operand", () => {
+  // Unlike native Python's truthiness, this dialect's `and`/`or`/`not` require a genuine `bool`
+  // operand (matching the real, non-stepper evaluator's BOOL_OP/NOT instructions): `1 and 1`, `not 5`,
+  // `None and 1` are all TypeErrors here, not truthy-evaluated.
+  test("and/or short-circuit on a bool left operand; the right operand's type is unrestricted", () => {
+    expect(result("True and 1")).toBe("1"); // left truthy → right returned, any type
+    expect(result("False and 1")).toBe("False"); // left falsy → short-circuits, right never touched
+    expect(result("True or 1")).toBe("True"); // left truthy → short-circuits
+    expect(result("False or 1")).toBe("1"); // left falsy → right returned, any type
+  });
+
+  test("a non-bool left operand to and/or is a TypeError (stuck), not truthy-evaluated", () => {
+    for (const src of ['"abc" and 1', "1 and 1", "None and 1", "(lambda x: x) and 1", "0 or 1"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+    expect(result("1 and 1")).toContain("TypeError");
+  });
+
+  test("not requires a bool argument; a non-bool value is a TypeError (stuck)", () => {
+    for (const src of ["not 1", "not 1.0", "not None", "not ''", "not (lambda x: x)"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+    expect(result("not 1")).toContain("TypeError");
   });
 });
 
@@ -847,14 +874,53 @@ describe("Python stepper — the rest of the math library", () => {
     expect(result("math_isfinite(math_inf)")).toBe("False");
   });
 
-  test("a math function coerces a bool argument (bool is an int subtype)", () => {
-    expect(result("math_sqrt(True)")).toBe("1.0"); // True → 1
-    expect(result("math_floor(False)")).toBe("0"); // False → 0
-  });
-
   test("a math function on a non-number is a TypeError (stuck)", () => {
     expect(result("math_floor(None)")).toContain("TypeError");
     expect(explanations("math_floor(None)").pop()).toBe("Evaluation stuck");
+  });
+});
+
+describe("Python stepper — bool is not an int subtype in this dialect", () => {
+  // Unlike native Python, `bool` participates in no arithmetic, comparison or equality operator, and
+  // no numeric builtin, here — it is only valid to `and`/`or`/`not` and to explicit conversions like
+  // `int()`/`float()`/`str()`. This matches the real, non-stepper evaluator (e.g. `True == True`,
+  // `True + 1` and `abs(True)` are all TypeErrors there too), even though native Python allows them.
+  test("bool is rejected by every binary arithmetic/comparison/equality operator", () => {
+    for (const src of ["True + 1", "1 + True", "True * True", "True / 1", "True - True"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+    for (const src of ["True == True", "True == 1", "True > 1", "1 > True", "True <= True"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("unary minus/plus on a bool is a TypeError (stuck)", () => {
+    expect(explanations("-True").pop()).toBe("Evaluation stuck");
+    expect(result("-True")).toContain("TypeError");
+  });
+
+  test("abs/round/math functions reject a bool argument", () => {
+    for (const src of ["abs(True)", "round(True)", "math_sqrt(True)", "math_floor(False)"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("min/max reject a bool argument", () => {
+    expect(explanations("min(True, 1)").pop()).toBe("Evaluation stuck");
+    expect(explanations("max(1, False)").pop()).toBe("Evaluation stuck");
+  });
+
+  test("explicit conversions (int, float, str, bool, is_boolean) still accept bool", () => {
+    // Conversions are the one place `bool` is still accepted — they convert its representation rather
+    // than using it as a numeric operand.
+    expect(result("int(True)")).toBe("1");
+    expect(result("float(True)")).toBe("1.0");
+    expect(result("str(True)")).toBe("'True'");
+    expect(result("bool(True)")).toBe("True");
+    expect(result("is_boolean(True)")).toBe("True");
   });
 });
 

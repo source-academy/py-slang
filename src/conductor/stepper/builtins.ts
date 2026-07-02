@@ -82,13 +82,15 @@ function typeError(message: string): never {
   return fail(`TypeError: ${message}`);
 }
 
-/** A Python `int`/`float`/`bool` (bool is an int subtype) as a JS number. Throws otherwise. */
+/** A Python `int`/`float` as a JS number. Unlike native Python, `bool` is not an int subtype in this
+ * dialect: it is rejected here like every other non-numeric type, since this helper backs arithmetic
+ * (`abs`, `round`, the `math_*` functions, `min`/`max`) — only explicit conversions such as `int()`
+ * and `float()` special-case `bool` themselves. Throws otherwise. */
 function asNumber(node: StepNode, fn: string): number {
   if (node.type === "Literal") {
     const v = node.value;
     if (typeof v === "bigint") return Number(v);
     if (typeof v === "number") return v;
-    if (typeof v === "boolean") return v ? 1 : 0;
   }
   return typeError(`${fn}() argument must be a number`);
 }
@@ -278,8 +280,7 @@ Object.assign(BUILTIN_FUNCTIONS, {
       const v = x.value as bigint;
       return intLiteral(v < 0n ? -v : v);
     }
-    if (isFloatNode(x) || isBoolNode(x))
-      return numberLiteral(Math.abs(asNumber(x, "abs")), isFloatNode(x));
+    if (isFloatNode(x)) return numberLiteral(Math.abs(x.value as number), true);
     return typeError("bad operand type for abs()");
   },
   int: (args: StepNode[]): StepNode => {
@@ -307,6 +308,8 @@ Object.assign(BUILTIN_FUNCTIONS, {
     checkArity("float", args, 0, 1);
     if (args.length === 0) return numberLiteral(0, true);
     const x = args[0];
+    // Unlike `asNumber`, the explicit `float()` conversion accepts a `bool` (like `int()` does below).
+    if (isBoolNode(x)) return numberLiteral(x.value ? 1 : 0, true);
     if (isStrNode(x)) {
       const s = (x.value as string).trim().replace(/_/g, "").toLowerCase();
       const specials: Record<string, number> = {
@@ -424,7 +427,9 @@ function pyTypeName(node: StepNode): string {
 
 function selectExtreme(name: string, args: StepNode[], wantMax: boolean): StepNode {
   checkArity(name, args, 1, null);
-  const numeric = args.every(a => isIntNode(a) || isFloatNode(a) || isBoolNode(a));
+  // `bool` is excluded, like everywhere else in this dialect's arithmetic/comparison operators — see
+  // `asNumber`.
+  const numeric = args.every(a => isIntNode(a) || isFloatNode(a));
   const strings = args.every(isStrNode);
   if (!numeric && !strings) {
     typeError(`'${name}' arguments must be all numbers or all strings`);
