@@ -89,6 +89,7 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
   ],
   ["FromImport", setToTrue],
   ["Global", setToFalse],
+  ["NonLocal", setToFalse],
   ["Pass", setToFalse],
   ["Break", setToFalse],
   ["Continue", setToFalse],
@@ -314,6 +315,46 @@ export function pyGetGlobalVariable(
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
 
+// Reads `name` from the nearest enclosing function scope (not global scope).
+// Used when a function declares `nonlocal name`.
+export function pyGetNonlocalVariable(
+  code: string,
+  context: Context,
+  name: string,
+  node: Node,
+): Value {
+  const programEnv = getProgramEnvironment(context);
+  let currentEnv: Environment | null = currentEnvironment(context).tail;
+  while (currentEnv !== null && currentEnv !== programEnv) {
+    if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
+      return currentEnv.head[name];
+    }
+    currentEnv = currentEnv.tail;
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
+}
+
+// Writes `value` to the nearest enclosing function scope that owns `name`.
+// Used when a function declares `nonlocal name` and assigns to it.
+export function pySetNonlocalVariable(
+  code: string,
+  context: Context,
+  name: string,
+  value: Value,
+  node: Node,
+): void {
+  const programEnv = getProgramEnvironment(context);
+  let currentEnv: Environment | null = currentEnvironment(context).tail;
+  while (currentEnv !== null && currentEnv !== programEnv) {
+    if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
+      currentEnv.head[name] = value;
+      return;
+    }
+    currentEnv = currentEnv.tail;
+  }
+  handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
+}
+
 /**
  * Check whether the stack has exceeded the max recursion limit
  * (It only accepts instructions since a new function call can only be pushed onto the control
@@ -426,9 +467,45 @@ export function scanForGlobalDeclarations(node: Node | Node[]): Set<string> {
   return globals;
 }
 
+// Returns the set of names declared with `nonlocal` anywhere in the given function body,
+// without recursing into nested function definitions.
+export function scanForNonlocalDeclarations(node: Node | Node[]): Set<string> {
+  const nonlocals = new Set<string>();
+  const visitor = (curNode: Node) => {
+    if (!curNode || typeof curNode !== "object") return;
+    const kind = (curNode as { kind?: string }).kind;
+    if (kind === "NonLocal") {
+      nonlocals.add((curNode as unknown as StmtNS.NonLocal).name.lexeme);
+      return;
+    }
+    if (kind === "FunctionDef" || kind === "Lambda") return;
+    for (const key in curNode) {
+      if (Object.prototype.hasOwnProperty.call(curNode, key)) {
+        const child = (curNode as unknown as Record<string, unknown>)[key];
+        if (Array.isArray(child)) {
+          child.forEach(c => {
+            if (c !== undefined && c !== null && typeof c === "object") visitor(c as Node);
+          });
+        } else if (
+          child !== undefined &&
+          child !== null &&
+          typeof child === "object" &&
+          (child as { kind?: string }).kind !== undefined
+        ) {
+          visitor(child as Node);
+        }
+      }
+    }
+  };
+  if (Array.isArray(node)) node.forEach(visitor);
+  else visitor(node);
+  return nonlocals;
+}
+
 export function scanForAssignments(
   node: Node | Node[],
   globalNames: Set<string> = new Set(),
+  nonlocalNames: Set<string> = new Set(),
 ): Set<string> {
   const assignments = new Set<string>();
   const visitor = (curNode: Node) => {
@@ -442,14 +519,14 @@ export function scanForAssignments(
       const assignNode = curNode as StmtNS.Assign;
       if (assignNode.target instanceof ExprNS.Variable) {
         const name = assignNode.target.name.lexeme;
-        if (!globalNames.has(name)) {
+        if (!globalNames.has(name) && !nonlocalNames.has(name)) {
           assignments.add(name);
         }
       }
     } else if (nodeType === "FunctionDef") {
       // def f(...) creates a binding for the function name in the current scope
       const name = (curNode as StmtNS.FunctionDef).name.lexeme;
-      if (!globalNames.has(name)) {
+      if (!globalNames.has(name) && !nonlocalNames.has(name)) {
         assignments.add(name);
       }
       return; // don't recurse into the nested function's body
