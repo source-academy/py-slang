@@ -47,7 +47,7 @@ export const ERROR_MAP = {
   RANGE_ARG_NOT_INT: "Using a non-integer argument in range().",
   GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
   MAKE_LINKED_LIST_NOT_LIST:
-    "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
+    "Trying to make a linked list out of a non-list value. (Internal error: llist function should only be called on lists)",
   STARRED_NOT_LIST: "Trying to unpack a non-list value.",
   PARSE_NOT_STRING: "Trying to parse a non-string value.",
   OUT_OF_MEMORY: "Out of memory.",
