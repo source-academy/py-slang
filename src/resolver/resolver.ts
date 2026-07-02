@@ -175,6 +175,17 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   private globalNamesInCurrentFunction: Set<string> = new Set();
   // Names declared `nonlocal` in the current function body (reset on function entry/exit).
   private nonlocalNamesInCurrentFunction: Set<string> = new Set();
+  // Stack of enclosing FunctionDef nodes (innermost last), used to resolve `nonlocal`
+  // against a whole-function-body scan rather than the incremental (textual-order)
+  // environment, since a binding construct may appear anywhere in the enclosing
+  // function — including nested in `if`/`while`/`for`, and even after the nested
+  // `def` that declares it `nonlocal` (matches CPython's whole-function static scoping).
+  private functionDefStack: StmtNS.FunctionDef[] = [];
+  // Top-level module statements, set once by visitFileInputStmt. Used as the outermost
+  // level of the whole-scope binding scan (see nameHasStaticBinding) — a module-level name
+  // can legitimately be bound anywhere in the module body, not just textually before a
+  // nested function that reads it.
+  private moduleStatements: StmtNS.Stmt[] = [];
 
   constructor(
     source: string,
@@ -306,6 +317,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const oldEnv = this.environment;
     this.environment = new Environment(this.source, this.environment, new Map());
     this.functionEnvironments.set(stmt, this.environment);
+    // #181 also applies at module level: e.g. `i = 3` followed by `global i` is a
+    // SyntaxError in real Python, even though `global` is otherwise a no-op there.
+    this.checkDeclarationOrder(stmt.statements, true);
+    this.moduleStatements = stmt.statements;
     this.resolve(stmt.statements);
     // Grab identifiers from that new environment. That are NOT functions.
     // stmt.varDecls = this.varDeclNames(this.environment.names)
@@ -348,7 +363,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       }
     }
 
+    this.functionDefStack.push(stmt);
     this.resolve(stmt.body);
+    this.functionDefStack.pop();
     // Restore old environment
     this.globalNamesInCurrentFunction = oldGlobalNames;
     this.nonlocalNamesInCurrentFunction = oldNonlocalNames;
@@ -392,9 +409,19 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(stmt.body);
     this.resolve(stmt.elseBlock);
   }
-  visitGlobalStmt(_stmt: StmtNS.Global): void {
-    // All work is done in visitFunctionDefStmt (scanning + declaring in the global env).
-    // At the top level `global x` is a no-op (already in global scope).
+  visitGlobalStmt(stmt: StmtNS.Global): void {
+    // Function-level `global x` is handled entirely in visitFunctionDefStmt (scanning +
+    // declaring in the outermost env). At module level `global x` is semantically a no-op
+    // (the name is already module-scope) — but it still must make `x` a recognized name for
+    // the *resolver*, exactly like a real assignment would, even though no value is bound
+    // yet. Real Python defers to a runtime NameError if `x` is never actually assigned
+    // before use; without this, py-slang would wrongly reject `global x` immediately.
+    const env = this.environment;
+    const isModuleLevel =
+      env !== null && env.enclosing !== null && env.enclosing.enclosing === null;
+    if (isModuleLevel && !env.names.has(stmt.name.lexeme)) {
+      env.names.set(stmt.name.lexeme, new Token(TokenType.NAME, stmt.name.lexeme, 0, 0, 0));
+    }
   }
 
   // Recursively collects names declared with `global` anywhere in the function body,
@@ -543,7 +570,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   // Checks that no name is used or assigned before its `global`/`nonlocal` declaration
   // in the function body (#181). Traverses in textual order.
-  private checkDeclarationOrder(body: StmtNS.Stmt[]): void {
+  // `isModuleLevel` additionally rejects bare `nonlocal` declarations (nonlocal is never
+  // valid at module scope, matching CPython's `SyntaxError: nonlocal declaration not
+  // allowed at module level` — but only once declaration-order has been ruled out, since
+  // CPython itself prioritises the order error when both apply).
+  private checkDeclarationOrder(body: StmtNS.Stmt[], isModuleLevel: boolean = false): void {
     const seen = new Map<string, { kind: "used" | "assigned"; token: Token }>();
 
     const recordUse = (token: Token) => {
@@ -610,6 +641,17 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
                 msg,
               ),
             );
+          } else if (isModuleLevel && stmt instanceof StmtNS.NonLocal) {
+            this.errors.push(
+              new ResolverErrors.ScopeConflictError(
+                stmt.name.line,
+                stmt.name.col,
+                this.source,
+                stmt.name.indexInSource,
+                stmt.name.indexInSource + name.length,
+                "nonlocal declaration not allowed at module level",
+              ),
+            );
           }
         } else if (stmt instanceof StmtNS.FunctionDef) {
           // Record the function name as an assignment; don't recurse into its body.
@@ -647,19 +689,88 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     scanBody(body);
   }
 
-  visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    // Search the enclosing function scope chain for the name.
-    // Stop before the fileInput (module) env — identified by its parent being the global env
-    // (whose own parent is null). Only function-scope envs are valid nonlocal targets.
-    let found = false;
-    let env = this.environment?.enclosing ?? null;
-    while (env !== null && env.enclosing !== null && env.enclosing.enclosing !== null) {
-      if (env.names.has(stmt.name.lexeme)) {
-        found = true;
-        break;
+  // Recursively checks whether `name` has a binding construct (assignment, `def`, or
+  // `for` target) anywhere in the given statement list, without descending into nested
+  // function/lambda bodies (they introduce their own scope). Mirrors scanGlobalDeclarations
+  // / scanNonlocalDeclarations, but collects "is this name bound here at all" instead.
+  private hasBindingConstruct(stmts: StmtNS.Stmt[], name: string): boolean {
+    for (const stmt of stmts) {
+      if (
+        stmt instanceof StmtNS.Assign &&
+        stmt.target instanceof ExprNS.Variable &&
+        stmt.target.name.lexeme === name
+      ) {
+        return true;
+      } else if (stmt instanceof StmtNS.FunctionDef && stmt.name.lexeme === name) {
+        return true;
+      } else if (stmt instanceof StmtNS.For) {
+        if (stmt.target.lexeme === name || this.hasBindingConstruct(stmt.body, name)) {
+          return true;
+        }
+      } else if (stmt instanceof StmtNS.If) {
+        if (this.hasBindingConstruct(stmt.body, name)) return true;
+        if (Array.isArray(stmt.elseBlock)) {
+          if (this.hasBindingConstruct(stmt.elseBlock, name)) return true;
+        } else if (stmt.elseBlock && this.hasBindingConstruct([stmt.elseBlock], name)) {
+          return true;
+        }
+      } else if (stmt instanceof StmtNS.While) {
+        if (this.hasBindingConstruct(stmt.body, name)) return true;
       }
-      env = env.enclosing;
+      // Do not recurse into nested FunctionDef or Lambda bodies.
     }
+    return false;
+  }
+
+  // Checks whether `name` has a binding construct (parameter, assignment, def, or `for`
+  // target) in the enclosing function at functionDefStack[startIndex], or in any function
+  // further out, stopping at (but not entering) module scope. Shared by visitNonLocalStmt
+  // (which starts one level out, since nonlocal never refers to the current function) and
+  // nameHasStaticBinding (which starts at the current function, inclusive).
+  private hasEnclosingFunctionBinding(name: string, startIndex: number): boolean {
+    for (let i = startIndex; i >= 0; i--) {
+      const fn = this.functionDefStack[i];
+      if (fn.parameters.some(p => p.lexeme === name)) {
+        return true;
+      }
+      const fnGlobals = this.scanGlobalDeclarations(fn.body);
+      if (fnGlobals.has(name)) {
+        // `x` is explicitly global in this function — it is not a local binding here,
+        // and CPython does not skip past it to look further out.
+        return false;
+      }
+      const fnNonlocals = this.scanNonlocalDeclarations(fn.body);
+      if (fnNonlocals.has(name)) {
+        // `x` is itself nonlocal in this function — defer to whatever that resolves to
+        // further out (already separately validated for `fn`).
+        continue;
+      }
+      if (this.hasBindingConstruct(fn.body, name)) {
+        return true;
+      }
+      // Not mentioned in this function at all — keep searching further out.
+    }
+    return false;
+  }
+
+  // Whole-scope-chain check for whether `name` can resolve at all: the current function
+  // (if any), each enclosing function, and finally module scope — each scanned as a whole
+  // body rather than relying on the incremental (textual-order) environment. This mirrors
+  // CPython's static LEGB classification: a binding construct may appear anywhere in its
+  // owning scope's body, not just textually before the point of reference (e.g. nested in
+  // `if`/`while`/`for`, or after a nested `def` that reads/writes it).
+  private nameHasStaticBinding(name: string): boolean {
+    if (this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 1)) {
+      return true;
+    }
+    return this.hasBindingConstruct(this.moduleStatements, name);
+  }
+
+  visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
+    const name = stmt.name.lexeme;
+    // Search enclosing FUNCTION scopes (never the module scope), innermost first,
+    // skipping the current function itself (nonlocal can never bind to it).
+    const found = this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 2);
     if (!found) {
       this.errors.push(
         new ResolverErrors.NameNotFoundError(
@@ -706,6 +817,17 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       this.environment?.lookupNameCurrentEnvWithError(expr.name);
     } catch (e) {
       if (e instanceof Error) {
+        // The incremental (textual-order) environment didn't find it — but the name may
+        // still have a legitimate binding construct somewhere in the current function, an
+        // enclosing function, or the module, just not yet registered because the resolver
+        // hasn't visited that part of the tree (e.g. it's nested in an `if`/`while`/`for`,
+        // or in a `def` that appears later in the same body). Real Python only fails at
+        // *runtime* (UnboundLocalError / NameError) for such forward references — it never
+        // rejects them statically — so accept here and let the interpreter's own dynamic
+        // checks (which already do a correct whole-function scan) catch genuine misuse.
+        if (this.nameHasStaticBinding(expr.name.lexeme)) {
+          return;
+        }
         this.errors.push(e);
         return;
       }

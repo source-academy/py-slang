@@ -4,6 +4,7 @@ import list from "../stdlib/list";
 import linkedList from "../stdlib/linked-list";
 import { generateTestCases, toPythonAstAndResolve } from "./utils";
 import { FeatureNotSupportedError } from "../validator";
+import { FreeVariableUnboundError, UnboundLocalError } from "../errors/errors";
 
 // ── Issue #177: nonlocal keyword — resolver acceptance ───────────────────────
 
@@ -233,6 +234,187 @@ outer()
         null,
       ],
     ],
+
+    "nonlocal — binding via if-nested assignment after the nested def resolves at runtime": [
+      [
+        `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+    if True:
+        x = 99
+    return x
+outer()
+`,
+        99n,
+        null,
+      ],
+    ],
+
+    "nonlocal — binding via for-loop target after the nested def resolves at runtime": [
+      [
+        `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+    for x in range(1):
+        pass
+    return x
+outer()
+`,
+        0n,
+        null,
+      ],
+    ],
+
+    "nonlocal — write via nested function whose only outer binding is a for-loop target": [
+      [
+        `
+def outer():
+    def inner():
+        nonlocal i
+        i = 5
+    inner()
+    for i in range(3):
+        pass
+    return i
+outer()
+`,
+        2n,
+        null,
+      ],
+    ],
+
+    "for-loop target alone (no other assignment) shadows an outer variable of the same name": [
+      [
+        `
+i = 100
+def f():
+    for i in range(3):
+        pass
+    return i
+result_inside = f()
+result_outside = i
+[result_inside, result_outside]
+`,
+        [2n, 100n],
+        null,
+      ],
+    ],
+
+    "reading a for-loop target before the loop runs raises UnboundLocalError, not an outer lookup":
+      [
+        [
+          `
+i = 100
+def f():
+    print(i)
+    for i in range(3):
+        pass
+f()
+`,
+          UnboundLocalError,
+          null,
+        ],
+      ],
+
+    "reading a nonlocal before its for-loop-target binding executes raises FreeVariableUnboundError, not UnboundLocalError":
+      [
+        [
+          `
+def outer():
+    def inner():
+        nonlocal i
+        print(i)
+        i = 5
+    inner()
+    for i in range(3):
+        pass
+    return i
+outer()
+`,
+          FreeVariableUnboundError,
+          null,
+        ],
+      ],
+
+    "when the for-loop runs before inner() is called (textually earlier in outer), i is already bound — no error":
+      [
+        [
+          `
+def outer():
+    def inner():
+        nonlocal i
+        print(i)
+        i = 5
+    for i in range(3):
+        pass
+    inner()
+    return i
+outer()
+`,
+          5n,
+          ["2"],
+        ],
+      ],
+
+    "nonlocal can target a directly-enclosing function's parameter (not just an assigned/for-target local)":
+      [
+        [
+          `
+def outer(x):
+    def inner():
+        nonlocal x
+        x = 100
+    inner()
+    return x
+outer(1)
+`,
+          100n,
+          null,
+        ],
+      ],
+
+    "nonlocal can target a parameter of a function further out, skipping an unrelated intermediate function":
+      [
+        [
+          `
+def grandouter(x):
+    def outer():
+        def inner():
+            nonlocal x
+            x = 100
+        inner()
+    outer()
+    return x
+grandouter(1)
+`,
+          100n,
+          null,
+        ],
+      ],
+
+    "implicit (non-nonlocal) closure read of an enclosing local raises FreeVariableUnboundError when read before that scope's own def executes":
+      [
+        [
+          `
+def outer():
+    def inner():
+        return helper()
+    result = inner()
+    def helper():
+        return 42
+    return result
+outer()
+`,
+          FreeVariableUnboundError,
+          null,
+        ],
+      ],
   },
   3,
   ch3,
@@ -339,6 +521,49 @@ def f(x):
     global x
 `;
     expect(() => toPythonAstAndResolve(code, 4)).toThrow(SyntaxError);
+  });
+});
+
+// global / nonlocal / parameter must be mutually distinct sets (per-name), not just
+// checked pairwise at the top level of the function body.
+describe("scope conflicts — global/nonlocal/parameter are mutually distinct sets", () => {
+  test("name that is simultaneously parameter, global and nonlocal is rejected (#178)", () => {
+    const code = `
+def f(x):
+    def g():
+        nonlocal x
+        global x
+        x = 1
+    g()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/nonlocal and global/);
+  });
+
+  test("global declared only inside an elif branch still conflicts with a parameter (#180)", () => {
+    const code = `
+def f(x):
+    if True:
+        pass
+    elif False:
+        global x
+    else:
+        pass
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/parameter and global/);
+  });
+
+  test("nonlocal declared only inside an elif branch still conflicts with a parameter (#179)", () => {
+    const code = `
+def outer():
+    x = 1
+    def f(x):
+        if True:
+            pass
+        elif False:
+            nonlocal x
+    f(1)
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/parameter and nonlocal/);
   });
 });
 
@@ -466,5 +691,113 @@ def f():
     global x
 `;
     expect(() => toPythonAstAndResolve(code, 4)).toThrow(SyntaxError);
+  });
+});
+
+// `nonlocal x` must resolve against the enclosing function's *whole* body (any binding
+// construct anywhere in it), not just names seen so far in textual-order resolution.
+describe("nonlocal — binding construct can appear anywhere in the enclosing function", () => {
+  test("binding via assignment nested in an if-block, after the nested def", () => {
+    const code = `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+    if True:
+        x = 99
+    return x
+outer()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("binding via a for-loop target, after the nested def", () => {
+    const code = `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+    for x in range(1):
+        pass
+outer()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("binding via a direct assignment statement that comes after the nested def", () => {
+    const code = `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+    x = 5
+outer()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("nonlocal skips an intermediate function that doesn't mention the name at all", () => {
+    const code = `
+def grandouter():
+    x = 1
+    def outer():
+        def inner():
+            nonlocal x
+            x = 2
+        inner()
+        return x
+    return outer()
+grandouter()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("nonlocal chains through an intermediate function that also declares it nonlocal", () => {
+    const code = `
+def grandouter():
+    x = 1
+    def outer():
+        nonlocal x
+        def inner():
+            nonlocal x
+            x = 2
+        inner()
+        return x
+    return outer()
+grandouter()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
+  });
+
+  test("nonlocal cannot skip past an intermediate function that declares the name global", () => {
+    const code = `
+def grandouter():
+    x = 1
+    def outer():
+        global x
+        x = 99
+        def inner():
+            nonlocal x
+            x = 2
+        inner()
+    outer()
+grandouter()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(SyntaxError);
+  });
+
+  test("nonlocal with no binding construct anywhere in any enclosing function is still rejected", () => {
+    const code = `
+def outer():
+    def inner():
+        nonlocal x
+        x = 1
+    inner()
+outer()
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(SyntaxError);
   });
 });

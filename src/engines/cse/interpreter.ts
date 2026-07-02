@@ -646,6 +646,13 @@ const cmdEvaluators: CmdEvaluators = {
       globalVariables,
       nonlocalVariables,
     );
+    // Parameters are local to the function too — a nested function's `nonlocal x` must be
+    // able to target an enclosing function's parameter, not just its assigned/for-target
+    // locals (a parameter is never global/nonlocal itself; the resolver already rejects
+    // that combination as a scope conflict, so no need to filter here).
+    for (const param of functionDefNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
       currentEnvironment(context),
@@ -666,6 +673,9 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const localVariables = scanForAssignments(lambdaNode.body);
+    for (const param of lambdaNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromLambda(
       lambdaNode,
       currentEnvironment(context),
