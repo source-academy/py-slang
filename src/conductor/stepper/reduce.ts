@@ -779,8 +779,8 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         preRedex: head,
         postRedex: head,
         postNewBody: [head, ...rest],
-        explanation: `Declared and substituted ${name} into the rest of the program`,
-        beforeExplanation: `Declaring and substituting ${name} into the rest of the program`,
+        explanation: `Declared and substituted ${name} into the rest of the block`,
+        beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
     }
     case "FunctionDeclaration": {
@@ -797,8 +797,8 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         preRedex: head,
         postRedex: head,
         postNewBody: [head, ...rest],
-        explanation: `Declared and substituted ${name} into the rest of the program`,
-        beforeExplanation: `Declaring and substituting ${name} into the rest of the program`,
+        explanation: `Declared and substituted ${name} into the rest of the block`,
+        beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
     }
     case "PassStatement":
