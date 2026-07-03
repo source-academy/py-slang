@@ -460,12 +460,12 @@ describe("Python stepper — step structure", () => {
     const e = explanations("1 + 1\n1 + 2");
     expect(e).toEqual([
       "Start of evaluation",
-      "Binary expression 1 + 1 evaluating",
-      "Binary expression 1 + 1 evaluated",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
       "Evaluating 2",
       "Evaluated 2",
-      "Binary expression 1 + 2 evaluating",
-      "Binary expression 1 + 2 evaluated",
+      "Evaluating binary expression 1 + 2",
+      "Evaluated expression 1 + 2",
       "Evaluating 3",
       "Evaluated 3",
       "Evaluation complete",
