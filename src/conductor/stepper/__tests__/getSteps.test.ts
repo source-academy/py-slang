@@ -651,7 +651,7 @@ describe("Python stepper — explanations mirror Source phrasing", () => {
 
   test("if statement", () => {
     expect(explanations("if 1 < 2:\n  x = 1\nelse:\n  x = 2\nx")).toContain(
-      "If statement evaluated, condition true, will proceed to if block",
+      "Evaluated if statement, condition true, will proceed to if block",
     );
   });
 
@@ -660,7 +660,7 @@ describe("Python stepper — explanations mirror Source phrasing", () => {
       "Evaluated AND expression, left of operator is truthy, will evaluate right of operator",
     );
     expect(explanations("1 if 2 > 1 else 9")).toContain(
-      "Conditional expression evaluated, condition is true, consequent evaluated",
+      "Evaluated conditional expression, condition is true, will evaluate consequent",
     );
   });
 });
