@@ -427,12 +427,17 @@ describe("Python stepper — step structure", () => {
 
   test("the final line's value disappears before completion (a program yields no value)", () => {
     // Unlike Source/js-slang, a Python program has no value: the last line's value is discarded just
-    // like every other line's, so the run ends on an *empty* program rather than lingering on it.
+    // like every other line's, so the run ends on an *empty* program rather than lingering on it. It is
+    // shown highlighted green (still present) one last time — the discard step's *after* step — before
+    // that happens; see "green flash before discard" below for the fully worked-out step sequence.
     const e = explanations("1 + 1");
     expect(e[e.length - 1]).toBe("Evaluation complete");
-    expect(e[e.length - 2]).toBe("2 finished evaluating"); // the discard step, as for any statement
+    expect(e[e.length - 2]).toBe("Evaluated 2"); // the discard step's after (green) step, as for any statement
+    expect(e[e.length - 3]).toBe("Evaluating 2"); // ...and its before (red) step
 
     const s = steps("1 + 1");
+    const lastVisible = s[s.length - 2].ast as any; // the green "2" step, one before the terminal step
+    expect(lastVisible.body).toHaveLength(1); // "2" is still there, not yet discarded
     const terminal = s[s.length - 1].ast as any;
     expect(terminal.type).toBe("Program");
     expect(terminal.body).toHaveLength(0); // nothing rendered at completion
@@ -443,6 +448,34 @@ describe("Python stepper — step structure", () => {
 
     // The REPL still echoes the final value, even though the stepper no longer lingers on it.
     expect(result("1 + 1")).toBe("2");
+  });
+
+  test("green flash before discard: a finished value is shown green once before it disappears", () => {
+    // The user-facing spec this implements: every contraction's before-step reads "… evaluating"
+    // (about to happen) and its after-step reads "… evaluated" (just happened, dropping the old
+    // "finished evaluating" wording) — and a contraction that discards a whole finished statement
+    // (an evaluated expression, a name binding, `pass`, an inlined `if` branch) shows it highlighted
+    // green, still present in the tree, on its after-step; only the *next* contraction's before-step
+    // shows it actually gone. Worked out fully for "1 + 1\n1 + 2\n" (ten steps total).
+    const e = explanations("1 + 1\n1 + 2");
+    expect(e).toEqual([
+      "Start of evaluation",
+      "Binary expression 1 + 1 evaluating",
+      "Binary expression 1 + 1 evaluated",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Binary expression 1 + 2 evaluating",
+      "Binary expression 1 + 2 evaluated",
+      "Evaluating 3",
+      "Evaluated 3",
+      "Evaluation complete",
+    ]);
+
+    const s = steps("1 + 1\n1 + 2");
+    const bodyLengths = s.map(step => (step.ast as any).body.length);
+    // Step 5 (index 4, the "Evaluated 2" green step) still has both statements — "2" has not yet been
+    // discarded — and step 9 (index 8, "Evaluated 3") still has its one statement, for the same reason.
+    expect(bodyLengths).toEqual([2, 2, 2, 2, 2, 1, 1, 1, 1, 0]);
   });
 });
 
@@ -607,12 +640,12 @@ describe("Python stepper — explanations mirror Source phrasing", () => {
   test("function declaration and application", () => {
     const e = explanations("def square(n):\n  return n * n\nsquare(4)");
     expect(e).toContain("Function square declared, parameter(s) n required");
-    expect(e).toContain("4 substituted into n of square");
+    expect(e).toContain("Substituted 4 into n of square");
   });
 
   test("name binding", () => {
     expect(explanations("x = 5\nx")).toContain(
-      "x declared and substituted into the rest of the program",
+      "Declared and substituted x into the rest of the program",
     );
   });
 
