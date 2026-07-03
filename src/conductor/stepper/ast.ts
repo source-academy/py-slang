@@ -42,6 +42,52 @@ export function numberLiteral(n: number, pyFloat: boolean): StepNode {
   return literal(n, numberRepr(n, pyFloat), pyFloat);
 }
 
+/**
+ * A Python `complex` value: a plain `{real, imag}` pair, deliberately *not* a class instance (unlike
+ * py-slang's own `PyComplexNumber`, which the real evaluator uses) — every {@link StepNode} must stay a
+ * plain, structured-clone-able object with no methods (see the module doc comment), and {@link clone}
+ * would silently strip a class instance's prototype (and so its methods) on the very first
+ * substitution. Arithmetic on this shape lives in `reduce.ts` (mirroring how `intBinary`/`floatBinary`
+ * sit there rather than in this module), next to the other binary-operator contractions.
+ */
+export interface ComplexValue {
+  real: number;
+  imag: number;
+}
+
+/** Whether `v` is a {@link ComplexValue} (a `Literal`'s `.value`, not a `StepNode` itself). */
+export function isComplexValue(v: unknown): v is ComplexValue {
+  return v !== null && typeof v === "object" && "real" in v && "imag" in v;
+}
+
+/** Python's `repr` for a single real/imaginary component: as {@link numberRepr}, but switching to
+ * scientific notation past the thresholds CPython itself uses (1e-4 / 1e16) rather than JS's — see
+ * `PyComplexNumber.toPythonComplexFloat` in `src/types/value-types.ts`, which this mirrors so the
+ * stepper's complex display matches the real, non-stepper evaluator's. */
+function complexComponentRepr(n: number): string {
+  if (Number.isNaN(n)) return "nan";
+  if (n === Infinity) return "inf";
+  if (n === -Infinity) return "-inf";
+  if (Math.abs(n) >= 1e16 || (n !== 0 && Math.abs(n) < 1e-4)) {
+    return n.toExponential().replace(/e([+-])(\d)$/, "e$10$2");
+  }
+  return String(n);
+}
+
+/** Python's `repr` of a complex value: `1j` when the real part is zero (no redundant `(...)`/`.0`),
+ * otherwise `(3-2j)`/`(1.5+0j)` — always parenthesised, with an explicit `+` before a non-negative
+ * imaginary part. Mirrors `PyComplexNumber.toString`. */
+export function complexRepr(c: ComplexValue): string {
+  if (c.real === 0) return `${complexComponentRepr(c.imag)}j`;
+  const sign = c.imag >= 0 ? "+" : "";
+  return `(${complexComponentRepr(c.real)}${sign}${complexComponentRepr(c.imag)}j)`;
+}
+
+/** Builds a complex `Literal`, formatting its `raw` with {@link complexRepr}. */
+export function complexLiteral(c: ComplexValue): StepNode {
+  return literal(c, complexRepr(c));
+}
+
 /** Python `repr` of a string: CPython prefers single quotes, switching to double quotes when the
  * string contains a single quote but no double quote (so `"it's"` shows as `"it's"`, not `'it\'s'`).
  * Shared by `translate` (source literals), the reducer (string concatenation) and the builtin library

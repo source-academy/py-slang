@@ -9,7 +9,15 @@
  */
 
 import { ExprNS, StmtNS, type FunctionParam } from "../../ast-types";
-import { type StepNode, identifier, literal, numberRepr, program, pythonStringRepr } from "./ast";
+import {
+  type StepNode,
+  complexLiteral,
+  identifier,
+  literal,
+  numberRepr,
+  program,
+  pythonStringRepr,
+} from "./ast";
 
 /** Python `repr` for a float: integers print with a trailing `.0` (e.g. `2.0`), matching Python. */
 function floatRepr(n: number): string {
@@ -36,8 +44,12 @@ function translateExpr(expr: ExprNS.Expr): StepNode {
       return literal(value, stringRepr(String(value)));
     }
     case "Complex": {
+      // The parser already combines a whole `<real>±<imag>j` literal into one `PyComplexNumber`
+      // (e.g. `2+3j` is one token, not `2` `+` `3j`); lift its two fields into the stepper's own
+      // plain-object `ComplexValue` rather than keeping py-slang's class instance (see `ComplexValue`'s
+      // doc comment in `./ast` for why a class instance can't safely be a `StepNode` value).
       const value = (expr as ExprNS.Complex).value;
-      return literal(String(value), String(value));
+      return complexLiteral({ real: value.real, imag: value.imag });
     }
     case "None":
       return literal(null, "None");

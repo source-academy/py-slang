@@ -24,8 +24,11 @@
  */
 
 import {
+  type ComplexValue,
   type StepNode,
   clone,
+  complexLiteral,
+  isComplexValue,
   isFunctionValue,
   isValue,
   literal,
@@ -63,6 +66,7 @@ function isTruthy(node: StepNode): boolean {
   if (typeof v === "number") return v !== 0;
   if (typeof v === "bigint") return v !== 0n;
   if (typeof v === "string") return v.length > 0;
+  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
   return true;
 }
 
@@ -169,6 +173,86 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
   }
 }
 
+/** `a / b` for complex numbers via CPython's branch-scaled algorithm (avoids needless overflow /
+ * underflow vs. the textbook `a * conj(b) / |b|²` formula) — ported from `PyComplexNumber.div` in
+ * `src/types/value-types.ts`; the zero-divisor check is the caller's job (mirrors `intBinary`). */
+function complexDiv(a: ComplexValue, b: ComplexValue): ComplexValue {
+  const absC = Math.abs(b.real);
+  const absD = Math.abs(b.imag);
+  if (absD < absC) {
+    const ratio = b.imag / b.real;
+    const denom = b.real + b.imag * ratio;
+    return { real: (a.real + a.imag * ratio) / denom, imag: (a.imag - a.real * ratio) / denom };
+  }
+  const ratio = b.real / b.imag;
+  const denom = b.imag + b.real * ratio;
+  return { real: (a.real * ratio + a.imag) / denom, imag: (a.imag * ratio - a.real) / denom };
+}
+
+/** `a ** b` for complex numbers via polar form (`a = r·e^iθ`, so `a**b = e^(b·(ln r + iθ))`) — ported
+ * from `PyComplexNumber.pow`. `0 ** b` for a negative-real or non-real `b` is undefined (mirrors
+ * `intBinary`/`floatBinary`'s `0 ** negative` → `ZeroDivisionError`, extended to complex exponents). */
+function complexPow(a: ComplexValue, b: ComplexValue): ComplexValue {
+  const r = Math.hypot(a.real, a.imag);
+  if (r === 0) {
+    if (b.real < 0 || b.imag !== 0) {
+      throw new Error("ZeroDivisionError: 0 cannot be raised to a negative or complex power");
+    }
+    return { real: 0, imag: 0 };
+  }
+  const theta = Math.atan2(a.imag, a.real);
+  const logR = Math.log(r);
+  const realExp = b.real * logR - b.imag * theta;
+  const imagExp = b.imag * logR + b.real * theta;
+  const scale = Math.exp(realExp);
+  return { real: scale * Math.cos(imagExp), imag: scale * Math.sin(imagExp) };
+}
+
+/**
+ * Complex arithmetic: `+,-,*,/,**` promote like the real evaluator (any `int`/`float` operand mixed
+ * with a `complex` one promotes the whole operation to complex — see `contractBinary`'s call site,
+ * which converts both operands to {@link ComplexValue} before calling this), and `==`/`!=` compare
+ * component-wise. There is no complex row for `//`, `%`, or the ordering operators in this dialect
+ * (Python's `complex` has no total order) — `default: null` leaves those to `reportBinaryTypeError`.
+ */
+function complexBinary(op: string, l: ComplexValue, r: ComplexValue): StepNode | null {
+  switch (op) {
+    case "+":
+      return complexLiteral({ real: l.real + r.real, imag: l.imag + r.imag });
+    case "-":
+      return complexLiteral({ real: l.real - r.real, imag: l.imag - r.imag });
+    case "*":
+      return complexLiteral({
+        real: l.real * r.real - l.imag * r.imag,
+        imag: l.real * r.imag + l.imag * r.real,
+      });
+    case "/":
+      if (r.real === 0 && r.imag === 0) {
+        throw new Error("ZeroDivisionError: complex division by zero");
+      }
+      return complexLiteral(complexDiv(l, r));
+    case "**":
+      return complexLiteral(complexPow(l, r));
+    case "==":
+      return boolLiteral(l.real === r.real && l.imag === r.imag);
+    case "!=":
+      return boolLiteral(l.real !== r.real || l.imag !== r.imag);
+    default:
+      return null;
+  }
+}
+
+/** Promotes an already-reduced binary operand to {@link ComplexValue} for a mixed complex operation
+ * (e.g. `2 + (1+2j)`), or `null` if it isn't `int`/`float`/`complex` at all (e.g. a `str`/`bool`/`None`
+ * operand, which stays a graceful "stuck" or a `reportBinaryTypeError` diagnosis, exactly as a
+ * non-numeric operand does for plain `int`/`float` arithmetic). */
+function toComplexValue(v: unknown): ComplexValue | null {
+  if (isComplexValue(v)) return v;
+  if (typeof v === "bigint") return { real: Number(v), imag: 0 };
+  if (typeof v === "number") return { real: v, imag: 0 };
+  return null;
+}
+
 const ORDER_OPS = new Set(["<", ">", "<=", ">="]);
 
 /**
@@ -185,6 +269,7 @@ function valueTypeName(node: StepNode): string | null {
     if (typeof v === "boolean") return "bool";
     if (typeof v === "string") return "str";
     if (v === null) return "NoneType";
+    if (isComplexValue(v)) return "complex";
   }
   if (isFunctionValue(node)) return "function";
   return null;
@@ -264,6 +349,13 @@ function contractBinary(node: StepNode): ReduceResult | null {
     const r = right.value;
     if (typeof l === "string" && typeof r === "string") {
       result = stringBinary(op, l, r);
+    } else if (isComplexValue(l) || isComplexValue(r)) {
+      // Any int/float/complex mix promotes to complex once either side is complex, exactly as the
+      // real evaluator does — checked before the plain int/float branch below so e.g. `2 + (1+2j)`
+      // (an int mixed with a complex) routes here instead of failing the `isNumericValue` check.
+      const lc = toComplexValue(l);
+      const rc = toComplexValue(r);
+      if (lc !== null && rc !== null) result = complexBinary(op, lc, rc);
     } else if (isNumericValue(l) && isNumericValue(r)) {
       // If either operand is a `float`, the operation promotes to float (Python semantics), so
       // `3.14 * 0` is `0.0` and `1 == 1.0` is `True`. `bool` is deliberately excluded from
@@ -313,6 +405,9 @@ function contractUnary(node: StepNode): ReduceResult | null {
   } else if (arg.type === "Literal" && typeof arg.value === "number") {
     if (op === "-") result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
     else if (op === "+") result = numberLiteral(arg.value, Boolean(arg.pyFloat));
+  } else if (arg.type === "Literal" && isComplexValue(arg.value)) {
+    if (op === "-") result = complexLiteral({ real: -arg.value.real, imag: -arg.value.imag });
+    else if (op === "+") result = complexLiteral(arg.value);
   }
   if (result === null) {
     if (op === "not") {

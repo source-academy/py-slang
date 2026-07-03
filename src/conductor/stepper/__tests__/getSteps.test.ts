@@ -945,14 +945,10 @@ describe("Python stepper — str/repr and bool of compound values", () => {
 
 describe("Python stepper — constructs outside the reducible subset degrade gracefully", () => {
   // These parse but sit outside the substitution stepper's faithfully-modelled subset. `translate`
-  // either renders them as a value (a complex/list literal) or degrades them to an inert placeholder
-  // identifier that simply gets stuck, instead of failing the whole run. (The preprocessing gate would
-  // reject most of these in production; the stepper's `getPythonSteps` translates them regardless.)
-  test("a complex literal renders as its text and is a (complete) value", () => {
-    expect(result("1j")).toBe("1j");
-    expect(explanations("3j").pop()).toBe("Evaluation complete");
-  });
-
+  // either renders them as a value (a list literal) or degrades them to an inert placeholder identifier
+  // that simply gets stuck, instead of failing the whole run. (The preprocessing gate would reject most
+  // of these in production; the stepper's `getPythonSteps` translates them regardless.) Complex numbers
+  // are *not* in this category — they are a fully-modelled value type; see "complex numbers" below.
   test("a list literal reduces to an array value", () => {
     expect(result("[1, 2, 3]")).toBe("[1, 2, 3]");
     expect(result("[]")).toBe("[]");
@@ -1063,5 +1059,172 @@ describe("Python stepper — MISC conversions and their error paths", () => {
     expect(result("len(5)")).toContain("TypeError");
     expect(result("arity(5)")).toContain("TypeError");
     expect(explanations("len(5)").pop()).toBe("Evaluation stuck");
+  });
+});
+
+describe("Python stepper — complex numbers", () => {
+  // A `<real>±<imag>j` literal is one token (parsed straight into real/imag by py-slang's parser), but
+  // `2 + 3j` (with an operator) is an ordinary int-plus-complex expression — both must produce the same
+  // value, so both forms are exercised throughout.
+  test("a bare complex literal displays like Python's repr (no parens when the real part is zero)", () => {
+    expect(result("1j")).toBe("1j");
+    expect(result("3j")).toBe("3j");
+    expect(result("-3j")).toBe("-3j");
+    expect(result("0j")).toBe("0j");
+    expect(result("-4.5j")).toBe("-4.5j");
+    expect(explanations("3j").pop()).toBe("Evaluation complete");
+  });
+
+  test("a real+imaginary literal displays parenthesised, with an explicit sign", () => {
+    expect(result("2+3j")).toBe("(2+3j)");
+    expect(result("2-3j")).toBe("(2-3j)");
+  });
+
+  test("int/float promote to complex when combined with one via an operator", () => {
+    expect(result("2 + 3j")).toBe("(2+3j)"); // int + complex
+    expect(result("3j + 2")).toBe("(2+3j)"); // complex + int, same value
+    expect(result("1.5 + 2j")).toBe("(1.5+2j)"); // float + complex
+  });
+
+  test("complex arithmetic: +, -, *, /", () => {
+    expect(result("(1+2j) + (3+4j)")).toBe("(4+6j)");
+    expect(result("(1+2j) - (3+4j)")).toBe("(-2-2j)");
+    expect(result("(1+2j) * (3+4j)")).toBe("(-5+10j)");
+    expect(result("(1+2j) / (3+4j)")).toBe("(0.44+0.08j)");
+  });
+
+  test("complex power (via the polar-form algorithm, like the real evaluator)", () => {
+    // `(1+2j) ** 2` is not exactly `-3+4j` here because the general complex power path always goes
+    // through log/exp/trig, picking up float noise even for an integer exponent — this exactly mirrors
+    // `PyComplexNumber.pow` in the real, non-stepper evaluator (same formula, same imprecision).
+    const s = result("(1+2j) ** 2");
+    expect(s.startsWith("(-3+4.0")).toBe(true);
+    expect(s.endsWith("j)")).toBe(true);
+    expect(result("0j ** 2")).toBe("0j");
+  });
+
+  test("0 to a negative or non-real power is a ZeroDivisionError (stuck)", () => {
+    for (const src of ["0j ** -1", "0j ** (1+1j)"]) {
+      expect(result(src)).toContain("ZeroDivisionError");
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+  });
+
+  test("complex division by zero is a ZeroDivisionError (stuck), for a plain-int or complex zero", () => {
+    for (const src of ["1j / 0", "1j / 0j"]) {
+      expect(result(src)).toContain("ZeroDivisionError");
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+  });
+
+  test("== / != hold between any mix of int, float and complex", () => {
+    expect(result("(1+2j) == (1+2j)")).toBe("True");
+    expect(result("(1+2j) == (1+3j)")).toBe("False");
+    expect(result("(1+2j) != (1+3j)")).toBe("True");
+    expect(result("1 == 1+0j")).toBe("True");
+    expect(result("1.0 == 1+0j")).toBe("True");
+    expect(result("1+0j == 1")).toBe("True");
+  });
+
+  test("ordering (<, <=, >, >=), // and % are not defined for complex — a TypeError (stuck)", () => {
+    for (const src of ["(1+2j) < (3+4j)", "(1+2j) // 2", "(1+2j) % 2"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("unary minus/plus on complex", () => {
+    expect(result("-(1+2j)")).toBe("(-1-2j)");
+    expect(result("+(1+2j)")).toBe("(1+2j)");
+  });
+
+  test("abs() returns the modulus as a non-negative float", () => {
+    expect(result("abs(3+4j)")).toBe("5.0");
+    expect(result("abs(0j)")).toBe("0.0");
+    expect(result("abs(1j)")).toBe("1.0");
+  });
+
+  test("str/repr of a complex value (repr matches str, unlike a string's quoting)", () => {
+    expect(result("str(1+2j)")).toBe("'(1+2j)'");
+    expect(result("repr(1+2j)")).toBe("'(1+2j)'");
+    expect(result("str(2j)")).toBe("'2j'");
+    expect(result("str(-2j)")).toBe("'-2j'");
+  });
+
+  test("complex() constructs from a number, bool, string, or (real, imag) pair", () => {
+    expect(result("complex()")).toBe("0j");
+    expect(result("complex(5)")).toBe("(5+0j)");
+    expect(result("complex(5.5)")).toBe("(5.5+0j)");
+    expect(result("complex(True)")).toBe("(1+0j)"); // the one place bool is still accepted
+    expect(result("complex(1+2j)")).toBe("(1+2j)");
+    expect(result("complex(1, 2)")).toBe("(1+2j)");
+    expect(result("complex(1.5, 2.5)")).toBe("(1.5+2.5j)");
+  });
+
+  test("complex(str) parses a Python complex-literal string", () => {
+    expect(result("complex('1+2j')")).toBe("(1+2j)");
+    expect(result("complex('-4.5j')")).toBe("-4.5j");
+    expect(result("complex('inf')")).toBe("(inf+0j)");
+  });
+
+  test("complex(str) rejects a malformed string with a ValueError (stuck)", () => {
+    expect(result("complex('not a number')")).toContain("ValueError");
+    expect(explanations("complex('not a number')").pop()).toBe("Evaluation stuck");
+  });
+
+  test("real()/imag() extract the components; they require an actual complex argument", () => {
+    expect(result("real(1+2j)")).toBe("1.0");
+    expect(result("imag(1+2j)")).toBe("2.0");
+    expect(explanations("real(5)").pop()).toBe("Evaluation stuck"); // int is not "complex" here
+    expect(result("real(5)")).toContain("TypeError");
+  });
+
+  test("is_complex distinguishes complex values from everything else", () => {
+    expect(result("is_complex(1+2j)")).toBe("True");
+    expect(result("is_complex(5)")).toBe("False");
+    expect(result("is_complex(5.0)")).toBe("False");
+  });
+
+  test("bool()/truthiness: only exactly 0j is falsy", () => {
+    expect(result("bool(0j)")).toBe("False");
+    expect(result("bool(1j)")).toBe("True");
+  });
+
+  test("complex is a valid and/or *right* operand (its type is never checked there)", () => {
+    expect(result("True and (1+2j)")).toBe("(1+2j)");
+  });
+
+  test("complex is rejected as and/or's left operand, and by not — a TypeError (stuck)", () => {
+    expect(explanations("(1+2j) and True").pop()).toBe("Evaluation stuck");
+    expect(result("(1+2j) and True")).toContain("TypeError");
+    expect(explanations("not (1+2j)").pop()).toBe("Evaluation stuck");
+    expect(result("not (1+2j)")).toContain("TypeError");
+  });
+
+  test("int()/float()/min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
+    for (const src of [
+      "int(1+2j)",
+      "float(1+2j)",
+      "min(1+2j, 3)",
+      "round(1+2j)",
+      "math_sqrt(1+2j)",
+    ]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("mixing complex with an incompatible type (str) is a TypeError (stuck)", () => {
+    expect(explanations("'a' + (1+2j)").pop()).toBe("Evaluation stuck");
+    expect(result("'a' + (1+2j)")).toContain("TypeError");
+  });
+
+  test("a pair may hold a complex element, formatted like any other pair element", () => {
+    expect(result("pair(1+2j, 2)")).toBe("[(1+2j), 2]");
+    expect(result("str(pair(1+2j, 2))")).toBe("'[(1+2j), 2]'");
+  });
+
+  test("complex arithmetic composes with user code", () => {
+    expect(result("f = lambda z: z * z\nf(1+1j)")).toBe("2j");
   });
 });
