@@ -465,7 +465,7 @@ describe("Python stepper — step structure", () => {
       "Evaluating 2",
       "Evaluated 2",
       "Evaluating binary expression 1 + 2",
-      "Evaluated expression 1 + 2",
+      "Evaluated binary expression 1 + 2",
       "Evaluating 3",
       "Evaluated 3",
       "Evaluation complete",
