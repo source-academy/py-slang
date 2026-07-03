@@ -476,11 +476,11 @@ function contractLogical(node: StepNode): ReduceResult | null {
   const explanation =
     op === "and"
       ? leftTruthy
-        ? "Evaluated AND expression, left of operator is truthy, continue evaluating right of operator"
+        ? "Evaluated AND expression, left of operator is truthy, will evaluate right of operator"
         : "Evaluated AND expression, left of operator is falsy, stop evaluation"
       : leftTruthy
         ? "Evaluated OR expression, left of operator is truthy, stop evaluation"
-        : "Evaluated OR expression, left of operator is falsy, continue evaluating right of operator";
+        : "Evaluated OR expression, left of operator is falsy, will evaluate right of operator";
   const beforeExplanation = op === "and" ? "Evaluating AND expression" : "Evaluating OR expression";
   return { node: chosen, preRedex: node, postRedex: chosen, explanation, beforeExplanation };
 }

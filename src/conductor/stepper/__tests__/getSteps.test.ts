@@ -185,7 +185,7 @@ describe("Python stepper — built-in functions and constants", () => {
   });
 
   test('math function call explanation is "<name> runs"', () => {
-    expect(explanations("math_sqrt(9)")).toContain("math_sqrt runs");
+    expect(explanations("math_sqrt(9)")).toContain("Running math_sqrt");
   });
 
   test("numeric MISC builtins", () => {
@@ -634,30 +634,30 @@ describe("Python stepper — function values render as mu-terms (not inline bodi
 
 describe("Python stepper — explanations mirror Source phrasing", () => {
   test("binary expression", () => {
-    expect(explanations("1 + 2")).toContain("Binary expression 1 + 2 evaluated");
+    expect(explanations("1 + 2")).toContain("Evaluated binary expression 1 + 2");
   });
 
   test("function declaration and application", () => {
     const e = explanations("def square(n):\n  return n * n\nsquare(4)");
-    expect(e).toContain("Function square declared, parameter(s) n required");
+    expect(e).toContain("Declaring and substituting square into the rest of the block");
     expect(e).toContain("Substituted 4 into n of square");
   });
 
   test("name binding", () => {
     expect(explanations("x = 5\nx")).toContain(
-      "Declared and substituted x into the rest of the program",
+      "Declared and substituted x into the rest of the block",
     );
   });
 
   test("if statement", () => {
     expect(explanations("if 1 < 2:\n  x = 1\nelse:\n  x = 2\nx")).toContain(
-      "If statement evaluated, condition true, proceed to if block",
+      "If statement evaluated, condition true, will proceed to if block",
     );
   });
 
   test("short-circuit and conditional", () => {
     expect(explanations("True and False")).toContain(
-      "AND operation evaluated, left of operator is truthy, continue evaluating right of operator",
+      "Evaluated AND expression, left of operator is truthy, will evaluate right of operator",
     );
     expect(explanations("1 if 2 > 1 else 9")).toContain(
       "Conditional expression evaluated, condition is true, consequent evaluated",
@@ -757,7 +757,7 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
 
   test("the list reduction shows pairs/lists, not the helper implementation noise", () => {
     // `pair` contracts in one labelled step, like Source's primitives.
-    expect(explanations("pair(1, 2)")).toContain("pair runs");
+    expect(explanations("pair(1, 2)")).toContain("Running pair");
     // A pair value serialises as an estree `ArrayExpression` for the host's `[...]` template. It shows
     // as the contraction result and is then discarded before the terminal (empty) "Evaluation
     // complete" step — a Python statement yields no program value — so search across the steps for it.
