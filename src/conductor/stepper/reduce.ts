@@ -481,10 +481,7 @@ function contractLogical(node: StepNode): ReduceResult | null {
       : leftTruthy
         ? "Evaluated OR expression, left of operator is truthy, stop evaluation"
         : "Evaluated OR expression, left of operator is falsy, continue evaluating right of operator";
-  const beforeExplanation =
-    op === "and"
-      ? "Evaluating AND expression"
-      : "Evaluating OR expression";
+  const beforeExplanation = op === "and" ? "Evaluating AND expression" : "Evaluating OR expression";
   return { node: chosen, preRedex: node, postRedex: chosen, explanation, beforeExplanation };
 }
 
@@ -497,7 +494,7 @@ function contractConditional(node: StepNode): ReduceResult {
     preRedex: node,
     postRedex: chosen,
     explanation: `Evaluated conditional expression, condition is ${truthy ? "true" : "false"}, will evaluate ${branch}`,
-    beforeExplanation: `Evaluating conditional expression`
+    beforeExplanation: `Evaluating conditional expression`,
   };
 }
 
