@@ -1657,6 +1657,50 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/py-slang@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/py-slang@workspace:."
+  dependencies:
+    "@inquirer/prompts": "npm:^8.3.2"
+    "@rollup/plugin-commonjs": "npm:^28.0.3"
+    "@rollup/plugin-json": "npm:^6.1.0"
+    "@rollup/plugin-node-resolve": "npm:^16.0.1"
+    "@rollup/plugin-replace": "npm:^6.0.3"
+    "@rollup/plugin-terser": "npm:^1.0.0"
+    "@rollup/plugin-typescript": "npm:^12.1.2"
+    "@rollup/plugin-wasm": "npm:^6.2.2"
+    "@sourceacademy/common-cse-machine": "npm:^0.1.0"
+    "@sourceacademy/common-stepper": "npm:^0.0.1"
+    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
+    "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
+    "@sourceacademy/runner-stepper": "npm:^0.0.1"
+    "@sourceacademy/wasm-util": "npm:^1.0.6"
+    "@types/fast-levenshtein": "npm:^0.0.4"
+    "@types/jest": "npm:^29.5.14"
+    "@types/moo": "npm:^0.5.10"
+    "@types/nearley": "npm:^2.11.5"
+    "@types/node": "npm:^18.19.84"
+    commander: "npm:^14.0.3"
+    eslint: "npm:^9.39.4"
+    eslint-config-prettier: "npm:^10.1.8"
+    fast-levenshtein: "npm:^3.0.0"
+    jest: "npm:^29.7.0"
+    jsdoc: "npm:^4.0.4"
+    mathjs: "npm:^15.2.0"
+    moo: "npm:^0.5.2"
+    nearley: "npm:^2.20.1"
+    prettier: "npm:^3.8.1"
+    rollup: "npm:^4.59.0"
+    rollup-plugin-polyfill-node: "npm:^0.13.0"
+    ts-jest: "npm:^29.0.5"
+    tslib: "npm:^2.8.1"
+    tsx: "npm:^4.19.0"
+    typescript: "npm:^5.5.3"
+    typescript-eslint: "npm:^8.56.1"
+    wabt: "npm:^1.0.37"
+  languageName: unknown
+  linkType: soft
+
 "@sourceacademy/runner-cse-machine@npm:^1.0.0":
   version: 1.0.0
   resolution: "@sourceacademy/runner-cse-machine@npm:1.0.0"
@@ -4787,50 +4831,6 @@ __metadata:
   checksum: 10c0/1abe217897bf74dcb3a0c9aba3555fe975023147b48db540aa2faf507aee91c03bf54f6aef0eb2bf59cc259a16d06b28eca37f0dc426d94f4692aeff02fb0e65
   languageName: node
   linkType: hard
-
-"py-slang@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "py-slang@workspace:."
-  dependencies:
-    "@inquirer/prompts": "npm:^8.3.2"
-    "@rollup/plugin-commonjs": "npm:^28.0.3"
-    "@rollup/plugin-json": "npm:^6.1.0"
-    "@rollup/plugin-node-resolve": "npm:^16.0.1"
-    "@rollup/plugin-replace": "npm:^6.0.3"
-    "@rollup/plugin-terser": "npm:^1.0.0"
-    "@rollup/plugin-typescript": "npm:^12.1.2"
-    "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/common-cse-machine": "npm:^0.1.0"
-    "@sourceacademy/common-stepper": "npm:^0.0.1"
-    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
-    "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
-    "@sourceacademy/runner-stepper": "npm:^0.0.1"
-    "@sourceacademy/wasm-util": "npm:^1.0.6"
-    "@types/fast-levenshtein": "npm:^0.0.4"
-    "@types/jest": "npm:^29.5.14"
-    "@types/moo": "npm:^0.5.10"
-    "@types/nearley": "npm:^2.11.5"
-    "@types/node": "npm:^18.19.84"
-    commander: "npm:^14.0.3"
-    eslint: "npm:^9.39.4"
-    eslint-config-prettier: "npm:^10.1.8"
-    fast-levenshtein: "npm:^3.0.0"
-    jest: "npm:^29.7.0"
-    jsdoc: "npm:^4.0.4"
-    mathjs: "npm:^15.2.0"
-    moo: "npm:^0.5.2"
-    nearley: "npm:^2.20.1"
-    prettier: "npm:^3.8.1"
-    rollup: "npm:^4.59.0"
-    rollup-plugin-polyfill-node: "npm:^0.13.0"
-    ts-jest: "npm:^29.0.5"
-    tslib: "npm:^2.8.1"
-    tsx: "npm:^4.19.0"
-    typescript: "npm:^5.5.3"
-    typescript-eslint: "npm:^8.56.1"
-    wabt: "npm:^1.0.37"
-  languageName: unknown
-  linkType: soft
 
 "railroad-diagrams@npm:^1.0.0":
   version: 1.0.0

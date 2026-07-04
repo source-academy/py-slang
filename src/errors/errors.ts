@@ -209,7 +209,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
     }
 
     // Assemble the final multi-line message
-    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
   }
 }
 
@@ -557,7 +557,34 @@ export class UnboundLocalError extends RuntimeSourceError {
 
     const hint = `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`;
     const suggestion = `The variable '${name}' is used in the current function, so it's considered a local variable. However, you tried to access it before a value was assigned to it in the local scope. Assign a value to '${name}' before you use it.`;
-    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
+    this.message = msg;
+  }
+}
+
+// Distinct from UnboundLocalError: raised when a name captured from an enclosing function
+// (either via an explicit `nonlocal` declaration, or an implicit closure read that needs
+// no such declaration) hasn't been assigned yet by its owning scope at the point it's
+// read — the name is a free/cell variable, not a local of the current function. Matches
+// CPython's wording for this exact situation, e.g.:
+//   NameError: cannot access free variable 'x' where it is not associated with a value in enclosing scope
+export class FreeVariableUnboundError extends RuntimeSourceError {
+  constructor(source: string, name: string, node: ExprNS.Expr) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const { lineIndex, fullLine } = getFullLine(source, node.startToken.indexInSource);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+
+    const hint = `NameError: cannot access free variable '${name}' where it is not associated with a value in enclosing scope`;
+    const suggestion = `The variable '${name}' is bound in an enclosing function, not the current one. However, that enclosing function hasn't assigned '${name}' a value yet at this point. Assign a value to '${name}' in the enclosing function before this reference runs.`;
+    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -578,7 +605,7 @@ export class NameError extends RuntimeSourceError {
     const indicator = createErrorIndicator(snippet, errorPos);
     const hint = `NameError: name '${name}' is not defined`;
     const suggestion = `The name '${name}' is not defined in the current scope. Check for typos or make sure the variable is assigned a value before being used.`;
-    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -607,7 +634,7 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
 
     const hint = `TypeError: cannot reassign built-in function '${name}'`;
     const suggestion = `You are trying to assign a value to '${name}', which is a built-in function. This is not allowed.`;
-    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }

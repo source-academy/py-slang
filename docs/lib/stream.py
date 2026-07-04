@@ -107,7 +107,7 @@ def stream_for_each(fun, xs):
     """
     stream_for_each applies first arg fun to the elements of the stream
     passed as second argument. fun is applied element-by-element:
-    for_each(fun, llist_to_stream(llist(1, 2,None))) results in the calls fun(1)
+    for_each(fun, llist_to_stream(llist(1, 2, None))) results in the calls fun(1)
     and fun(2).
     stream_for_each returns True.
     stream_for_each throws an exception if the second argument is not a

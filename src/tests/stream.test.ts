@@ -100,6 +100,8 @@ describe("Stream Tests", () => {
         true,
         null,
       ],
+      ["equal(stream_to_linked_list(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
+      ["equal(stream_to_linked_list(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
     ],
     "member, remove and filter": [
       [

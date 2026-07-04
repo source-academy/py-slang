@@ -15,6 +15,9 @@ export namespace ResolverErrors {
     }
   }
   export class NameNotFoundError extends BaseResolverError {
+    /** The unresolved name itself (e.g. `foo`), for callers that want just the identifier rather than
+     * the formatted diagnostic — the stepper uses it to build a CPython-style `NameError` message. */
+    varName: string;
     constructor(
       line: number,
       col: number,
@@ -37,6 +40,7 @@ export namespace ResolverErrors {
       const name = "NameNotFoundError";
       super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = "NameNotFoundError";
+      this.varName = source.slice(start, current);
     }
   }
 
@@ -80,6 +84,26 @@ export namespace ResolverErrors {
       hint = hint.padStart(hint.length + col - diff, " ");
       const name = "BreakContinueError";
 
+      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      this.name = name;
+    }
+  }
+
+  export class ScopeConflictError extends BaseResolverError {
+    constructor(
+      line: number,
+      col: number,
+      source: string,
+      start: number,
+      current: number,
+      message: string,
+    ) {
+      const { lineIndex, fullLine } = getFullLine(source, start);
+      let hint = ` ${message}`;
+      const diff = current - start;
+      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
+      hint = hint.padStart(hint.length + col - diff, " ");
+      const name = "SyntaxError";
       super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = name;
     }

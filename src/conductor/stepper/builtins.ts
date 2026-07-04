@@ -27,6 +27,7 @@ import {
   numberLiteral,
   pythonStringRepr,
   stringLiteral,
+  substitute,
   unparse,
 } from "./ast";
 import { listArities, listBuiltins } from "./lists";
@@ -53,6 +54,22 @@ export function getBuiltinConstant(name: string): StepNode {
   return numberLiteral(MATH_CONSTANTS[name], true);
 }
 
+/**
+ * Substitutes every built-in constant (`math_pi`, `math_e`, …) with its literal value throughout
+ * `program`, as a preprocessing step before stepping. This mirrors js-slang's substitution stepper
+ * (`src/stepper/builtins/index.ts` `prelude`): a constant is not a thing the student reduces, so the
+ * rendered program shows `3.141592653589793` from the very first step rather than displaying
+ * `math_pi` and contracting it later. Substitution is capture-avoiding (it won't touch a `math_pi`
+ * bound as a parameter), so only free references to the constant are replaced.
+ */
+export function substituteBuiltinConstants(program: StepNode): StepNode {
+  let result = program;
+  for (const name of Object.keys(MATH_CONSTANTS)) {
+    result = substitute(result, name, getBuiltinConstant(name));
+  }
+  return result;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                          Value helpers / predicates                        */
 /* -------------------------------------------------------------------------- */
@@ -65,13 +82,15 @@ function typeError(message: string): never {
   return fail(`TypeError: ${message}`);
 }
 
-/** A Python `int`/`float`/`bool` (bool is an int subtype) as a JS number. Throws otherwise. */
+/** A Python `int`/`float` as a JS number. Unlike native Python, `bool` is not an int subtype in this
+ * dialect: it is rejected here like every other non-numeric type, since this helper backs arithmetic
+ * (`abs`, `round`, the `math_*` functions, `min`/`max`) — only explicit conversions such as `int()`
+ * and `float()` special-case `bool` themselves. Throws otherwise. */
 function asNumber(node: StepNode, fn: string): number {
   if (node.type === "Literal") {
     const v = node.value;
     if (typeof v === "bigint") return Number(v);
     if (typeof v === "number") return v;
-    if (typeof v === "boolean") return v ? 1 : 0;
   }
   return typeError(`${fn}() argument must be a number`);
 }
@@ -261,8 +280,7 @@ Object.assign(BUILTIN_FUNCTIONS, {
       const v = x.value as bigint;
       return intLiteral(v < 0n ? -v : v);
     }
-    if (isFloatNode(x) || isBoolNode(x))
-      return numberLiteral(Math.abs(asNumber(x, "abs")), isFloatNode(x));
+    if (isFloatNode(x)) return numberLiteral(Math.abs(x.value as number), true);
     return typeError("bad operand type for abs()");
   },
   int: (args: StepNode[]): StepNode => {
@@ -290,6 +308,8 @@ Object.assign(BUILTIN_FUNCTIONS, {
     checkArity("float", args, 0, 1);
     if (args.length === 0) return numberLiteral(0, true);
     const x = args[0];
+    // Unlike `asNumber`, the explicit `float()` conversion accepts a `bool` (like `int()` does below).
+    if (isBoolNode(x)) return numberLiteral(x.value ? 1 : 0, true);
     if (isStrNode(x)) {
       const s = (x.value as string).trim().replace(/_/g, "").toLowerCase();
       const specials: Record<string, number> = {
@@ -407,7 +427,9 @@ function pyTypeName(node: StepNode): string {
 
 function selectExtreme(name: string, args: StepNode[], wantMax: boolean): StepNode {
   checkArity(name, args, 1, null);
-  const numeric = args.every(a => isIntNode(a) || isFloatNode(a) || isBoolNode(a));
+  // `bool` is excluded, like everywhere else in this dialect's arithmetic/comparison operators — see
+  // `asNumber`.
+  const numeric = args.every(a => isIntNode(a) || isFloatNode(a));
   const strings = args.every(isStrNode);
   if (!numeric && !strings) {
     typeError(`'${name}' arguments must be all numbers or all strings`);
@@ -445,6 +467,19 @@ const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
 export function isBuiltinFunctionAvailable(name: string, chapter: number): boolean {
   if (!isBuiltinFunctionName(name)) return false;
   return chapter >= 2 || !CHAPTER_2_FUNCTION_NAMES.has(name);
+}
+
+/**
+ * Every built-in name (functions and constants) the stepper recognises in `chapter`. This is the
+ * stepper's vocabulary of global names; it is handed to the default evaluator's analyzer as the set
+ * of predefined names so name-resolution and chapter-gating errors are detected canonically rather
+ * than by a bespoke resolver — see {@link ../preprocess}.
+ */
+export function getAvailableBuiltinNames(chapter: number): string[] {
+  const functions = Object.keys(BUILTIN_FUNCTIONS).filter(name =>
+    isBuiltinFunctionAvailable(name, chapter),
+  );
+  return [...functions, ...Object.keys(MATH_CONSTANTS)];
 }
 
 /** Applies the built-in `name` to already-reduced value `args`. Throws on misuse (→ stuck). */
