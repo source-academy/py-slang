@@ -200,6 +200,7 @@ function parseComplexString(raw: string): ComplexValue {
     if (Number.isNaN(n)) malformed();
     return isImag ? { real: 0, imag: n } : { real: n, imag: 0 };
   }
+  if (parts.length > 2) malformed();
   const [realPart, imagPart] = parts;
   if (!imagPart.endsWith("j")) malformed();
   const imagStr = imagPart.slice(0, -1);
