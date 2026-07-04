@@ -181,6 +181,9 @@ function parseComplexString(raw: string): ComplexValue {
     "+nan": NaN,
     "-nan": NaN,
   };
+  // Plain `in` also matches inherited Object.prototype keys (e.g. "constructor", "toString"), so
+  // e.g. "constructorj" would look up the Object constructor function instead of being rejected.
+  const isSpecial = (key: string): boolean => Object.prototype.hasOwnProperty.call(specials, key);
   const malformed = (): never =>
     fail(`ValueError: complex() arg is a malformed string: '${original}'`);
 
@@ -192,7 +195,7 @@ function parseComplexString(raw: string): ComplexValue {
       s = s.slice(0, -1);
       if (s === "" || s === "+" || s === "-") return { real: 0, imag: s === "-" ? -1 : 1 };
     }
-    if (s in specials) {
+    if (isSpecial(s)) {
       const v = specials[s];
       return isImag ? { real: 0, imag: v } : { real: v, imag: 0 };
     }
@@ -204,19 +207,18 @@ function parseComplexString(raw: string): ComplexValue {
   const [realPart, imagPart] = parts;
   if (!imagPart.endsWith("j")) malformed();
   const imagStr = imagPart.slice(0, -1);
-  const realOk = realPart in specials || !Number.isNaN(Number(realPart));
+  const realOk = isSpecial(realPart) || !Number.isNaN(Number(realPart));
   const imagOk =
-    imagStr in specials || ["+", "-", ""].includes(imagStr) || !Number.isNaN(Number(imagStr));
+    isSpecial(imagStr) || ["+", "-", ""].includes(imagStr) || !Number.isNaN(Number(imagStr));
   if (!realOk || !imagOk) malformed();
-  const real = realPart in specials ? specials[realPart] : Number(realPart);
-  const imag =
-    imagStr in specials
-      ? specials[imagStr]
-      : imagStr === "+" || imagStr === ""
-        ? 1
-        : imagStr === "-"
-          ? -1
-          : Number(imagStr);
+  const real = isSpecial(realPart) ? specials[realPart] : Number(realPart);
+  const imag = isSpecial(imagStr)
+    ? specials[imagStr]
+    : imagStr === "+" || imagStr === ""
+      ? 1
+      : imagStr === "-"
+        ? -1
+        : Number(imagStr);
   return { real, imag };
 }
 
@@ -384,7 +386,10 @@ Object.assign(BUILTIN_FUNCTIONS, {
         "-infinity": -Infinity,
         nan: NaN,
       };
-      if (s in specials) return numberLiteral(specials[s], true);
+      // Plain `in` also matches inherited Object.prototype keys (e.g. "constructor"); see the
+      // identical fix in `parseComplexString` above.
+      if (Object.prototype.hasOwnProperty.call(specials, s))
+        return numberLiteral(specials[s], true);
       const n = Number(s);
       if (Number.isNaN(n) && s !== "nan") fail("ValueError: could not convert string to float");
       return numberLiteral(n, true);

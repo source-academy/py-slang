@@ -1083,6 +1083,12 @@ describe("Python stepper — MISC conversions and their error paths", () => {
     expect(explanations('float("abc")').pop()).toBe("Evaluation stuck");
   });
 
+  test("float() rejects prototype-chain property names as malformed, not as special values", () => {
+    // Same regression as complex(str) above: these must not resolve via inherited Object.prototype keys.
+    expect(result('float("constructor")')).toContain("ValueError");
+    expect(result('float("__proto__")')).toContain("ValueError");
+  });
+
   test("factorial of a negative is a ValueError (stuck)", () => {
     expect(result("math_factorial(-1)")).toContain("ValueError");
     expect(explanations("math_factorial(-1)").pop()).toBe("Evaluation stuck");
@@ -1203,6 +1209,14 @@ describe("Python stepper — complex numbers", () => {
   test("complex(str) rejects a malformed string with a ValueError (stuck)", () => {
     expect(result("complex('not a number')")).toContain("ValueError");
     expect(explanations("complex('not a number')").pop()).toBe("Evaluation stuck");
+  });
+
+  test("complex(str) rejects prototype-chain property names as malformed, not as special values", () => {
+    // Regression: a bare `in` against the plain-object `specials` lookup used to match inherited
+    // Object.prototype keys, so e.g. complex('constructorj') smuggled the Object constructor
+    // function through as the imaginary part instead of being rejected.
+    expect(result("complex('constructorj')")).toContain("ValueError");
+    expect(result("complex('__proto__j')")).toContain("ValueError");
   });
 
   test("real()/imag() extract the components; they require an actual complex argument", () => {
