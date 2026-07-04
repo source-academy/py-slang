@@ -104,8 +104,7 @@ const isBoolNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.va
 const isStrNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.value === "string";
 const isNoneNode = (n: StepNode): boolean => n.type === "Literal" && n.value === null;
 const isComplexNode = (n: StepNode): boolean => n.type === "Literal" && isComplexValue(n.value);
-const isNumberNode = (n: StepNode): boolean =>
-  isIntNode(n) || isFloatNode(n) || isComplexNode(n);
+const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) || isComplexNode(n);
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
