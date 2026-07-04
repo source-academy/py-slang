@@ -22,7 +22,6 @@
 
 import type { StmtNS } from "../../ast-types";
 import { analyze } from "../../resolver/analysis";
-import { ResolverErrors } from "../../resolver/errors";
 import type { StepNode } from "./ast";
 import { getAvailableBuiltinNames } from "./builtins";
 import { translateProgram } from "./translate";
@@ -71,7 +70,12 @@ export function findUnsupportedOperator(program: StepNode): string | null {
  * selected chapter forbids — or `null` if it is clear to step. `source` is the program text (needed by
  * the analyzer for diagnostics); `chapter` is the selected SICPy sublanguage (1–4), which both gates
  * the available built-ins and selects the feature validators, so e.g. a §2 list-library name used in a
- * §1 program does not resolve and is reported as a `NameError`.
+ * §1 program does not resolve and is reported as a `NameNotFoundError`.
+ *
+ * The returned message is always the analyzer error's own formatted `.message` (line/column, source
+ * context, and — for an unresolved name — a "perhaps you meant" suggestion), unmodified: the same text
+ * the default (CSE) evaluator reports for the same program, so a preprocessing error reads identically
+ * regardless of which evaluator caught it.
  */
 export function preprocessPython(
   fileInput: StmtNS.FileInput,
@@ -87,13 +91,5 @@ export function preprocessPython(
   // passed: the stepper supplies its own curated vocabulary as the prelude instead of the full library.
   const errors = analyze(fileInput, source, chapter, [], getAvailableBuiltinNames(chapter));
   if (errors.length === 0) return null;
-
-  // Keep the CPython-style `NameError` for an unresolved name (what a Python student expects, and what
-  // the stepper has always reported). Any other analyzer error — a chapter feature-gate, a forbidden
-  // reassignment — surfaces with its own diagnostic.
-  const nameError = errors.find(e => e instanceof ResolverErrors.NameNotFoundError);
-  if (nameError !== undefined) {
-    return `NameError: name '${nameError.varName}' is not defined`;
-  }
   return errors[0].message;
 }

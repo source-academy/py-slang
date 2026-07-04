@@ -260,7 +260,12 @@ describe("Python stepper — built-in functions and constants", () => {
 
 describe("Python stepper — undefined variables are a preprocessing error", () => {
   test("an undefined name is reported (and would block the stepper)", () => {
-    expect(preprocess("undefined_name")).toBe("NameError: name 'undefined_name' is not defined");
+    // Same message the default (CSE) evaluator reports for the same program: the analyzer's own
+    // formatted `NameNotFoundError`, not a stepper-specific simplification.
+    expect(preprocess("undefined_name")).toBe(
+      "NameNotFoundError at line 1\n                   \nundefined_name\n" +
+        " ^^^^^^^^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
     expect(preprocess("undefined_name + 1")).toContain("undefined_name");
   });
 
@@ -279,9 +284,15 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
 
   test("an undefined name inside a function body is caught", () => {
     expect(preprocess("def f(n):\n  return n + missing\nf(1)")).toBe(
-      "NameError: name 'missing' is not defined",
+      "NameNotFoundError at line 2\n                   \n  return n + missing\n" +
+        "              ^^^^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "                      Perhaps you meant to type 'is_int'?",
     );
-    expect(preprocess("f = lambda x: x + y")).toBe("NameError: name 'y' is not defined");
+    expect(preprocess("f = lambda x: x + y")).toBe(
+      "NameNotFoundError at line 1\n                   \nf = lambda x: x + y\n" +
+        "                   ^ This name is not found in the current or enclosing environment(s).\n" +
+        "                     Perhaps you meant to type 'x'?",
+    );
   });
 
   test("a recursive call resolves (the function name is in scope)", () => {
@@ -313,25 +324,54 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   // (the pair / linked-list library) before they are taught. A §2 name used in a §1 program resolves
   // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
   test("§1 rejects §2 list-library functions as unknown names", () => {
-    expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
-    expect(preprocess("llist(1, 2, 3)", 1)).toBe("NameError: name 'llist' is not defined");
-    expect(preprocess("map(lambda x: x, None)", 1)).toBe("NameError: name 'map' is not defined");
-    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+    expect(preprocess("pair(1, 2)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \npair(1, 2)\n" +
+        " ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "      Perhaps you meant to type 'abs'?",
+    );
+    expect(preprocess("llist(1, 2, 3)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nllist(1, 2, 3)\n" +
+        " ^^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "       Perhaps you meant to type 'int'?",
+    );
+    expect(preprocess("map(lambda x: x, None)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nmap(lambda x: x, None)\n" +
+        " ^^^ This name is not found in the current or enclosing environment(s).",
+    );
+    expect(preprocess("is_pair(5)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nis_pair(5)\n" +
+        " ^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
   });
 
   test("a §2 name in §1 is reported exactly like an undefined variable", () => {
-    expect(preprocess("head(None)", 1)).toBe("NameError: name 'head' is not defined");
-    expect(preprocess("undefined_name", 1)).toBe("NameError: name 'undefined_name' is not defined");
+    expect(preprocess("head(None)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nhead(None)\n" +
+        " ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "      Perhaps you meant to type 'real'?",
+    );
+    expect(preprocess("undefined_name", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nundefined_name\n" +
+        " ^^^^^^^^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
   });
 
   test("a §2 name is rejected wherever it appears in a §1 program", () => {
     expect(preprocess("xs = pair(1, 2)\nhead(xs)", 1)).toBe(
-      "NameError: name 'pair' is not defined",
+      "NameNotFoundError at line 1\n                   \nxs = pair(1, 2)\n" +
+        "      ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "           Perhaps you meant to type 'abs'?",
     );
     expect(preprocess("def f(x):\n  return head(x)\nf(None)", 1)).toBe(
-      "NameError: name 'head' is not defined",
+      "NameNotFoundError at line 2\n                   \n  return head(x)\n" +
+        "          ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "               Perhaps you meant to type 'real'?",
     );
-    expect(preprocess("g = lambda xs: tail(xs)", 1)).toBe("NameError: name 'tail' is not defined");
+    expect(preprocess("g = lambda xs: tail(xs)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \ng = lambda xs: tail(xs)\n" +
+        "                ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "                     Perhaps you meant to type 'abs'?",
+    );
   });
 
   test("§1 core (math, MISC predicates, conversions, user bindings) stays available in §1", () => {
@@ -351,7 +391,10 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
 
   test("is_none (§1) and is_pair (§2) are split by chapter", () => {
     expect(preprocess("is_none(5)", 1)).toBeNull(); // available in every chapter
-    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+    expect(preprocess("is_pair(5)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nis_pair(5)\n" +
+        " ^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
     expect(preprocess("is_pair(5)", 2)).toBeNull();
   });
 });
