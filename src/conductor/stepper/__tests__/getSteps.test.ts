@@ -1014,7 +1014,7 @@ describe("Python stepper — list library edge built-ins", () => {
   });
 
   test("a library function called with the wrong argument count is stuck", () => {
-    expect(explanations("map_linked_list(lambda x: x)").pop()).toBe("Evaluation stuck");
+    expect(explanations("map(lambda x: x)").pop()).toBe("Evaluation stuck");
     expect(result("equal(None)")).toContain("takes 2 argument(s) but 1 were given");
   });
 });
