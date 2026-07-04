@@ -309,12 +309,8 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
   test("§1 rejects §2 list-library functions as unknown names", () => {
     expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
-    expect(preprocess("llist(1, 2, 3)", 1)).toBe(
-      "NameError: name 'llist' is not defined",
-    );
-    expect(preprocess("map(lambda x: x, None)", 1)).toBe(
-      "NameError: name 'map' is not defined",
-    );
+    expect(preprocess("llist(1, 2, 3)", 1)).toBe("NameError: name 'llist' is not defined");
+    expect(preprocess("map(lambda x: x, None)", 1)).toBe("NameError: name 'map' is not defined");
     expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
   });
 
@@ -673,20 +669,14 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("map, filter and reduce", () => {
-    expect(result("map(lambda x: x * x, llist(1, 2, 3))")).toBe(
-      "[1, [4, [9, None]]]",
-    );
-    expect(result("filter(lambda x: x > 1, llist(1, 2, 3))")).toBe(
-      "[2, [3, None]]",
-    );
+    expect(result("map(lambda x: x * x, llist(1, 2, 3))")).toBe("[1, [4, [9, None]]]");
+    expect(result("filter(lambda x: x > 1, llist(1, 2, 3))")).toBe("[2, [3, None]]");
     expect(result("reduce(lambda x, y: x + y, 0, llist(1, 2, 3))")).toBe("6");
   });
 
   test("reverse, append, enum and build", () => {
     expect(result("reverse(llist(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
-    expect(result("append(llist(1, 2), llist(3, 4))")).toBe(
-      "[1, [2, [3, [4, None]]]]",
-    );
+    expect(result("append(llist(1, 2), llist(3, 4))")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("enum_llist(1, 4)")).toBe("[1, [2, [3, [4, None]]]]");
     expect(result("build_llist(lambda i: i * 2, 3)")).toBe("[0, [2, [4, None]]]");
   });
@@ -719,9 +709,7 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
 
   test("a fully-evaluated list is a complete result", () => {
     expect(explanations("llist(1, 2, 3)").pop()).toBe("Evaluation complete");
-    expect(explanations("map(lambda x: x + 1, llist(1, 2))").pop()).toBe(
-      "Evaluation complete",
-    );
+    expect(explanations("map(lambda x: x + 1, llist(1, 2))").pop()).toBe("Evaluation complete");
   });
 
   test("misusing a list primitive is stuck, not a wrong answer", () => {
@@ -758,9 +746,7 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("structured-clone safe with pairs (survives the channel)", () => {
-    expect(() =>
-      structuredClone(steps("map(lambda x: x * 2, llist(1, 2, 3))")),
-    ).not.toThrow();
+    expect(() => structuredClone(steps("map(lambda x: x * 2, llist(1, 2, 3))"))).not.toThrow();
     for (const step of steps("reverse(llist(1, 2))")) {
       const marker = step.markers?.[0];
       if (marker?.redexId != null) expect(nodeIds(step.ast).has(marker.redexId)).toBe(true);

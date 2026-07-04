@@ -292,10 +292,7 @@ const library: Record<string, StepNode> = {
   },
 
   // llist_to_string(xs): box-and-pointer text, e.g. llist(1, 2) ⇒ "[1, [2, None]]".
-  llist_to_string: lam(
-    ["xs"],
-    call("_llist_to_string", [id("xs"), lam(["x"], id("x"))]),
-  ),
+  llist_to_string: lam(["xs"], call("_llist_to_string", [id("xs"), lam(["x"], id("x"))])),
   _llist_to_string: lam(
     ["xs", "cont"],
     cond(
@@ -344,10 +341,7 @@ const library: Record<string, StepNode> = {
   ),
 
   // append(xs, ys)
-  append: lam(
-    ["xs", "ys"],
-    call("_append", [id("xs"), id("ys"), lam(["x"], id("x"))]),
-  ),
+  append: lam(["xs", "ys"], call("_append", [id("xs"), id("ys"), lam(["x"], id("x"))])),
   _append: lam(
     ["xs", "ys", "cont"],
     cond(
@@ -385,20 +379,13 @@ const library: Record<string, StepNode> = {
       cond(
         bin("==", id("v"), headOf(id("xs"))),
         call("append", [call("reverse", [id("acc")]), tailOf(id("xs"))]),
-        call("_remove", [
-          id("v"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
+        call("_remove", [id("v"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
       ),
     ),
   ),
 
   // remove_all(v, xs): remove every element equal to v.
-  remove_all: lam(
-    ["v", "xs"],
-    call("_remove_all", [id("v"), id("xs"), none()]),
-  ),
+  remove_all: lam(["v", "xs"], call("_remove_all", [id("v"), id("xs"), none()])),
   _remove_all: lam(
     ["v", "xs", "acc"],
     cond(
@@ -407,20 +394,13 @@ const library: Record<string, StepNode> = {
       cond(
         bin("==", id("v"), headOf(id("xs"))),
         call("_remove_all", [id("v"), tailOf(id("xs")), id("acc")]),
-        call("_remove_all", [
-          id("v"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
+        call("_remove_all", [id("v"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
       ),
     ),
   ),
 
   // enum_llist(start, end): the list start, start+1, …, end.
-  enum_llist: lam(
-    ["start", "end"],
-    call("_enum_llist", [id("start"), id("end"), none()]),
-  ),
+  enum_llist: lam(["start", "end"], call("_enum_llist", [id("start"), id("end"), none()])),
   _enum_llist: lam(
     ["start", "end", "acc"],
     cond(
@@ -465,10 +445,7 @@ const library: Record<string, StepNode> = {
   ),
 
   // filter(pred, xs): keep elements for which pred returns True.
-  filter: lam(
-    ["pred", "xs"],
-    call("_filter", [id("pred"), id("xs"), none()]),
-  ),
+  filter: lam(["pred", "xs"], call("_filter", [id("pred"), id("xs"), none()])),
   _filter: lam(
     ["pred", "xs", "acc"],
     cond(
@@ -476,11 +453,7 @@ const library: Record<string, StepNode> = {
       call("reverse", [id("acc")]),
       cond(
         call(id("pred"), [headOf(id("xs"))]),
-        call("_filter", [
-          id("pred"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
+        call("_filter", [id("pred"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
         call("_filter", [id("pred"), tailOf(id("xs")), id("acc")]),
       ),
     ),

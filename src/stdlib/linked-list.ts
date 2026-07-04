@@ -78,18 +78,8 @@ class LinkedListBuiltins {
       if (!isPair(value)) {
         return toPythonString(value, true);
       }
-      const string1 = LinkedListBuiltins._print_llist(
-        value.value[0],
-        source,
-        command,
-        context,
-      );
-      const string2 = LinkedListBuiltins._print_llist(
-        value.value[1],
-        source,
-        command,
-        context,
-      );
+      const string1 = LinkedListBuiltins._print_llist(value.value[0], source, command, context);
+      const string2 = LinkedListBuiltins._print_llist(value.value[1], source, command, context);
       return "[" + string1 + ", " + string2 + "]";
     }
 

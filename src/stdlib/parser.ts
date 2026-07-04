@@ -246,9 +246,7 @@ function transform(
     case "List":
       return vector_to_llist([
         { type: "string", value: "array_expression" },
-        vector_to_llist(
-          (node as ExprNS.List).elements.map(el => transform(el, declaredNames)),
-        ),
+        vector_to_llist((node as ExprNS.List).elements.map(el => transform(el, declaredNames))),
       ]);
     case "Subscript":
       return vector_to_llist([
