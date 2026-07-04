@@ -76,8 +76,8 @@ describe("Stream Tests", () => {
       ],
       ["equal(stream_to_llist(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
       ["equal(stream_to_llist(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
-      ["equal(stream_to_linked_list(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
-      ["equal(stream_to_linked_list(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
+      ["equal(stream_to_llist(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
+      ["equal(stream_to_llist(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
     ],
     "member, remove and filter": [
       ["equal(stream_to_llist(stream_member(3, stream(1, 2, 3, 4))), llist(3, 4))", true, null],
