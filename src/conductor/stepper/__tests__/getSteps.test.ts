@@ -3,6 +3,7 @@ import { isBuiltinConstantName } from "../builtins";
 import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
 import { preprocessPython } from "../preprocess";
+import { pythonSyntaxProfile } from "../syntaxProfile";
 
 // `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
 // chapter-gating tests pass an explicit chapter (1 to forbid §2 names, 2 to allow them).
@@ -1314,5 +1315,105 @@ describe("Python stepper — complex numbers", () => {
 
   test("complex arithmetic composes with user code", () => {
     expect(result("f = lambda z: z * z\nf(1+1j)")).toBe("2j");
+  });
+});
+
+describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", () => {
+  // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op for
+  // evaluation (like `pass`) that the host's breakpoint navigation (the double-arrow) can jump to. The
+  // host recognises a breakpoint step by a marker whose `redexNodeType` is "DebuggerStatement" (see the
+  // web-stepper host's `stepNextBreakpoint`); the redex node's `type` is what the serializer exposes there.
+
+  test("preprocessing accepts breakpoint() in every chapter (it is a built-in name)", () => {
+    expect(preprocess("breakpoint()")).toBeNull();
+    expect(preprocess("breakpoint()", 1)).toBeNull();
+    expect(preprocess("breakpoint()\nx = 1\nx + 1")).toBeNull();
+  });
+
+  test("evaluates as a no-op, exactly like pass (never affects the result)", () => {
+    expect(result("breakpoint()\n1 + 1")).toBe("2");
+    expect(result("x = 5\nbreakpoint()\nx + 1")).toBe("6");
+    // Inside a function body too (a breakpoint before the return); the return value is unchanged.
+    expect(result("def f(x):\n  breakpoint()\n  return x + 1\nf(4)")).toBe("5");
+  });
+
+  test("produces a before/after pair reading 'Evaluating'/'Evaluated breakpoint statement'", () => {
+    expect(explanations("breakpoint()\n1 + 1")).toEqual([
+      "Start of evaluation",
+      "Evaluating breakpoint statement",
+      "Evaluated breakpoint statement",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Evaluation complete",
+    ]);
+  });
+
+  test("only the 'Evaluating' step is a breakpoint target — never the 'Evaluated' one (#188)", () => {
+    // The double-arrow must land on "Evaluating breakpoint statement", not the following "Evaluated
+    // breakpoint statement". The host picks a target by `redexNodeType === "DebuggerStatement"`, so the
+    // *before* step must carry it and the *after* step must not — for every breakpoint, including when
+    // there are several. (`stepNextBreakpoint` scans forward for the next such marker, so a flagged
+    // after step would make it stop on the wrong, post-reduction step.)
+    const s = steps("breakpoint()\nx = 1\nbreakpoint()\nx");
+    const flagged = s
+      .filter(step => step.markers?.[0]?.redexNodeType === "DebuggerStatement")
+      .map(step => step.markers?.[0]?.explanation);
+    expect(flagged).toEqual(["Evaluating breakpoint statement", "Evaluating breakpoint statement"]);
+
+    const before = s.find(
+      step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
+    );
+    expect(before?.markers?.[0]?.redexType).toBe("beforeMarker");
+    // The redex id resolves to a DebuggerStatement node in that step's tree (it is highlighted).
+    expect(nodeIds(before!.ast).has(before!.markers![0].redexId!)).toBe(true);
+
+    const after = s.find(
+      step => step.markers?.[0]?.explanation === "Evaluated breakpoint statement",
+    );
+    expect(after?.markers?.[0]?.redexType).toBe("afterMarker");
+    expect(after?.markers?.[0]?.redexNodeType).toBeUndefined();
+  });
+
+  test("green flash before discard: the statement is shown highlighted green on the after step, like pass", () => {
+    // Like `pass`, the after step ("Evaluated breakpoint statement") keeps the statement present and
+    // highlights it green (an afterMarker whose redexId resolves to the DebuggerStatement still in the
+    // tree); only the *next* contraction's before step shows it actually gone.
+    const s = steps("breakpoint()\n1 + 1");
+    const beforeIdx = s.findIndex(
+      step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
+    );
+    const before = s[beforeIdx];
+    const after = s[beforeIdx + 1];
+    expect(after.markers?.[0]?.explanation).toBe("Evaluated breakpoint statement");
+
+    // Before (red) and after (green) both still contain the breakpoint, highlighted via a resolvable redexId.
+    expect((before.ast as any).body[0].type).toBe("DebuggerStatement");
+    expect(before.markers?.[0]?.redexType).toBe("beforeMarker");
+    expect(nodeIds(before.ast).has(before.markers![0].redexId!)).toBe(true);
+
+    expect((after.ast as any).body[0].type).toBe("DebuggerStatement"); // still present (green flash)
+    expect(after.markers?.[0]?.redexType).toBe("afterMarker");
+    expect(nodeIds(after.ast).has(after.markers![0].redexId!)).toBe(true);
+
+    // The next step (the following before step) is where it is finally gone; `1 + 1` is now the head.
+    expect((s[beforeIdx + 2].ast as any).body[0].type).toBe("ExpressionStatement");
+  });
+
+  test("renders as the breakpoint() call the student typed", () => {
+    // Translated to a DebuggerStatement (see translate.ts) and preserved across serialization.
+    const bp = findNode(steps("breakpoint()\n1")[0].ast, n => n.type === "DebuggerStatement");
+    expect(bp).toBeDefined();
+    // The Python profile renders it as `breakpoint()`; without a template the host would show the
+    // placeholder `<DebuggerStatement>`.
+    expect(pythonSyntaxProfile.templates.DebuggerStatement).toEqual(["breakpoint()"]);
+  });
+
+  test("used as an expression it degrades to a no-op returning None (not the debugger form)", () => {
+    // Only the statement form is the debugger; in expression position `breakpoint()` is an ordinary
+    // built-in call that yields None, so the program still resolves rather than getting stuck.
+    expect(result("x = breakpoint()\nx")).toBe("None");
+    expect(explanations("x = breakpoint()\nx").pop()).toBe("Evaluation complete");
   });
 });

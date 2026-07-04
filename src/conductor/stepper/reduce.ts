@@ -812,6 +812,25 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         explanation: "Evaluated pass statement",
         beforeExplanation: "Evaluating pass statement",
       };
+    case "DebuggerStatement":
+      // Python's `breakpoint()` — the stepper's analogue of JavaScript's `debugger;` (js-slang's
+      // `StepperDebuggerStatement`). For evaluation it is a no-op, dropped exactly like `pass` above —
+      // including the same "green flash before discard": `postRedex`/`postNewBody` keep the statement
+      // present and highlighted green on the after step before it disappears on the next contraction.
+      // Its one special role is marking a breakpoint the host's double-arrow navigation jumps to: the
+      // redex node's `type` ("DebuggerStatement") is what `serializeStep` exposes as the marker's
+      // `redexNodeType`, which the host matches on. That is emitted for the *before* marker only (see
+      // `serializeMarker`), so the double-arrow lands on "Evaluating breakpoint statement" and never on
+      // the following "Evaluated breakpoint statement" — even though the statement is highlighted on both.
+      return {
+        kind: "step",
+        newBody: rest,
+        preRedex: head,
+        postRedex: head,
+        postNewBody: [head, ...rest],
+        explanation: "Evaluated breakpoint statement",
+        beforeExplanation: "Evaluating breakpoint statement",
+      };
     case "IfStatement": {
       const reduced = reduceExpr(head.test as StepNode);
       if (reduced) {

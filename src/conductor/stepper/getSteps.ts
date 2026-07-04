@@ -172,7 +172,13 @@ function serializeStep(step: Step): SerializedStepperStep {
     if (marker.redex) {
       const redexId = ids.get(marker.redex);
       if (redexId !== undefined) out.redexId = redexId;
-      out.redexNodeType = marker.redex.type;
+      // `redexNodeType` drives the host's breakpoint navigation (the double-arrow jumps to a marker
+      // whose type is "DebuggerStatement"), so it names the redex *about to be* contracted and belongs
+      // on the before marker only. An after marker still carries `redexId`/`redexType` (so its redex is
+      // highlighted — e.g. a `breakpoint()`/`pass` shown green one last time before it is discarded),
+      // but emitting `redexNodeType` there too would make the double-arrow also stop on that
+      // post-reduction step (landing on "Evaluated breakpoint statement", not just "Evaluating …").
+      if (marker.redexType === "beforeMarker") out.redexNodeType = marker.redex.type;
     }
     if (marker.redexType !== undefined) out.redexType = marker.redexType;
     if (marker.explanation !== undefined) out.explanation = marker.explanation;

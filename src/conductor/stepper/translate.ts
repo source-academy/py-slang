@@ -132,11 +132,24 @@ function block(statements: StmtNS.Stmt[]): StepNode {
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
-    case "SimpleExpr":
-      return {
-        type: "ExpressionStatement",
-        expression: translateExpr((stmt as StmtNS.SimpleExpr).expression),
-      };
+    case "SimpleExpr": {
+      const expr = (stmt as StmtNS.SimpleExpr).expression;
+      // Python's `breakpoint()` plays the role of JavaScript's `debugger;`: for evaluation it is a
+      // no-op (like `pass`), but it marks a step the host's breakpoint navigation can jump to. Its
+      // statement form — a no-arg call to the built-in name `breakpoint` — becomes a dedicated
+      // `DebuggerStatement`, the shared language-agnostic node type the host already recognises for
+      // breakpoints (see `reduce.ts` and the host's `stepNextBreakpoint`), so no per-language host code
+      // is needed. Used as an expression (e.g. `x = breakpoint()`) it stays an ordinary built-in call.
+      if (
+        expr.kind === "Call" &&
+        (expr as ExprNS.Call).callee.kind === "Variable" &&
+        ((expr as ExprNS.Call).callee as ExprNS.Variable).name.lexeme === "breakpoint" &&
+        (expr as ExprNS.Call).args.length === 0
+      ) {
+        return { type: "DebuggerStatement" };
+      }
+      return { type: "ExpressionStatement", expression: translateExpr(expr) };
+    }
     case "Assign": {
       const s = stmt as StmtNS.Assign;
       if (s.target.kind === "Variable") {
