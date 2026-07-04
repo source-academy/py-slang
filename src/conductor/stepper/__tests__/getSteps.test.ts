@@ -185,7 +185,7 @@ describe("Python stepper — built-in functions and constants", () => {
   });
 
   test('math function call explanation is "<name> runs"', () => {
-    expect(explanations("math_sqrt(9)")).toContain("math_sqrt runs");
+    expect(explanations("math_sqrt(9)")).toContain("Running math_sqrt");
   });
 
   test("numeric MISC builtins", () => {
@@ -425,12 +425,17 @@ describe("Python stepper — step structure", () => {
 
   test("the final line's value disappears before completion (a program yields no value)", () => {
     // Unlike Source/js-slang, a Python program has no value: the last line's value is discarded just
-    // like every other line's, so the run ends on an *empty* program rather than lingering on it.
+    // like every other line's, so the run ends on an *empty* program rather than lingering on it. It is
+    // shown highlighted green (still present) one last time — the discard step's *after* step — before
+    // that happens; see "green flash before discard" below for the fully worked-out step sequence.
     const e = explanations("1 + 1");
     expect(e[e.length - 1]).toBe("Evaluation complete");
-    expect(e[e.length - 2]).toBe("2 finished evaluating"); // the discard step, as for any statement
+    expect(e[e.length - 2]).toBe("Evaluated 2"); // the discard step's after (green) step, as for any statement
+    expect(e[e.length - 3]).toBe("Evaluating 2"); // ...and its before (red) step
 
     const s = steps("1 + 1");
+    const lastVisible = s[s.length - 2].ast as any; // the green "2" step, one before the terminal step
+    expect(lastVisible.body).toHaveLength(1); // "2" is still there, not yet discarded
     const terminal = s[s.length - 1].ast as any;
     expect(terminal.type).toBe("Program");
     expect(terminal.body).toHaveLength(0); // nothing rendered at completion
@@ -441,6 +446,34 @@ describe("Python stepper — step structure", () => {
 
     // The REPL still echoes the final value, even though the stepper no longer lingers on it.
     expect(result("1 + 1")).toBe("2");
+  });
+
+  test("green flash before discard: a finished value is shown green once before it disappears", () => {
+    // The user-facing spec this implements: every contraction's before-step reads "… evaluating"
+    // (about to happen) and its after-step reads "… evaluated" (just happened, dropping the old
+    // "finished evaluating" wording) — and a contraction that discards a whole finished statement
+    // (an evaluated expression, a name binding, `pass`, an inlined `if` branch) shows it highlighted
+    // green, still present in the tree, on its after-step; only the *next* contraction's before-step
+    // shows it actually gone. Worked out fully for "1 + 1\n1 + 2\n" (ten steps total).
+    const e = explanations("1 + 1\n1 + 2");
+    expect(e).toEqual([
+      "Start of evaluation",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Evaluating binary expression 1 + 2",
+      "Evaluated binary expression 1 + 2",
+      "Evaluating 3",
+      "Evaluated 3",
+      "Evaluation complete",
+    ]);
+
+    const s = steps("1 + 1\n1 + 2");
+    const bodyLengths = s.map(step => (step.ast as any).body.length);
+    // Step 5 (index 4, the "Evaluated 2" green step) still has both statements — "2" has not yet been
+    // discarded — and step 9 (index 8, "Evaluated 3") still has its one statement, for the same reason.
+    expect(bodyLengths).toEqual([2, 2, 2, 2, 2, 1, 1, 1, 1, 0]);
   });
 });
 
@@ -599,33 +632,33 @@ describe("Python stepper — function values render as mu-terms (not inline bodi
 
 describe("Python stepper — explanations mirror Source phrasing", () => {
   test("binary expression", () => {
-    expect(explanations("1 + 2")).toContain("Binary expression 1 + 2 evaluated");
+    expect(explanations("1 + 2")).toContain("Evaluated binary expression 1 + 2");
   });
 
   test("function declaration and application", () => {
     const e = explanations("def square(n):\n  return n * n\nsquare(4)");
-    expect(e).toContain("Function square declared, parameter(s) n required");
-    expect(e).toContain("4 substituted into n of square");
+    expect(e).toContain("Declaring and substituting square into the rest of the block");
+    expect(e).toContain("Substituted 4 into n of square");
   });
 
   test("name binding", () => {
     expect(explanations("x = 5\nx")).toContain(
-      "x declared and substituted into the rest of the program",
+      "Declared and substituted x into the rest of the block",
     );
   });
 
   test("if statement", () => {
     expect(explanations("if 1 < 2:\n  x = 1\nelse:\n  x = 2\nx")).toContain(
-      "If statement evaluated, condition true, proceed to if block",
+      "Evaluated if statement, condition true, will proceed to if block",
     );
   });
 
   test("short-circuit and conditional", () => {
     expect(explanations("True and False")).toContain(
-      "AND operation evaluated, left of operator is truthy, continue evaluating right of operator",
+      "Evaluated AND expression, left of operator is truthy, will evaluate right of operator",
     );
     expect(explanations("1 if 2 > 1 else 9")).toContain(
-      "Conditional expression evaluated, condition is true, consequent evaluated",
+      "Evaluated conditional expression, condition is true, will evaluate consequent",
     );
   });
 });
@@ -720,7 +753,7 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
 
   test("the list reduction shows pairs/lists, not the helper implementation noise", () => {
     // `pair` contracts in one labelled step, like Source's primitives.
-    expect(explanations("pair(1, 2)")).toContain("pair runs");
+    expect(explanations("pair(1, 2)")).toContain("Running pair");
     // A pair value serialises as an estree `ArrayExpression` for the host's `[...]` template. It shows
     // as the contraction result and is then discarded before the terminal (empty) "Evaluation
     // complete" step — a Python statement yields no program value — so search across the steps for it.
@@ -939,14 +972,10 @@ describe("Python stepper — str/repr and bool of compound values", () => {
 
 describe("Python stepper — constructs outside the reducible subset degrade gracefully", () => {
   // These parse but sit outside the substitution stepper's faithfully-modelled subset. `translate`
-  // either renders them as a value (a complex/list literal) or degrades them to an inert placeholder
-  // identifier that simply gets stuck, instead of failing the whole run. (The preprocessing gate would
-  // reject most of these in production; the stepper's `getPythonSteps` translates them regardless.)
-  test("a complex literal renders as its text and is a (complete) value", () => {
-    expect(result("1j")).toBe("1j");
-    expect(explanations("3j").pop()).toBe("Evaluation complete");
-  });
-
+  // either renders them as a value (a list literal) or degrades them to an inert placeholder identifier
+  // that simply gets stuck, instead of failing the whole run. (The preprocessing gate would reject most
+  // of these in production; the stepper's `getPythonSteps` translates them regardless.) Complex numbers
+  // are *not* in this category — they are a fully-modelled value type; see "complex numbers" below.
   test("a list literal reduces to an array value", () => {
     expect(result("[1, 2, 3]")).toBe("[1, 2, 3]");
     expect(result("[]")).toBe("[]");
@@ -1048,6 +1077,12 @@ describe("Python stepper — MISC conversions and their error paths", () => {
     expect(explanations('float("abc")').pop()).toBe("Evaluation stuck");
   });
 
+  test("float() rejects prototype-chain property names as malformed, not as special values", () => {
+    // Same regression as complex(str) above: these must not resolve via inherited Object.prototype keys.
+    expect(result('float("constructor")')).toContain("ValueError");
+    expect(result('float("__proto__")')).toContain("ValueError");
+  });
+
   test("factorial of a negative is a ValueError (stuck)", () => {
     expect(result("math_factorial(-1)")).toContain("ValueError");
     expect(explanations("math_factorial(-1)").pop()).toBe("Evaluation stuck");
@@ -1057,5 +1092,180 @@ describe("Python stepper — MISC conversions and their error paths", () => {
     expect(result("len(5)")).toContain("TypeError");
     expect(result("arity(5)")).toContain("TypeError");
     expect(explanations("len(5)").pop()).toBe("Evaluation stuck");
+  });
+});
+
+describe("Python stepper — complex numbers", () => {
+  // A `<real>±<imag>j` literal is one token (parsed straight into real/imag by py-slang's parser), but
+  // `2 + 3j` (with an operator) is an ordinary int-plus-complex expression — both must produce the same
+  // value, so both forms are exercised throughout.
+  test("a bare complex literal displays like Python's repr (no parens when the real part is zero)", () => {
+    expect(result("1j")).toBe("1j");
+    expect(result("3j")).toBe("3j");
+    expect(result("-3j")).toBe("-3j");
+    expect(result("0j")).toBe("0j");
+    expect(result("-4.5j")).toBe("-4.5j");
+    expect(explanations("3j").pop()).toBe("Evaluation complete");
+  });
+
+  test("a real+imaginary literal displays parenthesised, with an explicit sign", () => {
+    expect(result("2+3j")).toBe("(2+3j)");
+    expect(result("2-3j")).toBe("(2-3j)");
+  });
+
+  test("int/float promote to complex when combined with one via an operator", () => {
+    expect(result("2 + 3j")).toBe("(2+3j)"); // int + complex
+    expect(result("3j + 2")).toBe("(2+3j)"); // complex + int, same value
+    expect(result("1.5 + 2j")).toBe("(1.5+2j)"); // float + complex
+  });
+
+  test("complex arithmetic: +, -, *, /", () => {
+    expect(result("(1+2j) + (3+4j)")).toBe("(4+6j)");
+    expect(result("(1+2j) - (3+4j)")).toBe("(-2-2j)");
+    expect(result("(1+2j) * (3+4j)")).toBe("(-5+10j)");
+    expect(result("(1+2j) / (3+4j)")).toBe("(0.44+0.08j)");
+  });
+
+  test("complex power (via the polar-form algorithm, like the real evaluator)", () => {
+    // `(1+2j) ** 2` is not exactly `-3+4j` here because the general complex power path always goes
+    // through log/exp/trig, picking up float noise even for an integer exponent — this exactly mirrors
+    // `PyComplexNumber.pow` in the real, non-stepper evaluator (same formula, same imprecision).
+    const s = result("(1+2j) ** 2");
+    expect(s.startsWith("(-3+4.0")).toBe(true);
+    expect(s.endsWith("j)")).toBe(true);
+    expect(result("0j ** 2")).toBe("0j");
+  });
+
+  test("0 to a negative or non-real power is a ZeroDivisionError (stuck)", () => {
+    for (const src of ["0j ** -1", "0j ** (1+1j)"]) {
+      expect(result(src)).toContain("ZeroDivisionError");
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+  });
+
+  test("complex division by zero is a ZeroDivisionError (stuck), for a plain-int or complex zero", () => {
+    for (const src of ["1j / 0", "1j / 0j"]) {
+      expect(result(src)).toContain("ZeroDivisionError");
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+    }
+  });
+
+  test("== / != hold between any mix of int, float and complex", () => {
+    expect(result("(1+2j) == (1+2j)")).toBe("True");
+    expect(result("(1+2j) == (1+3j)")).toBe("False");
+    expect(result("(1+2j) != (1+3j)")).toBe("True");
+    expect(result("1 == 1+0j")).toBe("True");
+    expect(result("1.0 == 1+0j")).toBe("True");
+    expect(result("1+0j == 1")).toBe("True");
+  });
+
+  test("ordering (<, <=, >, >=), // and % are not defined for complex — a TypeError (stuck)", () => {
+    for (const src of ["(1+2j) < (3+4j)", "(1+2j) // 2", "(1+2j) % 2"]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("unary minus/plus on complex", () => {
+    expect(result("-(1+2j)")).toBe("(-1-2j)");
+    expect(result("+(1+2j)")).toBe("(1+2j)");
+  });
+
+  test("abs() returns the modulus as a non-negative float", () => {
+    expect(result("abs(3+4j)")).toBe("5.0");
+    expect(result("abs(0j)")).toBe("0.0");
+    expect(result("abs(1j)")).toBe("1.0");
+  });
+
+  test("str/repr of a complex value (repr matches str, unlike a string's quoting)", () => {
+    expect(result("str(1+2j)")).toBe("'(1+2j)'");
+    expect(result("repr(1+2j)")).toBe("'(1+2j)'");
+    expect(result("str(2j)")).toBe("'2j'");
+    expect(result("str(-2j)")).toBe("'-2j'");
+  });
+
+  test("complex() constructs from a number, bool, string, or (real, imag) pair", () => {
+    expect(result("complex()")).toBe("0j");
+    expect(result("complex(5)")).toBe("(5+0j)");
+    expect(result("complex(5.5)")).toBe("(5.5+0j)");
+    expect(result("complex(True)")).toBe("(1+0j)"); // the one place bool is still accepted
+    expect(result("complex(1+2j)")).toBe("(1+2j)");
+    expect(result("complex(1, 2)")).toBe("(1+2j)");
+    expect(result("complex(1.5, 2.5)")).toBe("(1.5+2.5j)");
+  });
+
+  test("complex(str) parses a Python complex-literal string", () => {
+    expect(result("complex('1+2j')")).toBe("(1+2j)");
+    expect(result("complex('-4.5j')")).toBe("-4.5j");
+    expect(result("complex('inf')")).toBe("(inf+0j)");
+  });
+
+  test("complex(str) rejects a malformed string with a ValueError (stuck)", () => {
+    expect(result("complex('not a number')")).toContain("ValueError");
+    expect(explanations("complex('not a number')").pop()).toBe("Evaluation stuck");
+  });
+
+  test("complex(str) rejects prototype-chain property names as malformed, not as special values", () => {
+    // Regression: a bare `in` against the plain-object `specials` lookup used to match inherited
+    // Object.prototype keys, so e.g. complex('constructorj') smuggled the Object constructor
+    // function through as the imaginary part instead of being rejected.
+    expect(result("complex('constructorj')")).toContain("ValueError");
+    expect(result("complex('__proto__j')")).toContain("ValueError");
+  });
+
+  test("real()/imag() extract the components; they require an actual complex argument", () => {
+    expect(result("real(1+2j)")).toBe("1.0");
+    expect(result("imag(1+2j)")).toBe("2.0");
+    expect(explanations("real(5)").pop()).toBe("Evaluation stuck"); // int is not "complex" here
+    expect(result("real(5)")).toContain("TypeError");
+  });
+
+  test("is_complex distinguishes complex values from everything else", () => {
+    expect(result("is_complex(1+2j)")).toBe("True");
+    expect(result("is_complex(5)")).toBe("False");
+    expect(result("is_complex(5.0)")).toBe("False");
+  });
+
+  test("bool()/truthiness: only exactly 0j is falsy", () => {
+    expect(result("bool(0j)")).toBe("False");
+    expect(result("bool(1j)")).toBe("True");
+  });
+
+  test("complex is a valid and/or *right* operand (its type is never checked there)", () => {
+    expect(result("True and (1+2j)")).toBe("(1+2j)");
+  });
+
+  test("complex is rejected as and/or's left operand, and by not — a TypeError (stuck)", () => {
+    expect(explanations("(1+2j) and True").pop()).toBe("Evaluation stuck");
+    expect(result("(1+2j) and True")).toContain("TypeError");
+    expect(explanations("not (1+2j)").pop()).toBe("Evaluation stuck");
+    expect(result("not (1+2j)")).toContain("TypeError");
+  });
+
+  test("int()/float()/min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
+    for (const src of [
+      "int(1+2j)",
+      "float(1+2j)",
+      "min(1+2j, 3)",
+      "round(1+2j)",
+      "math_sqrt(1+2j)",
+    ]) {
+      expect(explanations(src).pop()).toBe("Evaluation stuck");
+      expect(result(src)).toContain("TypeError");
+    }
+  });
+
+  test("mixing complex with an incompatible type (str) is a TypeError (stuck)", () => {
+    expect(explanations("'a' + (1+2j)").pop()).toBe("Evaluation stuck");
+    expect(result("'a' + (1+2j)")).toContain("TypeError");
+  });
+
+  test("a pair may hold a complex element, formatted like any other pair element", () => {
+    expect(result("pair(1+2j, 2)")).toBe("[(1+2j), 2]");
+    expect(result("str(pair(1+2j, 2))")).toBe("'[(1+2j), 2]'");
+  });
+
+  test("complex arithmetic composes with user code", () => {
+    expect(result("f = lambda z: z * z\nf(1+1j)")).toBe("2j");
   });
 });
