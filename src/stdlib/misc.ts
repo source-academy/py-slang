@@ -480,6 +480,22 @@ export class MiscBuiltins {
     return { type: "bool", value: obj.type === "complex" };
   }
 
+  @Validate(1, 1, "is_number", true)
+  static is_number(
+    args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): BoolValue {
+    // Mirrors Scheme's `number?`: true for any number in the numeric tower
+    // (integer, float or complex), but not for booleans.
+    const obj = args[0];
+    return {
+      type: "bool",
+      value: obj.type === "bigint" || obj.type === "number" || obj.type === "complex",
+    };
+  }
+
   @Validate(1, 1, "is_integer", true)
   static is_integer(
     args: Value[],

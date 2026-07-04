@@ -113,6 +113,15 @@ function is_integer(x) { }
 function is_none(x) { }
 
 /**
+ * Returns True if x is a number, and False otherwise. A number is an integer,
+ * a floating-point number or a complex number; a boolean is not a number.
+ *
+ * @param {any} <CODE>x</CODE> - given value
+ * @returns {bool} whether x is a number
+ */
+function is_number(x) { }
+
+/**
  * Returns True if x is a string, and False otherwise.
  *
  * @param {any} <CODE>x</CODE> - given value

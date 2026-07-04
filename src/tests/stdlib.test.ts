@@ -705,6 +705,16 @@ describe("Standard Library Tests", () => {
         ["is_integer(1+0j)", false, null],
         ['is_integer("abc")', false, null],
 
+        ["is_number(1)", true, null],
+        ["is_number(1.0)", true, null],
+        ["is_number(3.14)", true, null],
+        ["is_number(1+0j)", true, null],
+        ["is_number(True)", false, null],
+        ["is_number(None)", false, null],
+        ["is_number(lambda x: x)", false, null],
+        ["is_number(print)", false, null],
+        ['is_number("abc")', false, null],
+
         ["is_float(1)", false, null],
         ["is_float(1.0)", true, null],
         ["is_float(3.14)", true, null],
