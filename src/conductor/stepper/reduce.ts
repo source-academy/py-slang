@@ -212,11 +212,15 @@ function complexDiv(a: ComplexValue, b: ComplexValue): ComplexValue {
 function complexPow(a: ComplexValue, b: ComplexValue): ComplexValue {
   const r = Math.hypot(a.real, a.imag);
   if (r === 0) {
+    if (b.real === 0 && b.imag === 0) {
+      return { real: 1, imag: 0 };
+    }
     if (b.real < 0 || b.imag !== 0) {
       throw new Error("ZeroDivisionError: 0 cannot be raised to a negative or complex power");
     }
     return { real: 0, imag: 0 };
   }
+
   const theta = Math.atan2(a.imag, a.real);
   const logR = Math.log(r);
   const realExp = b.real * logR - b.imag * theta;
