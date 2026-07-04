@@ -34,7 +34,7 @@ More on literal values in <a href="https://sourceacademy.org/sicpjs/1.1">section
 
 ### Declaration assignments
 
-Variables are delared in Python §1 with declaration assignments
+Variables are declared in Python §1 with declaration assignments
 such as <PRE><CODE>my_name = x + 2</CODE></PRE>.
 In this statement, the variable `my_name` is bound to the result
 of evaluating `x + 2`. 
