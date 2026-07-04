@@ -390,6 +390,7 @@ function serializeEnvChain(
         })),
       isActive: env.id === activeEnv.id,
       isOnCallStack: callStackIds.has(env.id),
+      globalNames: env.closure?.globalVariables.size ? [...env.closure.globalVariables] : undefined,
     }));
 }
 

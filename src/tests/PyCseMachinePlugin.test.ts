@@ -428,6 +428,37 @@ describe("serializeEnvChain", () => {
     expect(frames[0].isOnCallStack).toBe(true);
   });
 
+  // `globalNames` predates its type declaration: it lands in @sourceacademy/common-cse-machine
+  // as a minor bump (see the companion source-academy/plugins PR) that isn't published yet, so
+  // CseSerializedEnvFrame here doesn't know about it. Cast at the read site until py-slang's
+  // dependency is bumped to the version that declares it; the write side (PyCseMachinePlugin.ts)
+  // already emits it as a plain extra property, which is safe regardless of the declared type.
+  const globalNamesOf = (frame: object) => (frame as { globalNames?: string[] }).globalNames;
+
+  it("carries globalNames from the closure's globalVariables", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set(["x", "y"]) };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(globalNamesOf(callFrame)).toEqual(["x", "y"]);
+  });
+
+  it("omits globalNames when the closure declares no globals", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set() };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(globalNamesOf(callFrame)).toBeUndefined();
+  });
+
+  it("omits globalNames for frames with no closure (e.g. the global frame)", () => {
+    const globalEnv = makeEnv("g", "global");
+    const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
+    expect(globalNamesOf(frames[0])).toBeUndefined();
+  });
+
   it("filters __program__ from bindings", () => {
     const globalEnv = makeEnv("g", "global", { __program__: none(), x: bigint(5n) });
     const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
