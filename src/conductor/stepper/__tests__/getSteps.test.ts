@@ -219,6 +219,11 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(result("is_function(abs)")).toBe("True");
     expect(result("is_function(math_sqrt)")).toBe("True");
     expect(result("is_complex(3)")).toBe("False");
+    expect(result("is_number(5)")).toBe("True");
+    expect(result("is_number(5.0)")).toBe("True");
+    expect(result("is_number(1+2j)")).toBe("True");
+    expect(result("is_number(True)")).toBe("False");
+    expect(result('is_number("a")')).toBe("False");
   });
 
   test("arity reports parameter counts", () => {
