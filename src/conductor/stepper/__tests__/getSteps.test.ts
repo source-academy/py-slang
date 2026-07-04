@@ -285,8 +285,7 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
   test("an undefined name inside a function body is caught", () => {
     expect(preprocess("def f(n):\n  return n + missing\nf(1)")).toBe(
       "NameNotFoundError at line 2\n                   \n  return n + missing\n" +
-        "              ^^^^^^^ This name is not found in the current or enclosing environment(s).\n" +
-        "                      Perhaps you meant to type 'is_int'?",
+        "              ^^^^^^^ This name is not found in the current or enclosing environment(s).",
     );
     expect(preprocess("f = lambda x: x + y")).toBe(
       "NameNotFoundError at line 1\n                   \nf = lambda x: x + y\n" +
@@ -336,7 +335,8 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
     );
     expect(preprocess("map(lambda x: x, None)", 1)).toBe(
       "NameNotFoundError at line 1\n                   \nmap(lambda x: x, None)\n" +
-        " ^^^ This name is not found in the current or enclosing environment(s).",
+        " ^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "     Perhaps you meant to type 'max'?",
     );
     expect(preprocess("is_pair(5)", 1)).toBe(
       "NameNotFoundError at line 1\n                   \nis_pair(5)\n" +
