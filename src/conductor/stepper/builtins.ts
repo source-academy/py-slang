@@ -100,7 +100,7 @@ function pyStr(node: StepNode, repr: boolean): string {
   }
   if (node.type === "ArrayExpression") {
     // A pair / linked list renders in box-and-pointer notation. Elements use repr (like
-    // `linked_list_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
+    // `llist_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
     return `[${(node.elements as StepNode[]).map(e => pyStr(e, true)).join(", ")}]`;
   }
   if (node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration") {
@@ -360,7 +360,7 @@ Object.assign(BUILTIN_FUNCTIONS, {
   },
 
   // Type predicates. `is_complex` is always False (the stepper has no complex value).
-  is_int: (args: StepNode[]): StepNode => predicate("is_int", args, isIntNode),
+  is_integer: (args: StepNode[]): StepNode => predicate("is_integer", args, isIntNode),
   is_float: (args: StepNode[]): StepNode => predicate("is_float", args, isFloatNode),
   is_boolean: (args: StepNode[]): StepNode => predicate("is_boolean", args, isBoolNode),
   is_string: (args: StepNode[]): StepNode => predicate("is_string", args, isStrNode),
@@ -370,7 +370,7 @@ Object.assign(BUILTIN_FUNCTIONS, {
 });
 
 // The Python §2 linked-list library (pairs and lists). Names follow Python (`pair`, `head`,
-// `linked_list`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
+// `llist`, `map`, …) while pairs/lists display like Source. See `./lists.ts`.
 Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
 
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */
@@ -437,7 +437,7 @@ const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
 /**
  * Whether built-in function `name` is available in SICPy `chapter`. The §1 core (the `math_*`
  * functions and the MISC library) is available in every chapter; the §2 linked-list library
- * (`pair`/`head`/`map_linked_list`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
+ * (`pair`/`head`/`map`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
  * name is treated as referencing an *unknown* name — the preprocessing pass reports it as a
  * `NameError`, exactly like an undefined variable, instead of letting the student reach a feature
  * before it is taught. (All built-in *constants* are `math_*`, i.e. §1, so they need no gating.)

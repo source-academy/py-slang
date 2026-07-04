@@ -480,8 +480,8 @@ export class MiscBuiltins {
     return { type: "bool", value: obj.type === "complex" };
   }
 
-  @Validate(1, 1, "is_int", true)
-  static is_int(
+  @Validate(1, 1, "is_integer", true)
+  static is_integer(
     args: Value[],
     _source: string,
     _command: ExprNS.Call,

@@ -175,7 +175,7 @@ function remove_all_linked_list(v, xs) {}
  * @param {int} <CODE>end</CODE> - ending element of the linked list
  * @returns {linked_list} linked list with elements from start to end (inclusive)
  */
-function enum_linked_list(start, end) {}
+function enum_llist(start, end) {}
 
 /**
  * Returns the element of linked list xs at position n (0-indexed).
@@ -184,7 +184,7 @@ function enum_linked_list(start, end) {}
  * @param {int} <CODE>n</CODE> - index of the element to return
  * @returns {value} element of xs at position n
  */
-function ref_linked_list(xs, n) {}
+function llist_ref(xs, n) {}
 
 /**
  * Applies binary function f to the elements of xs from right-to-left order.
