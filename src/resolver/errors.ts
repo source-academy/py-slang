@@ -71,20 +71,6 @@ export namespace ResolverErrors {
     }
   }
 
-  export class BreakContinueError extends BaseResolverError {
-    constructor(line: number, col: number, source: string, start: number, current: number) {
-      const { lineIndex, fullLine } = getFullLine(source, start);
-      let hint = ` A 'break' or 'continue' statement must be inside a loop body.`;
-      const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
-      hint = hint.padStart(hint.length + col - diff, " ");
-      const name = "BreakContinueError";
-
-      super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
-      this.name = name;
-    }
-  }
-
   export class ScopeConflictError extends BaseResolverError {
     constructor(
       line: number,
