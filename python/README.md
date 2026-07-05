@@ -62,6 +62,12 @@ The library mirrors the groups in `py-slang`'s standard library:
 `from sicp import *` brings the whole superset into scope, mirroring the
 environment students have in Source Academy's Python.
 
+For the full documentation of every function — signatures, descriptions, and
+worked examples — see the **[Python §4 standard library
+reference](https://docs.sourceacademy.org/python/python_4/)**. Its groups (MISC,
+MATH, LINKED LISTS, PAIR MUTATORS, LISTS, STREAM, MCE) correspond to the
+`sicp.<group>` submodules above.
+
 ## Compatibility
 
 - Requires Python 3.10+.
