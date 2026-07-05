@@ -1244,11 +1244,7 @@ describe("Python stepper — complex numbers", () => {
   });
 
   test("min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
-    for (const src of [
-      "min(1+2j, 3)",
-      "round(1+2j)",
-      "math_sqrt(1+2j)",
-    ]) {
+    for (const src of ["min(1+2j, 3)", "round(1+2j)", "math_sqrt(1+2j)"]) {
       expect(explanations(src).pop()).toBe("Evaluation stuck");
       expect(result(src)).toContain("TypeError");
     }
