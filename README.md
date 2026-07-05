@@ -59,6 +59,19 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 
 Refer to the [Conductor's Quick Start Guide](https://github.com/source-academy/conductor?tab=readme-ov-file#quick-start-guide)
 
+### Using your py-slang in your local Source Academy
+
+A common issue when developing modifications to py-slang is how to test it using your own local frontend. Unlike [js-slang](https://github.com/source-academy/js-slang), py-slang isn't a build-time npm dependency of the frontend — it's loaded at runtime as a Conductor evaluator bundle, resolved via a URL from the [Language Directory](https://github.com/source-academy/language-directory).
+
+First, build the evaluator you want to test and serve it locally, e.g.:
+
+```shell
+yarn build --evaluator PyCseEvaluator4
+npx http-server dist -p 4001 --cors
+```
+
+This serves the built bundle at `http://localhost:4001/PyCseEvaluator4.js`. Then run your own local copy of the [Language Directory](https://github.com/source-academy/language-directory) with the relevant Python evaluator's `path` pointed at that URL instead of the deployed one, and configure your local frontend to use it — see the Language Directory's [Local testing](https://github.com/source-academy/language-directory#local-testing) instructions for how to wire this up.
+
 ### Running the Wasm evaluator locally
 
 To run the Wasm compiler locally, run
