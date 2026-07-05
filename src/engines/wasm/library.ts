@@ -1,6 +1,5 @@
 import { i32, i64, wasm, WasmCall, WasmInstruction } from "@sourceacademy/wasm-util";
 import {
-  BOOLISE_FX,
   ERROR_MAP,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
@@ -17,7 +16,6 @@ import {
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
-  TYPE_TAG,
 } from "./constants";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
@@ -97,8 +95,6 @@ export const libraryFunctions: LibFuncType[] = [
   // list functions
   libFunc("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
   libFunc("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
-
-  libFunc("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
 
   libFunc("tokenize", 1).body(x => wasm.call(TOKENIZE_FX).args(x)),
   libFunc("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),

@@ -209,80 +209,6 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
 });
 
 describe("Boolean tests", () => {
-  // --- BASIC BOOL() SEMANTICS ---
-  it("bool(0) -> False", async () => {
-    const pythonCode = `bool(0)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(5) -> True", async () => {
-    const pythonCode = `bool(5)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(0.0) -> False", async () => {
-    const pythonCode = `bool(0.0)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(nonzero float) -> True", async () => {
-    const pythonCode = `bool(3.14)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(0+0j) -> False", async () => {
-    const pythonCode = `bool(0+0j)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(complex with nonzero part) -> True", async () => {
-    const pythonCode = `bool(1+0j)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool('') -> False", async () => {
-    const pythonCode = `bool("")`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(non-empty string) -> True", async () => {
-    const pythonCode = `bool("x")`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(pair) -> always True", async () => {
-    const pythonCode = `
-p = pair(1, 2)
-bool(p)
-  `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(None) -> False", async () => {
-    const pythonCode = `bool(None)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
   // --- NOT OPERATOR ---
   it("not True", async () => {
     const pythonCode = `not True`;
@@ -3098,11 +3024,6 @@ set_tail(x, [3, 4])
 
     it("is_list function should leave stack clean (not push result onto stack)", async () => {
       const pythonCode = `is_list([1, 2, 3])`;
-      await expectShadowStackToEqual(pythonCode, []);
-    });
-
-    it("bool function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `bool([1, 2, 3])`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
