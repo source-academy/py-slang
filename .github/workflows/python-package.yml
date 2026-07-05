@@ -24,6 +24,8 @@ jobs:
   test:
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -47,6 +49,7 @@ jobs:
     # `sourceacademy-sicp` project on PyPI pointing at this repo/workflow, or
     # swap the publish step for a token-based upload using a PYPI_API_TOKEN secret.
     permissions:
+      contents: read
       id-token: write
     environment: pypi
     steps:
