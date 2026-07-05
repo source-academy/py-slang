@@ -1316,3 +1316,62 @@ describe("Python stepper — complex numbers", () => {
     expect(result("f = lambda z: z * z\nf(1+1j)")).toBe("2j");
   });
 });
+
+describe("Python stepper — cumulative print output per step", () => {
+  // Each serialized step carries the program's cumulative textual output (everything `print` has
+  // written) up to that step, so the host can show a running output panel that grows with the slider.
+  // The field is a runner addition to the serialized step (see getSteps.ts); read it via a cast.
+  const outputs = (src: string): (string | undefined)[] =>
+    steps(src).map(s => (s as { output?: string }).output);
+
+  // Each step's explanation paired with that step's cumulative output.
+  const rows = (src: string): [string, string | undefined][] =>
+    steps(src).map(s => [s.markers?.[0]?.explanation ?? "", (s as { output?: string }).output]);
+
+  test("a print's text appears on its 'Ran print' step, not its 'Running print' step", () => {
+    const r = rows('print("hello")');
+    const running = r.find(([e]) => e === "Running print");
+    const ran = r.find(([e]) => e === "Ran print");
+    expect(running?.[1]).toBeUndefined(); // before the print runs, no output yet
+    expect(ran?.[1]).toBe("hello\n"); // the output appears exactly on the "Ran print" step
+  });
+
+  test("output is cumulative: each print appends to everything printed before it", () => {
+    // Two separate prints — the second's step output includes the first's, in order.
+    const ranOutputs = rows('print("a")\nprint(1, 2)')
+      .filter(([e]) => e === "Ran print")
+      .map(([, o]) => o);
+    expect(ranOutputs).toEqual(["a\n", "a\n1 2\n"]);
+  });
+
+  test("once printed, the output persists on every later step through 'Evaluation complete'", () => {
+    const o = outputs('print("x")\n1 + 1');
+    expect(o[o.length - 1]).toBe("x\n"); // still present on the terminal step
+    // Every step from the "Ran print" step onward carries it; none of them drops back to empty.
+    const firstWithOutput = o.findIndex(x => x === "x\n");
+    expect(firstWithOutput).toBeGreaterThan(-1);
+    expect(o.slice(firstWithOutput).every(x => x === "x\n")).toBe(true);
+  });
+
+  test("formatting mirrors CPython defaults: space-separated args, trailing newline, print() is blank", () => {
+    const ran = (src: string) =>
+      rows(src)
+        .filter(([e]) => e === "Ran print")
+        .map(([, o]) => o);
+    expect(ran('print("a", "b", "c")')).toEqual(["a b c\n"]); // sep=' '
+    expect(ran("print()")).toEqual(["\n"]); // just the end='\n'
+    expect(ran("print(3 * 4)")).toEqual(["12\n"]); // the argument is reduced to a value first
+    expect(ran("print(True)\nprint(None)")).toEqual(["True\n", "True\nNone\n"]); // Python reprs
+  });
+
+  test("a program that never prints carries no output field on any step", () => {
+    expect(outputs("1 + 1\nx = 2\nx * x").every(o => o === undefined)).toBe(true);
+  });
+
+  test("output accumulates across a print inside a function body and a later top-level print", () => {
+    const ran = rows('def f(x):\n  print(x)\n  return x + 1\nf(5)\nprint("done")')
+      .filter(([e]) => e === "Ran print")
+      .map(([, o]) => o);
+    expect(ran).toEqual(["5\n", "5\ndone\n"]);
+  });
+});

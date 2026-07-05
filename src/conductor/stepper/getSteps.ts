@@ -32,7 +32,18 @@ interface Marker {
 interface Step {
   ast: StepNode;
   markers?: Marker[];
+  /** The program's cumulative output (everything `print` has written) up to and including this step. */
+  output?: string;
 }
+
+/**
+ * {@link SerializedStepperStep} widened with the `output` field. `output` was added to the shared
+ * protocol type in `@sourceacademy/common-stepper` 0.0.2; until this package bumps its dependency to
+ * that, we widen locally so the runner can still emit it. The field crosses the runner→host channel as
+ * plain JSON regardless of the static type, and the host reads it from its own (already-updated)
+ * protocol type. TODO: drop this alias once the `@sourceacademy/common-stepper` dependency is ≥ 0.0.2.
+ */
+type SerializedStep = SerializedStepperStep & { output?: string };
 
 /**
  * Whether `prog` is a finished result rather than a tree stuck mid-reduction. A completed program is
@@ -52,7 +63,13 @@ function isComplete(prog: StepNode): boolean {
 }
 
 function drive(prog: StepNode, contractionLimit: number): Step[] {
-  const steps: Step[] = [{ ast: prog, markers: [{ explanation: "Start of evaluation" }] }];
+  // The program's cumulative output so far. A `print(...)` contraction reports its text via
+  // `result.output`; we append it *between* that contraction's before and after steps, so the text
+  // first appears on the "Ran print" (after) step and persists on every step after it. Every step
+  // carries the running total, so the host's output panel shows exactly what had been printed by that
+  // point as the slider moves (empty "" before the first print).
+  let output = "";
+  const steps: Step[] = [{ ast: prog, markers: [{ explanation: "Start of evaluation" }], output }];
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
@@ -64,8 +81,12 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
       const message = error instanceof Error ? error.message : String(error);
-      steps.push({ ast: current, markers: [{ redexType: "beforeMarker", explanation: message }] });
-      steps.push({ ast: current, markers: [{ explanation: "Evaluation stuck" }] });
+      steps.push({
+        ast: current,
+        markers: [{ redexType: "beforeMarker", explanation: message }],
+        output,
+      });
+      steps.push({ ast: current, markers: [{ explanation: "Evaluation stuck" }], output });
       return steps;
     }
     if (result === null) {
@@ -76,6 +97,7 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
         markers: [
           { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
         ],
+        output,
       });
       return steps;
     }
@@ -89,7 +111,11 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
           explanation: result.beforeExplanation,
         },
       ],
+      output,
     });
+    // Apply this contraction's output (only a `print` produces any) so the after step and everything
+    // after it show it, while the before ("Running print") step above still shows the prior total.
+    if (result.output !== undefined) output += result.output;
     steps.push({
       // `postNode` (set by a contraction that discards a finished value — see its doc comment on
       // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
@@ -100,11 +126,16 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
           ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
           : { redexType: "afterMarker", explanation: result.explanation },
       ],
+      output,
     });
 
     current = result.node;
     if (i === contractionLimit - 1) {
-      steps.push({ ast: current, markers: [{ explanation: "Maximum number of steps exceeded" }] });
+      steps.push({
+        ast: current,
+        markers: [{ explanation: "Maximum number of steps exceeded" }],
+        output,
+      });
     }
   }
 
@@ -127,7 +158,7 @@ function isNode(value: unknown): value is StepNode {
  * Cycle-safe via an on-path set (any node revisited while still an ancestor becomes a child-less
  * stub), guaranteeing a finite, structured-clone-able tree.
  */
-function serializeStep(step: Step): SerializedStepperStep {
+function serializeStep(step: Step): SerializedStep {
   let counter = 0;
   const ids = new Map<StepNode, string>();
   const onPath = new Set<StepNode>();
@@ -179,7 +210,13 @@ function serializeStep(step: Step): SerializedStepperStep {
     return out;
   };
 
-  return step.markers ? { ast, markers: step.markers.map(serializeMarker) } : { ast };
+  const out: SerializedStep = step.markers
+    ? { ast, markers: step.markers.map(serializeMarker) }
+    : { ast };
+  // Emit `output` only when non-empty; the host defaults an absent field to "" and always shows the
+  // (possibly empty) output panel once code has run, so pre-print steps need not carry an empty string.
+  if (step.output) out.output = step.output;
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */
