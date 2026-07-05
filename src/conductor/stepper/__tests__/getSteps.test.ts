@@ -674,6 +674,78 @@ describe("Python stepper — function values render as mu-terms (not inline bodi
   });
 });
 
+describe("Python stepper — a binding's substitution is visible on its own step, not the next", () => {
+  // A name binding (`VariableDeclaration`/`FunctionDeclaration`) substitutes its value into the rest
+  // of the block on the *same* contraction that declares it — matching how a call expression's
+  // argument substitution is already visible on its own "Substituted ..." step (`contractCall`), rather
+  // than only becoming visible one (unrelated) step later. The declaration itself still lingers one
+  // more step, highlighted green, before actually disappearing — the same "green flash before discard"
+  // `pass` gets — but that lingering must not delay the substitution's effect on the rest of the tree.
+
+  test("a variable's bound value already appears in the rest on its own 'Declared and substituted' step", () => {
+    const s = steps("x = 5\nx + 1");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation === "Declared and substituted x into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // The declaration is still present (green flash, like `pass`)...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
+    // ...but the rest's binary expression already has the literal substituted in, not a reference.
+    const bin = findNode(s[i].ast, n => n.type === "BinaryExpression");
+    expect(bin.left).toMatchObject({ type: "Literal", raw: "5" });
+
+    // Only the *next* step is where the declaration is actually gone.
+    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+  });
+
+  test("a def's mu-term already appears in the rest on its own 'Declared and substituted' step", () => {
+    const s = steps("def square(n):\n  return n * n\nsquare(4)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation ===
+        "Declared and substituted square into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // The declaration site is still present, in its full (un-named) form...
+    expect(
+      findNode(s[i].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
+    ).toBeDefined();
+    // ...but the call in the rest already shows `square` substituted as the named mu-term value.
+    const call = findNode(s[i].ast, n => n.type === "CallExpression");
+    expect(call.callee).toMatchObject({ type: "FunctionDeclaration", name: "square" });
+
+    // Only the *next* step is where the declaration site is actually gone (just the mu-term remains).
+    expect(
+      findNode(s[i + 1].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
+    ).toBeUndefined();
+  });
+
+  test("a local binding inside a function body substitutes into the rest on the same step", () => {
+    // def f(x):
+    //   y = x + 1
+    //   return y
+    // f(1)
+    const s = steps("def f(x):\n  y = x + 1\n  return y\nf(1)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation === "Declared and substituted y into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // `y`'s declaration (`y = 2`) still lingers...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
+    // ...but `return` already shows the substituted value, not a leftover `y` reference.
+    const ret = findNode(s[i].ast, n => n.type === "ReturnStatement");
+    expect(ret.argument).toMatchObject({ type: "Literal", raw: "2" });
+
+    // Only the *next* step is where the declaration is actually gone.
+    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+  });
+});
+
 describe("Python stepper — explanations mirror Source phrasing", () => {
   test("binary expression", () => {
     expect(explanations("1 + 2")).toContain("Evaluated binary expression 1 + 2");
