@@ -5,7 +5,7 @@
  * (already resolved by substitution at the statement level) or these language built-ins. This module
  * is the stepper's view of the Python §1/§2 standard library — see py-slang's
  * `docs/specs/python_standard.tex`, `python_misc.tex` and `math.ts` — namely the `math_*` constants
- * and functions plus the MISC library (`int`/`float`/`str`/`bool`/`complex`/`repr`, the `is_*`
+ * and functions plus the MISC library (`str`/`complex`/`repr`, the `is_*`
  * predicates, `real`/`imag`, `abs`/`round`/`min`/`max`/`len`/`arity`/`print`/`error`).
  *
  * Only built-ins that fit the stepper's value model (int = `bigint`, float = `number`, complex = a
@@ -87,8 +87,7 @@ function typeError(message: string): never {
 
 /** A Python `int`/`float` as a JS number. Unlike native Python, `bool` is not an int subtype in this
  * dialect: it is rejected here like every other non-numeric type, since this helper backs arithmetic
- * (`abs`, `round`, the `math_*` functions, `min`/`max`) — only explicit conversions such as `int()`
- * and `float()` special-case `bool` themselves. Throws otherwise. */
+ * (`abs`, `round`, the `math_*` functions, `min`/`max`). Throws otherwise. */
 function asNumber(node: StepNode, fn: string): number {
   if (node.type === "Literal") {
     const v = node.value;
@@ -104,6 +103,7 @@ const isBoolNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.va
 const isStrNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.value === "string";
 const isNoneNode = (n: StepNode): boolean => n.type === "Literal" && n.value === null;
 const isComplexNode = (n: StepNode): boolean => n.type === "Literal" && isComplexValue(n.value);
+const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) || isComplexNode(n);
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
@@ -123,7 +123,7 @@ function pyStr(node: StepNode, repr: boolean): string {
   }
   if (node.type === "ArrayExpression") {
     // A pair / linked list renders in box-and-pointer notation. Elements use repr (like
-    // `linked_list_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
+    // `llist_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
     return `[${(node.elements as StepNode[]).map(e => pyStr(e, true)).join(", ")}]`;
   }
   if (node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration") {
@@ -132,20 +132,6 @@ function pyStr(node: StepNode, repr: boolean): string {
   }
   if (node.type === "Identifier") return `<built-in function ${String(node.name)}>`;
   return unparse(node);
-}
-
-/** Python truthiness for the value subset the stepper handles (mirrors `reduce.ts`'s `isTruthy`). */
-function truthy(node: StepNode): boolean {
-  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
-  if (node.type !== "Literal") return true;
-  const v = node.value;
-  if (v === null || v === false) return false;
-  if (v === true) return true;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
-  return true;
 }
 
 function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
@@ -350,52 +336,6 @@ Object.assign(BUILTIN_FUNCTIONS, {
     }
     return typeError("bad operand type for abs()");
   },
-  int: (args: StepNode[]): StepNode => {
-    checkArity("int", args, 0, 2);
-    if (args.length === 0) return intLiteral(0n);
-    const x = args[0];
-    if (args.length === 2) {
-      if (!isStrNode(x)) typeError("int() can't convert non-string with explicit base");
-      const base = Number(asNumber(args[1], "int"));
-      const parsed = parseInt((x.value as string).trim(), base);
-      if (Number.isNaN(parsed)) fail(`ValueError: invalid literal for int() with base ${base}`);
-      return intLiteral(BigInt(parsed));
-    }
-    if (isIntNode(x)) return x;
-    if (isBoolNode(x)) return intLiteral((x.value as boolean) ? 1n : 0n);
-    if (isFloatNode(x)) return intLiteral(BigInt(Math.trunc(x.value as number)));
-    if (isStrNode(x)) {
-      const s = (x.value as string).trim().replace(/_/g, "");
-      if (!/^[+-]?\d+$/.test(s)) fail("ValueError: invalid literal for int() with base 10");
-      return intLiteral(BigInt(s));
-    }
-    return typeError("int() argument must be a string, a number or a bool");
-  },
-  float: (args: StepNode[]): StepNode => {
-    checkArity("float", args, 0, 1);
-    if (args.length === 0) return numberLiteral(0, true);
-    const x = args[0];
-    // Unlike `asNumber`, the explicit `float()` conversion accepts a `bool` (like `int()` does below).
-    if (isBoolNode(x)) return numberLiteral(x.value ? 1 : 0, true);
-    if (isStrNode(x)) {
-      const s = (x.value as string).trim().replace(/_/g, "").toLowerCase();
-      const specials: Record<string, number> = {
-        inf: Infinity,
-        "-inf": -Infinity,
-        infinity: Infinity,
-        "-infinity": -Infinity,
-        nan: NaN,
-      };
-      // Plain `in` also matches inherited Object.prototype keys (e.g. "constructor"); see the
-      // identical fix in `parseComplexString` above.
-      if (Object.prototype.hasOwnProperty.call(specials, s))
-        return numberLiteral(specials[s], true);
-      const n = Number(s);
-      if (Number.isNaN(n) && s !== "nan") fail("ValueError: could not convert string to float");
-      return numberLiteral(n, true);
-    }
-    return numberLiteral(asNumber(x, "float"), true);
-  },
   // complex(x): converts x (a number/bool/string/complex) to complex. complex(r, i): builds r + i*1j
   // — i itself may be complex too, matching the real evaluator. complex(): 0j.
   complex: (args: StepNode[]): StepNode => {
@@ -416,10 +356,6 @@ Object.assign(BUILTIN_FUNCTIONS, {
     const i = toComplex(args[1]);
     // r + i * 1j = r + (-i.imag, i.real)
     return complexLiteral({ real: r.real - i.imag, imag: r.imag + i.real });
-  },
-  bool: (args: StepNode[]): StepNode => {
-    checkArity("bool", args, 0, 1);
-    return boolLiteral(args.length === 0 ? false : truthy(args[0]));
   },
   str: (args: StepNode[]): StepNode => {
     checkArity("str", args, 0, 1);
@@ -483,27 +419,25 @@ Object.assign(BUILTIN_FUNCTIONS, {
   },
 
   // Type predicates.
-  is_int: (args: StepNode[]): StepNode => predicate("is_int", args, isIntNode),
+  is_integer: (args: StepNode[]): StepNode => predicate("is_integer", args, isIntNode),
   is_float: (args: StepNode[]): StepNode => predicate("is_float", args, isFloatNode),
   is_boolean: (args: StepNode[]): StepNode => predicate("is_boolean", args, isBoolNode),
   is_string: (args: StepNode[]): StepNode => predicate("is_string", args, isStrNode),
   is_none: (args: StepNode[]): StepNode => predicate("is_none", args, isNoneNode),
   is_function: (args: StepNode[]): StepNode => predicate("is_function", args, isFunctionNode),
   is_complex: (args: StepNode[]): StepNode => predicate("is_complex", args, isComplexNode),
+  is_number: (args: StepNode[]): StepNode => predicate("is_number", args, isNumberNode),
 });
 
 // The Python §2 linked-list library (pairs and lists). Names follow Python (`pair`, `head`,
-// `llist`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
+// `llist`, `map`, …) while pairs/lists display like Source. See `./lists.ts`.
 Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
 
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */
 const BUILTIN_MIN_ARGS: Record<string, number> = {
   min: 1,
   max: 1,
-  int: 0,
-  float: 0,
   complex: 0,
-  bool: 0,
   str: 0,
   print: 0,
   error: 0,
@@ -564,7 +498,7 @@ const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
 /**
  * Whether built-in function `name` is available in SICPy `chapter`. The §1 core (the `math_*`
  * functions and the MISC library) is available in every chapter; the §2 linked-list library
- * (`pair`/`head`/`map_linked_list`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
+ * (`pair`/`head`/`map`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
  * name is treated as referencing an *unknown* name — the preprocessing pass reports it as a
  * `NameError`, exactly like an undefined variable, instead of letting the student reach a feature
  * before it is taught. (All built-in *constants* are `math_*`, i.e. §1, so they need no gating.)
