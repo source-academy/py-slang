@@ -373,7 +373,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
     expect(preprocess("math_sqrt(2) + math_pi", 1)).toBeNull();
     expect(preprocess('abs(-5) + len("hi")', 1)).toBeNull();
     expect(preprocess("is_none(None)", 1)).toBeNull(); // is_none is a §1 MISC predicate
-    expect(preprocess('str(3) + round(2.5)', 1)).toBeNull();
+    expect(preprocess("complex(1) + round(2.5)", 1)).toBeNull(); // complex/str conversions stay in §1
     expect(preprocess("x = 5\nx + 1", 1)).toBeNull();
   });
 
