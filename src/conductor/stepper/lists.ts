@@ -5,14 +5,14 @@
  * `docs/specs/python_2.tex` and `docs/lib/linked_list.py`). This module is the stepper's view of that
  * library. As in Source's stepper (`js-slang/src/stepper/builtins/lists.ts`), a pair is a two-element
  * `ArrayExpression` rendered `[head, tail]` and the empty list is `None`; only the surface *names*
- * differ — Python's `pair`/`head`/`tail`/`llist`/`map_linked_list`/… in place of Source's
+ * differ — Python's `pair`/`head`/`tail`/`llist`/`map`/… in place of Source's
  * `pair`/`head`/`tail`/`list`/`map`/… — so a stepped Python program reads as Python while pairs and
  * lists display exactly like Source.
  *
  * The library splits into:
- *  - **primitives** (`pair`, `is_pair`, `head`, `tail`, `is_linked_list`, `llist`, `draw_data`),
+ *  - **primitives** (`pair`, `is_pair`, `head`, `tail`, `is_llist`, `llist`, `draw_data`),
  *    computed directly from already-reduced value arguments; and
- *  - **pre-declared** functions (`map_linked_list`, `filter_linked_list`, …), each modelled as a
+ *  - **pre-declared** functions (`map`, `filter`, …), each modelled as a
  *    `lambda`/`def` template that the stepper expands by substituting the value arguments for the
  *    parameters — so the recursion unfolds step by step in the visualiser, exactly as Source unfolds
  *    its `$map`/`$filter`/… helpers. A pre-declared function's body refers to other library functions
@@ -151,8 +151,8 @@ const primitives: Record<string, BuiltinFn> = {
     if (!isPairNode(args[0])) typeError("tail() argument must be a pair");
     return (args[0].elements as StepNode[])[1];
   },
-  is_linked_list: args => {
-    checkArity("is_linked_list", args, 1, 1);
+  is_llist: args => {
+    checkArity("is_llist", args, 1, 1);
     // A linked list is `None` or a pair whose tail is itself a linked list.
     const ok = (n: StepNode): boolean =>
       isEmptyList(n) || (isPairNode(n) && ok((n.elements as StepNode[])[1]));
@@ -198,12 +198,12 @@ const library: Record<string, StepNode> = {
         isNoneOf(id("ys")),
         cond(
           or(
-            call("is_int", [id("xs")]),
+            call("is_integer", [id("xs")]),
             or(call("is_float", [id("xs")]), call("is_complex", [id("xs")])),
           ),
           and(
             or(
-              call("is_int", [id("ys")]),
+              call("is_integer", [id("ys")]),
               or(call("is_float", [id("ys")]), call("is_complex", [id("ys")])),
             ),
             bin("==", id("xs"), id("ys")),
@@ -225,25 +225,25 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // length_linked_list(xs)
-  length_linked_list: lam(["xs"], call("_length_linked_list", [id("xs"), intLit(0)])),
-  _length_linked_list: lam(
+  // length(xs)
+  length: lam(["xs"], call("_length", [id("xs"), intLit(0)])),
+  _length: lam(
     ["xs", "acc"],
     cond(
       isNoneOf(id("xs")),
       id("acc"),
-      call("_length_linked_list", [tailOf(id("xs")), bin("+", id("acc"), intLit(1))]),
+      call("_length", [tailOf(id("xs")), bin("+", id("acc"), intLit(1))]),
     ),
   ),
 
-  // map_linked_list(f, xs)
-  map_linked_list: lam(["f", "xs"], call("_map_linked_list", [id("f"), id("xs"), none()])),
-  _map_linked_list: lam(
+  // map(f, xs)
+  map: lam(["f", "xs"], call("_map", [id("f"), id("xs"), none()])),
+  _map: lam(
     ["f", "xs", "acc"],
     cond(
       isNoneOf(id("xs")),
-      call("reverse_linked_list", [id("acc")]),
-      call("_map_linked_list", [
+      call("reverse", [id("acc")]),
+      call("_map", [
         id("f"),
         tailOf(id("xs")),
         pairOf(call(id("f"), [headOf(id("xs"))]), id("acc")),
@@ -251,17 +251,17 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // build_linked_list(fun, n)
-  build_linked_list: lam(
+  // build_llist(fun, n)
+  build_llist: lam(
     ["fun", "n"],
-    call("_build_linked_list", [bin("-", id("n"), intLit(1)), id("fun"), none()]),
+    call("_build_llist", [bin("-", id("n"), intLit(1)), id("fun"), none()]),
   ),
-  _build_linked_list: lam(
+  _build_llist: lam(
     ["i", "fun", "already_built"],
     cond(
       bin("<", id("i"), intLit(0)),
       id("already_built"),
-      call("_build_linked_list", [
+      call("_build_llist", [
         bin("-", id("i"), intLit(1)),
         id("fun"),
         pairOf(call(id("fun"), [id("i")]), id("already_built")),
@@ -269,12 +269,12 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // for_each_linked_list(fun, xs): apply fun to each element, return True. Modelled as a `def` with a
+  // for_each(fun, xs): apply fun to each element, return True. Modelled as a `def` with a
   // block body so the side-effecting `fun(head(xs))` is shown being evaluated for each element,
   // mirroring Source's block-bodied `for_each`.
-  for_each_linked_list: {
+  for_each: {
     type: "FunctionDeclaration",
-    id: id("for_each_linked_list"),
+    id: id("for_each"),
     params: [id("fun"), id("xs")],
     body: {
       type: "BlockStatement",
@@ -284,30 +284,27 @@ const library: Record<string, StepNode> = {
           [ret(boolLit(true))],
           [
             exprStmt(call(id("fun"), [headOf(id("xs"))])),
-            ret(call("for_each_linked_list", [id("fun"), tailOf(id("xs"))])),
+            ret(call("for_each", [id("fun"), tailOf(id("xs"))])),
           ],
         ),
       ],
     },
   },
 
-  // linked_list_to_string(xs): box-and-pointer text, e.g. llist(1, 2) ⇒ "[1, [2, None]]".
-  linked_list_to_string: lam(
-    ["xs"],
-    call("_linked_list_to_string", [id("xs"), lam(["x"], id("x"))]),
-  ),
-  _linked_list_to_string: lam(
+  // llist_to_string(xs): box-and-pointer text, e.g. llist(1, 2) ⇒ "[1, [2, None]]".
+  llist_to_string: lam(["xs"], call("_llist_to_string", [id("xs"), lam(["x"], id("x"))])),
+  _llist_to_string: lam(
     ["xs", "cont"],
     cond(
       isNoneOf(id("xs")),
       call(id("cont"), [stringLiteral("None")]),
       cond(
         isPairOf(id("xs")),
-        call("_linked_list_to_string", [
+        call("_llist_to_string", [
           headOf(id("xs")),
           lam(
             ["x_str"],
-            call("_linked_list_to_string", [
+            call("_llist_to_string", [
               tailOf(id("xs")),
               lam(
                 ["y_str"],
@@ -329,31 +326,28 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // reverse_linked_list(xs)
-  reverse_linked_list: lam(["xs"], call("_reverse_linked_list", [id("xs"), none()])),
-  _reverse_linked_list: lam(
+  // reverse(xs)
+  reverse: lam(["xs"], call("_reverse", [id("xs"), none()])),
+  _reverse: lam(
     ["original", "reversed_acc"],
     cond(
       isNoneOf(id("original")),
       id("reversed_acc"),
-      call("_reverse_linked_list", [
+      call("_reverse", [
         tailOf(id("original")),
         pairOf(headOf(id("original")), id("reversed_acc")),
       ]),
     ),
   ),
 
-  // append_linked_list(xs, ys)
-  append_linked_list: lam(
-    ["xs", "ys"],
-    call("_append_linked_list", [id("xs"), id("ys"), lam(["x"], id("x"))]),
-  ),
-  _append_linked_list: lam(
+  // append(xs, ys)
+  append: lam(["xs", "ys"], call("_append", [id("xs"), id("ys"), lam(["x"], id("x"))])),
+  _append: lam(
     ["xs", "ys", "cont"],
     cond(
       isNoneOf(id("xs")),
       call(id("cont"), [id("ys")]),
-      call("_append_linked_list", [
+      call("_append", [
         tailOf(id("xs")),
         id("ys"),
         lam(["zs"], call(id("cont"), [pairOf(headOf(id("xs")), id("zs"))])),
@@ -361,8 +355,8 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // member_linked_list(v, xs): first sub-list whose head equals v, else None.
-  member_linked_list: lam(
+  // member(v, xs): first sub-list whose head equals v, else None.
+  member: lam(
     ["v", "xs"],
     cond(
       isNoneOf(id("xs")),
@@ -370,63 +364,49 @@ const library: Record<string, StepNode> = {
       cond(
         bin("==", id("v"), headOf(id("xs"))),
         id("xs"),
-        call("member_linked_list", [id("v"), tailOf(id("xs"))]),
+        call("member", [id("v"), tailOf(id("xs"))]),
       ),
     ),
   ),
 
-  // remove_linked_list(v, xs): remove the first element equal to v.
-  remove_linked_list: lam(["v", "xs"], call("_remove_linked_list", [id("v"), id("xs"), none()])),
-  _remove_linked_list: lam(
+  // remove(v, xs): remove the first element equal to v.
+  remove: lam(["v", "xs"], call("_remove", [id("v"), id("xs"), none()])),
+  _remove: lam(
     ["v", "xs", "acc"],
     cond(
       isNoneOf(id("xs")),
-      call("append_linked_list", [call("reverse_linked_list", [id("acc")]), id("xs")]),
+      call("append", [call("reverse", [id("acc")]), id("xs")]),
       cond(
         bin("==", id("v"), headOf(id("xs"))),
-        call("append_linked_list", [call("reverse_linked_list", [id("acc")]), tailOf(id("xs"))]),
-        call("_remove_linked_list", [
-          id("v"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
+        call("append", [call("reverse", [id("acc")]), tailOf(id("xs"))]),
+        call("_remove", [id("v"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
       ),
     ),
   ),
 
-  // remove_all_linked_list(v, xs): remove every element equal to v.
-  remove_all_linked_list: lam(
-    ["v", "xs"],
-    call("_remove_all_linked_list", [id("v"), id("xs"), none()]),
-  ),
-  _remove_all_linked_list: lam(
+  // remove_all(v, xs): remove every element equal to v.
+  remove_all: lam(["v", "xs"], call("_remove_all", [id("v"), id("xs"), none()])),
+  _remove_all: lam(
     ["v", "xs", "acc"],
     cond(
       isNoneOf(id("xs")),
-      call("append_linked_list", [call("reverse_linked_list", [id("acc")]), id("xs")]),
+      call("append", [call("reverse", [id("acc")]), id("xs")]),
       cond(
         bin("==", id("v"), headOf(id("xs"))),
-        call("_remove_all_linked_list", [id("v"), tailOf(id("xs")), id("acc")]),
-        call("_remove_all_linked_list", [
-          id("v"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
+        call("_remove_all", [id("v"), tailOf(id("xs")), id("acc")]),
+        call("_remove_all", [id("v"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
       ),
     ),
   ),
 
-  // enum_linked_list(start, end): the list start, start+1, …, end.
-  enum_linked_list: lam(
-    ["start", "end"],
-    call("_enum_linked_list", [id("start"), id("end"), none()]),
-  ),
-  _enum_linked_list: lam(
+  // enum_llist(start, end): the list start, start+1, …, end.
+  enum_llist: lam(["start", "end"], call("_enum_llist", [id("start"), id("end"), none()])),
+  _enum_llist: lam(
     ["start", "end", "acc"],
     cond(
       bin(">", id("start"), id("end")),
-      call("reverse_linked_list", [id("acc")]),
-      call("_enum_linked_list", [
+      call("reverse", [id("acc")]),
+      call("_enum_llist", [
         bin("+", id("start"), intLit(1)),
         id("end"),
         pairOf(id("start"), id("acc")),
@@ -434,28 +414,28 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // ref_linked_list(xs, n): the element at index n (0-based). Out of bounds ⇒ head(None) ⇒ stuck,
+  // llist_ref(xs, n): the element at index n (0-based). Out of bounds ⇒ head(None) ⇒ stuck,
   // exactly like Source's `list_ref`.
-  ref_linked_list: lam(
+  llist_ref: lam(
     ["xs", "n"],
     cond(
       bin("==", id("n"), intLit(0)),
       headOf(id("xs")),
-      call("ref_linked_list", [tailOf(id("xs")), bin("-", id("n"), intLit(1))]),
+      call("llist_ref", [tailOf(id("xs")), bin("-", id("n"), intLit(1))]),
     ),
   ),
 
-  // accumulate_linked_list(f, initial, xs): fold f over the list from the right.
-  accumulate_linked_list: lam(
+  // reduce(f, initial, xs): fold f over the list from the right.
+  reduce: lam(
     ["f", "initial", "xs"],
-    call("_accumulate_linked_list", [id("f"), id("initial"), id("xs"), lam(["x"], id("x"))]),
+    call("_reduce", [id("f"), id("initial"), id("xs"), lam(["x"], id("x"))]),
   ),
-  _accumulate_linked_list: lam(
+  _reduce: lam(
     ["f", "initial", "xs", "cont"],
     cond(
       isNoneOf(id("xs")),
       call(id("cont"), [id("initial")]),
-      call("_accumulate_linked_list", [
+      call("_reduce", [
         id("f"),
         id("initial"),
         tailOf(id("xs")),
@@ -464,24 +444,17 @@ const library: Record<string, StepNode> = {
     ),
   ),
 
-  // filter_linked_list(pred, xs): keep elements for which pred returns True.
-  filter_linked_list: lam(
-    ["pred", "xs"],
-    call("_filter_linked_list", [id("pred"), id("xs"), none()]),
-  ),
-  _filter_linked_list: lam(
+  // filter(pred, xs): keep elements for which pred returns True.
+  filter: lam(["pred", "xs"], call("_filter", [id("pred"), id("xs"), none()])),
+  _filter: lam(
     ["pred", "xs", "acc"],
     cond(
       isNoneOf(id("xs")),
-      call("reverse_linked_list", [id("acc")]),
+      call("reverse", [id("acc")]),
       cond(
         call(id("pred"), [headOf(id("xs"))]),
-        call("_filter_linked_list", [
-          id("pred"),
-          tailOf(id("xs")),
-          pairOf(headOf(id("xs")), id("acc")),
-        ]),
-        call("_filter_linked_list", [id("pred"), tailOf(id("xs")), id("acc")]),
+        call("_filter", [id("pred"), tailOf(id("xs")), pairOf(headOf(id("xs")), id("acc"))]),
+        call("_filter", [id("pred"), tailOf(id("xs")), id("acc")]),
       ),
     ),
   ),
@@ -489,7 +462,7 @@ const library: Record<string, StepNode> = {
 
 /**
  * Expands a pre-declared library call: substitutes the value `args` for the function template's
- * parameters and returns its body (an expression, or — for `for_each_linked_list` — a block that the
+ * parameters and returns its body (an expression, or — for `for_each` — a block that the
  * reducer evaluates as a block expression). The body's other library-function references resolve as
  * built-ins on subsequent steps, so recursion unfolds one step at a time.
  */
@@ -521,22 +494,22 @@ export const listArities: Record<string, number> = {
   is_pair: 1,
   head: 1,
   tail: 1,
-  is_linked_list: 1,
+  is_llist: 1,
   llist: 0,
   draw_data: 1,
   equal: 2,
-  length_linked_list: 1,
-  map_linked_list: 2,
-  build_linked_list: 2,
-  for_each_linked_list: 2,
-  linked_list_to_string: 1,
-  reverse_linked_list: 1,
-  append_linked_list: 2,
-  member_linked_list: 2,
-  remove_linked_list: 2,
-  remove_all_linked_list: 2,
-  enum_linked_list: 2,
-  ref_linked_list: 2,
-  accumulate_linked_list: 3,
-  filter_linked_list: 2,
+  length: 1,
+  map: 2,
+  build_llist: 2,
+  for_each: 2,
+  llist_to_string: 1,
+  reverse: 1,
+  append: 2,
+  member: 2,
+  remove: 2,
+  remove_all: 2,
+  enum_llist: 2,
+  llist_ref: 2,
+  reduce: 3,
+  filter: 2,
 };

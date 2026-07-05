@@ -22,20 +22,16 @@ of arguments and generate an error message when the types do not match.
 
 \begin{center}
   \begin{tabular}{c|c|c|c}
-    operator & argument 1 & argument 2 & result\\ \hline
-    \texttt{\textbf{+,-,*}} & int       & int       & int\\
-    \texttt{\textbf{+,-,*}} & int       & float     & float\\
-    \texttt{\textbf{+,-,*}} & int       & complex   & complex\\
-    \texttt{\textbf{+,-,*}} & float     & int, float      & float\\
-    \texttt{\textbf{+,-,*}} & float     & complex   & complex\\
-    \texttt{\textbf{+,-,*}} & complex   & int, float, complex      & complex\\
+    operator                     & argument  1 & argument 2 & result\\ \hline
+    \texttt{\textbf{+,-,*,\%}}   & int         & int       & int\\
+    \texttt{\textbf{/}}          & int         & int       & float\\
+    \texttt{\textbf{+,-,*,/,\%}} & int         & float     & float\\
+    \texttt{\textbf{+,-,*,/,\%}} & float       & int, float      & float\\
+    \texttt{\textbf{+,-,*,/}}    & int         & complex   & complex\\
+    \texttt{\textbf{+,-,*,/}}    & float       & complex   & complex\\
+    \texttt{\textbf{+,-,*,/}}    & complex     & int, float, complex      & complex\\
     \texttt{\href{https://sourceacademy.org/sicpjs/3.3.4\#p24}{\textbf{+}}}
     & string   & string     & string\\
-    \texttt{\textbf{/}} & int       & int, float      & float\\
-    \texttt{\textbf{/}} & int       & complex   & complex\\
-    \texttt{\textbf{/}} & float     & int, float      & float\\
-    \texttt{\textbf{/}} & float     & complex   & complex\\
-    \texttt{\textbf{/}} & complex   & int, float, complex       & complex\\
     \texttt{\textbf{**}} & int   & int \verb|>=| 0   & int\\
     \texttt{\textbf{**}} & int   & int \verb|<| 0    & float\\
     \texttt{\textbf{**}} & int       & float     & float\\
@@ -43,21 +39,10 @@ of arguments and generate an error message when the types do not match.
     \texttt{\textbf{**}} & float     & int, float      & float\\
     \texttt{\textbf{**}} & float     & complex   & complex\\
     \texttt{\textbf{**}} & complex   & int, float, complex     & complex\\
-    \texttt{\textbf{\%}} & int   & int   & int\\
-    \texttt{\textbf{\%}} & int   & float   & float\\
-    \texttt{\textbf{\%}} & float   & float   & float\\
-    \texttt{\textbf{==}} & int,float,complex   & int,float,complex     & bool\\
-    \texttt{\textbf{==}} & string   & string     & bool\\
-    \texttt{\textbf{!=}} & int,float,complex   & int,float,complex     & bool\\
-    \texttt{\textbf{!=}} & string   & string     & bool\\
-    \texttt{\textbf{>}} & int,float   & int,float     & bool\\
-    \texttt{\textbf{>}} & string   & string     & bool\\
-    \texttt{\textbf{<}} & int,float   & int,float     & bool\\
-    \texttt{\textbf{<}} & string   & string     & bool\\
-    \texttt{\textbf{>=}} & int,float   & int,float     & bool\\
-    \texttt{\textbf{>=}} & string   & string     & bool\\
-    \texttt{\textbf{<=}} & int,float   & int,float     & bool\\
-    \texttt{\textbf{<=}} & string   & string     & bool\\
+    \texttt{\textbf{==,!=}} & int,float,complex   & int,float,complex     & bool\\
+    \texttt{\textbf{==,!=}} & string   & string     & bool\\
+    \texttt{\textbf{>,>=,<,<=}} & int,float   & int,float     & bool\\
+    \texttt{\textbf{>,>=,<,<=}} & string   & string     & bool\\
     \texttt{\textbf{and}} & bool & any & any\\
     \texttt{\textbf{or}}  & bool & any & any\\
     \texttt{\textbf{not}} & bool &     & bool\\
@@ -69,5 +54,5 @@ of arguments and generate an error message when the types do not match.
 \end{center}
 
 Following \texttt{\textbf{if}} and \texttt{\textbf{elif}},
-Python only allows boolean expressions. Lambda expressions can only
+Python \S $x$ only allows boolean expressions. Lambda expressions can only
 be used as arguments to operators when they are parenthesized.

@@ -95,7 +95,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
 // One concrete evaluator per SICPy chapter, mirroring `PyCseEvaluator1..4`: the host loads
 // `PyStepperEvaluator<chapter>` for the selected sublanguage (see `scripts/build.ts` / the conductor
 // `index`). The chapter is what gates the built-ins preprocessing accepts, so the §1 stepper forbids
-// the §2 list library (`pair`/`head`/`map_linked_list`/…) while the §2 stepper allows it.
+// the §2 list library (`pair`/`head`/`map`/…) while the §2 stepper allows it.
 export class PyStepperEvaluator1 extends PyStepperEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
     super(conductor, 1);

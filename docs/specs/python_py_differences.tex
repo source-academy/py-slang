@@ -30,7 +30,8 @@ specification, for the sake of internal consistency and esthetics.
   This is because Python's REPL implicitly displays the return value of each 
   expression, unless it is None.
 
-  In contrast, py-slang adopts a more controlled and minimalistic REPL behavior:
+  In contrast, py-slang implements the behavior of non-interactive
+  Python.
   Only expressions explicitly passed to \texttt{print()} produce output. If the 
   expression is evaluated without a print call, no output will appear, even 
   though a value is computed.
@@ -41,7 +42,9 @@ specification, for the sake of internal consistency and esthetics.
 print(1 + 2)  	# Outputs: 3
   \end{lstlisting}
 
-  This design aligns with the pedagogical goals of Source Academy, reinforcing 
-  the idea that output should be intentional and explicit, helping students 
-  better understand the role of side effects and output operations.
+  But
+
+  \begin{lstlisting}
+1 + 2    	# Outputs nothing
+  \end{lstlisting}
 \end{description}

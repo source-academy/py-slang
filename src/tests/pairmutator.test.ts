@@ -174,7 +174,7 @@ head(s)`,
     ],
     "complex mutation scenarios": [
       [
-        `def build_linked_list_mut(n):
+        `def build_llist_mut(n):
     if n == 0:
         return None
     else:
@@ -182,9 +182,9 @@ head(s)`,
         if n == 1:
             return p
         else:
-            set_tail(p, build_linked_list_mut(n - 1))
+            set_tail(p, build_llist_mut(n - 1))
             return p
-build_linked_list_mut(5)`,
+build_llist_mut(5)`,
         [5n, [4n, [3n, [2n, [1n, null]]]]],
         null,
       ],
