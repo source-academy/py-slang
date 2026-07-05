@@ -200,17 +200,12 @@ describe("Python stepper — built-in functions and constants", () => {
   });
 
   test("type conversions", () => {
-    expect(result("int(3.9)")).toBe("3");
-    expect(result('int("42")')).toBe("42");
-    expect(result("float(5)")).toBe("5.0");
     expect(result("str(42)")).toBe("'42'");
-    expect(result("bool(0)")).toBe("False");
-    expect(result("bool(3)")).toBe("True");
     expect(result('repr("hi")')).toBe("\"'hi'\"");
   });
 
   test("type predicates", () => {
-    expect(result("is_int(5)")).toBe("True");
+    expect(result("is_integer(5)")).toBe("True");
     expect(result("is_float(5)")).toBe("False");
     expect(result("is_float(5.0)")).toBe("True");
     expect(result('is_string("a")')).toBe("True");
@@ -219,6 +214,11 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(result("is_function(abs)")).toBe("True");
     expect(result("is_function(math_sqrt)")).toBe("True");
     expect(result("is_complex(3)")).toBe("False");
+    expect(result("is_number(5)")).toBe("True");
+    expect(result("is_number(5.0)")).toBe("True");
+    expect(result("is_number(1+2j)")).toBe("True");
+    expect(result("is_number(True)")).toBe("False");
+    expect(result('is_number("a")')).toBe("False");
   });
 
   test("arity reports parameter counts", () => {
@@ -255,7 +255,12 @@ describe("Python stepper — built-in functions and constants", () => {
 
 describe("Python stepper — undefined variables are a preprocessing error", () => {
   test("an undefined name is reported (and would block the stepper)", () => {
-    expect(preprocess("undefined_name")).toBe("NameError: name 'undefined_name' is not defined");
+    // Same message the default (CSE) evaluator reports for the same program: the analyzer's own
+    // formatted `NameNotFoundError`, not a stepper-specific simplification.
+    expect(preprocess("undefined_name")).toBe(
+      "NameNotFoundError at line 1\n                   \nundefined_name\n" +
+        " ^^^^^^^^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
     expect(preprocess("undefined_name + 1")).toContain("undefined_name");
   });
 
@@ -274,9 +279,14 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
 
   test("an undefined name inside a function body is caught", () => {
     expect(preprocess("def f(n):\n  return n + missing\nf(1)")).toBe(
-      "NameError: name 'missing' is not defined",
+      "NameNotFoundError at line 2\n                   \n  return n + missing\n" +
+        "              ^^^^^^^ This name is not found in the current or enclosing environment(s).",
     );
-    expect(preprocess("f = lambda x: x + y")).toBe("NameError: name 'y' is not defined");
+    expect(preprocess("f = lambda x: x + y")).toBe(
+      "NameNotFoundError at line 1\n                   \nf = lambda x: x + y\n" +
+        "                   ^ This name is not found in the current or enclosing environment(s).\n" +
+        "                     Perhaps you meant to type 'x'?",
+    );
   });
 
   test("a recursive call resolves (the function name is in scope)", () => {
@@ -308,47 +318,78 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
   // (the pair / linked-list library) before they are taught. A §2 name used in a §1 program resolves
   // to nothing, so it is reported as an unknown name — the same NameError as an undefined variable.
   test("§1 rejects §2 list-library functions as unknown names", () => {
-    expect(preprocess("pair(1, 2)", 1)).toBe("NameError: name 'pair' is not defined");
-    expect(preprocess("llist(1, 2, 3)", 1)).toBe("NameError: name 'llist' is not defined");
-    expect(preprocess("map_linked_list(lambda x: x, None)", 1)).toBe(
-      "NameError: name 'map_linked_list' is not defined",
+    expect(preprocess("pair(1, 2)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \npair(1, 2)\n" +
+        " ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "      Perhaps you meant to type 'abs'?",
     );
-    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+    expect(preprocess("llist(1, 2, 3)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nllist(1, 2, 3)\n" +
+        " ^^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "       Perhaps you meant to type 'print'?",
+    );
+    expect(preprocess("map(lambda x: x, None)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nmap(lambda x: x, None)\n" +
+        " ^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "     Perhaps you meant to type 'max'?",
+    );
+    expect(preprocess("is_pair(5)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nis_pair(5)\n" +
+        " ^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
   });
 
   test("a §2 name in §1 is reported exactly like an undefined variable", () => {
-    expect(preprocess("head(None)", 1)).toBe("NameError: name 'head' is not defined");
-    expect(preprocess("undefined_name", 1)).toBe("NameError: name 'undefined_name' is not defined");
+    expect(preprocess("head(None)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nhead(None)\n" +
+        " ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "      Perhaps you meant to type 'real'?",
+    );
+    expect(preprocess("undefined_name", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nundefined_name\n" +
+        " ^^^^^^^^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
   });
 
   test("a §2 name is rejected wherever it appears in a §1 program", () => {
     expect(preprocess("xs = pair(1, 2)\nhead(xs)", 1)).toBe(
-      "NameError: name 'pair' is not defined",
+      "NameNotFoundError at line 1\n                   \nxs = pair(1, 2)\n" +
+        "      ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "           Perhaps you meant to type 'abs'?",
     );
     expect(preprocess("def f(x):\n  return head(x)\nf(None)", 1)).toBe(
-      "NameError: name 'head' is not defined",
+      "NameNotFoundError at line 2\n                   \n  return head(x)\n" +
+        "          ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "               Perhaps you meant to type 'real'?",
     );
-    expect(preprocess("g = lambda xs: tail(xs)", 1)).toBe("NameError: name 'tail' is not defined");
+    expect(preprocess("g = lambda xs: tail(xs)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \ng = lambda xs: tail(xs)\n" +
+        "                ^^^^ This name is not found in the current or enclosing environment(s).\n" +
+        "                     Perhaps you meant to type 'abs'?",
+    );
   });
 
   test("§1 core (math, MISC predicates, conversions, user bindings) stays available in §1", () => {
     expect(preprocess("math_sqrt(2) + math_pi", 1)).toBeNull();
     expect(preprocess('abs(-5) + len("hi")', 1)).toBeNull();
     expect(preprocess("is_none(None)", 1)).toBeNull(); // is_none is a §1 MISC predicate
-    expect(preprocess('int("3") + round(2.5)', 1)).toBeNull();
+    expect(preprocess("complex(1) + round(2.5)", 1)).toBeNull(); // complex/str conversions stay in §1
     expect(preprocess("x = 5\nx + 1", 1)).toBeNull();
   });
 
   test("the same §2 names resolve once Python §2 is selected", () => {
     expect(preprocess("pair(1, 2)", 2)).toBeNull();
     expect(preprocess("head(pair(1, 2))", 2)).toBeNull();
-    expect(preprocess("map_linked_list(lambda x: x, llist(1, 2))", 2)).toBeNull();
+    expect(preprocess("map(lambda x: x, llist(1, 2))", 2)).toBeNull();
     expect(preprocess("is_pair(pair(1, 2))", 2)).toBeNull();
   });
 
   test("is_none (§1) and is_pair (§2) are split by chapter", () => {
     expect(preprocess("is_none(5)", 1)).toBeNull(); // available in every chapter
-    expect(preprocess("is_pair(5)", 1)).toBe("NameError: name 'is_pair' is not defined");
+    expect(preprocess("is_pair(5)", 1)).toBe(
+      "NameNotFoundError at line 1\n                   \nis_pair(5)\n" +
+        " ^^^^^^^ This name is not found in the current or enclosing environment(s).",
+    );
     expect(preprocess("is_pair(5)", 2)).toBeNull();
   });
 });
@@ -632,6 +673,78 @@ describe("Python stepper — function values render as mu-terms (not inline bodi
   });
 });
 
+describe("Python stepper — a binding's substitution is visible on its own step, not the next", () => {
+  // A name binding (`VariableDeclaration`/`FunctionDeclaration`) substitutes its value into the rest
+  // of the block on the *same* contraction that declares it — matching how a call expression's
+  // argument substitution is already visible on its own "Substituted ..." step (`contractCall`), rather
+  // than only becoming visible one (unrelated) step later. The declaration itself still lingers one
+  // more step, highlighted green, before actually disappearing — the same "green flash before discard"
+  // `pass` gets — but that lingering must not delay the substitution's effect on the rest of the tree.
+
+  test("a variable's bound value already appears in the rest on its own 'Declared and substituted' step", () => {
+    const s = steps("x = 5\nx + 1");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation === "Declared and substituted x into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // The declaration is still present (green flash, like `pass`)...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
+    // ...but the rest's binary expression already has the literal substituted in, not a reference.
+    const bin = findNode(s[i].ast, n => n.type === "BinaryExpression");
+    expect(bin.left).toMatchObject({ type: "Literal", raw: "5" });
+
+    // Only the *next* step is where the declaration is actually gone.
+    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+  });
+
+  test("a def's mu-term already appears in the rest on its own 'Declared and substituted' step", () => {
+    const s = steps("def square(n):\n  return n * n\nsquare(4)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation ===
+        "Declared and substituted square into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // The declaration site is still present, in its full (un-named) form...
+    expect(
+      findNode(s[i].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
+    ).toBeDefined();
+    // ...but the call in the rest already shows `square` substituted as the named mu-term value.
+    const call = findNode(s[i].ast, n => n.type === "CallExpression");
+    expect(call.callee).toMatchObject({ type: "FunctionDeclaration", name: "square" });
+
+    // Only the *next* step is where the declaration site is actually gone (just the mu-term remains).
+    expect(
+      findNode(s[i + 1].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
+    ).toBeUndefined();
+  });
+
+  test("a local binding inside a function body substitutes into the rest on the same step", () => {
+    // def f(x):
+    //   y = x + 1
+    //   return y
+    // f(1)
+    const s = steps("def f(x):\n  y = x + 1\n  return y\nf(1)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation === "Declared and substituted y into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+
+    // `y`'s declaration (`y = 2`) still lingers...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
+    // ...but `return` already shows the substituted value, not a leftover `y` reference.
+    const ret = findNode(s[i].ast, n => n.type === "ReturnStatement");
+    expect(ret.argument).toMatchObject({ type: "Literal", raw: "2" });
+
+    // Only the *next* step is where the declaration is actually gone.
+    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+  });
+});
+
 describe("Python stepper — explanations mirror Source phrasing", () => {
   test("binary expression", () => {
     expect(explanations("1 + 2")).toContain("Evaluated binary expression 1 + 2");
@@ -688,37 +801,37 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     expect(result("llist(42)")).toBe("[42, None]");
   });
 
-  test("is_linked_list distinguishes proper lists from improper pairs", () => {
-    expect(result("is_linked_list(llist(1, 2, 3))")).toBe("True");
-    expect(result("is_linked_list(None)")).toBe("True");
-    expect(result("is_linked_list(pair(1, 2))")).toBe("False");
-    expect(result("is_linked_list(5)")).toBe("False");
+  test("is_llist distinguishes proper lists from improper pairs", () => {
+    expect(result("is_llist(llist(1, 2, 3))")).toBe("True");
+    expect(result("is_llist(None)")).toBe("True");
+    expect(result("is_llist(pair(1, 2))")).toBe("False");
+    expect(result("is_llist(5)")).toBe("False");
   });
 
   test("length, ref and member", () => {
-    expect(result("length_linked_list(llist(1, 2, 3, 4))")).toBe("4");
-    expect(result("length_linked_list(None)")).toBe("0");
-    expect(result("ref_linked_list(llist(10, 20, 30), 1)")).toBe("20");
-    expect(result("member_linked_list(2, llist(1, 2, 3))")).toBe("[2, [3, None]]");
-    expect(result("member_linked_list(9, llist(1, 2))")).toBe("None");
+    expect(result("length(llist(1, 2, 3, 4))")).toBe("4");
+    expect(result("length(None)")).toBe("0");
+    expect(result("llist_ref(llist(10, 20, 30), 1)")).toBe("20");
+    expect(result("member(2, llist(1, 2, 3))")).toBe("[2, [3, None]]");
+    expect(result("member(9, llist(1, 2))")).toBe("None");
   });
 
-  test("map, filter and accumulate", () => {
-    expect(result("map_linked_list(lambda x: x * x, llist(1, 2, 3))")).toBe("[1, [4, [9, None]]]");
-    expect(result("filter_linked_list(lambda x: x > 1, llist(1, 2, 3))")).toBe("[2, [3, None]]");
-    expect(result("accumulate_linked_list(lambda x, y: x + y, 0, llist(1, 2, 3))")).toBe("6");
+  test("map, filter and reduce", () => {
+    expect(result("map(lambda x: x * x, llist(1, 2, 3))")).toBe("[1, [4, [9, None]]]");
+    expect(result("filter(lambda x: x > 1, llist(1, 2, 3))")).toBe("[2, [3, None]]");
+    expect(result("reduce(lambda x, y: x + y, 0, llist(1, 2, 3))")).toBe("6");
   });
 
   test("reverse, append, enum and build", () => {
-    expect(result("reverse_linked_list(llist(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
-    expect(result("append_linked_list(llist(1, 2), llist(3, 4))")).toBe("[1, [2, [3, [4, None]]]]");
-    expect(result("enum_linked_list(1, 4)")).toBe("[1, [2, [3, [4, None]]]]");
-    expect(result("build_linked_list(lambda i: i * 2, 3)")).toBe("[0, [2, [4, None]]]");
+    expect(result("reverse(llist(1, 2, 3))")).toBe("[3, [2, [1, None]]]");
+    expect(result("append(llist(1, 2), llist(3, 4))")).toBe("[1, [2, [3, [4, None]]]]");
+    expect(result("enum_llist(1, 4)")).toBe("[1, [2, [3, [4, None]]]]");
+    expect(result("build_llist(lambda i: i * 2, 3)")).toBe("[0, [2, [4, None]]]");
   });
 
   test("remove and remove_all", () => {
-    expect(result("remove_linked_list(2, llist(1, 2, 3, 2))")).toBe("[1, [3, [2, None]]]");
-    expect(result("remove_all_linked_list(2, llist(2, 1, 2, 3))")).toBe("[1, [3, None]]");
+    expect(result("remove(2, llist(1, 2, 3, 2))")).toBe("[1, [3, [2, None]]]");
+    expect(result("remove_all(2, llist(2, 1, 2, 3))")).toBe("[1, [3, None]]");
   });
 
   test("equal compares structure and leaf values", () => {
@@ -728,25 +841,23 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     expect(result("equal(None, None)")).toBe("True");
   });
 
-  test("linked_list_to_string and for_each", () => {
-    expect(result("linked_list_to_string(llist(1, 2))")).toBe("'[1, [2, None]]'");
-    expect(result("for_each_linked_list(lambda x: x, llist(1, 2, 3))")).toBe("True");
+  test("llist_to_string and for_each", () => {
+    expect(result("llist_to_string(llist(1, 2))")).toBe("'[1, [2, None]]'");
+    expect(result("for_each(lambda x: x, llist(1, 2, 3))")).toBe("True");
   });
 
   test("list functions are first-class values", () => {
     expect(result("is_function(pair)")).toBe("True");
-    expect(result("is_function(map_linked_list)")).toBe("True");
+    expect(result("is_function(map)")).toBe("True");
     expect(result("arity(pair)")).toBe("2");
-    expect(result("arity(accumulate_linked_list)")).toBe("3");
+    expect(result("arity(reduce)")).toBe("3");
     // A bare list-function name is a complete value, not stuck.
     expect(explanations("head").pop()).toBe("Evaluation complete");
   });
 
   test("a fully-evaluated list is a complete result", () => {
     expect(explanations("llist(1, 2, 3)").pop()).toBe("Evaluation complete");
-    expect(explanations("map_linked_list(lambda x: x + 1, llist(1, 2))").pop()).toBe(
-      "Evaluation complete",
-    );
+    expect(explanations("map(lambda x: x + 1, llist(1, 2))").pop()).toBe("Evaluation complete");
   });
 
   test("misusing a list primitive is stuck, not a wrong answer", () => {
@@ -769,9 +880,9 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("list library names resolve in preprocessing (not undefined)", () => {
-    expect(preprocess("map_linked_list(lambda x: x, llist(1, 2))")).toBeNull();
+    expect(preprocess("map(lambda x: x, llist(1, 2))")).toBeNull();
     expect(preprocess("xs = llist(1, 2)\nhead(xs)")).toBeNull();
-    expect(preprocess("accumulate_linked_list(lambda a, b: a + b, 0, None)")).toBeNull();
+    expect(preprocess("reduce(lambda a, b: a + b, 0, None)")).toBeNull();
   });
 
   test("user code composes with the list library", () => {
@@ -783,10 +894,8 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   });
 
   test("structured-clone safe with pairs (survives the channel)", () => {
-    expect(() =>
-      structuredClone(steps("map_linked_list(lambda x: x * 2, llist(1, 2, 3))")),
-    ).not.toThrow();
-    for (const step of steps("reverse_linked_list(llist(1, 2))")) {
+    expect(() => structuredClone(steps("map(lambda x: x * 2, llist(1, 2, 3))"))).not.toThrow();
+    for (const step of steps("reverse(llist(1, 2))")) {
       const marker = step.markers?.[0];
       if (marker?.redexId != null) expect(nodeIds(step.ast).has(marker.redexId)).toBe(true);
     }
@@ -946,13 +1055,10 @@ describe("Python stepper — bool is not an int subtype in this dialect", () => 
     expect(explanations("max(1, False)").pop()).toBe("Evaluation stuck");
   });
 
-  test("explicit conversions (int, float, str, bool, is_boolean) still accept bool", () => {
-    // Conversions are the one place `bool` is still accepted — they convert its representation rather
-    // than using it as a numeric operand.
-    expect(result("int(True)")).toBe("1");
-    expect(result("float(True)")).toBe("1.0");
+  test("str and is_boolean still accept a bool", () => {
+    // Conversions/predicates are where `bool` is still accepted — they use its representation rather
+    // than treating it as a numeric operand.
     expect(result("str(True)")).toBe("'True'");
-    expect(result("bool(True)")).toBe("True");
     expect(result("is_boolean(True)")).toBe("True");
   });
 });
@@ -967,12 +1073,6 @@ describe("Python stepper — str/repr and bool of compound values", () => {
     expect(result("str(lambda x: x)")).toBe("'<function <lambda>>'");
     expect(result("str(abs)")).toBe("'<built-in function abs>'");
     expect(result("repr(math_sqrt)")).toBe("'<built-in function math_sqrt>'");
-  });
-
-  test("bool uses the truthiness of strings and pairs", () => {
-    expect(result('bool("")')).toBe("False");
-    expect(result('bool("x")')).toBe("True");
-    expect(result("bool(pair(1, 2))")).toBe("True");
   });
 });
 
@@ -1020,7 +1120,7 @@ describe("Python stepper — list library edge built-ins", () => {
   });
 
   test("a library function called with the wrong argument count is stuck", () => {
-    expect(explanations("map_linked_list(lambda x: x)").pop()).toBe("Evaluation stuck");
+    expect(explanations("map(lambda x: x)").pop()).toBe("Evaluation stuck");
     expect(result("equal(None)")).toContain("takes 2 argument(s) but 1 were given");
   });
 });
@@ -1059,34 +1159,6 @@ describe("Python stepper — MISC conversions and their error paths", () => {
   test("unary plus on a number is the number itself", () => {
     expect(result("+5")).toBe("5"); // int
     expect(result("+5.0")).toBe("5.0"); // float
-  });
-
-  test("int() with an explicit base parses a string", () => {
-    expect(result('int("ff", 16)')).toBe("255");
-    expect(result('int("101", 2)')).toBe("5");
-  });
-
-  test("int() of an unconvertible type is a TypeError (stuck)", () => {
-    expect(result("int(None)")).toContain("TypeError");
-    expect(explanations("int(None)").pop()).toBe("Evaluation stuck");
-  });
-
-  test("float() parses strings, including the special values", () => {
-    expect(result('float("1.5")')).toBe("1.5");
-    expect(result('float("inf")')).toBe("inf");
-    expect(result('float("-inf")')).toBe("-inf");
-    expect(result('float("nan")')).toBe("nan");
-  });
-
-  test("float() of an unparseable string is a ValueError (stuck)", () => {
-    expect(result('float("abc")')).toContain("ValueError");
-    expect(explanations('float("abc")').pop()).toBe("Evaluation stuck");
-  });
-
-  test("float() rejects prototype-chain property names as malformed, not as special values", () => {
-    // Same regression as complex(str) above: these must not resolve via inherited Object.prototype keys.
-    expect(result('float("constructor")')).toContain("ValueError");
-    expect(result('float("__proto__")')).toContain("ValueError");
   });
 
   test("factorial of a negative is a ValueError (stuck)", () => {
@@ -1232,11 +1304,6 @@ describe("Python stepper — complex numbers", () => {
     expect(result("is_complex(5.0)")).toBe("False");
   });
 
-  test("bool()/truthiness: only exactly 0j is falsy", () => {
-    expect(result("bool(0j)")).toBe("False");
-    expect(result("bool(1j)")).toBe("True");
-  });
-
   test("complex is a valid and/or *right* operand (its type is never checked there)", () => {
     expect(result("True and (1+2j)")).toBe("(1+2j)");
   });
@@ -1248,14 +1315,8 @@ describe("Python stepper — complex numbers", () => {
     expect(result("not (1+2j)")).toContain("TypeError");
   });
 
-  test("int()/float()/min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
-    for (const src of [
-      "int(1+2j)",
-      "float(1+2j)",
-      "min(1+2j, 3)",
-      "round(1+2j)",
-      "math_sqrt(1+2j)",
-    ]) {
+  test("min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
+    for (const src of ["min(1+2j, 3)", "round(1+2j)", "math_sqrt(1+2j)"]) {
       expect(explanations(src).pop()).toBe("Evaluation stuck");
       expect(result(src)).toContain("TypeError");
     }
