@@ -63,10 +63,12 @@ Refer to the [Conductor's Quick Start Guide](https://github.com/source-academy/c
 
 A common issue when developing modifications to py-slang is how to test it using your own local frontend. Unlike [js-slang](https://github.com/source-academy/js-slang), py-slang isn't a build-time npm dependency of the frontend — it's loaded at runtime as a Conductor evaluator bundle, resolved via a URL from the [Language Directory](https://github.com/source-academy/language-directory).
 
-First, build the evaluator you want to test and serve it locally, e.g.:
+First, build the evaluator you want to test (or run it in watch mode using yarn dev) and serve it locally, e.g.:
 
 ```shell
 yarn build --evaluator PyCseEvaluator4
+## OR
+yarn dev --evaluator PyCseEvaluator4
 npx http-server dist -p 4001 --cors
 ```
 
