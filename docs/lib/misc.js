@@ -22,6 +22,15 @@ function print(...object) { }
 function error(...object) { }
 
 /**
+ * Evaluates to the <CODE>None</CODE> value with no effect on the program — the Python analogue of
+ * JavaScript's <CODE>debugger;</CODE> statement. In the stepper, <CODE>breakpoint()</CODE> additionally
+ * marks a step that the breakpoint navigation can jump to.
+ *
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function breakpoint() { }
+
+/**
  * Return the number of milliseconds elapsed since <CODE>January 1, 1970 00:00:00 UTC</CODE>.
  *
  * @returns {float} current time in milliseconds
