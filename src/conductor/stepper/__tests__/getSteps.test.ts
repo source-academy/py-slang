@@ -200,12 +200,7 @@ describe("Python stepper — built-in functions and constants", () => {
   });
 
   test("type conversions", () => {
-    expect(result("int(3.9)")).toBe("3");
-    expect(result('int("42")')).toBe("42");
-    expect(result("float(5)")).toBe("5.0");
     expect(result("str(42)")).toBe("'42'");
-    expect(result("bool(0)")).toBe("False");
-    expect(result("bool(3)")).toBe("True");
     expect(result('repr("hi")')).toBe("\"'hi'\"");
   });
 
@@ -331,7 +326,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
     expect(preprocess("llist(1, 2, 3)", 1)).toBe(
       "NameNotFoundError at line 1\n                   \nllist(1, 2, 3)\n" +
         " ^^^^^ This name is not found in the current or enclosing environment(s).\n" +
-        "       Perhaps you meant to type 'int'?",
+        "       Perhaps you meant to type 'print'?",
     );
     expect(preprocess("map(lambda x: x, None)", 1)).toBe(
       "NameNotFoundError at line 1\n                   \nmap(lambda x: x, None)\n" +
@@ -378,7 +373,7 @@ describe("Python stepper — Python §2 features are unavailable in Python §1 (
     expect(preprocess("math_sqrt(2) + math_pi", 1)).toBeNull();
     expect(preprocess('abs(-5) + len("hi")', 1)).toBeNull();
     expect(preprocess("is_none(None)", 1)).toBeNull(); // is_none is a §1 MISC predicate
-    expect(preprocess('int("3") + round(2.5)', 1)).toBeNull();
+    expect(preprocess('str(3) + round(2.5)', 1)).toBeNull();
     expect(preprocess("x = 5\nx + 1", 1)).toBeNull();
   });
 
@@ -988,13 +983,10 @@ describe("Python stepper — bool is not an int subtype in this dialect", () => 
     expect(explanations("max(1, False)").pop()).toBe("Evaluation stuck");
   });
 
-  test("explicit conversions (int, float, str, bool, is_boolean) still accept bool", () => {
-    // Conversions are the one place `bool` is still accepted — they convert its representation rather
-    // than using it as a numeric operand.
-    expect(result("int(True)")).toBe("1");
-    expect(result("float(True)")).toBe("1.0");
+  test("str and is_boolean still accept a bool", () => {
+    // Conversions/predicates are where `bool` is still accepted — they use its representation rather
+    // than treating it as a numeric operand.
     expect(result("str(True)")).toBe("'True'");
-    expect(result("bool(True)")).toBe("True");
     expect(result("is_boolean(True)")).toBe("True");
   });
 });
@@ -1009,12 +1001,6 @@ describe("Python stepper — str/repr and bool of compound values", () => {
     expect(result("str(lambda x: x)")).toBe("'<function <lambda>>'");
     expect(result("str(abs)")).toBe("'<built-in function abs>'");
     expect(result("repr(math_sqrt)")).toBe("'<built-in function math_sqrt>'");
-  });
-
-  test("bool uses the truthiness of strings and pairs", () => {
-    expect(result('bool("")')).toBe("False");
-    expect(result('bool("x")')).toBe("True");
-    expect(result("bool(pair(1, 2))")).toBe("True");
   });
 });
 
@@ -1101,34 +1087,6 @@ describe("Python stepper — MISC conversions and their error paths", () => {
   test("unary plus on a number is the number itself", () => {
     expect(result("+5")).toBe("5"); // int
     expect(result("+5.0")).toBe("5.0"); // float
-  });
-
-  test("int() with an explicit base parses a string", () => {
-    expect(result('int("ff", 16)')).toBe("255");
-    expect(result('int("101", 2)')).toBe("5");
-  });
-
-  test("int() of an unconvertible type is a TypeError (stuck)", () => {
-    expect(result("int(None)")).toContain("TypeError");
-    expect(explanations("int(None)").pop()).toBe("Evaluation stuck");
-  });
-
-  test("float() parses strings, including the special values", () => {
-    expect(result('float("1.5")')).toBe("1.5");
-    expect(result('float("inf")')).toBe("inf");
-    expect(result('float("-inf")')).toBe("-inf");
-    expect(result('float("nan")')).toBe("nan");
-  });
-
-  test("float() of an unparseable string is a ValueError (stuck)", () => {
-    expect(result('float("abc")')).toContain("ValueError");
-    expect(explanations('float("abc")').pop()).toBe("Evaluation stuck");
-  });
-
-  test("float() rejects prototype-chain property names as malformed, not as special values", () => {
-    // Same regression as complex(str) above: these must not resolve via inherited Object.prototype keys.
-    expect(result('float("constructor")')).toContain("ValueError");
-    expect(result('float("__proto__")')).toContain("ValueError");
   });
 
   test("factorial of a negative is a ValueError (stuck)", () => {
@@ -1274,11 +1232,6 @@ describe("Python stepper — complex numbers", () => {
     expect(result("is_complex(5.0)")).toBe("False");
   });
 
-  test("bool()/truthiness: only exactly 0j is falsy", () => {
-    expect(result("bool(0j)")).toBe("False");
-    expect(result("bool(1j)")).toBe("True");
-  });
-
   test("complex is a valid and/or *right* operand (its type is never checked there)", () => {
     expect(result("True and (1+2j)")).toBe("(1+2j)");
   });
@@ -1290,10 +1243,8 @@ describe("Python stepper — complex numbers", () => {
     expect(result("not (1+2j)")).toContain("TypeError");
   });
 
-  test("int()/float()/min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
+  test("min/max/round/math_* all reject complex — a TypeError (stuck), like bool", () => {
     for (const src of [
-      "int(1+2j)",
-      "float(1+2j)",
       "min(1+2j, 3)",
       "round(1+2j)",
       "math_sqrt(1+2j)",
