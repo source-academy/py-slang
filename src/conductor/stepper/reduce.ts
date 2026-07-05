@@ -53,9 +53,15 @@ export interface ReduceResult {
    * of the program, removing a `pass`, inlining an `if`'s chosen branch — replaces or removes the
    * redex's containing statement outright, so with no override the value would jump straight from
    * "about to be discarded" (red) to "already gone", never appearing "just finished" (green). Such a
-   * contraction sets `postNode` to the *pre*-contraction tree (redex unchanged, marked via `postRedex`)
-   * so the after step shows the value highlighted green one last time before it disappears on the next
+   * contraction sets `postNode` to a tree with the redex still present (marked via `postRedex`) so the
+   * after step shows the value highlighted green one last time before it disappears on the next
    * contraction; `node` (with the statement actually gone) still becomes the next contraction's start.
+   * This is usually exactly the pre-contraction tree — the one exception is a name binding
+   * (`VariableDeclaration`/`FunctionDeclaration` in `stepHead`), where `postNode` already carries the
+   * bound value substituted into the rest of the block, so that substitution is visible from this same
+   * "Declared and substituted" step rather than only from the next one (matching how a call
+   * expression's argument substitution is already visible on its own "Substituted ..." step — see
+   * `contractCall` — rather than one step later).
    * Defaults to `node` — most contractions (binary/unary/logical/conditional/call/`return`/falling off
    * the end of a function — anything whose result is a value that visibly *replaces* the redex in
    * place, rather than removing its containing statement) need no override.
@@ -774,12 +780,17 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
+      // Substituted eagerly, not deferred to `node` alone: `postNewBody` (the after step's displayed
+      // tree) reuses this same substituted rest, so the substitution is already visible on this step's
+      // "Declared and substituted" (green) tree rather than only on the next, unrelated step — see the
+      // `postNode` doc comment on `ReduceResult` above.
+      const substitutedRest = rest.map(stmt => substitute(stmt, name, boundValue));
       return {
         kind: "step",
-        newBody: rest.map(stmt => substitute(stmt, name, boundValue)),
+        newBody: substitutedRest,
         preRedex: head,
         postRedex: head,
-        postNewBody: [head, ...rest],
+        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
@@ -790,14 +801,15 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      const params = paramNames(head);
-      const paramsJoined = params.join(", ");
+      // See the identical substitutedRest/postNewBody note in the VariableDeclaration case above:
+      // this makes the substitution visible already on this step's after tree, not only the next one.
+      const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
       return {
         kind: "step",
-        newBody: rest.map(stmt => substitute(stmt, name, value)),
+        newBody: substitutedRest,
         preRedex: head,
         postRedex: head,
-        postNewBody: [head, ...rest],
+        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
