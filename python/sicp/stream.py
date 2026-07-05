@@ -5,7 +5,7 @@ Mirrors ``@sourceacademy/py-slang/src/stdlib/stream.ts`` and
 function returning the rest of the stream.
 """
 
-from .linked_list import head, is_pair, llist, pair, tail
+from .linked_list import head, is_pair, pair, tail
 from .misc import arity, error, is_function, is_none
 
 
@@ -45,11 +45,22 @@ def llist_to_stream(xs):
 
 
 def stream_to_llist(xs):
-    return None if is_none(xs) else pair(head(xs), stream_to_llist(stream_tail(xs)))
+    elements = []
+    while not is_none(xs):
+        elements.append(head(xs))
+        xs = stream_tail(xs)
+    result = None
+    for x in reversed(elements):
+        result = pair(x, result)
+    return result
 
 
 def stream_length(xs):
-    return 0 if is_none(xs) else 1 + stream_length(stream_tail(xs))
+    n = 0
+    while not is_none(xs):
+        n += 1
+        xs = stream_tail(xs)
+    return n
 
 
 def stream_map(f, s):
@@ -64,11 +75,10 @@ def build_stream(fun, n):
 
 
 def stream_for_each(fun, xs):
-    if is_none(xs):
-        return True
-    else:
+    while not is_none(xs):
         fun(head(xs))
-        return stream_for_each(fun, stream_tail(xs))
+        xs = stream_tail(xs)
+    return True
 
 
 def stream_reverse(xs):
@@ -135,11 +145,23 @@ def integers_from(n):
 
 
 def eval_stream(s, n):
-    def es(s, n):
-        return llist(head(s)) if n == 1 else pair(head(s), es(stream_tail(s), n - 1))
-
-    return None if n == 0 else es(s, n)
+    if n < 0:
+        error("eval_stream expects a nonnegative count, but encountered", n)
+    elements = []
+    while n > 0 and not is_none(s):
+        elements.append(head(s))
+        s = stream_tail(s)
+        n -= 1
+    result = None
+    for x in reversed(elements):
+        result = pair(x, result)
+    return result
 
 
 def stream_ref(s, n):
-    return head(s) if n == 0 else stream_ref(stream_tail(s), n - 1)
+    if n < 0:
+        error("stream_ref: index out of bounds")
+    while n > 0:
+        s = stream_tail(s)
+        n -= 1
+    return head(s)

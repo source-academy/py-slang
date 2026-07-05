@@ -2,9 +2,13 @@
 
 Mirrors ``@sourceacademy/py-slang/src/stdlib/linked-list.ts`` (native builtins)
 and ``linked-list.prelude.ts`` (book-defined functions). A pair is represented
-as a two-element Python list ``[head, tail]`` and the empty list as ``None`` —
+as a two-element Python list ``[head, tail]`` and the empty list as ``None`` --
 the same representation Source Academy Python uses, so results print and compare
 directly against the textbook, e.g. ``llist(1, 2, 3)`` -> ``[1, [2, [3, None]]]``.
+
+The prelude functions are defined iteratively rather than with the textbook's
+tail recursion: CPython has no tail-call optimization, so a recursive version
+would raise ``RecursionError`` on lists of ~1000 or more elements.
 """
 
 from .misc import error, is_none
@@ -69,44 +73,41 @@ def print_llist(xs):
 
 
 def is_llist(xs):
-    if is_none(xs):
-        return True
-    elif is_pair(xs):
-        return is_llist(tail(xs))
-    else:
-        return False
+    while is_pair(xs):
+        xs = tail(xs)
+    return is_none(xs)
 
 
 def length(xs):
-    return _length(xs, 0)
-
-
-def _length(xs, acc):
-    return acc if is_none(xs) else _length(tail(xs), acc + 1)
+    n = 0
+    while not is_none(xs):
+        n += 1
+        xs = tail(xs)
+    return n
 
 
 def map(f, xs):
-    return _map(f, xs, None)
-
-
-def _map(f, xs, acc):
-    return reverse(acc) if is_none(xs) else _map(f, tail(xs), pair(f(head(xs)), acc))
+    acc = None
+    while not is_none(xs):
+        acc = pair(f(head(xs)), acc)
+        xs = tail(xs)
+    return reverse(acc)
 
 
 def build_llist(fun, n):
-    return _build_llist(n - 1, fun, None)
-
-
-def _build_llist(i, fun, already_built):
-    return already_built if i < 0 else _build_llist(i - 1, fun, pair(fun(i), already_built))
+    if n < 0:
+        error("build_llist expects a nonnegative length, but encountered", n)
+    result = None
+    for i in range(n - 1, -1, -1):
+        result = pair(fun(i), result)
+    return result
 
 
 def for_each(fun, xs):
-    if is_none(xs):
-        return True
-    else:
+    while not is_none(xs):
         fun(head(xs))
-        return for_each(fun, tail(xs))
+        xs = tail(xs)
+    return True
 
 
 def llist_to_string(xs):
@@ -128,104 +129,86 @@ def _llist_to_string(xs, cont):
 
 
 def reverse(xs):
-    return _reverse(xs, None)
-
-
-def _reverse(original, reversed_acc):
-    return (
-        reversed_acc
-        if is_none(original)
-        else _reverse(tail(original), pair(head(original), reversed_acc))
-    )
+    reversed_acc = None
+    while not is_none(xs):
+        reversed_acc = pair(head(xs), reversed_acc)
+        xs = tail(xs)
+    return reversed_acc
 
 
 def append(xs, ys):
-    return _append(xs, ys, lambda x: x)
-
-
-def _append(xs, ys, cont):
-    return cont(ys) if is_none(xs) else _append(tail(xs), ys, lambda zs: cont(pair(head(xs), zs)))
+    elements = []
+    while not is_none(xs):
+        elements.append(head(xs))
+        xs = tail(xs)
+    result = ys
+    for x in reversed(elements):
+        result = pair(x, result)
+    return result
 
 
 def member(v, xs):
-    if is_none(xs):
-        return None
-    elif v == head(xs):
-        return xs
-    else:
-        return member(v, tail(xs))
+    while not is_none(xs):
+        if v == head(xs):
+            return xs
+        xs = tail(xs)
+    return None
 
 
 def remove(v, xs):
-    return _remove(v, xs, None)
-
-
-def _remove(v, xs, acc):
-    if is_none(xs):
-        return append(reverse(acc), xs)
-    elif v == head(xs):
-        return append(reverse(acc), tail(xs))
-    else:
-        return _remove(v, tail(xs), pair(head(xs), acc))
+    acc = None
+    while not is_none(xs):
+        if v == head(xs):
+            return append(reverse(acc), tail(xs))
+        acc = pair(head(xs), acc)
+        xs = tail(xs)
+    return reverse(acc)
 
 
 def remove_all(v, xs):
-    return _remove_all(v, xs, None)
-
-
-def _remove_all(v, xs, acc):
-    if is_none(xs):
-        return append(reverse(acc), xs)
-    elif v == head(xs):
-        return _remove_all(v, tail(xs), acc)
-    else:
-        return _remove_all(v, tail(xs), pair(head(xs), acc))
+    acc = None
+    while not is_none(xs):
+        if v != head(xs):
+            acc = pair(head(xs), acc)
+        xs = tail(xs)
+    return reverse(acc)
 
 
 def enum_llist(start, end):
-    return _enum_llist(start, end, None)
-
-
-def _enum_llist(start, end, acc):
-    return reverse(acc) if start > end else _enum_llist(start + 1, end, pair(start, acc))
+    result = None
+    for x in range(end, start - 1, -1):
+        result = pair(x, result)
+    return result
 
 
 def llist_ref(xs, n):
-    if n == 0:
-        if is_none(xs):
-            error("llist_ref: index out of bounds on None linked list")
-        return head(xs)
-    else:
+    if n < 0:
+        error("llist_ref: index out of bounds")
+    while n > 0:
         if is_none(xs):
             error("llist_ref: index out of bounds")
-        return llist_ref(tail(xs), n - 1)
+        xs = tail(xs)
+        n -= 1
+    if is_none(xs):
+        error("llist_ref: index out of bounds on None linked list")
+    return head(xs)
 
 
 def reduce(f, initial, xs):
-    return _reduce(f, initial, xs, lambda x: x)
-
-
-def _reduce(f, initial, xs, cont):
-    if is_none(xs):
-        return cont(initial)
-    else:
-        return _reduce(
-            f,
-            initial,
-            tail(xs),
-            lambda x_reduced_from_tail: cont(f(head(xs), x_reduced_from_tail)),
-        )
+    elements = []
+    while not is_none(xs):
+        elements.append(head(xs))
+        xs = tail(xs)
+    result = initial
+    for x in reversed(elements):
+        result = f(x, result)
+    return result
 
 
 def filter(pred, xs):
-    return _filter(pred, xs, None)
-
-
-def _filter(pred, xs, acc):
-    if is_none(xs):
-        return reverse(acc)
-    else:
+    acc = None
+    while not is_none(xs):
         if pred(head(xs)):
-            return _filter(pred, tail(xs), pair(head(xs), acc))
-        else:
-            return _filter(pred, tail(xs), acc)
+            acc = pair(head(xs), acc)
+        xs = tail(xs)
+    return reverse(acc)

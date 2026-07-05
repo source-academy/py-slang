@@ -22,7 +22,11 @@ def arity(f):
     position of its ``*args`` parameter (mirrors Source Academy ``arity``)."""
     if not callable(f):
         error("arity expects a function, but encountered", f)
-    params = list(_inspect.signature(f).parameters.values())
+    try:
+        sig = _inspect.signature(f)
+    except (ValueError, TypeError):
+        error("arity expects a function with an inspectable signature, but encountered", f)
+    params = list(sig.parameters.values())
     for i, p in enumerate(params):
         if p.kind is _inspect.Parameter.VAR_POSITIONAL:
             return i
