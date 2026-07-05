@@ -801,9 +801,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      const params = paramNames(head);
-      const paramsJoined = params.join(", ");
-      // See the identical `substitutedRest`/`postNewBody` note in the `VariableDeclaration` case above:
+      // See the identical substitutedRest/postNewBody note in the VariableDeclaration case above:
       // this makes the substitution visible already on this step's after tree, not only the next one.
       const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
       return {
