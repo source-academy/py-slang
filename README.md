@@ -134,6 +134,20 @@ Documentation on the Python libraries are generated from inline documentation in
 $ cd docs/python;  python -m http.server 8000
 ```
 
+## `sourceacademy-sicp` — the standard library for plain CPython
+
+The [`python/`](python/) directory contains **`sourceacademy-sicp`**, a companion
+package that ports this Python standard library — `pair`, `head`, `tail`,
+`llist`, the `math_*` functions, streams, and so on — to ordinary CPython. With
+`from sicp import *`, CS1101S / SICP (Python edition) programs run the same way
+outside Source Academy. It is kept here, next to the `src/stdlib/` groups it
+mirrors, so the two do not drift apart.
+
+Packaged for PyPI as `sourceacademy-sicp`. See
+[`python/README.md`](python/README.md) for installation and usage, and the
+[Python §4 standard library reference](https://docs.sourceacademy.org/python/python_4/)
+for per-function documentation.
+
 ## Prior Reading
 
 These repositories are relevant to `py-slang`, and may be useful if stuck
