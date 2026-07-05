@@ -556,4 +556,40 @@ describe("collectSnapshots", () => {
       expect(snap.currentLine).toBeGreaterThan(0);
     }
   });
+
+  it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {
+    const snapshots = await runAndCollect(
+      `def f():
+    return 1
+
+f()`,
+    );
+
+    // The step where "return" (RESET) is about to execute: the callee frame must still be
+    // the active one — the frame transition must not have happened yet.
+    const returnStepIndex = snapshots.findIndex(s => s.control[0]?.displayText === "return");
+    expect(returnStepIndex).toBeGreaterThan(-1);
+    const returnStep = snapshots[returnStepIndex];
+    const calleeFrame = returnStep.environments.find(e => e.name === "f");
+    expect(calleeFrame).toBeDefined();
+    expect(calleeFrame!.isActive).toBe(true);
+
+    // The very next step: RESET has fired (now a no-op) and is consumed. The callee frame
+    // must still be present and active — nothing should have changed yet.
+    const afterReturn = snapshots[returnStepIndex + 1];
+    const calleeFrameAfterReturn = afterReturn.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterReturn).toBeDefined();
+    expect(calleeFrameAfterReturn!.isActive).toBe(true);
+
+    // Only once the ENVIRONMENT instruction executes does the active frame move back — the
+    // callee frame ("f") must no longer be the active one (it may still be listed, no longer
+    // on the call stack, or pruned entirely).
+    const envStepIndex = snapshots.findIndex(
+      (s, i) => i > returnStepIndex && s.control[0]?.displayText === "ENVIRONMENT",
+    );
+    expect(envStepIndex).toBeGreaterThan(returnStepIndex);
+    const afterEnvStep = snapshots[envStepIndex + 1];
+    const calleeFrameAfterEnv = afterEnvStep.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterEnv?.isActive).not.toBe(true);
+  });
 });
