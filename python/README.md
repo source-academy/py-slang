@@ -88,6 +88,27 @@ python -m pytest                  # or: PYTHONPATH=. python tests/test_sicp.py
 python -m build                   # build the wheel + sdist
 ```
 
+## Releasing
+
+Publishing to PyPI is **not** automatic on push or merge. The CI `test` job runs
+on every change under `python/**`, but the `publish` job runs **only when a
+GitHub Release is published** (`.github/workflows/python-package.yml`).
+
+One-time setup: configure a [PyPI Trusted
+Publisher](https://docs.pypi.org/trusted-publishers/) for the
+`sourceacademy-sicp` project pointing at this repository and the
+`python-package` workflow (or swap the publish step for a token-based upload).
+
+To cut a release:
+
+1. Bump `version` in `pyproject.toml`. PyPI rejects re-uploads of an existing
+   version, so this must change every time.
+2. Merge to `main`.
+3. Create and publish a [GitHub
+   Release](https://github.com/source-academy/py-slang/releases/new) (a tag such
+   as `sicp-vX.Y.Z`). Publishing it triggers the `publish` job, which builds the
+   wheel + sdist and uploads them to PyPI.
+
 ## License
 
 Apache-2.0. Part of the [Source Academy](https://sourceacademy.org) project.

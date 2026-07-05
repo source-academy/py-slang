@@ -144,7 +144,8 @@ outside Source Academy. It is kept here, next to the `src/stdlib/` groups it
 mirrors, so the two do not drift apart.
 
 Packaged for PyPI as `sourceacademy-sicp`. See
-[`python/README.md`](python/README.md) for installation and usage, and the
+[`python/README.md`](python/README.md) for installation, usage, and
+[releasing](python/README.md#releasing), and the
 [Python §4 standard library reference](https://docs.sourceacademy.org/python/python_4/)
 for per-function documentation.
 
