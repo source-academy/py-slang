@@ -21,7 +21,7 @@ import {
   PopInstr,
   StatementSequence,
   UnOpInstr,
-  WhileInstr
+  WhileInstr,
 } from "./types";
 
 export const popInstr = (srcNode: Node): PopInstr => ({ instrType: InstrType.POP, srcNode });

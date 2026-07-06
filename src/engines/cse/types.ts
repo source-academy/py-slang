@@ -111,7 +111,6 @@ export interface EndOfFunctionBodyInstr extends BaseInstr {
   instrType: InstrType.END_OF_FUNCTION_BODY;
 }
 
-
 export interface PopInstr extends BaseInstr {
   instrType: InstrType.POP;
 }

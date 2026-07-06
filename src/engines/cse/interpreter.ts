@@ -47,7 +47,7 @@ import {
   ListInstr,
   PopInstr,
   UnOpInstr,
-  WhileInstr
+  WhileInstr,
 } from "./types";
 import {
   checkStackOverFlow,
