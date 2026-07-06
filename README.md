@@ -59,6 +59,21 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 
 Refer to the [Conductor's Quick Start Guide](https://github.com/source-academy/conductor?tab=readme-ov-file#quick-start-guide)
 
+### Using your py-slang in your local Source Academy
+
+A common issue when developing modifications to py-slang is how to test it using your own local frontend. Unlike [js-slang](https://github.com/source-academy/js-slang), py-slang isn't a build-time npm dependency of the frontend — it's loaded at runtime as a Conductor evaluator bundle, resolved via a URL from the [Language Directory](https://github.com/source-academy/language-directory).
+
+First, build the evaluator you want to test (or run it in watch mode using yarn dev) and serve it locally, e.g.:
+
+```shell
+yarn build --evaluator PyCseEvaluator4
+## OR
+yarn dev --evaluator PyCseEvaluator4
+npx http-server dist -p 4001 --cors
+```
+
+This serves the built bundle at `http://localhost:4001/PyCseEvaluator4.js`. Then run your own local copy of the [Language Directory](https://github.com/source-academy/language-directory) with the relevant Python evaluator's `path` pointed at that URL instead of the deployed one, and configure your local frontend to use it — see the Language Directory's [Local testing](https://github.com/source-academy/language-directory#local-testing) instructions for how to wire this up.
+
 ### Running the Wasm evaluator locally
 
 To run the Wasm compiler locally, run
@@ -89,6 +104,34 @@ the Python grammar in `python.ne`.
 
 ```shell
 yarn compile-grammar
+```
+## Documentation
+
+Our Python languages are documented here: <https://docs.sourceacademy.org/python/>
+
+### Requirements
+
+- `bash`: known working version: GNU bash, version 5.0.16
+- `latexmk`: Version 4.52c
+- `pdflatex`: known working versions
+  - pdfTeX 3.14159265-2.6-1.40.18 (TeX Live 2017)
+
+To build the documentation, run
+
+```bash
+$ git clone https://github.com/source-academy/py-slang.git
+$ cd py-slang
+$ yarn
+$ yarn install
+$ yarn jsdoc  # to make the web pages in py-slang/docs/python and the PDF documents
+```
+
+**Note:** The documentation may not build on Windows, depending on your bash setup, [see above](https://github.com/source-academy/py-slang#requirements).
+
+Documentation on the Python libraries are generated from inline documentation in the library sources, a copy of which are kept in `docs/lib/*.js`. The command `yarn jsdoc` generates the documentation and places it in the folder `docs/python`. You can test the documentation using a local server:
+
+```bash
+$ cd docs/python;  python -m http.server 8000
 ```
 
 ## Prior Reading

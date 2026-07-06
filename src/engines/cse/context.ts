@@ -34,7 +34,6 @@ export class Context {
       };
   public errors: RuntimeSourceError[] = [];
   public prelude: string | null = null;
-
   runtime: {
     break: boolean;
     debuggerOn: boolean;

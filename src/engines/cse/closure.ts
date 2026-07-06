@@ -22,6 +22,10 @@ export class Closure {
   public originalNode?: StmtNS.FunctionDef | ExprNS.Lambda;
   /** Stores local variables for scope check */
   public localVariables: Set<string>;
+  /** Stores variables declared global in this function body */
+  public globalVariables: Set<string>;
+  /** Stores variables declared nonlocal in this function body */
+  public nonlocalVariables: Set<string>;
 
   constructor(
     node: StmtNS.FunctionDef | ExprNS.Lambda,
@@ -29,6 +33,8 @@ export class Closure {
     context: Context,
     predefined: boolean = false,
     localVariables: Set<string> = new Set(),
+    globalVariables: Set<string> = new Set(),
+    nonlocalVariables: Set<string> = new Set(),
   ) {
     this.id = uniqueId(context);
     this.node = node;
@@ -37,6 +43,8 @@ export class Closure {
     this.predefined = predefined;
     this.originalNode = node;
     this.localVariables = localVariables;
+    this.globalVariables = globalVariables;
+    this.nonlocalVariables = nonlocalVariables;
   }
 
   static makeFromFunctionDef(
@@ -44,8 +52,18 @@ export class Closure {
     environment: Environment,
     context: Context,
     localVariables: Set<string>,
+    globalVariables: Set<string> = new Set(),
+    nonlocalVariables: Set<string> = new Set(),
   ): Closure {
-    const closure = new Closure(node, environment, context, false, localVariables);
+    const closure = new Closure(
+      node,
+      environment,
+      context,
+      false,
+      localVariables,
+      globalVariables,
+      nonlocalVariables,
+    );
     return closure;
   }
 

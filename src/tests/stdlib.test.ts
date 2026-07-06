@@ -1,4 +1,10 @@
-import { TypeError, UnsupportedOperandTypeError, ValueError, ZeroDivisionError } from "../errors";
+import {
+  RecursionError,
+  TypeError,
+  UnsupportedOperandTypeError,
+  ValueError,
+  ZeroDivisionError,
+} from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -684,18 +690,30 @@ describe("Standard Library Tests", () => {
         ["a = 18446744073709551616\nstr(a)", "18446744073709551616", null],
         ["a = 18446744073709551616\nrepr(a)", "18446744073709551616", null],
         ["a = 18446744073709551616\nb = 2**64\na == b", true, null],
-        ["a = 18446744073709551616\nb = int('18446744073709551615')\na != b", true, null],
+        ["a = 18446744073709551616\nb = 18446744073709551615\na != b", true, null],
+        ["def f(x): return 1 + f(x)\nf(2)", RecursionError, null],
+        ["def f(x): return f(x - 1) if x > 0 else 0\nf(10240)", 0n, null],
       ],
       "is functions": [
-        ["is_int(1)", true, null],
-        ["is_int(1.0)", false, null],
-        ["is_int(3.14)", false, null],
-        ["is_int(True)", false, null],
-        ["is_int(None)", false, null],
-        ["is_int(lambda x: x)", false, null],
-        ["is_int(print)", false, null],
-        ["is_int(1+0j)", false, null],
-        ['is_int("abc")', false, null],
+        ["is_integer(1)", true, null],
+        ["is_integer(1.0)", false, null],
+        ["is_integer(3.14)", false, null],
+        ["is_integer(True)", false, null],
+        ["is_integer(None)", false, null],
+        ["is_integer(lambda x: x)", false, null],
+        ["is_integer(print)", false, null],
+        ["is_integer(1+0j)", false, null],
+        ['is_integer("abc")', false, null],
+
+        ["is_number(1)", true, null],
+        ["is_number(1.0)", true, null],
+        ["is_number(3.14)", true, null],
+        ["is_number(1+0j)", true, null],
+        ["is_number(True)", false, null],
+        ["is_number(None)", false, null],
+        ["is_number(lambda x: x)", false, null],
+        ["is_number(print)", false, null],
+        ['is_number("abc")', false, null],
 
         ["is_float(1)", false, null],
         ["is_float(1.0)", true, null],
@@ -782,62 +800,6 @@ describe("Standard Library Tests", () => {
       ],
 
       coercing: [
-        ["int()", 0n, null], // int() with no arguments returns 0
-        ["int(1)", 1n, null],
-        ["int(1.0)", 1n, null],
-        ["int(3.14)", 3n, null],
-        ["int(True)", 1n, null],
-        ["int(None)", TypeError, null],
-        ["int(lambda x: x)", TypeError, null],
-        ["int(print)", TypeError, null],
-        ["int(1+0j)", TypeError, null],
-        ['int("abc")', ValueError, null],
-        ['int("1.0")', ValueError, null],
-        ['int("1")', 1n, null],
-        ['int("1_000")', 1000n, null],
-        ['int("1_000e+2")', ValueError, null],
-        ['int("13", 1)', ValueError, null], // base must be between 2 and 36, or 0
-        ['int("13", 2)', ValueError, null], // invalid literal for int() with base 2: '13'
-        ['int("101", 2)', 5n, null],
-        ['int("0xFF", 0)', 255n, null],
-        ['int("0b101", 0)', 5n, null],
-        ['int("0o77", 0)', 63n, null],
-        ['int("-0o77", 0)', -63n, null],
-        ['int("0o77.3", 0)', ValueError, null],
-        ['int("0o77e+2", 0)', ValueError, null],
-        ['int("1_000", 0)', 1000n, null],
-        ["int(True, 0)", TypeError, null],
-        ['int("13", 256)', ValueError, null], // base must be between 2 and 36, or 0
-
-        // TODO: Add more coercion test cases for int() where double underscores between digits is prohibited
-
-        ["float()", 0, null],
-        ["float(1)", 1, null],
-        ["float(1.0)", 1, null],
-        ["float(3.14)", 3.14, null],
-        ["float(True)", 1.0, null],
-        ["float(None)", TypeError, null],
-        ["float(lambda x: x)", TypeError, null],
-        ["float(print)", TypeError, null],
-        ["float(1+0j)", TypeError, null],
-        ['float("abc")', ValueError, null],
-        ['float("1.0")', 1.0, null],
-        ['float("1")', 1, null],
-        ['float("1_000")', 1000, null],
-        ['float("1_000e+2")', 100000, null],
-        ['float("13")', 13, null],
-        ['float("13.05")', 13.05, null],
-        ['float("-13.05")', -13.05, null],
-        ['float("inf")', Infinity, null],
-        ['float("-inf")', -Infinity, null],
-        ['float("nan")', NaN, null],
-        ['float("-nan")', NaN, null],
-        ['float("+nan")', NaN, null],
-        ['float("infinity")', Infinity, null],
-        ['float("+infinity")', Infinity, null],
-        ['float("-infinity")', -Infinity, null],
-        // TODO: Add more coercion test cases for float() where double underscores between digits is prohibited
-
         ["complex()", new PyComplexNumber(0, 0), null], // complex() with no arguments returns 0j
         ["complex(1)", PyComplexNumber.fromBigInt(1n), null],
         ["complex(1.0)", PyComplexNumber.fromNumber(1), null],
@@ -874,30 +836,13 @@ describe("Standard Library Tests", () => {
         ["complex(1, None)", TypeError, null],
         ["complex(1, lambda x: x)", TypeError, null],
         ["complex(0, 1j)", new PyComplexNumber(-1, 0), null],
-
-        ["bool()", false, null], // bool() with no arguments returns False
-        ["bool(1)", true, null],
-        ["bool(0)", false, null],
-        ["bool(1.0)", true, null],
-        ["bool(0.0)", false, null],
-        ["bool(1+0j)", true, null],
-        ["bool(0+0j)", false, null],
-        ["bool(None)", false, null],
-        ["bool(lambda x: x)", true, null],
-        ["bool(print)", true, null],
-        ['bool("")', false, null],
-        ['bool("abc")', true, null],
-        ['bool(" ")', true, null],
       ],
       arity: [
         ["arity(abs)", 1n, null],
         ["arity(arity)", 1n, null],
-        ["arity(bool)", 0n, null],
         ["arity(complex)", 0n, null],
         ["arity(error)", 0n, null],
-        ["arity(float)", 0n, null],
         ["arity(imag)", 1n, null],
-        ["arity(int)", 0n, null],
         ["arity(math_acos)", 1n, null],
         ["arity(math_acosh)", 1n, null],
         ["arity(math_asin)", 1n, null],
@@ -953,7 +898,7 @@ describe("Standard Library Tests", () => {
         ["arity(is_string)", 1n, null],
         ["arity(is_function)", 1n, null],
         ["arity(is_float)", 1n, null],
-        ["arity(is_int)", 1n, null],
+        ["arity(is_integer)", 1n, null],
         ["arity(len)", 1n, null],
         ["arity(max)", 2n, null],
         ["arity(min)", 2n, null],
@@ -994,6 +939,7 @@ describe("Standard Library Tests", () => {
         ["hello = 'hello'\r\n\r\nhello", "hello", null],
         ["hello = 'hello'\r\n# This is a comment\r\nhello", "hello", null],
       ],
+      "predefined variables": [["a = 1\n__program__", "a = 1\n__program__", null]],
     };
 
     generateTestCases(mathTests, 1, [misc, math]);

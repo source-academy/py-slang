@@ -10,8 +10,7 @@ const math_e = 2.718281828459045;
 /**
  *
  * The name inf refers to float value positive infinity.
- * (For negative infinity, use -math.inf.) Equivalent to
- * the output of float('inf').
+ * (For negative infinity, use -math.inf.)
  * See also <a href="https://docs.python.org/3/library/math.html#math.inf">Python 3.13 Documentation</a>.
  * @const {float}
  *
@@ -21,7 +20,6 @@ const math_inf = 1 / 0;
 /**
  *
  * A floating-point “not a number” (nan) value.
- * Equivalent to the output of float('nan').
  * See also <a href="https://docs.python.org/3/library/math.html#math.nan">Python 3.13 Documentation</a>.
  * @const {float}
  *

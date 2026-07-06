@@ -72,6 +72,9 @@ export async function pythonToModule(
           command as ExprNS.Call,
           context,
         );
+        if (result === undefined) {
+          return { type: DataType.VOID, value: undefined };
+        }
         if ("next" in result) {
           return yield* result;
         }
