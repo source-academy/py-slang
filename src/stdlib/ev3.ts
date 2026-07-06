@@ -1,4 +1,9 @@
-export const EV3_INTERNAL_FUNCTIONS = [
+import { Value } from "../engines/cse/stash";
+import { GroupName } from "./utils";
+
+const ev3Builtins = new Map<string, Value>();
+
+export const EV3_FUNCTIONS = [
   'ev3_pause',
   'ev3_connected',
   'ev3_motorA',
@@ -41,4 +46,19 @@ export const EV3_INTERNAL_FUNCTIONS = [
   'ev3_ledRightRed',
   'ev3_ledGetBrightness',
   'ev3_ledSetBrightness'
-]
+];
+
+for (const name of EV3_FUNCTIONS) {
+  ev3Builtins.set(name, {
+    type: "builtin",
+    func: () => ({ type: "none" } as Value),
+    name,
+    minArgs: 0,
+  });
+}
+
+export default {
+  name: GroupName.EV3,
+  prelude: "",
+  builtins: ev3Builtins,
+};

@@ -13,6 +13,7 @@ export enum GroupName {
   LIST = "list",
   PAIRMUTATORS = "pair-mutators",
   MCE = "mce",
+  EV3 = "ev3",
 }
 
 /**

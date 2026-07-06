@@ -1,10 +1,3 @@
-export type EV3ExecutionResult = {
-  status: 'finished' | 'error'
-  output?: string
-  error?: string
-}
-
-export type SlingRunRequest = {
-  code: string
-  svml?: unknown
-}
+export type EV3ExecutionResult =
+  | { status: 'finished'; output: string } // output = base64-encoded assembled SVML binary
+  | { status: 'error'; error: string };

@@ -8,7 +8,6 @@ import { PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
 import { SVMLProgram } from "./types";
 
-/** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
 const I32_MAX = 2_147_483_647;
 
@@ -17,6 +16,8 @@ interface CompilerAnnotation {
   envLevel: number;
   isPrimitive: boolean;
   primitiveIndex?: number;
+  isInternal?: boolean;
+  internalIndex?: number;
 }
 
 export type ExpressionResult = {
@@ -30,6 +31,7 @@ export class SVMLCompiler
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
+  private internalFunctions?: Map<string, number>;
 
   private tokenAnnotations = new WeakMap<Token, CompilerAnnotation>();
   private envSlotCounters = new WeakMap<Environment, number>();
@@ -46,20 +48,28 @@ export class SVMLCompiler
     currentEnvironment: Environment,
     functionEnvironments: FunctionEnvironments,
     builder: SVMLIRBuilder,
+    internalFunctions?: Map<string, number>,
   ) {
     this.builder = builder;
     this.currentEnvironment = currentEnvironment;
     this.functionEnvironments = functionEnvironments;
     this.isTailCall = false;
+    this.internalFunctions = internalFunctions;
   }
 
   /**
    * Create SVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
+   *
+   * @param internalFunctions Optional map of VM-internal function names to their fixed
+   * VM-internal indices (e.g. EV3's 0-40 device function table). Names in this map compile
+   * to CALLV/CALLTV instead of CALLP/CALLTP. Callers that don't pass this (e.g. PySvmlEvaluator,
+   * PySvmlSinterEvaluator) are entirely unaffected - behavior is identical to before this was added.
    */
   static fromProgram(
     program: StmtNS.FileInput,
     functionEnvironments?: FunctionEnvironments,
+    internalFunctions?: Map<string, number>,
   ): SVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
@@ -71,7 +81,7 @@ export class SVMLCompiler
     }
     SVMLIRBuilder.resetIndex();
     const builder = new SVMLIRBuilder(0);
-    return new SVMLCompiler(mainEnv, functionEnvironments, builder);
+    return new SVMLCompiler(mainEnv, functionEnvironments, builder, internalFunctions);
   }
 
   fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): SVMLCompiler {
@@ -85,7 +95,12 @@ export class SVMLCompiler
     const numArgs = node.parameters.length;
     const builder = this.builder.createChildBuilder(numArgs);
 
-    const compiler = new SVMLCompiler(nextEnvironment, this.functionEnvironments, builder);
+    const compiler = new SVMLCompiler(
+      nextEnvironment,
+      this.functionEnvironments,
+      builder,
+      this.internalFunctions,
+    );
 
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);
@@ -123,16 +138,27 @@ export class SVMLCompiler
     const parentEnv = this.currentEnvironment.lookupNameEnv(token);
 
     if (parentEnv !== null && parentEnv.enclosing === null) {
-      const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
-      if (primitiveIndex === undefined) {
-        throw new Error(`Primitive function ${name} not implemented`);
+      const internalIndex = this.internalFunctions?.get(name);
+      if (internalIndex !== undefined) {
+        annotation = {
+          slot: internalIndex,
+          envLevel: 0,
+          isPrimitive: false,
+          isInternal: true,
+          internalIndex,
+        };
+      } else {
+        const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
+        if (primitiveIndex === undefined) {
+          throw new Error(`Primitive function ${name} not implemented`);
+        }
+        annotation = {
+          slot: primitiveIndex,
+          envLevel: 0,
+          isPrimitive: true,
+          primitiveIndex,
+        };
       }
-      annotation = {
-        slot: primitiveIndex,
-        envLevel: 0,
-        isPrimitive: true,
-        primitiveIndex,
-      };
     } else if (parentEnv != null) {
       const envLevel = this.currentEnvironment.lookupName(token);
       const slot = this.getOrAssignSlot(parentEnv, name);
@@ -171,7 +197,7 @@ export class SVMLCompiler
   private emitLoadSymbol(token: Token): ExpressionResult {
     const annotation = this.getTokenAnnotation(token);
 
-    if (annotation.isPrimitive) {
+    if (annotation.isPrimitive || annotation.isInternal) {
       return { maxStackSize: 0 };
     }
     if (annotation.envLevel === 0) {
@@ -185,7 +211,7 @@ export class SVMLCompiler
   private emitStoreSymbol(token: Token): void {
     const annotation = this.getTokenAnnotation(token);
 
-    if (annotation.isPrimitive) {
+    if (annotation.isPrimitive || annotation.isInternal) {
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
     }
 
@@ -199,7 +225,10 @@ export class SVMLCompiler
   private emitFunctionCall(token: Token, numArgs: number): void {
     const annotation = this.getTokenAnnotation(token);
 
-    if (annotation.isPrimitive) {
+    if (annotation.isInternal) {
+      const internalOpcode = this.isTailCall ? OpCodes.CALLTV : OpCodes.CALLV;
+      this.builder.emitPrimitiveCall(internalOpcode, annotation.internalIndex!, numArgs);
+    } else if (annotation.isPrimitive) {
       const primitiveOpcode = this.isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
     } else {

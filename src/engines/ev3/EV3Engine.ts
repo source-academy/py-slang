@@ -1,26 +1,38 @@
-import { parse } from '../../parser/parser-adapter'
-import { SVMLCompiler } from '../svml/svml-compiler'
-import type { EV3ExecutionResult } from './types'
+import { parse } from '../../parser/parser-adapter';
+import { analyzeWithEnvironments } from '../../resolver';
+import ev3, { EV3_FUNCTIONS } from '../../stdlib/ev3';
+import math from '../../stdlib/math';
+import misc from '../../stdlib/misc';
+import { SINTER_OPCODE_MAX } from '../svml/opcodes';
+import { assemble } from '../svml/svml-assembler';
+import { SVMLCompiler } from '../svml/svml-compiler';
+import type { EV3ExecutionResult } from './types';
 
-class EV3Engine {
+function uint8ArrayToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+const EV3_INTERNAL_FUNCTIONS = new Map(EV3_FUNCTIONS.map((name, i) => [name, i]));
+
+export class EV3Engine {
   async execute(code: string): Promise<EV3ExecutionResult> {
     try {
-      const ast = parse(code + '\n')
-      const compiler = SVMLCompiler.fromProgram(ast)
-      const svmlProgram = compiler.compileProgram(ast)
+      const script = code + '\n';
+      const ast = parse(script);
+      const { errors, environments } = analyzeWithEnvironments(ast, script, 4, [misc, math, ev3]);
+      if (errors.length > 0) {
+        throw errors[0];
+      }
 
-      return {
-        status: 'finished',
-        output: JSON.stringify(svmlProgram)
-      }
+      const compiler = SVMLCompiler.fromProgram(ast, environments, EV3_INTERNAL_FUNCTIONS);
+      const program = compiler.compileProgram(ast);
+      const binary = assemble(program, SINTER_OPCODE_MAX);
+
+      return { status: 'finished', output: uint8ArrayToBase64(binary) };
     } catch (err) {
-      return {
-        status: 'error',
-        error: err instanceof Error ? err.message : String(err)
-      }
+      return { status: 'error', error: err instanceof Error ? err.message : String(err) };
     }
   }
 }
-
-export { EV3Engine }
-
