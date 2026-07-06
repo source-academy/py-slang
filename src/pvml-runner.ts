@@ -2,7 +2,7 @@
  * Headless runner for the PVML/Pynter pathway.
  *
  * Compiles a SICPy program to PVML bytecode (same compiler as the
- * PyPvmlEvaluator/PySvmlSinterEvaluator Conductor evaluators) and executes
+ * PyPvmlEvaluator/PyPvmlPynterEvaluator Conductor evaluators) and executes
  * it on a native Pynter `runner` binary (https://github.com/source-academy/pynter),
  * built separately via CMake. Pynter is a fork of Sinter kept as a separate
  * project so that Python-specific VM semantics don't risk destabilizing
@@ -11,7 +11,7 @@
  * output, throws RunError on any failure.
  */
 
-import { SINTER_OPCODE_MAX } from "./engines/pvml/opcodes";
+import { PYNTER_OPCODE_MAX } from "./engines/pvml/opcodes";
 import { NativePynterError, runNativePynter } from "./engines/pvml/pynter/native-pynter";
 import { assemble } from "./engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "./engines/pvml/pvml-compiler";
@@ -41,7 +41,7 @@ export interface RunPvmlResult {
  * program's print() output and its final result value/type.
  *
  * Note: the PVML compiler currently only wires up the [misc, math] stdlib
- * groups (matching PyPvmlEvaluator/PySvmlSinterEvaluator), so its chapter
+ * groups (matching PyPvmlEvaluator/PyPvmlPynterEvaluator), so its chapter
  * coverage is narrower than the CSE pathway's — variants that rely on
  * linked lists, streams, or the parser library are not yet supported here.
  */
@@ -69,7 +69,7 @@ export async function runCodePvmlDetailed(
   try {
     const compiler = PVMLCompiler.fromProgram(ast, environments);
     const program = compiler.compileProgram(ast);
-    binary = assemble(program, SINTER_OPCODE_MAX);
+    binary = assemble(program, PYNTER_OPCODE_MAX);
   } catch (e: unknown) {
     throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
   }

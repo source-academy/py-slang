@@ -11,7 +11,7 @@ const allTargets = [
   "PyCseEvaluator4",
   "PyWasmEvaluator",
   "PyPvmlEvaluator",
-  "PySvmlSinterEvaluator",
+  "PyPvmlPynterEvaluator",
   "PyStepperEvaluator1",
   "PyStepperEvaluator2",
 ] as const;

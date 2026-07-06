@@ -1,15 +1,15 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { SINTER_OPCODE_MAX } from "../engines/pvml/opcodes";
-import initSinter, { SinterValue } from "../engines/pvml/sinter/sinter";
+import { PYNTER_OPCODE_MAX } from "../engines/pvml/opcodes";
 import { assemble } from "../engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import initPynter, { PynterValue } from "../engines/pvml/pynter/pynter-wasm";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
 
-function sinterValueToNative(value: SinterValue): unknown {
+function pynterValueToNative(value: PynterValue): unknown {
   switch (value.type) {
     case "int":
     case "float":
@@ -20,12 +20,12 @@ function sinterValueToNative(value: SinterValue): unknown {
     case "undefined":
       return undefined;
     default:
-      throw new Error(`Unsupported Sinter value type: ${(value as { type: string }).type}`);
+      throw new Error(`Unsupported Pynter value type: ${(value as { type: string }).type}`);
   }
 }
 
-export class PySvmlSinterEvaluator extends BasicEvaluator {
-  private sinter: Awaited<ReturnType<typeof initSinter>> | null = null;
+export class PyPvmlPynterEvaluator extends BasicEvaluator {
+  private pynter: Awaited<ReturnType<typeof initPynter>> | null = null;
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
@@ -37,15 +37,15 @@ export class PySvmlSinterEvaluator extends BasicEvaluator {
       }
       const compiler = PVMLCompiler.fromProgram(ast, environments);
       const program = compiler.compileProgram(ast);
-      const binary = assemble(program, SINTER_OPCODE_MAX);
+      const binary = assemble(program, PYNTER_OPCODE_MAX);
 
-      if (!this.sinter) {
-        this.sinter = await initSinter({
+      if (!this.pynter) {
+        this.pynter = await initPynter({
           print: (text: string) => this.conductor.sendOutput(text),
         });
       }
-      const result = this.sinter.runBinary(binary);
-      this.conductor.sendResult(sinterValueToNative(result));
+      const result = this.pynter.runBinary(binary);
+      this.conductor.sendResult(pynterValueToNative(result));
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));
     }
