@@ -7,7 +7,7 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { TypeError, UserError } from "../errors/errors";
 import { FeatureNotSupportedError } from "../validator";
-import { generateNativePyinterTestCases, generateTestCases, TestCases } from "./utils";
+import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("Loop Tests", () => {
   const loopTests: TestCases = {
@@ -88,5 +88,5 @@ describe("Loop Tests", () => {
   };
 
   generateTestCases(loopTests, 3, [misc, math, linkedList, stream, pairmutator, list]);
-  generateNativePyinterTestCases(loopTests, 3);
+  generateNativePynterTestCases(loopTests, 3);
 });

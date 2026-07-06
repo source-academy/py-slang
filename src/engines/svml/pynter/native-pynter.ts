@@ -1,8 +1,8 @@
 /**
- * Runs assembled SVML bytecode through a native Pyinter `runner` binary
- * (https://github.com/source-academy/pyinter), built separately via CMake.
+ * Runs assembled SVML bytecode through a native Pynter `runner` binary
+ * (https://github.com/source-academy/pynter), built separately via CMake.
  *
- * Pyinter is a fork of Sinter (https://github.com/source-academy/sinter),
+ * Pynter is a fork of Sinter (https://github.com/source-academy/sinter),
  * kept as a separate sister project so that giving the native VM
  * Python-specific semantics doesn't put any risk on Sinter, which remains
  * the fallback engine for the Source curriculum.
@@ -24,7 +24,7 @@ import { join } from "node:path";
 const TRAILER_PREFIX = "Program exited with fault ";
 const TRAILER_RE = /^Program exited with fault (.+?) and result type (.+?): ([\s\S]*)$/;
 
-export interface NativePyinterResult {
+export interface NativePynterResult {
   /** Everything the program printed via print()/display(), concatenated. */
   output: string;
   /** e.g. "no fault", "divide by zero", "program called error()", ... */
@@ -33,16 +33,16 @@ export interface NativePyinterResult {
   resultValue: string;
 }
 
-export class NativePyinterError extends Error {}
+export class NativePynterError extends Error {}
 
 /**
- * Spawn `pyinterPath` on `binary` and parse its stdout into program output
+ * Spawn `pynterPath` on `binary` and parse its stdout into program output
  * vs. the trailing fault/result diagnostic.
  */
-export async function runNativePyinter(
+export async function runNativePynter(
   binary: Uint8Array,
-  pyinterPath: string,
-): Promise<NativePyinterResult> {
+  pynterPath: string,
+): Promise<NativePynterResult> {
   const dir = await mkdtemp(join(tmpdir(), "py-slang-svml-"));
   const programPath = join(dir, "program.svm");
 
@@ -50,13 +50,13 @@ export async function runNativePyinter(
     await writeFile(programPath, binary);
 
     const stdout = await new Promise<string>((resolve, reject) => {
-      execFile(pyinterPath, [programPath], (error, stdout, stderr) => {
+      execFile(pynterPath, [programPath], (error, stdout, stderr) => {
         // The runner always exits 0 (faults are reported in stdout, not via
         // the exit code), so any error here means we couldn't run it at all.
         if (error) {
           reject(
-            new NativePyinterError(
-              `Failed to run native pyinter binary at "${pyinterPath}": ${error.message}${
+            new NativePynterError(
+              `Failed to run native pynter binary at "${pynterPath}": ${error.message}${
                 stderr ? `\n${stderr}` : ""
               }`,
             ),
@@ -69,8 +69,8 @@ export async function runNativePyinter(
 
     const trailerStart = stdout.lastIndexOf(TRAILER_PREFIX);
     if (trailerStart === -1) {
-      throw new NativePyinterError(
-        `Unexpected output from native pyinter binary (no fault/result trailer found):\n${stdout}`,
+      throw new NativePynterError(
+        `Unexpected output from native pynter binary (no fault/result trailer found):\n${stdout}`,
       );
     }
 
@@ -78,7 +78,7 @@ export async function runNativePyinter(
     const trailer = stdout.slice(trailerStart).trimEnd();
     const match = TRAILER_RE.exec(trailer);
     if (!match) {
-      throw new NativePyinterError(`Could not parse native pyinter trailer line: ${trailer}`);
+      throw new NativePynterError(`Could not parse native pynter trailer line: ${trailer}`);
     }
     const [, fault, resultType, resultValue] = match;
 

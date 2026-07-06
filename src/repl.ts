@@ -3,12 +3,12 @@
  *
  * Usage:
  *   yarn build:repl && yarn repl <file.py> [-v <1-4>]
- *   yarn repl <file.py> --engine svml --pyinter <path-to-pyinter-runner-binary> -v 3
+ *   yarn repl <file.py> --engine svml --pynter <path-to-pynter-runner-binary> -v 3
  *
  * Runs a SICPy program either through the CSE evaluator (default) or by
- * compiling it to SVML bytecode and executing it on a native Pyinter runner
- * (https://github.com/source-academy/pyinter, built separately via CMake).
- * Pyinter is a fork of Sinter (https://github.com/source-academy/sinter)
+ * compiling it to SVML bytecode and executing it on a native Pynter runner
+ * (https://github.com/source-academy/pynter, built separately via CMake).
+ * Pynter is a fork of Sinter (https://github.com/source-academy/sinter)
  * kept as a separate project so that Python-specific VM semantics don't risk
  * destabilizing Sinter, which remains the fallback engine for the Source
  * curriculum.
@@ -26,7 +26,7 @@ type Engine = "cse" | "svml";
 interface ReplOptions {
   variant: string;
   engine: Engine;
-  pyinter?: string;
+  pynter?: string;
 }
 
 async function runFile(filename: string, opts: ReplOptions): Promise<void> {
@@ -40,10 +40,10 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
 
   const variant = parseInt(opts.variant, 10);
 
-  if (opts.engine === "svml" && !opts.pyinter) {
+  if (opts.engine === "svml" && !opts.pynter) {
     process.stderr.write(
-      "--engine svml requires --pyinter <path>, pointing at a built native Pyinter `runner`" +
-        " binary (see https://github.com/source-academy/pyinter#build-locally).\n",
+      "--engine svml requires --pynter <path>, pointing at a built native Pynter `runner`" +
+        " binary (see https://github.com/source-academy/pynter#build-locally).\n",
     );
     process.exit(1);
   }
@@ -58,7 +58,7 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
   try {
     const output =
       opts.engine === "svml"
-        ? await runCodeSvml(code, variant, { pyinterPath: opts.pyinter! })
+        ? await runCodeSvml(code, variant, { pynterPath: opts.pynter! })
         : await runCode(code, variant);
     process.stdout.write(output);
   } catch (e) {
@@ -73,13 +73,13 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
 
 const program = new Command()
   .name("py-slang")
-  .description("Run SICPy programs using the py-slang CSE or SVML/Pyinter evaluator")
+  .description("Run SICPy programs using the py-slang CSE or SVML/Pynter evaluator")
   .argument("<file>", "SICPy source file to evaluate")
   .option("-v, --variant <number>", "SICPy chapter/variant (1–4)", "4")
   .option("-e, --engine <name>", "Execution engine: cse or svml", "cse")
   .option(
-    "--pyinter <path>",
-    "Path to a native Pyinter `runner` binary (required for --engine svml, which only supports -v 3)",
+    "--pynter <path>",
+    "Path to a native Pynter `runner` binary (required for --engine svml, which only supports -v 3)",
   )
   .action(async (file: string, opts: ReplOptions) => {
     if (opts.engine !== "cse" && opts.engine !== "svml") {

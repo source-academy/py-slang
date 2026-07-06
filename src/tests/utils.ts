@@ -333,22 +333,22 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
 };
 
 // ---------------------------------------------------------------------------
-// Native Pyinter (svml/pyinter) parity test utilities
+// Native Pynter (svml/pynter) parity test utilities
 //
 // Reruns the same `TestCases` tables used by generateTestCases() (the CSE
-// suite) against the SVML compiler + a native Pyinter `runner` binary, to
-// track how far the svml/pyinter pathway currently is from CSE parity.
+// suite) against the SVML compiler + a native Pynter `runner` binary, to
+// track how far the svml/pynter pathway currently is from CSE parity.
 //
-// Opt-in: set PYINTER_RUNNER_PATH to a built `runner` binary
-// (https://github.com/source-academy/pyinter#build-locally) to enable these.
+// Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary
+// (https://github.com/source-academy/pynter#build-locally) to enable these.
 // Skipped entirely otherwise, since CI doesn't build the native binary.
 // Failures are expected and informative here, not a sign of broken infra —
 // see README.md's "Running the standalone CLI (repl)" section for the
 // pathway's known, current limitations.
 // ---------------------------------------------------------------------------
 
-/** Converts a Pyinter result (type name + raw value string) to a JS value comparable to `expected`. */
-function pyinterResultToComparable(result: { resultType: string; resultValue: string }): unknown {
+/** Converts a Pynter result (type name + raw value string) to a JS value comparable to `expected`. */
+function pynterResultToComparable(result: { resultType: string; resultValue: string }): unknown {
   switch (result.resultType) {
     case "integer":
     case "float":
@@ -367,10 +367,10 @@ function pyinterResultToComparable(result: { resultType: string; resultValue: st
   }
 }
 
-/** Converts a CSE `TestOutputValue` to a JS value comparable to pyinterResultToComparable()'s output. */
+/** Converts a CSE `TestOutputValue` to a JS value comparable to pynterResultToComparable()'s output. */
 function expectedToComparable(expected: TestOutputValue): unknown {
   if (typeof expected === "bigint") {
-    // Pyinter numbers are single-precision floats/32-bit ints, not arbitrary-precision.
+    // Pynter numbers are single-precision floats/32-bit ints, not arbitrary-precision.
     return Number(expected);
   }
   if (
@@ -387,19 +387,19 @@ function expectedToComparable(expected: TestOutputValue): unknown {
 
 /**
  * Reruns `testCases` (as already used with generateTestCases() for the CSE
- * machine) through the SVML compiler + native Pyinter, at the given chapter
+ * machine) through the SVML compiler + native Pynter, at the given chapter
  * `variant`. See the file-level comment above for gating/expectations.
  */
-export const generateNativePyinterTestCases = (testCases: TestCases, variant: number) => {
-  const pyinterPath = process.env.PYINTER_RUNNER_PATH;
-  const describeBlock = pyinterPath ? describe : describe.skip;
+export const generateNativePynterTestCases = (testCases: TestCases, variant: number) => {
+  const pynterPath = process.env.PYNTER_RUNNER_PATH;
+  const describeBlock = pynterPath ? describe : describe.skip;
 
   for (const [funcName, tests] of Object.entries(testCases)) {
-    describeBlock(`[svml/pyinter] ${funcName}`, () => {
+    describeBlock(`[svml/pynter] ${funcName}`, () => {
       test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
         let result;
         try {
-          result = await runCodeSvmlDetailed(code, variant, { pyinterPath: pyinterPath! });
+          result = await runCodeSvmlDetailed(code, variant, { pynterPath: pynterPath! });
         } catch (e) {
           if (typeof expected === "function") {
             // CSE also expects a failure here; any RunError counts as agreement.
@@ -411,7 +411,7 @@ export const generateNativePyinterTestCases = (testCases: TestCases, variant: nu
 
         if (typeof expected === "function") {
           throw new Error(
-            `Expected an error (${expected.name}), but svml/pyinter completed with ` +
+            `Expected an error (${expected.name}), but svml/pynter completed with ` +
               `result type "${result.resultType}": ${result.resultValue}`,
           );
         }
@@ -420,7 +420,7 @@ export const generateNativePyinterTestCases = (testCases: TestCases, variant: nu
           expect(result.output).toBe(output.map(line => `${line}\n`).join(""));
         }
 
-        const actual = pyinterResultToComparable(result);
+        const actual = pynterResultToComparable(result);
         const wanted = expectedToComparable(expected);
         if (typeof wanted === "number" && !Number.isInteger(wanted)) {
           expect(actual).toBeCloseTo(wanted, 2);

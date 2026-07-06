@@ -91,21 +91,21 @@ yarn build:repl
 yarn repl <path to python file> [-v <1-4>]
 ```
 
-Alternatively, `--engine svml` compiles the file to SVML bytecode and runs it on a native [Pyinter](https://github.com/source-academy/pyinter) `runner` binary instead of the CSE machine — the same compiler used by `PySvmlEvaluator`/`PySvmlSinterEvaluator`, but executed by a native C VM rather than a WASM port or the TypeScript interpreter. Pyinter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pyinter repo separately (see its [build instructions](https://github.com/source-academy/pyinter#build-locally)) and pointing `--pyinter` at the resulting binary:
+Alternatively, `--engine svml` compiles the file to SVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of the CSE machine — the same compiler used by `PySvmlEvaluator`/`PySvmlSinterEvaluator`, but executed by a native C VM rather than a WASM port or the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary:
 
 ```shell
-yarn repl <path to python file> --engine svml --pyinter <path to pyinter's runner binary> -v 3
+yarn repl <path to python file> --engine svml --pynter <path to pynter's runner binary> -v 3
 ```
 
 `--engine svml` only supports `-v 3` (SICPy §3) today; the CLI exits with an error for any other variant.
 
-For example, if `pyinter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
+For example, if `pynter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
 
 ```shell
-yarn repl <path to python file> --engine svml --pyinter ../pyinter/build/runner/runner -v 3
+yarn repl <path to python file> --engine svml --pynter ../pynter/build/runner/runner -v 3
 ```
 
-Note that the SVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PySvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine svml` yet. `src/tests/utils.ts`'s `generateNativePyinterTestCases()` reruns the existing CSE test suite against `--engine svml`-equivalent code when `PYINTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the SVML compiler and Pyinter itself gain features.
+Note that the SVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PySvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine svml` yet. `src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine svml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the SVML compiler and Pynter itself gain features.
 
 ### Running the test suite
 

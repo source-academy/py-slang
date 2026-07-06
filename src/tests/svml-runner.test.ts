@@ -12,10 +12,10 @@ import { runCodeSvml } from "../svml-runner";
  * what the source actually computes -- it only exercises runCodeSvml's
  * wiring (compile -> assemble -> spawn -> parse result).
  */
-async function makeFakePyinter(
+async function makeFakePynter(
   stdout: string,
 ): Promise<{ path: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(join(tmpdir(), "fake-pyinter-"));
+  const dir = await mkdtemp(join(tmpdir(), "fake-pynter-"));
   const path = join(dir, "runner.sh");
   await writeFile(path, `#!/bin/sh\ncat <<'EOF'\n${stdout}\nEOF\n`);
   await chmod(path, 0o755);
@@ -24,11 +24,11 @@ async function makeFakePyinter(
 
 describe("runCodeSvml", () => {
   test("returns program output on success", async () => {
-    const { path, cleanup } = await makeFakePyinter(
+    const { path, cleanup } = await makeFakePynter(
       "hello\nProgram exited with fault no fault and result type undefined: undefined",
     );
     try {
-      const output = await runCodeSvml('print("hello")\n', 2, { pyinterPath: path });
+      const output = await runCodeSvml('print("hello")\n', 2, { pynterPath: path });
       expect(output).toBe("hello\n");
     } finally {
       await cleanup();
@@ -36,17 +36,17 @@ describe("runCodeSvml", () => {
   });
 
   test("throws a parse RunError on invalid syntax", async () => {
-    await expect(runCodeSvml("def (:\n", 2, { pyinterPath: "/unused" })).rejects.toMatchObject({
+    await expect(runCodeSvml("def (:\n", 2, { pynterPath: "/unused" })).rejects.toMatchObject({
       kind: "parse",
     } satisfies Partial<RunError>);
   });
 
-  test("throws a runtime RunError when Pyinter reports a fault", async () => {
-    const { path, cleanup } = await makeFakePyinter(
+  test("throws a runtime RunError when Pynter reports a fault", async () => {
+    const { path, cleanup } = await makeFakePynter(
       "Program exited with fault divide by zero and result type undefined: undefined",
     );
     try {
-      await expect(runCodeSvml("1 / 0\n", 2, { pyinterPath: path })).rejects.toMatchObject({
+      await expect(runCodeSvml("1 / 0\n", 2, { pynterPath: path })).rejects.toMatchObject({
         kind: "runtime",
       } satisfies Partial<RunError>);
     } finally {
