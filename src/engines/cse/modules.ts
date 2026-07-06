@@ -95,11 +95,13 @@ export async function pythonToModule(
         yield;
         return pythonToModule(context, code, command, context.stash.pop()!);
       }
+      const arity =
+        (value.closure.node.parameters.findIndex(p => p.isStarred) + 1 ||
+          value.closure.node.parameters.length + 1) - 1;
       return context.evaluator.closure_make<DataType[], DataType>(
-        // TODO: fix arity
         {
           returnType: DataType.VOID,
-          args: Array(value.closure.node.parameters.length).fill(DataType.VOID),
+          args: Array(arity).fill(DataType.VOID),
         },
         closureFunc,
       );
