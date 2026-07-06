@@ -10,7 +10,7 @@ HELPERSTEX = $(HELPERS:%=python_%.tex)
 
 all: $(PDFSPECS)
 
-%.pdf: %.tex 
+%.pdf: %.tex $(HELPERSTEX)
 	$(PDFLATEX) $*
 
 clean:
