@@ -5,12 +5,12 @@
  * (already resolved by substitution at the statement level) or these language built-ins. This module
  * is the stepper's view of the Python §1/§2 standard library — see py-slang's
  * `docs/specs/python_standard.tex`, `python_misc.tex` and `math.ts` — namely the `math_*` constants
- * and functions plus the MISC library (`int`/`float`/`str`/`bool`/`repr`, the `is_*` predicates,
- * `abs`/`round`/`min`/`max`/`len`/`arity`/`print`/`error`).
+ * and functions plus the MISC library (`str`/`complex`/`repr`, the `is_*`
+ * predicates, `real`/`imag`, `abs`/`round`/`min`/`max`/`len`/`arity`/`print`/`error`).
  *
- * Only built-ins that fit the stepper's value model (int = `bigint`, float = `number`, bool, str,
- * `None`, and function values) are provided. Non-deterministic / interactive ones (`input`,
- * `time_time`, `random_random`) and the complex-number ones (`complex`/`real`/`imag`) are
+ * Only built-ins that fit the stepper's value model (int = `bigint`, float = `number`, complex = a
+ * plain `{real, imag}` — see `ComplexValue` in `./ast` — bool, str, `None`, and function values) are
+ * provided. Non-deterministic / interactive ones (`input`, `time_time`, `random_random`) are
  * intentionally omitted: a call to one stays irreducible and the stepper reports "Evaluation stuck",
  * which is the honest outcome for behaviour a pure substitution view cannot model.
  *
@@ -20,7 +20,10 @@
  */
 
 import {
+  type ComplexValue,
   type StepNode,
+  complexLiteral,
+  isComplexValue,
   isPairNode,
   isResultValue,
   literal,
@@ -84,8 +87,7 @@ function typeError(message: string): never {
 
 /** A Python `int`/`float` as a JS number. Unlike native Python, `bool` is not an int subtype in this
  * dialect: it is rejected here like every other non-numeric type, since this helper backs arithmetic
- * (`abs`, `round`, the `math_*` functions, `min`/`max`) — only explicit conversions such as `int()`
- * and `float()` special-case `bool` themselves. Throws otherwise. */
+ * (`abs`, `round`, the `math_*` functions, `min`/`max`). Throws otherwise. */
 function asNumber(node: StepNode, fn: string): number {
   if (node.type === "Literal") {
     const v = node.value;
@@ -100,6 +102,8 @@ const isIntNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.val
 const isBoolNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.value === "boolean";
 const isStrNode = (n: StepNode): boolean => n.type === "Literal" && typeof n.value === "string";
 const isNoneNode = (n: StepNode): boolean => n.type === "Literal" && n.value === null;
+const isComplexNode = (n: StepNode): boolean => n.type === "Literal" && isComplexValue(n.value);
+const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) || isComplexNode(n);
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
@@ -119,7 +123,7 @@ function pyStr(node: StepNode, repr: boolean): string {
   }
   if (node.type === "ArrayExpression") {
     // A pair / linked list renders in box-and-pointer notation. Elements use repr (like
-    // `linked_list_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
+    // `llist_to_string`), so a string element shows quoted: pair("a", None) ⇒ ['a', None].
     return `[${(node.elements as StepNode[]).map(e => pyStr(e, true)).join(", ")}]`;
   }
   if (node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration") {
@@ -128,19 +132,6 @@ function pyStr(node: StepNode, repr: boolean): string {
   }
   if (node.type === "Identifier") return `<built-in function ${String(node.name)}>`;
   return unparse(node);
-}
-
-/** Python truthiness for the value subset the stepper handles (mirrors `reduce.ts`'s `isTruthy`). */
-function truthy(node: StepNode): boolean {
-  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
-  if (node.type !== "Literal") return true;
-  const v = node.value;
-  if (v === null || v === false) return false;
-  if (v === true) return true;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  return true;
 }
 
 function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
@@ -157,6 +148,64 @@ function bankersRound(x: number): number {
   if (diff < 0.5) return floor;
   if (diff > 0.5) return floor + 1;
   return floor % 2 === 0 ? floor : floor + 1;
+}
+
+/** Parses a Python complex-literal string (e.g. `"1+2j"`, `"-4.5j"`, `"3"`, `"inf"`) for
+ * `complex(str)` — ported from `PyComplexNumber.fromString` in `src/types/value-types.ts` so the two
+ * evaluators parse the same strings the same way. */
+function parseComplexString(raw: string): ComplexValue {
+  const original = raw;
+  let s = raw.trim().replace(/_/g, "").toLowerCase();
+  const specials: Record<string, number> = {
+    infinity: Infinity,
+    "+infinity": Infinity,
+    "-infinity": -Infinity,
+    inf: Infinity,
+    "+inf": Infinity,
+    "-inf": -Infinity,
+    nan: NaN,
+    "+nan": NaN,
+    "-nan": NaN,
+  };
+  // Plain `in` also matches inherited Object.prototype keys (e.g. "constructor", "toString"), so
+  // e.g. "constructorj" would look up the Object constructor function instead of being rejected.
+  const isSpecial = (key: string): boolean => Object.prototype.hasOwnProperty.call(specials, key);
+  const malformed = (): never =>
+    fail(`ValueError: complex() arg is a malformed string: '${original}'`);
+
+  const parts = s.split(/(?<!e)(?=[+-])/).filter(part => part !== "");
+  if (parts.length === 0) malformed();
+  if (parts.length === 1) {
+    const isImag = s.endsWith("j");
+    if (isImag) {
+      s = s.slice(0, -1);
+      if (s === "" || s === "+" || s === "-") return { real: 0, imag: s === "-" ? -1 : 1 };
+    }
+    if (isSpecial(s)) {
+      const v = specials[s];
+      return isImag ? { real: 0, imag: v } : { real: v, imag: 0 };
+    }
+    const n = Number(s);
+    if (Number.isNaN(n)) malformed();
+    return isImag ? { real: 0, imag: n } : { real: n, imag: 0 };
+  }
+  if (parts.length > 2) malformed();
+  const [realPart, imagPart] = parts;
+  if (!imagPart.endsWith("j")) malformed();
+  const imagStr = imagPart.slice(0, -1);
+  const realOk = isSpecial(realPart) || !Number.isNaN(Number(realPart));
+  const imagOk =
+    isSpecial(imagStr) || ["+", "-", ""].includes(imagStr) || !Number.isNaN(Number(imagStr));
+  if (!realOk || !imagOk) malformed();
+  const real = isSpecial(realPart) ? specials[realPart] : Number(realPart);
+  const imag = isSpecial(imagStr)
+    ? specials[imagStr]
+    : imagStr === "+" || imagStr === ""
+      ? 1
+      : imagStr === "-"
+        ? -1
+        : Number(imagStr);
+  return { real, imag };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -281,54 +330,32 @@ Object.assign(BUILTIN_FUNCTIONS, {
       return intLiteral(v < 0n ? -v : v);
     }
     if (isFloatNode(x)) return numberLiteral(Math.abs(x.value as number), true);
+    if (isComplexNode(x)) {
+      const c = x.value as ComplexValue;
+      return numberLiteral(Math.hypot(c.real, c.imag), true); // the modulus, a non-negative float
+    }
     return typeError("bad operand type for abs()");
   },
-  int: (args: StepNode[]): StepNode => {
-    checkArity("int", args, 0, 2);
-    if (args.length === 0) return intLiteral(0n);
-    const x = args[0];
-    if (args.length === 2) {
-      if (!isStrNode(x)) typeError("int() can't convert non-string with explicit base");
-      const base = Number(asNumber(args[1], "int"));
-      const parsed = parseInt((x.value as string).trim(), base);
-      if (Number.isNaN(parsed)) fail(`ValueError: invalid literal for int() with base ${base}`);
-      return intLiteral(BigInt(parsed));
+  // complex(x): converts x (a number/bool/string/complex) to complex. complex(r, i): builds r + i*1j
+  // — i itself may be complex too, matching the real evaluator. complex(): 0j.
+  complex: (args: StepNode[]): StepNode => {
+    checkArity("complex", args, 0, 2);
+    if (args.length === 0) return complexLiteral({ real: 0, imag: 0 });
+    const toComplex = (n: StepNode): ComplexValue => {
+      if (isComplexNode(n)) return n.value as ComplexValue;
+      if (isIntNode(n) || isFloatNode(n)) return { real: asNumber(n, "complex"), imag: 0 };
+      if (isBoolNode(n)) return { real: n.value ? 1 : 0, imag: 0 };
+      return typeError("complex() argument must be a string, a number, a bool or a complex number");
+    };
+    if (args.length === 1) {
+      const x = args[0];
+      if (isStrNode(x)) return complexLiteral(parseComplexString(x.value as string));
+      return complexLiteral(toComplex(x));
     }
-    if (isIntNode(x)) return x;
-    if (isBoolNode(x)) return intLiteral((x.value as boolean) ? 1n : 0n);
-    if (isFloatNode(x)) return intLiteral(BigInt(Math.trunc(x.value as number)));
-    if (isStrNode(x)) {
-      const s = (x.value as string).trim().replace(/_/g, "");
-      if (!/^[+-]?\d+$/.test(s)) fail("ValueError: invalid literal for int() with base 10");
-      return intLiteral(BigInt(s));
-    }
-    return typeError("int() argument must be a string, a number or a bool");
-  },
-  float: (args: StepNode[]): StepNode => {
-    checkArity("float", args, 0, 1);
-    if (args.length === 0) return numberLiteral(0, true);
-    const x = args[0];
-    // Unlike `asNumber`, the explicit `float()` conversion accepts a `bool` (like `int()` does below).
-    if (isBoolNode(x)) return numberLiteral(x.value ? 1 : 0, true);
-    if (isStrNode(x)) {
-      const s = (x.value as string).trim().replace(/_/g, "").toLowerCase();
-      const specials: Record<string, number> = {
-        inf: Infinity,
-        "-inf": -Infinity,
-        infinity: Infinity,
-        "-infinity": -Infinity,
-        nan: NaN,
-      };
-      if (s in specials) return numberLiteral(specials[s], true);
-      const n = Number(s);
-      if (Number.isNaN(n) && s !== "nan") fail("ValueError: could not convert string to float");
-      return numberLiteral(n, true);
-    }
-    return numberLiteral(asNumber(x, "float"), true);
-  },
-  bool: (args: StepNode[]): StepNode => {
-    checkArity("bool", args, 0, 1);
-    return boolLiteral(args.length === 0 ? false : truthy(args[0]));
+    const r = toComplex(args[0]);
+    const i = toComplex(args[1]);
+    // r + i * 1j = r + (-i.imag, i.real)
+    return complexLiteral({ real: r.real - i.imag, imag: r.imag + i.real });
   },
   str: (args: StepNode[]): StepNode => {
     checkArity("str", args, 0, 1);
@@ -337,6 +364,18 @@ Object.assign(BUILTIN_FUNCTIONS, {
   repr: (args: StepNode[]): StepNode => {
     checkArity("repr", args, 1, 1);
     return stringLiteral(pyStr(args[0], true));
+  },
+  real: (args: StepNode[]): StepNode => {
+    checkArity("real", args, 1, 1);
+    const x = args[0];
+    if (!isComplexNode(x)) typeError("real() argument must be a complex number");
+    return numberLiteral((x.value as ComplexValue).real, true);
+  },
+  imag: (args: StepNode[]): StepNode => {
+    checkArity("imag", args, 1, 1);
+    const x = args[0];
+    if (!isComplexNode(x)) typeError("imag() argument must be a complex number");
+    return numberLiteral((x.value as ComplexValue).imag, true);
   },
   len: (args: StepNode[]): StepNode => {
     checkArity("len", args, 1, 1);
@@ -379,27 +418,26 @@ Object.assign(BUILTIN_FUNCTIONS, {
     fail("Error: " + args.map(a => pyStr(a, false)).join(" "));
   },
 
-  // Type predicates. `is_complex` is always False (the stepper has no complex value).
-  is_int: (args: StepNode[]): StepNode => predicate("is_int", args, isIntNode),
+  // Type predicates.
+  is_integer: (args: StepNode[]): StepNode => predicate("is_integer", args, isIntNode),
   is_float: (args: StepNode[]): StepNode => predicate("is_float", args, isFloatNode),
   is_boolean: (args: StepNode[]): StepNode => predicate("is_boolean", args, isBoolNode),
   is_string: (args: StepNode[]): StepNode => predicate("is_string", args, isStrNode),
   is_none: (args: StepNode[]): StepNode => predicate("is_none", args, isNoneNode),
   is_function: (args: StepNode[]): StepNode => predicate("is_function", args, isFunctionNode),
-  is_complex: (args: StepNode[]): StepNode => predicate("is_complex", args, () => false),
+  is_complex: (args: StepNode[]): StepNode => predicate("is_complex", args, isComplexNode),
+  is_number: (args: StepNode[]): StepNode => predicate("is_number", args, isNumberNode),
 });
 
 // The Python §2 linked-list library (pairs and lists). Names follow Python (`pair`, `head`,
-// `llist`, `map_linked_list`, …) while pairs/lists display like Source. See `./lists.ts`.
+// `llist`, `map`, …) while pairs/lists display like Source. See `./lists.ts`.
 Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
 
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */
 const BUILTIN_MIN_ARGS: Record<string, number> = {
   min: 1,
   max: 1,
-  int: 0,
-  float: 0,
-  bool: 0,
+  complex: 0,
   str: 0,
   print: 0,
   error: 0,
@@ -417,6 +455,7 @@ function predicate(name: string, args: StepNode[], test: (n: StepNode) => boolea
 function pyTypeName(node: StepNode): string {
   if (isIntNode(node)) return "int";
   if (isFloatNode(node)) return "float";
+  if (isComplexNode(node)) return "complex";
   if (isBoolNode(node)) return "bool";
   if (isStrNode(node)) return "str";
   if (isNoneNode(node)) return "NoneType";
@@ -459,7 +498,7 @@ const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
 /**
  * Whether built-in function `name` is available in SICPy `chapter`. The §1 core (the `math_*`
  * functions and the MISC library) is available in every chapter; the §2 linked-list library
- * (`pair`/`head`/`map_linked_list`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
+ * (`pair`/`head`/`map`/…) only from chapter 2 on. So a chapter-1 program that uses a §2
  * name is treated as referencing an *unknown* name — the preprocessing pass reports it as a
  * `NameError`, exactly like an undefined variable, instead of letting the student reach a feature
  * before it is taught. (All built-in *constants* are `math_*`, i.e. §1, so they need no gating.)

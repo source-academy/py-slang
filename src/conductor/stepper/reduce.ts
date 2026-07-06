@@ -24,8 +24,11 @@
  */
 
 import {
+  type ComplexValue,
   type StepNode,
   clone,
+  complexLiteral,
+  isComplexValue,
   isFunctionValue,
   isValue,
   literal,
@@ -38,14 +41,37 @@ import {
 import { applyBuiltin, isBuiltinFunctionName, isStepperValue } from "./builtins";
 
 export interface ReduceResult {
-  /** The program/expression after this single contraction. */
+  /** The program/expression after this single contraction — becomes `current` for the next step. */
   node: StepNode;
   /** The node in the *before* tree that was contracted (highlighted before the step). */
   preRedex: StepNode;
   /** The node in the *after* tree that is the contraction's result (highlighted after the step). */
   postRedex?: StepNode;
-  /** A human-readable description of the contraction. */
+  /**
+   * The tree the *after* step displays, if different from `node`. A contraction that discards an
+   * already-finished value — dropping a completed expression statement, binding a name into the rest
+   * of the program, removing a `pass`, inlining an `if`'s chosen branch — replaces or removes the
+   * redex's containing statement outright, so with no override the value would jump straight from
+   * "about to be discarded" (red) to "already gone", never appearing "just finished" (green). Such a
+   * contraction sets `postNode` to a tree with the redex still present (marked via `postRedex`) so the
+   * after step shows the value highlighted green one last time before it disappears on the next
+   * contraction; `node` (with the statement actually gone) still becomes the next contraction's start.
+   * This is usually exactly the pre-contraction tree — the one exception is a name binding
+   * (`VariableDeclaration`/`FunctionDeclaration` in `stepHead`), where `postNode` already carries the
+   * bound value substituted into the rest of the block, so that substitution is visible from this same
+   * "Declared and substituted" step rather than only from the next one (matching how a call
+   * expression's argument substitution is already visible on its own "Substituted ..." step — see
+   * `contractCall` — rather than one step later).
+   * Defaults to `node` — most contractions (binary/unary/logical/conditional/call/`return`/falling off
+   * the end of a function — anything whose result is a value that visibly *replaces* the redex in
+   * place, rather than removing its containing statement) need no override.
+   */
+  postNode?: StepNode;
+  /** A human-readable description shown on the *after* step, past tense ("… evaluated"). */
   explanation: string;
+  /** The same description shown on the *before* step, present-continuous ("… evaluating") — the same
+   * event, described as about to happen rather than just having happened. */
+  beforeExplanation: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -63,6 +89,7 @@ function isTruthy(node: StepNode): boolean {
   if (typeof v === "number") return v !== 0;
   if (typeof v === "bigint") return v !== 0n;
   if (typeof v === "string") return v.length > 0;
+  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
   return true;
 }
 
@@ -169,6 +196,90 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
   }
 }
 
+/** `a / b` for complex numbers via CPython's branch-scaled algorithm (avoids needless overflow /
+ * underflow vs. the textbook `a * conj(b) / |b|²` formula) — ported from `PyComplexNumber.div` in
+ * `src/types/value-types.ts`; the zero-divisor check is the caller's job (mirrors `intBinary`). */
+function complexDiv(a: ComplexValue, b: ComplexValue): ComplexValue {
+  const absC = Math.abs(b.real);
+  const absD = Math.abs(b.imag);
+  if (absD < absC) {
+    const ratio = b.imag / b.real;
+    const denom = b.real + b.imag * ratio;
+    return { real: (a.real + a.imag * ratio) / denom, imag: (a.imag - a.real * ratio) / denom };
+  }
+  const ratio = b.real / b.imag;
+  const denom = b.imag + b.real * ratio;
+  return { real: (a.real * ratio + a.imag) / denom, imag: (a.imag * ratio - a.real) / denom };
+}
+
+/** `a ** b` for complex numbers via polar form (`a = r·e^iθ`, so `a**b = e^(b·(ln r + iθ))`) — ported
+ * from `PyComplexNumber.pow`. `0 ** b` for a negative-real or non-real `b` is undefined (mirrors
+ * `intBinary`/`floatBinary`'s `0 ** negative` → `ZeroDivisionError`, extended to complex exponents). */
+function complexPow(a: ComplexValue, b: ComplexValue): ComplexValue {
+  const r = Math.hypot(a.real, a.imag);
+  if (r === 0) {
+    if (b.real === 0 && b.imag === 0) {
+      return { real: 1, imag: 0 };
+    }
+    if (b.real < 0 || b.imag !== 0) {
+      throw new Error("ZeroDivisionError: 0 cannot be raised to a negative or complex power");
+    }
+    return { real: 0, imag: 0 };
+  }
+
+  const theta = Math.atan2(a.imag, a.real);
+  const logR = Math.log(r);
+  const realExp = b.real * logR - b.imag * theta;
+  const imagExp = b.imag * logR + b.real * theta;
+  const scale = Math.exp(realExp);
+  return { real: scale * Math.cos(imagExp), imag: scale * Math.sin(imagExp) };
+}
+
+/**
+ * Complex arithmetic: `+,-,*,/,**` promote like the real evaluator (any `int`/`float` operand mixed
+ * with a `complex` one promotes the whole operation to complex — see `contractBinary`'s call site,
+ * which converts both operands to {@link ComplexValue} before calling this), and `==`/`!=` compare
+ * component-wise. There is no complex row for `//`, `%`, or the ordering operators in this dialect
+ * (Python's `complex` has no total order) — `default: null` leaves those to `reportBinaryTypeError`.
+ */
+function complexBinary(op: string, l: ComplexValue, r: ComplexValue): StepNode | null {
+  switch (op) {
+    case "+":
+      return complexLiteral({ real: l.real + r.real, imag: l.imag + r.imag });
+    case "-":
+      return complexLiteral({ real: l.real - r.real, imag: l.imag - r.imag });
+    case "*":
+      return complexLiteral({
+        real: l.real * r.real - l.imag * r.imag,
+        imag: l.real * r.imag + l.imag * r.real,
+      });
+    case "/":
+      if (r.real === 0 && r.imag === 0) {
+        throw new Error("ZeroDivisionError: complex division by zero");
+      }
+      return complexLiteral(complexDiv(l, r));
+    case "**":
+      return complexLiteral(complexPow(l, r));
+    case "==":
+      return boolLiteral(l.real === r.real && l.imag === r.imag);
+    case "!=":
+      return boolLiteral(l.real !== r.real || l.imag !== r.imag);
+    default:
+      return null;
+  }
+}
+
+/** Promotes an already-reduced binary operand to {@link ComplexValue} for a mixed complex operation
+ * (e.g. `2 + (1+2j)`), or `null` if it isn't `int`/`float`/`complex` at all (e.g. a `str`/`bool`/`None`
+ * operand, which stays a graceful "stuck" or a `reportBinaryTypeError` diagnosis, exactly as a
+ * non-numeric operand does for plain `int`/`float` arithmetic). */
+function toComplexValue(v: unknown): ComplexValue | null {
+  if (isComplexValue(v)) return v;
+  if (typeof v === "bigint") return { real: Number(v), imag: 0 };
+  if (typeof v === "number") return { real: v, imag: 0 };
+  return null;
+}
+
 const ORDER_OPS = new Set(["<", ">", "<=", ">="]);
 
 /**
@@ -185,6 +296,7 @@ function valueTypeName(node: StepNode): string | null {
     if (typeof v === "boolean") return "bool";
     if (typeof v === "string") return "str";
     if (v === null) return "NoneType";
+    if (isComplexValue(v)) return "complex";
   }
   if (isFunctionValue(node)) return "function";
   return null;
@@ -264,6 +376,13 @@ function contractBinary(node: StepNode): ReduceResult | null {
     const r = right.value;
     if (typeof l === "string" && typeof r === "string") {
       result = stringBinary(op, l, r);
+    } else if (isComplexValue(l) || isComplexValue(r)) {
+      // Any int/float/complex mix promotes to complex once either side is complex, exactly as the
+      // real evaluator does — checked before the plain int/float branch below so e.g. `2 + (1+2j)`
+      // (an int mixed with a complex) routes here instead of failing the `isNumericValue` check.
+      const lc = toComplexValue(l);
+      const rc = toComplexValue(r);
+      if (lc !== null && rc !== null) result = complexBinary(op, lc, rc);
     } else if (isNumericValue(l) && isNumericValue(r)) {
       // If either operand is a `float`, the operation promotes to float (Python semantics), so
       // `3.14 * 0` is `0.0` and `1 == 1.0` is `True`. `bool` is deliberately excluded from
@@ -291,7 +410,8 @@ function contractBinary(node: StepNode): ReduceResult | null {
     node: result,
     preRedex: node,
     postRedex: result,
-    explanation: `Binary expression ${unparse(node)} evaluated`,
+    explanation: `Evaluated binary expression ${unparse(node)}`,
+    beforeExplanation: `Evaluating binary expression ${unparse(node)}`,
   };
 }
 
@@ -313,6 +433,9 @@ function contractUnary(node: StepNode): ReduceResult | null {
   } else if (arg.type === "Literal" && typeof arg.value === "number") {
     if (op === "-") result = numberLiteral(-arg.value, Boolean(arg.pyFloat));
     else if (op === "+") result = numberLiteral(arg.value, Boolean(arg.pyFloat));
+  } else if (arg.type === "Literal" && isComplexValue(arg.value)) {
+    if (op === "-") result = complexLiteral({ real: -arg.value.real, imag: -arg.value.imag });
+    else if (op === "+") result = complexLiteral(arg.value);
   }
   if (result === null) {
     if (op === "not") {
@@ -332,11 +455,17 @@ function contractUnary(node: StepNode): ReduceResult | null {
   const argRepr = unparse(arg);
   const explanation =
     op === "not"
-      ? `Unary expression evaluated, boolean ${argRepr} negated.`
+      ? `Evaluated unary expression not ${argRepr}.`
       : op === "-"
-        ? `Unary expression evaluated, value ${argRepr} negated.`
-        : `Unary expression ${unparse(node)} evaluated`;
-  return { node: result, preRedex: node, postRedex: result, explanation };
+        ? `Evaluated unary expression -${argRepr}`
+        : `Evaluated unary expression ${unparse(node)}`;
+  const beforeExplanation =
+    op === "not"
+      ? `Evaluating unary expression not ${argRepr}.`
+      : op === "-"
+        ? `Evaluating unary expression -${argRepr}.`
+        : `Evaluating unary expression ${unparse(node)}`;
+  return { node: result, preRedex: node, postRedex: result, explanation, beforeExplanation };
 }
 
 function contractLogical(node: StepNode): ReduceResult | null {
@@ -357,22 +486,25 @@ function contractLogical(node: StepNode): ReduceResult | null {
   const explanation =
     op === "and"
       ? leftTruthy
-        ? "AND operation evaluated, left of operator is truthy, continue evaluating right of operator"
-        : "AND operation evaluated, left of operator is falsy, stop evaluation"
+        ? "Evaluated AND expression, left of operator is truthy, will evaluate right of operator"
+        : "Evaluated AND expression, left of operator is falsy, stop evaluation"
       : leftTruthy
-        ? "OR operation evaluated, left of operator is truthy, stop evaluation"
-        : "OR operation evaluated, left of operator is falsy, continue evaluating right of operator";
-  return { node: chosen, preRedex: node, postRedex: chosen, explanation };
+        ? "Evaluated OR expression, left of operator is truthy, stop evaluation"
+        : "Evaluated OR expression, left of operator is falsy, will evaluate right of operator";
+  const beforeExplanation = op === "and" ? "Evaluating AND expression" : "Evaluating OR expression";
+  return { node: chosen, preRedex: node, postRedex: chosen, explanation, beforeExplanation };
 }
 
 function contractConditional(node: StepNode): ReduceResult {
   const truthy = isTruthy(node.test as StepNode);
   const chosen = clone((truthy ? node.consequent : node.alternate) as StepNode);
+  const branch = truthy ? "consequent" : "alternate";
   return {
     node: chosen,
     preRedex: node,
     postRedex: chosen,
-    explanation: `Conditional expression evaluated, condition is ${truthy ? "true" : "false"}, ${truthy ? "consequent" : "alternate"} evaluated`,
+    explanation: `Evaluated conditional expression, condition is ${truthy ? "true" : "false"}, will evaluate ${branch}`,
+    beforeExplanation: `Evaluating conditional expression`,
   };
 }
 
@@ -390,7 +522,8 @@ function contractCall(node: StepNode): ReduceResult | null {
       node: result,
       preRedex: node,
       postRedex: result,
-      explanation: `${String(callee.name)} runs`,
+      explanation: `Ran ${String(callee.name)}`,
+      beforeExplanation: `Running ${String(callee.name)}`,
     };
   }
 
@@ -454,19 +587,33 @@ function contractCall(node: StepNode): ReduceResult | null {
   // Mirror Source's application explanation: a named function shows as its name, an anonymous lambda
   // as its full form (`unparse`), and a nullary call as "<func> runs".
   const functionDisplay = unparse(callee);
+  const argsJoined = args.map(unparse).join(", ");
+  const paramsJoined = params.join(", ");
   const explanation =
     params.length === 0
-      ? `${functionDisplay} runs`
-      : `${args.map(unparse).join(", ")} substituted into ${params.join(", ")} of ${functionDisplay}`;
-  return { node: result, preRedex: node, postRedex: result, explanation };
+      ? `Ran ${functionDisplay}`
+      : `Substituted ${argsJoined} into ${paramsJoined} of ${functionDisplay}`;
+  const beforeExplanation =
+    params.length === 0
+      ? `Running ${functionDisplay}`
+      : `Substituting ${argsJoined} into ${paramsJoined} of ${functionDisplay}`;
+  return { node: result, preRedex: node, postRedex: result, explanation, beforeExplanation };
 }
 
 /* -------------------------------------------------------------------------- */
 /*                          One-step expression reducer                       */
 /* -------------------------------------------------------------------------- */
 
+/** Rewraps `child`'s result one level up, into `parent[key]`. `postNode` (if the child set one — see
+ * its doc comment) must be rewrapped the same way as `node`, or a nested discard (e.g. a multi-
+ * statement function body reducing in expression position, several levels inside a larger expression)
+ * would display just its own isolated `postNode` instead of that value in its full surrounding tree. */
 function rebuild(parent: StepNode, key: string, child: ReduceResult): ReduceResult {
-  return { ...child, node: { ...parent, [key]: child.node } };
+  return {
+    ...child,
+    node: { ...parent, [key]: child.node },
+    postNode: child.postNode ? { ...parent, [key]: child.postNode } : undefined,
+  };
 }
 
 function rebuildIndex(
@@ -477,7 +624,13 @@ function rebuildIndex(
 ): ReduceResult {
   const arr = (parent[key] as StepNode[]).slice();
   arr[index] = child.node;
-  return { ...child, node: { ...parent, [key]: arr } };
+  let postNode: StepNode | undefined;
+  if (child.postNode) {
+    const postArr = (parent[key] as StepNode[]).slice();
+    postArr[index] = child.postNode;
+    postNode = { ...parent, [key]: postArr };
+  }
+  return { ...child, node: { ...parent, [key]: arr }, postNode };
 }
 
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
@@ -558,7 +711,13 @@ type HeadOutcome =
       newBody: StepNode[];
       preRedex: StepNode;
       postRedex?: StepNode;
+      // The statement list the *after* step displays, if different from `newBody` — the `HeadOutcome`
+      // analogue of `ReduceResult.postNode` (see its doc comment): set when this step discards the
+      // *whole* head statement (a binding, a dropped `pass`, an inlined `if` branch) rather than taking
+      // one more step inside it, so the after step can show it highlighted green before it is gone.
+      postNewBody?: StepNode[];
       explanation: string;
+      beforeExplanation: string;
     }
   | { kind: "finished-expression" } // head is a fully-evaluated `ExpressionStatement` (a value)
   | { kind: "return" } //              head is a `ReturnStatement` (exits a function body)
@@ -582,7 +741,11 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
           newBody: [{ ...head, expression: reduced.node }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
+          postNewBody: reduced.postNode
+            ? [{ ...head, expression: reduced.postNode }, ...rest]
+            : undefined,
           explanation: reduced.explanation,
+          beforeExplanation: reduced.beforeExplanation,
         };
       }
       // A finished expression statement is a value to discard (or the program's result); one that
@@ -600,7 +763,11 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
             newBody: [{ ...head, declarations: [{ ...decl, init: reduced.node }] }, ...rest],
             preRedex: reduced.preRedex,
             postRedex: reduced.postRedex,
+            postNewBody: reduced.postNode
+              ? [{ ...head, declarations: [{ ...decl, init: reduced.postNode }] }, ...rest]
+              : undefined,
             explanation: reduced.explanation,
+            beforeExplanation: reduced.beforeExplanation,
           };
         }
         return { kind: "irreducible" };
@@ -613,11 +780,19 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
+      // Substituted eagerly, not deferred to `node` alone: `postNewBody` (the after step's displayed
+      // tree) reuses this same substituted rest, so the substitution is already visible on this step's
+      // "Declared and substituted" (green) tree rather than only on the next, unrelated step — see the
+      // `postNode` doc comment on `ReduceResult` above.
+      const substitutedRest = rest.map(stmt => substitute(stmt, name, boundValue));
       return {
         kind: "step",
-        newBody: rest.map(stmt => substitute(stmt, name, boundValue)),
+        newBody: substitutedRest,
         preRedex: head,
-        explanation: `${name} declared and substituted into the rest of the program`,
+        postRedex: head,
+        postNewBody: [head, ...substitutedRest],
+        explanation: `Declared and substituted ${name} into the rest of the block`,
+        beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
     }
     case "FunctionDeclaration": {
@@ -626,14 +801,17 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      const params = paramNames(head);
+      // See the identical substitutedRest/postNewBody note in the VariableDeclaration case above:
+      // this makes the substitution visible already on this step's after tree, not only the next one.
+      const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
       return {
         kind: "step",
-        newBody: rest.map(stmt => substitute(stmt, name, value)),
+        newBody: substitutedRest,
         preRedex: head,
-        explanation: params.length
-          ? `Function ${name} declared, parameter(s) ${params.join(", ")} required`
-          : `Function ${name} declared`,
+        postRedex: head,
+        postNewBody: [head, ...substitutedRest],
+        explanation: `Declared and substituted ${name} into the rest of the block`,
+        beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
     }
     case "PassStatement":
@@ -641,7 +819,10 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         kind: "step",
         newBody: rest,
         preRedex: head,
-        explanation: "Pass statement evaluated",
+        postRedex: head,
+        postNewBody: [head, ...rest],
+        explanation: "Evaluated pass statement",
+        beforeExplanation: "Evaluating pass statement",
       };
     case "IfStatement": {
       const reduced = reduceExpr(head.test as StepNode);
@@ -651,17 +832,25 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
           newBody: [{ ...head, test: reduced.node }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
+          postNewBody: reduced.postNode
+            ? [{ ...head, test: reduced.postNode }, ...rest]
+            : undefined,
           explanation: reduced.explanation,
+          beforeExplanation: reduced.beforeExplanation,
         };
       }
       const truthy = isTruthy(head.test as StepNode);
       const branch = (truthy ? head.consequent : head.alternate) as StepNode | null;
       const branchBody = branch ? (branch.body as StepNode[]) : [];
+      const branchName = truthy ? "if" : "else";
       return {
         kind: "step",
         newBody: [...branchBody, ...rest],
         preRedex: head,
-        explanation: `If statement evaluated, condition ${truthy ? "true" : "false"}, proceed to ${truthy ? "if" : "else"} block`,
+        postRedex: head,
+        postNewBody: [head, ...rest],
+        explanation: `Evaluated if statement, condition ${truthy ? "true" : "false"}, will proceed to ${branchName} block`,
+        beforeExplanation: `Evaluating if statement`,
       };
     }
     case "ReturnStatement":
@@ -690,19 +879,29 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         node: { ...prog, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
+        postNode: outcome.postNewBody ? { ...prog, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
+        beforeExplanation: outcome.beforeExplanation,
       };
-    case "finished-expression":
+    case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
       // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So
       // we drop it even when it is the last statement: the final line's value then disappears via the
       // same step as every other line's, and the run ends on an empty program that `drive` reports as
-      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.)
+      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.) The
+      // after step shows the value highlighted green one last time (`postNode`/`postRedex` = the
+      // unchanged pre-contraction tree/statement) before it actually disappears on the *next*
+      // contraction — see `ReduceResult.postNode`'s doc comment.
+      const text = unparse(head.expression as StepNode);
       return {
         node: { ...prog, body: rest },
         preRedex: head,
-        explanation: `${unparse(head.expression as StepNode)} finished evaluating`,
+        postRedex: head,
+        postNode: prog,
+        explanation: `Evaluated ${text}`,
+        beforeExplanation: `Evaluating ${text}`,
       };
+    }
     case "return": // A `return` at the top level is not valid Python; treat the program as done.
     case "irreducible":
       return null;
@@ -720,7 +919,13 @@ function reduceBlock(node: StepNode): ReduceResult | null {
   const none = (): StepNode => literal(null, "None");
   const fallOff = (preRedex: StepNode): ReduceResult => {
     const result = none();
-    return { node: result, preRedex, postRedex: result, explanation: "Function returns None" };
+    return {
+      node: result,
+      preRedex,
+      postRedex: result,
+      explanation: "Function returned None",
+      beforeExplanation: "Function returning None",
+    };
   };
 
   const body = node.body as StepNode[];
@@ -736,24 +941,38 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         node: { ...node, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
+        postNode: outcome.postNewBody ? { ...node, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
+        beforeExplanation: outcome.beforeExplanation,
       };
     case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a
       // bare `return`); the argument then reduces in place. Anything after it is dead code, dropped.
       const arg = (head.argument as StepNode | null) ?? none();
-      return { node: arg, preRedex: head, postRedex: arg, explanation: `${unparse(arg)} returned` };
+      return {
+        node: arg,
+        preRedex: head,
+        postRedex: arg,
+        explanation: `Returned ${unparse(arg)}`,
+        beforeExplanation: `Returning ${unparse(arg)}`,
+      };
     }
-    case "finished-expression":
+    case "finished-expression": {
       // A bare expression value in a function body is not the function's result: discard it; if it
-      // was the last statement, the function fell off the end → None.
-      return rest.length === 0
-        ? fallOff(head)
-        : {
-            node: { ...node, body: rest },
-            preRedex: head,
-            explanation: `${unparse(head.expression as StepNode)} finished evaluating`,
-          };
+      // was the last statement, the function fell off the end → None. As in `reduceProgram`'s
+      // "finished-expression" case, the after step shows the value green once more (`postNode`) before
+      // it disappears on the next contraction.
+      if (rest.length === 0) return fallOff(head);
+      const text = unparse(head.expression as StepNode);
+      return {
+        node: { ...node, body: rest },
+        preRedex: head,
+        postRedex: head,
+        postNode: node,
+        explanation: `Evaluated ${text}`,
+        beforeExplanation: `Evaluating ${text}`,
+      };
+    }
     case "irreducible":
       // A statement in the body is stuck (cannot reduce and is not a value/return). Signal no
       // progress so the driver reports the whole evaluation as stuck, rather than inventing a value.

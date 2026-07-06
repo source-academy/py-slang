@@ -83,11 +83,18 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
     steps.push({
       ast: current,
       markers: [
-        { redex: result.preRedex, redexType: "beforeMarker", explanation: result.explanation },
+        {
+          redex: result.preRedex,
+          redexType: "beforeMarker",
+          explanation: result.beforeExplanation,
+        },
       ],
     });
     steps.push({
-      ast: result.node,
+      // `postNode` (set by a contraction that discards a finished value — see its doc comment on
+      // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
+      // regardless, so the discarded statement is actually gone by the next contraction.
+      ast: result.postNode ?? result.node,
       markers: [
         result.postRedex
           ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
