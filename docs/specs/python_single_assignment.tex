@@ -1,6 +1,6 @@
-Reassignment is not allowed. That means any parameter of a function
-must not appear on the left hand side of \texttt{\textbf{=}} within
-its scope, and any variable
-declared by a declaration assignment must not appear in another
-declaration assignment in the same scope.
-
+Reassignment is not allowed. Within any scope, each name (including
+function parameters, variables, and function names) must be declared or
+defined at most once. Therefore, a parameter or declared variable
+must not appear on the left-hand side of an assignment,
+and a name must not be defined by multiple
+assignments or function definitions in the same scope.
