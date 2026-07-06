@@ -981,6 +981,15 @@ describe("Standard Library Tests", () => {
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
         ["[1,2,3] is (lambda x: x)", false, null], // list is function
       ],
+      // equal matches == semantics on Python lists too (bool-as-int, as in Python)
+      "equal on lists": [
+        ["equal([True], [1])", true, null],
+        ["equal([True], [2])", false, null],
+        ["equal([1], [1.0])", true, null],
+        ["equal([1, [True]], [1.0, [1]])", true, null],
+        ["equal([1], [(1+0j)])", true, null],
+        ["[True] == [1]", true, null],
+      ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [
         ["1 is not 1", UnsupportedOperandTypeError, null],
