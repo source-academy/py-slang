@@ -5,7 +5,8 @@
  * the language specifications — the human source of truth:
  *
  *   docs/specs/python_typing_front.tex      (rows common to all chapters)
- *   docs/specs/python_typing_middle_12.tex  (`==`/`!=` rows for Python §1/§2)
+ *   docs/specs/python_typing_middle_1.tex   (`==`/`!=` rows for Python §1)
+ *   docs/specs/python_typing_middle_2.tex   (`==`/`!=` rows for Python §2)
  *   docs/specs/python_typing_middle_34.tex  (`==`/`!=`/`is` rows for Python §3/§4)
  *   docs/specs/python_typing_back.tex       (rows common to all chapters)
  *
@@ -30,6 +31,8 @@ import { Stash, Value } from "../engines/cse/stash";
 import { UnsupportedOperandTypeError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
+import linkedList from "../stdlib/linked-list";
+import { Group } from "../stdlib/utils";
 import { FeatureNotSupportedError, makeValidatorsForChapter } from "../validator";
 import { generateMockStreams } from "./utils";
 
@@ -39,6 +42,11 @@ import { generateMockStreams } from "./utils";
 
 type PyType = "int" | "float" | "complex" | "bool" | "str" | "NoneType" | "list" | "function";
 
+/**
+ * List literals are rejected by the chapter 1/2 validators (NoListsValidator), so at
+ * Python §2 a "list" (pair) value is instead constructed via the linked-list library's
+ * `pair` builtin — the only way §2 code can produce one.
+ */
 const LITERAL: Record<PyType, string> = {
   int: "2",
   float: "2.5",
@@ -50,6 +58,10 @@ const LITERAL: Record<PyType, string> = {
   function: "(lambda x: x)",
 };
 
+function literalFor(type: PyType, chapter: number): string {
+  return type === "list" && chapter === 2 ? "pair(1, 2)" : LITERAL[type];
+}
+
 /** Stash representation of each spec result type. */
 const STASH_TYPE: Record<string, string> = {
   int: "bigint",
@@ -59,9 +71,19 @@ const STASH_TYPE: Record<string, string> = {
   str: "string",
 };
 
-/** List literals are rejected by the chapter 1/2 validators, so the §1/§2 universe excludes them. */
-const UNIVERSE_12: PyType[] = ["int", "float", "complex", "bool", "str", "NoneType", "function"];
-const UNIVERSE_34: PyType[] = [...UNIVERSE_12, "list"];
+/** List literals are rejected by the chapter 1 validators, so the §1 universe excludes them. */
+const UNIVERSE_1: PyType[] = ["int", "float", "complex", "bool", "str", "NoneType", "function"];
+/** At §2 "list" is available as a pair, constructed via the linked-list library's `pair`. */
+const UNIVERSE_WITH_LIST: PyType[] = [...UNIVERSE_1, "list"];
+
+function universeForChapter(chapter: number): PyType[] {
+  return chapter === 1 ? UNIVERSE_1 : UNIVERSE_WITH_LIST;
+}
+
+/** The linked-list library group, needed at §2 to resolve/evaluate the `pair` builtin. */
+function groupsForChapter(chapter: number): Group[] {
+  return chapter === 2 ? [linkedList] : [];
+}
 
 // ---------------------------------------------------------------------------
 // The spec tables
@@ -77,7 +99,11 @@ interface Row {
 }
 
 const NUMERIC: PyType[] = ["int", "float", "complex"];
-const ANY_34 = UNIVERSE_34;
+const ANY_34 = UNIVERSE_WITH_LIST;
+/** §2's `==`/`!=` universe: everything except bool and function (see MIDDLE_2 below). */
+const CHAPTER_2_EQUALITY_TYPES: PyType[] = UNIVERSE_WITH_LIST.filter(
+  type => type !== "bool" && type !== "function",
+);
 
 // docs/specs/python_typing_front.tex — common to all chapters
 const FRONT: Row[] = [
@@ -106,10 +132,28 @@ const BACK: Row[] = [
   { ops: [">", ">=", "<", "<="], left: ["str"], right: ["str"], result: "bool" },
 ];
 
-// docs/specs/python_typing_middle_12.tex — Python §1/§2 only
-const MIDDLE_12: Row[] = [
+// docs/specs/python_typing_middle_1.tex — Python §1 only
+const MIDDLE_1: Row[] = [
   { ops: ["==", "!="], left: NUMERIC, right: NUMERIC, result: "bool" },
   { ops: ["==", "!="], left: ["str"], right: ["str"], result: "bool" },
+  { ops: [">", ">=", "<", "<="], left: ["int", "float"], right: ["int", "float"], result: "bool" },
+];
+
+// docs/specs/python_typing_middle_2.tex — Python §2 only.
+// `==`/`!=` compare structurally over any x any *except* bool and function,
+// which are excluded entirely (`bool x any -> error`, `any x bool -> error`,
+// `function x any -> error`, `any x function -> error`): a §2 comparison never
+// has to answer whether `True == 1` holds, or what function equality means
+// before `is` is introduced at §3/§4. Every other combination — including
+// cross-type and pair/None comparisons — is `bool`.
+// Ordering comparisons are unaffected: still int,float x int,float only.
+const MIDDLE_2: Row[] = [
+  {
+    ops: ["==", "!="],
+    left: CHAPTER_2_EQUALITY_TYPES,
+    right: CHAPTER_2_EQUALITY_TYPES,
+    result: "bool",
+  },
   { ops: [">", ">=", "<", "<="], left: ["int", "float"], right: ["int", "float"], result: "bool" },
 ];
 
@@ -131,11 +175,14 @@ const MIDDLE_34: Row[] = [
   },
 ];
 
-const TABLE_12: Row[] = [...FRONT, ...MIDDLE_12, ...BACK];
+const TABLE_1: Row[] = [...FRONT, ...MIDDLE_1, ...BACK];
+const TABLE_2: Row[] = [...FRONT, ...MIDDLE_2, ...BACK];
 const TABLE_34: Row[] = [...FRONT, ...MIDDLE_34, ...BACK];
 
 function tableForChapter(chapter: number): Row[] {
-  return chapter <= 2 ? TABLE_12 : TABLE_34;
+  if (chapter === 1) return TABLE_1;
+  if (chapter === 2) return TABLE_2;
+  return TABLE_34;
 }
 
 const BINARY_OPS_12 = ["+", "-", "*", "/", "%", "**", ">", ">=", "<", "<=", "==", "!="];
@@ -160,12 +207,12 @@ type Outcome =
   | { kind: "runtime-error"; name: string }
   | { kind: "resolve-error"; name: string };
 
-async function run(code: string, chapter: number): Promise<Outcome> {
+async function run(code: string, chapter: number, groups: Group[] = []): Promise<Outcome> {
   const script = code + "\n";
   let ast: StmtNS.Stmt;
   try {
     ast = parse(script);
-    const resolver = new Resolver(script, ast, makeValidatorsForChapter(chapter), [], []);
+    const resolver = new Resolver(script, ast, makeValidatorsForChapter(chapter), groups, []);
     const errors = resolver.resolve(ast);
     if (errors.length > 0) {
       throw errors[0];
@@ -175,6 +222,11 @@ async function run(code: string, chapter: number): Promise<Outcome> {
   }
   const context = new Context();
   generateMockStreams(context, []);
+  for (const group of groups) {
+    for (const [name, value] of group.builtins) {
+      context.nativeStorage.builtins.set(name, value);
+    }
+  }
   // The value of the final expression statement is observed as the last value
   // popped off the stash (same technique as generateTestCases in utils.ts).
   let lastPopped: Value | undefined;
@@ -214,13 +266,14 @@ function describeOutcome(outcome: Outcome): string {
  * behave as the spec table requires.
  */
 async function sweepBinaryOperator(op: string, chapter: number): Promise<string[]> {
-  const universe = chapter <= 2 ? UNIVERSE_12 : UNIVERSE_34;
+  const universe = universeForChapter(chapter);
+  const groups = groupsForChapter(chapter);
   const mismatches: string[] = [];
   for (const left of universe) {
     for (const right of universe) {
-      const code = `${LITERAL[left]} ${op} ${LITERAL[right]}`;
+      const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
       const expected = specResult(op, left, right, chapter);
-      const outcome = await run(code, chapter);
+      const outcome = await run(code, chapter, groups);
       if (expected !== null) {
         if (outcome.kind !== "value" || outcome.stashType !== STASH_TYPE[expected]) {
           mismatches.push(
@@ -252,7 +305,8 @@ for (const chapter of [1, 2, 3, 4]) {
     });
 
     test("unary -", async () => {
-      const universe = chapter <= 2 ? UNIVERSE_12 : UNIVERSE_34;
+      const universe = universeForChapter(chapter);
+      const groups = groupsForChapter(chapter);
       const allowed: Partial<Record<PyType, ResultType>> = {
         int: "int",
         float: "float",
@@ -260,9 +314,9 @@ for (const chapter of [1, 2, 3, 4]) {
       };
       const mismatches: string[] = [];
       for (const operand of universe) {
-        const code = `-${LITERAL[operand]}`;
+        const code = `-${literalFor(operand, chapter)}`;
         const expected = allowed[operand] ?? null;
-        const outcome = await run(code, chapter);
+        const outcome = await run(code, chapter, groups);
         if (expected !== null) {
           if (outcome.kind !== "value" || outcome.stashType !== STASH_TYPE[expected]) {
             mismatches.push(`${code}: spec says ${expected}, got ${describeOutcome(outcome)}`);
@@ -278,11 +332,12 @@ for (const chapter of [1, 2, 3, 4]) {
     });
 
     test("not", async () => {
-      const universe = chapter <= 2 ? UNIVERSE_12 : UNIVERSE_34;
+      const universe = universeForChapter(chapter);
+      const groups = groupsForChapter(chapter);
       const mismatches: string[] = [];
       for (const operand of universe) {
-        const code = `not ${LITERAL[operand]}`;
-        const outcome = await run(code, chapter);
+        const code = `not ${literalFor(operand, chapter)}`;
+        const outcome = await run(code, chapter, groups);
         if (operand === "bool") {
           if (outcome.kind !== "value" || outcome.stashType !== "bool") {
             mismatches.push(`${code}: spec says bool, got ${describeOutcome(outcome)}`);
@@ -300,12 +355,13 @@ for (const chapter of [1, 2, 3, 4]) {
     // `and` / `or` require a bool left operand; the result is the value of one
     // of the operands ("any"), so only error-vs-success is asserted.
     test.each([["and"], ["or"]])("%s", async op => {
-      const universe = chapter <= 2 ? UNIVERSE_12 : UNIVERSE_34;
+      const universe = universeForChapter(chapter);
+      const groups = groupsForChapter(chapter);
       const mismatches: string[] = [];
       for (const left of universe) {
         for (const right of universe) {
-          const code = `${LITERAL[left]} ${op} ${LITERAL[right]}`;
-          const outcome = await run(code, chapter);
+          const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
+          const outcome = await run(code, chapter, groups);
           if (left === "bool") {
             if (outcome.kind !== "value") {
               mismatches.push(`${code}: spec says any, got ${describeOutcome(outcome)}`);
@@ -417,8 +473,58 @@ describe("Operator conformance: directed cases", () => {
     }
   });
 
+  // At Python §2, == and != compare structurally over any x any except bool
+  // and function (see MIDDLE_2 above): cross-type comparisons, pairs (via
+  // `pair`) and None all participate. (At §1, == on None or a cross-type pair
+  // is an UnsupportedOperandTypeError — the sweep above pins that.)
+  test("pairs, None and cross-type values compare structurally under == at Python §2", async () => {
+    const cases: [string, boolean][] = [
+      ["pair(1, 2) == pair(1, 2)", true],
+      ["pair(1, pair(2, 3)) == pair(1, pair(2, 3))", true],
+      ["pair(1, 2) == pair(1.0, 2)", true],
+      ["pair(1, 2) == pair(2, 2)", false],
+      ["pair(1, 2) != pair(1, 2)", false],
+      ["x = pair(1, 2)\ny = x\nx == y", true],
+      ["None == None", true],
+      ["None != None", false],
+      ["pair(1, 2) == None", false],
+      ["None == pair(1, 2)", false],
+      ["1 == 'ab'", false],
+      ["1 != 'ab'", true],
+      ["None == 1", false],
+      ["1 == 1", true],
+      ["'ab' == 'ab'", true],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
+  // bool and function are excluded from §2's ==/!= entirely (the sweep above
+  // pins this for the full type cross product); spelled out here for the
+  // specific "does True == 1 hold" question the exclusion exists to avoid.
+  test("bool and function are not valid == / != operands at Python §2", async () => {
+    for (const code of [
+      "True == 1",
+      "1 == True",
+      "True == True",
+      "True == None",
+      "None == True",
+      "(lambda x: x) == (lambda x: x)",
+      "(lambda x: x) == 1",
+    ]) {
+      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
+        code,
+        { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
+      ]);
+    }
+  });
+
   // None == None is True at Python §3/§4, as in Python
-  // (at §1/§2, == on None is an UnsupportedOperandTypeError — the sweep pins that)
+  // (at §1, == on None is an UnsupportedOperandTypeError — the sweep pins that)
   test.each([[3], [4]])("None equality at Python §%d", async chapter => {
     const cases: [string, boolean][] = [
       ["None == None", true],

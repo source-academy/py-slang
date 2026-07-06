@@ -226,9 +226,22 @@ function structuralEquals(
 }
 
 /**
- * Handles equality and inequality comparisons between any two values, following Python §3/§4 semantics
- * (structural equality, total over all types). This compares to the logic for Python §1 and §2 where
- * equality and inequality only apply to numeric x numeric and string x string.
+ * Whether a value is excluded from Python §2's any x any equality: bool (avoiding
+ * CPython's bool-as-int equality, e.g. `True == 1`, as a directly written §2
+ * comparison) and function values (equality without `is` is left undefined until
+ * §3/§4 introduces it). See docs/specs/python_typing_middle_2.tex:
+ * `==,!= bool,function x any -> error`, `==,!= any x bool,function -> error`.
+ */
+function excludedFromChapter2Equality(value: Value): boolean {
+  return value.type === "bool" || value.type === "closure";
+}
+
+/**
+ * Handles equality and inequality comparisons using structural equality, total over all types.
+ * At Python §3/§4 this applies to any operand pair (see evaluateBinaryExpression). At Python §2
+ * it is used for any operand pair where neither side is excluded (see
+ * excludedFromChapter2Equality) — every other §1/§2 operand combination is unaffected by this
+ * function.
  *
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
@@ -309,7 +322,8 @@ function pyIdentical(left: Value, right: Value): boolean {
 
 /**
  * The main function for evaluating a binary expression, which dispatches to the appropriate logic based on the operator and operand types.
- * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded equality semantics for Python §3.
+ * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded
+ * equality semantics for Python §3/§4 (any x any) and §2 (any x any except bool/function).
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
  * @param context The global context state
@@ -331,6 +345,20 @@ export function evaluateBinaryExpression(
   // Handle expanded equality semantics for Python §3/§4,
   // where equality and inequality comparisons take any x any (structural equality)
   if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
+    return handleExpandedEquality(code, command, context, operator, left, right);
+  }
+
+  // At Python §2, == and != compare structurally over anything allowed in §2 —
+  // including cross-type comparisons, pairs and None — except bool and function
+  // values, which are excluded entirely (see excludedFromChapter2Equality and
+  // docs/specs/python_typing_middle_2.tex). At §1, == and != keep the narrower
+  // rule enforced below.
+  if (
+    (operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) &&
+    variant == 2 &&
+    !excludedFromChapter2Equality(left) &&
+    !excludedFromChapter2Equality(right)
+  ) {
     return handleExpandedEquality(code, command, context, operator, left, right);
   }
 
