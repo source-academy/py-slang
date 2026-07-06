@@ -981,6 +981,17 @@ describe("Standard Library Tests", () => {
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
         ["[1,2,3] is (lambda x: x)", false, null], // list is function
       ],
+      // math_nan is a shared singleton value; as in CPython, nan == nan is
+      // False even for the identical object, while a list containing that nan
+      // equals itself (container comparison checks identity per element first)
+      "NaN comparisons": [
+        ["math_nan == math_nan", false, null],
+        ["math_nan != math_nan", true, null],
+        ["math_nan < 1", false, null],
+        ["math_nan >= math_nan", false, null],
+        ["[math_nan] == [math_nan]", true, null],
+        ["x = [math_nan]\nx == x", true, null],
+      ],
       // equal matches == semantics on Python lists too (bool-as-int, as in Python)
       "equal on lists": [
         ["equal([True], [1])", true, null],
