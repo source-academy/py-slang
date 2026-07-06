@@ -91,7 +91,7 @@ export async function pythonToModule(
       async function* closureFunc(...args: TypedValue<DataType>[]): ModuleFunctionGenerator {
         context.control.push(appInstr(args.length, command as ExprNS.Call));
         context.stash.push(value2);
-        for (const arg of args.reverse()) {
+        for (const arg of args) {
           context.stash.push(await moduleToPython(context, code, command, arg));
         }
         yield;

@@ -297,6 +297,9 @@ export async function* generateCSEMachineStateStream(
   variant: number,
   isPrelude: boolean = false,
 ) {
+  // Evaluate imports before starting the main evaluation loop
+  await evaluateImports(control.peek() as StmtNS.FileInput, context, code);
+
   // steps: number of steps completed
   let steps = 0;
 
