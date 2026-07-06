@@ -187,7 +187,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     }
   >();
   private opaqueMap = new Map<
-    TypedValue<DataType.OPAQUE>,
+    OpaqueIdentifier,
     { value: unknown; immutable: boolean }
   >();
   private uniqueId = 0;
@@ -400,18 +400,18 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       type: DataType.OPAQUE,
       value: this.uniqueId++ as OpaqueIdentifier,
     };
-    this.opaqueMap.set(opaqueValue, { value: v, immutable: immutable || false });
+    this.opaqueMap.set(opaqueValue.value, { value: v, immutable: immutable || false });
     return Promise.resolve(opaqueValue);
   }
   opaque_get(o: TypedValue<DataType.OPAQUE>): Promise<unknown> {
-    const opaque = this.opaqueMap.get(o);
+    const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
       throw new Error(`Invalid opaque identifier: ${o.value}`);
     }
     return Promise.resolve(opaque.value);
   }
   opaque_update(o: TypedValue<DataType.OPAQUE>, v: unknown): Promise<void> {
-    const opaque = this.opaqueMap.get(o);
+    const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
       throw new Error(`Invalid opaque identifier: ${o.value}`);
     }
