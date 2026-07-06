@@ -9,6 +9,8 @@ import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
+import { RunError } from "../runner";
+import { runCodeSvmlDetailed } from "../svml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
@@ -324,6 +326,106 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
 
         if (output !== null) {
           expect(outputs).toEqual(output);
+        }
+      });
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Native Sinter (svml/sinter) parity test utilities
+//
+// Reruns the same `TestCases` tables used by generateTestCases() (the CSE
+// suite) against the SVML compiler + a native Sinter `runner` binary, to
+// track how far the svml/sinter pathway currently is from CSE parity.
+//
+// Opt-in: set SINTER_RUNNER_PATH to a built `runner` binary
+// (https://github.com/source-academy/sinter#build-locally) to enable these.
+// Skipped entirely otherwise, since CI doesn't build the native binary.
+// Failures are expected and informative here, not a sign of broken infra —
+// see README.md's "Running the standalone CLI (repl)" section for the
+// pathway's known, current limitations.
+// ---------------------------------------------------------------------------
+
+/** Converts a Sinter result (type name + raw value string) to a JS value comparable to `expected`. */
+function sinterResultToComparable(result: { resultType: string; resultValue: string }): unknown {
+  switch (result.resultType) {
+    case "integer":
+    case "float":
+      return Number(result.resultValue);
+    case "boolean":
+      return result.resultValue === "true";
+    case "string":
+      return result.resultValue;
+    case "null":
+      return null;
+    case "undefined":
+      return undefined;
+    default:
+      // arrays, functions: not decoded from the native trailer today.
+      return undefined;
+  }
+}
+
+/** Converts a CSE `TestOutputValue` to a JS value comparable to sinterResultToComparable()'s output. */
+function expectedToComparable(expected: TestOutputValue): unknown {
+  if (typeof expected === "bigint") {
+    // Sinter numbers are single-precision floats/32-bit ints, not arbitrary-precision.
+    return Number(expected);
+  }
+  if (
+    typeof expected === "number" ||
+    typeof expected === "string" ||
+    typeof expected === "boolean" ||
+    expected === null
+  ) {
+    return expected;
+  }
+  // PyComplexNumber and arrays aren't representable by the native result trailer today.
+  return undefined;
+}
+
+/**
+ * Reruns `testCases` (as already used with generateTestCases() for the CSE
+ * machine) through the SVML compiler + native Sinter, at the given chapter
+ * `variant`. See the file-level comment above for gating/expectations.
+ */
+export const generateNativeSinterTestCases = (testCases: TestCases, variant: number) => {
+  const sinterPath = process.env.SINTER_RUNNER_PATH;
+  const describeBlock = sinterPath ? describe : describe.skip;
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describeBlock(`[svml/sinter] ${funcName}`, () => {
+      test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
+        let result;
+        try {
+          result = await runCodeSvmlDetailed(code, variant, { sinterPath: sinterPath! });
+        } catch (e) {
+          if (typeof expected === "function") {
+            // CSE also expects a failure here; any RunError counts as agreement.
+            expect(e).toBeInstanceOf(RunError);
+            return;
+          }
+          throw e;
+        }
+
+        if (typeof expected === "function") {
+          throw new Error(
+            `Expected an error (${expected.name}), but svml/sinter completed with ` +
+              `result type "${result.resultType}": ${result.resultValue}`,
+          );
+        }
+
+        if (output !== null) {
+          expect(result.output).toBe(output.map(line => `${line}\n`).join(""));
+        }
+
+        const actual = sinterResultToComparable(result);
+        const wanted = expectedToComparable(expected);
+        if (typeof wanted === "number" && !Number.isInteger(wanted)) {
+          expect(actual).toBeCloseTo(wanted, 2);
+        } else {
+          expect(actual).toEqual(wanted);
         }
       });
     });

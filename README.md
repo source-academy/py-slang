@@ -82,6 +82,31 @@ To run the Wasm compiler locally, run
 yarn wasm <path to python file>
 ```
 
+### Running the standalone CLI (repl)
+
+`py-slang` can also be run as a standalone CLI, outside of Conductor, via `src/repl.ts`. By default it evaluates a SICPy file through the CSE machine:
+
+```shell
+yarn build:repl
+yarn repl <path to python file> [-v <1-4>]
+```
+
+Alternatively, `--engine svml` compiles the file to SVML bytecode and runs it on a native [Sinter](https://github.com/source-academy/sinter) `runner` binary instead of the CSE machine — the same compiler used by `PySvmlEvaluator`/`PySvmlSinterEvaluator`, but executed by Sinter's actual C VM rather than its WASM port or the TypeScript interpreter. This requires building `runner` from the Sinter repo separately (see its [build instructions](https://github.com/source-academy/sinter#build-locally)) and pointing `--sinter` at the resulting binary:
+
+```shell
+yarn repl <path to python file> --engine svml --sinter <path to sinter's runner binary> -v 3
+```
+
+`--engine svml` only supports `-v 3` (SICPy §3) today; the CLI exits with an error for any other variant.
+
+For example, if `sinter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
+
+```shell
+yarn repl <path to python file> --engine svml --sinter ../sinter/build/runner/runner -v 3
+```
+
+Note that the SVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PySvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine svml` yet. `src/tests/utils.ts`'s `generateNativeSinterTestCases()` reruns the existing CSE test suite against `--engine svml`-equivalent code when `SINTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the SVML compiler and Sinter itself gain features.
+
 ### Running the test suite
 
 Ensure that all tests pass before committing.

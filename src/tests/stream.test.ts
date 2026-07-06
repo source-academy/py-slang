@@ -8,7 +8,7 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
-import { generateTestCases, TestCases } from "./utils";
+import { generateNativeSinterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("Stream Tests", () => {
   const streamTests: TestCases = {
@@ -157,4 +157,5 @@ equal(eval_stream(primes, 10), llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`,
   };
 
   generateTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
+  generateNativeSinterTestCases(streamTests, 2);
 });

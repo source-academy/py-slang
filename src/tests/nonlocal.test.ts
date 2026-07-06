@@ -2,7 +2,12 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import list from "../stdlib/list";
 import linkedList from "../stdlib/linked-list";
-import { generateTestCases, toPythonAstAndResolve } from "./utils";
+import {
+  generateNativeSinterTestCases,
+  generateTestCases,
+  TestCases,
+  toPythonAstAndResolve,
+} from "./utils";
 import { FeatureNotSupportedError } from "../validator";
 import { FreeVariableUnboundError, UnboundLocalError } from "../errors/errors";
 
@@ -62,11 +67,10 @@ def outer():
 
 const ch3 = [misc, math, linkedList, list];
 
-generateTestCases(
-  {
-    "nonlocal — basic write modifies enclosing scope": [
-      [
-        `
+const nonlocalTests: TestCases = {
+  "nonlocal — basic write modifies enclosing scope": [
+    [
+      `
 def outer():
     x = 1
     def inner():
@@ -76,14 +80,14 @@ def outer():
     return x
 outer()
 `,
-        42n,
-        null,
-      ],
+      42n,
+      null,
     ],
+  ],
 
-    "nonlocal — read from enclosing scope": [
-      [
-        `
+  "nonlocal — read from enclosing scope": [
+    [
+      `
 def outer():
     x = 99
     def inner():
@@ -93,14 +97,14 @@ def outer():
     return x
 outer()
 `,
-        99n,
-        null,
-      ],
+      99n,
+      null,
     ],
+  ],
 
-    "nonlocal — write then read at enclosing scope": [
-      [
-        `
+  "nonlocal — write then read at enclosing scope": [
+    [
+      `
 def outer():
     x = 0
     def increment():
@@ -112,14 +116,14 @@ def outer():
     return x
 outer()
 `,
-        3n,
-        null,
-      ],
+      3n,
+      null,
     ],
+  ],
 
-    "nonlocal — returned closure captures modified nonlocal": [
-      [
-        `
+  "nonlocal — returned closure captures modified nonlocal": [
+    [
+      `
 def make_counter():
     count = 0
     def inc():
@@ -132,14 +136,14 @@ result()
 result()
 result()
 `,
-        3n,
-        null,
-      ],
+      3n,
+      null,
     ],
+  ],
 
-    "nonlocal — three levels of nesting": [
-      [
-        `
+  "nonlocal — three levels of nesting": [
+    [
+      `
 def a():
     x = 1
     def b():
@@ -153,14 +157,14 @@ def a():
     return x
 a()
 `,
-        3n,
-        null,
-      ],
+      3n,
+      null,
     ],
+  ],
 
-    "nonlocal — does not affect global scope": [
-      [
-        `
+  "nonlocal — does not affect global scope": [
+    [
+      `
 x = 100
 def outer():
     x = 10
@@ -172,14 +176,14 @@ def outer():
 outer()
 x
 `,
-        100n,
-        null,
-      ],
+      100n,
+      null,
     ],
+  ],
 
-    "nonlocal — skips intermediate scopes without the binding": [
-      [
-        `
+  "nonlocal — skips intermediate scopes without the binding": [
+    [
+      `
 def a():
     x = 1
     def b():
@@ -191,14 +195,14 @@ def a():
     return x
 a()
 `,
-        99n,
-        null,
-      ],
+      99n,
+      null,
     ],
+  ],
 
-    "nonlocal — print uses modified value": [
-      [
-        `
+  "nonlocal — print uses modified value": [
+    [
+      `
 def outer():
     val = 0
     def set_val(v):
@@ -208,14 +212,14 @@ def outer():
     print(val)
 outer()
 `,
-        null,
-        ["7"],
-      ],
+      null,
+      ["7"],
     ],
+  ],
 
-    "nonlocal — global and nonlocal in different nested functions": [
-      [
-        `
+  "nonlocal — global and nonlocal in different nested functions": [
+    [
+      `
 g = 0
 def outer():
     x = 10
@@ -230,14 +234,14 @@ def outer():
     return x
 outer()
 `,
-        20n,
-        null,
-      ],
+      20n,
+      null,
     ],
+  ],
 
-    "nonlocal — binding via if-nested assignment after the nested def resolves at runtime": [
-      [
-        `
+  "nonlocal — binding via if-nested assignment after the nested def resolves at runtime": [
+    [
+      `
 def outer():
     def inner():
         nonlocal x
@@ -248,14 +252,14 @@ def outer():
     return x
 outer()
 `,
-        99n,
-        null,
-      ],
+      99n,
+      null,
     ],
+  ],
 
-    "nonlocal — binding via for-loop target after the nested def resolves at runtime": [
-      [
-        `
+  "nonlocal — binding via for-loop target after the nested def resolves at runtime": [
+    [
+      `
 def outer():
     def inner():
         nonlocal x
@@ -266,14 +270,14 @@ def outer():
     return x
 outer()
 `,
-        0n,
-        null,
-      ],
+      0n,
+      null,
     ],
+  ],
 
-    "nonlocal — write via nested function whose only outer binding is a for-loop target": [
-      [
-        `
+  "nonlocal — write via nested function whose only outer binding is a for-loop target": [
+    [
+      `
 def outer():
     def inner():
         nonlocal i
@@ -284,14 +288,14 @@ def outer():
     return i
 outer()
 `,
-        2n,
-        null,
-      ],
+      2n,
+      null,
     ],
+  ],
 
-    "for-loop target alone (no other assignment) shadows an outer variable of the same name": [
-      [
-        `
+  "for-loop target alone (no other assignment) shadows an outer variable of the same name": [
+    [
+      `
 i = 100
 def f():
     for i in range(3):
@@ -301,15 +305,14 @@ result_inside = f()
 result_outside = i
 [result_inside, result_outside]
 `,
-        [2n, 100n],
-        null,
-      ],
+      [2n, 100n],
+      null,
     ],
+  ],
 
-    "reading a for-loop target before the loop runs raises UnboundLocalError, not an outer lookup":
-      [
-        [
-          `
+  "reading a for-loop target before the loop runs raises UnboundLocalError, not an outer lookup": [
+    [
+      `
 i = 100
 def f():
     print(i)
@@ -317,15 +320,15 @@ def f():
         pass
 f()
 `,
-          UnboundLocalError,
-          null,
-        ],
-      ],
+      UnboundLocalError,
+      null,
+    ],
+  ],
 
-    "reading a nonlocal before its for-loop-target binding executes raises FreeVariableUnboundError, not UnboundLocalError":
+  "reading a nonlocal before its for-loop-target binding executes raises FreeVariableUnboundError, not UnboundLocalError":
+    [
       [
-        [
-          `
+        `
 def outer():
     def inner():
         nonlocal i
@@ -337,15 +340,15 @@ def outer():
     return i
 outer()
 `,
-          FreeVariableUnboundError,
-          null,
-        ],
+        FreeVariableUnboundError,
+        null,
       ],
+    ],
 
-    "when the for-loop runs before inner() is called (textually earlier in outer), i is already bound — no error":
+  "when the for-loop runs before inner() is called (textually earlier in outer), i is already bound — no error":
+    [
       [
-        [
-          `
+        `
 def outer():
     def inner():
         nonlocal i
@@ -357,15 +360,15 @@ def outer():
     return i
 outer()
 `,
-          5n,
-          ["2"],
-        ],
+        5n,
+        ["2"],
       ],
+    ],
 
-    "nonlocal can target a directly-enclosing function's parameter (not just an assigned/for-target local)":
+  "nonlocal can target a directly-enclosing function's parameter (not just an assigned/for-target local)":
+    [
       [
-        [
-          `
+        `
 def outer(x):
     def inner():
         nonlocal x
@@ -374,15 +377,15 @@ def outer(x):
     return x
 outer(1)
 `,
-          100n,
-          null,
-        ],
+        100n,
+        null,
       ],
+    ],
 
-    "nonlocal can target a parameter of a function further out, skipping an unrelated intermediate function":
+  "nonlocal can target a parameter of a function further out, skipping an unrelated intermediate function":
+    [
       [
-        [
-          `
+        `
 def grandouter(x):
     def outer():
         def inner():
@@ -393,15 +396,15 @@ def grandouter(x):
     return x
 grandouter(1)
 `,
-          100n,
-          null,
-        ],
+        100n,
+        null,
       ],
+    ],
 
-    "implicit (non-nonlocal) closure read of an enclosing local raises FreeVariableUnboundError when read before that scope's own def executes":
+  "implicit (non-nonlocal) closure read of an enclosing local raises FreeVariableUnboundError when read before that scope's own def executes":
+    [
       [
-        [
-          `
+        `
 def outer():
     def inner():
         return helper()
@@ -411,14 +414,14 @@ def outer():
     return result
 outer()
 `,
-          FreeVariableUnboundError,
-          null,
-        ],
+        FreeVariableUnboundError,
+        null,
       ],
-  },
-  3,
-  ch3,
-);
+    ],
+};
+
+generateTestCases(nonlocalTests, 3, ch3);
+generateNativeSinterTestCases(nonlocalTests, 3);
 
 // ── Issues #178–#181: scope conflict validators ───────────────────────────────
 // These are always SyntaxErrors regardless of chapter; tested with chapter 3.
