@@ -123,9 +123,11 @@ export function evaluateUnaryExpression(
 /**
  * Structural equality between any two values, following Python semantics
  * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
- * Numbers compare across int/float/complex; lists compare element-wise (recursively),
- * as in Python; values of different types are unequal; remaining same-type values
- * compare by value where they carry one, and by reference otherwise.
+ * Numbers compare across int/float/complex, and booleans participate as in
+ * CPython, where bool is a subclass of int (True == 1 is True); lists compare
+ * element-wise (recursively), as in Python; values of other differing types are
+ * unequal; remaining same-type values compare by value where they carry one,
+ * and by reference otherwise.
  *
  * Self-referential lists without shared identity exhaust the stack, mirroring
  * CPython's RecursionError on such comparisons.
@@ -140,6 +142,14 @@ function structuralEquals(
   // Identity shortcut: also lets comparisons of shared substructure terminate early.
   if (left === right) {
     return true;
+  }
+
+  // As in CPython, booleans compare as the ints they are (True == 1, False == 0.0)
+  if (left.type === "bool") {
+    left = { type: "bigint", value: left.value ? 1n : 0n };
+  }
+  if (right.type === "bool") {
+    right = { type: "bigint", value: right.value ? 1n : 0n };
   }
 
   // Complex number equality, coercing ints and floats
@@ -209,13 +219,32 @@ export function handleExpandedEquality(
 }
 
 /**
- * Identity (`is`) between any two values, following Python §3/§4 semantics
- * (see docs/specs/python_typing_middle_34.tex: `is` takes any x any).
- * Lists and function values compare by reference — `is` is what makes sharing
- * of mutable structure observable. Values of immutable types compare by value:
- * their identity is unobservable, so this stays within Python's unspecified
- * interning behavior while remaining deterministic (`1 is 1` is True, `1 is 1.0`
- * is False, `None is None` is True).
+ * A value whose identity is unobservable: numbers (int, float, complex),
+ * strings and booleans. Applying `is` to these is an error
+ * (see docs/specs/python_typing_middle_34.tex): whether `1 is 1` holds is
+ * unspecified in Python (interning), so the operator is restricted to the
+ * reference types (list, function, None) where identity is meaningful.
+ */
+function hasUnobservableIdentity(value: Value): boolean {
+  switch (value.type) {
+    case "number":
+    case "bigint":
+    case "complex":
+    case "string":
+    case "bool":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Identity (`is`) between two values of reference type (list, function or
+ * None), following Python §3/§4 semantics
+ * (see docs/specs/python_typing_middle_34.tex). Lists and function values
+ * compare by reference — `is` is what makes sharing of structure observable —
+ * and `None is None` is true. Values of different types are never identical
+ * (so `xs is None` is simply false for a list `xs`).
  */
 function pyIdentical(left: Value, right: Value): boolean {
   if (left.type !== right.type) {
@@ -226,18 +255,14 @@ function pyIdentical(left: Value, right: Value): boolean {
       return true;
     case "list":
       return left === right;
-    case "complex":
-      return (
-        right.type == "complex" &&
-        left.value.real === right.value.real &&
-        left.value.imag === right.value.imag
-      );
     default:
-      if ("value" in left && "value" in right) {
-        return left.value === right.value;
-      }
+      // Function values: closures compare by their underlying closure,
+      // builtins by the function they wrap.
       if ("closure" in left && "closure" in right) {
         return left.closure === right.closure;
+      }
+      if ("value" in left && "value" in right) {
+        return left.value === right.value;
       }
       return left === right;
   }
@@ -270,10 +295,24 @@ export function evaluateBinaryExpression(
     return handleExpandedEquality(code, command, context, operator, left, right);
   }
 
-  // Handle identity semantics for `is` / `is not`, which take any x any.
-  // The `is` operator only exists at Python §3/§4; chapters 1 and 2 reject it
-  // at validation time (NoIsOperatorValidator).
+  // Handle identity semantics for `is` / `is not`, which apply to values of
+  // reference type (list, function, None) and are an error whenever either
+  // operand is a number, string or boolean (identity of immutable values is
+  // unobservable). The `is` operator only exists at Python §3/§4; chapters 1
+  // and 2 reject it at validation time (NoIsOperatorValidator).
   if (operator == TokenType.IS || operator == TokenType.ISNOT) {
+    if (hasUnobservableIdentity(left) || hasUnobservableIdentity(right)) {
+      handleRuntimeError(
+        context,
+        new UnsupportedOperandTypeError(
+          code,
+          command,
+          left.type,
+          right.type,
+          operatorTranslator(operator),
+        ),
+      );
+    }
     return {
       type: "bool",
       value: (operator == TokenType.ISNOT) !== pyIdentical(left, right),

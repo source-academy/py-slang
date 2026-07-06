@@ -77,7 +77,6 @@ interface Row {
 }
 
 const NUMERIC: PyType[] = ["int", "float", "complex"];
-const ANY_12 = UNIVERSE_12;
 const ANY_34 = UNIVERSE_34;
 
 // docs/specs/python_typing_front.tex — common to all chapters
@@ -114,10 +113,15 @@ const MIDDLE_12: Row[] = [
   { ops: ["==", "!="], left: ["str"], right: ["str"], result: "bool" },
 ];
 
-// docs/specs/python_typing_middle_34.tex — Python §3/§4 only
+// docs/specs/python_typing_middle_34.tex — Python §3/§4 only.
+// `==`/`!=` take any x any; `is` is restricted to the reference types
+// (list, function, None) and errors whenever either operand is a number,
+// string or boolean (identity of immutable values is unobservable).
+// The error rows of the table are the sweep's default expectation.
+const REFERENCE_TYPES: PyType[] = ["NoneType", "list", "function"];
 const MIDDLE_34: Row[] = [
   { ops: ["==", "!="], left: ANY_34, right: ANY_34, result: "bool" },
-  { ops: ["is", "is not"], left: ANY_34, right: ANY_34, result: "bool" },
+  { ops: ["is", "is not"], left: REFERENCE_TYPES, right: REFERENCE_TYPES, result: "bool" },
 ];
 
 function tableForChapter(chapter: number): Row[] {
@@ -142,7 +146,7 @@ function specResult(op: string, left: PyType, right: PyType, chapter: number): R
 // ---------------------------------------------------------------------------
 
 type Outcome =
-  | { kind: "value"; stashType: string }
+  | { kind: "value"; stashType: string; value: unknown }
   | { kind: "runtime-error"; name: string }
   | { kind: "resolve-error"; name: string };
 
@@ -178,7 +182,11 @@ async function run(code: string, chapter: number): Promise<Outcome> {
   if (context.errors.length > 0) {
     return { kind: "runtime-error", name: context.errors[0].constructor.name };
   }
-  return { kind: "value", stashType: lastPopped?.type ?? "none" };
+  return {
+    kind: "value",
+    stashType: lastPopped?.type ?? "none",
+    value: lastPopped && "value" in lastPopped ? lastPopped.value : undefined,
+  };
 }
 
 function describeOutcome(outcome: Outcome): string {
@@ -324,8 +332,57 @@ describe("Operator conformance: directed cases", () => {
   );
 
   test("`**` int x int is int for nonnegative exponents and float for negative ones", async () => {
-    expect(await run("2 ** 3", 1)).toStrictEqual({ kind: "value", stashType: "bigint" });
-    expect(await run("2 ** 0", 1)).toStrictEqual({ kind: "value", stashType: "bigint" });
-    expect(await run("2 ** (-3)", 1)).toStrictEqual({ kind: "value", stashType: "number" });
+    expect(await run("2 ** 3", 1)).toStrictEqual({ kind: "value", stashType: "bigint", value: 8n });
+    expect(await run("2 ** 0", 1)).toStrictEqual({ kind: "value", stashType: "bigint", value: 1n });
+    expect(await run("2 ** (-3)", 1)).toStrictEqual({
+      kind: "value",
+      stashType: "number",
+      value: 0.125,
+    });
+  });
+
+  // As in CPython, where bool is a subclass of int, booleans participate in
+  // `==`/`!=` as the ints they are at Python §3/§4. (At §1/§2 booleans are not
+  // valid `==` operands at all — the sweep above pins that.)
+  test.each([[3], [4]])("bool compares as its int value under == at Python §%d", async chapter => {
+    const cases: [string, boolean][] = [
+      ["True == 1", true],
+      ["True == 1.0", true],
+      ["True == (1+0j)", true],
+      ["False == 0", true],
+      ["True == 2", false],
+      ["False == 1", false],
+      ["True == True", true],
+      ["True == False", false],
+      ["True != 1", false],
+      ["[True] == [1]", true],
+      ["True == 'True'", false],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
+  // Structural equality on lists at Python §3/§4, as in Python
+  test.each([[3], [4]])("lists compare structurally under == at Python §%d", async chapter => {
+    const cases: [string, boolean][] = [
+      ["[1, 2] == [1, 2]", true],
+      ["[1, [2, 3]] == [1, [2, 3]]", true],
+      ["[1] == [1.0]", true],
+      ["[1] == [2]", false],
+      ["[1] == [1, 2]", false],
+      ["x = [1, 2]\ny = x\nx == y", true],
+      ["[] == []", true],
+      ["[1, 2] != [1, 2]", false],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
   });
 });

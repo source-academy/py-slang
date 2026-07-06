@@ -948,74 +948,48 @@ describe("Standard Library Tests", () => {
 
   describe("Chapter 3 Builtins", () => {
     const miscTests: TestCases = {
-      // `is` takes any x any at Python §3/§4 (docs/specs/python_typing_middle_34.tex).
-      // Lists and functions compare by reference; immutable values compare by value
-      // (their identity is unobservable); values of different types are never identical.
+      // `is` applies to the reference types (list, function, None) at Python §3/§4
+      // and errors whenever either operand is a number, string or boolean, whose
+      // identity is unobservable (docs/specs/python_typing_middle_34.tex).
       "is operator": [
-        ["1 is 1", true, null], // int is same int
-        ["2 is 1", false, null], // int is diff int
-        ["1 is (1+0j)", false, null], // int is complex
-        ["2 is (1.0+0j)", false, null], // int is complex
-        ["3 is (1+1j)", false, null], // int is complex
-        ["1 is 1.0", false, null], // int is float (never identical, as in Python)
-        ["1 is 2.0", false, null], // int is diff float
-        ["3.14 is 3.14", true, null], // float is same float
-        ["3.15 is 3.14", false, null], // float is diff float
-        ["1.0 is 1", false, null], // float is int
-        ["1.0 is 2", false, null], // float is diff int
-        ["1.0 is (1+0j)", false, null], // float is complex
-        ["(1+0j) is (1+0j)", true, null], // complex is same complex
-        ["-(1+0j) is (1+1j)", false, null], // complex is complex with diff imaginary
-        ["(1.2+0j) is (1+0j)", false, null], // complex is complex with diff real
-        ["(1.2+1j) is (1.2+1.2j)", false, null], // complex is diff complex
-        ["(1+0j) is 1", false, null], // complex is int
-        ["(1.0+0j) is 1", false, null], // complex with float real is int
-        ["(1+0j) is 1.0", false, null], // complex is float
-        ["(1.5+0j) is 1.5", false, null], // complex with float real is float
-        ["(1.5+1j) is 1.5", false, null], // complex is diff float
-        ["True is True", true, null], // bool is same bool
-        ["True is False", false, null], // bool is diff bool
-        ["1 is True", false, null], // int is bool
-        ["1 is None", false, null], // int is None
-        ["True is 1", false, null], // bool is int
-        ["None is 1", false, null], // None is int
+        ["1 is 1", UnsupportedOperandTypeError, null], // int is int
+        ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
+        ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
+        ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
+        ["True is True", UnsupportedOperandTypeError, null], // bool is bool
+        ["1 is True", UnsupportedOperandTypeError, null], // int is bool
+        ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
+        ["1 is None", UnsupportedOperandTypeError, null], // number x reference is also an error
+        ["None is 1", UnsupportedOperandTypeError, null],
+        ["'' is None", UnsupportedOperandTypeError, null],
+        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null],
+        ["[1,2,3] is ''", UnsupportedOperandTypeError, null],
+        ["1 is (lambda x: x)", UnsupportedOperandTypeError, null],
+        ["a = [1,2,3]\na is 1", UnsupportedOperandTypeError, null],
         ["None is None", true, null], // None is None
         ["(lambda x: x) is (lambda x: x)", false, null], // function is diff function
-        ["(1 is (lambda x: x))", false, null], // int is function
         ["def a():\n    return 2\na is a", true, null], // function is same function
-        ["'' is ''", true, null], // empty string is empty string
-        ["hello = 'hello'\nhello is 'hello'", true, null], // string is same string
-        ["hello = 'hello'\nhello is 'Hello'", false, null], // string is diff string
-        ["'a' is 'abc'", false, null], // string is longer string
-        ["'a' is 'A'", false, null], // string is string with diff case
-        ["'#' is '$'", false, null], // string is string with diff character
-        ["1 is ''", false, null], // int is string
-        ["'' is 1", false, null], // string is int
-        ["'' is True", false, null], // string is bool
-        ["'' is None", false, null], // string is None
-        ["'' is (lambda x: x)", false, null], // string is function
-        ["'' is 1.0", false, null], // string is float
-        ["'' is (1+0j)", false, null], // string is complex
-        ["1 is 0", false, null], // int is zero
-        ["1 is 0.0", false, null], // int is zero float
-        ["1 is (0+0j)", false, null], // int is zero complex
+        ["f = lambda x: x\ng = f\nf is g", true, null], // function is its alias
+        ["a = [1,2,3]\na is None", false, null], // list is None (the Python idiom)
+        ["(lambda x: x) is None", false, null], // function is None
+        ["None is []", false, null], // None is list
         ["[1,2,3] is [1,2,3]", false, null], // list is list with same elements
         ["a = [1,2,3]\na is a", true, null], // list is itself
+        ["a = [1,2,3]\nb = a\na is b", true, null], // list is its alias
         ["a = [1,2,3]\na is [1,2,3]", false, null], // list is different list with same elements
         ["[1,2,3] is [1,2,4]", false, null], // list is different list with different elements
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
-        ["[1,2,3] is ''", false, null], // list is string
+        ["[1,2,3] is (lambda x: x)", false, null], // list is function
       ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [
-        ["1 is not 1", false, null],
-        ["1 is not 2", true, null],
-        ["1 is not 1.0", true, null],
+        ["1 is not 1", UnsupportedOperandTypeError, null],
+        ["'x' is not 'x'", UnsupportedOperandTypeError, null],
         ["None is not None", false, null],
         ["a = [1,2,3]\na is not a", false, null],
         ["a = [1,2,3]\nb = [1,2,3]\na is not b", true, null],
-        ["'x' is not 'x'", false, null],
-        ["'x' is not 'y'", true, null],
+        ["a = [1,2,3]\na is not None", true, null],
+        ["(lambda x: x) is not (lambda x: x)", true, null],
       ],
       arity: [
         ["arity((lambda *args: args))", 0n, null],
