@@ -21,7 +21,7 @@ export class Context {
 
   public conductor: IRunnerPlugin | null = null;
   public evaluator: IDataHandler | null = null;
-  
+
   public streams:
     | {
         initialised: false;

@@ -17,7 +17,12 @@ export interface StatementSequence {
 }
 
 export type ModuleFunctionGenerator = AsyncGenerator<void, TypedValue<DataType>, undefined>;
-export type ModuleFunction = (args: Value[], code: string, command: ExprNS.Call, context: Context) => ModuleFunctionGenerator;
+export type ModuleFunction = (
+  args: Value[],
+  code: string,
+  command: ExprNS.Call,
+  context: Context,
+) => ModuleFunctionGenerator;
 
 export enum InstrType {
   RESET = "Reset",

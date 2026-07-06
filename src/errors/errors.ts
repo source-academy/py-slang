@@ -596,7 +596,7 @@ export class ModuleFunctionNotFoundError extends RuntimeSourceError {
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
-    
+
     const hint = `ImportError: cannot import name '${functionName}' from '${moduleName}'`;
     const suggestion = `The module '${moduleName}' does not have a function named '${functionName}', or it may not be exported. Check the module's documentation to see the list of available functions and ensure that '${functionName}' is correctly defined and exported in '${moduleName}'.`;
     const msg = `ImportError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
@@ -609,4 +609,3 @@ export class ModuleFunctionNotFoundError extends RuntimeSourceError {
     Current position is one after real position of end of token: 1
 */
 export const MAGIC_OFFSET = 1;
-

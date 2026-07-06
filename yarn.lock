@@ -1645,10 +1645,10 @@ __metadata:
 
 "@sourceacademy/runner-module-loader@file:../plugins/src/runner/module-loader::locator=py-slang%40workspace%3A.":
   version: 0.0.1
-  resolution: "@sourceacademy/runner-module-loader@file:../plugins/src/runner/module-loader#../plugins/src/runner/module-loader::hash=fad9c7&locator=py-slang%40workspace%3A."
+  resolution: "@sourceacademy/runner-module-loader@file:../plugins/src/runner/module-loader#../plugins/src/runner/module-loader::hash=c41ef3&locator=py-slang%40workspace%3A."
   peerDependencies:
     "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/67d672861d6f42c6b81be3390728b99e68fa5e9ec2df3fe2378ee936b13ec70e0de36003f229ee51eb07cf85fdb795815dcde46a570c01573355e0f0fd578e54
+  checksum: 10c0/9cb2920cad035d7d19319a83b6ef1c7afddf28fd84d55a528891923013b81d3880ff2979d94ddbc0130b6e6780bdf7cb72965fe31aca7a566893ff420ccb58d5
   languageName: node
   linkType: hard
 

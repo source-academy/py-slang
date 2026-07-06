@@ -1,5 +1,6 @@
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
+import { OpaqueIdentifier } from "../../../../conductor/dist/conductor/types/moduleInterface";
 import { ExprNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
@@ -26,7 +27,7 @@ export async function loadModules(context: Context, moduleNames: string[]): Prom
         context.nativeStorage.loadedModules[moduleName] = Object.fromEntries(
           pluginObj?.exports.map(t => [t.symbol, t]) || [],
         );
-      } catch (e) {
+      } catch {
         handleRuntimeError(context, new ModuleNotFoundError(moduleName));
       }
     }),
@@ -62,7 +63,7 @@ export async function pythonToModule(
       }
       return array;
     case "opaque":
-      return context.evaluator.opaque_make(value.value);
+      return { type: DataType.OPAQUE, value: value.value as OpaqueIdentifier };
     case "builtin":
       async function* builtinFunc(...args: TypedValue<DataType>[]): ModuleFunctionGenerator {
         const result = await (value as BuiltinValue).func(
@@ -77,7 +78,7 @@ export async function pythonToModule(
         return pythonToModule(context, code, command, result);
       }
 
-      return context.evaluator.closure_make(
+      return context.evaluator.closure_make<DataType[], DataType>(
         { returnType: DataType.VOID, args: Array(value.minArgs).fill(DataType.VOID) },
         builtinFunc,
       );
@@ -94,7 +95,7 @@ export async function pythonToModule(
         yield;
         return pythonToModule(context, code, command, context.stash.pop()!);
       }
-      return context.evaluator.closure_make(
+      return context.evaluator.closure_make<DataType[], DataType>(
         // TODO: fix arity
         {
           returnType: DataType.VOID,

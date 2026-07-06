@@ -309,7 +309,7 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
-    
+
     if (isNode(command)) {
       const node = command;
 
