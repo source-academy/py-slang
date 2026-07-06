@@ -117,6 +117,34 @@ Ensure that all tests pass before committing.
 yarn test
 ```
 
+#### Running the PVML/Pynter native parity suite
+
+`yarn test` always runs the CSE machine tests. It also includes an opt-in suite —
+`generateNativePynterTestCases()` in `src/tests/utils.ts`, used by the `stdlib`, `global-keyword`,
+`nonlocal`, `loops`, `linked-list`, `pairmutator`, `list`, `stream`, and `parser-stdlib` test files
+— that reruns the same test cases through the PVML compiler and a native
+[Pynter](https://github.com/source-academy/pynter) `runner` binary instead (see "Running the
+standalone CLI (repl)" above for background). It's skipped by default, since it needs a locally
+built Pynter binary that CI doesn't have.
+
+To run it, build `runner` from the Pynter repo (see its
+[build instructions](https://github.com/source-academy/pynter#build-locally)) and point
+`PYNTER_RUNNER_PATH` at the resulting binary:
+
+```shell
+PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn test
+```
+
+Failures here are expected and informative, not a sign of broken infra: the PVML compiler
+currently only wires up the `misc` and `math` stdlib groups, so anything relying on linked lists,
+streams, or mutable pairs/lists fails at analysis, not at Pynter. Complex-number cases are cleanly
+skipped rather than counted as failures or passes, since Pynter's VM has no complex number type at
+all. To see just this suite's results, filter by its test-name tag:
+
+```shell
+PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn jest -t "\[pvml/pynter\]"
+```
+
 ### Regenerating the AST types and Parser
 
 The AST types need to be regenerated after changing

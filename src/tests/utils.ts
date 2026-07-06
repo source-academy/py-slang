@@ -385,6 +385,30 @@ function expectedToComparable(expected: TestOutputValue): unknown {
   return undefined;
 }
 
+/** Matches a Python imaginary-number literal: 3j, .5j, 1.2j, 1.j, 1e3j, 1e-3j, 1J, etc. */
+const COMPLEX_LITERAL_RE = /(?<![a-zA-Z_])(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[jJ]\b/;
+
+/** Whether `expected` is (or, if an array, contains) a PyComplexNumber. */
+function containsComplexNumber(expected: TestExpectedValue): boolean {
+  if (expected instanceof PyComplexNumber) return true;
+  if (Array.isArray(expected)) return expected.some(containsComplexNumber);
+  return false;
+}
+
+/**
+ * Whether a test case involves complex numbers, which Pynter's VM doesn't support
+ * at all (it mirrors Sinter: values are booleans, 32-bit ints, or single-precision
+ * floats only) — py-slang's own PVML compiler rejects complex literals outright
+ * (see PVMLCompiler.visitComplexExpr). Detected via the expected value's type
+ * (recursing into arrays, e.g. a list of complex numbers) or a complex-literal
+ * regex over the source, since a case can involve complex numbers as an
+ * intermediate value without one being the final `expected` result (e.g. a
+ * comparison, or an error case).
+ */
+function involvesComplexNumbers(code: string, expected: TestExpectedValue): boolean {
+  return containsComplexNumber(expected) || COMPLEX_LITERAL_RE.test(code);
+}
+
 /**
  * Reruns `testCases` (as already used with generateTestCases() for the CSE
  * machine) through the PVML compiler + native Pynter, at the given chapter
@@ -396,7 +420,7 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
 
   for (const [funcName, tests] of Object.entries(testCases)) {
     describeBlock(`[pvml/pynter] ${funcName}`, () => {
-      test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
+      const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
         let result;
         try {
           result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath! });
@@ -427,7 +451,27 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
         } else {
           expect(actual).toEqual(wanted);
         }
-      });
+      };
+
+      const internalTestCases = createInternalTestCases(tests);
+      const supported = internalTestCases.filter(
+        ({ code, expected }) => !involvesComplexNumbers(code, expected),
+      );
+      const unsupportedComplex = internalTestCases.filter(({ code, expected }) =>
+        involvesComplexNumbers(code, expected),
+      );
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (unsupportedComplex.length > 0) {
+        test.skip.each(unsupportedComplex)(
+          `$label (Pynter does not support complex numbers)`,
+          runTestCase,
+        );
+      }
     });
   }
 };
