@@ -10,7 +10,7 @@ import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import { RunError } from "../runner";
-import { runCodeSvmlDetailed } from "../svml-runner";
+import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
@@ -333,11 +333,11 @@ export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
 };
 
 // ---------------------------------------------------------------------------
-// Native Pynter (svml/pynter) parity test utilities
+// Native Pynter (pvml/pynter) parity test utilities
 //
 // Reruns the same `TestCases` tables used by generateTestCases() (the CSE
 // suite) against the PVML compiler + a native Pynter `runner` binary, to
-// track how far the svml/pynter pathway currently is from CSE parity.
+// track how far the pvml/pynter pathway currently is from CSE parity.
 //
 // Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary
 // (https://github.com/source-academy/pynter#build-locally) to enable these.
@@ -395,11 +395,11 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
   const describeBlock = pynterPath ? describe : describe.skip;
 
   for (const [funcName, tests] of Object.entries(testCases)) {
-    describeBlock(`[svml/pynter] ${funcName}`, () => {
+    describeBlock(`[pvml/pynter] ${funcName}`, () => {
       test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
         let result;
         try {
-          result = await runCodeSvmlDetailed(code, variant, { pynterPath: pynterPath! });
+          result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath! });
         } catch (e) {
           if (typeof expected === "function") {
             // CSE also expects a failure here; any RunError counts as agreement.
@@ -411,7 +411,7 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
 
         if (typeof expected === "function") {
           throw new Error(
-            `Expected an error (${expected.name}), but svml/pynter completed with ` +
+            `Expected an error (${expected.name}), but pvml/pynter completed with ` +
               `result type "${result.resultType}": ${result.resultValue}`,
           );
         }

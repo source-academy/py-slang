@@ -43,8 +43,8 @@ export async function runNativePynter(
   binary: Uint8Array,
   pynterPath: string,
 ): Promise<NativePynterResult> {
-  const dir = await mkdtemp(join(tmpdir(), "py-slang-svml-"));
-  const programPath = join(dir, "program.svm");
+  const dir = await mkdtemp(join(tmpdir(), "py-slang-pvml-"));
+  const programPath = join(dir, "program.pvm");
 
   try {
     await writeFile(programPath, binary);

@@ -7,7 +7,7 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
 
-export class PySvmlEvaluator extends BasicEvaluator {
+export class PyPvmlEvaluator extends BasicEvaluator {
   evaluateChunk(chunk: string): Promise<void> {
     try {
       const script = chunk + "\n";

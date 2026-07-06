@@ -1,8 +1,8 @@
 /**
- * Headless runner for the SVML/Pynter pathway.
+ * Headless runner for the PVML/Pynter pathway.
  *
- * Compiles a SICPy program to SVML bytecode (same compiler as the
- * PySvmlEvaluator/PySvmlSinterEvaluator Conductor evaluators) and executes
+ * Compiles a SICPy program to PVML bytecode (same compiler as the
+ * PyPvmlEvaluator/PySvmlSinterEvaluator Conductor evaluators) and executes
  * it on a native Pynter `runner` binary (https://github.com/source-academy/pynter),
  * built separately via CMake. Pynter is a fork of Sinter kept as a separate
  * project so that Python-specific VM semantics don't risk destabilizing
@@ -21,12 +21,12 @@ import { RunError } from "./runner";
 import math from "./stdlib/math";
 import misc from "./stdlib/misc";
 
-export interface RunSvmlOptions {
+export interface RunPvmlOptions {
   /** Path to a built native Pynter `runner` binary. */
   pynterPath: string;
 }
 
-export interface RunSvmlResult {
+export interface RunPvmlResult {
   /** Everything the program printed via print()/display(), concatenated. */
   output: string;
   /** The type of the program's final value, as reported by Pynter (e.g. "integer", "string"). */
@@ -37,19 +37,19 @@ export interface RunSvmlResult {
 
 /**
  * Evaluate `code` as a SICPy program at the given `variant` by compiling it
- * to SVML and running it on a native Pynter binary. Returns both the
+ * to PVML and running it on a native Pynter binary. Returns both the
  * program's print() output and its final result value/type.
  *
- * Note: the SVML compiler currently only wires up the [misc, math] stdlib
- * groups (matching PySvmlEvaluator/PySvmlSinterEvaluator), so its chapter
+ * Note: the PVML compiler currently only wires up the [misc, math] stdlib
+ * groups (matching PyPvmlEvaluator/PySvmlSinterEvaluator), so its chapter
  * coverage is narrower than the CSE pathway's — variants that rely on
  * linked lists, streams, or the parser library are not yet supported here.
  */
-export async function runCodeSvmlDetailed(
+export async function runCodePvmlDetailed(
   code: string,
   variant: number,
-  options: RunSvmlOptions,
-): Promise<RunSvmlResult> {
+  options: RunPvmlOptions,
+): Promise<RunPvmlResult> {
   const { pynterPath } = options;
   const script = code.endsWith("\n") ? code : code + "\n";
 
@@ -96,13 +96,13 @@ export async function runCodeSvmlDetailed(
 
 /**
  * Evaluate `code` as a SICPy program at the given `variant`, returning only
- * its print() output. See runCodeSvmlDetailed() for the full result.
+ * its print() output. See runCodePvmlDetailed() for the full result.
  */
-export async function runCodeSvml(
+export async function runCodePvml(
   code: string,
   variant: number,
-  options: RunSvmlOptions,
+  options: RunPvmlOptions,
 ): Promise<string> {
-  const { output } = await runCodeSvmlDetailed(code, variant, options);
+  const { output } = await runCodePvmlDetailed(code, variant, options);
   return output;
 }

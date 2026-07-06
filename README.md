@@ -4,7 +4,7 @@
 
 `py-slang` is a Python implementation developed specifically for the Source Academy online learning environment. Unlike previous versions where Python was treated as a subset within [js-slang](https://github.com/source-academy/js-slang), py-slang now stands as an independent language implementation. It features its own parser, csemachine, and runtime, designed to process a tailored subset of Python for educational purposes.
 
-It contains multiple [engines](https://github.com/source-academy/py-slang/tree/main/src/engines) including the CSE machine, a WASM compiler and an SVML compiler.
+It contains multiple [engines](https://github.com/source-academy/py-slang/tree/main/src/engines) including the CSE machine, a WASM compiler and a PVML compiler.
 
 ## Usage
 
@@ -52,8 +52,8 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 | [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine                                                                                                                                                |
 | [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine                                                                                                                                                |
 | [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it                                                                                                                                           |
-| [PySvmlEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlEvaluator.ts)                                         | Evaluates the Python AST via a handwritten Typescript compiler and interpreter                                                                                                                     |
-| [PySvmlSinterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlSinterEvaluator.ts)                             | Evaluates the Python AST with the same compiler as `PySvmlEvaluator`, but a different interpreter. It uses the WebAssembly port of the [Sinter](https://github.com/source-academy/sinter) project. |
+| [PyPvmlEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                         | Evaluates the Python AST via a handwritten Typescript compiler and interpreter                                                                                                                     |
+| [PySvmlSinterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PySvmlSinterEvaluator.ts)                             | Evaluates the Python AST with the same compiler as `PyPvmlEvaluator`, but a different interpreter. It uses the WebAssembly port of the [Sinter](https://github.com/source-academy/sinter) project. |
 
 ### Using the evaluators
 
@@ -91,21 +91,21 @@ yarn build:repl
 yarn repl <path to python file> [-v <1-4>]
 ```
 
-Alternatively, `--engine svml` compiles the file to SVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of the CSE machine — the same compiler used by `PySvmlEvaluator`/`PySvmlSinterEvaluator`, but executed by a native C VM rather than a WASM port or the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary:
+Alternatively, `--engine pvml` compiles the file to PVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of the CSE machine — the same compiler used by `PyPvmlEvaluator`/`PySvmlSinterEvaluator`, but executed by a native C VM rather than a WASM port or the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary:
 
 ```shell
-yarn repl <path to python file> --engine svml --pynter <path to pynter's runner binary> -v 3
+yarn repl <path to python file> --engine pvml --pynter <path to pynter's runner binary> -v 3
 ```
 
-`--engine svml` only supports `-v 3` (SICPy §3) today; the CLI exits with an error for any other variant.
+`--engine pvml` only supports `-v 3` (SICPy §3) today; the CLI exits with an error for any other variant.
 
 For example, if `pynter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
 
 ```shell
-yarn repl <path to python file> --engine svml --pynter ../pynter/build/runner/runner -v 3
+yarn repl <path to python file> --engine pvml --pynter ../pynter/build/runner/runner -v 3
 ```
 
-Note that the SVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PySvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine svml` yet. `src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine svml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the SVML compiler and Pynter itself gain features.
+Note that the PVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PyPvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine pvml` yet. `src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine pvml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the PVML compiler and Pynter itself gain features.
 
 The bytecode format itself — currently identical to SVML, the format [Sinter](https://github.com/source-academy/sinter) executes — is documented under [`docs/pvml/`](./docs/pvml/), forked from the [js-slang SVML wiki](https://github.com/source-academy/js-slang/wiki/SVML-Specification) so it can be edited to describe PVML (py-slang's own bytecode target) without touching the canonical SVML docs. See `docs/pvml/PVML-Specification.md` for the wire format and `docs/pvml/PVML-Instruction-Set.wiki` for the opcode reference — the latter also documents a known mismatch between py-slang's primitive-function index table and the one built into Sinter/Pynter today.
 
