@@ -1,15 +1,15 @@
 import OpCodes, { OPCODE_MAX } from "./opcodes";
-import { SVMLBoxType, SVMLIR } from "./types";
-import { SVMLCompilerError } from "./errors";
+import { PVMLBoxType, PVMLIR } from "./types";
+import { PVMLCompilerError } from "./errors";
 
 /**
- * Mutable builder for constructing SVMLIR.
+ * Mutable builder for constructing PVMLIR.
  *
  * Used during compilation only. Once build() is called, the resulting
- * SVMLIR is frozen and immutable.
+ * PVMLIR is frozen and immutable.
  */
-export class SVMLIRBuilder {
-  private children: SVMLIRBuilder[] = [];
+export class PVMLIRBuilder {
+  private children: PVMLIRBuilder[] = [];
   private ops: number[] = [];
   private a1s: number[] = [];
   private a2s: number[] = [];
@@ -31,24 +31,24 @@ export class SVMLIRBuilder {
 
   constructor(numArgs: number) {
     this.numArgs = numArgs;
-    this.functionIndex = SVMLIRBuilder._functionIndex++;
+    this.functionIndex = PVMLIRBuilder._functionIndex++;
   }
 
   static resetIndex(): void {
-    SVMLIRBuilder._functionIndex = 0;
+    PVMLIRBuilder._functionIndex = 0;
   }
 
   getFunctionIndex(): number {
     return this.functionIndex;
   }
 
-  createChildBuilder(numArgs: number): SVMLIRBuilder {
-    const child = new SVMLIRBuilder(numArgs);
+  createChildBuilder(numArgs: number): PVMLIRBuilder {
+    const child = new PVMLIRBuilder(numArgs);
     this.children.push(child);
     return child;
   }
 
-  getAllBuilders(toSort: boolean = false): SVMLIRBuilder[] {
+  getAllBuilders(toSort: boolean = false): PVMLIRBuilder[] {
     const res = [this, ...this.children.flatMap(child => child.getAllBuilders())];
     if (!toSort) {
       return res;
@@ -63,7 +63,7 @@ export class SVMLIRBuilder {
     this.updateStackDepth(opcode);
   }
 
-  emitUnary(opcode: number, arg1: SVMLBoxType): void {
+  emitUnary(opcode: number, arg1: PVMLBoxType): void {
     this.ops.push(opcode);
     if (typeof arg1 === "string") {
       this.a1s.push(this.strings.length);
@@ -75,7 +75,7 @@ export class SVMLIRBuilder {
     this.updateStackDepth(opcode);
   }
 
-  emitBinary(opcode: number, arg1: SVMLBoxType, arg2: SVMLBoxType): void {
+  emitBinary(opcode: number, arg1: PVMLBoxType, arg2: PVMLBoxType): void {
     this.ops.push(opcode);
     this.a1s.push(arg1 as number);
     this.a2s.push(arg2 as number);
@@ -143,11 +143,11 @@ export class SVMLIRBuilder {
   }
 
   /**
-   * Resolve labels, patch jump offsets, and produce an immutable SVMLIR.
+   * Resolve labels, patch jump offsets, and produce an immutable PVMLIR.
    * Non-destructive: works on a copy of data, so the builder can be reused.
    * @param indexMap Optional map of old->new function indices for NEWC remapping.
    */
-  build(indexMap?: Map<number, number>): SVMLIR {
+  build(indexMap?: Map<number, number>): PVMLIR {
     const n = this.ops.length;
     const opcodes = new Int32Array(n);
     const arg1s = new Float64Array(n);
@@ -163,7 +163,7 @@ export class SVMLIRBuilder {
     for (const { instrIndex, labelId } of this.fixups) {
       const targetIndex = this.labelPositions[labelId];
       if (targetIndex === undefined) {
-        throw new SVMLCompilerError(`Undefined label ID: ${labelId}`);
+        throw new PVMLCompilerError(`Undefined label ID: ${labelId}`);
       }
       arg1s[instrIndex] = targetIndex - instrIndex;
     }
@@ -182,7 +182,7 @@ export class SVMLIRBuilder {
       }
     }
 
-    return new SVMLIR(
+    return new PVMLIR(
       opcodes,
       arg1s,
       arg2s,
