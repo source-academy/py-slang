@@ -1,6 +1,5 @@
 import { i32, i64, wasm, WasmCall, WasmInstruction } from "@sourceacademy/wasm-util";
 import {
-  BOOLISE_FX,
   ERROR_MAP,
   GET_LEX_ADDR_FX,
   GET_LIST_ELEMENT_FX,
@@ -17,7 +16,6 @@ import {
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
-  TYPE_TAG,
 } from "./constants";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
@@ -85,8 +83,8 @@ export const libraryFunctions: LibFuncType[] = [
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
   ]),
   libFunc("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
-  libFunc("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
-  libFunc("is_linked_list", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
+  libFunc("llist", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
+  libFunc("is_llist", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
   libFunc("set_head", 2, true).body((x, y) =>
     wasm.call(SET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(0)), y),
   ),
@@ -97,8 +95,6 @@ export const libraryFunctions: LibFuncType[] = [
   // list functions
   libFunc("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
   libFunc("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
-
-  libFunc("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
 
   libFunc("tokenize", 1).body(x => wasm.call(TOKENIZE_FX).args(x)),
   libFunc("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),

@@ -82,15 +82,15 @@ pair(head(p), tail(p))`,
         null,
       ],
       [
-        `p = linked_list(1, 2, 3)
+        `p = llist(1, 2, 3)
 set_head(p, 10)
 head(p)`,
         10n,
         null,
       ],
       [
-        `p = linked_list(1, 2, 3)
-set_tail(p, linked_list(20, 30))
+        `p = llist(1, 2, 3)
+set_tail(p, llist(20, 30))
 head(tail(p))`,
         20n,
         null,
@@ -118,22 +118,22 @@ head(p)`,
     ],
     "mutation with linked lists": [
       [
-        `lst = linked_list(1, 2, 3, 4)
+        `lst = llist(1, 2, 3, 4)
 set_head(lst, 100)
 head(lst)`,
         100n,
         null,
       ],
       [
-        `lst = linked_list(1, 2, 3, 4)
-new_tail = linked_list(20, 30)
+        `lst = llist(1, 2, 3, 4)
+new_tail = llist(20, 30)
 set_tail(lst, new_tail)
 head(tail(lst))`,
         20n,
         null,
       ],
       [
-        `lst = linked_list(10, 20, 30)
+        `lst = llist(10, 20, 30)
 set_head(tail(lst), 200)
 head(tail(lst))`,
         200n,
@@ -174,7 +174,7 @@ head(s)`,
     ],
     "complex mutation scenarios": [
       [
-        `def build_linked_list_mut(n):
+        `def build_llist_mut(n):
     if n == 0:
         return None
     else:
@@ -182,9 +182,9 @@ head(s)`,
         if n == 1:
             return p
         else:
-            set_tail(p, build_linked_list_mut(n - 1))
+            set_tail(p, build_llist_mut(n - 1))
             return p
-build_linked_list_mut(5)`,
+build_llist_mut(5)`,
         [5n, [4n, [3n, [2n, [1n, null]]]]],
         null,
       ],

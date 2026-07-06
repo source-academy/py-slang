@@ -71,15 +71,21 @@ export namespace ResolverErrors {
     }
   }
 
-  export class BreakContinueError extends BaseResolverError {
-    constructor(line: number, col: number, source: string, start: number, current: number) {
+  export class ScopeConflictError extends BaseResolverError {
+    constructor(
+      line: number,
+      col: number,
+      source: string,
+      start: number,
+      current: number,
+      message: string,
+    ) {
       const { lineIndex, fullLine } = getFullLine(source, start);
-      let hint = ` A 'break' or 'continue' statement must be inside a loop body.`;
+      let hint = ` ${message}`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
       hint = hint.padStart(hint.length + col - diff, " ");
-      const name = "BreakContinueError";
-
+      const name = "SyntaxError";
       super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = name;
     }
