@@ -1,4 +1,4 @@
-import { DataType, TypedValue } from "../../../../conductor/dist/conductor/types/moduleInterface";
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
 import { Context } from "./context";

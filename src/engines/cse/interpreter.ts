@@ -145,12 +145,12 @@ export async function evaluate(
     return displayError(context, error, ErrorType.EVALUATOR_RUNTIME);
   }
 
-  await evaluateImports(program as StmtNS.FileInput, context, code);
-
   try {
     context.runtime.isRunning = true;
     context.control = new Control(program);
     context.stash = new Stash();
+
+    await evaluateImports(program as StmtNS.FileInput, context, code);
 
     // Adaptation for new feature
     const result = await runCSEMachine(
@@ -172,24 +172,22 @@ export async function evaluate(
   }
 }
 
-function filterImportDeclarations(
-  program: StmtNS.FileInput,
-): Map<string, { specs: { name: string; alias: string | undefined }[]; node: StmtNS.FromImport }> {
-  const importNodeMap = new Map<
-    string,
-    { specs: { name: string; alias: string | undefined }[]; node: StmtNS.FromImport }
-  >();
+type ModuleImportMapValue = { name: string; alias: string | undefined; node: StmtNS.FromImport };
+function filterImportDeclarations(program: StmtNS.FileInput): Map<string, ModuleImportMapValue[]> {
+  const importNodeMap = new Map<string, ModuleImportMapValue[]>();
   for (const stmt of program.statements) {
     if (stmt instanceof StmtNS.FromImport) {
       const moduleName = stmt.module.lexeme;
       if (!importNodeMap.has(moduleName)) {
-        importNodeMap.set(moduleName, { specs: [], node: stmt });
+        importNodeMap.set(moduleName, []);
       }
-      importNodeMap
-        .get(moduleName)!
-        .specs.push(
-          ...stmt.names.map(spec => ({ name: spec.name.lexeme, alias: spec.alias?.lexeme })),
-        );
+      importNodeMap.get(moduleName)!.push(
+        ...stmt.names.map(spec => ({
+          name: spec.name.lexeme,
+          alias: spec.alias?.lexeme,
+          node: stmt,
+        })),
+      );
     }
   }
   return importNodeMap;
@@ -210,14 +208,14 @@ async function evaluateImports(
 
   await loadModules(context, [...importNodeMap.keys()]);
   for (const [moduleName, nodes] of importNodeMap) {
-    for (const node of nodes.specs) {
+    for (const node of nodes) {
       const importedFunc = context.nativeStorage.loadedModules[moduleName]?.[node.name];
       if (!importedFunc) {
-        throw new error.ModuleFunctionNotFoundError(moduleName, moduleName, node.name, nodes.node);
+        throw new error.ModuleFunctionNotFoundError(moduleName, moduleName, node.name, node.node);
       }
     }
     await Promise.all(
-      nodes.specs.map(async node => {
+      nodes.map(async node => {
         const importedFunc = context.nativeStorage.loadedModules[moduleName][node.name];
         pyDefineVariable(
           context,

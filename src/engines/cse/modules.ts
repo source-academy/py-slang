@@ -1,6 +1,5 @@
-import { DataType, TypedValue } from "@sourceacademy/conductor/types";
+import { DataType, OpaqueIdentifier, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
-import { OpaqueIdentifier } from "../../../../conductor/dist/conductor/types/moduleInterface";
 import { ExprNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
