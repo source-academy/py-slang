@@ -4,11 +4,13 @@ import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
+import { RunError } from "../runner";
+import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
@@ -262,28 +264,28 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 };
 
 // ---------------------------------------------------------------------------
-// SVML test utilities
+// PVML test utilities
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ErrorClass = new (...args: any[]) => Error;
 
 /**
- * Expected value for an SVML test case.
- * SVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
+ * Expected value for an PVML test case.
+ * PVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
  * `undefined` means the expression should evaluate to Python None / no return value.
  */
-export type SVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+export type PVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
 
 /**
- * Same shape as TestCases but with SVML-compatible expected values.
+ * Same shape as TestCases but with PVML-compatible expected values.
  * Each tuple: [code, expected, output].
  *   - expected: a JS primitive, undefined, null, or an Error subclass (for expected throws)
  *   - output: expected print outputs, or null if none expected
  */
-export type SVMLTestCases = Record<string, [string, SVMLTestExpectedValue, string[] | null][]>;
+export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
-export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
+export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
       test.each(
@@ -298,19 +300,19 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
         if (typeof expected === "function") {
           expect(() => {
             const ast = parse(source);
-            const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-            new SVMLInterpreter(program).execute();
+            const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+            new PVMLInterpreter(program).execute();
           }).toThrow(expected);
           return;
         }
 
         const outputs: string[] = [];
         const ast = parse(source);
-        const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-        const interpreter = new SVMLInterpreter(program, {
+        const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+        const interpreter = new PVMLInterpreter(program, {
           sendOutput: msg => outputs.push(msg),
         });
-        const result = SVMLInterpreter.toJSValue(interpreter.execute());
+        const result = PVMLInterpreter.toJSValue(interpreter.execute());
 
         if (expected === undefined) {
           expect(result).toBeUndefined();
@@ -326,6 +328,150 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
           expect(outputs).toEqual(output);
         }
       });
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Native Pynter (pvml/pynter) parity test utilities
+//
+// Reruns the same `TestCases` tables used by generateTestCases() (the CSE
+// suite) against the PVML compiler + a native Pynter `runner` binary, to
+// track how far the pvml/pynter pathway currently is from CSE parity.
+//
+// Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary
+// (https://github.com/source-academy/pynter#build-locally) to enable these.
+// Skipped entirely otherwise, since CI doesn't build the native binary.
+// Failures are expected and informative here, not a sign of broken infra —
+// see README.md's "Running the standalone CLI (repl)" section for the
+// pathway's known, current limitations.
+// ---------------------------------------------------------------------------
+
+/** Converts a Pynter result (type name + raw value string) to a JS value comparable to `expected`. */
+function pynterResultToComparable(result: { resultType: string; resultValue: string }): unknown {
+  switch (result.resultType) {
+    case "integer":
+    case "float":
+      return Number(result.resultValue);
+    case "boolean":
+      return result.resultValue === "true";
+    case "string":
+      return result.resultValue;
+    case "null":
+      return null;
+    case "undefined":
+      return undefined;
+    default:
+      // arrays, functions: not decoded from the native trailer today.
+      return undefined;
+  }
+}
+
+/** Converts a CSE `TestOutputValue` to a JS value comparable to pynterResultToComparable()'s output. */
+function expectedToComparable(expected: TestOutputValue): unknown {
+  if (typeof expected === "bigint") {
+    // Pynter numbers are single-precision floats/32-bit ints, not arbitrary-precision.
+    return Number(expected);
+  }
+  if (
+    typeof expected === "number" ||
+    typeof expected === "string" ||
+    typeof expected === "boolean" ||
+    expected === null
+  ) {
+    return expected;
+  }
+  // PyComplexNumber and arrays aren't representable by the native result trailer today.
+  return undefined;
+}
+
+/** Matches a Python imaginary-number literal: 3j, .5j, 1.2j, 1.j, 1e3j, 1e-3j, 1J, etc. */
+const COMPLEX_LITERAL_RE = /(?<![a-zA-Z_])(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[jJ]\b/;
+
+/** Whether `expected` is (or, if an array, contains) a PyComplexNumber. */
+function containsComplexNumber(expected: TestExpectedValue): boolean {
+  if (expected instanceof PyComplexNumber) return true;
+  if (Array.isArray(expected)) return expected.some(containsComplexNumber);
+  return false;
+}
+
+/**
+ * Whether a test case involves complex numbers, which Pynter's VM doesn't support
+ * at all (it mirrors Sinter: values are booleans, 32-bit ints, or single-precision
+ * floats only) — py-slang's own PVML compiler rejects complex literals outright
+ * (see PVMLCompiler.visitComplexExpr). Detected via the expected value's type
+ * (recursing into arrays, e.g. a list of complex numbers) or a complex-literal
+ * regex over the source, since a case can involve complex numbers as an
+ * intermediate value without one being the final `expected` result (e.g. a
+ * comparison, or an error case).
+ */
+function involvesComplexNumbers(code: string, expected: TestExpectedValue): boolean {
+  return containsComplexNumber(expected) || COMPLEX_LITERAL_RE.test(code);
+}
+
+/**
+ * Reruns `testCases` (as already used with generateTestCases() for the CSE
+ * machine) through the PVML compiler + native Pynter, at the given chapter
+ * `variant`. See the file-level comment above for gating/expectations.
+ */
+export const generateNativePynterTestCases = (testCases: TestCases, variant: number) => {
+  const pynterPath = process.env.PYNTER_RUNNER_PATH;
+  const describeBlock = pynterPath ? describe : describe.skip;
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describeBlock(`[pvml/pynter] ${funcName}`, () => {
+      const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
+        let result;
+        try {
+          result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath! });
+        } catch (e) {
+          if (typeof expected === "function") {
+            // CSE also expects a failure here; any RunError counts as agreement.
+            expect(e).toBeInstanceOf(RunError);
+            return;
+          }
+          throw e;
+        }
+
+        if (typeof expected === "function") {
+          throw new Error(
+            `Expected an error (${expected.name}), but pvml/pynter completed with ` +
+              `result type "${result.resultType}": ${result.resultValue}`,
+          );
+        }
+
+        if (output !== null) {
+          expect(result.output).toBe(output.map(line => `${line}\n`).join(""));
+        }
+
+        const actual = pynterResultToComparable(result);
+        const wanted = expectedToComparable(expected);
+        if (typeof wanted === "number" && !Number.isInteger(wanted)) {
+          expect(actual).toBeCloseTo(wanted, 2);
+        } else {
+          expect(actual).toEqual(wanted);
+        }
+      };
+
+      const internalTestCases = createInternalTestCases(tests);
+      const supported = internalTestCases.filter(
+        ({ code, expected }) => !involvesComplexNumbers(code, expected),
+      );
+      const unsupportedComplex = internalTestCases.filter(({ code, expected }) =>
+        involvesComplexNumbers(code, expected),
+      );
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (unsupportedComplex.length > 0) {
+        test.skip.each(unsupportedComplex)(
+          `$label (Pynter does not support complex numbers)`,
+          runTestCase,
+        );
+      }
     });
   }
 };
