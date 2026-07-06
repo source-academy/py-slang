@@ -1,7 +1,7 @@
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NativePynterError, runNativePynter } from "../engines/svml/pynter/native-pynter";
+import { NativePynterError, runNativePynter } from "../engines/pvml/pynter/native-pynter";
 
 /**
  * Stands in for the real native `runner` binary (which isn't available in

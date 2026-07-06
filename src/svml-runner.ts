@@ -11,10 +11,10 @@
  * output, throws RunError on any failure.
  */
 
-import { SINTER_OPCODE_MAX } from "./engines/svml/opcodes";
-import { NativePynterError, runNativePynter } from "./engines/svml/pynter/native-pynter";
-import { assemble } from "./engines/svml/svml-assembler";
-import { SVMLCompiler } from "./engines/svml/svml-compiler";
+import { SINTER_OPCODE_MAX } from "./engines/pvml/opcodes";
+import { NativePynterError, runNativePynter } from "./engines/pvml/pynter/native-pynter";
+import { assemble } from "./engines/pvml/pvml-assembler";
+import { PVMLCompiler } from "./engines/pvml/pvml-compiler";
 import { parse } from "./parser";
 import { analyzeWithEnvironments } from "./resolver";
 import { RunError } from "./runner";
@@ -67,7 +67,7 @@ export async function runCodeSvmlDetailed(
 
   let binary: Uint8Array;
   try {
-    const compiler = SVMLCompiler.fromProgram(ast, environments);
+    const compiler = PVMLCompiler.fromProgram(ast, environments);
     const program = compiler.compileProgram(ast);
     binary = assemble(program, SINTER_OPCODE_MAX);
   } catch (e: unknown) {

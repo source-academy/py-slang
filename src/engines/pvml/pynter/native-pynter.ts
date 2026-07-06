@@ -1,5 +1,5 @@
 /**
- * Runs assembled SVML bytecode through a native Pynter `runner` binary
+ * Runs assembled PVML bytecode through a native Pynter `runner` binary
  * (https://github.com/source-academy/pynter), built separately via CMake.
  *
  * Pynter is a fork of Sinter (https://github.com/source-academy/sinter),

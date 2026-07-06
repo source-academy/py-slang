@@ -1,8 +1,8 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { SINTER_OPCODE_MAX } from "../engines/svml/opcodes";
-import initSinter, { SinterValue } from "../engines/svml/sinter/sinter";
-import { assemble } from "../engines/svml/svml-assembler";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
+import { SINTER_OPCODE_MAX } from "../engines/pvml/opcodes";
+import initSinter, { SinterValue } from "../engines/pvml/sinter/sinter";
+import { assemble } from "../engines/pvml/pvml-assembler";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import math from "../stdlib/math";
@@ -35,7 +35,7 @@ export class PySvmlSinterEvaluator extends BasicEvaluator {
       if (errors.length > 0) {
         throw errors[0];
       }
-      const compiler = SVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, environments);
       const program = compiler.compileProgram(ast);
       const binary = assemble(program, SINTER_OPCODE_MAX);
 

@@ -1,6 +1,6 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import math from "../stdlib/math";
@@ -16,13 +16,13 @@ export class PySvmlEvaluator extends BasicEvaluator {
       if (errors.length > 0) {
         throw errors[0];
       }
-      const compiler = SVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, environments);
       const program = compiler.compileProgram(ast);
-      const interpreter = new SVMLInterpreter(program, {
+      const interpreter = new PVMLInterpreter(program, {
         sendOutput: msg => this.conductor.sendOutput(msg),
       });
       const returnValue = interpreter.execute();
-      this.conductor.sendResult(SVMLInterpreter.toJSValue(returnValue));
+      this.conductor.sendResult(PVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));
     }

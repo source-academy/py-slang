@@ -4,8 +4,8 @@ import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
@@ -264,28 +264,28 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 };
 
 // ---------------------------------------------------------------------------
-// SVML test utilities
+// PVML test utilities
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ErrorClass = new (...args: any[]) => Error;
 
 /**
- * Expected value for an SVML test case.
- * SVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
+ * Expected value for an PVML test case.
+ * PVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
  * `undefined` means the expression should evaluate to Python None / no return value.
  */
-export type SVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+export type PVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
 
 /**
- * Same shape as TestCases but with SVML-compatible expected values.
+ * Same shape as TestCases but with PVML-compatible expected values.
  * Each tuple: [code, expected, output].
  *   - expected: a JS primitive, undefined, null, or an Error subclass (for expected throws)
  *   - output: expected print outputs, or null if none expected
  */
-export type SVMLTestCases = Record<string, [string, SVMLTestExpectedValue, string[] | null][]>;
+export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
-export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
+export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
       test.each(
@@ -300,19 +300,19 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
         if (typeof expected === "function") {
           expect(() => {
             const ast = parse(source);
-            const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-            new SVMLInterpreter(program).execute();
+            const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+            new PVMLInterpreter(program).execute();
           }).toThrow(expected);
           return;
         }
 
         const outputs: string[] = [];
         const ast = parse(source);
-        const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-        const interpreter = new SVMLInterpreter(program, {
+        const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+        const interpreter = new PVMLInterpreter(program, {
           sendOutput: msg => outputs.push(msg),
         });
-        const result = SVMLInterpreter.toJSValue(interpreter.execute());
+        const result = PVMLInterpreter.toJSValue(interpreter.execute());
 
         if (expected === undefined) {
           expect(result).toBeUndefined();
@@ -336,7 +336,7 @@ export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
 // Native Pynter (svml/pynter) parity test utilities
 //
 // Reruns the same `TestCases` tables used by generateTestCases() (the CSE
-// suite) against the SVML compiler + a native Pynter `runner` binary, to
+// suite) against the PVML compiler + a native Pynter `runner` binary, to
 // track how far the svml/pynter pathway currently is from CSE parity.
 //
 // Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary
@@ -387,7 +387,7 @@ function expectedToComparable(expected: TestOutputValue): unknown {
 
 /**
  * Reruns `testCases` (as already used with generateTestCases() for the CSE
- * machine) through the SVML compiler + native Pynter, at the given chapter
+ * machine) through the PVML compiler + native Pynter, at the given chapter
  * `variant`. See the file-level comment above for gating/expectations.
  */
 export const generateNativePynterTestCases = (testCases: TestCases, variant: number) => {

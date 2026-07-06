@@ -1,15 +1,15 @@
 /**
- * End-to-end tests for the SVML pipeline:
+ * End-to-end tests for the PVML pipeline:
  *   Python source → parse → compile → interpret
  *
  * Uses the same TestCases tuple convention as stdlib.test.ts:
  *   [code, expectedValue, expectedOutput]
  */
-import { UnsupportedOperandTypeError, ZeroDivisionError } from "../engines/svml/errors";
-import { generateSVMLTestCases, SVMLTestCases } from "./utils";
+import { UnsupportedOperandTypeError, ZeroDivisionError } from "../engines/pvml/errors";
+import { generatePVMLTestCases, PVMLTestCases } from "./utils";
 
-describe("SVML E2E", () => {
-  const functionTests: SVMLTestCases = {
+describe("PVML E2E", () => {
+  const functionTests: PVMLTestCases = {
     "simple calls": [
       ["def add(x, y):\n    return x + y\nadd(3, 4)", 7, null],
       ["def noop():\n    pass\nnoop()", undefined, null],
@@ -76,7 +76,7 @@ describe("SVML E2E", () => {
     ],
   };
 
-  const branchTests: SVMLTestCases = {
+  const branchTests: PVMLTestCases = {
     "if-else": [
       ["x = 10\nif x > 5:\n    result = 1\nelse:\n    result = 2\nresult", 1, null],
       ["x = 3\nif x > 5:\n    result = 1\nelse:\n    result = 2\nresult", 2, null],
@@ -131,7 +131,7 @@ describe("SVML E2E", () => {
     ],
   };
 
-  const loopTests: SVMLTestCases = {
+  const loopTests: PVMLTestCases = {
     "while loops": [
       ["i = 0\ntotal = 0\nwhile i < 5:\n    total = total + i\n    i = i + 1\ntotal", 10, null],
       ["i = 0\nwhile True:\n    if i == 7:\n        break\n    i = i + 1\ni", 7, null],
@@ -167,7 +167,7 @@ describe("SVML E2E", () => {
     ],
   };
 
-  const combinedTests: SVMLTestCases = {
+  const combinedTests: PVMLTestCases = {
     "functions + branches": [
       [
         "def gcd(a, b):\n    if b == 0:\n        return a\n    else:\n        return gcd(b, a % b)\ngcd(48, 18)",
@@ -198,7 +198,7 @@ describe("SVML E2E", () => {
     ],
   };
 
-  const errorTests: SVMLTestCases = {
+  const errorTests: PVMLTestCases = {
     "type errors": [
       ['1 + ""', UnsupportedOperandTypeError, null],
       ["not 1", UnsupportedOperandTypeError, null],
@@ -211,9 +211,9 @@ describe("SVML E2E", () => {
     ],
   };
 
-  describe("Functions", () => generateSVMLTestCases(functionTests));
-  describe("Branches", () => generateSVMLTestCases(branchTests));
-  describe("Loops", () => generateSVMLTestCases(loopTests));
-  describe("Combined", () => generateSVMLTestCases(combinedTests));
-  describe("Errors", () => generateSVMLTestCases(errorTests));
+  describe("Functions", () => generatePVMLTestCases(functionTests));
+  describe("Branches", () => generatePVMLTestCases(branchTests));
+  describe("Loops", () => generatePVMLTestCases(loopTests));
+  describe("Combined", () => generatePVMLTestCases(combinedTests));
+  describe("Errors", () => generatePVMLTestCases(errorTests));
 });
