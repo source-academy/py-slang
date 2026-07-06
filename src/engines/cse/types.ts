@@ -206,6 +206,8 @@ export function operatorTranslator(operator: TokenType | string) {
       return "or";
     case TokenType.IS:
       return "is";
+    case TokenType.ISNOT:
+      return "is not";
     default:
       return String(operator);
   }

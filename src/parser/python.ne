@@ -17,7 +17,7 @@
 
 @{%
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
-import { Token } from "../tokenizer";
+import { Token, TokenType } from "../tokenizer";
 import pythonLexer from "./lexer";
 import { toAstToken, toFunctionParam } from "./token-bridge";
 
@@ -322,7 +322,7 @@ expressionCmpOp ->
   | "in"              {% tok %}
   | "not" "in"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; return tok; } %}
   | "is"              {% tok %}
-  | "is" "not"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; return tok; } %}
+  | "is" "not"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; tok.type = TokenType.ISNOT; return tok; } %}
 
 expressionAdd ->
     expressionAdd expressionAddOp expressionMul  {% astBinary %}

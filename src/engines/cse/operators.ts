@@ -121,8 +121,69 @@ export function evaluateUnaryExpression(
 }
 
 /**
- * Handles equality and inequality comparisons between any two non-list values, following Python §3 semantics.
- * This compares to the logic for Python §1 and §2 where equality and inequality for non-list values only applied to values of the same type.
+ * Structural equality between any two values, following Python semantics
+ * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
+ * Numbers compare across int/float/complex; lists compare element-wise (recursively),
+ * as in Python; values of different types are unequal; remaining same-type values
+ * compare by value where they carry one, and by reference otherwise.
+ *
+ * Self-referential lists without shared identity exhaust the stack, mirroring
+ * CPython's RecursionError on such comparisons.
+ */
+function structuralEquals(
+  code: string,
+  command: ExprNS.Binary,
+  context: Context,
+  left: Value,
+  right: Value,
+): boolean {
+  // Identity shortcut: also lets comparisons of shared substructure terminate early.
+  if (left === right) {
+    return true;
+  }
+
+  // Complex number equality, coercing ints and floats
+  if (left.type == "complex" || right.type == "complex") {
+    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
+      return false;
+    }
+    return PyComplexNumber.fromValue(context, code, command, left.value).equals(
+      PyComplexNumber.fromValue(context, code, command, right.value),
+    );
+  }
+
+  // Ints and floats compare across types (1 == 1.0 is True)
+  if (isNumeric(left) && isNumeric(right)) {
+    return pyCompare(left, right) === 0;
+  }
+
+  // If two types are different, they are not equal
+  if (left.type != right.type) {
+    return false;
+  }
+
+  // Lists compare element-wise, recursively, as in Python
+  if (left.type == "list" && right.type == "list") {
+    return (
+      left.value.length === right.value.length &&
+      left.value.every((element, i) =>
+        structuralEquals(code, command, context, element, right.value[i]),
+      )
+    );
+  }
+
+  // Remaining same-type values: by value where they carry one (e.g. strings, bools),
+  // by reference otherwise (e.g. closures).
+  if ("value" in left && "value" in right) {
+    return left.value === right.value;
+  }
+  return left == right;
+}
+
+/**
+ * Handles equality and inequality comparisons between any two values, following Python §3/§4 semantics
+ * (structural equality, total over all types). This compares to the logic for Python §1 and §2 where
+ * equality and inequality only apply to numeric x numeric and string x string.
  *
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
@@ -140,56 +201,46 @@ export function handleExpandedEquality(
   left: Value,
   right: Value,
 ): Value {
-  // List equality is not supported via the equality operators, only via `is`.
-  if (left.type == "list" && right.type == "list") {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(
-        code,
-        command,
-        left.type,
-        right.type,
-        operatorTranslator(operator),
-      ),
-    );
-  }
+  return {
+    type: "bool",
+    value:
+      (operator == TokenType.NOTEQUAL) !== structuralEquals(code, command, context, left, right),
+  };
+}
 
-  // Handle complex number equality
-  if (left.type == "complex" || right.type == "complex") {
-    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
-      return { type: "bool", value: operator == TokenType.NOTEQUAL };
-    }
-    return {
-      type: "bool",
-      value:
-        (operator == TokenType.NOTEQUAL) !==
-        PyComplexNumber.fromValue(context, code, command, left.value).equals(
-          PyComplexNumber.fromValue(context, code, command, right.value),
-        ),
-    };
+/**
+ * Identity (`is`) between any two values, following Python §3/§4 semantics
+ * (see docs/specs/python_typing_middle_34.tex: `is` takes any x any).
+ * Lists and function values compare by reference — `is` is what makes sharing
+ * of mutable structure observable. Values of immutable types compare by value:
+ * their identity is unobservable, so this stays within Python's unspecified
+ * interning behavior while remaining deterministic (`1 is 1` is True, `1 is 1.0`
+ * is False, `None is None` is True).
+ */
+function pyIdentical(left: Value, right: Value): boolean {
+  if (left.type !== right.type) {
+    return false;
   }
-
-  // Handle ints and floats
-  if (isNumeric(left) && isNumeric(right)) {
-    return {
-      type: "bool",
-      value: (operator == TokenType.NOTEQUAL) !== (pyCompare(left, right) === 0),
-    };
+  switch (left.type) {
+    case "none":
+      return true;
+    case "list":
+      return left === right;
+    case "complex":
+      return (
+        right.type == "complex" &&
+        left.value.real === right.value.real &&
+        left.value.imag === right.value.imag
+      );
+    default:
+      if ("value" in left && "value" in right) {
+        return left.value === right.value;
+      }
+      if ("closure" in left && "closure" in right) {
+        return left.closure === right.closure;
+      }
+      return left === right;
   }
-
-  // If two types are different, they are not equal
-  if (left.type != right.type) {
-    return { type: "bool", value: operator == TokenType.NOTEQUAL };
-  }
-
-  // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
-  if ("value" in left && "value" in right) {
-    return {
-      type: "bool",
-      value: (left.value === right.value) !== (operator == TokenType.NOTEQUAL),
-    };
-  }
-  return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
 }
 
 /**
@@ -213,10 +264,20 @@ export function evaluateBinaryExpression(
   right: Value,
   variant: number,
 ): Value {
-  // Handle expanded equality semantics for Python §3,
-  // where equality and inequality comparisons between non-list values of different types are allowed
+  // Handle expanded equality semantics for Python §3/§4,
+  // where equality and inequality comparisons take any x any (structural equality)
   if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
     return handleExpandedEquality(code, command, context, operator, left, right);
+  }
+
+  // Handle identity semantics for `is` / `is not`, which take any x any.
+  // The `is` operator only exists at Python §3/§4; chapters 1 and 2 reject it
+  // at validation time (NoIsOperatorValidator).
+  if (operator == TokenType.IS || operator == TokenType.ISNOT) {
+    return {
+      type: "bool",
+      value: (operator == TokenType.ISNOT) !== pyIdentical(left, right),
+    };
   }
 
   // Handle Complex numbers
@@ -286,11 +347,9 @@ export function evaluateBinaryExpression(
     );
   }
 
-  // Handle list operations (only referential equality)
+  // Handle list operations (`is`, `is not`, and §3/§4 `==`/`!=` are handled above;
+  // everything else on lists is an error)
   if (left.type == "list" || right.type == "list") {
-    if (operator == TokenType.IS && right.type === "list" && left.type === "list") {
-      return { type: "bool", value: left === right };
-    }
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(

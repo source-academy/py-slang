@@ -5,7 +5,7 @@ function id(x: unknown[]) {
 }
 
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
-import { Token } from "../tokenizer";
+import { Token, TokenType } from "../tokenizer";
 import pythonLexer from "./lexer";
 import { toAstToken, toFunctionParam } from "./token-bridge";
 
@@ -586,6 +586,7 @@ const ParserRules = [
     postprocess: ([t]: [moo.Token]) => {
       const tok = toAstToken(t);
       tok.lexeme = "is not";
+      tok.type = TokenType.ISNOT;
       return tok;
     },
   },
