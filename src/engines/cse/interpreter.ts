@@ -1140,7 +1140,9 @@ const cmdEvaluators: CmdEvaluators = {
       topElement.instrType === InstrType.ENVIRONMENT
     ) {
       control.pop();
-      popEnvironment(context);
+      while (currentEnvironment(context).id !== topElement.env.id) {
+        popEnvironment(context);
+      }
     }
 
     const numOfArgs = instr.numOfArgs;
