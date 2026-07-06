@@ -1,6 +1,6 @@
 import Buffer from "../../utils/buffer";
 import OpCodes, { getInstructionSize, OPCODE_MAX, unsupportedOpcodeMessage } from "./opcodes";
-import { Instruction, SVMLProgram, SVMLIR } from "./types";
+import { Instruction, PVMLProgram, PVMLIR } from "./types";
 
 const SVM_MAGIC = 0x5005acad;
 const MAJOR_VER = 0;
@@ -48,7 +48,7 @@ function writeStringConstant(b: Buffer, s: string) {
   b.putU(8, 0);
 }
 
-function serialiseFunction(f: SVMLIR, targetMaxOpcode?: number): ImFunction {
+function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
   const code = f.toInstructions();
   const { stackSize, envSize, numArgs } = f;
   const holes: Hole[] = [];
@@ -158,7 +158,7 @@ function serialiseFunction(f: SVMLIR, targetMaxOpcode?: number): ImFunction {
   };
 }
 
-export function assemble(p: SVMLProgram, targetMaxOpcode?: number): Uint8Array {
+export function assemble(p: PVMLProgram, targetMaxOpcode?: number): Uint8Array {
   const entrypointIndex = p.entryPoint;
   const jsonFns = p.functions;
 
@@ -231,7 +231,7 @@ export function assemble(p: SVMLProgram, targetMaxOpcode?: number): Uint8Array {
   return bin.asArray();
 }
 
-export function disassemble(p: Uint8Array): SVMLProgram {
+export function disassemble(p: Uint8Array): PVMLProgram {
   const view = new DataView(p.buffer, p.byteOffset, p.byteLength);
 
   const align4 = (n: number) => (n + 3) & ~3;
@@ -244,7 +244,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
   const major = view.getUint16(4, true);
   const minor = view.getUint16(6, true);
   if (major !== MAJOR_VER || minor !== MINOR_VER) {
-    throw new Error(`Unsupported SVML version ${major}.${minor}`);
+    throw new Error(`Unsupported PVML version ${major}.${minor}`);
   }
 
   const entrypointOffset = view.getUint32(8, true);
@@ -260,7 +260,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
   for (let i = 0; i < constantCount; i++) {
     cursor = align4(cursor);
     if (cursor + 6 > p.byteLength) {
-      throw new Error("Truncated SVML binary while reading constants");
+      throw new Error("Truncated PVML binary while reading constants");
     }
     const strOffset = cursor;
     const tag = view.getUint16(cursor, true);
@@ -271,7 +271,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
     const size = view.getUint32(cursor, true);
     cursor += 4;
     if (size === 0 || cursor + size > p.byteLength) {
-      throw new Error("Truncated SVML binary while reading string constant");
+      throw new Error("Truncated PVML binary while reading string constant");
     }
     const raw = new Uint8Array(p.buffer, p.byteOffset + cursor, size);
     const strBytes = raw.subarray(0, size - 1);
@@ -284,7 +284,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
   const functionsStart = cursor;
 
   if (functionsStart >= p.byteLength) {
-    throw new Error("Malformed SVML binary: no function section");
+    throw new Error("Malformed PVML binary: no function section");
   }
 
   // First pass: discover function start offsets by parsing from known starts.
@@ -513,7 +513,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
   }
 
   if (rawFunctions.length === 0) {
-    throw new Error("SVML binary does not contain any functions");
+    throw new Error("PVML binary does not contain any functions");
   }
 
   const entrypointIndex = offsetToIndex.get(entrypointOffset);
@@ -521,7 +521,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
     throw new Error("Entrypoint function offset not found in binary");
   }
 
-  // Apply closure fixups on mutable data before freezing into SVMLIR
+  // Apply closure fixups on mutable data before freezing into PVMLIR
   for (const { fnIndex, instrIndex, targetOffset } of closureFixups) {
     const targetIndex = offsetToIndex.get(targetOffset);
     if (targetIndex === undefined) {
@@ -530,7 +530,7 @@ export function disassemble(p: Uint8Array): SVMLProgram {
     rawFunctions[fnIndex].instructions[instrIndex].arg1 = targetIndex;
   }
 
-  // Now freeze into immutable SVMLIR instances
+  // Now freeze into immutable PVMLIR instances
   const functions = rawFunctions.map(f => {
     const n = f.instructions.length;
     const opcodes = new Int32Array(n);
@@ -552,8 +552,8 @@ export function disassemble(p: Uint8Array): SVMLProgram {
 
     // symbolCount = envSize - numArgs (since envSize = symbolCount + numArgs)
     const symbolCount = f.envSize - f.numArgs;
-    return new SVMLIR(opcodes, arg1s, arg2s, strings, f.stackSize, symbolCount, f.numArgs);
+    return new PVMLIR(opcodes, arg1s, arg2s, strings, f.stackSize, symbolCount, f.numArgs);
   });
 
-  return new SVMLProgram(entrypointIndex, functions);
+  return new PVMLProgram(entrypointIndex, functions);
 }
