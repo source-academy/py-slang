@@ -295,6 +295,25 @@ export function evaluateBinaryExpression(
     return handleExpandedEquality(code, command, context, operator, left, right);
   }
 
+  // At Python §3/§4, booleans participate in ordering comparisons as the ints
+  // they are, as in CPython (True < 2 is True); see the
+  // `>,>=,<,<= int,float,bool` row of docs/specs/python_typing_middle_34.tex.
+  // At §1/§2 booleans are not valid ordering operands (python_typing_middle_12.tex).
+  if (
+    variant >= 3 &&
+    (operator == TokenType.LESS ||
+      operator == TokenType.LESSEQUAL ||
+      operator == TokenType.GREATER ||
+      operator == TokenType.GREATEREQUAL)
+  ) {
+    if (left.type === "bool") {
+      left = { type: "bigint", value: left.value ? 1n : 0n };
+    }
+    if (right.type === "bool") {
+      right = { type: "bigint", value: right.value ? 1n : 0n };
+    }
+  }
+
   // Handle identity semantics for `is` / `is not`, which apply to values of
   // reference type (list, function, None) and are an error whenever either
   // operand is a number, string or boolean (identity of immutable values is

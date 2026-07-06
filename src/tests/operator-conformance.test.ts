@@ -103,7 +103,6 @@ const FRONT: Row[] = [
 // docs/specs/python_typing_back.tex — common to all chapters
 // (`and`, `or`, `not` and unary `-` are handled separately below)
 const BACK: Row[] = [
-  { ops: [">", ">=", "<", "<="], left: ["int", "float"], right: ["int", "float"], result: "bool" },
   { ops: [">", ">=", "<", "<="], left: ["str"], right: ["str"], result: "bool" },
 ];
 
@@ -111,6 +110,7 @@ const BACK: Row[] = [
 const MIDDLE_12: Row[] = [
   { ops: ["==", "!="], left: NUMERIC, right: NUMERIC, result: "bool" },
   { ops: ["==", "!="], left: ["str"], right: ["str"], result: "bool" },
+  { ops: [">", ">=", "<", "<="], left: ["int", "float"], right: ["int", "float"], result: "bool" },
 ];
 
 // docs/specs/python_typing_middle_34.tex — Python §3/§4 only.
@@ -118,10 +118,17 @@ const MIDDLE_12: Row[] = [
 // (list, function, None) and errors whenever either operand is a number,
 // string or boolean (identity of immutable values is unobservable).
 // The error rows of the table are the sweep's default expectation.
+// Ordering comparisons admit booleans (as in CPython, bool being an int).
 const REFERENCE_TYPES: PyType[] = ["NoneType", "list", "function"];
 const MIDDLE_34: Row[] = [
   { ops: ["==", "!="], left: ANY_34, right: ANY_34, result: "bool" },
   { ops: ["is", "is not"], left: REFERENCE_TYPES, right: REFERENCE_TYPES, result: "bool" },
+  {
+    ops: [">", ">=", "<", "<="],
+    left: ["int", "float", "bool"],
+    right: ["int", "float", "bool"],
+    result: "bool",
+  },
 ];
 
 function tableForChapter(chapter: number): Row[] {
@@ -357,6 +364,26 @@ describe("Operator conformance: directed cases", () => {
       ["True != 1", false],
       ["[True] == [1]", true],
       ["True == 'True'", false],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
+  // As in CPython, booleans participate in ordering comparisons as ints at
+  // Python §3/§4 (the sweep pins that they error at §1/§2).
+  test.each([[3], [4]])("bool orders as its int value at Python §%d", async chapter => {
+    const cases: [string, boolean][] = [
+      ["False < True", true],
+      ["True < 2", true],
+      ["True <= 1", true],
+      ["2.5 > True", true],
+      ["True > 1", false],
+      ["False >= 1", false],
+      ["0.5 < True", true],
     ];
     for (const [code, expected] of cases) {
       expect([code, await run(code, chapter)]).toStrictEqual([
