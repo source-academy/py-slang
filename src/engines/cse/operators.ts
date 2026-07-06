@@ -135,6 +135,14 @@ function asIntIfBool(value: Value): Value {
 }
 
 /**
+ * Whether a value is a valid operand for numeric ordering comparisons
+ * (int, float or bool — bool as the int it is under CPython's rules).
+ */
+function isOrderable(value: Value): boolean {
+  return value.type === "bigint" || value.type === "number" || value.type === "bool";
+}
+
+/**
  * Structural equality between any two values, following Python semantics
  * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
  * Numbers compare across int/float/complex, and booleans participate as in
@@ -330,8 +338,13 @@ export function evaluateBinaryExpression(
   // they are, as in CPython (True < 2 is True); see the
   // `>,>=,<,<= int,float,bool` row of docs/specs/python_typing_middle_34.tex.
   // At §1/§2 booleans are not valid ordering operands (python_typing_middle_12.tex).
+  // The coercion is gated on both operands already being orderable so that an
+  // unsupported comparison (e.g. `True < 'abc'`) reports 'bool', not 'int', in
+  // its error message.
   if (
     variant >= 3 &&
+    isOrderable(left) &&
+    isOrderable(right) &&
     (operator == TokenType.LESS ||
       operator == TokenType.LESSEQUAL ||
       operator == TokenType.GREATER ||
