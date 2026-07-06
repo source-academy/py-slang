@@ -107,6 +107,8 @@ yarn repl <path to python file> --engine svml --pynter ../pynter/build/runner/ru
 
 Note that the SVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PySvmlEvaluator`/`PySvmlSinterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine svml` yet. `src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine svml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the SVML compiler and Pynter itself gain features.
 
+The bytecode format itself — currently identical to SVML, the format [Sinter](https://github.com/source-academy/sinter) executes — is documented under [`docs/pvml/`](./docs/pvml/), forked from the [js-slang SVML wiki](https://github.com/source-academy/js-slang/wiki/SVML-Specification) so it can be edited to describe PVML (py-slang's own bytecode target) without touching the canonical SVML docs. See `docs/pvml/PVML-Specification.md` for the wire format and `docs/pvml/PVML-Instruction-Set.wiki` for the opcode reference — the latter also documents a known mismatch between py-slang's primitive-function index table and the one built into Sinter/Pynter today.
+
 ### Running the test suite
 
 Ensure that all tests pass before committing.
