@@ -28,13 +28,24 @@ export class Environment {
   // copy this field.
   moduleBindings: Set<string>;
   definedNames: Set<string>;
-  constructor(source: string, enclosing: Environment | null, names: Map<string, Token>) {
+  // Names bound as parameters of the function/lambda this scope belongs to (empty for the
+  // module scope). Distinct from `names`, which also gains entries for names assigned within
+  // the scope's body — this set lets a chapter's no-reassignment validator tell "declared as a
+  // parameter" apart from "declared by a body statement" so it can flag a parameter reassignment.
+  parameters: Set<string>;
+  constructor(
+    source: string,
+    enclosing: Environment | null,
+    names: Map<string, Token>,
+    parameters: Set<string> = new Set(),
+  ) {
     this.source = source;
     this.enclosing = enclosing;
     this.names = names;
     this.functions = new Set();
     this.moduleBindings = new Set();
     this.definedNames = new Set();
+    this.parameters = parameters;
   }
 
   /*
@@ -334,7 +345,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
     const newEnv = new Map(stmt.parameters.map(param => [param.lexeme, param]));
-    this.environment = new Environment(this.source, this.environment, newEnv);
+    this.environment = new Environment(
+      this.source,
+      this.environment,
+      newEnv,
+      new Set(newEnv.keys()),
+    );
     this.functionEnvironments.set(stmt, this.environment);
     this.functionScope = this.environment;
 
@@ -839,7 +855,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
-    this.environment = new Environment(this.source, this.environment, newEnv);
+    this.environment = new Environment(
+      this.source,
+      this.environment,
+      newEnv,
+      new Set(newEnv.keys()),
+    );
     this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Restore old environment
@@ -850,7 +871,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
     const newEnv = new Map(expr.parameters.map(param => [param.lexeme, param]));
-    this.environment = new Environment(this.source, this.environment, newEnv);
+    this.environment = new Environment(
+      this.source,
+      this.environment,
+      newEnv,
+      new Set(newEnv.keys()),
+    );
     this.functionEnvironments.set(expr, this.environment);
     this.resolve(expr.body);
     // Grab identifiers from that new environment.
