@@ -9,7 +9,7 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
-import { generateNativeSinterTestCases, generateTestCases, TestCases } from "./utils";
+import { generateNativePyinterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("List Tests", () => {
   const listTests: TestCases = {
@@ -76,5 +76,5 @@ describe("List Tests", () => {
   };
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
-  generateNativeSinterTestCases(listTests, 3);
+  generateNativePyinterTestCases(listTests, 3);
 });

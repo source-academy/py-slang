@@ -1,6 +1,6 @@
 import { FeatureNotSupportedError } from "../validator";
 import {
-  generateNativeSinterTestCases,
+  generateNativePyinterTestCases,
   generateTestCases,
   TestCases,
   toPythonAstAndResolve,
@@ -288,4 +288,4 @@ print(count)
 };
 
 generateTestCases(globalKeywordTests, 3, ch3);
-generateNativeSinterTestCases(globalKeywordTests, 3);
+generateNativePyinterTestCases(globalKeywordTests, 3);

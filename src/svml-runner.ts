@@ -1,15 +1,18 @@
 /**
- * Headless runner for the SVML/Sinter pathway.
+ * Headless runner for the SVML/Pyinter pathway.
  *
  * Compiles a SICPy program to SVML bytecode (same compiler as the
  * PySvmlEvaluator/PySvmlSinterEvaluator Conductor evaluators) and executes
- * it on a native Sinter `runner` binary (https://github.com/source-academy/sinter),
- * built separately via CMake. Mirrors runCode()'s contract in runner.ts:
- * returns concatenated print() output, throws RunError on any failure.
+ * it on a native Pyinter `runner` binary (https://github.com/source-academy/pyinter),
+ * built separately via CMake. Pyinter is a fork of Sinter kept as a separate
+ * project so that Python-specific VM semantics don't risk destabilizing
+ * Sinter, which remains the fallback engine for the Source curriculum.
+ * Mirrors runCode()'s contract in runner.ts: returns concatenated print()
+ * output, throws RunError on any failure.
  */
 
 import { SINTER_OPCODE_MAX } from "./engines/svml/opcodes";
-import { NativeSinterError, runNativeSinter } from "./engines/svml/sinter/native-sinter";
+import { NativePyinterError, runNativePyinter } from "./engines/svml/pyinter/native-pyinter";
 import { assemble } from "./engines/svml/svml-assembler";
 import { SVMLCompiler } from "./engines/svml/svml-compiler";
 import { parse } from "./parser";
@@ -19,22 +22,22 @@ import math from "./stdlib/math";
 import misc from "./stdlib/misc";
 
 export interface RunSvmlOptions {
-  /** Path to a built native Sinter `runner` binary. */
-  sinterPath: string;
+  /** Path to a built native Pyinter `runner` binary. */
+  pyinterPath: string;
 }
 
 export interface RunSvmlResult {
   /** Everything the program printed via print()/display(), concatenated. */
   output: string;
-  /** The type of the program's final value, as reported by Sinter (e.g. "integer", "string"). */
+  /** The type of the program's final value, as reported by Pyinter (e.g. "integer", "string"). */
   resultType: string;
-  /** The program's final value, as reported by Sinter, still in its raw string form. */
+  /** The program's final value, as reported by Pyinter, still in its raw string form. */
   resultValue: string;
 }
 
 /**
  * Evaluate `code` as a SICPy program at the given `variant` by compiling it
- * to SVML and running it on a native Sinter binary. Returns both the
+ * to SVML and running it on a native Pyinter binary. Returns both the
  * program's print() output and its final result value/type.
  *
  * Note: the SVML compiler currently only wires up the [misc, math] stdlib
@@ -47,7 +50,7 @@ export async function runCodeSvmlDetailed(
   variant: number,
   options: RunSvmlOptions,
 ): Promise<RunSvmlResult> {
-  const { sinterPath } = options;
+  const { pyinterPath } = options;
   const script = code.endsWith("\n") ? code : code + "\n";
 
   let ast;
@@ -73,9 +76,9 @@ export async function runCodeSvmlDetailed(
 
   let result;
   try {
-    result = await runNativeSinter(binary, sinterPath);
+    result = await runNativePyinter(binary, pyinterPath);
   } catch (e: unknown) {
-    if (e instanceof NativeSinterError) {
+    if (e instanceof NativePyinterError) {
       throw new RunError("runtime", e.message);
     }
     throw e;
@@ -84,7 +87,7 @@ export async function runCodeSvmlDetailed(
   if (result.fault !== "no fault") {
     throw new RunError(
       "runtime",
-      `Sinter fault: ${result.fault} (result type: ${result.resultType}, value: ${result.resultValue})`,
+      `Pyinter fault: ${result.fault} (result type: ${result.resultType}, value: ${result.resultValue})`,
     );
   }
 
