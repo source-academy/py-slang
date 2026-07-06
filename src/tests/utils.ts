@@ -386,6 +386,19 @@ function expectedToComparable(expected: TestOutputValue): unknown {
 }
 
 /**
+ * Whether a test case involves complex numbers, which Pynter's VM doesn't support
+ * at all (it mirrors Sinter: values are booleans, 32-bit ints, or single-precision
+ * floats only) — py-slang's own PVML compiler rejects complex literals outright
+ * (see PVMLCompiler.visitComplexExpr). Detected via the expected value's type or a
+ * complex-literal regex over the source, since a case can involve complex numbers
+ * as an intermediate value without one being the final `expected` result (e.g. a
+ * comparison, or an error case).
+ */
+function involvesComplexNumbers(code: string, expected: TestExpectedValue): boolean {
+  return expected instanceof PyComplexNumber || /\b\d+(\.\d+)?j\b/.test(code);
+}
+
+/**
  * Reruns `testCases` (as already used with generateTestCases() for the CSE
  * machine) through the PVML compiler + native Pynter, at the given chapter
  * `variant`. See the file-level comment above for gating/expectations.
@@ -396,7 +409,7 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
 
   for (const [funcName, tests] of Object.entries(testCases)) {
     describeBlock(`[pvml/pynter] ${funcName}`, () => {
-      test.each(createInternalTestCases(tests))(`$label`, async ({ code, expected, output }) => {
+      const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
         let result;
         try {
           result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath! });
@@ -427,7 +440,27 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
         } else {
           expect(actual).toEqual(wanted);
         }
-      });
+      };
+
+      const internalTestCases = createInternalTestCases(tests);
+      const supported = internalTestCases.filter(
+        ({ code, expected }) => !involvesComplexNumbers(code, expected),
+      );
+      const unsupportedComplex = internalTestCases.filter(({ code, expected }) =>
+        involvesComplexNumbers(code, expected),
+      );
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (unsupportedComplex.length > 0) {
+        test.skip.each(unsupportedComplex)(
+          `$label (Pynter does not support complex numbers)`,
+          runTestCase,
+        );
+      }
     });
   }
 };
