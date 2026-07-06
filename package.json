@@ -25,6 +25,7 @@
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
     "test-coverage": "jest --coverage",
+    "pynter:report": "tsx scripts/pynter-parity-report.ts",
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
