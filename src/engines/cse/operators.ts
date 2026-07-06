@@ -120,14 +120,25 @@ export function evaluateUnaryExpression(
   }
 }
 
+/** A float NaN value; NaN is unequal to everything, including itself, as in CPython. */
+function isNaNValue(value: Value): boolean {
+  return value.type === "number" && Number.isNaN(value.value);
+}
+
 /**
  * Structural equality between any two values, following Python semantics
  * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
  * Numbers compare across int/float/complex, and booleans participate as in
- * CPython, where bool is a subclass of int (True == 1 is True); lists compare
- * element-wise (recursively), as in Python; values of other differing types are
- * unequal; remaining same-type values compare by value where they carry one,
- * and by reference otherwise.
+ * CPython, where bool is a subclass of int (True == 1 is True); `None == None`
+ * is true; lists compare element-wise (recursively), as in Python; values of
+ * other differing types are unequal; remaining same-type values compare by
+ * value where they carry one, and by reference otherwise.
+ *
+ * The identity shortcut mirrors CPython's container comparison, which checks
+ * `x is y` before `x == y` per element — so a list containing NaN equals
+ * itself, while distinct NaN values are unequal. (Top-level `nan == nan` on
+ * the very same object is CPython-False; handleExpandedEquality guards that
+ * case before calling this function.)
  *
  * Self-referential lists without shared identity exhaust the stack, mirroring
  * CPython's RecursionError on such comparisons.
@@ -152,6 +163,12 @@ function structuralEquals(
     right = { type: "bigint", value: right.value ? 1n : 0n };
   }
 
+  // NaN is unequal to everything, including another NaN (identity shortcut above
+  // deliberately wins for the same object, matching CPython's container rule)
+  if (isNaNValue(left) || isNaNValue(right)) {
+    return false;
+  }
+
   // Complex number equality, coercing ints and floats
   if (left.type == "complex" || right.type == "complex") {
     if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
@@ -172,6 +189,11 @@ function structuralEquals(
     return false;
   }
 
+  // None == None is true, as in Python
+  if (left.type == "none") {
+    return true;
+  }
+
   // Lists compare element-wise, recursively, as in Python
   if (left.type == "list" && right.type == "list") {
     return (
@@ -182,7 +204,7 @@ function structuralEquals(
     );
   }
 
-  // Remaining same-type values: by value where they carry one (e.g. strings, bools),
+  // Remaining same-type values: by value where they carry one (e.g. strings),
   // by reference otherwise (e.g. closures).
   if ("value" in left && "value" in right) {
     return left.value === right.value;
@@ -211,6 +233,13 @@ export function handleExpandedEquality(
   left: Value,
   right: Value,
 ): Value {
+  // A top-level NaN operand is unequal to everything — even the identical
+  // object (CPython: nan == nan is False). Checked here rather than in
+  // structuralEquals so that the identity shortcut still applies to NaN
+  // *elements* inside lists, as in CPython's container comparison.
+  if (isNaNValue(left) || isNaNValue(right)) {
+    return { type: "bool", value: operator == TokenType.NOTEQUAL };
+  }
   return {
     type: "bool",
     value:
@@ -318,8 +347,10 @@ export function evaluateBinaryExpression(
   // reference type (list, function, None) and are an error whenever either
   // operand is a number, string or boolean (identity of immutable values is
   // unobservable). The `is` operator only exists at Python §3/§4; chapters 1
-  // and 2 reject it at validation time (NoIsOperatorValidator).
-  if (operator == TokenType.IS || operator == TokenType.ISNOT) {
+  // and 2 reject it at validation time (NoIsOperatorValidator), and the
+  // variant gate here keeps the runtime as an independent backstop (at §1/§2
+  // the operator falls through to the generic unsupported-operand error).
+  if ((operator == TokenType.IS || operator == TokenType.ISNOT) && variant >= 3) {
     if (hasUnobservableIdentity(left) || hasUnobservableIdentity(right)) {
       handleRuntimeError(
         context,
@@ -574,6 +605,11 @@ export function evaluateBinaryExpression(
     case TokenType.LESSEQUAL:
     case TokenType.GREATER:
     case TokenType.GREATEREQUAL: {
+      // As in CPython, NaN is unordered and unequal to everything, including
+      // itself: every comparison with a NaN operand is False except !=
+      if (isNaNValue(left) || isNaNValue(right)) {
+        return { type: "bool", value: operator == TokenType.NOTEQUAL };
+      }
       const cmp = pyCompare(left, right);
       let result: boolean;
       switch (operator) {

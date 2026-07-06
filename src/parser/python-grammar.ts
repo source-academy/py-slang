@@ -576,6 +576,7 @@ const ParserRules = [
     postprocess: ([t]: [moo.Token]) => {
       const tok = toAstToken(t);
       tok.lexeme = "not in";
+      tok.type = TokenType.NOTIN;
       return tok;
     },
   },

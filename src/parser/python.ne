@@ -320,7 +320,7 @@ expressionCmpOp ->
   | %lessequal        {% tok %}
   | %notequal         {% tok %}
   | "in"              {% tok %}
-  | "not" "in"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; return tok; } %}
+  | "not" "in"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'not in'; tok.type = TokenType.NOTIN; return tok; } %}
   | "is"              {% tok %}
   | "is" "not"        {% ([t]: [moo.Token]) => { const tok = toAstToken(t); tok.lexeme = 'is not'; tok.type = TokenType.ISNOT; return tok; } %}
 

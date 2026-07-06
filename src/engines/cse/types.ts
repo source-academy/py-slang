@@ -208,6 +208,10 @@ export function operatorTranslator(operator: TokenType | string) {
       return "is";
     case TokenType.ISNOT:
       return "is not";
+    case TokenType.IN:
+      return "in";
+    case TokenType.NOTIN:
+      return "not in";
     default:
       return String(operator);
   }

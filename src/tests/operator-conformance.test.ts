@@ -404,6 +404,49 @@ describe("Operator conformance: directed cases", () => {
       ["x = [1, 2]\ny = x\nx == y", true],
       ["[] == []", true],
       ["[1, 2] != [1, 2]", false],
+      ["[None] == [None]", true],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
+  // None == None is True at Python §3/§4, as in Python
+  // (at §1/§2, == on None is an UnsupportedOperandTypeError — the sweep pins that)
+  test.each([[3], [4]])("None equality at Python §%d", async chapter => {
+    const cases: [string, boolean][] = [
+      ["None == None", true],
+      ["None != None", false],
+      ["None == 1", false],
+      ["None == []", false],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
+  // NaN is unordered and unequal to everything, including itself, as in CPython.
+  // 1.0e400 overflows to inf (as in CPython), so 1.0e400 - 1.0e400 produces NaN
+  // without needing any builtin. These semantics hold at every chapter.
+  test.each([[1], [2], [3], [4]])("NaN comparisons at Python §%d", async chapter => {
+    const nan = "nan = 1.0e400 - 1.0e400\n";
+    const cases: [string, boolean][] = [
+      [nan + "nan == nan", false],
+      [nan + "nan != nan", true],
+      [nan + "nan == 1", false],
+      [nan + "nan != 1", true],
+      [nan + "nan < 1", false],
+      [nan + "nan <= 1", false],
+      [nan + "nan > 1", false],
+      [nan + "nan >= 1", false],
+      [nan + "nan < nan", false],
+      [nan + "nan >= nan", false],
     ];
     for (const [code, expected] of cases) {
       expect([code, await run(code, chapter)]).toStrictEqual([
