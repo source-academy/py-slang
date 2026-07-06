@@ -228,18 +228,15 @@ async function run(code: string, chapter: number, groups: Group[] = []): Promise
     }
   }
   // The value of the final expression statement is observed as the last value
-  // popped off the stash (same technique as generateTestCases in utils.ts).
+  // popped off the stash (same jest.spyOn technique as generateTestCases in utils.ts).
+  const spy = jest.spyOn(Stash.prototype, "pop");
   let lastPopped: Value | undefined;
-  const originalPop = Stash.prototype.pop;
-  Stash.prototype.pop = function () {
-    const value = originalPop.call(this);
-    lastPopped = value;
-    return value;
-  };
   try {
     await evaluate(code, ast, context, { variant: chapter });
+    // Read results before mockRestore(), which also clears them (like mockReset()).
+    lastPopped = spy.mock.results.at(-1)?.value as Value | undefined;
   } finally {
-    Stash.prototype.pop = originalPop;
+    spy.mockRestore();
   }
   if (context.errors.length > 0) {
     return { kind: "runtime-error", name: context.errors[0].constructor.name };
@@ -506,6 +503,8 @@ describe("Operator conformance: directed cases", () => {
   // bool and function are excluded from §2's ==/!= entirely (the sweep above
   // pins this for the full type cross product); spelled out here for the
   // specific "does True == 1 hold" question the exclusion exists to avoid.
+  // "function" covers both closures (lambdas) and library builtins (e.g.
+  // `head`) — excludedFromChapter2Equality must reject both.
   test("bool and function are not valid == / != operands at Python §2", async () => {
     for (const code of [
       "True == 1",
@@ -515,7 +514,20 @@ describe("Operator conformance: directed cases", () => {
       "None == True",
       "(lambda x: x) == (lambda x: x)",
       "(lambda x: x) == 1",
+      "head == head",
+      "head == 1",
     ]) {
+      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
+        code,
+        { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
+      ]);
+    }
+  });
+
+  // The bool/function exclusion applies wherever `==`/`!=` reaches, including
+  // elements found by recursing into pairs — not just the top-level operands.
+  test("bool and function are not valid == / != operands even nested inside pairs at Python §2", async () => {
+    for (const code of ["pair(1, 2) == pair(True, 3)", "pair(head, 2) == pair(head, 2)"]) {
       expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
         code,
         { kind: "runtime-error", name: UnsupportedOperandTypeError.name },

@@ -159,14 +159,39 @@ function isOrderable(value: Value): boolean {
  *
  * Self-referential lists without shared identity exhaust the stack, mirroring
  * CPython's RecursionError on such comparisons.
+ *
+ * When `restrictChapter2` is set, every operand pair — including elements
+ * reached by recursing into lists — is re-checked against
+ * excludedFromChapter2Equality: §2 excludes bool/function from `==`/`!=`
+ * everywhere the comparison reaches, not just at the top level, so
+ * `pair(1, 2) == pair(True, 3)` and `pair(head, 2) == pair(head, 2)` are
+ * errors at §2, not silently-wrong bools.
  */
 function structuralEquals(
   code: string,
   command: ExprNS.Binary,
   context: Context,
+  operator: TokenType,
   left: Value,
   right: Value,
+  restrictChapter2: boolean,
 ): boolean {
+  if (
+    restrictChapter2 &&
+    (excludedFromChapter2Equality(left) || excludedFromChapter2Equality(right))
+  ) {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        left.type,
+        right.type,
+        operatorTranslator(operator),
+      ),
+    );
+  }
+
   // Identity shortcut: also lets comparisons of shared substructure terminate early.
   if (left === right) {
     return true;
@@ -212,7 +237,15 @@ function structuralEquals(
     return (
       left.value.length === right.value.length &&
       left.value.every((element, i) =>
-        structuralEquals(code, command, context, element, right.value[i]),
+        structuralEquals(
+          code,
+          command,
+          context,
+          operator,
+          element,
+          right.value[i],
+          restrictChapter2,
+        ),
       )
     );
   }
@@ -228,12 +261,13 @@ function structuralEquals(
 /**
  * Whether a value is excluded from Python §2's any x any equality: bool (avoiding
  * CPython's bool-as-int equality, e.g. `True == 1`, as a directly written §2
- * comparison) and function values (equality without `is` is left undefined until
- * §3/§4 introduces it). See docs/specs/python_typing_middle_2.tex:
+ * comparison) and function values — both user-defined closures and library
+ * builtins (equality without `is` is left undefined until §3/§4 introduces it).
+ * See docs/specs/python_typing_middle_2.tex:
  * `==,!= bool,function x any -> error`, `==,!= any x bool,function -> error`.
  */
 function excludedFromChapter2Equality(value: Value): boolean {
-  return value.type === "bool" || value.type === "closure";
+  return value.type === "bool" || value.type === "closure" || value.type === "builtin";
 }
 
 /**
@@ -249,6 +283,9 @@ function excludedFromChapter2Equality(value: Value): boolean {
  * @param operator The operator of the binary expression (either TokenType.DOUBLEEQUAL for equality or TokenType.NOTEQUAL for inequality)
  * @param left The left operand value
  * @param right The right operand value
+ * @param restrictChapter2 When true, re-applies excludedFromChapter2Equality at every level of
+ * recursion (not just the top-level operands), so nested bool/function values inside lists are
+ * also errors at §2. Unset (false) at §3/§4, where equality is unconditionally total.
  * @returns The result of the equality comparison
  */
 export function handleExpandedEquality(
@@ -258,6 +295,7 @@ export function handleExpandedEquality(
   operator: TokenType,
   left: Value,
   right: Value,
+  restrictChapter2 = false,
 ): Value {
   // A top-level NaN operand is unequal to everything — even the identical
   // object (CPython: nan == nan is False). Checked here rather than in
@@ -269,7 +307,8 @@ export function handleExpandedEquality(
   return {
     type: "bool",
     value:
-      (operator == TokenType.NOTEQUAL) !== structuralEquals(code, command, context, left, right),
+      (operator == TokenType.NOTEQUAL) !==
+      structuralEquals(code, command, context, operator, left, right, restrictChapter2),
   };
 }
 
@@ -359,7 +398,7 @@ export function evaluateBinaryExpression(
     !excludedFromChapter2Equality(left) &&
     !excludedFromChapter2Equality(right)
   ) {
-    return handleExpandedEquality(code, command, context, operator, left, right);
+    return handleExpandedEquality(code, command, context, operator, left, right, true);
   }
 
   // At Python §3/§4, booleans participate in ordering comparisons as the ints
