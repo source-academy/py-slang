@@ -1,18 +1,18 @@
-import { Context } from "../../engines/cse/context";
-import { Control } from "../../engines/cse/control";
-import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
-import { Stash, Value } from "../../engines/cse/stash";
-import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
-import { TokenType } from "../../tokenizer";
-import { toPythonFloat } from "../../stdlib/utils";
-import { Environment } from "../../engines/cse/environment";
-import { Closure } from "../../engines/cse/closure";
 import type {
   CseSnapshot,
   CseSerializedEnvFrame as SerializedEnvFrame,
   CseSerializedInstruction as SerializedInstruction,
   CseSerializedValue as SerializedValue,
 } from "@sourceacademy/common-cse-machine";
+import { Closure } from "../../engines/cse/closure";
+import { Context } from "../../engines/cse/context";
+import { Control } from "../../engines/cse/control";
+import { Environment } from "../../engines/cse/environment";
+import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
+import { Stash, Value } from "../../engines/cse/stash";
+import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
+import { toPythonFloat } from "../../stdlib/utils";
+import { TokenType } from "../../tokenizer";
 
 type ControlStackItem = {
   instrType?: string;
@@ -149,7 +149,6 @@ const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
   [InstrType.BRANCH]: "Branch",
   [InstrType.WHILE]: "While", // py: "WhileInstr" → js: "While"
   [InstrType.FOR]: "For", // py: "ForInstr"   → js: "For"
-  [InstrType.RESET]: "Reset",
   [InstrType.LIST]: "ArrayLiteral", // py: "ListLiteral" → js: "ArrayLiteral"
   [InstrType.LIST_ACCESS]: "ArrayAccess", // py: "ListAccess"  → js: "ArrayAccess"
   [InstrType.LIST_ASSIGNMENT]: "ArrayAssignment", // py: "ListAssignment" → js: "ArrayAssignment"
@@ -188,8 +187,6 @@ const PY_TO_JS_NODE_TYPE: Record<string, string> = {
 
 function instrDisplayText(item: ControlStackItem): string {
   switch (item.instrType as InstrType) {
-    case InstrType.RESET:
-      return "return";
     case InstrType.END_OF_FUNCTION_BODY:
       return "return None";
     case InstrType.POP:
@@ -466,4 +463,5 @@ export async function collectSnapshots(
 // Python-specific serialization of control/stash/environment into CseSnapshots.
 
 // Exported for unit testing only — not part of the public API.
-export { formatValue, serializeValue, instrDisplayText, serializeControlItem, serializeEnvChain };
+export { formatValue, instrDisplayText, serializeControlItem, serializeEnvChain, serializeValue };
+

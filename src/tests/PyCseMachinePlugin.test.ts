@@ -1,21 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  collectSnapshots,
   formatValue,
-  serializeValue,
   instrDisplayText,
   serializeControlItem,
   serializeEnvChain,
-  collectSnapshots,
+  serializeValue,
 } from "../conductor/plugins/PyCseMachinePlugin";
-import { InstrType } from "../engines/cse/types";
-import { TokenType } from "../tokenizer";
-import type { Value } from "../engines/cse/stash";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
+import type { Value } from "../engines/cse/stash";
 import { Stash } from "../engines/cse/stash";
+import { InstrType } from "../engines/cse/types";
 import { parse } from "../parser/parser-adapter";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
+import { TokenType } from "../tokenizer";
 import { PyComplexNumber } from "../types/value-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,10 +187,6 @@ describe("serializeValue", () => {
 // ── instrDisplayText ──────────────────────────────────────────────────────────
 
 describe("instrDisplayText", () => {
-  it("RESET → 'return'", () => {
-    expect(instrDisplayText({ instrType: InstrType.RESET })).toBe("return");
-  });
-
   it("END_OF_FUNCTION_BODY → 'return None'", () => {
     expect(instrDisplayText({ instrType: InstrType.END_OF_FUNCTION_BODY })).toBe("return None");
   });
@@ -263,12 +259,6 @@ describe("serializeControlItem", () => {
 
   it("unknown item → '<unknown>'", () => {
     expect(serializeControlItem({}, code).displayText).toBe("<unknown>");
-  });
-
-  it("RESET instruction has displayText 'return' and instrType metadata", () => {
-    const result = serializeControlItem({ instrType: InstrType.RESET }, code);
-    expect(result.displayText).toBe("return");
-    expect((result.metadata as any)?.instrType).toBe("Reset");
   });
 
   it("APPLICATION carries numOfArgs in metadata", () => {

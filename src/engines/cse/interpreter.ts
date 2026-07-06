@@ -46,9 +46,8 @@ import {
   ListAssmtInstr,
   ListInstr,
   PopInstr,
-  ResetInstr,
   UnOpInstr,
-  WhileInstr,
+  WhileInstr
 } from "./types";
 import {
   checkStackOverFlow,
@@ -696,7 +695,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.ENVIRONMENT)) {
         break;
       }
     }
@@ -848,16 +847,6 @@ const cmdEvaluators: CmdEvaluators = {
   /**
    * Instructions
    */
-  [InstrType.RESET]: function (
-    _code: string,
-    _command: ResetInstr,
-    context: Context,
-    _control: Control,
-    _stash: Stash,
-    _isPrelude: boolean,
-  ) {
-    popEnvironment(context);
-  },
 
   [InstrType.ASSIGNMENT]: function (
     code: string,
@@ -1148,7 +1137,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (
       topElement !== undefined &&
       isInstr(topElement) &&
-      topElement.instrType === InstrType.RESET
+      topElement.instrType === InstrType.ENVIRONMENT
     ) {
       control.pop();
       popEnvironment(context);
@@ -1193,7 +1182,6 @@ const cmdEvaluators: CmdEvaluators = {
       const closure = callable.closure;
       const callerEnv = currentEnvironment(context);
       control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
-      control.push(instrCreator.resetInstr(instr.srcNode));
       if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }

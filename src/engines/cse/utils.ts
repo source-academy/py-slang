@@ -15,10 +15,6 @@ import { Context } from "./context";
 import { Control, ControlItem } from "./control";
 import { currentEnvironment, Environment } from "./environment";
 import { AssertionError, handleRuntimeError } from "./error";
-
-export function getProgramEnvironment(context: Context): Environment | null {
-  return context.runtime.environments.find(env => env.name === "programEnvironment") ?? null;
-}
 import { BigIntValue, ComplexValue, NumberValue, Value } from "./stash";
 import {
   BranchInstr,
@@ -29,6 +25,10 @@ import {
   StatementSequence,
   WhileInstr,
 } from "./types";
+
+export function getProgramEnvironment(context: Context): Environment | null {
+  return context.runtime.environments.find(env => env.name === "programEnvironment") ?? null;
+}
 
 export const isNode = (command: ControlItem): command is Node => {
   return !isInstr(command);
@@ -183,7 +183,6 @@ const propertySetter: PropertySetter = new Map<string, Transformer>([
       return item;
     },
   ],
-  [InstrType.RESET, setToFalse],
   [InstrType.END_OF_FUNCTION_BODY, setToFalse],
   [InstrType.UNARY_OP, setToFalse],
   [InstrType.BINARY_OP, setToFalse],
@@ -397,7 +396,7 @@ export function pySetNonlocalVariable(
  * (It only accepts instructions since a new function call can only be pushed onto the control
  *  after the `InstrType.APPLICATION` instruction is pushed)
  *
- * It checks the number of `InstrType.RESET` in the control stack, which corresponds to the number of function calls currently on the stack.
+ * It checks the number of `InstrType.ENVIRONMENT` in the control stack, which corresponds to the number of function calls currently on the stack.
  * If this number exceeds the specified recursion limit, it throws a `RecursionError`.
  *
  * @param code The code being executed, used for error reporting

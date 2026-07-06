@@ -19,10 +19,9 @@ import {
   ListInstr,
   Node,
   PopInstr,
-  ResetInstr,
   StatementSequence,
   UnOpInstr,
-  WhileInstr,
+  WhileInstr
 } from "./types";
 
 export const popInstr = (srcNode: Node): PopInstr => ({ instrType: InstrType.POP, srcNode });
@@ -75,11 +74,6 @@ export const continueInstr = (srcNode: Node): ContinueInstr => ({
 export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   instrType: InstrType.BINARY_OP,
   symbol,
-  srcNode,
-});
-
-export const resetInstr = (srcNode: Node): ResetInstr => ({
-  instrType: InstrType.RESET,
   srcNode,
 });
 
