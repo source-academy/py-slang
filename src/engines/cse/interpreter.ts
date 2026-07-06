@@ -61,9 +61,12 @@ import {
   isNode,
   pyDefineVariable,
   pyGetGlobalVariable,
+  pyGetNonlocalVariable,
   pyGetVariable,
+  pySetNonlocalVariable,
   scanForAssignments,
   scanForGlobalDeclarations,
+  scanForNonlocalDeclarations,
 } from "./utils";
 
 export interface IOptions {
@@ -370,7 +373,7 @@ function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
 type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
-type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert" | "NonLocal">;
+type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert">;
 type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
@@ -537,6 +540,12 @@ const cmdEvaluators: CmdEvaluators = {
     // and writes to the module-level environment.
   },
 
+  NonLocal: function () {
+    // `nonlocal x` is a declaration — no runtime effect; the interpreter uses
+    // closure.nonlocalVariables (populated at FunctionDef time) to route reads
+    // and writes to the nearest enclosing function environment.
+  },
+
   Variable: function (
     code: string,
     variable: ExprNS.Variable,
@@ -548,9 +557,12 @@ const cmdEvaluators: CmdEvaluators = {
     const name = variable.name.lexeme;
     const currentEnv = currentEnvironment(context);
     const isGlobal = currentEnv.closure?.globalVariables.has(name) ?? false;
+    const isNonlocal = currentEnv.closure?.nonlocalVariables.has(name) ?? false;
     const value = isGlobal
       ? pyGetGlobalVariable(code, context, name, variable)
-      : pyGetVariable(code, context, name, variable);
+      : isNonlocal
+        ? pyGetNonlocalVariable(code, context, name, variable)
+        : pyGetVariable(code, context, name, variable);
     stash.push(value);
   },
 
@@ -628,13 +640,26 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const globalVariables = scanForGlobalDeclarations(functionDefNode.body);
-    const localVariables = scanForAssignments(functionDefNode.body, globalVariables);
+    const nonlocalVariables = scanForNonlocalDeclarations(functionDefNode.body);
+    const localVariables = scanForAssignments(
+      functionDefNode.body,
+      globalVariables,
+      nonlocalVariables,
+    );
+    // Parameters are local to the function too — a nested function's `nonlocal x` must be
+    // able to target an enclosing function's parameter, not just its assigned/for-target
+    // locals (a parameter is never global/nonlocal itself; the resolver already rejects
+    // that combination as a scope conflict, so no need to filter here).
+    for (const param of functionDefNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
       currentEnvironment(context),
       context,
       localVariables,
       globalVariables,
+      nonlocalVariables,
     );
     pyDefineVariable(context, functionDefNode.name.lexeme, { type: "closure", closure });
   },
@@ -648,6 +673,9 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const localVariables = scanForAssignments(lambdaNode.body);
+    for (const param of lambdaNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromLambda(
       lambdaNode,
       currentEnvironment(context),
@@ -850,9 +878,12 @@ const cmdEvaluators: CmdEvaluators = {
       }
       const currentEnv = currentEnvironment(context);
       const isGlobal = currentEnv.closure?.globalVariables.has(instr.symbol) ?? false;
+      const isNonlocal = currentEnv.closure?.nonlocalVariables.has(instr.symbol) ?? false;
       if (isGlobal) {
         const progEnv = getProgramEnvironment(context) ?? currentEnv;
         pyDefineVariable(context, instr.symbol, value, progEnv);
+      } else if (isNonlocal) {
+        pySetNonlocalVariable(code, context, instr.symbol, value, instr.srcNode as ExprNS.Expr);
       } else {
         pyDefineVariable(context, instr.symbol, value);
       }

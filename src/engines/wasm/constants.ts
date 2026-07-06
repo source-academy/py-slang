@@ -47,7 +47,7 @@ export const ERROR_MAP = {
   RANGE_ARG_NOT_INT: "Using a non-integer argument in range().",
   GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
   MAKE_LINKED_LIST_NOT_LIST:
-    "Trying to make a linked list out of a non-list value. (Internal error: linked_list function should only be called on lists)",
+    "Trying to make a linked list out of a non-list value. (Internal error: llist function should only be called on lists)",
   STARRED_NOT_LIST: "Trying to unpack a non-list value.",
   PARSE_NOT_STRING: "Trying to parse a non-string value.",
   OUT_OF_MEMORY: "Out of memory.",
@@ -866,7 +866,7 @@ export const IS_PAIR_FX = wasm
 
 // linked list related functions
 export const MAKE_LINKED_LIST_FX = wasm
-  .func("$_make_linked_list")
+  .func("$_make_llist")
   .params({ $tag: i32, $val: i64 })
   .locals({ $i: i32, $acc_tag: i32, $acc_val: i64, $elem_tag: i32, $elem_val: i64 })
   .results(i32, i64)
@@ -931,7 +931,7 @@ export const MAKE_LINKED_LIST_FX = wasm
   );
 
 export const IS_LINKED_LIST_FX = wasm
-  .func("$_is_linked_list")
+  .func("$_is_llist")
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
   .body(

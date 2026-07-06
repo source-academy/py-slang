@@ -16,7 +16,7 @@ import type {
 
 import type { StmtNS } from "../../ast-types";
 import { type StepNode, unparse } from "./ast";
-import { isStepperValue } from "./builtins";
+import { isStepperValue, substituteBuiltinConstants } from "./builtins";
 import { reduceProgram } from "./reduce";
 import { translateProgram } from "./translate";
 
@@ -35,9 +35,12 @@ interface Step {
 }
 
 /**
- * Whether `prog` is a finished result — empty, or a single expression statement holding a final value
- * — as opposed to a tree that simply cannot reduce any further (a stuck non-value, e.g. `5(3)` or an
- * unbound name). Distinguishes the terminal "Evaluation complete" from "Evaluation stuck".
+ * Whether `prog` is a finished result rather than a tree stuck mid-reduction. A completed program is
+ * empty — the reducer discards even the final expression's value (a Python statement yields no value;
+ * see `reduceProgram`) — so an empty body is complete. A single leftover expression statement is
+ * complete only if it is a value (defensive: such a value is normally already discarded), while a
+ * leftover non-value (e.g. `5(3)`, `[1, 2] + [3]`, an unbound name) is stuck. Distinguishes the
+ * terminal "Evaluation complete" from "Evaluation stuck".
  */
 function isComplete(prog: StepNode): boolean {
   const body = prog.body as StepNode[];
@@ -80,11 +83,18 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
     steps.push({
       ast: current,
       markers: [
-        { redex: result.preRedex, redexType: "beforeMarker", explanation: result.explanation },
+        {
+          redex: result.preRedex,
+          redexType: "beforeMarker",
+          explanation: result.beforeExplanation,
+        },
       ],
     });
     steps.push({
-      ast: result.node,
+      // `postNode` (set by a contraction that discards a finished value — see its doc comment on
+      // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
+      // regardless, so the discarded statement is actually gone by the next contraction.
+      ast: result.postNode ?? result.node,
       markers: [
         result.postRedex
           ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
@@ -188,18 +198,34 @@ export function getPythonSteps(
   stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
 ): SerializedStepperStep[] {
   const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
-  return drive(translateProgram(fileInput), contractionLimit).map(serializeStep);
+  // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
+  // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}.
+  const program = substituteBuiltinConstants(translateProgram(fileInput));
+  return drive(program, contractionLimit).map(serializeStep);
 }
 
 /**
  * Reduces a parsed Python file to normal form and returns the textual value of its final expression
- * (for the REPL). The stepper's last reduction *is* the program's value in the substitution model,
- * so no separate interpreter is needed.
+ * (for the REPL). A completed Python program reduces all the way to an *empty* program — the reducer
+ * discards the final expression's value like any other statement's (a Python statement yields no
+ * program value; see `reduceProgram`) — so we remember the last top-level expression's text as the
+ * program reduces, just before it is discarded, and echo that. The stepper's reduction *is* the
+ * program's value in the substitution model, so no separate interpreter is needed.
  */
 export function evaluatePython(fileInput: StmtNS.FileInput): string {
-  let current = translateProgram(fileInput);
+  let current = substituteBuiltinConstants(translateProgram(fileInput));
+  let resultRepr = "";
   try {
     for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
+      // Remember the final expression's text before the next contraction discards it. A trailing
+      // non-expression statement (e.g. an assignment) contributes no value, so `resultRepr` keeps the
+      // last expression seen — or stays "" if the program never ends on one.
+      const body = current.body as StepNode[];
+      const last = body.length > 0 ? body[body.length - 1] : undefined;
+      if (last?.type === "ExpressionStatement") {
+        const expr = last.expression as StepNode;
+        resultRepr = expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
+      }
       const result = reduceProgram(current);
       if (result === null) break;
       current = result.node;
@@ -211,12 +237,5 @@ export function evaluatePython(fileInput: StmtNS.FileInput): string {
     return error instanceof Error ? error.message : String(error);
   }
 
-  const body = current.body as StepNode[];
-  if (body.length === 0) return "";
-  const last = body[body.length - 1];
-  if (last.type === "ExpressionStatement") {
-    const expr = last.expression as StepNode;
-    return expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
-  }
-  return "";
+  return resultRepr;
 }

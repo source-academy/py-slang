@@ -6,112 +6,25 @@
  * `checkProgramForUndefinedVariables`, we detect undefined variables up front as a *preprocessing*
  * error: the evaluator reports it and does not run the stepper at all (see `PyStepperEvaluator`).
  *
- * The check is a lexical scope walk over the translated {@link StepNode} tree. A name resolves if it
- * is a built-in (function or constant), or is bound — as an assignment, a `def`, an `if`-branch
- * binding, or a parameter — in the current function scope or any enclosing scope (Python hoists
- * assignments to function/module scope, so order within a scope does not matter for definedness).
+ * Name resolution and chapter feature-gating are delegated to py-slang's own analyzer — the very same
+ * {@link analyze} pass the default (CSE) evaluator runs — rather than to a bespoke scope walk. We hand
+ * it the stepper's curated built-in vocabulary ({@link getAvailableBuiltinNames}) as the set of
+ * predefined names, so the analyzer's scope rules (hoisting, nested functions, `global`/`nonlocal`)
+ * and per-chapter restrictions are applied canonically and stay in lockstep with the real evaluator.
+ * A §2 list-library name used in a §1 program is simply not in the §1 vocabulary, so it surfaces as an
+ * unknown name — the same `NameError` a student would get for a genuine typo.
+ *
+ * The only stepper-specific check that remains here is the unsupported-operator rejection: identity
+ * (`is`, `is not`) and membership (`in`, `not in`) are valid Python the analyzer accepts, but the
+ * substitution model has no rule for them, so we reject them up front rather than letting a program get
+ * silently "stuck".
  */
 
 import type { StmtNS } from "../../ast-types";
+import { analyze } from "../../resolver/analysis";
 import type { StepNode } from "./ast";
-import { isBuiltinConstantName, isBuiltinFunctionAvailable } from "./builtins";
+import { getAvailableBuiltinNames } from "./builtins";
 import { translateProgram } from "./translate";
-
-/** A real Python identifier (so translation's `<Unsupported>` placeholders are ignored). */
-const IDENTIFIER = /^[A-Za-z_]\w*$/;
-
-function paramNames(fn: StepNode): string[] {
-  return ((fn.params as StepNode[]) ?? []).map(p => String(p.name));
-}
-
-/**
- * Names bound directly at one scope level by `statements` — assignments, `def`s, and bindings inside
- * `if`/`else` branches (which do not introduce a scope in Python) — without descending into nested
- * function bodies (those are inner scopes of their own).
- */
-function collectBindings(statements: StepNode[], into: Set<string>): void {
-  for (const stmt of statements) {
-    switch (stmt.type) {
-      case "VariableDeclaration":
-        for (const d of stmt.declarations as StepNode[]) into.add(String((d.id as StepNode).name));
-        break;
-      case "FunctionDeclaration":
-        into.add(String((stmt.id as StepNode).name));
-        break;
-      case "IfStatement": {
-        const cons = stmt.consequent as StepNode | null;
-        const alt = stmt.alternate as StepNode | null;
-        if (cons) collectBindings(cons.body as StepNode[], into);
-        if (alt) collectBindings(alt.body as StepNode[], into);
-        break;
-      }
-      default:
-        break;
-    }
-  }
-}
-
-const isDefined = (name: string, scopes: Set<string>[], chapter: number): boolean =>
-  isBuiltinFunctionAvailable(name, chapter) ||
-  isBuiltinConstantName(name) ||
-  scopes.some(s => s.has(name));
-
-/** Walks `program` (already translated) and returns the first name that does not resolve in `chapter`
- * — an unbound variable, or a built-in not yet available at this chapter (a §2 list-library name in a
- * §1 program) — or `null` if every referenced name resolves. */
-export function findUndefinedName(program: StepNode, chapter: number): string | null {
-  let found: string | null = null;
-
-  const visit = (node: StepNode, scopes: Set<string>[]): void => {
-    if (found !== null) return;
-    switch (node.type) {
-      case "Identifier": {
-        const name = String(node.name);
-        if (IDENTIFIER.test(name) && !isDefined(name, scopes, chapter)) found = name;
-        return;
-      }
-      case "VariableDeclarator":
-        // `id` is a binding, not a reference; only the initializer contains references.
-        visit(node.init as StepNode, scopes);
-        return;
-      case "FunctionDeclaration": {
-        // `id` and params are bindings; the body opens a new scope (params + its own bindings).
-        const inner = new Set<string>(paramNames(node));
-        collectBindings((node.body as StepNode).body as StepNode[], inner);
-        visit(node.body as StepNode, [...scopes, inner]);
-        return;
-      }
-      case "ArrowFunctionExpression": {
-        // A lambda's body is a single expression; its only new bindings are the parameters.
-        visit(node.body as StepNode, [...scopes, new Set<string>(paramNames(node))]);
-        return;
-      }
-      default:
-        for (const key of Object.keys(node)) {
-          if (key === "type") continue;
-          visitValue(node[key], scopes);
-        }
-    }
-  };
-
-  const visitValue = (value: unknown, scopes: Set<string>[]): void => {
-    if (found !== null) return;
-    if (Array.isArray(value)) {
-      value.forEach(v => visitValue(v, scopes));
-    } else if (
-      value !== null &&
-      typeof value === "object" &&
-      typeof (value as StepNode).type === "string"
-    ) {
-      visit(value as StepNode, scopes);
-    }
-  };
-
-  const moduleScope = new Set<string>();
-  collectBindings(program.body as StepNode[], moduleScope);
-  for (const stmt of program.body as StepNode[]) visit(stmt, [moduleScope]);
-  return found;
-}
 
 /**
  * Comparison operators Python accepts but the substitution stepper does not model: identity (`is`,
@@ -153,17 +66,30 @@ export function findUnsupportedOperator(program: StepNode): string | null {
 
 /**
  * The stepper's preprocessing pass for a parsed Python program: returns an error message if it must
- * not run — an unsupported operator (`is`/`is not`/`in`/`not in`) or an undefined name — or `null` if
- * it is clear to step. `chapter` is the selected SICPy sublanguage (1–4): a §2 list-library name used
- * in a §1 program does not resolve and is reported as a `NameError`, so students cannot reach a
- * feature before it is taught.
+ * not run — an unsupported operator (`is`/`is not`/`in`/`not in`), an undefined name, or a feature the
+ * selected chapter forbids — or `null` if it is clear to step. `source` is the program text (needed by
+ * the analyzer for diagnostics); `chapter` is the selected SICPy sublanguage (1–4), which both gates
+ * the available built-ins and selects the feature validators, so e.g. a §2 list-library name used in a
+ * §1 program does not resolve and is reported as a `NameNotFoundError`.
+ *
+ * The returned message is always the analyzer error's own formatted `.message` (line/column, source
+ * context, and — for an unresolved name — a "perhaps you meant" suggestion), unmodified: the same text
+ * the default (CSE) evaluator reports for the same program, so a preprocessing error reads identically
+ * regardless of which evaluator caught it.
  */
-export function preprocessPython(fileInput: StmtNS.FileInput, chapter: number): string | null {
-  const program = translateProgram(fileInput);
-
-  const operator = findUnsupportedOperator(program);
+export function preprocessPython(
+  fileInput: StmtNS.FileInput,
+  source: string,
+  chapter: number,
+): string | null {
+  // Stepper-specific: reject identity/membership operators the substitution model cannot represent.
+  // Run first so this construct is reported regardless of its operands' definedness.
+  const operator = findUnsupportedOperator(translateProgram(fileInput));
   if (operator !== null) return `Operator '${operator}' is not allowed.`;
 
-  const name = findUndefinedName(program, chapter);
-  return name === null ? null : `NameError: name '${name}' is not defined`;
+  // Delegate name resolution + chapter feature-gating to the canonical analyzer. No stdlib groups are
+  // passed: the stepper supplies its own curated vocabulary as the prelude instead of the full library.
+  const errors = analyze(fileInput, source, chapter, [], getAvailableBuiltinNames(chapter));
+  if (errors.length === 0) return null;
+  return errors[0].message;
 }

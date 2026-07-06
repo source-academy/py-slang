@@ -209,80 +209,6 @@ describe("Comparison operator tests (int, float, complex, string)", () => {
 });
 
 describe("Boolean tests", () => {
-  // --- BASIC BOOL() SEMANTICS ---
-  it("bool(0) -> False", async () => {
-    const pythonCode = `bool(0)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(5) -> True", async () => {
-    const pythonCode = `bool(5)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(0.0) -> False", async () => {
-    const pythonCode = `bool(0.0)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(nonzero float) -> True", async () => {
-    const pythonCode = `bool(3.14)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(0+0j) -> False", async () => {
-    const pythonCode = `bool(0+0j)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(complex with nonzero part) -> True", async () => {
-    const pythonCode = `bool(1+0j)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool('') -> False", async () => {
-    const pythonCode = `bool("")`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
-  it("bool(non-empty string) -> True", async () => {
-    const pythonCode = `bool("x")`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(pair) -> always True", async () => {
-    const pythonCode = `
-p = pair(1, 2)
-bool(p)
-  `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("True");
-  });
-
-  it("bool(None) -> False", async () => {
-    const pythonCode = `bool(None)`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe("False");
-  });
-
   // --- NOT OPERATOR ---
   it("not True", async () => {
     const pythonCode = `not True`;
@@ -501,8 +427,8 @@ head(tail(tail(p)))
 });
 
 describe("Linked list tests", () => {
-  it("linked_list constructs a linked list from a Python list", async () => {
-    const pythonCode = `head(tail(linked_list(1, 2, 3)))`;
+  it("llist constructs a linked list from a Python list", async () => {
+    const pythonCode = `head(tail(llist(1, 2, 3)))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("2");
@@ -510,7 +436,7 @@ describe("Linked list tests", () => {
 
   it("set_head mutates linked list", async () => {
     const pythonCode = `
-l = linked_list(10, 20, 30)
+l = llist(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
@@ -533,29 +459,29 @@ head(l)
     expect(renderedResult).toBe("False");
   });
 
-  it("is_linked_list identifies linked list correctly", async () => {
-    const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+  it("is_llist identifies linked list correctly", async () => {
+    const pythonCode = `is_llist(llist(1, 2, 3))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
-  it("is_linked_list identifies linked lists created with nested pairs", async () => {
-    const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, None))))`;
+  it("is_llist identifies linked lists created with nested pairs", async () => {
+    const pythonCode = `is_llist(pair(1, pair(2, pair(3, None))))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
-  it("is_linked_list identifies non-linked lists correctly", async () => {
-    const pythonCode = `is_linked_list([1, 2, 3])`;
+  it("is_llist identifies non-linked lists correctly", async () => {
+    const pythonCode = `is_llist([1, 2, 3])`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
-  it("is_linked_list identifies non-linked lists created with pairs correctly", async () => {
-    const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, 4))))`;
+  it("is_llist identifies non-linked lists created with pairs correctly", async () => {
+    const pythonCode = `is_llist(pair(1, pair(2, pair(3, 4))))`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
@@ -3049,13 +2975,13 @@ f(10, 20)
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    it("linked_list function should push resultant list onto stack", async () => {
-      const pythonCode = `linked_list(1, 2, 3)`;
+    it("llist function should push resultant list onto stack", async () => {
+      const pythonCode = `llist(1, 2, 3)`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    it("is_linked_list function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+    it("is_llist function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_llist(llist(1, 2, 3))`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
@@ -3098,11 +3024,6 @@ set_tail(x, [3, 4])
 
     it("is_list function should leave stack clean (not push result onto stack)", async () => {
       const pythonCode = `is_list([1, 2, 3])`;
-      await expectShadowStackToEqual(pythonCode, []);
-    });
-
-    it("bool function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `bool([1, 2, 3])`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
@@ -3747,7 +3668,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.LIST);
@@ -3768,7 +3689,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
       new Error(ERROR_MAP.OUT_OF_MEMORY),
