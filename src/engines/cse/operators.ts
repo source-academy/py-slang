@@ -126,6 +126,15 @@ function isNaNValue(value: Value): boolean {
 }
 
 /**
+ * As in CPython, where bool is a subclass of int, booleans participate in
+ * equality and ordering comparisons as the ints they are: coerce a boolean
+ * to its int value and leave every other value untouched.
+ */
+function asIntIfBool(value: Value): Value {
+  return value.type === "bool" ? { type: "bigint", value: value.value ? 1n : 0n } : value;
+}
+
+/**
  * Structural equality between any two values, following Python semantics
  * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
  * Numbers compare across int/float/complex, and booleans participate as in
@@ -156,12 +165,8 @@ function structuralEquals(
   }
 
   // As in CPython, booleans compare as the ints they are (True == 1, False == 0.0)
-  if (left.type === "bool") {
-    left = { type: "bigint", value: left.value ? 1n : 0n };
-  }
-  if (right.type === "bool") {
-    right = { type: "bigint", value: right.value ? 1n : 0n };
-  }
+  left = asIntIfBool(left);
+  right = asIntIfBool(right);
 
   // NaN is unequal to everything, including another NaN (identity shortcut above
   // deliberately wins for the same object, matching CPython's container rule)
@@ -285,13 +290,10 @@ function pyIdentical(left: Value, right: Value): boolean {
     case "list":
       return left === right;
     default:
-      // Function values: closures compare by their underlying closure,
-      // builtins by the function they wrap.
+      // Function values: closures compare by their underlying closure;
+      // everything else (builtins etc.) by reference.
       if ("closure" in left && "closure" in right) {
         return left.closure === right.closure;
-      }
-      if ("value" in left && "value" in right) {
-        return left.value === right.value;
       }
       return left === right;
   }
@@ -335,12 +337,8 @@ export function evaluateBinaryExpression(
       operator == TokenType.GREATER ||
       operator == TokenType.GREATEREQUAL)
   ) {
-    if (left.type === "bool") {
-      left = { type: "bigint", value: left.value ? 1n : 0n };
-    }
-    if (right.type === "bool") {
-      right = { type: "bigint", value: right.value ? 1n : 0n };
-    }
+    left = asIntIfBool(left);
+    right = asIntIfBool(right);
   }
 
   // Handle identity semantics for `is` / `is not`, which apply to values of

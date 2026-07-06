@@ -131,8 +131,11 @@ const MIDDLE_34: Row[] = [
   },
 ];
 
+const TABLE_12: Row[] = [...FRONT, ...MIDDLE_12, ...BACK];
+const TABLE_34: Row[] = [...FRONT, ...MIDDLE_34, ...BACK];
+
 function tableForChapter(chapter: number): Row[] {
-  return [...FRONT, ...(chapter <= 2 ? MIDDLE_12 : MIDDLE_34), ...BACK];
+  return chapter <= 2 ? TABLE_12 : TABLE_34;
 }
 
 const BINARY_OPS_12 = ["+", "-", "*", "/", "%", "**", ">", ">=", "<", "<=", "==", "!="];
