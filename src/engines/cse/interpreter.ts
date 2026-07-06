@@ -851,12 +851,16 @@ const cmdEvaluators: CmdEvaluators = {
   [InstrType.RESET]: function (
     _code: string,
     _command: ResetInstr,
-    context: Context,
+    _context: Context,
     _control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    popEnvironment(context);
+    // Environment restoration is handled entirely by the paired ENVIRONMENT instruction
+    // (always pushed immediately below this RESET by the APPLICATION handler), whose while
+    // loop pops back to the caller's environment. Popping here too was redundant — it made
+    // the frame transition happen a step early, at the return statement itself, instead of
+    // at the ENVIRONMENT instruction where the CSE machine visualizer animates it.
   },
 
   [InstrType.ASSIGNMENT]: function (
