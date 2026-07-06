@@ -188,10 +188,13 @@ async function evaluateImports(
   context: Context,
   code: string,
 ): Promise<void> {
+  const importNodeMap = filterImportDeclarations(program);
+  if (importNodeMap.size === 0) {
+    return;
+  }
   if (context.evaluator === null || context.conductor === null) {
     throw new Error("Context is not properly initialized with evaluator and conductor");
   }
-  const importNodeMap = filterImportDeclarations(program);
 
   await loadModules(context, [...importNodeMap.keys()]);
   for (const [moduleName, nodes] of importNodeMap) {
@@ -309,6 +312,7 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
+    control.pop();
 
     if (isNode(command)) {
       const node = command;

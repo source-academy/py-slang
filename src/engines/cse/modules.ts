@@ -133,11 +133,12 @@ export async function moduleToPython(
     case DataType.EMPTY_LIST:
       return { type: "none" };
     case DataType.ARRAY:
+      const length = await context.evaluator.array_length(value);
       return {
         type: "list",
         value: await Promise.all(
-          new Array(await context.evaluator.array_length(value)).map(async v =>
-            moduleToPython(context, code, command, await context.evaluator!.array_get(value, v)),
+          Array.from({ length }, async (_, i) =>
+            moduleToPython(context, code, command, await context.evaluator!.array_get(value, i)),
           ),
         ),
       };
