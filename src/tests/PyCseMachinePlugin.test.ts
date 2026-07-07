@@ -1,21 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  collectSnapshots,
   formatValue,
-  serializeValue,
   instrDisplayText,
   serializeControlItem,
   serializeEnvChain,
-  collectSnapshots,
+  serializeValue,
 } from "../conductor/plugins/PyCseMachinePlugin";
-import { InstrType } from "../engines/cse/types";
-import { TokenType } from "../tokenizer";
-import type { Value } from "../engines/cse/stash";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
+import type { Value } from "../engines/cse/stash";
 import { Stash } from "../engines/cse/stash";
+import { InstrType } from "../engines/cse/types";
 import { parse } from "../parser/parser-adapter";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
+import { TokenType } from "../tokenizer";
 import { PyComplexNumber } from "../types/value-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -365,6 +365,19 @@ describe("serializeControlItem", () => {
     );
     expect((result.metadata as any)?.nodeType).toBe("FunctionDeclaration");
     expect((result.metadata as any)?.bodyLength).toBe(2);
+  });
+
+  it("Lambda node with nested Lambda body unwraps body correctly", () => {
+    const result = serializeControlItem(
+      {
+        kind: "Lambda",
+        body: { kind: "Lambda", body: [{ kind: "Return" }] },
+      },
+      code,
+    );
+    expect((result.metadata as any)?.nodeType).toBe("ArrowFunctionExpression");
+    expect((result.metadata as any)?.bodyLength).toBe(1);
+    expect((result.metadata as any)?.bodyNodeTypes).toEqual(["ArrowFunctionExpression"]);
   });
 
   it("FileInput node with StatementSequence body unwraps body correctly", () => {

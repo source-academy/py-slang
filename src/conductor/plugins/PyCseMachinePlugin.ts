@@ -311,17 +311,21 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     // For block-like nodes pass body length and child types so the adapter can build
     // stub body arrays (used by ControlExpansionAnimation / StatementSequence handling).
     if (
-      jsNodeType === "StatementSequence" ||
-      jsNodeType === "FunctionDeclaration" ||
-      jsNodeType === "ArrowFunctionExpression"
+      (jsNodeType === "StatementSequence" ||
+        jsNodeType === "FunctionDeclaration" ||
+        jsNodeType === "ArrowFunctionExpression") &&
+      item.body !== undefined
     ) {
-      const body = Array.isArray(item.body)
-        ? item.body
-        : item.body !== undefined && item.body !== null && "body" in item.body
+      const body =
+        item.body !== undefined &&
+        item.body !== null &&
+        "body" in item.body &&
+        jsNodeType === "StatementSequence"
           ? item.body.body
-          : [];
-      nodeMeta.bodyLength = body.length;
-      nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
+          : item.body;
+      const bodyArray = Array.isArray(body) ? body : [body];
+      nodeMeta.bodyLength = bodyArray.length;
+      nodeMeta.bodyNodeTypes = bodyArray.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
 
     return Object.keys(nodeMeta).length > 0 ? { displayText, metadata: nodeMeta } : { displayText };
