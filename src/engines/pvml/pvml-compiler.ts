@@ -215,7 +215,7 @@ export class PVMLCompiler
       // to it, mirroring native Pynter's "ifn" nanbox tag. A direct call
       // (`print(x)`) never reaches this branch: emitFunctionCall emits
       // CALLP/CALLTP straight from the primitive index instead.
-      this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex!);
+      this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex);
       return { maxStackSize: 1 };
     }
     if (annotation.envLevel === 0) {
@@ -596,7 +596,7 @@ export class PVMLCompiler
 
     const initResult = this.compile(stmt.value);
 
-    this.emitStoreSymbol((stmt.target as ExprNS.Variable).name);
+    this.emitStoreSymbol(stmt.target.name);
 
     this.builder.emitNullary(OpCodes.LGCU);
     return initResult;

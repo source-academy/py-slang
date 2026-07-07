@@ -11,7 +11,6 @@ import {
   PVMLEnvironment,
   PVMLIR,
   PVMLIterator,
-  PVMLPrimitive,
   PVMLProgram,
   PVMLType,
 } from "./types";
@@ -800,7 +799,7 @@ export class PVMLInterpreter {
     // — e.g. `f = abs; f(-5)` — has no function-table entry/frame of its
     // own; dispatch it the same way CALLP/CALLTP do.
     if (isPVMLObject(func) && func.type === "primitive") {
-      const result = executePrimitive((func as PVMLPrimitive).primitiveIndex, args, this.onOutput);
+      const result = executePrimitive(func.primitiveIndex, args, this.onOutput);
       this.push(result);
       return;
     }
