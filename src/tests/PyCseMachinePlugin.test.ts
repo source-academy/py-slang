@@ -377,6 +377,7 @@ describe("serializeControlItem", () => {
     );
     expect((result.metadata as any)?.nodeType).toBe("ArrowFunctionExpression");
     expect((result.metadata as any)?.bodyLength).toBe(1);
+    expect((result.metadata as any)?.bodyNodeTypes).toEqual(["ArrowFunctionExpression"]);
   });
 
   it("FileInput node with StatementSequence body unwraps body correctly", () => {
