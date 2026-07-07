@@ -126,6 +126,14 @@ export class Token {
    */
   indexInSource: number;
 
+  /**
+   * True for tokens fabricated at runtime (e.g. implicit `range()` bounds) that do not
+   * correspond to real source text. Consumers that slice source text by position (like the
+   * CSE Machine visualizer) must not treat these as real, even though their `indexInSource`
+   * may coincide with a genuine position (e.g. 0).
+   */
+  synthetic?: boolean;
+
   constructor(type: TokenType, lexeme: string, line: number, col: number, indexInSource: number) {
     this.type = type;
     this.lexeme = lexeme;

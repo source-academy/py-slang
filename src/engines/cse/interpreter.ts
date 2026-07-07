@@ -1123,11 +1123,13 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(instr);
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
         const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+        token.synthetic = true;
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
       const v1Lit = generateBigIntLiteral(start.value);
       const v3Lit = generateBigIntLiteral(step.value);
       const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      plusToken.synthetic = true;
       const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
       Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));

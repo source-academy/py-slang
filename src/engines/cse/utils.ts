@@ -696,7 +696,9 @@ export function evaluateForIterator(
     );
   }
   const tempTokenZero = new Token(TokenType.NUMBER, "0", 0, 0, 0);
+  tempTokenZero.synthetic = true;
   const tempTokenOne = new Token(TokenType.NUMBER, "1", 0, 0, 0);
+  tempTokenOne.synthetic = true;
   if (rangeArguments.length === 1) {
     return {
       start: new ExprNS.BigIntLiteral(tempTokenZero, tempTokenZero, "0"),
@@ -722,9 +724,11 @@ export function evaluateForIterator(
 
 export function generateForIncrement(variableName: string, value: bigint): StmtNS.Stmt {
   const token = new Token(TokenType.NAME, variableName, 0, 0, -1);
+  token.synthetic = true;
   const variable = new ExprNS.Variable(token, token, token);
 
   const literalToken = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+  literalToken.synthetic = true;
   const literal = new ExprNS.BigIntLiteral(literalToken, literalToken, value.toString());
   return new StmtNS.Assign(token, literalToken, variable, literal);
 }
