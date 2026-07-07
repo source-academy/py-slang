@@ -100,7 +100,7 @@ describe("formatValue", () => {
   });
 
   it("formats builtin function", () => {
-    expect(formatValue(builtin("abs"))).toBe("<built-in function abs>");
+    expect(formatValue(builtin("abs"))).toBe("abs");
   });
 
   it("formats short list", () => {
@@ -180,7 +180,8 @@ describe("serializeValue", () => {
 
   it("serializes builtin", () => {
     const v = serializeValue(builtin("print"));
-    expect(v.displayValue).toBe("<built-in function print>");
+    expect(v.displayValue).toBe("print");
+    expect(v.label).toBe("builtin_function_or_method");
   });
 });
 
