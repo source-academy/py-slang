@@ -30,6 +30,7 @@ import {
   complexLiteral,
   isComplexValue,
   isFunctionValue,
+  isTruthy,
   isValue,
   literal,
   numberLiteral,
@@ -81,21 +82,6 @@ export interface ReduceResult {
 /* -------------------------------------------------------------------------- */
 /*                          Values & Python semantics                         */
 /* -------------------------------------------------------------------------- */
-
-/** Python truthiness for `if`/ternary conditions, which (unlike `and`/`or`/`not` — see
- * `contractLogical` and `contractUnary`'s `not` case) are never type-restricted to `bool`. */
-function isTruthy(node: StepNode): boolean {
-  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
-  if (node.type !== "Literal") return true; // function values are truthy
-  const v = node.value;
-  if (v === null || v === false) return false;
-  if (v === true) return true;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
-  return true;
-}
 
 /* -------------------------------------------------------------------------- */
 /*                          Expression contractions                           */

@@ -146,20 +146,6 @@ export function formatPrintOutput(args: StepNode[]): string {
   return args.map(a => pyStr(a, false)).join(" ") + "\n";
 }
 
-/** Python truthiness for the value subset the stepper handles (mirrors `reduce.ts`'s `isTruthy`). */
-function truthy(node: StepNode): boolean {
-  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
-  if (node.type !== "Literal") return true;
-  const v = node.value;
-  if (v === null || v === false) return false;
-  if (v === true) return true;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
-  return true;
-}
-
 function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
   if (args.length < min || (max !== null && args.length > max)) {
     const want = max === null ? `at least ${min}` : min === max ? `${min}` : `${min} to ${max}`;

@@ -69,7 +69,14 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
   // carries the running total, so the host's output panel shows exactly what had been printed by that
   // point as the slider moves (empty "" before the first print).
   let output = "";
-  const steps: Step[] = [{ ast: prog, markers: [{ explanation: "Start of evaluation" }], output }];
+  const steps: Step[] = [];
+  // Every step must carry the *current* running total, so pushing goes through this closure instead
+  // of each call site restating `output` — a plain `steps.push` would silently omit it.
+  const pushStep = (ast: StepNode, markers?: Marker[]): void => {
+    steps.push({ ast, markers, output });
+  };
+
+  pushStep(prog, [{ explanation: "Start of evaluation" }]);
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
@@ -81,61 +88,40 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
       const message = error instanceof Error ? error.message : String(error);
-      steps.push({
-        ast: current,
-        markers: [{ redexType: "beforeMarker", explanation: message }],
-        output,
-      });
-      steps.push({ ast: current, markers: [{ explanation: "Evaluation stuck" }], output });
+      pushStep(current, [{ redexType: "beforeMarker", explanation: message }]);
+      pushStep(current, [{ explanation: "Evaluation stuck" }]);
       return steps;
     }
     if (result === null) {
       // No further contraction: the program is either a finished value ("Evaluation complete") or a
       // tree that cannot reduce yet is not a value ("Evaluation stuck"), exactly as Source reports.
-      steps.push({
-        ast: current,
-        markers: [
-          { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
-        ],
-        output,
-      });
+      pushStep(current, [
+        { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
+      ]);
       return steps;
     }
 
-    steps.push({
-      ast: current,
-      markers: [
-        {
-          redex: result.preRedex,
-          redexType: "beforeMarker",
-          explanation: result.beforeExplanation,
-        },
-      ],
-      output,
-    });
+    pushStep(current, [
+      { redex: result.preRedex, redexType: "beforeMarker", explanation: result.beforeExplanation },
+    ]);
     // Apply this contraction's output (only a `print` produces any) so the after step and everything
     // after it show it, while the before ("Running print") step above still shows the prior total.
     if (result.output !== undefined) output += result.output;
-    steps.push({
+    pushStep(
       // `postNode` (set by a contraction that discards a finished value — see its doc comment on
       // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
       // regardless, so the discarded statement is actually gone by the next contraction.
-      ast: result.postNode ?? result.node,
-      markers: [
+      result.postNode ?? result.node,
+      [
         result.postRedex
           ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
           : { redexType: "afterMarker", explanation: result.explanation },
       ],
-      output,
-    });
+    );
 
     current = result.node;
     if (i === contractionLimit - 1) {
-      steps.push({
-        ast: current,
-        markers: [{ explanation: "Maximum number of steps exceeded" }],
-        output,
-      });
+      pushStep(current, [{ explanation: "Maximum number of steps exceeded" }]);
     }
   }
 
