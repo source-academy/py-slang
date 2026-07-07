@@ -950,59 +950,68 @@ describe("Standard Library Tests", () => {
 
   describe("Chapter 3 Builtins", () => {
     const miscTests: TestCases = {
+      // `is` applies to the reference types (list, function, None) at Python §3/§4
+      // and errors whenever either operand is a number, string or boolean, whose
+      // identity is unobservable (docs/specs/python_typing_middle_34.tex).
       "is operator": [
         ["1 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["2 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["1 is (1+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["2 is (1.0+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["3 is (1+1j)", UnsupportedOperandTypeError, null], // int is complex
         ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
-        ["1 is 2.0", UnsupportedOperandTypeError, null], // int is diff float
         ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
-        ["3.15 is 3.14", UnsupportedOperandTypeError, null], // float is diff float
-        ["1.0 is 1", UnsupportedOperandTypeError, null], // float is int
-        ["1.0 is 2", UnsupportedOperandTypeError, null], // float is diff int
-        ["1.0 is (1+0j)", UnsupportedOperandTypeError, null], // float is complex
         ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
-        ["-(1+0j) is (1+1j)", UnsupportedOperandTypeError, null], // complex is complex with diff imaginary
-        ["(1.2+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex with diff real
-        ["(1.2+1j) is (1.2+1.2j)", UnsupportedOperandTypeError, null], // complex is diff complex
-        ["(1+0j) is 1", UnsupportedOperandTypeError, null], // complex is int
-        ["(1.0+0j) is 1", UnsupportedOperandTypeError, null], // complex with float real is int
-        ["(1+0j) is 1.0", UnsupportedOperandTypeError, null], // complex is float
-        ["(1.5+0j) is 1.5", UnsupportedOperandTypeError, null], // complex with float real is float
-        ["(1.5+1j) is 1.5", UnsupportedOperandTypeError, null], // complex is diff float
         ["True is True", UnsupportedOperandTypeError, null], // bool is bool
         ["1 is True", UnsupportedOperandTypeError, null], // int is bool
-        ["1 is None", UnsupportedOperandTypeError, null], // int is None
-        ["True is 1", UnsupportedOperandTypeError, null], // bool is int
-        ["None is 1", UnsupportedOperandTypeError, null], // None is int
-        ["None is None", UnsupportedOperandTypeError, null], // None is None
-        ["(lambda x: x) is (lambda x: x)", UnsupportedOperandTypeError, null], // function is diff function
-        ["(1 is (lambda x: x))", UnsupportedOperandTypeError, null], // int is function
-        ["def a():\n    return 2\na is a", UnsupportedOperandTypeError, null], // function is function,
-        ["'' is ''", UnsupportedOperandTypeError, null], // empty string is empty string
         ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
-        ["hello = 'hello'\nhello is 'Hello'", UnsupportedOperandTypeError, null], // string is diff string
-        ["'a' is 'abc'", UnsupportedOperandTypeError, null], // string is longer string
-        ["'a' is 'A'", UnsupportedOperandTypeError, null], // string is string with diff case
-        ["'#' is '$'", UnsupportedOperandTypeError, null], // string is string with diff character
-        ["1 is ''", UnsupportedOperandTypeError, null], // int is string
-        ["'' is 1", UnsupportedOperandTypeError, null], // string is int
-        ["'' is True", UnsupportedOperandTypeError, null], // string is bool
-        ["'' is None", UnsupportedOperandTypeError, null], // string is None
-        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null], // string is function
-        ["'' is 1.0", UnsupportedOperandTypeError, null], // string is float
-        ["'' is (1+0j)", UnsupportedOperandTypeError, null], // string is complex
-        ["1 is 0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is 0.0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is (0+0j)", UnsupportedOperandTypeError, null], // int is zero
+        ["1 is None", UnsupportedOperandTypeError, null], // number x reference is also an error
+        ["None is 1", UnsupportedOperandTypeError, null],
+        ["'' is None", UnsupportedOperandTypeError, null],
+        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null],
+        ["[1,2,3] is ''", UnsupportedOperandTypeError, null],
+        ["1 is (lambda x: x)", UnsupportedOperandTypeError, null],
+        ["a = [1,2,3]\na is 1", UnsupportedOperandTypeError, null],
+        ["None is None", true, null], // None is None
+        ["(lambda x: x) is (lambda x: x)", false, null], // function is diff function
+        ["def a():\n    return 2\na is a", true, null], // function is same function
+        ["f = lambda x: x\ng = f\nf is g", true, null], // function is its alias
+        ["a = [1,2,3]\na is None", false, null], // list is None (the Python idiom)
+        ["(lambda x: x) is None", false, null], // function is None
+        ["None is []", false, null], // None is list
         ["[1,2,3] is [1,2,3]", false, null], // list is list with same elements
         ["a = [1,2,3]\na is a", true, null], // list is itself
+        ["a = [1,2,3]\nb = a\na is b", true, null], // list is its alias
         ["a = [1,2,3]\na is [1,2,3]", false, null], // list is different list with same elements
         ["[1,2,3] is [1,2,4]", false, null], // list is different list with different elements
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
-        ["[1,2,3] is ''", UnsupportedOperandTypeError, null], // list is string
+        ["[1,2,3] is (lambda x: x)", false, null], // list is function
+      ],
+      // math_nan is a shared singleton value; as in CPython, nan == nan is
+      // False even for the identical object, while a list containing that nan
+      // equals itself (container comparison checks identity per element first)
+      "NaN comparisons": [
+        ["math_nan == math_nan", false, null],
+        ["math_nan != math_nan", true, null],
+        ["math_nan < 1", false, null],
+        ["math_nan >= math_nan", false, null],
+        ["[math_nan] == [math_nan]", true, null],
+        ["x = [math_nan]\nx == x", true, null],
+      ],
+      // equal matches == semantics on Python lists too (bool-as-int, as in Python)
+      "equal on lists": [
+        ["equal([True], [1])", true, null],
+        ["equal([True], [2])", false, null],
+        ["equal([1], [1.0])", true, null],
+        ["equal([1, [True]], [1.0, [1]])", true, null],
+        ["equal([1], [(1+0j)])", true, null],
+        ["[True] == [1]", true, null],
+      ],
+      // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
+      "is not operator": [
+        ["1 is not 1", UnsupportedOperandTypeError, null],
+        ["'x' is not 'x'", UnsupportedOperandTypeError, null],
+        ["None is not None", false, null],
+        ["a = [1,2,3]\na is not a", false, null],
+        ["a = [1,2,3]\nb = [1,2,3]\na is not b", true, null],
+        ["a = [1,2,3]\na is not None", true, null],
+        ["(lambda x: x) is not (lambda x: x)", true, null],
       ],
       arity: [
         ["arity((lambda *args: args))", 0n, null],
