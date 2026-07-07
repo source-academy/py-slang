@@ -41,9 +41,6 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { when: "alternate", parts: [{ token: "else:", cls: "identifier" }, { child: "alternate" }] },
     ],
     PassStatement: [{ token: "pass", cls: "identifier" }],
-    // `breakpoint()` renders as the plain call it came from (see `translate.ts`), so a student sees the
-    // same text they typed; it is a no-op statement that also marks a stepper breakpoint.
-    DebuggerStatement: ["breakpoint()"],
 
     // Atoms
     Literal: [{ prop: "raw", cls: "literal" }],

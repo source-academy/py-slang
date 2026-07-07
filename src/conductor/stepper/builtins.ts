@@ -432,11 +432,11 @@ Object.assign(BUILTIN_FUNCTIONS, {
   },
   breakpoint: (args: StepNode[]): StepNode => {
     // Python's `breakpoint()` drops into a debugger; a pure substitution view has none, so as a value
-    // it is simply a no-op that yields `None`. Its *statement* form is intercepted before it reaches
-    // the reducer and rendered as a stepper breakpoint (see `translate.ts`'s `DebuggerStatement` case
-    // and the reducer). This entry exists so the name (a) resolves during preprocessing — it is part of
-    // the vocabulary handed to the analyzer via `getAvailableBuiltinNames` — and (b) degrades
-    // gracefully if written in expression position, e.g. `x = breakpoint()`.
+    // it is simply a no-op that yields `None`. Its *statement* form is recognised as a stepper
+    // breakpoint by `reduce.ts`'s `stepHead` (`ExpressionStatement` case) before this entry is ever
+    // reached. This entry exists so the name (a) resolves during preprocessing — it is part of the
+    // vocabulary handed to the analyzer via `getAvailableBuiltinNames` — and (b) degrades gracefully
+    // when written in expression position or otherwise not a bare statement, e.g. `x = breakpoint()`.
     void args;
     return literal(null, "None");
   },

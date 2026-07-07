@@ -27,6 +27,8 @@ interface Marker {
   redex?: StepNode;
   redexType?: "beforeMarker" | "afterMarker";
   explanation?: string;
+  /** Whether this marker's redex is a `breakpoint()` statement — see `serializeMarker`. */
+  isBreakpoint?: boolean;
 }
 
 interface Step {
@@ -102,7 +104,12 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
     }
 
     pushStep(current, [
-      { redex: result.preRedex, redexType: "beforeMarker", explanation: result.beforeExplanation },
+      {
+        redex: result.preRedex,
+        redexType: "beforeMarker",
+        explanation: result.beforeExplanation,
+        isBreakpoint: result.isBreakpoint,
+      },
     ]);
     // Apply this contraction's output (only a `print` produces any) so the after step and everything
     // after it show it, while the before ("Running print") step above still shows the prior total.
@@ -190,12 +197,17 @@ function serializeStep(step: Step): SerializedStep {
       const redexId = ids.get(marker.redex);
       if (redexId !== undefined) out.redexId = redexId;
       // `redexNodeType` drives the host's breakpoint navigation (the double-arrow jumps to a marker
-      // whose type is "DebuggerStatement"), so it names the redex *about to be* contracted and belongs
-      // on the before marker only. An after marker still carries `redexId`/`redexType` (so its redex is
-      // highlighted — e.g. a `breakpoint()`/`pass` shown green one last time before it is discarded),
-      // but emitting `redexNodeType` there too would make the double-arrow also stop on that
-      // post-reduction step (landing on "Evaluated breakpoint statement", not just "Evaluating …").
-      if (marker.redexType === "beforeMarker") out.redexNodeType = marker.redex.type;
+      // whose type is "DebuggerStatement"), so it belongs on the before marker only — an after marker
+      // still carries `redexId`/`redexType` (so its redex is highlighted — e.g. a `breakpoint()`/`pass`
+      // shown green one last time before it is discarded), but emitting `redexNodeType` there too would
+      // make the double-arrow also stop on that post-reduction step (landing on "Evaluated breakpoint
+      // statement", not just "Evaluating …"). A `breakpoint()` redex is never actually typed
+      // "DebuggerStatement" (see `stepHead`'s `ExpressionStatement` case in reduce.ts — it is detected
+      // by resolved identity, not a dedicated node type, so aliasing like `bp = breakpoint; bp()` still
+      // matches), so `isBreakpoint` overrides what would otherwise be the redex's real node type.
+      if (marker.redexType === "beforeMarker") {
+        out.redexNodeType = marker.isBreakpoint ? "DebuggerStatement" : marker.redex.type;
+      }
     }
     if (marker.redexType !== undefined) out.redexType = marker.redexType;
     if (marker.explanation !== undefined) out.explanation = marker.explanation;

@@ -3,7 +3,6 @@ import { isBuiltinConstantName } from "../builtins";
 import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
 import { preprocessPython } from "../preprocess";
-import { pythonSyntaxProfile } from "../syntaxProfile";
 
 // `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
 // chapter-gating tests pass an explicit chapter (1 to forbid §2 names, 2 to allow them).
@@ -1342,7 +1341,12 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
   // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op for
   // evaluation (like `pass`) that the host's breakpoint navigation (the double-arrow) can jump to. The
   // host recognises a breakpoint step by a marker whose `redexNodeType` is "DebuggerStatement" (see the
-  // web-stepper host's `stepNextBreakpoint`); the redex node's `type` is what the serializer exposes there.
+  // web-stepper host's `stepNextBreakpoint`). Unlike every other marker field, this one is *not* simply
+  // the redex's actual node type: `breakpoint()` stays an ordinary `CallExpression`/`ExpressionStatement`
+  // (see `translate.ts`), detected by *resolved identity* at reduction time in `stepHead` (reduce.ts) —
+  // `redexNodeType` is set explicitly there (see `serializeMarker` in getSteps.ts) rather than derived
+  // from the tree. That is what makes aliasing (`bp = breakpoint; bp()`) behave exactly like a direct
+  // `breakpoint()` call, the same way `p = print; p(1)` already behaves exactly like `print(1)`.
 
   test("preprocessing accepts breakpoint() in every chapter (it is a built-in name)", () => {
     expect(preprocess("breakpoint()")).toBeNull();
@@ -1386,7 +1390,7 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
       step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
     );
     expect(before?.markers?.[0]?.redexType).toBe("beforeMarker");
-    // The redex id resolves to a DebuggerStatement node in that step's tree (it is highlighted).
+    // The redex id resolves to a node in that step's tree (it is highlighted).
     expect(nodeIds(before!.ast).has(before!.markers![0].redexId!)).toBe(true);
 
     const after = s.find(
@@ -1398,8 +1402,8 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
 
   test("green flash before discard: the statement is shown highlighted green on the after step, like pass", () => {
     // Like `pass`, the after step ("Evaluated breakpoint statement") keeps the statement present and
-    // highlights it green (an afterMarker whose redexId resolves to the DebuggerStatement still in the
-    // tree); only the *next* contraction's before step shows it actually gone.
+    // highlights it green (an afterMarker whose redexId resolves to the call still in the tree); only
+    // the *next* contraction's before step shows it actually gone.
     const s = steps("breakpoint()\n1 + 1");
     const beforeIdx = s.findIndex(
       step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
@@ -1408,12 +1412,14 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
     const after = s[beforeIdx + 1];
     expect(after.markers?.[0]?.explanation).toBe("Evaluated breakpoint statement");
 
-    // Before (red) and after (green) both still contain the breakpoint, highlighted via a resolvable redexId.
-    expect((before.ast as any).body[0].type).toBe("DebuggerStatement");
+    // Before (red) and after (green) both still contain the breakpoint call, highlighted via a
+    // resolvable redexId — an ordinary ExpressionStatement/CallExpression, not a dedicated node type
+    // (see reduce.ts's stepHead).
+    expect((before.ast as any).body[0].type).toBe("ExpressionStatement");
     expect(before.markers?.[0]?.redexType).toBe("beforeMarker");
     expect(nodeIds(before.ast).has(before.markers![0].redexId!)).toBe(true);
 
-    expect((after.ast as any).body[0].type).toBe("DebuggerStatement"); // still present (green flash)
+    expect((after.ast as any).body[0].type).toBe("ExpressionStatement"); // still present (green flash)
     expect(after.markers?.[0]?.redexType).toBe("afterMarker");
     expect(nodeIds(after.ast).has(after.markers![0].redexId!)).toBe(true);
 
@@ -1421,20 +1427,68 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
     expect((s[beforeIdx + 2].ast as any).body[0].type).toBe("ExpressionStatement");
   });
 
-  test("renders as the breakpoint() call the student typed", () => {
-    // Translated to a DebuggerStatement (see translate.ts) and preserved across serialization.
-    const bp = findNode(steps("breakpoint()\n1")[0].ast, n => n.type === "DebuggerStatement");
-    expect(bp).toBeDefined();
-    // The Python profile renders it as `breakpoint()`; without a template the host would show the
-    // placeholder `<DebuggerStatement>`.
-    expect(pythonSyntaxProfile.templates.DebuggerStatement).toEqual(["breakpoint()"]);
+  test("renders as the breakpoint() call the student typed (an ordinary CallExpression)", () => {
+    // No dedicated node type: `breakpoint()` translates to a plain CallExpression (see translate.ts)
+    // and renders through the same Identifier/CallExpression templates as any other built-in call.
+    const stmt = (steps("breakpoint()\n1")[0].ast as any).body[0];
+    expect(stmt.type).toBe("ExpressionStatement");
+    expect(stmt.expression.type).toBe("CallExpression");
+    expect(stmt.expression.callee.type).toBe("Identifier");
+    expect(stmt.expression.callee.name).toBe("breakpoint");
+    expect(stmt.expression.arguments).toEqual([]);
   });
 
   test("used as an expression it degrades to a no-op returning None (not the debugger form)", () => {
-    // Only the statement form is the debugger; in expression position `breakpoint()` is an ordinary
-    // built-in call that yields None, so the program still resolves rather than getting stuck.
+    // Only the bare-statement form is the debugger; in expression position `breakpoint()` is an
+    // ordinary built-in call that yields None, so the program still resolves rather than getting stuck.
     expect(result("x = breakpoint()\nx")).toBe("None");
     expect(explanations("x = breakpoint()\nx").pop()).toBe("Evaluation complete");
+  });
+
+  test("aliased via a variable behaves exactly like breakpoint() itself, just as p = print; p(1) does", () => {
+    // The bug this fixes: detection used to match the student's literal source text ("breakpoint()"),
+    // so an alias silently lost the debugger behaviour. It is now resolved identity at reduction time
+    // (stepHead in reduce.ts): `bp`, once substituted to the `breakpoint` builtin, is indistinguishable
+    // from writing `breakpoint()` directly — same wording, same nav target, same no-op evaluation.
+    const src = "bp = breakpoint\nbp()\n1 + 1";
+    expect(result(src)).toBe("2");
+    expect(explanations(src)).toEqual([
+      "Start of evaluation",
+      "Declaring and substituting bp into the rest of the block",
+      "Declared and substituted bp into the rest of the block",
+      "Evaluating breakpoint statement",
+      "Evaluated breakpoint statement",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Evaluation complete",
+    ]);
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].markers?.[0]?.explanation).toBe("Evaluating breakpoint statement");
+  });
+
+  test("aliasing also works inside a function body", () => {
+    const src = "def f(x):\n  bp = breakpoint\n  bp()\n  return x + 1\nf(4)";
+    expect(result(src)).toBe("5");
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+  });
+
+  test("aliased and used as an expression still degrades to a no-op (not a breakpoint target)", () => {
+    // Aliasing must not *widen* what counts as the debugger form either: `bp()` in expression position
+    // degrades exactly like `breakpoint()` does in the direct case above.
+    const src = "bp = breakpoint\nx = bp()\nx";
+    expect(result(src)).toBe("None");
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(0);
   });
 });
 
