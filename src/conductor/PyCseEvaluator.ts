@@ -186,10 +186,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       isVararg?: boolean;
     }
   >();
-  private opaqueMap = new Map<
-    OpaqueIdentifier,
-    { value: unknown; immutable: boolean }
-  >();
+  private opaqueMap = new Map<OpaqueIdentifier, { value: unknown; immutable: boolean }>();
   private uniqueId = 0;
   pair_make(
     head: TypedValue<DataType>,

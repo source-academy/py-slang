@@ -1,4 +1,9 @@
-import { DataType, OpaqueIdentifier, TypedValue } from "@sourceacademy/conductor/types";
+import {
+  ClosureIdentifier,
+  DataType,
+  OpaqueIdentifier,
+  TypedValue,
+} from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { ExprNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
@@ -64,6 +69,9 @@ export async function pythonToModule(
     case "opaque":
       return { type: DataType.OPAQUE, value: value.value as OpaqueIdentifier };
     case "builtin":
+      if ("id" in value.func && typeof value.func.id === "number" && value.func.id !== null) {
+        return { type: DataType.CLOSURE, value: value.func.id as ClosureIdentifier<DataType> };
+      }
       async function* builtinFunc(...args: TypedValue<DataType>[]): ModuleFunctionGenerator {
         const result = await (value as BuiltinValue).func(
           await Promise.all(args.map(arg => moduleToPython(context, code, command, arg))),
@@ -167,6 +175,7 @@ export async function moduleToPython(
         );
         return yield* result;
       }
+      builtinGenerator.id = value.value;
       return {
         type: "builtin",
         minArgs: await context.evaluator.closure_arity(value),
