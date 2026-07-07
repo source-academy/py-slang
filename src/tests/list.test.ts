@@ -76,5 +76,12 @@ describe("List Tests", () => {
   };
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
-  generateNativePynterTestCases(listTests, 3);
+  generateNativePynterTestCases(listTests, 3, [
+    misc,
+    math,
+    linkedList,
+    pairmutator,
+    stream,
+    list,
+  ]);
 });

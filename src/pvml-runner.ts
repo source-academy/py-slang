@@ -17,13 +17,19 @@ import { assemble } from "./engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "./engines/pvml/pvml-compiler";
 import { parse } from "./parser";
 import { analyzeWithEnvironments } from "./resolver";
-import { RunError } from "./runner";
-import math from "./stdlib/math";
-import misc from "./stdlib/misc";
+import { RunError, VARIANT_GROUPS } from "./runner";
+import type { Group } from "./stdlib/utils";
 
 export interface RunPvmlOptions {
   /** Path to a built native Pynter `runner` binary. */
   pynterPath: string;
+  /**
+   * Stdlib groups to load, overriding the VARIANT_GROUPS[variant] default.
+   * Needed for the handful of test suites that exercise a non-canonical
+   * combination for a given variant (e.g. stream tests run at variant 2 with
+   * the `stream`/`pairmutator` groups added on top).
+   */
+  groups?: Group[];
 }
 
 export interface RunPvmlResult {
@@ -40,27 +46,39 @@ export interface RunPvmlResult {
  * to PVML and running it on a native Pynter binary. Returns both the
  * program's print() output and its final result value/type.
  *
- * Note: the PVML compiler currently only wires up the [misc, math] stdlib
- * groups (matching PyPvmlEvaluator/PyPvmlPynterEvaluator), so its chapter
- * coverage is narrower than the CSE pathway's — variants that rely on
- * linked lists, streams, or the parser library are not yet supported here.
+ * Stdlib groups default to VARIANT_GROUPS[variant] (see runner.ts), matching
+ * the CSE pathway's chapter coverage. A group's prelude (SICPy source, e.g.
+ * linked-list.prelude.ts's `equal`/`map`/`reverse`/...) is prepended to
+ * `code` and compiled + run as a single PVML program: unlike the CSE
+ * machine, which runs the prelude once into a shared, mutable environment
+ * ahead of the main script, each native Pynter invocation is a fresh
+ * process with no persistent environment to carry prelude bindings across —
+ * so prelude and script must be one compilation unit for the script to see
+ * the prelude's functions at all.
  */
 export async function runCodePvmlDetailed(
   code: string,
   variant: number,
   options: RunPvmlOptions,
 ): Promise<RunPvmlResult> {
-  const { pynterPath } = options;
+  const { pynterPath, groups = VARIANT_GROUPS[variant] } = options;
+  if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
+
   const script = code.endsWith("\n") ? code : code + "\n";
+  const preludeText = groups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+  const fullSource = preludeText ? `${preludeText}\n${script}` : script;
 
   let ast;
   try {
-    ast = parse(script);
+    ast = parse(fullSource);
   } catch (e: unknown) {
     throw new RunError("parse", String((e as { message?: string })?.message ?? e));
   }
 
-  const { errors, environments } = analyzeWithEnvironments(ast, script, variant, [misc, math]);
+  const { errors, environments } = analyzeWithEnvironments(ast, fullSource, variant, groups);
   if (errors.length > 0) {
     throw new RunError("analysis", errors.map(e => e.message).join("\n"));
   }

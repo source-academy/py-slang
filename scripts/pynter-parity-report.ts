@@ -129,7 +129,7 @@ function main() {
     return [suite, `${passed}/${attempted}`, String(skipped), pct(passed, attempted)];
   };
 
-  const header = ["Suite", "Pass/Attempted", "Skipped (complex numbers)", "Pass rate"];
+  const header = ["Suite", "Pass/Attempted", "Skipped (out of scope)", "Pass rate"];
   const body = rows.map(r => toRow(r.suite, r.passed, r.failed, r.skipped));
   body.push(
     toRow("**Total**", totals.passed, totals.failed, totals.skipped).map((cell, i) =>

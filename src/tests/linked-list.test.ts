@@ -159,5 +159,5 @@ describe("Linked List Tests", () => {
   };
 
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
-  generateNativePynterTestCases(linkedListTests, 2);
+  generateNativePynterTestCases(linkedListTests, 2, [misc, math, linkedList]);
 });
