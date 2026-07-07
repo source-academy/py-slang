@@ -13,7 +13,7 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
-import { generateTestCases, TestCases } from "./utils";
+import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("Standard Library Tests", () => {
   describe("Chapter 1 Builtins", () => {
@@ -944,6 +944,8 @@ describe("Standard Library Tests", () => {
 
     generateTestCases(mathTests, 1, [misc, math]);
     generateTestCases(miscTests, 1, [misc, math]);
+    generateNativePynterTestCases(mathTests, 1);
+    generateNativePynterTestCases(miscTests, 1);
   });
 
   describe("Chapter 3 Builtins", () => {
@@ -1030,5 +1032,6 @@ describe("Standard Library Tests", () => {
       ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
+    generateNativePynterTestCases(miscTests, 3);
   });
 });

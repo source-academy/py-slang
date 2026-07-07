@@ -3,10 +3,10 @@ import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer";
-import { SVMLIRBuilder } from "./SVMLIRBuilder";
+import { PVMLIRBuilder } from "./PVMLIRBuilder";
 import { PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
-import { SVMLProgram } from "./types";
+import { PVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
@@ -23,10 +23,10 @@ export type ExpressionResult = {
   maxStackSize: number;
 };
 
-export class SVMLCompiler
+export class PVMLCompiler
   implements StmtNS.Visitor<ExpressionResult>, ExprNS.Visitor<ExpressionResult>
 {
-  private builder: SVMLIRBuilder;
+  private builder: PVMLIRBuilder;
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
@@ -45,7 +45,7 @@ export class SVMLCompiler
   constructor(
     currentEnvironment: Environment,
     functionEnvironments: FunctionEnvironments,
-    builder: SVMLIRBuilder,
+    builder: PVMLIRBuilder,
   ) {
     this.builder = builder;
     this.currentEnvironment = currentEnvironment;
@@ -54,13 +54,13 @@ export class SVMLCompiler
   }
 
   /**
-   * Create SVMLCompiler from program AST.
+   * Create PVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
    */
   static fromProgram(
     program: StmtNS.FileInput,
     functionEnvironments?: FunctionEnvironments,
-  ): SVMLCompiler {
+  ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
       functionEnvironments = resolver.resolveEnvironments(program);
@@ -69,12 +69,12 @@ export class SVMLCompiler
     if (!mainEnv) {
       throw new Error("Main program environment not found");
     }
-    SVMLIRBuilder.resetIndex();
-    const builder = new SVMLIRBuilder(0);
-    return new SVMLCompiler(mainEnv, functionEnvironments, builder);
+    PVMLIRBuilder.resetIndex();
+    const builder = new PVMLIRBuilder(0);
+    return new PVMLCompiler(mainEnv, functionEnvironments, builder);
   }
 
-  fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): SVMLCompiler {
+  fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
     const nextEnvironment = this.functionEnvironments.get(node);
     if (!nextEnvironment) {
       throw new Error(`Function environment not found`);
@@ -85,7 +85,7 @@ export class SVMLCompiler
     const numArgs = node.parameters.length;
     const builder = this.builder.createChildBuilder(numArgs);
 
-    const compiler = new SVMLCompiler(nextEnvironment, this.functionEnvironments, builder);
+    const compiler = new PVMLCompiler(nextEnvironment, this.functionEnvironments, builder);
 
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);
@@ -100,13 +100,13 @@ export class SVMLCompiler
     return compiler;
   }
 
-  compileProgram(program: StmtNS.FileInput): SVMLProgram {
+  compileProgram(program: StmtNS.FileInput): PVMLProgram {
     this.compile(program);
 
     const allBuilders = this.builder.getAllBuilders(true);
     const functions = allBuilders.map(b => b.build());
 
-    return new SVMLProgram(0, functions);
+    return new PVMLProgram(0, functions);
   }
 
   compile(node: StmtNS.Stmt | ExprNS.Expr): ExpressionResult {
@@ -237,7 +237,7 @@ export class SVMLCompiler
   }
 
   visitStarredExpr(_expr: ExprNS.Starred): ExpressionResult {
-    throw new Error("Starred expressions not yet supported in SVML compiler");
+    throw new Error("Starred expressions not yet supported in PVML compiler");
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
@@ -252,13 +252,13 @@ export class SVMLCompiler
   }
 
   visitComplexExpr(_expr: ExprNS.Complex): ExpressionResult {
-    // TODO: needs proper SVML support for complex numbers
-    throw new Error("Complex numbers not yet supported in SVML compiler");
+    // TODO: needs proper PVML support for complex numbers
+    throw new Error("Complex numbers not yet supported in PVML compiler");
   }
 
   visitListExpr(expr: ExprNS.List): ExpressionResult {
     const n = expr.elements.length;
-    // Spill to a named slot because SVML has no direct stack-to-array-store
+    // Spill to a named slot because PVML has no direct stack-to-array-store
     const tmpSlot = this.getOrAssignSlot(
       this.currentEnvironment,
       `__list_tmp_${this.tmpCounter++}`,
@@ -468,7 +468,7 @@ export class SVMLCompiler
   /** Compile a closure body, emit RETG, and emit NEWC in the parent scope. */
   private compileClosure(
     node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda,
-    compileBody: (compiler: SVMLCompiler) => ExpressionResult,
+    compileBody: (compiler: PVMLCompiler) => ExpressionResult,
   ): ExpressionResult {
     const compiler = this.fromFunctionNode(node);
     const { maxStackSize } = compileBody(compiler);
@@ -582,7 +582,7 @@ export class SVMLCompiler
   }
 
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): ExpressionResult {
-    throw new Error("AnnAssign not yet implemented in SVML compiler");
+    throw new Error("AnnAssign not yet implemented in PVML compiler");
   }
 
   visitBreakStmt(_stmt: StmtNS.Break): ExpressionResult {
@@ -607,7 +607,7 @@ export class SVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
-    throw new Error("FromImport not yet implemented in SVML compiler");
+    throw new Error("FromImport not yet implemented in PVML compiler");
   }
 
   visitGlobalStmt(_stmt: StmtNS.Global): ExpressionResult {
@@ -621,7 +621,7 @@ export class SVMLCompiler
   }
 
   visitAssertStmt(_stmt: StmtNS.Assert): ExpressionResult {
-    throw new Error("Assert not yet implemented in SVML compiler");
+    throw new Error("Assert not yet implemented in PVML compiler");
   }
 
   visitForStmt(stmt: StmtNS.For): ExpressionResult {

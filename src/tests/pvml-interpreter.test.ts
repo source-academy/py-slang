@@ -1,35 +1,35 @@
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import {
   MissingRequiredPositionalError,
   UnsupportedOperandTypeError,
   ZeroDivisionError,
-} from "../engines/svml/errors";
+} from "../engines/pvml/errors";
 
 function compileAndRun(code: string): unknown {
   const ast = parse(code);
-  const compiler = SVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast);
   const program = compiler.compileProgram(ast);
-  const interpreter = new SVMLInterpreter(program);
+  const interpreter = new PVMLInterpreter(program);
   const result = interpreter.execute();
 
-  return SVMLInterpreter.toJSValue(result);
+  return PVMLInterpreter.toJSValue(result);
 }
 
 function compileAndRunWithOutput(code: string): { result: unknown; outputs: string[] } {
   const outputs: string[] = [];
   const ast = parse(code);
-  const compiler = SVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast);
   const program = compiler.compileProgram(ast);
-  const interpreter = new SVMLInterpreter(program, {
+  const interpreter = new PVMLInterpreter(program, {
     sendOutput: msg => outputs.push(msg),
   });
-  return { result: SVMLInterpreter.toJSValue(interpreter.execute()), outputs };
+  return { result: PVMLInterpreter.toJSValue(interpreter.execute()), outputs };
 }
 
-describe("SVML Interpreter Tests", () => {
+describe("PVML Interpreter Tests", () => {
   describe("Basic Arithmetic", () => {
     test("Simple function addition", () => {
       const code = `
@@ -264,7 +264,7 @@ classify_number(15)
     });
   });
 
-  describe("SVML Generic Semantics", () => {
+  describe("PVML Generic Semantics", () => {
     test("String comparison works for generic ordered ops", () => {
       const code = `
 "apple" < "banana"
@@ -561,7 +561,7 @@ total
   });
 });
 
-describe("SVML Additional Coverage", () => {
+describe("PVML Additional Coverage", () => {
   describe("Arithmetic operators", () => {
     test("floor division positive", () => {
       expect(compileAndRun("7 // 2\n")).toBe(3);
@@ -746,8 +746,8 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-      const interpreter = new SVMLInterpreter(program, { maxInstructions: 50 });
+      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, { maxInstructions: 50 });
       expect(() => interpreter.execute()).toThrow(/instruction limit/i);
     });
 
@@ -758,8 +758,8 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-      const interpreter = new SVMLInterpreter(program, { maxCallDepth: 5 });
+      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
       expect(() => interpreter.execute()).toThrow(/call depth/i);
     });
   });
@@ -769,9 +769,9 @@ loop()
       const code = "def f(x):\n    return x + 1\nf(10)\n";
       const ast = parse(code);
       const { environments } = analyzeWithEnvironments(ast, code, 4);
-      const compiler = SVMLCompiler.fromProgram(ast, environments);
-      const result = SVMLInterpreter.toJSValue(
-        new SVMLInterpreter(compiler.compileProgram(ast)).execute(),
+      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const result = PVMLInterpreter.toJSValue(
+        new PVMLInterpreter(compiler.compileProgram(ast)).execute(),
       );
       expect(result).toBe(11);
     });

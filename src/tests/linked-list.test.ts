@@ -7,7 +7,7 @@ import {
 import linkedList from "../stdlib/linked-list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { generateTestCases, TestCases } from "./utils";
+import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("Linked List Tests", () => {
   const linkedListTests: TestCases = {
@@ -159,4 +159,5 @@ describe("Linked List Tests", () => {
   };
 
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
+  generateNativePynterTestCases(linkedListTests, 2);
 });
