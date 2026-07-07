@@ -30,6 +30,7 @@ import {
   complexLiteral,
   isComplexValue,
   isFunctionValue,
+  isTruthy,
   isValue,
   literal,
   numberLiteral,
@@ -38,7 +39,7 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import { applyBuiltin, isBuiltinFunctionName, isStepperValue } from "./builtins";
+import { applyBuiltin, formatPrintOutput, isBuiltinFunctionName, isStepperValue } from "./builtins";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction — becomes `current` for the next step. */
@@ -72,26 +73,15 @@ export interface ReduceResult {
   /** The same description shown on the *before* step, present-continuous ("… evaluating") — the same
    * event, described as about to happen rather than just having happened. */
   beforeExplanation: string;
+  /** Text this contraction writes to the program's output (only a `print(...)` call does — see
+   * `contractCall`). The driver appends it to the running output shown from the *after* step onward, so
+   * a `print`'s text first appears on its "Ran print" step. `undefined` for every other contraction. */
+  output?: string;
 }
 
 /* -------------------------------------------------------------------------- */
 /*                          Values & Python semantics                         */
 /* -------------------------------------------------------------------------- */
-
-/** Python truthiness for `if`/ternary conditions, which (unlike `and`/`or`/`not` — see
- * `contractLogical` and `contractUnary`'s `not` case) are never type-restricted to `bool`. */
-function isTruthy(node: StepNode): boolean {
-  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
-  if (node.type !== "Literal") return true; // function values are truthy
-  const v = node.value;
-  if (v === null || v === false) return false;
-  if (v === true) return true;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "bigint") return v !== 0n;
-  if (typeof v === "string") return v.length > 0;
-  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
-  return true;
-}
 
 /* -------------------------------------------------------------------------- */
 /*                          Expression contractions                           */
@@ -517,13 +507,17 @@ function contractCall(node: StepNode): ReduceResult | null {
   // throws on misuse (wrong type/arity), which the driver turns into an "Evaluation stuck" step.
   if (callee.type === "Identifier" && isBuiltinFunctionName(String(callee.name))) {
     if (!args.every(isValue)) return null;
-    const result = applyBuiltin(String(callee.name), args);
+    const name = String(callee.name);
+    const result = applyBuiltin(name, args);
     return {
       node: result,
       preRedex: node,
       postRedex: result,
-      explanation: `Ran ${String(callee.name)}`,
-      beforeExplanation: `Running ${String(callee.name)}`,
+      explanation: `Ran ${name}`,
+      beforeExplanation: `Running ${name}`,
+      // `print` also writes to the program's output; record that text so the driver can show it in the
+      // stepper's output panel (from this call's "Ran print" step onward). `print` still yields `None`.
+      output: name === "print" ? formatPrintOutput(args) : undefined,
     };
   }
 
@@ -718,6 +712,9 @@ type HeadOutcome =
       postNewBody?: StepNode[];
       explanation: string;
       beforeExplanation: string;
+      // Text this step writes to the program's output (only a `print(...)` reduced inside the head
+      // produces any — see `ReduceResult.output`); propagated to the `ReduceResult` for the driver.
+      output?: string;
     }
   | { kind: "finished-expression" } // head is a fully-evaluated `ExpressionStatement` (a value)
   | { kind: "return" } //              head is a `ReturnStatement` (exits a function body)
@@ -746,6 +743,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
             : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
+          output: reduced.output,
         };
       }
       // A finished expression statement is a value to discard (or the program's result); one that
@@ -768,6 +766,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
               : undefined,
             explanation: reduced.explanation,
             beforeExplanation: reduced.beforeExplanation,
+            output: reduced.output,
           };
         }
         return { kind: "irreducible" };
@@ -856,6 +855,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
             : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
+          output: reduced.output,
         };
       }
       const truthy = isTruthy(head.test as StepNode);
@@ -901,6 +901,7 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         postNode: outcome.postNewBody ? { ...prog, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
+        output: outcome.output,
       };
     case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
@@ -963,6 +964,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         postNode: outcome.postNewBody ? { ...node, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
+        output: outcome.output,
       };
     case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a

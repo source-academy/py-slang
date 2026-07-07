@@ -1,8 +1,8 @@
-import type { SVMLBoxType } from "./types";
-import { isSVMLObject } from "./types";
-import { MissingRequiredPositionalError, SVMLInterpreterError } from "./errors";
+import type { PVMLBoxType } from "./types";
+import { isPVMLObject } from "./types";
+import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
 
-// Map Python builtin names to SVML primitive opcode indices
+// Map Python builtin names to PVML primitive opcode indices
 export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["print", 5],
   ["display", 5], // Alias for print
@@ -18,9 +18,9 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["len", 31],
 ]);
 
-function assertNumericArgs(args: SVMLBoxType[], fn: string): number[] {
+function assertNumericArgs(args: PVMLBoxType[], fn: string): number[] {
   if (!args.every(a => typeof a === "number"))
-    throw new SVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
+    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
   return args;
 }
 
@@ -30,9 +30,9 @@ function assertNumericArgs(args: SVMLBoxType[], fn: string): number[] {
  */
 export function executePrimitive(
   primitiveIndex: number,
-  args: SVMLBoxType[],
+  args: PVMLBoxType[],
   sendOutput: (message: string) => void,
-): SVMLBoxType {
+): PVMLBoxType {
   switch (primitiveIndex) {
     case 5: // print/display
       sendOutput(args.join(" "));
@@ -113,7 +113,7 @@ export function executePrimitive(
       const [a, b, c] = assertNumericArgs(args, "range");
       const [start, stop, step] =
         args.length === 1 ? [0, a, 1] : args.length === 2 ? [a, b, 1] : [a, b, c];
-      if (step === 0) throw new SVMLInterpreterError("ValueError: range() arg 3 must not be zero");
+      if (step === 0) throw new PVMLInterpreterError("ValueError: range() arg 3 must not be zero");
       return { type: "iterator", kind: "range", current: start, stop, step };
     }
 
@@ -122,11 +122,11 @@ export function executePrimitive(
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
-      if (isSVMLObject(v) && v.type === "array") return v.elements.length;
-      throw new SVMLInterpreterError(`TypeError: object of type '${typeof v}' has no len()`);
+      if (isPVMLObject(v) && v.type === "array") return v.elements.length;
+      throw new PVMLInterpreterError(`TypeError: object of type '${typeof v}' has no len()`);
     }
 
     default:
-      throw new SVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);
+      throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);
   }
 }
