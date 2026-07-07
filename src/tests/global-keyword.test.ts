@@ -1,5 +1,10 @@
 import { FeatureNotSupportedError } from "../validator";
-import { generateTestCases, toPythonAstAndResolve } from "./utils";
+import {
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+  toPythonAstAndResolve,
+} from "./utils";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import list from "../stdlib/list";
@@ -139,11 +144,10 @@ print(i)
 
 const ch3 = [misc, math, linkedList, list];
 
-generateTestCases(
-  {
-    "global keyword — basic write": [
-      [
-        `
+const globalKeywordTests: TestCases = {
+  "global keyword — basic write": [
+    [
+      `
 x = 0
 def f():
     global x
@@ -151,14 +155,14 @@ def f():
 f()
 x
 `,
-        42n,
-        null,
-      ],
+      42n,
+      null,
     ],
+  ],
 
-    "global keyword — read before local assignment": [
-      [
-        `
+  "global keyword — read before local assignment": [
+    [
+      `
 x = 99
 def f():
     global x
@@ -166,14 +170,14 @@ def f():
 f()
 x
 `,
-        99n,
-        null,
-      ],
+      99n,
+      null,
     ],
+  ],
 
-    "global keyword — write then read at module level": [
-      [
-        `
+  "global keyword — write then read at module level": [
+    [
+      `
 x = 1
 def increment():
     global x
@@ -183,26 +187,26 @@ increment()
 increment()
 x
 `,
-        4n,
+      4n,
+      null,
+    ],
+  ],
+
+  "global keyword — bare module-level declaration with no assignment raises NameError at runtime, not a resolver error":
+    [
+      [
+        `
+global i
+print(i)
+`,
+        NameError,
         null,
       ],
     ],
 
-    "global keyword — bare module-level declaration with no assignment raises NameError at runtime, not a resolver error":
-      [
-        [
-          `
-global i
-print(i)
-`,
-          NameError,
-          null,
-        ],
-      ],
-
-    "global keyword — does not affect local of same name in other function": [
-      [
-        `
+  "global keyword — does not affect local of same name in other function": [
+    [
+      `
 x = 10
 def uses_global():
     global x
@@ -213,14 +217,14 @@ uses_global()
 uses_local()
 x
 `,
-        20n,
-        null,
-      ],
+      20n,
+      null,
     ],
+  ],
 
-    "global keyword — nested function: global skips enclosing scope": [
-      [
-        `
+  "global keyword — nested function: global skips enclosing scope": [
+    [
+      `
 x = 1
 def outer():
     x = 100
@@ -231,14 +235,14 @@ def outer():
 outer()
 x
 `,
-        2n,
-        null,
-      ],
+      2n,
+      null,
     ],
+  ],
 
-    "global keyword — declared in if branch inside function": [
-      [
-        `
+  "global keyword — declared in if branch inside function": [
+    [
+      `
 x = 0
 def f():
     global x
@@ -247,28 +251,28 @@ def f():
 f()
 x
 `,
-        7n,
-        null,
-      ],
+      7n,
+      null,
     ],
+  ],
 
-    "global keyword — global name created by function (not pre-existing)": [
-      [
-        `
+  "global keyword — global name created by function (not pre-existing)": [
+    [
+      `
 def f():
     global y
     y = 55
 f()
 y
 `,
-        55n,
-        null,
-      ],
+      55n,
+      null,
     ],
+  ],
 
-    "global keyword — print output uses global value": [
-      [
-        `
+  "global keyword — print output uses global value": [
+    [
+      `
 count = 0
 def bump():
     global count
@@ -277,11 +281,11 @@ bump()
 bump()
 print(count)
 `,
-        null,
-        ["2"],
-      ],
+      null,
+      ["2"],
     ],
-  },
-  3,
-  ch3,
-);
+  ],
+};
+
+generateTestCases(globalKeywordTests, 3, ch3);
+generateNativePynterTestCases(globalKeywordTests, 3);

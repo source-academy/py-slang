@@ -123,6 +123,14 @@ describe("Chapter 1 — most restrictive", () => {
     analyzeThrows("x = 1\nx = 2", 1);
   });
 
+  test("assigning to a function parameter is banned in chapter 1", () => {
+    analyzeThrows("def f(x):\n    x = 1\n    return x", 1);
+  });
+
+  test("reading (not assigning) a function parameter still passes in chapter 1", () => {
+    analyzeOk("def f(x):\n    y = x + 1\n    return y", 1);
+  });
+
   test("break/continue are banned in chapter 1", () => {
     analyzeThrows("def f():\n    break", 1, [FeatureNotSupportedError]);
     analyzeThrows("def f():\n    continue", 1, [FeatureNotSupportedError]);
@@ -160,6 +168,10 @@ describe("Chapter 2 — loops and reassignment still banned", () => {
     analyzeThrows("x = 1\nx = 2", 2);
   });
 
+  test("assigning to a function parameter is banned in chapter 2", () => {
+    analyzeThrows("def f(x):\n    x = 1\n    return x", 2);
+  });
+
   test("while loop is banned in chapter 2", () => {
     analyzeThrows("while True:\n    pass", 2, [FeatureNotSupportedError]);
   });
@@ -194,6 +206,10 @@ describe("Chapter 2 — loops and reassignment still banned", () => {
 describe("Chapter 3 — loops and lists allowed", () => {
   test("while loop is allowed in chapter 3", () => {
     analyzeOk("while True:\n    pass", 3);
+  });
+
+  test("assigning to a function parameter is allowed in chapter 3 (reassignment enabled)", () => {
+    analyzeOk("def f(x):\n    x = 1\n    return x", 3);
   });
 
   test("list literal is allowed in chapter 3", () => {

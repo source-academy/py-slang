@@ -1,21 +1,21 @@
-import { assemble, disassemble } from "../engines/svml/svml-assembler";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { assemble, disassemble } from "../engines/pvml/pvml-assembler";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { parse } from "../parser/parser-adapter";
 
 function compileAndAssemble(code: string): Uint8Array {
   const ast = parse(code);
-  const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
+  const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
   return assemble(program);
 }
 
 function roundTrip(code: string): unknown {
   const binary = compileAndAssemble(code);
   const program = disassemble(binary);
-  return SVMLInterpreter.toJSValue(new SVMLInterpreter(program).execute());
+  return PVMLInterpreter.toJSValue(new PVMLInterpreter(program).execute());
 }
 
-describe("SVML assembler", () => {
+describe("PVML assembler", () => {
   describe("binary output", () => {
     test("produces a non-empty Uint8Array", () => {
       const binary = compileAndAssemble("1 + 1\n");
@@ -37,7 +37,7 @@ describe("SVML assembler", () => {
   describe("disassemble round-trip", () => {
     test("function count is preserved", () => {
       const ast = parse("def f(x):\n    return x\nf(1)\n");
-      const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
       expect(disassemble(assemble(program)).functions.length).toBe(program.functions.length);
     });
 

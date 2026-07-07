@@ -93,11 +93,12 @@ export enum OpCodes {
 export const OPCODE_MAX = 88;
 
 /**
- * Sinter VM's maximum supported opcode (op_neq_b = 0x54).
+ * Pynter's maximum supported opcode (op_neq_b = 0x54; currently identical to
+ * Sinter's, since Pynter is presently an unmodified fork).
  * Opcodes above this value are py-slang extensions not present in the
  * compiled WASM binary.
  */
-export const SINTER_OPCODE_MAX = 0x54; // 84
+export const PYNTER_OPCODE_MAX = 0x54; // 84
 
 const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVG]: "floor division (//)",
@@ -107,16 +108,16 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
 };
 
 /**
- * Returns a human-readable description of an opcode that exceeds the
- * sinter VM's supported range, or a generic fallback.
+ * Returns a human-readable description of an opcode that exceeds
+ * Pynter's supported range, or a generic fallback.
  */
 export function unsupportedOpcodeMessage(opcode: number): string {
   const feature = UNSUPPORTED_OPCODE_FEATURES[opcode];
   const name = OpCodes[opcode] ?? `opcode ${opcode}`;
   if (feature) {
-    return `${name}: ${feature} is not supported by the sinter backend`;
+    return `${name}: ${feature} is not supported by the Pynter backend`;
   }
-  return `${name} (opcode ${opcode}) is not supported by the sinter backend`;
+  return `${name} (opcode ${opcode}) is not supported by the Pynter backend`;
 }
 
 export function getInstructionSize(opcode: OpCodes): number {
