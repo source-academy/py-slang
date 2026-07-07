@@ -452,7 +452,10 @@ const NATIVE_PYNTER_SKIP_REASONS: {
   reason: string;
 }[] = [
   { matches: involvesComplexNumbers, reason: "Pynter does not support complex numbers" },
-  { matches: code => involvesParseFeature(code), reason: "parse()/tokenize() aren't part of Python 3" },
+  {
+    matches: code => involvesParseFeature(code),
+    reason: "parse()/tokenize() aren't part of Python 3",
+  },
 ];
 
 /**

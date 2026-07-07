@@ -117,7 +117,11 @@ function unaryMath(args: PVMLBoxType[], name: string, fn: (x: number) => number)
   return fn(x);
 }
 
-function binaryMath(args: PVMLBoxType[], name: string, fn: (a: number, b: number) => number): number {
+function binaryMath(
+  args: PVMLBoxType[],
+  name: string,
+  fn: (a: number, b: number) => number,
+): number {
   if (args.length !== 2)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 2 arguments`);
   const [a, b] = assertNumericArgs(args, name);

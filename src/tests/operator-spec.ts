@@ -25,7 +25,15 @@ import { Group } from "../stdlib/utils";
 // Type universe and representative operand literals
 // ---------------------------------------------------------------------------
 
-export type PyType = "int" | "float" | "complex" | "bool" | "str" | "NoneType" | "list" | "function";
+export type PyType =
+  | "int"
+  | "float"
+  | "complex"
+  | "bool"
+  | "str"
+  | "NoneType"
+  | "list"
+  | "function";
 
 /**
  * List literals are rejected by the chapter 1/2 validators (NoListsValidator), so at
@@ -113,7 +121,9 @@ const FRONT: Row[] = [
 
 // docs/specs/python_typing_back.tex — common to all chapters
 // (`and`, `or`, `not` and unary `-` are handled separately below)
-const BACK: Row[] = [{ ops: [">", ">=", "<", "<="], left: ["str"], right: ["str"], result: "bool" }];
+const BACK: Row[] = [
+  { ops: [">", ">=", "<", "<="], left: ["str"], right: ["str"], result: "bool" },
+];
 
 // docs/specs/python_typing_middle_1.tex — Python §1 only
 const MIDDLE_1: Row[] = [

@@ -29,7 +29,13 @@ import { Resolver } from "../resolver";
 import { RunError, VARIANT_GROUPS } from "../runner";
 import { Group } from "../stdlib/utils";
 import { makeValidatorsForChapter } from "../validator";
-import { BINARY_OPS_12, BINARY_OPS_34, literalFor, PyType, universeForChapter } from "./operator-spec";
+import {
+  BINARY_OPS_12,
+  BINARY_OPS_34,
+  literalFor,
+  PyType,
+  universeForChapter,
+} from "./operator-spec";
 import { generateMockStreams, isCloseToFloat32 } from "./utils";
 
 /** PVML has no complex-number support at all; see file header. */
@@ -137,9 +143,9 @@ function expectMatch(wanted: CseOutcome, actual: PvmlOutcome): void {
   if (wanted.kind === "value") {
     expect(actual.kind).toBe("value");
     if (actual.kind === "value") {
-      expect(pvmlValueMatches(wanted.stashType, wanted.value, actual.resultType, actual.resultValue)).toBe(
-        true,
-      );
+      expect(
+        pvmlValueMatches(wanted.stashType, wanted.value, actual.resultType, actual.resultValue),
+      ).toBe(true);
     }
   } else {
     expect(actual.kind).toBe("error");

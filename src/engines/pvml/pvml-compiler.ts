@@ -480,7 +480,9 @@ export class PVMLCompiler
     // Loading it here regardless would push a stray NEWCP value that CALLP
     // never consumes, corrupting the stack for every primitive call.
     const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
-    const functionStackEffect = isPrimitiveCallee ? 0 : this.emitLoadSymbol(callee.name).maxStackSize;
+    const functionStackEffect = isPrimitiveCallee
+      ? 0
+      : this.emitLoadSymbol(callee.name).maxStackSize;
 
     let maxArgStackSize = 0;
     for (let i = 0; i < expr.args.length; i++) {
