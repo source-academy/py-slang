@@ -134,6 +134,18 @@ function pyStr(node: StepNode, repr: boolean): string {
   return unparse(node);
 }
 
+/**
+ * The text Python's `print` writes for `args`: each argument rendered with `str()` (not `repr()`),
+ * space-separated, then a trailing newline — CPython's default `sep=' '`, `end='\n'`. The stepper does
+ * not model `print`'s keyword arguments (`sep`/`end`/`file` — the AST carries only positional args),
+ * so those defaults are fixed. The reducer records this as the output a `print(...)` contraction adds
+ * to the stepper's cumulative output panel; `print` itself still evaluates to `None` (its Python return
+ * value — see the `print` built-in below).
+ */
+export function formatPrintOutput(args: StepNode[]): string {
+  return args.map(a => pyStr(a, false)).join(" ") + "\n";
+}
+
 function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
   if (args.length < min || (max !== null && args.length > max)) {
     const want = max === null ? `at least ${min}` : min === max ? `${min}` : `${min} to ${max}`;
@@ -408,8 +420,9 @@ Object.assign(BUILTIN_FUNCTIONS, {
     return typeError("arity() argument must be a function");
   },
   print: (args: StepNode[]): StepNode => {
-    // A pure substitution view has nowhere to send console output, so `print` just yields `None`
-    // (its Python return value); the printed text is not part of the reduction being visualised.
+    // `print` evaluates to `None` (its Python return value). The text it writes is not part of the
+    // reduction itself; the reducer records it separately (via `formatPrintOutput`) so the host can
+    // show it in the stepper's cumulative output panel — see `contractCall` in `reduce.ts`.
     void args;
     return literal(null, "None");
   },
