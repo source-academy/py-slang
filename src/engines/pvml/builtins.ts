@@ -130,7 +130,7 @@ function binaryMath(
 
 /** A pair is represented as a 2-element PVMLArray, matching native Pynter's cons-array layout. */
 function pairArray(v: PVMLBoxType, fn: string): Extract<PVMLBoxType, { type: "array" }> {
-  if (!isPVMLObject(v) || v.type !== "array")
+  if (!isPVMLObject(v) || v.type !== "array" || v.elements.length !== 2)
     throw new PVMLInterpreterError(`TypeError: ${fn}() requires a pair argument`);
   return v;
 }
@@ -157,7 +157,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
       if (isPVMLObject(v) && v.type === "array") return v.elements.length;
-      throw new PVMLInterpreterError(`TypeError: object of type '${typeof v}' has no len()`);
+      throw new PVMLInterpreterError(`TypeError: object of type '${getPVMLType(v)}' has no len()`);
     }
 
     case 5: // print/display
