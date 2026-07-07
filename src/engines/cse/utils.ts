@@ -601,27 +601,6 @@ export function scanForAssignments(
   return assignments;
 }
 
-export function typeTranslator(type: Value["type"]): string {
-  switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "bool":
-      return "bool";
-    case "string":
-      return "str";
-    case "complex":
-      return "complex";
-    case "none":
-      return "NoneType";
-    case "closure":
-      return "function";
-    default:
-      return "unknown";
-  }
-}
-
 export function operandTranslator(type: string) {
   switch (type) {
     case "__py_adder":
@@ -695,9 +674,9 @@ export function evaluateForIterator(
       new TooManyPositionalArgumentsError(code, forNode.iter, "range", 3, rangeArguments, true),
     );
   }
-  const tempTokenZero = new Token(TokenType.NUMBER, "0", 0, 0, 0);
+  const tempTokenZero = new Token(TokenType.BIGINT, "0", 0, 0, 0);
   tempTokenZero.synthetic = true;
-  const tempTokenOne = new Token(TokenType.NUMBER, "1", 0, 0, 0);
+  const tempTokenOne = new Token(TokenType.BIGINT, "1", 0, 0, 0);
   tempTokenOne.synthetic = true;
   if (rangeArguments.length === 1) {
     return {
