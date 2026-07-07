@@ -5,6 +5,7 @@ export type PVMLBoxType =
   | null
   | undefined
   | PVMLClosure
+  | PVMLPrimitive
   | PVMLArray
   | PVMLIterator;
 
@@ -16,6 +17,7 @@ export enum PVMLType {
   STRING = "string",
   ARRAY = "array",
   CLOSURE = "closure",
+  PRIMITIVE = "primitive",
   ITERATOR = "iterator",
 }
 
@@ -42,8 +44,22 @@ export interface PVMLClosure {
   parentEnv: PVMLEnvironment | null;
 }
 
-/** Type guard: narrows PVMLBoxType to the three object variants. */
-export function isPVMLObject(value: PVMLBoxType): value is PVMLClosure | PVMLArray | PVMLIterator {
+/**
+ * A reference to a primitive function (e.g. `print`, `abs`) used as a
+ * first-class value rather than called directly — e.g. `is_function(print)`
+ * or `f = abs; f(-5)`. Mirrors native Pynter's "ifn" nanbox tag, which
+ * likewise represents a primitive function reference distinctly from a
+ * user-defined closure.
+ */
+export interface PVMLPrimitive {
+  type: "primitive";
+  primitiveIndex: number;
+}
+
+/** Type guard: narrows PVMLBoxType to the object variants. */
+export function isPVMLObject(
+  value: PVMLBoxType,
+): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
@@ -190,6 +206,8 @@ export function getPVMLType(value: PVMLBoxType): PVMLType {
     switch (value.type) {
       case "closure":
         return PVMLType.CLOSURE;
+      case "primitive":
+        return PVMLType.PRIMITIVE;
       case "array":
         return PVMLType.ARRAY;
       case "iterator":
