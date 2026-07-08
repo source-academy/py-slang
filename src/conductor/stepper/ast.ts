@@ -191,6 +191,24 @@ export function isEmptyList(node: StepNode): boolean {
   return node.type === "Literal" && node.value === null;
 }
 
+/**
+ * Python truthiness. Used both by `if`/ternary conditions in `reduce.ts` (which, unlike `and`/`or`/
+ * `not`, are never type-restricted to `bool`) and by the explicit `bool()` conversion in `builtins.ts`
+ * — a single shared implementation so the two can't drift apart.
+ */
+export function isTruthy(node: StepNode): boolean {
+  if (node.type === "ArrayExpression") return (node.elements as StepNode[]).length > 0;
+  if (node.type !== "Literal") return true; // function values are truthy
+  const v = node.value;
+  if (v === null || v === false) return false;
+  if (v === true) return true;
+  if (typeof v === "number") return v !== 0;
+  if (typeof v === "bigint") return v !== 0n;
+  if (typeof v === "string") return v.length > 0;
+  if (isComplexValue(v)) return v.real !== 0 || v.imag !== 0;
+  return true;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Cloning                                       */
 /* -------------------------------------------------------------------------- */

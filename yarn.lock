@@ -1610,10 +1610,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-cse-machine@npm:^0.1.0":
-  version: 0.1.0
-  resolution: "@sourceacademy/common-cse-machine@npm:0.1.0"
-  checksum: 10c0/7c31a0629e15b6d1c9d8a67228d290555003c4862e7298ef591fe4a33cb2ccc3372675d7165029af3ad47dd68b6cc116f4ca8843e5a8306c0f62531c5c01fd4a
+"@sourceacademy/common-cse-machine@npm:^0.2.0":
+  version: 0.2.0
+  resolution: "@sourceacademy/common-cse-machine@npm:0.2.0"
+  checksum: 10c0/da882e9f6f6bc3aae32c06e6f2d5de9050c21ad64b6c8bcab51427fd5817fd8ee83a53ad3c791edd3349adc4f68f1d4f438573d75f9b1741400b1247fe4089cd
   languageName: node
   linkType: hard
 
@@ -1643,7 +1643,7 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/common-cse-machine": "npm:^0.1.0"
+    "@sourceacademy/common-cse-machine": "npm:^0.2.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
     "@sourceacademy/runner-cse-machine": "npm:^1.0.0"

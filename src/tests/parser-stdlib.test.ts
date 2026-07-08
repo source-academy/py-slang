@@ -6,7 +6,7 @@ import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
-import { generateTestCases, TestCases } from "./utils";
+import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
 
 const groups = [misc, math, linkedList, list, pairmutator, stream, parser];
 
@@ -637,4 +637,28 @@ describe("Parser Stdlib Tests", () => {
   generateTestCases(parseErrorTests, 4, groups);
   generateTestCases(tokenizeTests, 4, groups);
   generateTestCases(applyTests, 4, groups);
+
+  generateNativePynterTestCases(literalTests, 4);
+  generateNativePynterTestCases(nameTests, 4);
+  generateNativePynterTestCases(binaryTests, 4);
+  generateNativePynterTestCases(unaryTests, 4);
+  generateNativePynterTestCases(boolOpTests, 4);
+  generateNativePynterTestCases(compareTests, 4);
+  generateNativePynterTestCases(conditionalTests, 4);
+  generateNativePynterTestCases(loopTests, 4);
+  generateNativePynterTestCases(functionTests, 4);
+  generateNativePynterTestCases(lambdaTests, 4);
+  generateNativePynterTestCases(applicationTests, 4);
+  generateNativePynterTestCases(assignTests, 4);
+  generateNativePynterTestCases(listTests, 4);
+  generateNativePynterTestCases(starredTests, 4);
+  generateNativePynterTestCases(controlFlowTests, 4);
+  generateNativePynterTestCases(scopeTests, 4);
+  generateNativePynterTestCases(assertTests, 4);
+  generateNativePynterTestCases(importTests, 4);
+  generateNativePynterTestCases(sequenceTests, 4);
+  generateNativePynterTestCases(nestedTests, 4);
+  generateNativePynterTestCases(parseErrorTests, 4);
+  generateNativePynterTestCases(tokenizeTests, 4);
+  generateNativePynterTestCases(applyTests, 4);
 });

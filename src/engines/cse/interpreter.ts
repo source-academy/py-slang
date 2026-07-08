@@ -851,12 +851,16 @@ const cmdEvaluators: CmdEvaluators = {
   [InstrType.RESET]: function (
     _code: string,
     _command: ResetInstr,
-    context: Context,
+    _context: Context,
     _control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    popEnvironment(context);
+    // Environment restoration is handled entirely by the paired ENVIRONMENT instruction
+    // (always pushed immediately below this RESET by the APPLICATION handler), whose while
+    // loop pops back to the caller's environment. Popping here too was redundant — it made
+    // the frame transition happen a step early, at the return statement itself, instead of
+    // at the ENVIRONMENT instruction where the CSE machine visualizer animates it.
   },
 
   [InstrType.ASSIGNMENT]: function (
@@ -1119,11 +1123,13 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(instr);
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
         const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+        token.synthetic = true;
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
       const v1Lit = generateBigIntLiteral(start.value);
       const v3Lit = generateBigIntLiteral(step.value);
       const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      plusToken.synthetic = true;
       const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
       Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));

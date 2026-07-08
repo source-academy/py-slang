@@ -1,21 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {
+  collectSnapshots,
   formatValue,
-  serializeValue,
   instrDisplayText,
   serializeControlItem,
   serializeEnvChain,
-  collectSnapshots,
+  serializeValue,
 } from "../conductor/plugins/PyCseMachinePlugin";
-import { InstrType } from "../engines/cse/types";
-import { TokenType } from "../tokenizer";
-import type { Value } from "../engines/cse/stash";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
+import type { Value } from "../engines/cse/stash";
 import { Stash } from "../engines/cse/stash";
+import { InstrType } from "../engines/cse/types";
 import { parse } from "../parser/parser-adapter";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
+import { TokenType } from "../tokenizer";
 import { PyComplexNumber } from "../types/value-types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ describe("formatValue", () => {
   });
 
   it("formats builtin function", () => {
-    expect(formatValue(builtin("abs"))).toBe("<built-in function abs>");
+    expect(formatValue(builtin("abs"))).toBe("abs");
   });
 
   it("formats short list", () => {
@@ -180,7 +180,9 @@ describe("serializeValue", () => {
 
   it("serializes builtin", () => {
     const v = serializeValue(builtin("print"));
-    expect(v.displayValue).toBe("<built-in function print>");
+    expect(v.displayValue).toBe("print");
+    expect(v.label).toBe("builtin_function_or_method");
+    expect(v.label).not.toBe("function"); // "function" is what closures get
   });
 });
 
@@ -367,6 +369,19 @@ describe("serializeControlItem", () => {
     expect((result.metadata as any)?.bodyLength).toBe(2);
   });
 
+  it("Lambda node with nested Lambda body unwraps body correctly", () => {
+    const result = serializeControlItem(
+      {
+        kind: "Lambda",
+        body: { kind: "Lambda", body: [{ kind: "Return" }] },
+      },
+      code,
+    );
+    expect((result.metadata as any)?.nodeType).toBe("ArrowFunctionExpression");
+    expect((result.metadata as any)?.bodyLength).toBe(1);
+    expect((result.metadata as any)?.bodyNodeTypes).toEqual(["ArrowFunctionExpression"]);
+  });
+
   it("FileInput node with StatementSequence body unwraps body correctly", () => {
     const result = serializeControlItem(
       {
@@ -390,6 +405,49 @@ describe("serializeControlItem", () => {
     );
     expect((result.metadata as any)?.startLine).toBe(3);
     expect((result.metadata as any)?.endLine).toBe(3);
+  });
+
+  // Regression tests for https://github.com/source-academy/py-slang/issues/228.
+  it("a real single-token node whose token is the very first token of the source renders its real text and line info", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 1, lexeme: "print" },
+        endToken: { indexInSource: 0, line: 1, lexeme: "print" },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("print");
+    expect((result.metadata as any)?.startLine).toBe(1);
+    expect((result.metadata as any)?.endLine).toBe(1);
+  });
+
+  it("a synthetic single-token node pinned to position 0 falls back to the generic KIND_LABEL, not the real text at position 0", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("var");
+    expect((result.metadata as any)?.startLine).toBeUndefined();
+  });
+
+  it("synthetic BigIntLiteral (e.g. implicit range() start/step bound) still shows its runtime value", () => {
+    const result = serializeControlItem(
+      {
+        kind: "BigIntLiteral",
+        value: 0n,
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      "for x in range(3):\n    pass\n",
+    );
+    expect(result.displayText).toBe("0");
   });
 });
 
@@ -426,6 +484,30 @@ describe("serializeEnvChain", () => {
     const globalEnv = makeEnv("g", "global");
     const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
     expect(frames[0].isOnCallStack).toBe(true);
+  });
+
+  it("carries globalNames from the closure's globalVariables", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set(["x", "y"]) };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(callFrame.globalNames).toEqual(["x", "y"]);
+  });
+
+  it("omits globalNames when the closure declares no globals", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set() };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(callFrame.globalNames).toBeUndefined();
+  });
+
+  it("omits globalNames for frames with no closure (e.g. the global frame)", () => {
+    const globalEnv = makeEnv("g", "global");
+    const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
+    expect(frames[0].globalNames).toBeUndefined();
   });
 
   it("filters __program__ from bindings", () => {
@@ -524,5 +606,41 @@ describe("collectSnapshots", () => {
     for (const snap of withLine) {
       expect(snap.currentLine).toBeGreaterThan(0);
     }
+  });
+
+  it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {
+    const snapshots = await runAndCollect(
+      `def f():
+    return 1
+
+f()`,
+    );
+
+    // The step where "return" (RESET) is about to execute: the callee frame must still be
+    // the active one — the frame transition must not have happened yet.
+    const returnStepIndex = snapshots.findIndex(s => s.control[0]?.displayText === "return");
+    expect(returnStepIndex).toBeGreaterThan(-1);
+    const returnStep = snapshots[returnStepIndex];
+    const calleeFrame = returnStep.environments.find(e => e.name === "f");
+    expect(calleeFrame).toBeDefined();
+    expect(calleeFrame!.isActive).toBe(true);
+
+    // The very next step: RESET has fired (now a no-op) and is consumed. The callee frame
+    // must still be present and active — nothing should have changed yet.
+    const afterReturn = snapshots[returnStepIndex + 1];
+    const calleeFrameAfterReturn = afterReturn.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterReturn).toBeDefined();
+    expect(calleeFrameAfterReturn!.isActive).toBe(true);
+
+    // Only once the ENVIRONMENT instruction executes does the active frame move back — the
+    // callee frame ("f") must no longer be the active one (it may still be listed, no longer
+    // on the call stack, or pruned entirely).
+    const envStepIndex = snapshots.findIndex(
+      (s, i) => i > returnStepIndex && s.control[0]?.displayText === "ENVIRONMENT",
+    );
+    expect(envStepIndex).toBeGreaterThan(returnStepIndex);
+    const afterEnvStep = snapshots[envStepIndex + 1];
+    const calleeFrameAfterEnv = afterEnvStep.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterEnv?.isActive).not.toBe(true);
   });
 });

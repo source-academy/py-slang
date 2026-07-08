@@ -3,16 +3,16 @@ import { executePrimitive } from "./builtins";
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
 import OpCodes from "./opcodes";
 import {
-  getSVMLType,
-  isSVMLObject,
-  SVMLArray,
-  SVMLBoxType,
-  SVMLClosure,
-  SVMLEnvironment,
-  SVMLIR,
-  SVMLIterator,
-  SVMLProgram,
-  SVMLType,
+  getPVMLType,
+  isPVMLObject,
+  PVMLArray,
+  PVMLBoxType,
+  PVMLClosure,
+  PVMLEnvironment,
+  PVMLIR,
+  PVMLIterator,
+  PVMLProgram,
+  PVMLType,
 } from "./types";
 
 const __DEBUG__ =
@@ -21,30 +21,30 @@ const __DEBUG__ =
 const debug: (msg: string) => void = __DEBUG__ ? (msg: string) => console.log(msg) : () => {};
 
 /**
- * TypeScript-based SVML Interpreter
+ * TypeScript-based PVML Interpreter
  *
- * This interpreter runs SVML bytecode directly without needing WASM assembly.
+ * This interpreter runs PVML bytecode directly without needing WASM assembly.
  */
 
 /**
  * Call frame for function execution
  */
 interface CallFrame {
-  closure: SVMLClosure;
-  ir: SVMLIR;
+  closure: PVMLClosure;
+  ir: PVMLIR;
   pc: number;
-  env: SVMLEnvironment;
-  stack: SVMLBoxType[];
+  env: PVMLEnvironment;
+  stack: PVMLBoxType[];
   callerFrame: CallFrame | null;
 }
 
 /**
- * SVML Interpreter
+ * PVML Interpreter
  */
-export class SVMLInterpreter {
-  private program: SVMLProgram;
+export class PVMLInterpreter {
+  private program: PVMLProgram;
   private currentFrame: CallFrame | null;
-  private globalEnv: SVMLEnvironment;
+  private globalEnv: PVMLEnvironment;
   private halted: boolean;
   private readonly onOutput: (msg: string) => void;
 
@@ -57,7 +57,7 @@ export class SVMLInterpreter {
   private maxInstructionLimit: number = 1000000;
 
   constructor(
-    program: SVMLProgram,
+    program: PVMLProgram,
     options?: {
       maxStackSize?: number;
       maxCallDepth?: number;
@@ -67,7 +67,7 @@ export class SVMLInterpreter {
   ) {
     this.program = program;
     this.currentFrame = null;
-    this.globalEnv = new SVMLEnvironment(0);
+    this.globalEnv = new PVMLEnvironment(0);
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
 
@@ -81,7 +81,7 @@ export class SVMLInterpreter {
   /**
    * Execute the program and return the result
    */
-  execute(): SVMLBoxType {
+  execute(): PVMLBoxType {
     const entryPointIndex = this.program.entryPoint;
     const entryFunction = this.program.functions[entryPointIndex];
 
@@ -89,13 +89,13 @@ export class SVMLInterpreter {
       throw new Error(`Entry point function at index ${entryPointIndex} not found`);
     }
 
-    const entryClosure: SVMLClosure = {
+    const entryClosure: PVMLClosure = {
       type: "closure",
       functionIndex: entryPointIndex,
       parentEnv: null,
     };
 
-    const entryEnv = new SVMLEnvironment(entryFunction.envSize, null);
+    const entryEnv = new PVMLEnvironment(entryFunction.envSize, null);
 
     this.currentFrame = {
       closure: entryClosure,
@@ -116,7 +116,7 @@ export class SVMLInterpreter {
   /**
    * Main interpreter loop — dispatch from typed arrays
    */
-  private run(): SVMLBoxType {
+  private run(): PVMLBoxType {
     while (!this.halted && this.currentFrame) {
       // Safety check
       if (this.instructionCount >= this.maxInstructionLimit) {
@@ -140,7 +140,7 @@ export class SVMLInterpreter {
 
       if (__DEBUG__)
         debug(
-          `PC=${pc} | ${OpCodes[op] || `UNKNOWN(${op})`} ${a1} ${a2} | Stack: [${frame.stack.map(v => JSON.stringify(SVMLInterpreter.toJSValue(v))).join(", ")}]`,
+          `PC=${pc} | ${OpCodes[op] || `UNKNOWN(${op})`} ${a1} ${a2} | Stack: [${frame.stack.map(v => JSON.stringify(PVMLInterpreter.toJSValue(v))).join(", ")}]`,
         );
 
       switch (op) {
@@ -196,12 +196,12 @@ export class SVMLInterpreter {
         case OpCodes.ADDG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
 
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             this.push((left as number) + (right as number));
-          } else if (leftType === SVMLType.STRING && rightType === SVMLType.STRING) {
+          } else if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
             this.push((left as string) + (right as string));
           } else {
             throw new UnsupportedOperandTypeError("+", leftType, rightType);
@@ -217,10 +217,10 @@ export class SVMLInterpreter {
         case OpCodes.SUBG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
 
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             this.push((left as number) - (right as number));
           } else {
             throw new UnsupportedOperandTypeError("-", leftType, rightType);
@@ -236,10 +236,10 @@ export class SVMLInterpreter {
         case OpCodes.MULG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
 
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             this.push((left as number) * (right as number));
           } else {
             throw new UnsupportedOperandTypeError("*", leftType, rightType);
@@ -255,10 +255,10 @@ export class SVMLInterpreter {
         case OpCodes.DIVG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
 
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             if ((right as number) === 0) throw new ZeroDivisionError("division by zero");
             this.push((left as number) / (right as number));
           } else {
@@ -276,10 +276,10 @@ export class SVMLInterpreter {
         case OpCodes.FLOORDIVG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
 
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             if ((right as number) === 0) throw new ZeroDivisionError("division by zero");
             this.push(Math.floor((left as number) / (right as number)));
           } else {
@@ -297,9 +297,9 @@ export class SVMLInterpreter {
         case OpCodes.MODG: {
           const right = this.pop();
           const left = this.pop();
-          const leftType = getSVMLType(left);
-          const rightType = getSVMLType(right);
-          if (leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER) {
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
+          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
             const a = left as number;
             const b = right as number;
             if (b === 0) throw new ZeroDivisionError("integer modulo by zero");
@@ -319,8 +319,8 @@ export class SVMLInterpreter {
         // Unary operations
         case OpCodes.NEGG: {
           const operand = this.pop();
-          const operandType = getSVMLType(operand);
-          if (operandType === SVMLType.NUMBER) {
+          const operandType = getPVMLType(operand);
+          if (operandType === PVMLType.NUMBER) {
             this.push(-(operand as number));
           } else {
             throw new UnsupportedOperandTypeError("-", operandType);
@@ -335,7 +335,7 @@ export class SVMLInterpreter {
         case OpCodes.NOTG: {
           const operand = this.pop();
           if (typeof operand !== "boolean") {
-            throw new UnsupportedOperandTypeError("not", getSVMLType(operand));
+            throw new UnsupportedOperandTypeError("not", getPVMLType(operand));
           }
           this.push(!operand);
           break;
@@ -428,6 +428,10 @@ export class SVMLInterpreter {
           this.createClosure(a1);
           break;
 
+        case OpCodes.NEWCP:
+          this.push({ type: "primitive", primitiveIndex: a1 });
+          break;
+
         case OpCodes.CALL:
           this.call(a1, false);
           break;
@@ -477,9 +481,9 @@ export class SVMLInterpreter {
         // Iterator opcodes
         case OpCodes.NEWITER: {
           const iterable = this.pop();
-          if (isSVMLObject(iterable)) {
+          if (isPVMLObject(iterable)) {
             if (iterable.type === "array") {
-              const iter: SVMLIterator = {
+              const iter: PVMLIterator = {
                 type: "iterator",
                 kind: "list",
                 array: iterable,
@@ -498,9 +502,9 @@ export class SVMLInterpreter {
         }
 
         case OpCodes.FOR_ITER: {
-          const iter = this.peek() as SVMLIterator;
+          const iter = this.peek() as PVMLIterator;
           let done = false;
-          let nextValue: SVMLBoxType = undefined;
+          let nextValue: PVMLBoxType = undefined;
 
           if (iter.kind === "range") {
             const going = iter.step! > 0 ? iter.current! < iter.stop! : iter.current! > iter.stop!;
@@ -556,7 +560,7 @@ export class SVMLInterpreter {
   // Stack Operations
   // ========================================================================
 
-  private push(value: SVMLBoxType): void {
+  private push(value: PVMLBoxType): void {
     if (!this.currentFrame) {
       throw new Error("No current frame for push");
     }
@@ -566,7 +570,7 @@ export class SVMLInterpreter {
     this.currentFrame.stack.push(value);
   }
 
-  private pop(): SVMLBoxType {
+  private pop(): PVMLBoxType {
     if (!this.currentFrame) {
       throw new Error("No current frame for pop");
     }
@@ -576,11 +580,11 @@ export class SVMLInterpreter {
       throw new Error("Stack underflow");
     }
     const value = this.currentFrame.stack.pop()!;
-    if (__DEBUG__) debug(`  Popped: ${JSON.stringify(SVMLInterpreter.toJSValue(value))}`);
+    if (__DEBUG__) debug(`  Popped: ${JSON.stringify(PVMLInterpreter.toJSValue(value))}`);
     return value;
   }
 
-  private peek(offset: number = 0): SVMLBoxType {
+  private peek(offset: number = 0): PVMLBoxType {
     if (!this.currentFrame) {
       throw new Error("No current frame for peek");
     }
@@ -639,11 +643,11 @@ export class SVMLInterpreter {
   private genericOrderedComparison(op: "<" | ">" | "<=" | ">="): void {
     const right = this.pop();
     const left = this.pop();
-    const leftType = getSVMLType(left);
-    const rightType = getSVMLType(right);
+    const leftType = getPVMLType(left);
+    const rightType = getPVMLType(right);
 
-    const bothNumbers = leftType === SVMLType.NUMBER && rightType === SVMLType.NUMBER;
-    const bothStrings = leftType === SVMLType.STRING && rightType === SVMLType.STRING;
+    const bothNumbers = leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER;
+    const bothStrings = leftType === PVMLType.STRING && rightType === PVMLType.STRING;
     if (!bothNumbers && !bothStrings) {
       throw new UnsupportedOperandTypeError(op, leftType, rightType);
     }
@@ -674,7 +678,7 @@ export class SVMLInterpreter {
     }
     const value = this.pop();
     if (__DEBUG__)
-      debug(`[STLG] Storing to slot ${slot}: ${JSON.stringify(SVMLInterpreter.toJSValue(value))}`);
+      debug(`[STLG] Storing to slot ${slot}: ${JSON.stringify(PVMLInterpreter.toJSValue(value))}`);
     this.currentFrame.env.set(slot, value);
   }
 
@@ -689,7 +693,7 @@ export class SVMLInterpreter {
     if (__DEBUG__) debug(`[LDPG] Parent env has ${parentEnv.getSize()} slots`);
     const value = parentEnv.get(slot);
     if (__DEBUG__)
-      debug(`[LDPG] Loaded value: ${JSON.stringify(SVMLInterpreter.toJSValue(value))}`);
+      debug(`[LDPG] Loaded value: ${JSON.stringify(PVMLInterpreter.toJSValue(value))}`);
     this.push(value);
   }
 
@@ -716,7 +720,7 @@ export class SVMLInterpreter {
   private branchIfTrue(offset: number): void {
     const condition = this.pop();
     if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getSVMLType(condition));
+      throw new UnsupportedOperandTypeError("branch", getPVMLType(condition));
     }
     if (condition) {
       this.branch(offset);
@@ -726,7 +730,7 @@ export class SVMLInterpreter {
   private branchIfFalse(offset: number): void {
     const condition = this.pop();
     if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getSVMLType(condition));
+      throw new UnsupportedOperandTypeError("branch", getPVMLType(condition));
     }
     if (!condition) {
       this.branch(offset);
@@ -742,7 +746,7 @@ export class SVMLInterpreter {
       throw new Error("No current frame");
     }
 
-    const closure: SVMLClosure = {
+    const closure: PVMLClosure = {
       type: "closure",
       functionIndex,
       parentEnv: this.currentFrame.env,
@@ -767,7 +771,7 @@ export class SVMLInterpreter {
       );
 
     // Stack layout: [... func arg1 arg2 ... argN] with argN on top
-    const args = new Array<SVMLBoxType>(numArgs);
+    const args = new Array<PVMLBoxType>(numArgs);
     for (let i = numArgs - 1; i >= 0; i--) {
       if (this.currentFrame?.stack.length === 0) {
         throw new Error(`Stack underflow while popping argument ${i}/${numArgs}. Stack was empty.`);
@@ -789,11 +793,20 @@ export class SVMLInterpreter {
 
     const func = this.pop();
     if (__DEBUG__)
-      debug(`[CALL] Popped function: ${JSON.stringify(SVMLInterpreter.toJSValue(func))}`);
+      debug(`[CALL] Popped function: ${JSON.stringify(PVMLInterpreter.toJSValue(func))}`);
 
-    if (!isSVMLObject(func) || func.type !== "closure") {
+    // A primitive referenced as a value (NEWCP) rather than called directly
+    // — e.g. `f = abs; f(-5)` — has no function-table entry/frame of its
+    // own; dispatch it the same way CALLP/CALLTP do.
+    if (isPVMLObject(func) && func.type === "primitive") {
+      const result = executePrimitive(func.primitiveIndex, args, this.onOutput);
+      this.push(result);
+      return;
+    }
+
+    if (!isPVMLObject(func) || func.type !== "closure") {
       throw new Error(
-        `Cannot call non-closure value: ${JSON.stringify(SVMLInterpreter.toJSValue(func))}`,
+        `Cannot call non-closure value: ${JSON.stringify(PVMLInterpreter.toJSValue(func))}`,
       );
     }
 
@@ -805,11 +818,11 @@ export class SVMLInterpreter {
       throw new Error(`Function expects ${funcDef.numArgs} arguments but got ${numArgs}`);
     }
 
-    const newEnv = new SVMLEnvironment(funcDef.envSize, closure.parentEnv);
+    const newEnv = new PVMLEnvironment(funcDef.envSize, closure.parentEnv);
     for (let i = 0; i < numArgs; i++) {
       newEnv.set(i, args[i]);
       if (__DEBUG__)
-        debug(`[CALL] Set env slot ${i} = ${JSON.stringify(SVMLInterpreter.toJSValue(args[i]))}`);
+        debug(`[CALL] Set env slot ${i} = ${JSON.stringify(PVMLInterpreter.toJSValue(args[i]))}`);
     }
 
     if (__DEBUG__)
@@ -841,7 +854,7 @@ export class SVMLInterpreter {
     if (__DEBUG__) debug(`[CALLP] primitiveIndex=${primitiveIndex}, numArgs=${numArgs}`);
 
     // Primitives pop N arguments only — no function object on the stack
-    const args = new Array<SVMLBoxType>(numArgs);
+    const args = new Array<PVMLBoxType>(numArgs);
     for (let i = numArgs - 1; i >= 0; i--) {
       if (this.currentFrame?.stack.length === 0) {
         throw new Error(`Stack underflow in primitive call while popping argument ${i}/${numArgs}`);
@@ -851,14 +864,14 @@ export class SVMLInterpreter {
 
     if (__DEBUG__)
       debug(
-        `[CALLP] Calling primitive ${primitiveIndex} with args: ${JSON.stringify(args.map(a => SVMLInterpreter.toJSValue(a)))}`,
+        `[CALLP] Calling primitive ${primitiveIndex} with args: ${JSON.stringify(args.map(a => PVMLInterpreter.toJSValue(a)))}`,
       );
 
     const result = executePrimitive(primitiveIndex, args, this.onOutput);
     this.push(result);
 
     if (__DEBUG__)
-      debug(`[CALLP] Primitive returned: ${JSON.stringify(SVMLInterpreter.toJSValue(result))}`);
+      debug(`[CALLP] Primitive returned: ${JSON.stringify(PVMLInterpreter.toJSValue(result))}`);
   }
 
   private return(): void {
@@ -870,7 +883,7 @@ export class SVMLInterpreter {
     const returnValue = this.pop();
 
     if (__DEBUG__)
-      debug(`[RETG] Returning value: ${JSON.stringify(SVMLInterpreter.toJSValue(returnValue))}`);
+      debug(`[RETG] Returning value: ${JSON.stringify(PVMLInterpreter.toJSValue(returnValue))}`);
 
     const callerFrame = this.currentFrame.callerFrame;
 
@@ -895,10 +908,11 @@ export class SVMLInterpreter {
   // ========================================================================
 
   private createArray(): void {
-    const size = this.pop() as number;
-    const arr: SVMLArray = {
+    // No size operand: native Pynter's NEWA (op_new_a) always creates an
+    // empty, auto-growing array and never pops one — see visitListExpr.
+    const arr: PVMLArray = {
       type: "array",
-      elements: new Array(size).fill(undefined),
+      elements: [],
     };
     this.push(arr);
   }
@@ -907,15 +921,13 @@ export class SVMLInterpreter {
     const index = this.pop() as number;
     const arr = this.pop();
 
-    if (!isSVMLObject(arr) || arr.type !== "array") {
+    if (!isPVMLObject(arr) || arr.type !== "array") {
       throw new Error("Cannot index non-array value");
     }
 
-    if (index < 0 || index >= arr.elements.length) {
-      throw new Error(`Array index ${index} out of bounds (length: ${arr.elements.length})`);
-    }
-
-    this.push(arr.elements[index]);
+    // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
+    // fault, it yields undefined.
+    this.push(index >= 0 && index < arr.elements.length ? arr.elements[index] : undefined);
   }
 
   private storeArrayElement(): void {
@@ -923,14 +935,16 @@ export class SVMLInterpreter {
     const index = this.pop() as number;
     const arr = this.pop();
 
-    if (!isSVMLObject(arr) || arr.type !== "array") {
+    if (!isPVMLObject(arr) || arr.type !== "array") {
       throw new Error("Cannot index non-array value");
     }
 
-    if (index < 0 || index >= arr.elements.length) {
-      throw new Error(`Array index ${index} out of bounds (length: ${arr.elements.length})`);
+    if (index < 0) {
+      throw new Error(`Array index ${index} out of bounds`);
     }
 
+    // Mirrors native Pynter's siarray_put: writing past the end grows the
+    // array (leaving a gap of `undefined`s) rather than faulting.
     arr.elements[index] = value;
   }
 
@@ -941,13 +955,14 @@ export class SVMLInterpreter {
   /**
    * Convert runtime value to JavaScript value for display
    */
-  static toJSValue(value: SVMLBoxType): unknown {
+  static toJSValue(value: PVMLBoxType): unknown {
     if (value === null || value === undefined) return value;
     if (typeof value === "number" || typeof value === "boolean" || typeof value === "string")
       return value;
-    if (isSVMLObject(value)) {
+    if (isPVMLObject(value)) {
       if (value.type === "closure") return `<closure:${value.functionIndex}>`;
-      if (value.type === "array") return value.elements.map(e => SVMLInterpreter.toJSValue(e));
+      if (value.type === "primitive") return `<primitive:${value.primitiveIndex}>`;
+      if (value.type === "array") return value.elements.map(e => PVMLInterpreter.toJSValue(e));
       if (value.type === "iterator") return `<iterator>`;
     }
     return String(value);

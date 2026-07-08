@@ -1,5 +1,5 @@
 import { OpCodes } from "./opcodes";
-import { SVMLProgram } from "./types";
+import { PVMLProgram } from "./types";
 
 const OPCODES_STR = {
   [OpCodes.NOP]: "NOP   ",
@@ -95,7 +95,7 @@ export function getName(op: number) {
 }
 
 // pretty-print the program
-export function stringifyProgram(P: SVMLProgram) {
+export function stringifyProgram(P: PVMLProgram) {
   let programStr = "";
   programStr += "Entry function: " + P.entryPoint + "\n";
   for (let i = 0; i < P.functions.length; i++) {

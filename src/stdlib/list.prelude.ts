@@ -1,15 +1,22 @@
 export default `
 def equal(xs, ys):
+    def as_num(v):
+        if is_boolean(v):
+            if v:
+                return 1
+            else:
+                return 0
+        else:
+            return v
     if is_pair(xs):
-        return (is_pair(ys) and 
-                equal(head(xs), head(ys)) and 
+        return (is_pair(ys) and
+                equal(head(xs), head(ys)) and
                 equal(tail(xs), tail(ys)))
     elif is_none(xs):
         return is_none(ys)
-    elif is_integer(xs) or is_float(xs):
-        return (is_integer(ys) or is_float(ys)) and xs == ys
-    elif is_boolean(xs):
-        return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
+    elif is_integer(xs) or is_float(xs) or is_complex(xs) or is_boolean(xs):
+        return ((is_integer(ys) or is_float(ys) or is_complex(ys) or is_boolean(ys)) and
+                as_num(xs) == as_num(ys))
     elif is_string(xs):
         return is_string(ys) and xs == ys
     elif is_function(xs):
