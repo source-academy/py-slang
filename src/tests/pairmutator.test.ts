@@ -226,5 +226,7 @@ result`,
   };
 
   generateTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
-  generateNativePynterTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
+  // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
+  // programs, so run them there rather than at their nominal §2.
+  generateNativePynterTestCases(pairmutatorTests, 3, [misc, math, linkedList, pairmutator, stream]);
 });

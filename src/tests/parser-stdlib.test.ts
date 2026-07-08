@@ -638,27 +638,30 @@ describe("Parser Stdlib Tests", () => {
   generateTestCases(tokenizeTests, 4, groups);
   generateTestCases(applyTests, 4, groups);
 
-  generateNativePynterTestCases(literalTests, 4);
-  generateNativePynterTestCases(nameTests, 4);
-  generateNativePynterTestCases(binaryTests, 4);
-  generateNativePynterTestCases(unaryTests, 4);
-  generateNativePynterTestCases(boolOpTests, 4);
-  generateNativePynterTestCases(compareTests, 4);
-  generateNativePynterTestCases(conditionalTests, 4);
-  generateNativePynterTestCases(loopTests, 4);
-  generateNativePynterTestCases(functionTests, 4);
-  generateNativePynterTestCases(lambdaTests, 4);
-  generateNativePynterTestCases(applicationTests, 4);
-  generateNativePynterTestCases(assignTests, 4);
-  generateNativePynterTestCases(listTests, 4);
-  generateNativePynterTestCases(starredTests, 4);
-  generateNativePynterTestCases(controlFlowTests, 4);
-  generateNativePynterTestCases(scopeTests, 4);
-  generateNativePynterTestCases(assertTests, 4);
-  generateNativePynterTestCases(importTests, 4);
-  generateNativePynterTestCases(sequenceTests, 4);
-  generateNativePynterTestCases(nestedTests, 4);
-  generateNativePynterTestCases(parseErrorTests, 4);
-  generateNativePynterTestCases(tokenizeTests, 4);
-  generateNativePynterTestCases(applyTests, 4);
+  // Pynter only supports Python §3 (see pynter/README.md), unlike the CSE
+  // sweep above (§4) — still valid §3 programs where they don't use parse()/
+  // tokenize() (parseErrorTests/tokenizeTests are skip-gated for that reason).
+  generateNativePynterTestCases(literalTests, 3);
+  generateNativePynterTestCases(nameTests, 3);
+  generateNativePynterTestCases(binaryTests, 3);
+  generateNativePynterTestCases(unaryTests, 3);
+  generateNativePynterTestCases(boolOpTests, 3);
+  generateNativePynterTestCases(compareTests, 3);
+  generateNativePynterTestCases(conditionalTests, 3);
+  generateNativePynterTestCases(loopTests, 3);
+  generateNativePynterTestCases(functionTests, 3);
+  generateNativePynterTestCases(lambdaTests, 3);
+  generateNativePynterTestCases(applicationTests, 3);
+  generateNativePynterTestCases(assignTests, 3);
+  generateNativePynterTestCases(listTests, 3);
+  generateNativePynterTestCases(starredTests, 3);
+  generateNativePynterTestCases(controlFlowTests, 3);
+  generateNativePynterTestCases(scopeTests, 3);
+  generateNativePynterTestCases(assertTests, 3);
+  generateNativePynterTestCases(importTests, 3);
+  generateNativePynterTestCases(sequenceTests, 3);
+  generateNativePynterTestCases(nestedTests, 3);
+  generateNativePynterTestCases(parseErrorTests, 3);
+  generateNativePynterTestCases(tokenizeTests, 3);
+  generateNativePynterTestCases(applyTests, 3);
 });

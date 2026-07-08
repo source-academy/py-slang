@@ -3,12 +3,18 @@
  *
  * Reuses that suite's spec tables/type universe (see operator-spec.ts; the
  * human source of truth is still the four docs/specs/python_typing_*.tex
- * fragments) and sweeps the same operator × type × type cross product, at
- * all four chapters, through the native Pynter `runner` binary instead of
- * the CSE machine. For each combination, the CSE machine's own result is
- * computed fresh and used as the expected value — so this pins native Pynter
- * against the *actual* reference implementation, not a second hand-written
- * copy of it that could drift.
+ * fragments) and sweeps the same operator × type × type cross product,
+ * through the native Pynter `runner` binary instead of the CSE machine. For
+ * each combination, the CSE machine's own result is computed fresh and used
+ * as the expected value — so this pins native Pynter against the *actual*
+ * reference implementation, not a second hand-written copy of it that could
+ * drift.
+ *
+ * Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md):
+ * it implements that chapter's semantics unconditionally, with no runtime
+ * notion of "chapter" to gate narrower/wider rules for §1/§2/§4. So unlike
+ * operator-conformance.test.ts (which sweeps all four chapters against the
+ * CSE machine), this file only ever exercises §3.
  *
  * One PVML-specific carve-out: `complex` is dropped from the type universe
  * entirely. PVMLCompiler.visitComplexExpr rejects complex literals outright
@@ -155,7 +161,7 @@ function expectMatch(wanted: CseOutcome, actual: PvmlOutcome): void {
 const pynterPath = process.env.PYNTER_RUNNER_PATH;
 const describeBlock = pynterPath ? describe : describe.skip;
 
-for (const chapter of [1, 2, 3, 4]) {
+for (const chapter of [3]) {
   describeBlock(`[pvml/pynter] Operator conformance at Python §${chapter}`, () => {
     const ops = chapter <= 2 ? BINARY_OPS_12 : BINARY_OPS_34;
     const universe = pvmlUniverseForChapter(chapter);
