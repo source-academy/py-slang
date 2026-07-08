@@ -13,7 +13,7 @@ import { Token, TokenType } from "../../tokenizer";
 import { isStatementSequence } from "./closure";
 import { Context } from "./context";
 import { Control, ControlItem } from "./control";
-import { currentEnvironment, Environment } from "./environment";
+import { currentEnvironment, Environment, UNASSIGNED } from "./environment";
 import { AssertionError, handleRuntimeError } from "./error";
 
 export function getProgramEnvironment(context: Context): Environment | null {
@@ -274,35 +274,30 @@ export function pyDefineVariable(
 
 export function pyGetVariable(code: string, context: Context, name: string, node: Node): Value {
   const env = currentEnvironment(context);
-  if (env.closure && env.closure.localVariables.has(name)) {
-    if (!env.head.hasOwnProperty(name)) {
-      handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable));
-    }
-  }
 
+  // Every local of a function frame is preallocated (as UNASSIGNED) by createEnvironment
+  // at CALL time, so a name owned by some frame on the chain is always found there — as
+  // either a real value or the UNASSIGNED sentinel — before the walk can reach an
+  // unrelated binding of the same name further out (e.g. a global). This is what makes
+  // reads of the frame that's still executing raise UnboundLocalError, and reads of an
+  // enclosing frame (an implicit closure read, no `nonlocal` needed) raise the
+  // "free variable" error, instead of both silently falling through to an outer scope.
   let currentEnv: Environment | null = env;
   while (currentEnv) {
     if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
-      return currentEnv.head[name];
-    } else {
-      currentEnv = currentEnv.tail;
+      const value = currentEnv.head[name];
+      if (value === UNASSIGNED) {
+        if (currentEnv === env) {
+          handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable));
+        }
+        handleRuntimeError(
+          context,
+          new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
+        );
+      }
+      return value;
     }
-  }
-
-  // Not bound anywhere in the chain — but it may still be a legitimate implicit closure
-  // read of an enclosing function's own local (no `nonlocal` needed for reads), whose
-  // binding construct just hasn't executed yet (e.g. a `def`/assignment that appears later
-  // in that enclosing scope's body). Distinguish this from a genuinely undefined name, the
-  // same way pyGetNonlocalVariable already does for explicit `nonlocal` targets.
-  let ancestorEnv: Environment | null = env.tail;
-  while (ancestorEnv) {
-    if (ancestorEnv.closure && ancestorEnv.closure.localVariables.has(name)) {
-      handleRuntimeError(
-        context,
-        new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
-      );
-    }
-    ancestorEnv = ancestorEnv.tail;
+    currentEnv = currentEnv.tail;
   }
 
   if (context.nativeStorage.builtins.has(name)) {
@@ -319,10 +314,13 @@ export function pyGetGlobalVariable(
   name: string,
   node: Node,
 ): Value {
+  // The global/module frame is never preallocated with UNASSIGNED locals (per the issue:
+  // "only the global environment supports dynamic allocation"), so a bound property here
+  // is always a real value.
   let currentEnv: Environment | null = getProgramEnvironment(context);
   while (currentEnv) {
     if (Object.prototype.hasOwnProperty.call(currentEnv.head, name)) {
-      return currentEnv.head[name];
+      return currentEnv.head[name] as Value;
     }
     currentEnv = currentEnv.tail;
   }
@@ -363,14 +361,20 @@ export function pyGetNonlocalVariable(
 ): Value {
   const owningEnv = findNonlocalOwningEnvironment(context, name);
   if (owningEnv) {
-    if (Object.prototype.hasOwnProperty.call(owningEnv.head, name)) {
-      return owningEnv.head[name];
+    // owningEnv was found via closure.localVariables, so createEnvironment preallocated
+    // `name` in its head — either as a real value or as UNASSIGNED.
+    const value = owningEnv.head[name];
+    if (value === UNASSIGNED) {
+      // `name` is a free variable captured from an enclosing scope (via `nonlocal`), not a
+      // local of the *current* function — CPython raises NameError with "free variable ...
+      // in enclosing scope" wording here, distinct from UnboundLocalError (which is for a
+      // name that's local to the function actually doing the reading).
+      handleRuntimeError(
+        context,
+        new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
+      );
     }
-    // `name` is a free variable captured from an enclosing scope (via `nonlocal`), not a
-    // local of the *current* function — CPython raises NameError with "free variable ...
-    // in enclosing scope" wording here, distinct from UnboundLocalError (which is for a
-    // name that's local to the function actually doing the reading).
-    handleRuntimeError(context, new FreeVariableUnboundError(code, name, node as ExprNS.Variable));
+    return value;
   }
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
