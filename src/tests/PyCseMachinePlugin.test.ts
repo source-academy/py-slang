@@ -100,7 +100,7 @@ describe("formatValue", () => {
   });
 
   it("formats builtin function", () => {
-    expect(formatValue(builtin("abs"))).toBe("<built-in function abs>");
+    expect(formatValue(builtin("abs"))).toBe("abs");
   });
 
   it("formats short list", () => {
@@ -180,7 +180,9 @@ describe("serializeValue", () => {
 
   it("serializes builtin", () => {
     const v = serializeValue(builtin("print"));
-    expect(v.displayValue).toBe("<built-in function print>");
+    expect(v.displayValue).toBe("print");
+    expect(v.label).toBe("builtin_function_or_method");
+    expect(v.label).not.toBe("function"); // "function" is what closures get
   });
 });
 
@@ -404,6 +406,49 @@ describe("serializeControlItem", () => {
     expect((result.metadata as any)?.startLine).toBe(3);
     expect((result.metadata as any)?.endLine).toBe(3);
   });
+
+  // Regression tests for https://github.com/source-academy/py-slang/issues/228.
+  it("a real single-token node whose token is the very first token of the source renders its real text and line info", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 1, lexeme: "print" },
+        endToken: { indexInSource: 0, line: 1, lexeme: "print" },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("print");
+    expect((result.metadata as any)?.startLine).toBe(1);
+    expect((result.metadata as any)?.endLine).toBe(1);
+  });
+
+  it("a synthetic single-token node pinned to position 0 falls back to the generic KIND_LABEL, not the real text at position 0", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("var");
+    expect((result.metadata as any)?.startLine).toBeUndefined();
+  });
+
+  it("synthetic BigIntLiteral (e.g. implicit range() start/step bound) still shows its runtime value", () => {
+    const result = serializeControlItem(
+      {
+        kind: "BigIntLiteral",
+        value: 0n,
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      "for x in range(3):\n    pass\n",
+    );
+    expect(result.displayText).toBe("0");
+  });
 });
 
 // ── serializeEnvChain ─────────────────────────────────────────────────────────
@@ -561,6 +606,30 @@ describe("collectSnapshots", () => {
     for (const snap of withLine) {
       expect(snap.currentLine).toBeGreaterThan(0);
     }
+  });
+
+  // Regression test for https://github.com/source-academy/py-slang/issues/233.
+  it("currentLine never collapses to 0 during a for/range() loop's synthetic bookkeeping steps", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    for (const snap of snapshots) {
+      expect(snap.currentLine).not.toBe(0);
+    }
+    // Once the loop body has run at least once, currentLine should have reached line 2
+    // (print(x)) rather than getting stuck on line 1 forever.
+    expect(snapshots.some(s => s.currentLine === 2)).toBe(true);
+  });
+
+  it("currentLine alternates between the for-line and the body line across iterations, not stuck on one", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    const lines = snapshots.map(s => s.currentLine);
+    // Collapse consecutive duplicates: [1,1,1,2,2,1,1,2,2] -> [1,2,1,2].
+    const transitions = lines.filter((line, i) => line !== lines[i - 1]);
+    // The loop's per-iteration bookkeeping (implicit range() bounds, condition re-check,
+    // increment) is logically part of the for-statement (line 1), so currentLine should
+    // return there after each body execution (line 2) instead of getting stuck on
+    // whichever line last had a "real" (non-synthetic) node.
+    expect(transitions.filter(l => l === 1).length).toBeGreaterThan(1);
+    expect(transitions.filter(l => l === 2).length).toBeGreaterThan(1);
   });
 
   it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {

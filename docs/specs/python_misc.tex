@@ -62,7 +62,11 @@ names are provided by the MISC library:
     The evaluation of any call of \texttt{error} aborts the running program immediately.
 
   \item
-    \verb#arity#\texttt{(f)}: \textit{primitive}, 
+    \verb#breakpoint#\texttt{()}: \textit{primitive}, evaluates to the \texttt{None} value with no
+    effect on the program (the analogue of JavaScript's \texttt{debugger;} statement). In the stepper
+    it additionally marks a breakpoint that the breakpoint navigation can jump to.
+  \item
+    \verb#arity#\texttt{(f)}: \textit{primitive},
     takes in a function \texttt{f} and returns the minimum number of parameters that \texttt{f} can accept.
 
   \item

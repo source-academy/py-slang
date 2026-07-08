@@ -77,6 +77,10 @@ export interface ReduceResult {
    * `contractCall`). The driver appends it to the running output shown from the *after* step onward, so
    * a `print`'s text first appears on its "Ran print" step. `undefined` for every other contraction. */
   output?: string;
+  /** Whether this contraction is a `breakpoint()` statement (see `stepHead`'s `ExpressionStatement`
+   * case) — the driver's cue to flag the *before* step as the host's breakpoint-navigation target,
+   * independent of the redex node's actual type. `undefined`/falsy for every other contraction. */
+  isBreakpoint?: boolean;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -715,6 +719,8 @@ type HeadOutcome =
       // Text this step writes to the program's output (only a `print(...)` reduced inside the head
       // produces any — see `ReduceResult.output`); propagated to the `ReduceResult` for the driver.
       output?: string;
+      // Whether this step is a `breakpoint()` statement; propagated to `ReduceResult.isBreakpoint`.
+      isBreakpoint?: boolean;
     }
   | { kind: "finished-expression" } // head is a fully-evaluated `ExpressionStatement` (a value)
   | { kind: "return" } //              head is a `ReturnStatement` (exits a function body)
@@ -731,6 +737,33 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
   switch (head.type) {
     case "ExpressionStatement": {
       const expr = head.expression as StepNode;
+      // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op
+      // statement (like `pass`) that also marks a step the host's breakpoint navigation (the
+      // double-arrow) can jump to. Detected here against the *current*, already-substituted tree — a
+      // zero-arg call whose callee is (by now) literally the built-in identifier `breakpoint` —
+      // instead of the student's original syntax, so it behaves like every other built-in: reached
+      // directly (`breakpoint()`) or via aliasing (`bp = breakpoint; bp()`) is indistinguishable, just
+      // as `p = print; p(1)` already is. This only matches when the call is the *whole* of a bare
+      // statement; used any other way (`x = breakpoint()`, nested in a larger expression, passed
+      // around) it falls through to `reduceExpr` below and reduces as an ordinary built-in call
+      // yielding `None`, matching Python's real return value.
+      if (
+        expr.type === "CallExpression" &&
+        (expr.callee as StepNode).type === "Identifier" &&
+        (expr.callee as StepNode).name === "breakpoint" &&
+        (expr.arguments as StepNode[]).length === 0
+      ) {
+        return {
+          kind: "step",
+          newBody: rest,
+          preRedex: head,
+          postRedex: head,
+          postNewBody: [head, ...rest],
+          explanation: "Evaluated breakpoint statement",
+          beforeExplanation: "Evaluating breakpoint statement",
+          isBreakpoint: true,
+        };
+      }
       const reduced = reduceExpr(expr);
       if (reduced) {
         return {
@@ -744,6 +777,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
+          isBreakpoint: reduced.isBreakpoint,
         };
       }
       // A finished expression statement is a value to discard (or the program's result); one that
@@ -837,6 +871,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
+          isBreakpoint: reduced.isBreakpoint,
         };
       }
       const truthy = isTruthy(head.test as StepNode);
@@ -883,6 +918,7 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
+        isBreakpoint: outcome.isBreakpoint,
       };
     case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
@@ -946,6 +982,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
+        isBreakpoint: outcome.isBreakpoint,
       };
     case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a
