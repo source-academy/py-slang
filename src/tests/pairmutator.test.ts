@@ -226,5 +226,5 @@ result`,
   };
 
   generateTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
-  generateNativePynterTestCases(pairmutatorTests, 2);
+  generateNativePynterTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
 });

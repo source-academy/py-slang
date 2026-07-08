@@ -12,8 +12,8 @@ describe("PVML E2E", () => {
   const functionTests: PVMLTestCases = {
     "simple calls": [
       ["def add(x, y):\n    return x + y\nadd(3, 4)", 7, null],
-      ["def noop():\n    pass\nnoop()", undefined, null],
-      ["def f():\n    return\nf()", undefined, null],
+      ["def noop():\n    pass\nnoop()", null, null],
+      ["def f():\n    return\nf()", null, null],
     ],
     "nested and higher-order": [
       [
