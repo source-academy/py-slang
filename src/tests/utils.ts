@@ -6,9 +6,10 @@ import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
-import { Resolver } from "../resolver";
+import { analyzeWithEnvironments, Resolver } from "../resolver";
 import { RunError } from "../runner";
 import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
@@ -285,56 +286,148 @@ export type PVMLTestExpectedValue = number | boolean | string | null | undefined
  */
 export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
+/** Reasons a test case is skipped for the PVML compiler + PVMLInterpreter pathway,
+ * checked in order — mirrors NATIVE_PYNTER_SKIP_REASONS below, for the same
+ * reason: a case that's genuinely out of this pathway's scope should be a
+ * labeled skip, not a failure someone has to keep re-diagnosing as "known". */
+const PVML_SKIP_REASONS: {
+  matches: (code: string) => boolean;
+  reason: string;
+}[] = [
+  {
+    matches: code => COMPLEX_LITERAL_RE.test(code),
+    reason: "PVMLCompiler rejects complex-number literals outright (visitComplexExpr)",
+  },
+  {
+    matches: code => PARSE_FEATURE_CALL_RE.test(code),
+    reason: "parse()/tokenize() have no PVML compiler/stdlib-group wiring",
+  },
+];
+
 /**
  * @param variant The Python chapter to compile test cases for (default 4, the
- * broadest — matches PyPvmlEvaluator's own hardcoded chapter). Only matters
- * for cases exercising chapter-gated operator semantics (`==`/`!=`/ordering's
- * bool handling, `is`/`is not`); everything else behaves the same at every
- * chapter, so most callers can omit it.
+ * broadest — matches PyPvmlEvaluator's own hardcoded chapter). Matters both
+ * for chapter-gated operator semantics (`==`/`!=`/ordering's bool handling,
+ * `is`/`is not`) and for which chapter's validators (NoListsValidator,
+ * NoIsOperatorValidator, ...) apply during resolution.
+ * @param groups Stdlib groups to load — same as generateTestCases()'s
+ * `groups` param. Defaults to `[misc, math]` (this pathway's own previous,
+ * implicit default) rather than `[]`, so existing callers that don't
+ * override it keep seeing `print`/etc. Each group's SICPy prelude (if any)
+ * is compiled and run once per test case, into the same PVMLInterpreter
+ * globalEnv the case itself then runs against (PVMLCompiler's `useGlobalMap`
+ * mode — see its doc comment), so prelude-defined functions (e.g.
+ * `pair`/`head` from linkedList) are callable from the case. Each case gets
+ * a *fresh* globalEnv — unlike PyPvmlEvaluator's REPL semantics, cases here
+ * are independent of one another, matching generateTestCases()/
+ * generateNativePynterTestCases().
  */
-export const generatePVMLTestCases = (testCases: PVMLTestCases, variant: number = 4) => {
+export const generatePVMLTestCases = (
+  testCases: PVMLTestCases,
+  variant: number = 4,
+  groups: Group[] = [misc, math],
+) => {
+  const preludeText = groups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+
+  /** Runs `script` against `globalEnv` (mutated in place), returning the
+   * result and any print() output. Compiles+resolves fresh each call, using
+   * whatever names are already in `globalEnv` (from an earlier call with the
+   * same map, e.g. the prelude) so this script can reference them. */
+  const runAgainstGlobalEnv = (
+    script: string,
+    globalEnv: Map<string, PVMLBoxType>,
+  ): { result: PVMLBoxType; outputs: string[] } => {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      variant,
+      groups,
+      [],
+      Array.from(globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const outputs: string[] = [];
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => outputs.push(msg),
+      globalEnv,
+    });
+    const result = interpreter.execute();
+    return { result, outputs };
+  };
+
+  type PVMLInternalCase = {
+    code: string;
+    expected: PVMLTestExpectedValue;
+    output: string[] | null;
+    label: string;
+  };
+
+  const runTestCase = ({ code, expected, output }: PVMLInternalCase) => {
+    const globalEnv = new Map<string, PVMLBoxType>();
+    if (preludeText.trim()) {
+      runAgainstGlobalEnv(preludeText, globalEnv);
+    }
+
+    if (typeof expected === "function") {
+      expect(() => runAgainstGlobalEnv(code, globalEnv)).toThrow(expected);
+      return;
+    }
+
+    const { result: rawResult, outputs } = runAgainstGlobalEnv(code, globalEnv);
+    const result = PVMLInterpreter.toJSValue(rawResult);
+
+    if (expected === undefined) {
+      expect(result).toBeUndefined();
+    } else if (expected === null) {
+      expect(result).toBeNull();
+    } else if (typeof expected === "number" && !Number.isInteger(expected)) {
+      expect(result).toBeCloseTo(expected);
+    } else {
+      expect(result).toBe(expected);
+    }
+
+    if (output !== null) {
+      expect(outputs).toEqual(output);
+    }
+  };
+
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
-      test.each(
-        tests.map(([code, expected, output]) => ({
-          code,
-          expected,
-          output,
-          label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
-        })),
-      )("$code → $label", ({ code, expected, output }) => {
-        const source = code.endsWith("\n") ? code : code + "\n";
-        if (typeof expected === "function") {
-          expect(() => {
-            const ast = parse(source);
-            const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
-            new PVMLInterpreter(program).execute();
-          }).toThrow(expected);
-          return;
-        }
+      const internalCases: PVMLInternalCase[] = tests.map(([code, expected, output]) => ({
+        code,
+        expected,
+        output,
+        label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
+      }));
 
-        const outputs: string[] = [];
-        const ast = parse(source);
-        const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
-        const interpreter = new PVMLInterpreter(program, {
-          sendOutput: msg => outputs.push(msg),
-        });
-        const result = PVMLInterpreter.toJSValue(interpreter.execute());
-
-        if (expected === undefined) {
-          expect(result).toBeUndefined();
-        } else if (expected === null) {
-          expect(result).toBeNull();
-        } else if (typeof expected === "number" && !Number.isInteger(expected)) {
-          expect(result).toBeCloseTo(expected);
+      const supported: PVMLInternalCase[] = [];
+      const skipBuckets = new Map<string, PVMLInternalCase[]>();
+      for (const testCase of internalCases) {
+        const reason = PVML_SKIP_REASONS.find(({ matches }) => matches(testCase.code))?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
         } else {
-          expect(result).toBe(expected);
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
         }
+      }
 
-        if (output !== null) {
-          expect(outputs).toEqual(output);
-        }
-      });
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)("$code → $label", runTestCase);
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$code → $label (${reason})`, runTestCase);
+      }
     });
   }
 };

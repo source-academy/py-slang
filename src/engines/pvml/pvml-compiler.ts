@@ -811,9 +811,11 @@ export class PVMLCompiler
     // FOR_ITER: if exhausted, pops iter and jumps to loopEnd; else pushes next value
     this.builder.emitJump(OpCodes.FOR_ITER, loopEndLabel);
 
-    // Iterator stays on stack below the value
-    const targetSlot = this.getOrAssignSlot(this.currentEnvironment, stmt.target.lexeme);
-    this.builder.emitUnary(OpCodes.STLG, targetSlot);
+    // Iterator stays on stack below the value. Routed through emitStoreSymbol
+    // (not a hardcoded local-slot store) so a module-level `for` target
+    // correctly uses STGG in useGlobalMap mode, exactly like any other
+    // module-level assignment — see emitStoreSymbol/getTokenAnnotation.
+    this.emitStoreSymbol(stmt.target);
 
     const bodyResult = this.compileStatements(stmt.body);
     // Body values aren't used; discard to maintain stack balance
