@@ -674,9 +674,13 @@ export function evaluateForIterator(
       new TooManyPositionalArgumentsError(code, forNode.iter, "range", 3, rangeArguments, true),
     );
   }
-  const tempTokenZero = new Token(TokenType.BIGINT, "0", 0, 0, 0);
+  // Line is the real for-statement's line, not 0 — these bounds are logically part of
+  // evaluating that statement, and the CSE Machine visualizer's currentLine tracking
+  // relies on synthetic nodes carrying a meaningful line rather than none at all.
+  const forLine = forNode.startToken.line;
+  const tempTokenZero = new Token(TokenType.BIGINT, "0", forLine, 0, 0);
   tempTokenZero.synthetic = true;
-  const tempTokenOne = new Token(TokenType.BIGINT, "1", 0, 0, 0);
+  const tempTokenOne = new Token(TokenType.BIGINT, "1", forLine, 0, 0);
   tempTokenOne.synthetic = true;
   if (rangeArguments.length === 1) {
     return {
@@ -701,12 +705,16 @@ export function evaluateForIterator(
   };
 }
 
-export function generateForIncrement(variableName: string, value: bigint): StmtNS.Stmt {
-  const token = new Token(TokenType.NAME, variableName, 0, 0, -1);
+export function generateForIncrement(
+  variableName: string,
+  value: bigint,
+  line: number,
+): StmtNS.Stmt {
+  const token = new Token(TokenType.NAME, variableName, line, 0, -1);
   token.synthetic = true;
   const variable = new ExprNS.Variable(token, token, token);
 
-  const literalToken = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+  const literalToken = new Token(TokenType.BIGINT, value.toString(), line, 0, -1);
   literalToken.synthetic = true;
   const literal = new ExprNS.BigIntLiteral(literalToken, literalToken, value.toString());
   return new StmtNS.Assign(token, literalToken, variable, literal);
