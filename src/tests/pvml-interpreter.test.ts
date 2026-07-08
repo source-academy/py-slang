@@ -667,13 +667,13 @@ describe("PVML Additional Coverage", () => {
       expect(compileAndRun("pass\n")).toBeUndefined();
     });
 
-    test("bare return yields undefined", () => {
+    test("bare return yields None", () => {
       const code = `
 def f():
     return
 f()
 `;
-      expect(compileAndRun(code)).toBeUndefined();
+      expect(compileAndRun(code)).toBeNull();
     });
 
     test("while with continue skips iteration", () => {
