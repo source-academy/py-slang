@@ -18,8 +18,8 @@ type ControlStackItem = {
   instrType?: string;
   env?: Environment;
   kind?: string;
-  startToken?: { indexInSource?: number; line?: number; lexeme?: string };
-  endToken?: { indexInSource?: number; line?: number; lexeme?: string } | null;
+  startToken?: { indexInSource?: number; line?: number; lexeme?: string; synthetic?: boolean };
+  endToken?: { indexInSource?: number; line?: number; lexeme?: string; synthetic?: boolean } | null;
   body?: Array<{ kind: string }> | { kind: string; body: Array<{ kind: string }> };
   syntheticLabel?: string;
   numOfArgs?: number;
@@ -72,7 +72,11 @@ function formatValue(v: Value): string {
       return `[${items.join(", ")}${suffix}]`;
     }
     case "builtin":
-      return `<built-in function ${v.name}>`;
+      // Just the name, matching how "closure" above shows funcName rather than
+      // Python's full repr() — this is a compact stash chip, not repr() output.
+      // The "this is a builtin" fact is carried separately via `label`
+      // (see serializeValue / typeTranslator), same pattern as closures.
+      return v.name;
     default:
       v satisfies never;
       return "?";
@@ -267,10 +271,11 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       endTok != null && endTok.indexInSource !== undefined
         ? endTok.indexInSource + (endTok.lexeme?.length ?? 0)
         : -1;
-    // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) have both
-    // tokens pinned to position 0. Require start > 0 OR end token at a real position
-    // to guard against slicing the wrong source text.
-    const isRealSourceNode = start > 0 || (endTok?.indexInSource ?? 0) > 0;
+    // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) carry tokens
+    // explicitly marked `synthetic` — they don't correspond to real source text, even
+    // when their indexInSource coincides with a genuine position (e.g. 0, the very first
+    // token of the file). Do not infer syntheticness from position alone.
+    const isRealSourceNode = !item.startToken?.synthetic && !endTok?.synthetic;
     let displayText: string;
     let loc: { startLine: number; endLine: number } | undefined;
     if (start >= 0 && end > start && end <= code.length && isRealSourceNode) {
