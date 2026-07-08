@@ -1,8 +1,8 @@
 import { ExprNS, StmtNS } from "../../ast-types";
-import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
+import { Environment, FunctionEnvironments, Resolver } from "../../resolver/resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
-import { Token, TokenType } from "../../tokenizer";
+import { Token, TokenType } from "../../tokenizer/tokenizer";
 import { PVMLIRBuilder } from "./PVMLIRBuilder";
 import { PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
@@ -17,6 +17,13 @@ interface CompilerAnnotation {
   envLevel: number;
   isPrimitive: boolean;
   primitiveIndex?: number;
+  // VM-internal function (e.g. an EV3 device function) — compiles to
+  // CALLV/CALLTV/NEWCV instead of CALLP/CALLTP/NEWCP. Populated only when
+  // the compiler was constructed with an `internalFunctions` map; every
+  // caller that doesn't pass one (PVMLEvaluator, PVMLSinterEvaluator, ...)
+  // never sets this, so behavior for them is unchanged.
+  isInternal?: boolean;
+  internalIndex?: number;
 }
 
 export type ExpressionResult = {
@@ -30,6 +37,7 @@ export class PVMLCompiler
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
+  private internalFunctions?: Map<string, number>;
 
   private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
   private envSlotCounters: WeakMap<Environment, number>;
@@ -63,6 +71,7 @@ export class PVMLCompiler
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
     envBuilders: WeakMap<Environment, PVMLIRBuilder> = new WeakMap(),
+    internalFunctions?: Map<string, number>,
   ) {
     this.builder = builder;
     this.currentEnvironment = currentEnvironment;
@@ -73,15 +82,22 @@ export class PVMLCompiler
     this.envSlotMaps = envSlotMaps;
     this.envBuilders = envBuilders;
     this.envBuilders.set(currentEnvironment, builder);
+    this.internalFunctions = internalFunctions;
   }
 
   /**
    * Create PVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
+   *
+   * @param internalFunctions Optional map of VM-internal function names to their fixed
+   * VM-internal indices (e.g. EV3's device function table). Names in this map compile to
+   * CALLV/CALLTV/NEWCV instead of CALLP/CALLTP/NEWCP. Callers that don't pass this are
+   * entirely unaffected.
    */
   static fromProgram(
     program: StmtNS.FileInput,
     functionEnvironments?: FunctionEnvironments,
+    internalFunctions?: Map<string, number>,
   ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
@@ -93,7 +109,16 @@ export class PVMLCompiler
     }
     PVMLIRBuilder.resetIndex();
     const builder = new PVMLIRBuilder(0);
-    return new PVMLCompiler(mainEnv, functionEnvironments, builder);
+    return new PVMLCompiler(
+      mainEnv,
+      functionEnvironments,
+      builder,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      internalFunctions,
+    );
   }
 
   fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
@@ -115,6 +140,7 @@ export class PVMLCompiler
       this.envSlotCounters,
       this.envSlotMaps,
       this.envBuilders,
+      this.internalFunctions,
     );
 
     const slotMap = new Map<string, number>();
@@ -153,16 +179,27 @@ export class PVMLCompiler
     const parentEnv = this.currentEnvironment.lookupNameEnv(token);
 
     if (parentEnv !== null && parentEnv.enclosing === null) {
-      const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
-      if (primitiveIndex === undefined) {
-        throw new Error(`Primitive function ${name} not implemented`);
+      const internalIndex = this.internalFunctions?.get(name);
+      if (internalIndex !== undefined) {
+        annotation = {
+          slot: internalIndex,
+          envLevel: 0,
+          isPrimitive: false,
+          isInternal: true,
+          internalIndex,
+        };
+      } else {
+        const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
+        if (primitiveIndex === undefined) {
+          throw new Error(`Primitive function ${name} not implemented`);
+        }
+        annotation = {
+          slot: primitiveIndex,
+          envLevel: 0,
+          isPrimitive: true,
+          primitiveIndex,
+        };
       }
-      annotation = {
-        slot: primitiveIndex,
-        envLevel: 0,
-        isPrimitive: true,
-        primitiveIndex,
-      };
     } else if (parentEnv != null) {
       const envLevel = this.currentEnvironment.lookupName(token);
       const slot = this.getOrAssignSlot(parentEnv, name);
@@ -218,6 +255,13 @@ export class PVMLCompiler
       this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex);
       return { maxStackSize: 1 };
     }
+    if (annotation.isInternal) {
+      // Same as the isPrimitive branch above, but for a VM-internal (device)
+      // function referenced as a value rather than called directly. NEWCV
+      // is CALLV/CALLTV's "reference" counterpart, mirroring NEWCP/CALLP.
+      this.builder.emitUnary(OpCodes.NEWCV, annotation.internalIndex);
+      return { maxStackSize: 1 };
+    }
     if (annotation.envLevel === 0) {
       this.builder.emitUnary(OpCodes.LDLG, annotation.slot);
     } else {
@@ -229,7 +273,7 @@ export class PVMLCompiler
   private emitStoreSymbol(token: Token): void {
     const annotation = this.getTokenAnnotation(token);
 
-    if (annotation.isPrimitive) {
+    if (annotation.isPrimitive || annotation.isInternal) {
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
     }
 
@@ -243,7 +287,10 @@ export class PVMLCompiler
   private emitFunctionCall(token: Token, numArgs: number): void {
     const annotation = this.getTokenAnnotation(token);
 
-    if (annotation.isPrimitive) {
+    if (annotation.isInternal) {
+      const internalOpcode = this.isTailCall ? OpCodes.CALLTV : OpCodes.CALLV;
+      this.builder.emitPrimitiveCall(internalOpcode, annotation.internalIndex!, numArgs);
+    } else if (annotation.isPrimitive) {
       const primitiveOpcode = this.isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
     } else {
@@ -474,13 +521,15 @@ export class PVMLCompiler
 
     const callee: ExprNS.Variable = expr.callee;
 
-    // CALLP/CALLTP (primitive calls) take their arguments directly off the
-    // stack with no function value involved (see callPrimitive) — only a
-    // non-primitive (closure) call needs its callee's value loaded first.
-    // Loading it here regardless would push a stray NEWCP value that CALLP
-    // never consumes, corrupting the stack for every primitive call.
-    const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
-    const functionStackEffect = isPrimitiveCallee
+    // CALLP/CALLTP (primitive calls) and CALLV/CALLTV (VM-internal calls)
+    // take their arguments directly off the stack with no function value
+    // involved (see callPrimitive/callInternal) — only a non-primitive,
+    // non-internal (closure) call needs its callee's value loaded first.
+    // Loading it here regardless would push a stray NEWCP/NEWCV value that
+    // CALLP/CALLV never consumes, corrupting the stack for every such call.
+    const calleeAnnotation = this.getTokenAnnotation(callee.name);
+    const isDirectDispatchCallee = calleeAnnotation.isPrimitive || calleeAnnotation.isInternal;
+    const functionStackEffect = isDirectDispatchCallee
       ? 0
       : this.emitLoadSymbol(callee.name).maxStackSize;
 

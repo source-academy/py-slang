@@ -3,9 +3,9 @@ import { analyzeWithEnvironments } from '../../resolver';
 import ev3, { EV3_FUNCTIONS } from '../../stdlib/ev3';
 import math from '../../stdlib/math';
 import misc from '../../stdlib/misc';
-import { SINTER_OPCODE_MAX } from '../svml/opcodes';
-import { assemble } from '../svml/svml-assembler';
-import { SVMLCompiler } from '../svml/svml-compiler';
+import { PYNTER_OPCODE_MAX } from '../pvml/opcodes';
+import { assemble } from '../pvml/pvml-assembler';
+import { PVMLCompiler } from '../pvml/pvml-compiler';
 import type { EV3ExecutionResult } from './types';
 
 function uint8ArrayToBase64(bytes: Uint8Array): string {
@@ -26,9 +26,9 @@ export class EV3Engine {
         throw errors[0];
       }
 
-      const compiler = SVMLCompiler.fromProgram(ast, environments, EV3_INTERNAL_FUNCTIONS);
+      const compiler = PVMLCompiler.fromProgram(ast, environments, EV3_INTERNAL_FUNCTIONS);
       const program = compiler.compileProgram(ast);
-      const binary = assemble(program, SINTER_OPCODE_MAX);
+      const binary = assemble(program, PYNTER_OPCODE_MAX);
 
       return { status: 'finished', output: uint8ArrayToBase64(binary) };
     } catch (err) {
