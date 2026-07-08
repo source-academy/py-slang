@@ -289,11 +289,12 @@ export function pyGetVariable(code: string, context: Context, name: string, node
       if (value === UNASSIGNED) {
         if (currentEnv === env) {
           handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable));
+        } else {
+          handleRuntimeError(
+            context,
+            new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
+          );
         }
-        handleRuntimeError(
-          context,
-          new FreeVariableUnboundError(code, name, node as ExprNS.Variable),
-        );
       }
       return value;
     }
