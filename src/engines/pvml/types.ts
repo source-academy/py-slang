@@ -40,6 +40,20 @@ export interface PVMLIterator {
 
 export interface PVMLClosure {
   type: "closure";
+  /**
+   * Direct reference to the closure's compiled code, resolved once at
+   * closure-creation time (NEWC) rather than re-resolved via a numeric index
+   * into "whichever program is currently running" at every call. This makes
+   * closures portable across independently-compiled programs — needed once a
+   * closure can outlive the single compilation that created it, e.g. a
+   * prelude-defined function stored in PVMLInterpreter's persistent global
+   * environment and called from a later, separately-compiled REPL chunk
+   * (see PVMLCompiler's `useGlobalMap`/PVMLInterpreter's globalEnv).
+   */
+  ir: PVMLIR;
+  /** The function's index in the program that originally compiled it — for
+   * debug/display only (e.g. toJSValue's `<closure:N>`); never used for call
+   * dispatch, which goes through `ir` directly. */
   functionIndex: number;
   parentEnv: PVMLEnvironment | null;
 }
@@ -156,7 +170,7 @@ export class PVMLIR {
     const result: Instruction[] = [];
     for (let i = 0; i < this.count; i++) {
       const opcode = this.opcodes[i];
-      if (opcode === OpCodes.LGCS) {
+      if (opcode === OpCodes.LGCS || opcode === OpCodes.LDGG || opcode === OpCodes.STGG) {
         result.push({ opcode, arg1: this.strings[this.arg1s[i]] });
       } else {
         result.push({ opcode, arg1: this.arg1s[i], arg2: this.arg2s[i] });

@@ -105,9 +105,24 @@ export enum OpCodes {
   GTG12 = 94,
   LEG12 = 95,
   GEG12 = 96,
+  // Name-indexed global variable access, distinct from LDLG/LDPG/STLG/STPG's
+  // fixed-size-array-slot model: Python's module/global scope can gain brand
+  // new names at any time (`global x` introducing a name with no top-level
+  // assignment; a REPL session where chunk N+1 defines a name chunk N didn't
+  // have), which a statically-sized array can't accommodate without knowing
+  // every global up front. LDGG/STGG instead read/write a dynamically-growable
+  // name-indexed store (see PVMLInterpreter's globalEnv), so the interpreter/VM
+  // never needs to know a program's full set of globals ahead of time. Opt-in
+  // at the compiler level (PVMLCompiler's `useGlobalMap`, off by default) —
+  // only py-slang's own PVMLInterpreter, for its incremental/persistent
+  // (browser REPL) use case, ever needs this; every other consumer (native
+  // Pynter's single-shot prelude+script compilation, the test suite) keeps
+  // using the plain slot-based module environment unchanged.
+  LDGG = 97,
+  STGG = 98,
 }
 
-export const OPCODE_MAX = 96;
+export const OPCODE_MAX = 98;
 
 /**
  * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
@@ -132,6 +147,8 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.GTG12]: "§1/§2 comparison semantics",
   [OpCodes.LEG12]: "§1/§2 comparison semantics",
   [OpCodes.GEG12]: "§1/§2 comparison semantics",
+  [OpCodes.LDGG]: "incremental/persistent global variables",
+  [OpCodes.STGG]: "incremental/persistent global variables",
 };
 
 /**
@@ -185,6 +202,8 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.BR:
     case OpCodes.JMP:
     case OpCodes.FOR_ITER:
+    case OpCodes.LDGG:
+    case OpCodes.STGG:
       return 5;
 
     case OpCodes.LDCF64:

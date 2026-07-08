@@ -17,6 +17,12 @@ interface CompilerAnnotation {
   envLevel: number;
   isPrimitive: boolean;
   primitiveIndex?: number;
+  /** True for a name declared in the module-level environment, when the
+   * compiler is in `useGlobalMap` mode — see PVMLCompiler.useGlobalMap and
+   * getTokenAnnotation(). `slot`/`envLevel` are meaningless in this case;
+   * `name` is what emitLoadSymbol/emitStoreSymbol emit LDGG/STGG with. */
+  isGlobal?: boolean;
+  name?: string;
 }
 
 export type ExpressionResult = {
@@ -37,6 +43,16 @@ export class PVMLCompiler
    * this" check. Threaded through to every child compiler (fromFunctionNode)
    * so a nested function/lambda compiles for the same chapter as its parent. */
   private readonly variant: number;
+  /** When true, names declared at module level compile to LDGG/STGG (a
+   * dynamically-growable, name-indexed global store) instead of the usual
+   * fixed-slot LDPG/STPG. Off by default — native Pynter's single-shot
+   * prelude+script compilation never needs globals to grow after the fact,
+   * so it keeps using the plain slot-based module environment unchanged;
+   * only py-slang's own PVMLInterpreter opts in, for its incremental/
+   * persistent (browser REPL) use case, where a later chunk can introduce a
+   * global a fixed-size array wouldn't have room for. Threaded through to
+   * every child compiler (fromFunctionNode), same as `variant`. */
+  private readonly useGlobalMap: boolean;
 
   private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
   private envSlotCounters: WeakMap<Environment, number>;
@@ -67,6 +83,7 @@ export class PVMLCompiler
     functionEnvironments: FunctionEnvironments,
     builder: PVMLIRBuilder,
     variant: number,
+    useGlobalMap: boolean = false,
     tokenAnnotations: WeakMap<Token, CompilerAnnotation> = new WeakMap(),
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
@@ -77,6 +94,7 @@ export class PVMLCompiler
     this.functionEnvironments = functionEnvironments;
     this.isTailCall = false;
     this.variant = variant;
+    this.useGlobalMap = useGlobalMap;
     this.tokenAnnotations = tokenAnnotations;
     this.envSlotCounters = envSlotCounters;
     this.envSlotMaps = envSlotMaps;
@@ -92,6 +110,7 @@ export class PVMLCompiler
     program: StmtNS.FileInput,
     variant: number,
     functionEnvironments?: FunctionEnvironments,
+    useGlobalMap: boolean = false,
   ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
@@ -103,7 +122,7 @@ export class PVMLCompiler
     }
     PVMLIRBuilder.resetIndex();
     const builder = new PVMLIRBuilder(0);
-    return new PVMLCompiler(mainEnv, functionEnvironments, builder, variant);
+    return new PVMLCompiler(mainEnv, functionEnvironments, builder, variant, useGlobalMap);
   }
 
   fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
@@ -122,6 +141,7 @@ export class PVMLCompiler
       this.functionEnvironments,
       builder,
       this.variant,
+      this.useGlobalMap,
       this.tokenAnnotations,
       this.envSlotCounters,
       this.envSlotMaps,
@@ -163,7 +183,22 @@ export class PVMLCompiler
     const name = token.lexeme;
     const parentEnv = this.currentEnvironment.lookupNameEnv(token);
 
-    if (parentEnv !== null && parentEnv.enclosing === null) {
+    // The absolute-root environment (no enclosing scope at all) holds
+    // builtins/prelude names, dispatched by primitive index — never a
+    // fixed-slot or (in useGlobalMap mode) name-indexed variable lookup.
+    const isPrimitiveEnv = parentEnv !== null && parentEnv.enclosing === null;
+    // One level below the absolute root is the module-level environment —
+    // Python's global scope (see resolver.ts's isModuleLevel check, which
+    // uses the same test). In useGlobalMap mode this is where LDGG/STGG take
+    // over from the fixed-slot LDPG/STPG the "Pynter mode" (useGlobalMap
+    // false) keeps using — see the `useGlobalMap` field doc comment.
+    const isModuleLevelEnv =
+      this.useGlobalMap &&
+      parentEnv !== null &&
+      parentEnv.enclosing !== null &&
+      parentEnv.enclosing.enclosing === null;
+
+    if (isPrimitiveEnv) {
       const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
       if (primitiveIndex === undefined) {
         throw new Error(`Primitive function ${name} not implemented`);
@@ -173,6 +208,14 @@ export class PVMLCompiler
         envLevel: 0,
         isPrimitive: true,
         primitiveIndex,
+      };
+    } else if (isModuleLevelEnv) {
+      annotation = {
+        slot: -1,
+        envLevel: -1,
+        isPrimitive: false,
+        isGlobal: true,
+        name,
       };
     } else if (parentEnv != null) {
       const envLevel = this.currentEnvironment.lookupName(token);
@@ -229,6 +272,10 @@ export class PVMLCompiler
       this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex);
       return { maxStackSize: 1 };
     }
+    if (annotation.isGlobal) {
+      this.builder.emitUnary(OpCodes.LDGG, annotation.name);
+      return { maxStackSize: 1 };
+    }
     if (annotation.envLevel === 0) {
       this.builder.emitUnary(OpCodes.LDLG, annotation.slot);
     } else {
@@ -242,6 +289,11 @@ export class PVMLCompiler
 
     if (annotation.isPrimitive) {
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
+    }
+
+    if (annotation.isGlobal) {
+      this.builder.emitUnary(OpCodes.STGG, annotation.name);
+      return;
     }
 
     if (annotation.envLevel === 0) {

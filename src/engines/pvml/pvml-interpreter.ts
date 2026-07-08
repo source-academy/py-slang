@@ -56,7 +56,16 @@ interface CallFrame {
 export class PVMLInterpreter {
   private program: PVMLProgram;
   private currentFrame: CallFrame | null;
-  private globalEnv: PVMLEnvironment;
+  /** Backing store for LDGG/STGG (see opcodes.ts) — a dynamically-growable,
+   * name-indexed global environment, entirely separate from the fixed-slot
+   * PVMLEnvironment array chain used for locals/nonlocals. Only ever
+   * populated when the compiler that produced `program` was run in
+   * `useGlobalMap` mode; otherwise LDGG/STGG simply never appear in the
+   * bytecode. Optionally supplied externally (see constructor) so a caller
+   * can share/persist it across multiple PVMLInterpreter instances — e.g. a
+   * REPL evaluating one chunk per instance, where a later chunk needs to see
+   * an earlier chunk's globals. */
+  private globalEnv: Map<string, PVMLBoxType>;
   private halted: boolean;
   private readonly onOutput: (msg: string) => void;
 
@@ -75,11 +84,14 @@ export class PVMLInterpreter {
       maxCallDepth?: number;
       maxInstructions?: number;
       sendOutput?: (msg: string) => void;
+      /** Pre-existing global environment to use (and mutate in place) instead
+       * of starting with an empty one — see `globalEnv` above. */
+      globalEnv?: Map<string, PVMLBoxType>;
     },
   ) {
     this.program = program;
     this.currentFrame = null;
-    this.globalEnv = new PVMLEnvironment(0);
+    this.globalEnv = options?.globalEnv ?? new Map();
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
 
@@ -88,6 +100,13 @@ export class PVMLInterpreter {
       if (options.maxCallDepth) this.maxCallDepth = options.maxCallDepth;
       if (options.maxInstructions) this.maxInstructionLimit = options.maxInstructions;
     }
+  }
+
+  /** The current global environment (see `globalEnv` above) — retrieve after
+   * `execute()` to thread into a later PVMLInterpreter instance for a REPL's
+   * next chunk, so it sees this chunk's global variable/function definitions. */
+  getGlobalEnv(): Map<string, PVMLBoxType> {
+    return this.globalEnv;
   }
 
   /**
@@ -103,6 +122,7 @@ export class PVMLInterpreter {
 
     const entryClosure: PVMLClosure = {
       type: "closure",
+      ir: entryFunction,
       functionIndex: entryPointIndex,
       parentEnv: null,
     };
@@ -189,6 +209,16 @@ export class PVMLInterpreter {
 
         case OpCodes.LGCS:
           this.push(ir.strings[a1]);
+          break;
+
+        // Name-indexed global variable access (see `globalEnv` field doc) —
+        // a1 is a string-table index, same encoding as LGCS.
+        case OpCodes.LDGG:
+          this.push(this.globalEnv.get(ir.strings[a1]));
+          break;
+
+        case OpCodes.STGG:
+          this.globalEnv.set(ir.strings[a1], this.pop());
           break;
 
         // Stack operations
@@ -838,8 +868,14 @@ export class PVMLInterpreter {
       throw new Error("No current frame");
     }
 
+    const ir = this.program.functions[functionIndex];
+    if (!ir) {
+      throw new Error(`Function at index ${functionIndex} not found`);
+    }
+
     const closure: PVMLClosure = {
       type: "closure",
+      ir,
       functionIndex,
       parentEnv: this.currentFrame.env,
     };
@@ -904,7 +940,12 @@ export class PVMLInterpreter {
 
     const closure = func;
 
-    const funcDef = this.program.functions[closure.functionIndex];
+    // Dispatch through the closure's own captured code reference, not an
+    // index into `this.program.functions` — the closure may have been
+    // created by a *different*, earlier compilation (see PVMLClosure's `ir`
+    // field doc), so `this.program` (this interpreter instance's own,
+    // possibly unrelated, program) may not even have an entry at that index.
+    const funcDef = closure.ir;
 
     if (numArgs !== funcDef.numArgs) {
       throw new Error(`Function expects ${funcDef.numArgs} arguments but got ${numArgs}`);
