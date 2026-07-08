@@ -619,6 +619,19 @@ describe("collectSnapshots", () => {
     expect(snapshots.some(s => s.currentLine === 2)).toBe(true);
   });
 
+  it("currentLine alternates between the for-line and the body line across iterations, not stuck on one", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    const lines = snapshots.map(s => s.currentLine);
+    // Collapse consecutive duplicates: [1,1,1,2,2,1,1,2,2] -> [1,2,1,2].
+    const transitions = lines.filter((line, i) => line !== lines[i - 1]);
+    // The loop's per-iteration bookkeeping (implicit range() bounds, condition re-check,
+    // increment) is logically part of the for-statement (line 1), so currentLine should
+    // return there after each body execution (line 2) instead of getting stuck on
+    // whichever line last had a "real" (non-synthetic) node.
+    expect(transitions.filter(l => l === 1).length).toBeGreaterThan(1);
+    expect(transitions.filter(l => l === 2).length).toBeGreaterThan(1);
+  });
+
   it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {
     const snapshots = await runAndCollect(
       `def f():
