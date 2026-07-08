@@ -88,9 +88,11 @@ export enum OpCodes {
   FLOORDIVF = 86,
   NEWITER = 87,
   FOR_ITER = 88,
+  EQP = 89, // pointer/identity equality (is)
+  NEQP = 90, // pointer/identity inequality (is not)
 }
 
-export const OPCODE_MAX = 88;
+export const OPCODE_MAX = 90;
 
 /**
  * Pynter's maximum supported opcode (op_neq_b = 0x54; currently identical to
@@ -105,6 +107,8 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVF]: "floor division (//)",
   [OpCodes.NEWITER]: "for loops",
   [OpCodes.FOR_ITER]: "for loops",
+  [OpCodes.EQP]: "identity comparison (is / is not)",
+  [OpCodes.NEQP]: "identity comparison (is / is not)",
 };
 
 /**
