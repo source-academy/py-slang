@@ -449,6 +449,13 @@ export class PVMLInterpreter {
           this.strictNotEqual12();
           break;
 
+        case OpCodes.EQP:
+          this.identityEqual();
+          break;
+        case OpCodes.NEQP:
+          this.identityNotEqual();
+          break;
+
         // Variable operations
         case OpCodes.LDLG:
         case OpCodes.LDLF:
@@ -736,6 +743,30 @@ export class PVMLInterpreter {
     if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
       throw new UnsupportedOperandTypeError("!=", leftType, rightType);
     }
+    this.push(left !== right);
+  }
+
+  /**
+   * `is`: Python pointer/identity equality, as distinct from `==`'s structural
+   * equality (see docs/specs/python_typing_tail_34.tex). Arrays and closures
+   * are boxed JS objects here, so `===` already compares them by reference —
+   * two separately-built lists with equal elements are `is`-unequal even
+   * though `==`-equal. Scalars (number/string/boolean/None) have no separate
+   * identity in this representation, so `===` on them doubles as identity;
+   * this still satisfies the spec's only hard guarantee (`None`/`True`/`False`
+   * are each a single instance system-wide), since JS gives that for free.
+   * Deliberately no bool-as-int coercion (unlike EQG/NEQG above) — `1 is True`
+   * must be false, since `is` never treats values of different types as equal.
+   */
+  private identityEqual(): void {
+    const right = this.pop();
+    const left = this.pop();
+    this.push(left === right);
+  }
+
+  private identityNotEqual(): void {
+    const right = this.pop();
+    const left = this.pop();
     this.push(left !== right);
   }
 

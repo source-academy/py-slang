@@ -270,8 +270,7 @@ describe("PVML E2E", () => {
   // `is`/`is not` compile to their own EQP/NEQP opcodes, distinct from `==`/`!=`'s
   // EQG/NEQG (see pvml-compiler.ts's getCompareOpCode) — `is`/`is not` test Python
   // pointer/identity equality, a different question from `==`/`!=`'s structural
-  // equality. The PVML interpreter doesn't execute EQP/NEQP yet, so this only
-  // pins what the compiler emits, not runtime behaviour.
+  // equality.
   describe("Compiler: is / is not opcodes", () => {
     test("`is` compiles to EQP, not EQG", () => {
       expect(compiledEntryOpcodes("1 is 1")).toContain(OpCodes.EQP);
@@ -290,6 +289,30 @@ describe("PVML E2E", () => {
       expect(compiledEntryOpcodes("1 != 1")).not.toContain(OpCodes.NEQP);
     });
   });
+
+  const identityTests: PVMLTestCases = {
+    "is / is not": [
+      ["None is None", true, null],
+      ["None is not None", false, null],
+      ["1 is 1", true, null],
+      ["True is True", true, null],
+      ["1 is True", false, null],
+      // Real Python: false (int and float are distinct types, so `is` should
+      // never treat them as identical, even at equal value). PVML doesn't
+      // distinguish int from float at the *value* level, unlike the CSE
+      // machine's bigint/number split — both compile to a plain JS `number`
+      // at runtime, so they're indistinguishable to `is` here. A known,
+      // pre-existing representation gap, not something this change touches.
+      ["1 is 1.0", true, null],
+      ["x = [1, 2]\ny = x\nx is y", true, null],
+      ["[1, 2] is [1, 2]", false, null],
+      ["f = lambda x: x\ng = f\nf is g", true, null],
+      ["(lambda x: x) is (lambda x: x)", false, null],
+      ["1 is not 2", true, null],
+    ],
+  };
+
+  describe("Identity (is / is not)", () => generatePVMLTestCases(identityTests));
 
   // `==`/`!=`/ordering compile to a different opcode family per chapter (see
   // pvml-compiler.ts's getCompareOpCode): §1/§2 reject bool operands outright

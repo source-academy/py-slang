@@ -387,7 +387,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // primitive function, rather than a fresh module-level variable slot.
     if (this.globalNamesInCurrentFunction.size > 0) {
       let globalEnv: Environment | null = this.environment;
-      while (globalEnv !== null && globalEnv.enclosing !== null && globalEnv.enclosing.enclosing !== null) {
+      while (
+        globalEnv !== null &&
+        globalEnv.enclosing !== null &&
+        globalEnv.enclosing.enclosing !== null
+      ) {
         globalEnv = globalEnv.enclosing;
       }
       if (globalEnv) {
