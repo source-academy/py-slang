@@ -563,6 +563,17 @@ describe("collectSnapshots", () => {
     }
   });
 
+  // Regression test for https://github.com/source-academy/py-slang/issues/233.
+  it("currentLine never collapses to 0 during a for/range() loop's synthetic bookkeeping steps", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    for (const snap of snapshots) {
+      expect(snap.currentLine).not.toBe(0);
+    }
+    // Once the loop body has run at least once, currentLine should have reached line 2
+    // (print(x)) rather than getting stuck on line 1 forever.
+    expect(snapshots.some(s => s.currentLine === 2)).toBe(true);
+  });
+
   it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {
     const snapshots = await runAndCollect(
       `def f():

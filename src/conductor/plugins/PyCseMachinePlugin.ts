@@ -411,6 +411,13 @@ export async function collectSnapshots(
   maxSnapshots: number = 1000,
 ): Promise<CseSnapshot[]> {
   const snapshots: CseSnapshot[] = [];
+  // Runtime-fabricated nodes (e.g. implicit range() bounds, the for-loop increment —
+  // see utils.ts's evaluateForIterator/generateForIncrement) carry tokens pinned to
+  // line 0, since they don't correspond to any line the user actually wrote. Real
+  // tokens are always 1-based (see parser/token-bridge.ts), so line 0 is an
+  // unambiguous "not a real line" signal. Keep showing the last real line instead of
+  // flickering to 0 while these synthetic nodes are being evaluated.
+  let lastKnownLine: number | undefined;
 
   const stream = generateCSEMachineStateStream(
     code,
@@ -452,14 +459,17 @@ export async function collectSnapshots(
     // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
     // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
     const currentNode = context.runtime.nodes[0] as { startToken?: { line?: number } } | undefined;
-    const currentLine: number | undefined = currentNode?.startToken?.line;
+    const rawLine = currentNode?.startToken?.line;
+    if (rawLine) {
+      lastKnownLine = rawLine;
+    }
 
     snapshots.push({
       stepIndex: steps - 1,
       control: controlItems,
       stash: stashItems,
       environments,
-      currentLine,
+      currentLine: lastKnownLine,
     });
   }
 
