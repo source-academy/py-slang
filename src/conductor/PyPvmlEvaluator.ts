@@ -16,7 +16,7 @@ export class PyPvmlEvaluator extends BasicEvaluator {
       if (errors.length > 0) {
         throw errors[0];
       }
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, environments);
       const program = compiler.compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, {
         sendOutput: msg => this.conductor.sendOutput(msg),

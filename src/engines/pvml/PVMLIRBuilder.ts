@@ -248,6 +248,12 @@ const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
   STACK_EFFECTS[OpCodes.NEQB] = -1;
   STACK_EFFECTS[OpCodes.EQP] = -1;
   STACK_EFFECTS[OpCodes.NEQP] = -1;
+  STACK_EFFECTS[OpCodes.EQG12] = -1;
+  STACK_EFFECTS[OpCodes.NEQG12] = -1;
+  STACK_EFFECTS[OpCodes.LTG12] = -1;
+  STACK_EFFECTS[OpCodes.GTG12] = -1;
+  STACK_EFFECTS[OpCodes.LEG12] = -1;
+  STACK_EFFECTS[OpCodes.GEG12] = -1;
 
   // Unary operations (0, takes 1 operand, produces 1)
   STACK_EFFECTS[OpCodes.NOTG] = 0;

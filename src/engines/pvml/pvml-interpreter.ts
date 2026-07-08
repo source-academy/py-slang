@@ -15,6 +15,18 @@ import {
   PVMLType,
 } from "./types";
 
+/** Whether a value is excluded from §1/§2's `==`/`!=` entirely: bool (avoiding
+ * CPython's bool-as-int equality, e.g. `True == 1`, as a directly written
+ * §1/§2 comparison) and function values — both closures and primitives
+ * (equality without `is` is left undefined until §3/§4 introduces it). See
+ * docs/specs/python_typing_middle_12.tex: `==,!= bool,function x any -> error`,
+ * `==,!= any x bool,function -> error`. Mirrors the CSE machine's
+ * `excludedFromChapter12Equality` in src/engines/cse/operators.ts. */
+function isExcludedFromChapter12Equality(value: PVMLBoxType): boolean {
+  if (typeof value === "boolean") return true;
+  return isPVMLObject(value) && (value.type === "closure" || value.type === "primitive");
+}
+
 const __DEBUG__ =
   typeof (globalThis as Record<string, unknown>).__DEBUG__ !== "undefined" &&
   (globalThis as Record<string, unknown>).__DEBUG__;
@@ -385,6 +397,28 @@ export class PVMLInterpreter {
           this.strictNotEqual();
           break;
 
+        // §1/§2-restricted comparisons (see opcodes.ts): bool/function operands
+        // are rejected outright, rather than the §3/§4 opcodes' bool-as-int
+        // coercion (LTG/GTG/LEG/GEG/EQG/NEQG above).
+        case OpCodes.LTG12:
+          this.genericOrderedComparison12("<");
+          break;
+        case OpCodes.GTG12:
+          this.genericOrderedComparison12(">");
+          break;
+        case OpCodes.LEG12:
+          this.genericOrderedComparison12("<=");
+          break;
+        case OpCodes.GEG12:
+          this.genericOrderedComparison12(">=");
+          break;
+        case OpCodes.EQG12:
+          this.strictEqual12();
+          break;
+        case OpCodes.NEQG12:
+          this.strictNotEqual12();
+          break;
+
         // Variable operations
         case OpCodes.LDLG:
         case OpCodes.LDLF:
@@ -628,19 +662,77 @@ export class PVMLInterpreter {
     this.push(left >= right);
   }
 
+  /** Booleans participate in `==`/`!=`/ordering as the ints they are at §3/§4
+   * (True == 1 is true), as in CPython where bool is an int subtype. Every
+   * other value passes through unchanged. Used only by the §3/§4 comparison
+   * opcodes (EQG/NEQG/LTG/GTG/LEG/GEG) — deliberately not by their §1/§2
+   * counterparts (EQG12/etc.), which reject bool operands instead. */
+  private static asNumberIfBool(value: PVMLBoxType): PVMLBoxType {
+    return typeof value === "boolean" ? (value ? 1 : 0) : value;
+  }
+
   private strictEqual(): void {
-    const right = this.pop();
-    const left = this.pop();
+    const right = PVMLInterpreter.asNumberIfBool(this.pop());
+    const left = PVMLInterpreter.asNumberIfBool(this.pop());
     this.push(left === right);
   }
 
   private strictNotEqual(): void {
+    const right = PVMLInterpreter.asNumberIfBool(this.pop());
+    const left = PVMLInterpreter.asNumberIfBool(this.pop());
+    this.push(left !== right);
+  }
+
+  /** §1/§2's `==`/`!=` (see docs/specs/python_typing_middle_12.tex): bool and
+   * function values (closures/primitives) are excluded entirely, even against
+   * each other (`True == True` is an error, not `true`) — unlike §3/§4, there
+   * is no bool-as-int coercion here at all. */
+  private strictEqual12(): void {
     const right = this.pop();
     const left = this.pop();
+    const leftType = getPVMLType(left);
+    const rightType = getPVMLType(right);
+    if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
+      throw new UnsupportedOperandTypeError("==", leftType, rightType);
+    }
+    this.push(left === right);
+  }
+
+  private strictNotEqual12(): void {
+    const right = this.pop();
+    const left = this.pop();
+    const leftType = getPVMLType(left);
+    const rightType = getPVMLType(right);
+    if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
+      throw new UnsupportedOperandTypeError("!=", leftType, rightType);
+    }
     this.push(left !== right);
   }
 
   private genericOrderedComparison(op: "<" | ">" | "<=" | ">="): void {
+    const right = PVMLInterpreter.asNumberIfBool(this.pop());
+    const left = PVMLInterpreter.asNumberIfBool(this.pop());
+    const leftType = getPVMLType(left);
+    const rightType = getPVMLType(right);
+
+    const bothNumbers = leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER;
+    const bothStrings = leftType === PVMLType.STRING && rightType === PVMLType.STRING;
+    if (!bothNumbers && !bothStrings) {
+      throw new UnsupportedOperandTypeError(op, leftType, rightType);
+    }
+
+    const l = left as number | string;
+    const r = right as number | string;
+    if (op === "<") this.push(l < r);
+    else if (op === ">") this.push(l > r);
+    else if (op === "<=") this.push(l <= r);
+    else this.push(l >= r);
+  }
+
+  /** §1/§2's ordering comparisons (see docs/specs/python_typing_middle_12.tex):
+   * int/float/string operands only — no bool-as-int coercion (unlike §3/§4's
+   * genericOrderedComparison above), so a bool operand is simply rejected. */
+  private genericOrderedComparison12(op: "<" | ">" | "<=" | ">="): void {
     const right = this.pop();
     const left = this.pop();
     const leftType = getPVMLType(left);

@@ -285,7 +285,14 @@ export type PVMLTestExpectedValue = number | boolean | string | null | undefined
  */
 export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
-export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
+/**
+ * @param variant The Python chapter to compile test cases for (default 4, the
+ * broadest — matches PyPvmlEvaluator's own hardcoded chapter). Only matters
+ * for cases exercising chapter-gated operator semantics (`==`/`!=`/ordering's
+ * bool handling, `is`/`is not`); everything else behaves the same at every
+ * chapter, so most callers can omit it.
+ */
+export const generatePVMLTestCases = (testCases: PVMLTestCases, variant: number = 4) => {
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
       test.each(
@@ -300,7 +307,7 @@ export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
         if (typeof expected === "function") {
           expect(() => {
             const ast = parse(source);
-            const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+            const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
             new PVMLInterpreter(program).execute();
           }).toThrow(expected);
           return;
@@ -308,7 +315,7 @@ export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
 
         const outputs: string[] = [];
         const ast = parse(source);
-        const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+        const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
         const interpreter = new PVMLInterpreter(program, {
           sendOutput: msg => outputs.push(msg),
         });

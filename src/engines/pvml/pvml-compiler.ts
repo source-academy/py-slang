@@ -30,6 +30,13 @@ export class PVMLCompiler
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
+  /** The Python chapter being compiled for (1-4). Determines which of the
+   * §1/§2- vs §3/§4-specific comparison opcodes getCompareOpCode() emits (see
+   * opcodes.ts) — the compiler bakes the chapter's rules into the choice of
+   * opcode so the interpreter/VM never needs a runtime "which chapter is
+   * this" check. Threaded through to every child compiler (fromFunctionNode)
+   * so a nested function/lambda compiles for the same chapter as its parent. */
+  private readonly variant: number;
 
   private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
   private envSlotCounters: WeakMap<Environment, number>;
@@ -59,6 +66,7 @@ export class PVMLCompiler
     currentEnvironment: Environment,
     functionEnvironments: FunctionEnvironments,
     builder: PVMLIRBuilder,
+    variant: number,
     tokenAnnotations: WeakMap<Token, CompilerAnnotation> = new WeakMap(),
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
@@ -68,6 +76,7 @@ export class PVMLCompiler
     this.currentEnvironment = currentEnvironment;
     this.functionEnvironments = functionEnvironments;
     this.isTailCall = false;
+    this.variant = variant;
     this.tokenAnnotations = tokenAnnotations;
     this.envSlotCounters = envSlotCounters;
     this.envSlotMaps = envSlotMaps;
@@ -81,6 +90,7 @@ export class PVMLCompiler
    */
   static fromProgram(
     program: StmtNS.FileInput,
+    variant: number,
     functionEnvironments?: FunctionEnvironments,
   ): PVMLCompiler {
     if (!functionEnvironments) {
@@ -93,7 +103,7 @@ export class PVMLCompiler
     }
     PVMLIRBuilder.resetIndex();
     const builder = new PVMLIRBuilder(0);
-    return new PVMLCompiler(mainEnv, functionEnvironments, builder);
+    return new PVMLCompiler(mainEnv, functionEnvironments, builder, variant);
   }
 
   fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
@@ -111,6 +121,7 @@ export class PVMLCompiler
       nextEnvironment,
       this.functionEnvironments,
       builder,
+      this.variant,
       this.tokenAnnotations,
       this.envSlotCounters,
       this.envSlotMaps,
@@ -362,24 +373,37 @@ export class PVMLCompiler
     }
   }
 
+  /**
+   * `==`/`!=`/ordering mean different things at §1/§2 (bool — and for `==`/`!=`,
+   * function — operands are rejected outright: docs/specs/python_typing_middle_12.tex)
+   * vs §3/§4 (bool participates as the int it is, no exclusions:
+   * python_typing_middle_34.tex). Rather than have the VM ask "which chapter is
+   * this program?" at runtime, the compiler bakes that choice into which of the
+   * two opcode families it emits — see the EQG12/NEQG12/LTG12/GTG12/LEG12/GEG12
+   * comment in opcodes.ts.
+   */
   private getCompareOpCode(operator: Token): number {
+    const restricted = this.variant <= 2;
     switch (operator.type) {
       case TokenType.LESS:
-        return OpCodes.LTG;
+        return restricted ? OpCodes.LTG12 : OpCodes.LTG;
       case TokenType.GREATER:
-        return OpCodes.GTG;
+        return restricted ? OpCodes.GTG12 : OpCodes.GTG;
       case TokenType.LESSEQUAL:
-        return OpCodes.LEG;
+        return restricted ? OpCodes.LEG12 : OpCodes.LEG;
       case TokenType.GREATEREQUAL:
-        return OpCodes.GEG;
+        return restricted ? OpCodes.GEG12 : OpCodes.GEG;
       case TokenType.DOUBLEEQUAL:
-        return OpCodes.EQG;
+        return restricted ? OpCodes.EQG12 : OpCodes.EQG;
       case TokenType.NOTEQUAL:
-        return OpCodes.NEQG;
-      // `is`/`is not` test identity (Python pointer equality), which is a
-      // different question from `==`/`!=`'s structural equality — e.g. two
-      // separately-constructed but element-wise-equal lists are `==` but not
-      // `is`. They therefore get their own opcodes rather than reusing EQG/NEQG.
+        return restricted ? OpCodes.NEQG12 : OpCodes.NEQG;
+      // `is`/`is not` only exist at §3/§4 at all (rejected at §1/§2 by
+      // NoIsOperatorValidator before compilation ever starts), so there's no
+      // chapter-gated opcode choice to make here. They test identity (Python
+      // pointer equality), a different question from `==`/`!=`'s structural
+      // equality — e.g. two separately-constructed but element-wise-equal
+      // lists are `==` but not `is`. They therefore get their own opcodes
+      // rather than reusing EQG/NEQG.
       case TokenType.IS:
         return OpCodes.EQP;
       case TokenType.ISNOT:

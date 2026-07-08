@@ -36,7 +36,7 @@ export class PyPvmlPynterEvaluator extends BasicEvaluator {
       if (errors.length > 0) {
         throw errors[0];
       }
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, 3, environments);
       const program = compiler.compileProgram(ast);
       const binary = assemble(program, PYNTER_OPCODE_MAX);
 

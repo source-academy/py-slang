@@ -362,12 +362,19 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Run scope conflict checks before resolving the body.
     this.checkFunctionScopeConflicts(stmt);
 
-    // Declare global names in the outermost (module-level) environment so that
-    // variable lookups within this function can find them via the chain walk.
+    // Declare global names in the outermost *module-level* environment (not the
+    // absolute-root builtins/prelude environment one level further out — see
+    // visitGlobalStmt's isModuleLevel check for the same "one below root" test)
+    // so that variable lookups within this function can find them via the chain
+    // walk. This matters even for a name with no top-level assignment at all
+    // (`def f(): global y; y = 1` with no `y` anywhere at module scope): without
+    // this, PVMLCompiler's getTokenAnnotation would resolve `y` all the way to
+    // the builtins environment and misinterpret it as an unimplemented
+    // primitive function, rather than a fresh module-level variable slot.
     if (this.globalNamesInCurrentFunction.size > 0) {
       let globalEnv: Environment | null = this.environment;
-      while (globalEnv?.enclosing !== null) {
-        globalEnv = globalEnv?.enclosing ?? null;
+      while (globalEnv !== null && globalEnv.enclosing !== null && globalEnv.enclosing.enclosing !== null) {
+        globalEnv = globalEnv.enclosing;
       }
       if (globalEnv) {
         for (const name of this.globalNamesInCurrentFunction) {

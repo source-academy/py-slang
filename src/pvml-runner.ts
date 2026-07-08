@@ -93,7 +93,7 @@ export async function runCodePvmlDetailed(
 
   let binary: Uint8Array;
   try {
-    const compiler = PVMLCompiler.fromProgram(ast, environments);
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments);
     const program = compiler.compileProgram(ast);
     binary = assemble(program, PYNTER_OPCODE_MAX);
   } catch (e: unknown) {

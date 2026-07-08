@@ -90,14 +90,33 @@ export enum OpCodes {
   FLOORDIVF = 88,
   NEWITER = 89,
   FOR_ITER = 90,
+  // §1/§2-restricted comparison opcodes: bool (and, for EQG12/NEQG12, function)
+  // operands are rejected outright, matching docs/specs/python_typing_middle_12.tex
+  // (bool/function excluded from ==/!=; ordering never admits bool). The
+  // unqualified EQG/NEQG/LTG/GTG/LEG/GEG opcodes are the §3/§4 semantics
+  // instead (bool participates as the int it is — python_typing_middle_34.tex).
+  // The PVML compiler picks between the two based on the chapter it's
+  // compiling for, so neither the compiler's downstream consumers nor the
+  // interpreter need a runtime "which chapter is this" check — see
+  // PVMLCompiler's `variant` field and getCompareOpCode().
+  EQG12 = 91,
+  NEQG12 = 92,
+  LTG12 = 93,
+  GTG12 = 94,
+  LEG12 = 95,
+  GEG12 = 96,
 }
 
-export const OPCODE_MAX = 90;
+export const OPCODE_MAX = 96;
 
 /**
  * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
- * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER) are py-slang extensions not
- * yet implemented natively by Pynter (nor by the WASM Sinter/Pynter port).
+ * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER, and the EQG12/NEQG12/LTG12/
+ * GTG12/LEG12/GEG12 §1/§2-restricted comparisons) are py-slang extensions not
+ * implemented natively by Pynter (nor by the WASM Sinter/Pynter port). The
+ * §1/§2 comparison opcodes in particular will never need to be, since the
+ * native Pynter pathway is permanently gated to Python §3 only (see
+ * pvml-runner.ts) — only py-slang's own PVMLInterpreter ever executes them.
  * EQP/NEQP (is/is not) are below this threshold — Pynter implements them.
  */
 export const PYNTER_OPCODE_MAX = 0x56; // 86
@@ -107,6 +126,12 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVF]: "floor division (//)",
   [OpCodes.NEWITER]: "for loops",
   [OpCodes.FOR_ITER]: "for loops",
+  [OpCodes.EQG12]: "§1/§2 comparison semantics",
+  [OpCodes.NEQG12]: "§1/§2 comparison semantics",
+  [OpCodes.LTG12]: "§1/§2 comparison semantics",
+  [OpCodes.GTG12]: "§1/§2 comparison semantics",
+  [OpCodes.LEG12]: "§1/§2 comparison semantics",
+  [OpCodes.GEG12]: "§1/§2 comparison semantics",
 };
 
 /**

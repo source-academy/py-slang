@@ -8,9 +8,9 @@ import {
   ZeroDivisionError,
 } from "../engines/pvml/errors";
 
-function compileAndRun(code: string): unknown {
+function compileAndRun(code: string, variant: number = 4): unknown {
   const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
   const interpreter = new PVMLInterpreter(program);
   const result = interpreter.execute();
@@ -18,10 +18,13 @@ function compileAndRun(code: string): unknown {
   return PVMLInterpreter.toJSValue(result);
 }
 
-function compileAndRunWithOutput(code: string): { result: unknown; outputs: string[] } {
+function compileAndRunWithOutput(
+  code: string,
+  variant: number = 4,
+): { result: unknown; outputs: string[] } {
   const outputs: string[] = [];
   const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
   const interpreter = new PVMLInterpreter(program, {
     sendOutput: msg => outputs.push(msg),
@@ -746,7 +749,7 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxInstructions: 50 });
       expect(() => interpreter.execute()).toThrow(/instruction limit/i);
     });
@@ -758,7 +761,7 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
       expect(() => interpreter.execute()).toThrow(/call depth/i);
     });
@@ -769,7 +772,7 @@ loop()
       const code = "def f(x):\n    return x + 1\nf(10)\n";
       const ast = parse(code);
       const { environments } = analyzeWithEnvironments(ast, code, 4);
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, environments);
       const result = PVMLInterpreter.toJSValue(
         new PVMLInterpreter(compiler.compileProgram(ast)).execute(),
       );

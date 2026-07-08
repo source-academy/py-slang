@@ -14,9 +14,9 @@ import { generatePVMLTestCases, PVMLTestCases } from "./utils";
 /** The opcodes the entry function's compiled body contains, for compiler-only assertions
  * that don't require the interpreter to execute them (e.g. opcodes the interpreter doesn't
  * implement yet). */
-function compiledEntryOpcodes(code: string): OpCodes[] {
+function compiledEntryOpcodes(code: string, variant: number = 4): OpCodes[] {
   const ast = parse(code.endsWith("\n") ? code : code + "\n");
-  const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+  const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
   const entryFn = program.functions[program.entryPoint];
   return Array.from(entryFn.opcodes);
 }
@@ -211,6 +211,42 @@ describe("PVML E2E", () => {
     ],
   };
 
+  // `global`/`nonlocal` variable references resolve via the same environment-
+  // chain machinery already exercised by closures/recursion above — see
+  // resolver.ts's visitFunctionDefStmt, which pre-declares a `global`-declared
+  // name in the module-level environment (not the outer builtins/prelude
+  // environment) so a name with *no* top-level assignment at all still gets a
+  // real variable slot there, rather than being mistaken for an unimplemented
+  // primitive function.
+  const globalNonlocalTests: PVMLTestCases = {
+    global: [
+      ["x = 0\ndef set_x():\n    global x\n    x = 42\nset_x()\nx", 42, null],
+      ["def set_y():\n    global y\n    y = 99\nset_y()\ny", 99, null],
+      [
+        "def outer():\n    def inner():\n        global z\n        z = 7\n    inner()\nouter()\nz",
+        7,
+        null,
+      ],
+      [
+        "def setter():\n    global w\n    w = 5\ndef getter():\n    global w\n    return w + 1\nsetter()\ngetter()",
+        6,
+        null,
+      ],
+      [
+        "def bump():\n    global counter\n    counter = 0\n    counter = counter + 1\n    return counter\nbump()",
+        1,
+        null,
+      ],
+    ],
+    nonlocal: [
+      [
+        "def outer():\n    n = 0\n    def inc():\n        nonlocal n\n        n = n + 1\n    inc()\n    inc()\n    return n\nouter()",
+        2,
+        null,
+      ],
+    ],
+  };
+
   const errorTests: PVMLTestCases = {
     "type errors": [
       ['1 + ""', UnsupportedOperandTypeError, null],
@@ -228,6 +264,7 @@ describe("PVML E2E", () => {
   describe("Branches", () => generatePVMLTestCases(branchTests));
   describe("Loops", () => generatePVMLTestCases(loopTests));
   describe("Combined", () => generatePVMLTestCases(combinedTests));
+  describe("Global / Nonlocal", () => generatePVMLTestCases(globalNonlocalTests));
   describe("Errors", () => generatePVMLTestCases(errorTests));
 
   // `is`/`is not` compile to their own EQP/NEQP opcodes, distinct from `==`/`!=`'s
@@ -253,4 +290,63 @@ describe("PVML E2E", () => {
       expect(compiledEntryOpcodes("1 != 1")).not.toContain(OpCodes.NEQP);
     });
   });
+
+  // `==`/`!=`/ordering compile to a different opcode family per chapter (see
+  // pvml-compiler.ts's getCompareOpCode): §1/§2 reject bool operands outright
+  // (EQG12/NEQG12/LTG12/GTG12/LEG12/GEG12), §3/§4 let bool participate as the
+  // int it is (EQG/NEQG/LTG/GTG/LEG/GEG) — the interpreter itself never has to
+  // ask which chapter compiled the program.
+  describe("Compiler: chapter-gated comparison opcodes", () => {
+    test("`==` compiles to EQG12 at §1/§2, EQG at §3/§4", () => {
+      expect(compiledEntryOpcodes("1 == 1", 1)).toContain(OpCodes.EQG12);
+      expect(compiledEntryOpcodes("1 == 1", 2)).toContain(OpCodes.EQG12);
+      expect(compiledEntryOpcodes("1 == 1", 3)).toContain(OpCodes.EQG);
+      expect(compiledEntryOpcodes("1 == 1", 3)).not.toContain(OpCodes.EQG12);
+      expect(compiledEntryOpcodes("1 == 1", 4)).toContain(OpCodes.EQG);
+    });
+
+    test("`<` compiles to LTG12 at §1/§2, LTG at §3/§4", () => {
+      expect(compiledEntryOpcodes("1 < 2", 1)).toContain(OpCodes.LTG12);
+      expect(compiledEntryOpcodes("1 < 2", 3)).toContain(OpCodes.LTG);
+      expect(compiledEntryOpcodes("1 < 2", 3)).not.toContain(OpCodes.LTG12);
+    });
+  });
+
+  const chapter12BoolExclusionTests: PVMLTestCases = {
+    "== / != reject bool": [
+      ["True == 1", UnsupportedOperandTypeError, null],
+      ["True == True", UnsupportedOperandTypeError, null],
+      ["1 != True", UnsupportedOperandTypeError, null],
+    ],
+    "ordering rejects bool": [
+      ["True < 2", UnsupportedOperandTypeError, null],
+      ["1 <= True", UnsupportedOperandTypeError, null],
+    ],
+    "still works for non-bool operands": [
+      ["1 == 1", true, null],
+      ["1 < 2", true, null],
+    ],
+  };
+
+  const chapter34BoolAsIntTests: PVMLTestCases = {
+    "== / != let bool participate as int": [
+      ["True == 1", true, null],
+      ["True == True", true, null],
+      ["1 != True", false, null],
+    ],
+    "ordering lets bool participate as int": [
+      ["True < 2", true, null],
+      ["1 <= True", true, null],
+      ["2 <= True", false, null],
+    ],
+  };
+
+  describe("Chapter 1: == / != / ordering reject bool", () =>
+    generatePVMLTestCases(chapter12BoolExclusionTests, 1));
+  describe("Chapter 2: == / != / ordering reject bool", () =>
+    generatePVMLTestCases(chapter12BoolExclusionTests, 2));
+  describe("Chapter 3: == / != / ordering let bool participate as int", () =>
+    generatePVMLTestCases(chapter34BoolAsIntTests, 3));
+  describe("Chapter 4: == / != / ordering let bool participate as int", () =>
+    generatePVMLTestCases(chapter34BoolAsIntTests, 4));
 });
