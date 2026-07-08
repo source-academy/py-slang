@@ -5,7 +5,9 @@ import { parse } from "../parser/parser-adapter";
 
 function compileAndAssemble(code: string): Uint8Array {
   const ast = parse(code);
-  const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
+  // This suite exercises the serialised binary format itself, which can't carry
+  // arbitrary-precision int literals (LGCBI) — see PVMLCompiler's `targetsPynter`.
+  const program = PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast);
   return assemble(program);
 }
 
@@ -37,7 +39,7 @@ describe("PVML assembler", () => {
   describe("disassemble round-trip", () => {
     test("function count is preserved", () => {
       const ast = parse("def f(x):\n    return x\nf(1)\n");
-      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast);
       expect(disassemble(assemble(program)).functions.length).toBe(program.functions.length);
     });
 

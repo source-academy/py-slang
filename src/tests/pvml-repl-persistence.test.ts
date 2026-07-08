@@ -53,16 +53,17 @@ describe("PVML REPL persistence (useGlobalMap mode)", () => {
 
     const r1 = runChunk("x = 5\ndef f():\n    return x + 1\n", globalEnv);
     globalEnv = r1.globalEnv;
-    expect(globalEnv.get("x")).toBe(5);
+    // Python `int` values are genuine bigints here (see PVMLType.BIGINT).
+    expect(globalEnv.get("x")).toBe(5n);
 
     const r2 = runChunk("f()", globalEnv);
-    expect(r2.result).toBe(6);
+    expect(r2.result).toBe(6n);
 
     const r3 = runChunk("x = x + 10\nx", r2.globalEnv);
-    expect(r3.result).toBe(15);
+    expect(r3.result).toBe(15n);
 
     const r4 = runChunk("f()", r3.globalEnv);
-    expect(r4.result).toBe(16);
+    expect(r4.result).toBe(16n);
   });
 
   test("chunk 2 can define a new global the array model couldn't have pre-sized", () => {
@@ -70,7 +71,7 @@ describe("PVML REPL persistence (useGlobalMap mode)", () => {
     const r1 = runChunk("a = 1\n", globalEnv);
     globalEnv = r1.globalEnv;
     const r2 = runChunk("b = 2\na + b", globalEnv);
-    expect(r2.result).toBe(3);
+    expect(r2.result).toBe(3n);
   });
 
   test("`global` from within a function still works across chunks", () => {
@@ -78,7 +79,7 @@ describe("PVML REPL persistence (useGlobalMap mode)", () => {
     const r1 = runChunk("def set_y():\n    global y\n    y = 99\nset_y()\n", globalEnv);
     globalEnv = r1.globalEnv;
     const r2 = runChunk("y", globalEnv);
-    expect(r2.result).toBe(99);
+    expect(r2.result).toBe(99n);
   });
 
   test("nonlocal closures are unaffected by useGlobalMap mode", () => {
@@ -87,6 +88,6 @@ describe("PVML REPL persistence (useGlobalMap mode)", () => {
       "def outer():\n    n = 0\n    def inc():\n        nonlocal n\n        n = n + 1\n    inc()\n    inc()\n    return n\nouter()",
       globalEnv,
     );
-    expect(r.result).toBe(2);
+    expect(r.result).toBe(2n);
   });
 });

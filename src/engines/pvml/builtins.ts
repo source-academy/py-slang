@@ -1,3 +1,7 @@
+import { numericCompare } from "../cse/utils";
+import { toPythonString } from "../../stdlib/utils";
+import { PyComplexNumber } from "../../types";
+import { pvmlBoxToCseValue } from "./cse-interop";
 import type { PVMLBoxType } from "./types";
 import { getPVMLType, isPVMLObject, PVMLType } from "./types";
 import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
@@ -22,13 +26,24 @@ import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
  * range() called outside a for-loop, and only for this file's own TS-side
  * PVMLInterpreter — native Pynter has no primitive for it at all.
  *
- * `str`/`repr` point at native Pynter's unimplemented `stringify` stub
- * (index 90, `sivmfn_prim_unimpl`) rather than being left out: SICPy preludes
- * (e.g. linked-list.prelude.ts's `llist_to_string`) reference `repr()`, and
- * PVMLCompiler compiles a whole file eagerly — leaving the name out would
- * block every function in the prelude from compiling, not just the one that
- * calls it. Pointing it at the stub lets compilation succeed; it only faults
- * if actually called at runtime.
+ * `str`/`repr` point at two of native Pynter's unimplemented stubs (index 90
+ * `stringify`, index 91 `prompt`; both `sivmfn_prim_unimpl`) rather than
+ * being left out entirely: SICPy preludes (e.g. linked-list.prelude.ts's
+ * `llist_to_string`) reference `repr()`, and PVMLCompiler compiles a whole
+ * file eagerly — leaving the name out would block every function in the
+ * prelude from compiling, not just the one that calls it. Pointing them at
+ * unimplemented-but-real stub slots lets compilation succeed for both
+ * targets; a `targetsPynter`-compiled program calling either one still
+ * faults cleanly if it ever reaches real Pynter, exactly as before. They
+ * need genuinely different indices (not both 90, as before this file's own
+ * TS-side str()/repr() implementation existed) because this file's
+ * `executePrimitive` dispatches on primitive index alone, and str()/repr()
+ * differ in one respect a shared index can't distinguish: a *bare* string
+ * argument is quoted by repr() but not str() (e.g. `str("a")` -> `a`,
+ * `repr("a")` -> `'a'`) — see cse-interop.ts/src/stdlib/utils.ts's
+ * toPythonString. `prompt` (index 91, i.e. Python's `input()`) has no
+ * PRIMITIVE_FUNCTIONS entry of its own, so borrowing its stub slot for
+ * `repr` doesn't take anything away from a real feature.
  *
  * `is_integer`/`is_float`/`is_complex`/`_gen_list` have no Source-standard-
  * library equivalent (Source's is_number() doesn't distinguish int/float,
@@ -43,6 +58,18 @@ import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
  * `is_array`/`array_length`, NOT native's own `is_list`(19)/`length`(26) —
  * those check "is/measure a proper cons-pair chain", which is the concept
  * py-slang's *linked-list* prelude (`is_llist`/`length`) uses instead.
+ *
+ * `complex`/`real`/`imag` (complex-number construction/decomposition — see
+ * cse-interop.ts and PVMLType.COMPLEX) have no Pynter equivalent whatsoever
+ * (unlike is_integer/is_float/etc. above, there isn't even an unimplemented
+ * stub for them) and native Pynter never will, per this project's explicit
+ * split: Pynter targets 32-bit embedded hardware, complex numbers are a
+ * "full power of the desktop browser" pathway feature. Their indices
+ * (97/98/99) are simply the next free numbers past Pynter's real dispatch
+ * table (SIVMFN_PRIMITIVE_COUNT = 97) — safe because op_call_p bounds-checks
+ * the primitive index before dispatch (pynter/vm/src/vm.c's
+ * do_internal_function) and faults cleanly on an out-of-range one, exactly
+ * like calling into a real unimplemented stub would.
  */
 export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["print", 5],
@@ -65,13 +92,16 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["set_head", 74],
   ["set_tail", 75],
   ["stream", 76], // Variadic lazy-stream constructor; identical semantics to native's.
-  ["str", 90], // Unimplemented native stub; see comment above.
-  ["repr", 90],
+  ["str", 90], // Unimplemented native "stringify" stub; see comment above.
+  ["repr", 91], // Unimplemented native "prompt" stub, borrowed; see comment above.
   ["tail", 89],
   ["pair", 68],
   ["is_integer", 92],
   ["is_float", 93],
   ["is_complex", 94],
+  ["real", 97],
+  ["imag", 98],
+  ["complex", 99],
   ["abs", 32],
   ["math_acos", 33],
   ["math_acosh", 34],
@@ -104,10 +134,52 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_trunc", 66],
 ]);
 
+/**
+ * Coerces int (bigint) args to float (Number) for builtins that are
+ * inherently floating-point (the math_* functions, round(), etc. — CPython's
+ * own `math` module always returns a float regardless of int/float input).
+ * Precision loss for huge bigints here matches that same float-coercion
+ * behavior, not a shortcut. Builtins that must preserve Python `int`-ness of
+ * their result (e.g. range()) use their own bigint-preserving arg check
+ * instead — see assertIntArgs below.
+ */
 function assertNumericArgs(args: PVMLBoxType[], fn: string): number[] {
-  if (!args.every(a => typeof a === "number"))
+  if (!args.every(a => typeof a === "number" || typeof a === "bigint"))
     throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
-  return args;
+  return args.map(a => Number(a));
+}
+
+/** Requires every arg to be a Python `int` — used by range(), which raises
+ * TypeError on a float argument in CPython too (range(3.0) is an error), and
+ * whose result must stay int-typed throughout (see NEWITER/FOR_ITER's
+ * "range"-kind PVMLIterator). Normally that means a genuine `bigint` (see
+ * PVMLType.BIGINT); a plain `number` is also accepted and treated as already
+ * being an int, since `targetsPynter`-compiled bytecode (PVMLCompiler) has no
+ * way to represent int/float differently at this value level at all (that
+ * distinction only lives in real Pynter's own NaN-boxing) — this lets
+ * Pynter-targeted bytecode still run correctly if ever executed directly by
+ * this TS interpreter instead of the native VM (e.g. assembler round-trip
+ * tests), at the cost of not rejecting a genuine Pynter-mode float there. */
+function assertIntArgs(args: PVMLBoxType[], fn: string): bigint[] {
+  if (!args.every(a => typeof a === "bigint" || typeof a === "number"))
+    throw new PVMLInterpreterError(`TypeError: ${fn}() requires integer arguments`);
+  return args.map(a => (typeof a === "bigint" ? a : BigInt(a)));
+}
+
+/** Converts an int/float/bool/complex value to PyComplexNumber, for the
+ * complex() constructor (case 99) — mirrors the non-string branches of
+ * PyComplexNumber.fromValue (src/types/value-types.ts) exactly, but without
+ * that method's Context/handleRuntimeError coupling (which PVML has no
+ * equivalent of); the string-parsing branch isn't needed here since
+ * complex(real, imag) never takes a string operand (that's only the
+ * one-argument `complex("3+4j")` form, which this primitive doesn't
+ * implement). Returns undefined for anything else. */
+function toPyComplexOperand(value: PVMLBoxType): PyComplexNumber | undefined {
+  if (value instanceof PyComplexNumber) return value;
+  if (typeof value === "boolean") return new PyComplexNumber(value ? 1 : 0, 0);
+  if (typeof value === "number") return PyComplexNumber.fromNumber(value);
+  if (typeof value === "bigint") return PyComplexNumber.fromBigInt(value);
+  return undefined;
 }
 
 function unaryMath(args: PVMLBoxType[], name: string, fn: (x: number) => number): number {
@@ -126,6 +198,23 @@ function binaryMath(
     throw new MissingRequiredPositionalError(`${name}() takes exactly 2 arguments`);
   const [a, b] = assertNumericArgs(args, name);
   return fn(a, b);
+}
+
+/** max()/min(): picks the winning argument by value (via the CSE-shared
+ * `numericCompare`, which correctly orders bigint against float) and returns
+ * it unchanged — preserving whichever int/float type it already was, unlike
+ * assertNumericArgs' float coercion (matches CSE's max()/min() in
+ * src/stdlib/misc.ts, which likewise return the original Value). */
+function pickExtremum(args: PVMLBoxType[], fn: string, wantMax: boolean): PVMLBoxType {
+  if (!args.every(a => typeof a === "number" || typeof a === "bigint"))
+    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
+  let best = args[0];
+  for (let i = 1; i < args.length; i++) {
+    const cur = args[i];
+    const cmp = numericCompare(cur, best);
+    if (wantMax ? cmp > 0 : cmp < 0) best = cur;
+  }
+  return best;
 }
 
 /** A pair is represented as a 2-element PVMLArray, matching native Pynter's cons-array layout. */
@@ -184,8 +273,13 @@ export function executePrimitive(
     case 20: // is_none
       return getPVMLType(args[0]) === PVMLType.NULL;
 
-    case 21: // is_number
-      return getPVMLType(args[0]) === PVMLType.NUMBER;
+    case 21: // is_number — true for int (bigint), float (number) or complex, not bool.
+      // Mirrors CSE's is_number() (misc.ts): the full numeric tower.
+      return (
+        typeof args[0] === "number" ||
+        typeof args[0] === "bigint" ||
+        args[0] instanceof PyComplexNumber
+      );
 
     case 22: // is_pair
       return isPVMLObject(args[0]) && args[0].type === "array" && args[0].elements.length === 2;
@@ -219,19 +313,30 @@ export function executePrimitive(
     case 89: // tail
       return pairElement(args, "tail", 1);
 
-    case 90: // str/repr: unimplemented, mirrors native Pynter's stringify stub
-      throw new PVMLInterpreterError(
-        "NotImplementedError: str()/repr() are not yet supported by the PVML/Pynter backend",
-      );
+    case 90: // str — reuses the CSE machine's own formatting logic (see
+      // cse-interop.ts's doc comment for why/how) rather than re-deriving
+      // Python's float/string/list formatting rules from scratch.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("str() takes exactly 1 argument");
+      return toPythonString(pvmlBoxToCseValue(args[0]), false);
 
-    case 92: // is_integer
-      return typeof args[0] === "number" && Number.isInteger(args[0]);
+    case 91: // repr — see str() above; differs only in quoting a bare string
+      // argument (see PRIMITIVE_FUNCTIONS' doc comment).
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("repr() takes exactly 1 argument");
+      return toPythonString(pvmlBoxToCseValue(args[0]), true);
 
-    case 93: // is_float
-      return typeof args[0] === "number" && !Number.isInteger(args[0]);
+    case 92: // is_integer — true only for a genuine int (bigint), matching
+      // CSE's is_integer() (misc.ts). A whole-valued float (e.g. `2.0`) is
+      // still a float in Python, so no longer checked via Number.isInteger()
+      // now that int/float are distinct runtime types (see PVMLType.BIGINT).
+      return typeof args[0] === "bigint";
 
-    case 94: // is_complex: PVML has no complex number representation
-      return false;
+    case 93: // is_float — true only for a genuine float (number); see is_integer above.
+      return typeof args[0] === "number";
+
+    case 94: // is_complex
+      return args[0] instanceof PyComplexNumber;
 
     case 95: {
       // _gen_list
@@ -245,6 +350,40 @@ export function executePrimitive(
       throw new PVMLInterpreterError(
         "NotImplementedError: arity() is not yet supported by the PVML/Pynter backend",
       );
+
+    case 97: // real — the real part of a complex number, as a float. Matches
+      // CSE's real() (misc.ts): requires a genuine complex argument.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("real() takes exactly 1 argument");
+      if (!(args[0] instanceof PyComplexNumber))
+        throw new PVMLInterpreterError(
+          `TypeError: real() argument must be complex, not '${getPVMLType(args[0])}'`,
+        );
+      return args[0].real;
+
+    case 98: // imag — see real() above.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("imag() takes exactly 1 argument");
+      if (!(args[0] instanceof PyComplexNumber))
+        throw new PVMLInterpreterError(
+          `TypeError: imag() argument must be complex, not '${getPVMLType(args[0])}'`,
+        );
+      return args[0].imag;
+
+    case 99: {
+      // complex(real, imag) — the constructor form (as distinct from the
+      // `a+bj` literal syntax, compiled via LGCC — see PVMLCompiler's
+      // visitComplexExpr). Matches CSE's complex() (misc.ts): real + imag*i.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError("complex() takes exactly 2 arguments");
+      const realPart = toPyComplexOperand(args[0]);
+      const imagPart = toPyComplexOperand(args[1]);
+      if (!realPart || !imagPart)
+        throw new PVMLInterpreterError(
+          "TypeError: complex() arguments must be int, float, bool or complex",
+        );
+      return realPart.add(imagPart.mul(new PyComplexNumber(0, 1)));
+    }
 
     case 76: // stream: needs a runtime-synthesized continuation closure, which this
       // TS interpreter can't create (closures reference statically compiled bytecode
@@ -260,15 +399,25 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `range() takes 1 to 3 arguments (${args.length} given)`,
         );
-      const [a, b, c] = assertNumericArgs(args, "range");
+      const [a, b, c] = assertIntArgs(args, "range");
       const [start, stop, step] =
-        args.length === 1 ? [0, a, 1] : args.length === 2 ? [a, b, 1] : [a, b, c];
-      if (step === 0) throw new PVMLInterpreterError("ValueError: range() arg 3 must not be zero");
+        args.length === 1 ? [0n, a, 1n] : args.length === 2 ? [a, b, 1n] : [a, b, c];
+      if (step === 0n) throw new PVMLInterpreterError("ValueError: range() arg 3 must not be zero");
       return { type: "iterator", kind: "range", current: start, stop, step };
     }
 
-    case 32: // abs
-      return unaryMath(args, "abs", Math.abs);
+    case 32: {
+      // abs — preserves int/float type (matches CSE's abs() in misc.ts:
+      // bigint stays bigint, at full precision); a complex argument's abs()
+      // is its modulus (a float), matching CSE and CPython.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("abs() takes exactly 1 argument");
+      const [x] = args;
+      if (typeof x === "bigint") return x < 0n ? -x : x;
+      if (typeof x === "number") return Math.abs(x);
+      if (x instanceof PyComplexNumber) return Math.sqrt(x.real * x.real + x.imag * x.imag);
+      throw new PVMLInterpreterError("TypeError: abs() requires numeric arguments");
+    }
     case 33: // math_acos
       return unaryMath(args, "math_acos", Math.acos);
     case 34: // math_acosh
@@ -312,7 +461,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `max() takes at least 2 arguments (${args.length} given)`,
         );
-      return Math.max(...assertNumericArgs(args, "max"));
+      return pickExtremum(args, "max", true);
     }
 
     case 56: {
@@ -321,7 +470,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `min() takes at least 2 arguments (${args.length} given)`,
         );
-      return Math.min(...assertNumericArgs(args, "min"));
+      return pickExtremum(args, "min", false);
     }
 
     case 57: // math_pow
@@ -331,11 +480,23 @@ export function executePrimitive(
       return Math.random();
 
     case 59: {
-      // round
+      // round (1-arg form, matching this primitive's signature): banker's
+      // rounding (round-half-to-even) to the nearest int, always returning a
+      // bigint regardless of whether the input was int or float — mirrors
+      // CSE's round() with no ndigits (misc.ts). Plain Math.round() would be
+      // wrong here twice over: it rounds .5 away from zero instead of to
+      // even, and it returns a float instead of Python's int result.
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("round() takes exactly 1 argument");
-      const [n] = assertNumericArgs(args, "round");
-      return Math.round(n);
+      const [x] = args;
+      if (typeof x !== "number" && typeof x !== "bigint")
+        throw new PVMLInterpreterError("TypeError: round() requires numeric arguments");
+      const shifted = new Intl.NumberFormat("en-US", {
+        roundingMode: "halfEven",
+        useGrouping: false,
+        maximumFractionDigits: 0,
+      } as Intl.NumberFormatOptions).format(x);
+      return BigInt(shifted);
     }
 
     case 61: // math_sin

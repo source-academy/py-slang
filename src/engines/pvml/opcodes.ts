@@ -120,9 +120,34 @@ export enum OpCodes {
   // using the plain slot-based module environment unchanged.
   LDGG = 97,
   STGG = 98,
+  // Loads an arbitrary-precision int literal from the bigint constant pool
+  // (PVMLIR's `bigints`, indexed by this opcode's arg1 — mirrors LGCS's
+  // string-constant-pool encoding, needed because arg1s is a Float64Array
+  // and can't carry a bigint payload beyond float64 precision directly).
+  // Browser-pathway only, matching the CSE machine's own bigint/number int-
+  // float split (full-power desktop browser use case — see PVMLCompiler's
+  // visitBigIntLiteralExpr). Native Pynter has no equivalent and isn't meant
+  // to: its NaN-boxed ints are a deliberately narrow 20-bit range (embedded/
+  // microcontroller target), nowhere near needing arbitrary precision.
+  LGCBI = 99,
+  // Loads a complex literal from the complex constant pool (PVMLIR's
+  // `complexes`, indexed by this opcode's arg1 — mirrors LGCBI's bigint-
+  // constant-pool encoding exactly, needed because arg1s (Float64Array)
+  // can't carry a real+imaginary pair). Browser-pathway only, matching the
+  // CSE machine's own complex-number support (full-power desktop browser
+  // use case — see PVMLCompiler's visitComplexExpr). Native Pynter has zero
+  // complex-number support and isn't meant to gain any.
+  LGCC = 100,
+  // Generic exponentiation (`**`), all numeric types (int/float/complex) —
+  // added alongside complex numbers since raising to a complex power, or a
+  // number to a complex power, is a real, non-corner-case operation
+  // (see PVMLInterpreter's powArith). No chapter-gated variant needed: `**`
+  // has no bool-exclusion rule distinguishing §1/§2 from §3/§4, unlike
+  // ==/!=/ordering (see EQG12 etc. above).
+  POWG = 101,
 }
 
-export const OPCODE_MAX = 98;
+export const OPCODE_MAX = 101;
 
 /**
  * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
@@ -149,6 +174,9 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.GEG12]: "§1/§2 comparison semantics",
   [OpCodes.LDGG]: "incremental/persistent global variables",
   [OpCodes.STGG]: "incremental/persistent global variables",
+  [OpCodes.LGCBI]: "arbitrary-precision integers",
+  [OpCodes.LGCC]: "complex numbers",
+  [OpCodes.POWG]: "exponentiation (**)",
 };
 
 /**
@@ -204,6 +232,8 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.FOR_ITER:
     case OpCodes.LDGG:
     case OpCodes.STGG:
+    case OpCodes.LGCBI:
+    case OpCodes.LGCC:
       return 5;
 
     case OpCodes.LDCF64:

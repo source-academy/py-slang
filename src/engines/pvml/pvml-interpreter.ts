@@ -1,6 +1,7 @@
-import { pythonMod } from "../cse/utils";
+import { numericCompare, pythonMod } from "../cse/utils";
+import { PyComplexNumber } from "../../types";
 import { executePrimitive } from "./builtins";
-import { UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
+import { PVMLInterpreterError, UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
 import OpCodes from "./opcodes";
 import {
   getPVMLType,
@@ -25,6 +26,64 @@ import {
 function isExcludedFromChapter12Equality(value: PVMLBoxType): boolean {
   if (typeof value === "boolean") return true;
   return isPVMLObject(value) && (value.type === "closure" || value.type === "primitive");
+}
+
+/** A Python `int` (bigint) or `float` (number) — the two *orderable* numeric
+ * runtime types (matching the CSE machine's `isNumeric`), and the only two
+ * eligible for `//`/`%` (Python has no complex floor division or modulo:
+ * `1j // 2`/`1j % 2` are TypeErrors). See `isArithmeticValue` below for the
+ * wider set (also complex) used by `+`/`-`/`*`/`/`/`**`/equality. */
+function isNumericValue(value: PVMLBoxType): value is number | bigint {
+  return typeof value === "number" || typeof value === "bigint";
+}
+
+/** A Python `int`, `float` or `complex` — every type `+`/`-`/`*`/`/`/`**` and
+ * `==`/`!=` operate on (see docs/specs/python_typing_3.tex's `**` table and
+ * CSE's `isCoercedComplex`). Ordering (`<` etc.) and `//`/`%` use the
+ * narrower `isNumericValue` instead — complex numbers support neither in
+ * Python. */
+function isArithmeticValue(value: PVMLBoxType): value is number | bigint | PyComplexNumber {
+  return typeof value === "number" || typeof value === "bigint" || value instanceof PyComplexNumber;
+}
+
+/** Promotes a number/bigint/complex value to PyComplexNumber, for mixed
+ * arithmetic where at least one operand is already complex. */
+function toComplex(value: number | bigint | PyComplexNumber): PyComplexNumber {
+  if (value instanceof PyComplexNumber) return value;
+  return typeof value === "bigint"
+    ? PyComplexNumber.fromBigInt(value)
+    : PyComplexNumber.fromNumber(value);
+}
+
+/**
+ * Complex division, following CPython's scaled algorithm to avoid overflow
+ * (see PyComplexNumber.div's doc comment in src/types/value-types.ts, which
+ * uses the same algorithm) — reimplemented here rather than calling
+ * PyComplexNumber.prototype.div directly because that method reports
+ * division-by-zero via the CSE machine's own Context/handleRuntimeError,
+ * which PVML has no equivalent of; PVML's own ZeroDivisionError is used here
+ * instead, matching every other arithmetic opcode in this file.
+ */
+function complexDiv(a: PyComplexNumber, b: PyComplexNumber): PyComplexNumber {
+  const denominator = b.real * b.real + b.imag * b.imag;
+  if (denominator === 0) throw new ZeroDivisionError("complex division by zero");
+
+  const absC = Math.abs(b.real);
+  const absD = Math.abs(b.imag);
+  let real: number;
+  let imag: number;
+  if (absD < absC) {
+    const ratio = b.imag / b.real;
+    const denom = b.real + b.imag * ratio;
+    real = (a.real + a.imag * ratio) / denom;
+    imag = (a.imag - a.real * ratio) / denom;
+  } else {
+    const ratio = b.real / b.imag;
+    const denom = b.imag + b.real * ratio;
+    real = (a.real * ratio + a.imag) / denom;
+    imag = (a.imag * ratio - a.real) / denom;
+  }
+  return new PyComplexNumber(real, imag);
 }
 
 const __DEBUG__ =
@@ -211,6 +270,20 @@ export class PVMLInterpreter {
           this.push(ir.strings[a1]);
           break;
 
+        // Arbitrary-precision int literal from the bigint constant pool (see
+        // PVMLIR's `bigints` field doc) — a1 is a bigint-table index, same
+        // encoding pattern as LGCS's string-table index.
+        case OpCodes.LGCBI:
+          this.push(ir.bigints[a1]);
+          break;
+
+        // Complex literal from the complex constant pool (see PVMLIR's
+        // `complexes` field doc) — a1 is a complexes-table index, same
+        // encoding pattern as LGCS/LGCBI.
+        case OpCodes.LGCC:
+          this.push(ir.complexes[a1]);
+          break;
+
         // Name-indexed global variable access (see `globalEnv` field doc) —
         // a1 is a string-table index, same encoding as LGCS.
         case OpCodes.LDGG:
@@ -241,8 +314,8 @@ export class PVMLInterpreter {
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
 
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            this.push((left as number) + (right as number));
+          if (isArithmeticValue(left) && isArithmeticValue(right)) {
+            this.push(PVMLInterpreter.numericArith("+", left, right));
           } else if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
             this.push((left as string) + (right as string));
           } else {
@@ -262,8 +335,8 @@ export class PVMLInterpreter {
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
 
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            this.push((left as number) - (right as number));
+          if (isArithmeticValue(left) && isArithmeticValue(right)) {
+            this.push(PVMLInterpreter.numericArith("-", left, right));
           } else {
             throw new UnsupportedOperandTypeError("-", leftType, rightType);
           }
@@ -281,8 +354,8 @@ export class PVMLInterpreter {
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
 
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            this.push((left as number) * (right as number));
+          if (isArithmeticValue(left) && isArithmeticValue(right)) {
+            this.push(PVMLInterpreter.numericArith("*", left, right));
           } else {
             throw new UnsupportedOperandTypeError("*", leftType, rightType);
           }
@@ -300,9 +373,8 @@ export class PVMLInterpreter {
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
 
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            if ((right as number) === 0) throw new ZeroDivisionError("division by zero");
-            this.push((left as number) / (right as number));
+          if (isArithmeticValue(left) && isArithmeticValue(right)) {
+            this.push(PVMLInterpreter.numericArith("/", left, right));
           } else {
             throw new UnsupportedOperandTypeError("/", leftType, rightType);
           }
@@ -321,9 +393,8 @@ export class PVMLInterpreter {
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
 
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            if ((right as number) === 0) throw new ZeroDivisionError("division by zero");
-            this.push(Math.floor((left as number) / (right as number)));
+          if (isNumericValue(left) && isNumericValue(right)) {
+            this.push(PVMLInterpreter.numericArith("//", left, right));
           } else {
             throw new UnsupportedOperandTypeError("//", leftType, rightType);
           }
@@ -341,11 +412,8 @@ export class PVMLInterpreter {
           const left = this.pop();
           const leftType = getPVMLType(left);
           const rightType = getPVMLType(right);
-          if (leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER) {
-            const a = left as number;
-            const b = right as number;
-            if (b === 0) throw new ZeroDivisionError("integer modulo by zero");
-            this.push(pythonMod(a, b));
+          if (isNumericValue(left) && isNumericValue(right)) {
+            this.push(PVMLInterpreter.numericArith("%", left, right));
           } else {
             throw new UnsupportedOperandTypeError("%", leftType, rightType);
           }
@@ -358,12 +426,29 @@ export class PVMLInterpreter {
           this.push(pythonMod(left, right));
           break;
         }
+        case OpCodes.POWG: {
+          const right = this.pop();
+          const left = this.pop();
+          const leftType = getPVMLType(left);
+          const rightType = getPVMLType(right);
+
+          if (isArithmeticValue(left) && isArithmeticValue(right)) {
+            this.push(PVMLInterpreter.powArith(left, right));
+          } else {
+            throw new UnsupportedOperandTypeError("**", leftType, rightType);
+          }
+          break;
+        }
         // Unary operations
         case OpCodes.NEGG: {
           const operand = this.pop();
           const operandType = getPVMLType(operand);
-          if (operandType === PVMLType.NUMBER) {
-            this.push(-(operand as number));
+          if (typeof operand === "number") {
+            this.push(-operand);
+          } else if (typeof operand === "bigint") {
+            this.push(-operand);
+          } else if (operand instanceof PyComplexNumber) {
+            this.push(new PyComplexNumber(-operand.real, -operand.imag));
           } else {
             throw new UnsupportedOperandTypeError("-", operandType);
           }
@@ -703,21 +788,185 @@ export class PVMLInterpreter {
    * (True == 1 is true), as in CPython where bool is an int subtype. Every
    * other value passes through unchanged. Used only by the §3/§4 comparison
    * opcodes (EQG/NEQG/LTG/GTG/LEG/GEG) — deliberately not by their §1/§2
-   * counterparts (EQG12/etc.), which reject bool operands instead. */
+   * counterparts (EQG12/etc.), which reject bool operands instead. Coerces to
+   * bigint (matching every other Python int's runtime representation here),
+   * not `number` — see PVMLType.BIGINT's doc comment. */
   private static asNumberIfBool(value: PVMLBoxType): PVMLBoxType {
-    return typeof value === "boolean" ? (value ? 1 : 0) : value;
+    return typeof value === "boolean" ? (value ? 1n : 0n) : value;
+  }
+
+  /**
+   * `==`/`!=` between two numeric (int/float/complex) values: same-type
+   * values compare exactly (bigint vs bigint, or number vs number); a mixed
+   * bigint/float pair goes through `numericCompare` (see ../cse/utils,
+   * shared with the CSE machine) for magnitude-correct cross-type
+   * comparison. If either side is complex, both are coerced to complex and
+   * compared via PyComplexNumber.equals (int/float coerce to a
+   * zero-imaginary-part complex, matching CPython: `1 == (1+0j)` is True).
+   * As in CPython, NaN is unordered and unequal to everything, including
+   * itself.
+   */
+  private static numericEquals(
+    left: number | bigint | PyComplexNumber,
+    right: number | bigint | PyComplexNumber,
+  ): boolean {
+    if (left instanceof PyComplexNumber || right instanceof PyComplexNumber) {
+      return toComplex(left).equals(toComplex(right));
+    }
+    if (typeof left === "number" && Number.isNaN(left)) return false;
+    if (typeof right === "number" && Number.isNaN(right)) return false;
+    if (typeof left === "bigint" && typeof right === "bigint") return left === right;
+    if (typeof left === "number" && typeof right === "number") return left === right;
+    return numericCompare(left, right) === 0;
+  }
+
+  /** `<`/`>`/`<=`/`>=` between two numeric (int/float) values — see
+   * `numericEquals` above for the same same-type-exact / mixed-type-via-
+   * `numericCompare` split, and the same NaN handling (every ordering
+   * comparison with a NaN operand is False). */
+  private static numericOrder(
+    op: "<" | ">" | "<=" | ">=",
+    left: number | bigint,
+    right: number | bigint,
+  ): boolean {
+    if (typeof left === "number" && Number.isNaN(left)) return false;
+    if (typeof right === "number" && Number.isNaN(right)) return false;
+    const cmp = numericCompare(left, right);
+    switch (op) {
+      case "<":
+        return cmp < 0;
+      case ">":
+        return cmp > 0;
+      case "<=":
+        return cmp <= 0;
+      case ">=":
+        return cmp >= 0;
+    }
+  }
+
+  /**
+   * `+`/`-`/`*`/`/`/`//`/`%` between two numeric (int/float) values, mirroring
+   * the CSE machine's exact promotion rules (src/engines/cse/operators.ts):
+   * if either operand is a float, both are coerced to float (with potential
+   * precision loss for huge bigints — this is Python's own float-coercion
+   * behavior, not a shortcut); if both are int (bigint), the result stays a
+   * bigint at full precision, except `/` which always produces a float even
+   * for int/int (Python 3's true division, PEP 238).
+   */
+  private static numericArith(
+    op: "+" | "-" | "*" | "/" | "//" | "%",
+    left: number | bigint | PyComplexNumber,
+    right: number | bigint | PyComplexNumber,
+  ): number | bigint | PyComplexNumber {
+    if (left instanceof PyComplexNumber || right instanceof PyComplexNumber) {
+      // Callers only ever reach here with a complex operand for +/-/*//
+      // (ADDG/SUBG/MULG/DIVG) — FLOORDIVG/MODG gate on the narrower
+      // isNumericValue (no complex) before calling this at all, since Python
+      // has no complex floor division or modulo.
+      const l = toComplex(left);
+      const r = toComplex(right);
+      switch (op) {
+        case "+":
+          return l.add(r);
+        case "-":
+          return l.sub(r);
+        case "*":
+          return l.mul(r);
+        case "/":
+          return complexDiv(l, r);
+        default:
+          throw new PVMLInterpreterError(
+            `TypeError: unsupported operand type(s) for ${op}: 'complex'`,
+          );
+      }
+    }
+    if (typeof left === "number" || typeof right === "number") {
+      const l = Number(left);
+      const r = Number(right);
+      switch (op) {
+        case "+":
+          return l + r;
+        case "-":
+          return l - r;
+        case "*":
+          return l * r;
+        case "/":
+          if (r === 0) throw new ZeroDivisionError("division by zero");
+          return l / r;
+        case "//":
+          if (r === 0) throw new ZeroDivisionError("division by zero");
+          return Math.floor(l / r);
+        case "%":
+          if (r === 0) throw new ZeroDivisionError("integer modulo by zero");
+          return pythonMod(l, r);
+      }
+    }
+    const l = left;
+    const r = right;
+    switch (op) {
+      case "+":
+        return l + r;
+      case "-":
+        return l - r;
+      case "*":
+        return l * r;
+      case "/":
+        if (r === 0n) throw new ZeroDivisionError("division by zero");
+        return Number(l) / Number(r);
+      case "//":
+        if (r === 0n) throw new ZeroDivisionError("division by zero");
+        return (l - pythonMod(l, r)) / r;
+      case "%":
+        if (r === 0n) throw new ZeroDivisionError("integer modulo by zero");
+        return pythonMod(l, r);
+    }
+  }
+
+  /**
+   * `**`, matching docs/specs/python_typing_3.tex's exponentiation table:
+   * int**int with a non-negative exponent stays int (arbitrary precision);
+   * a negative int exponent (or any float/complex operand) promotes to
+   * float/complex. `0 ** negative` is a ZeroDivisionError in Python, checked
+   * before JS's own `**` would otherwise happily return Infinity.
+   */
+  private static powArith(
+    left: number | bigint | PyComplexNumber,
+    right: number | bigint | PyComplexNumber,
+  ): number | bigint | PyComplexNumber {
+    if (left instanceof PyComplexNumber || right instanceof PyComplexNumber) {
+      return toComplex(left).pow(toComplex(right));
+    }
+    if (typeof left === "bigint" && typeof right === "bigint") {
+      if (left === 0n && right < 0n) {
+        throw new ZeroDivisionError("0.0 cannot be raised to a negative power");
+      }
+      if (right < 0n) return Number(left) ** Number(right);
+      return left ** right;
+    }
+    const l = Number(left);
+    const r = Number(right);
+    if (l === 0 && r < 0) throw new ZeroDivisionError("0.0 cannot be raised to a negative power");
+    return l ** r;
   }
 
   private strictEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    this.push(left === right);
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      this.push(PVMLInterpreter.numericEquals(left, right));
+    } else {
+      this.push(left === right);
+    }
   }
 
   private strictNotEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    this.push(left !== right);
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      this.push(!PVMLInterpreter.numericEquals(left, right));
+    } else {
+      this.push(left !== right);
+    }
   }
 
   /** §1/§2's `==`/`!=` (see docs/specs/python_typing_middle_12.tex): bool and
@@ -732,7 +981,11 @@ export class PVMLInterpreter {
     if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
       throw new UnsupportedOperandTypeError("==", leftType, rightType);
     }
-    this.push(left === right);
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      this.push(PVMLInterpreter.numericEquals(left, right));
+    } else {
+      this.push(left === right);
+    }
   }
 
   private strictNotEqual12(): void {
@@ -743,7 +996,11 @@ export class PVMLInterpreter {
     if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
       throw new UnsupportedOperandTypeError("!=", leftType, rightType);
     }
-    this.push(left !== right);
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      this.push(!PVMLInterpreter.numericEquals(left, right));
+    } else {
+      this.push(left !== right);
+    }
   }
 
   /**
@@ -776,18 +1033,20 @@ export class PVMLInterpreter {
     const leftType = getPVMLType(left);
     const rightType = getPVMLType(right);
 
-    const bothNumbers = leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER;
-    const bothStrings = leftType === PVMLType.STRING && rightType === PVMLType.STRING;
-    if (!bothNumbers && !bothStrings) {
-      throw new UnsupportedOperandTypeError(op, leftType, rightType);
+    if (isNumericValue(left) && isNumericValue(right)) {
+      this.push(PVMLInterpreter.numericOrder(op, left, right));
+      return;
     }
-
-    const l = left as number | string;
-    const r = right as number | string;
-    if (op === "<") this.push(l < r);
-    else if (op === ">") this.push(l > r);
-    else if (op === "<=") this.push(l <= r);
-    else this.push(l >= r);
+    if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
+      const l = left as string;
+      const r = right as string;
+      if (op === "<") this.push(l < r);
+      else if (op === ">") this.push(l > r);
+      else if (op === "<=") this.push(l <= r);
+      else this.push(l >= r);
+      return;
+    }
+    throw new UnsupportedOperandTypeError(op, leftType, rightType);
   }
 
   /** §1/§2's ordering comparisons (see docs/specs/python_typing_middle_12.tex):
@@ -799,18 +1058,20 @@ export class PVMLInterpreter {
     const leftType = getPVMLType(left);
     const rightType = getPVMLType(right);
 
-    const bothNumbers = leftType === PVMLType.NUMBER && rightType === PVMLType.NUMBER;
-    const bothStrings = leftType === PVMLType.STRING && rightType === PVMLType.STRING;
-    if (!bothNumbers && !bothStrings) {
-      throw new UnsupportedOperandTypeError(op, leftType, rightType);
+    if (isNumericValue(left) && isNumericValue(right)) {
+      this.push(PVMLInterpreter.numericOrder(op, left, right));
+      return;
     }
-
-    const l = left as number | string;
-    const r = right as number | string;
-    if (op === "<") this.push(l < r);
-    else if (op === ">") this.push(l > r);
-    else if (op === "<=") this.push(l <= r);
-    else this.push(l >= r);
+    if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
+      const l = left as string;
+      const r = right as string;
+      if (op === "<") this.push(l < r);
+      else if (op === ">") this.push(l > r);
+      else if (op === "<=") this.push(l <= r);
+      else this.push(l >= r);
+      return;
+    }
+    throw new UnsupportedOperandTypeError(op, leftType, rightType);
   }
 
   // ========================================================================
@@ -1121,8 +1382,20 @@ export class PVMLInterpreter {
    */
   static toJSValue(value: PVMLBoxType): unknown {
     if (value === null || value === undefined) return value;
-    if (typeof value === "number" || typeof value === "boolean" || typeof value === "string")
+    if (
+      typeof value === "number" ||
+      typeof value === "bigint" ||
+      typeof value === "boolean" ||
+      typeof value === "string"
+    )
       return value;
+    // Complex numbers are stringified here rather than passed through as the
+    // raw PyComplexNumber object (unlike bigint above, which structured-clones
+    // natively) — a plain class instance isn't guaranteed to survive a
+    // conductor/postMessage boundary the way a bigint primitive does, and
+    // `.toString()` already matches this value's str()/repr() rendering
+    // (see cse-interop.ts) exactly.
+    if (value instanceof PyComplexNumber) return value.toString();
     if (isPVMLObject(value)) {
       if (value.type === "closure") return `<closure:${value.functionIndex}>`;
       if (value.type === "primitive") return `<primitive:${value.primitiveIndex}>`;

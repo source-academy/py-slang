@@ -5,7 +5,11 @@
  * Uses the same TestCases tuple convention as stdlib.test.ts:
  *   [code, expectedValue, expectedOutput]
  */
-import { UnsupportedOperandTypeError, ZeroDivisionError } from "../engines/pvml/errors";
+import {
+  PVMLInterpreterError,
+  UnsupportedOperandTypeError,
+  ZeroDivisionError,
+} from "../engines/pvml/errors";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import OpCodes from "../engines/pvml/opcodes";
 import { parse } from "../parser/parser-adapter";
@@ -297,13 +301,13 @@ describe("PVML E2E", () => {
       ["1 is 1", true, null],
       ["True is True", true, null],
       ["1 is True", false, null],
-      // Real Python: false (int and float are distinct types, so `is` should
-      // never treat them as identical, even at equal value). PVML doesn't
-      // distinguish int from float at the *value* level, unlike the CSE
-      // machine's bigint/number split — both compile to a plain JS `number`
-      // at runtime, so they're indistinguishable to `is` here. A known,
-      // pre-existing representation gap, not something this change touches.
-      ["1 is 1.0", true, null],
+      // int and float are distinct types in Python, so `is` never treats them
+      // as identical even at equal value. Now that PVML's `int` literals
+      // compile to a genuine `bigint` (matching the CSE machine's own
+      // bigint/number split — see PVMLType.BIGINT), `1` and `1.0` are
+      // distinguishable at the value level: `1n !== 1.0` in JS gives the
+      // correct answer for free.
+      ["1 is 1.0", false, null],
       ["x = [1, 2]\ny = x\nx is y", true, null],
       ["[1, 2] is [1, 2]", false, null],
       ["f = lambda x: x\ng = f\nf is g", true, null],
@@ -372,4 +376,155 @@ describe("PVML E2E", () => {
     generatePVMLTestCases(chapter34BoolAsIntTests, 3));
   describe("Chapter 4: == / != / ordering let bool participate as int", () =>
     generatePVMLTestCases(chapter34BoolAsIntTests, 4));
+
+  // Builtins that must distinguish Python `int` (bigint) from `float`
+  // (number) now that PVML represents them as genuinely distinct runtime
+  // types (see PVMLType.BIGINT) — mirrors the CSE machine's own
+  // is_number()/is_integer()/is_float()/abs()/round()/max()/min() (misc.ts).
+  const builtinBigintTests: PVMLTestCases = {
+    "is_number / is_integer / is_float": [
+      ["is_number(5)", true, null],
+      ["is_number(5.0)", true, null],
+      ["is_number(True)", false, null],
+      ["is_integer(5)", true, null],
+      ["is_integer(5.0)", false, null],
+      ["is_float(5.0)", true, null],
+      ["is_float(5)", false, null],
+    ],
+    "abs() preserves int/float type": [
+      ["abs(-5)", 5, null],
+      ["abs(-5.5)", 5.5, null],
+      ["is_integer(abs(-5))", true, null],
+      ["is_float(abs(-5.5))", true, null],
+      ["abs(-5) is 5", true, null],
+    ],
+    "round() always returns an int": [
+      ["round(3.5)", 4, null],
+      ["round(2.5)", 2, null], // banker's rounding: rounds to even, not away from zero
+      ["is_integer(round(3.5))", true, null],
+      ["is_integer(round(5))", true, null],
+    ],
+    "max() / min() preserve the winning argument's type": [
+      ["max(3, 7, 2, 9)", 9, null],
+      ["is_integer(max(3, 7, 2, 9))", true, null],
+      ["max(3, 7.5, 2)", 7.5, null],
+      ["is_float(max(3, 7.5, 2))", true, null],
+      ["min(3, 7, 2, 9)", 2, null],
+      ["is_integer(min(3, 7, 2, 9))", true, null],
+      ["min(3.5, 7, 2)", 2, null],
+      ["is_integer(min(3.5, 7, 2))", true, null],
+    ],
+  };
+
+  describe("Builtins: int/float bigint-awareness", () => generatePVMLTestCases(builtinBigintTests));
+
+  // str()/repr() reuse the CSE machine's own formatting logic (see
+  // cse-interop.ts) rather than re-deriving Python's float/string/list
+  // formatting rules from scratch — these are less "does bigint math work"
+  // and more "does the reuse boundary actually produce correct output".
+  const strReprTests: PVMLTestCases = {
+    numbers: [
+      ["str(5)", "5", null],
+      ["str(5.0)", "5.0", null],
+      ["repr(5)", "5", null],
+      ["str(-3.5)", "-3.5", null],
+    ],
+    "bool / None": [
+      ["str(True)", "True", null],
+      ["str(False)", "False", null],
+      ["str(None)", "None", null],
+      ["repr(None)", "None", null],
+    ],
+    "strings: str() vs repr() differ only on a bare string": [
+      ["str('hello')", "hello", null],
+      ["repr('hello')", "'hello'", null],
+    ],
+    "lists: elements are always quoted like repr(), even under str()": [
+      ["str([1, 2, 3])", "[1, 2, 3]", null],
+      ["str([1, 'a', True, None])", "[1, 'a', True, None]", null],
+      ["repr([1, 'a'])", "[1, 'a']", null],
+    ],
+    functions: [
+      ["def f():\n    pass\nstr(f)", "<function f>", null],
+      ["f = lambda x: x\nstr(f)", "<function (anonymous)>", null],
+      ["str(abs)", "<built-in function abs>", null],
+    ],
+  };
+
+  describe("Builtins: str() / repr()", () => generatePVMLTestCases(strReprTests));
+
+  // Complex numbers (browser-pathway only — native Pynter has zero complex
+  // support and never will, see opcodes.ts's LGCC doc comment). Complex-
+  // valued results are asserted via str() since PVMLTestExpectedValue has no
+  // raw complex variant (see utils.ts).
+  const complexTests: PVMLTestCases = {
+    literals: [
+      ["str(1j)", "1j", null],
+      ["str(3+4j)", "(3+4j)", null],
+      ["str(-4j)", "-4j", null],
+    ],
+    arithmetic: [
+      ["str((1+2j) + (3+4j))", "(4+6j)", null],
+      ["str((1+2j) - (3+4j))", "(-2-2j)", null],
+      ["str((1+2j) * (3+4j))", "(-5+10j)", null],
+      ["str((1+2j) / (3+4j))", "(0.44+0.08j)", null],
+      ["str(1 + 2j)", "(1+2j)", null], // int + complex promotes to complex
+      ["str(1.5 + 2j)", "(1.5+2j)", null], // float + complex promotes to complex
+      ["str(-(3+4j))", "(-3-4j)", null], // unary minus
+      ["1 / (0j)", ZeroDivisionError, null],
+      ["1j // 2", UnsupportedOperandTypeError, null], // no complex floor division
+      ["1j % 2", UnsupportedOperandTypeError, null], // no complex modulo
+    ],
+    "exponentiation (**)": [
+      ["2 ** 10", 1024, null], // int ** non-negative int -> int
+      ["is_integer(2 ** 10)", true, null],
+      ["2 ** -1", 0.5, null], // int ** negative int -> float
+      ["is_float(2 ** -1)", true, null],
+      ["2 ** 0.5", Math.sqrt(2), null], // int ** float -> float
+      // int ** complex -> complex: 2**i = e^(i*ln2) = cos(ln2) + i*sin(ln2)
+      ["str(2 ** (0+1j))", "(0.7692389013639721+0.6389612763136348j)", null],
+      ["is_complex((1+1j) ** 2)", true, null], // complex ** anything -> complex
+    ],
+    "equality coerces across the numeric tower": [
+      ["(1+0j) == 1", true, null],
+      ["(1+0j) == 1.0", true, null],
+      ["1j == 1j", true, null],
+      ["1j == 1", false, null],
+      ["1j != 1", true, null],
+    ],
+    "ordering rejects complex (not orderable in Python)": [
+      ["1j < 2", UnsupportedOperandTypeError, null],
+      ["2 > 1j", UnsupportedOperandTypeError, null],
+    ],
+    "is_number / is_integer / is_float / is_complex": [
+      ["is_number(3+4j)", true, null],
+      ["is_integer(3+4j)", false, null],
+      ["is_float(3+4j)", false, null],
+      ["is_complex(3+4j)", true, null],
+      ["is_complex(5)", false, null],
+    ],
+    "abs() is the modulus": [
+      ["abs(3+4j)", 5, null],
+      ["is_float(abs(3+4j))", true, null],
+    ],
+    "real() / imag() / complex() constructor": [
+      ["real(3+4j)", 3, null],
+      ["imag(3+4j)", 4, null],
+      ["str(complex(3, 4))", "(3+4j)", null],
+      ["real(5)", PVMLInterpreterError, null],
+    ],
+    "lists containing complex numbers": [["str([1, 3+4j, 2.5])", "[1, (3+4j), 2.5]", null]],
+  };
+
+  describe("Complex numbers", () => generatePVMLTestCases(complexTests));
+
+  describe("Complex numbers: rejected for native Pynter", () => {
+    test("a complex literal fails to compile in targetsPynter mode", () => {
+      const ast = parse("1j\n");
+      expect(() => PVMLCompiler.fromProgram(ast, 4, undefined, false, true)).not.toThrow();
+      expect(() =>
+        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
+      ).toThrow(/Pynter/);
+    });
+  });
 });

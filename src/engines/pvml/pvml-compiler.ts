@@ -53,6 +53,20 @@ export class PVMLCompiler
    * global a fixed-size array wouldn't have room for. Threaded through to
    * every child compiler (fromFunctionNode), same as `variant`. */
   private readonly useGlobalMap: boolean;
+  /** When true, Python `int` literals compile to the old int32-range-LGCI /
+   * LGCF64-fallback encoding (indistinguishable from a float once on the
+   * stack) instead of always going through the bigint constant pool (LGCBI).
+   * Native Pynter's single-shot, embedded/32-bit-target compilation is the
+   * only caller that sets this — its NaN-boxed value representation already
+   * distinguishes int from float at the VM level (NANBOX_TINT), and its
+   * fixed-width binary format can't carry arbitrary-precision constants at
+   * all (see opcodes.ts's LGCBI doc comment), so there is nothing for it to
+   * gain from LGCBI and no way to serialise it if it tried. Every other
+   * caller (py-slang's own PVMLInterpreter, the "full power of the desktop
+   * browser" target) keeps the default `false`, matching the CSE machine's
+   * own int/float (bigint/number) split. Threaded through to every child
+   * compiler (fromFunctionNode), same as `variant`/`useGlobalMap`. */
+  private readonly targetsPynter: boolean;
 
   private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
   private envSlotCounters: WeakMap<Environment, number>;
@@ -84,6 +98,7 @@ export class PVMLCompiler
     builder: PVMLIRBuilder,
     variant: number,
     useGlobalMap: boolean = false,
+    targetsPynter: boolean = false,
     tokenAnnotations: WeakMap<Token, CompilerAnnotation> = new WeakMap(),
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
@@ -95,6 +110,7 @@ export class PVMLCompiler
     this.isTailCall = false;
     this.variant = variant;
     this.useGlobalMap = useGlobalMap;
+    this.targetsPynter = targetsPynter;
     this.tokenAnnotations = tokenAnnotations;
     this.envSlotCounters = envSlotCounters;
     this.envSlotMaps = envSlotMaps;
@@ -111,6 +127,7 @@ export class PVMLCompiler
     variant: number,
     functionEnvironments?: FunctionEnvironments,
     useGlobalMap: boolean = false,
+    targetsPynter: boolean = false,
   ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
@@ -122,7 +139,14 @@ export class PVMLCompiler
     }
     PVMLIRBuilder.resetIndex();
     const builder = new PVMLIRBuilder(0);
-    return new PVMLCompiler(mainEnv, functionEnvironments, builder, variant, useGlobalMap);
+    return new PVMLCompiler(
+      mainEnv,
+      functionEnvironments,
+      builder,
+      variant,
+      useGlobalMap,
+      targetsPynter,
+    );
   }
 
   fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
@@ -134,7 +158,12 @@ export class PVMLCompiler
       nextEnvironment.lookupNameCurrentEnvWithError(param);
     }
     const numArgs = node.parameters.length;
-    const builder = this.builder.createChildBuilder(numArgs);
+    // Display-only name for str()/repr() on a closure over this function
+    // (see PVMLIR's `functionName` doc comment) — a FunctionDef's declared
+    // name, or "(anonymous)" for a lambda/multi-lambda, matching how the CSE
+    // machine names these (src/stdlib/utils.ts's toPythonString).
+    const functionName = node instanceof StmtNS.FunctionDef ? node.name.lexeme : "(anonymous)";
+    const builder = this.builder.createChildBuilder(numArgs, functionName);
 
     const compiler = new PVMLCompiler(
       nextEnvironment,
@@ -142,6 +171,7 @@ export class PVMLCompiler
       builder,
       this.variant,
       this.useGlobalMap,
+      this.targetsPynter,
       this.tokenAnnotations,
       this.envSlotCounters,
       this.envSlotMaps,
@@ -348,19 +378,36 @@ export class PVMLCompiler
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
-    const numValue = Number(expr.value);
-    if (Number.isInteger(numValue) && I32_MIN <= numValue && numValue <= I32_MAX) {
-      this.builder.emitUnary(OpCodes.LGCI, numValue);
+    if (this.targetsPynter) {
+      const numValue = Number(expr.value);
+      if (Number.isInteger(numValue) && I32_MIN <= numValue && numValue <= I32_MAX) {
+        this.builder.emitUnary(OpCodes.LGCI, numValue);
+      } else {
+        this.builder.emitUnary(OpCodes.LGCF64, numValue);
+      }
     } else {
-      this.builder.emitUnary(OpCodes.LGCF64, numValue);
+      // Always preserve full precision and the int/float distinction — see
+      // `targetsPynter`'s doc comment and opcodes.ts's LGCBI doc comment.
+      // `expr.value` is the literal's raw digit string (BigIntLiteral.value),
+      // not yet a JS bigint — emitUnary's string-vs-bigint dispatch relies on
+      // actually passing a `bigint` here, not a numeric string.
+      this.builder.emitUnary(OpCodes.LGCBI, BigInt(expr.value));
     }
 
     return { maxStackSize: 1 };
   }
 
-  visitComplexExpr(_expr: ExprNS.Complex): ExpressionResult {
-    // TODO: needs proper PVML support for complex numbers
-    throw new Error("Complex numbers not yet supported in PVML compiler");
+  visitComplexExpr(expr: ExprNS.Complex): ExpressionResult {
+    if (this.targetsPynter) {
+      // Native Pynter has zero complex-number support (no NaN-boxing tag, no
+      // arithmetic) and never will — see opcodes.ts's LGCC doc comment. Fail
+      // at compile time with a clear message rather than emitting an opcode
+      // that would only be caught later, opaquely, by assemble()'s
+      // targetMaxOpcode check.
+      throw new Error("Complex number literals are not supported when compiling for native Pynter");
+    }
+    this.builder.emitUnary(OpCodes.LGCC, expr.value);
+    return { maxStackSize: 1 };
   }
 
   visitListExpr(expr: ExprNS.List): ExpressionResult {
@@ -420,6 +467,8 @@ export class PVMLCompiler
         return OpCodes.MODG;
       case TokenType.DOUBLESLASH:
         return OpCodes.FLOORDIVG;
+      case TokenType.DOUBLESTAR:
+        return OpCodes.POWG;
       default:
         throw new Error(`Unsupported binary operator: ${operator.lexeme}`);
     }

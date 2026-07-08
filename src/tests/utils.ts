@@ -273,7 +273,12 @@ type ErrorClass = new (...args: any[]) => Error;
 
 /**
  * Expected value for an PVML test case.
- * PVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
+ * Python `int` results come back from toJSValue as a genuine JS `bigint`
+ * (see PVMLType.BIGINT) — expressed here as a plain `number` for test-table
+ * brevity; runTestCase() below compares a bigint result against it by value
+ * (`Number(result) === expected`), not by `toBe`/`Object.is`. Complex-valued
+ * results have no dedicated variant here either — assert them via str()
+ * (e.g. `["str(1+2j)", "(1+2j)", null]`), same idea.
  * `undefined` means the expression should evaluate to Python None / no return value.
  */
 export type PVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
@@ -294,10 +299,6 @@ const PVML_SKIP_REASONS: {
   matches: (code: string) => boolean;
   reason: string;
 }[] = [
-  {
-    matches: code => COMPLEX_LITERAL_RE.test(code),
-    reason: "PVMLCompiler rejects complex-number literals outright (visitComplexExpr)",
-  },
   {
     matches: code => PARSE_FEATURE_CALL_RE.test(code),
     reason: "parse()/tokenize() have no PVML compiler/stdlib-group wiring",
@@ -389,6 +390,8 @@ export const generatePVMLTestCases = (
       expect(result).toBeUndefined();
     } else if (expected === null) {
       expect(result).toBeNull();
+    } else if (typeof result === "bigint" && typeof expected === "number") {
+      expect(Number(result)).toBe(expected);
     } else if (typeof expected === "number" && !Number.isInteger(expected)) {
       expect(result).toBeCloseTo(expected);
     } else {

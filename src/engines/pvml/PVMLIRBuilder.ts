@@ -1,3 +1,4 @@
+import { PyComplexNumber } from "../../types";
 import OpCodes, { OPCODE_MAX } from "./opcodes";
 import { PVMLBoxType, PVMLIR } from "./types";
 import { PVMLCompilerError } from "./errors";
@@ -14,6 +15,8 @@ export class PVMLIRBuilder {
   private a1s: number[] = [];
   private a2s: number[] = [];
   private strings: string[] = [];
+  private bigints: bigint[] = [];
+  private complexes: PyComplexNumber[] = [];
 
   // Fast label tracking with numeric IDs
   private labelPositions: number[] = []; // sparse array: labelId -> instruction index
@@ -26,12 +29,15 @@ export class PVMLIRBuilder {
   private numArgs: number = 0;
   private functionIndex: number;
   private static _functionIndex: number = 0;
+  /** Display-only function name — see PVMLIR's `functionName` doc comment. */
+  private functionName: string;
 
   private lastLabelId: number = 0;
 
-  constructor(numArgs: number) {
+  constructor(numArgs: number, functionName: string = "(anonymous)") {
     this.numArgs = numArgs;
     this.functionIndex = PVMLIRBuilder._functionIndex++;
+    this.functionName = functionName;
   }
 
   static resetIndex(): void {
@@ -42,8 +48,8 @@ export class PVMLIRBuilder {
     return this.functionIndex;
   }
 
-  createChildBuilder(numArgs: number): PVMLIRBuilder {
-    const child = new PVMLIRBuilder(numArgs);
+  createChildBuilder(numArgs: number, functionName: string = "(anonymous)"): PVMLIRBuilder {
+    const child = new PVMLIRBuilder(numArgs, functionName);
     this.children.push(child);
     return child;
   }
@@ -68,6 +74,12 @@ export class PVMLIRBuilder {
     if (typeof arg1 === "string") {
       this.a1s.push(this.strings.length);
       this.strings.push(arg1);
+    } else if (typeof arg1 === "bigint") {
+      this.a1s.push(this.bigints.length);
+      this.bigints.push(arg1);
+    } else if (arg1 instanceof PyComplexNumber) {
+      this.a1s.push(this.complexes.length);
+      this.complexes.push(arg1);
     } else {
       this.a1s.push(arg1 as number);
     }
@@ -187,9 +199,12 @@ export class PVMLIRBuilder {
       arg1s,
       arg2s,
       this.strings.slice(), // copy for builder reuse
+      this.bigints.slice(), // copy for builder reuse
       this.maxStackDepth,
       this.symbolCount,
       this.numArgs,
+      this.functionName,
+      this.complexes.slice(), // copy for builder reuse
     );
   }
 }
@@ -211,6 +226,8 @@ const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
   STACK_EFFECTS[OpCodes.LGCU] = 1;
   STACK_EFFECTS[OpCodes.LGCN] = 1;
   STACK_EFFECTS[OpCodes.LGCS] = 1;
+  STACK_EFFECTS[OpCodes.LGCBI] = 1;
+  STACK_EFFECTS[OpCodes.LGCC] = 1;
 
   // Pop instructions (-1 from stack)
   STACK_EFFECTS[OpCodes.POPG] = -1;
@@ -230,6 +247,7 @@ const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
   STACK_EFFECTS[OpCodes.MODF] = -1;
   STACK_EFFECTS[OpCodes.FLOORDIVG] = -1;
   STACK_EFFECTS[OpCodes.FLOORDIVF] = -1;
+  STACK_EFFECTS[OpCodes.POWG] = -1;
 
   // Comparison operations (-1, takes 2 operands, produces 1)
   STACK_EFFECTS[OpCodes.LTG] = -1;

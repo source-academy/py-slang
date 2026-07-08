@@ -8,6 +8,17 @@ import {
   ZeroDivisionError,
 } from "../engines/pvml/errors";
 
+/** Python `int` results come back from toJSValue as a genuine `bigint` (see
+ * PVMLType.BIGINT) — this test file's assertions predate that and are all
+ * written against plain JS numbers, so coerce bigint (recursively, through
+ * arrays) to Number here. Genuine int/float-distinction tests live in
+ * pvml.test.ts's "Identity (is / is not)" section instead. */
+function toComparable(value: unknown): unknown {
+  if (typeof value === "bigint") return Number(value);
+  if (Array.isArray(value)) return value.map(toComparable);
+  return value;
+}
+
 function compileAndRun(code: string, variant: number = 4): unknown {
   const ast = parse(code);
   const compiler = PVMLCompiler.fromProgram(ast, variant);
@@ -15,7 +26,7 @@ function compileAndRun(code: string, variant: number = 4): unknown {
   const interpreter = new PVMLInterpreter(program);
   const result = interpreter.execute();
 
-  return PVMLInterpreter.toJSValue(result);
+  return toComparable(PVMLInterpreter.toJSValue(result));
 }
 
 function compileAndRunWithOutput(
@@ -29,7 +40,7 @@ function compileAndRunWithOutput(
   const interpreter = new PVMLInterpreter(program, {
     sendOutput: msg => outputs.push(msg),
   });
-  return { result: PVMLInterpreter.toJSValue(interpreter.execute()), outputs };
+  return { result: toComparable(PVMLInterpreter.toJSValue(interpreter.execute())), outputs };
 }
 
 describe("PVML Interpreter Tests", () => {
@@ -773,8 +784,8 @@ loop()
       const ast = parse(code);
       const { environments } = analyzeWithEnvironments(ast, code, 4);
       const compiler = PVMLCompiler.fromProgram(ast, 4, environments);
-      const result = PVMLInterpreter.toJSValue(
-        new PVMLInterpreter(compiler.compileProgram(ast)).execute(),
+      const result = toComparable(
+        PVMLInterpreter.toJSValue(new PVMLInterpreter(compiler.compileProgram(ast)).execute()),
       );
       expect(result).toBe(11);
     });

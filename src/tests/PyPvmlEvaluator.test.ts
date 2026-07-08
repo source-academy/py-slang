@@ -24,7 +24,9 @@ describe("PyPvmlEvaluator", () => {
     await evaluator.evaluateChunk("x + 1\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([undefined, 6]);
+    // Python `int` results are genuine bigints (see PVMLType.BIGINT) — this
+    // preserves full precision across the real evaluator/conductor pathway.
+    expect(results).toEqual([undefined, 6n]);
   });
 
   test("persists a function definition across evaluateChunk calls", async () => {
@@ -35,7 +37,7 @@ describe("PyPvmlEvaluator", () => {
     await evaluator.evaluateChunk("f(21)\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([undefined, 42]);
+    expect(results).toEqual([undefined, 42n]);
   });
 
   test("loads the linked-list prelude (pair/head/tail available from the first chunk)", async () => {
@@ -45,7 +47,7 @@ describe("PyPvmlEvaluator", () => {
     await evaluator.evaluateChunk("head(pair(1, 2))\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([1]);
+    expect(results).toEqual([1n]);
   });
 
   test("output via print() is forwarded to the conductor", async () => {
