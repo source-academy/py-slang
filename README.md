@@ -145,6 +145,16 @@ all. To see just this suite's results, filter by its test-name tag:
 PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn jest -t "\[pvml/pynter\]"
 ```
 
+Alternatively, `yarn pynter:report` (`scripts/pynter-parity-report.ts`) runs the whole suite and prints
+a Markdown table of pass/attempted counts and pass rate per test file — handy for seeing what to
+work on at a glance, or pasting into a PR description:
+
+```shell
+PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn pynter:report
+```
+
+Pass `--failures` to also list the full name of every failing test, grouped by suite.
+
 ### Regenerating the AST types and Parser
 
 The AST types need to be regenerated after changing

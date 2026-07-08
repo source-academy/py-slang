@@ -36,6 +36,20 @@ describe("Linked List Tests", () => {
       ],
       ["print_llist(llist('a', 'b'))", null, ["llist('a', 'b')"]],
     ],
+    // equal matches == semantics: booleans compare as the ints they are
+    // (as in Python), and the coercion stays legal at §2, where == itself
+    // takes no bool operands
+    "equal semantics": [
+      ["equal(llist(True), llist(1))", true, null],
+      ["equal(llist(False), llist(0))", true, null],
+      ["equal(llist(True), llist(2))", false, null],
+      ["equal(llist(True), llist(1.0))", true, null],
+      ["equal(True, 1)", true, null],
+      ["equal(llist(1), llist(1.0))", true, null],
+      ["equal(llist(1), llist('a'))", false, null],
+      ["equal(llist(True, llist(2, 3)), llist(1, llist(2.0, 3)))", true, null],
+      ["equal(None, None)", true, null],
+    ],
     "empty list boundaries": [
       ["equal(append(None, None), None)", true, null],
       ["length(llist())", 0n, null],
@@ -145,5 +159,5 @@ describe("Linked List Tests", () => {
   };
 
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
-  generateNativePynterTestCases(linkedListTests, 2);
+  generateNativePynterTestCases(linkedListTests, 2, [misc, math, linkedList]);
 });

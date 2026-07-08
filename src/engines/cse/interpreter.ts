@@ -1106,13 +1106,18 @@ const cmdEvaluators: CmdEvaluators = {
         return;
       }
       control.push(instr);
+      // Line is the real for-statement's line — this per-iteration bookkeeping is
+      // logically part of evaluating that statement, not a separate, lineless step.
+      const forLine = node.startToken.line;
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
-        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+        const token = new Token(TokenType.BIGINT, value.toString(), forLine, 0, -1);
+        token.synthetic = true;
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
       const v1Lit = generateBigIntLiteral(start.value);
       const v3Lit = generateBigIntLiteral(step.value);
-      const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      const plusToken = new Token(TokenType.PLUS, "+", forLine, 0, -1);
+      plusToken.synthetic = true;
       const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
       Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));
@@ -1120,7 +1125,7 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(nextStartExpr);
       control.push(instrCreator.continueMarkerInstr(node));
       control.push(...instr.body.slice().reverse());
-      control.push(generateForIncrement(node.target.lexeme, start.value));
+      control.push(generateForIncrement(node.target.lexeme, start.value, forLine));
     }
   },
   [InstrType.CONTINUE_MARKER]: function () {},
