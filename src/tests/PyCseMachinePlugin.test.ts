@@ -182,6 +182,7 @@ describe("serializeValue", () => {
     const v = serializeValue(builtin("print"));
     expect(v.displayValue).toBe("print");
     expect(v.label).toBe("builtin_function_or_method");
+    expect(v.label).not.toBe("function"); // "function" is what closures get
   });
 });
 
@@ -404,6 +405,49 @@ describe("serializeControlItem", () => {
     );
     expect((result.metadata as any)?.startLine).toBe(3);
     expect((result.metadata as any)?.endLine).toBe(3);
+  });
+
+  // Regression tests for https://github.com/source-academy/py-slang/issues/228.
+  it("a real single-token node whose token is the very first token of the source renders its real text and line info", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 1, lexeme: "print" },
+        endToken: { indexInSource: 0, line: 1, lexeme: "print" },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("print");
+    expect((result.metadata as any)?.startLine).toBe(1);
+    expect((result.metadata as any)?.endLine).toBe(1);
+  });
+
+  it("a synthetic single-token node pinned to position 0 falls back to the generic KIND_LABEL, not the real text at position 0", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("var");
+    expect((result.metadata as any)?.startLine).toBeUndefined();
+  });
+
+  it("synthetic BigIntLiteral (e.g. implicit range() start/step bound) still shows its runtime value", () => {
+    const result = serializeControlItem(
+      {
+        kind: "BigIntLiteral",
+        value: 0n,
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      "for x in range(3):\n    pass\n",
+    );
+    expect(result.displayText).toBe("0");
   });
 });
 
