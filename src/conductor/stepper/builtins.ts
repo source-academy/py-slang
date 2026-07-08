@@ -430,6 +430,16 @@ Object.assign(BUILTIN_FUNCTIONS, {
     // Like Python's `error`, aborts the run; surfaces as an "Evaluation stuck" step with this text.
     fail("Error: " + args.map(a => pyStr(a, false)).join(" "));
   },
+  breakpoint: (args: StepNode[]): StepNode => {
+    // Python's `breakpoint()` drops into a debugger; a pure substitution view has none, so as a value
+    // it is simply a no-op that yields `None`. Its *statement* form is recognised as a stepper
+    // breakpoint by `reduce.ts`'s `stepHead` (`ExpressionStatement` case) before this entry is ever
+    // reached. This entry exists so the name (a) resolves during preprocessing — it is part of the
+    // vocabulary handed to the analyzer via `getAvailableBuiltinNames` — and (b) degrades gracefully
+    // when written in expression position or otherwise not a bare statement, e.g. `x = breakpoint()`.
+    void args;
+    return literal(null, "None");
+  },
 
   // Type predicates.
   is_integer: (args: StepNode[]): StepNode => predicate("is_integer", args, isIntNode),
@@ -454,6 +464,7 @@ const BUILTIN_MIN_ARGS: Record<string, number> = {
   str: 0,
   print: 0,
   error: 0,
+  breakpoint: 0,
   math_log: 1,
   math_gcd: 1,
 };

@@ -132,11 +132,15 @@ function block(statements: StmtNS.Stmt[]): StepNode {
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
-    case "SimpleExpr":
-      return {
-        type: "ExpressionStatement",
-        expression: translateExpr((stmt as StmtNS.SimpleExpr).expression),
-      };
+    case "SimpleExpr": {
+      const expr = (stmt as StmtNS.SimpleExpr).expression;
+      // `breakpoint()` (JavaScript's `debugger;` analogue) is *not* special-cased here: recognising it
+      // by the student's original syntax would miss `bp = breakpoint; bp()` — the same aliasing that
+      // already works transparently for every other built-in (e.g. `p = print; p(1)`). Instead
+      // `reduce.ts`'s `stepHead` (`ExpressionStatement` case) detects it against the already-substituted
+      // tree at reduction time, so it stays an ordinary call here like any other.
+      return { type: "ExpressionStatement", expression: translateExpr(expr) };
+    }
     case "Assign": {
       const s = stmt as StmtNS.Assign;
       if (s.target.kind === "Variable") {
