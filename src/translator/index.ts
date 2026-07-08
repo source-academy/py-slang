@@ -1,0 +1,1 @@
+export { Translator } from "./translator";
