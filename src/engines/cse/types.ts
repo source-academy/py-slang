@@ -165,6 +165,9 @@ export function typeTranslator(type: Value["type"]): string {
       return "NoneType";
     case "closure":
       return "function";
+    case "builtin":
+      // Matches CPython's type(print).__name__.
+      return "builtin_function_or_method";
     default:
       return "unknown";
   }

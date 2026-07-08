@@ -157,5 +157,5 @@ equal(eval_stream(primes, 10), llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`,
   };
 
   generateTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
-  generateNativePynterTestCases(streamTests, 2);
+  generateNativePynterTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
 });
