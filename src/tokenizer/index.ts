@@ -1,1 +1,1 @@
-export { Token, TokenType } from "./tokenizer";
+export { Token, Tokenizer } from "./tokenizer";
