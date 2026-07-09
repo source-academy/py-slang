@@ -225,9 +225,7 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(explanations("min(5)").pop()).toBe("Evaluation stuck");
     expect(result("max(5)")).toContain("takes at least 2 argument(s) but 1 were given");
     expect(explanations("max(pair(1, 5))").pop()).toBe("Evaluation stuck");
-    expect(result("max(pair(1, 5))")).toContain(
-      "takes at least 2 argument(s) but 1 were given",
-    );
+    expect(result("max(pair(1, 5))")).toContain("takes at least 2 argument(s) but 1 were given");
     expect(result("arity(max)")).toBe("2");
     expect(result("arity(min)")).toBe("2");
   });
