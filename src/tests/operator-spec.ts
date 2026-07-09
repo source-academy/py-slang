@@ -100,10 +100,10 @@ const CHAPTER_2_EQUALITY_TYPES: PyType[] = UNIVERSE_WITH_LIST.filter(
 
 // docs/specs/python_typing_front.tex — common to all chapters
 const FRONT: Row[] = [
-  { ops: ["+", "-", "*", "%"], left: ["int"], right: ["int"], result: "int" },
+  { ops: ["+", "-", "*", "%", "//"], left: ["int"], right: ["int"], result: "int" },
   { ops: ["/"], left: ["int"], right: ["int"], result: "float" },
-  { ops: ["+", "-", "*", "/", "%"], left: ["int"], right: ["float"], result: "float" },
-  { ops: ["+", "-", "*", "/", "%"], left: ["float"], right: ["int", "float"], result: "float" },
+  { ops: ["+", "-", "*", "/", "%", "//"], left: ["int"], right: ["float"], result: "float" },
+  { ops: ["+", "-", "*", "/", "%", "//"], left: ["float"], right: ["int", "float"], result: "float" },
   { ops: ["+", "-", "*", "/"], left: ["int"], right: ["complex"], result: "complex" },
   { ops: ["+", "-", "*", "/"], left: ["float"], right: ["complex"], result: "complex" },
   { ops: ["+", "-", "*", "/"], left: ["complex"], right: NUMERIC, result: "complex" },
@@ -178,7 +178,21 @@ function tableForChapter(chapter: number): Row[] {
   return TABLE_34;
 }
 
-export const BINARY_OPS_12 = ["+", "-", "*", "/", "%", "**", ">", ">=", "<", "<=", "==", "!="];
+export const BINARY_OPS_12 = [
+  "+",
+  "-",
+  "*",
+  "/",
+  "//",
+  "%",
+  "**",
+  ">",
+  ">=",
+  "<",
+  "<=",
+  "==",
+  "!=",
+];
 export const BINARY_OPS_34 = [...BINARY_OPS_12, "is", "is not"];
 
 /** The spec result type for `left op right` at the given chapter, or null if forbidden. */
