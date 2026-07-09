@@ -31,11 +31,12 @@ export class PyPvmlPynterEvaluator extends BasicEvaluator {
     try {
       const script = chunk + "\n";
       const ast = parse(script);
-      const { errors, environments } = analyzeWithEnvironments(ast, script, 4, [misc, math]);
+      // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md).
+      const { errors, environments } = analyzeWithEnvironments(ast, script, 3, [misc, math]);
       if (errors.length > 0) {
         throw errors[0];
       }
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, 3, environments, false, true);
       const program = compiler.compileProgram(ast);
       const binary = assemble(program, PYNTER_OPCODE_MAX);
 

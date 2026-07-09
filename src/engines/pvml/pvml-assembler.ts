@@ -139,6 +139,35 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
         break;
       case OpCodes.JMP:
         throw new Error("JMP assembling not implemented");
+      case OpCodes.LGCBI:
+        throw new Error(
+          "LGCBI (arbitrary-precision integer) cannot be serialised to the fixed-width " +
+            "PVML binary format; this opcode is browser-pathway-only (PVMLInterpreter's " +
+            "in-memory PVMLIR) and should never reach the assembler",
+        );
+      case OpCodes.LGCC:
+        throw new Error(
+          "LGCC (complex literal) cannot be serialised to the fixed-width PVML binary format; " +
+            "this opcode is browser-pathway-only (PVMLInterpreter's in-memory PVMLIR) and " +
+            "should never reach the assembler",
+        );
+      case OpCodes.CALLA:
+      case OpCodes.CALLTA:
+        // Structurally these are nullary and *could* be encoded (no operand
+        // to lose precision on, unlike LGCBI/LGCC) — but a program using
+        // them always also uses LGCBI for its int literals (int literals are
+        // unconditionally bigint in browser-pathway compilation), which
+        // already can't be serialised, and targetsPynter mode rejects
+        // spread calls outright at compile time (see PVMLCompiler's
+        // compileSpreadCall) — so this opcode never legitimately reaches the
+        // assembler in practice either. Throwing explicitly here, rather
+        // than silently falling through the switch, keeps that intent clear
+        // instead of looking like an oversight.
+        throw new Error(
+          "CALLA/CALLTA (call-site argument spreading) cannot be serialised to the fixed-width " +
+            "PVML binary format; this opcode is browser-pathway-only (PVMLInterpreter's " +
+            "in-memory PVMLIR) and should never reach the assembler",
+        );
     }
   }
 
@@ -470,6 +499,22 @@ export function disassemble(p: Uint8Array): PVMLProgram {
         }
         case OpCodes.JMP:
           throw new Error("JMP disassembly not implemented");
+        case OpCodes.LGCBI:
+          throw new Error(
+            "LGCBI (arbitrary-precision integer) cannot appear in a serialised PVML binary; " +
+              "this opcode is browser-pathway-only and assemble() refuses to encode it",
+          );
+        case OpCodes.LGCC:
+          throw new Error(
+            "LGCC (complex literal) cannot appear in a serialised PVML binary; this opcode is " +
+              "browser-pathway-only and assemble() refuses to encode it",
+          );
+        case OpCodes.CALLA:
+        case OpCodes.CALLTA:
+          throw new Error(
+            "CALLA/CALLTA (call-site argument spreading) cannot appear in a serialised PVML " +
+              "binary; this opcode is browser-pathway-only and assemble() refuses to encode it",
+          );
       }
 
       const instruction: Instruction = { opcode };
@@ -552,7 +597,10 @@ export function disassemble(p: Uint8Array): PVMLProgram {
 
     // symbolCount = envSize - numArgs (since envSize = symbolCount + numArgs)
     const symbolCount = f.envSize - f.numArgs;
-    return new PVMLIR(opcodes, arg1s, arg2s, strings, f.stackSize, symbolCount, f.numArgs);
+    // LGCBI never survives serialisation (see the throw above), so a disassembled
+    // function's bigint pool is always empty.
+    const bigints: bigint[] = [];
+    return new PVMLIR(opcodes, arg1s, arg2s, strings, bigints, f.stackSize, symbolCount, f.numArgs);
   });
 
   return new PVMLProgram(entrypointIndex, functions);

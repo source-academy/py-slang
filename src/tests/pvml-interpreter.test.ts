@@ -8,25 +8,39 @@ import {
   ZeroDivisionError,
 } from "../engines/pvml/errors";
 
-function compileAndRun(code: string): unknown {
+/** Python `int` results come back from toJSValue as a genuine `bigint` (see
+ * PVMLType.BIGINT) — this test file's assertions predate that and are all
+ * written against plain JS numbers, so coerce bigint (recursively, through
+ * arrays) to Number here. Genuine int/float-distinction tests live in
+ * pvml.test.ts's "Identity (is / is not)" section instead. */
+function toComparable(value: unknown): unknown {
+  if (typeof value === "bigint") return Number(value);
+  if (Array.isArray(value)) return value.map(toComparable);
+  return value;
+}
+
+function compileAndRun(code: string, variant: number = 4): unknown {
   const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
   const interpreter = new PVMLInterpreter(program);
   const result = interpreter.execute();
 
-  return PVMLInterpreter.toJSValue(result);
+  return toComparable(PVMLInterpreter.toJSValue(result));
 }
 
-function compileAndRunWithOutput(code: string): { result: unknown; outputs: string[] } {
+function compileAndRunWithOutput(
+  code: string,
+  variant: number = 4,
+): { result: unknown; outputs: string[] } {
   const outputs: string[] = [];
   const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
   const interpreter = new PVMLInterpreter(program, {
     sendOutput: msg => outputs.push(msg),
   });
-  return { result: PVMLInterpreter.toJSValue(interpreter.execute()), outputs };
+  return { result: toComparable(PVMLInterpreter.toJSValue(interpreter.execute())), outputs };
 }
 
 describe("PVML Interpreter Tests", () => {
@@ -746,19 +760,23 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxInstructions: 50 });
       expect(() => interpreter.execute()).toThrow(/instruction limit/i);
     });
 
     test("exceeding maxCallDepth throws", () => {
+      // Not tail-recursive: `1 +` is still pending after the recursive call
+      // returns, so this genuinely grows the call stack (unlike `return
+      // loop()` above, which the compiler now compiles as a tail call —
+      // see visitReturnStmt/compileTail — and so never grows call depth).
       const code = `
 def loop():
-    return loop()
+    return 1 + loop()
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
       expect(() => interpreter.execute()).toThrow(/call depth/i);
     });
@@ -769,9 +787,9 @@ loop()
       const code = "def f(x):\n    return x + 1\nf(10)\n";
       const ast = parse(code);
       const { environments } = analyzeWithEnvironments(ast, code, 4);
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
-      const result = PVMLInterpreter.toJSValue(
-        new PVMLInterpreter(compiler.compileProgram(ast)).execute(),
+      const compiler = PVMLCompiler.fromProgram(ast, 4, environments);
+      const result = toComparable(
+        PVMLInterpreter.toJSValue(new PVMLInterpreter(compiler.compileProgram(ast)).execute()),
       );
       expect(result).toBe(11);
     });

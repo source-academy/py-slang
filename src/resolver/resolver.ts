@@ -197,6 +197,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // can legitimately be bound anywhere in the module body, not just textually before a
   // nested function that reads it.
   private moduleStatements: StmtNS.Stmt[] = [];
+  /** Names already bound at module (global) scope before this resolve() call
+   * — e.g. a REPL's previous chunks, or a prelude compiled into the same
+   * persistent global environment. Unlike `preludeNames` (constructor param,
+   * seeded into the *root* builtins environment), these are seeded into the
+   * *module*-level environment `visitFileInputStmt` creates, so they resolve
+   * as ordinary global variables/functions, not primitives — see
+   * PVMLCompiler's `useGlobalMap` mode, which depends on that distinction. */
+  private readonly moduleNames: string[];
 
   constructor(
     source: string,
@@ -204,6 +212,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     validators: FeatureValidator[] = [],
     groups: Group[] = [],
     preludeNames: string[] = [],
+    moduleNames: string[] = [],
   ) {
     this.source = source;
     this.ast = ast;
@@ -212,6 +221,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.validators = validators;
     this.errors = [];
     this.functionEnvironments = new Map();
+    this.moduleNames = moduleNames;
     // The global environment
     this.environment = new Environment(
       source,
@@ -326,7 +336,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitFileInputStmt(stmt: StmtNS.FileInput): void {
     // Create a new environment.
     const oldEnv = this.environment;
-    this.environment = new Environment(this.source, this.environment, new Map());
+    this.environment = new Environment(
+      this.source,
+      this.environment,
+      new Map(this.moduleNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)])),
+    );
     this.functionEnvironments.set(stmt, this.environment);
     // #181 also applies at module level: e.g. `i = 3` followed by `global i` is a
     // SyntaxError in real Python, even though `global` is otherwise a no-op there.
@@ -362,12 +376,23 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // Run scope conflict checks before resolving the body.
     this.checkFunctionScopeConflicts(stmt);
 
-    // Declare global names in the outermost (module-level) environment so that
-    // variable lookups within this function can find them via the chain walk.
+    // Declare global names in the outermost *module-level* environment (not the
+    // absolute-root builtins/prelude environment one level further out — see
+    // visitGlobalStmt's isModuleLevel check for the same "one below root" test)
+    // so that variable lookups within this function can find them via the chain
+    // walk. This matters even for a name with no top-level assignment at all
+    // (`def f(): global y; y = 1` with no `y` anywhere at module scope): without
+    // this, PVMLCompiler's getTokenAnnotation would resolve `y` all the way to
+    // the builtins environment and misinterpret it as an unimplemented
+    // primitive function, rather than a fresh module-level variable slot.
     if (this.globalNamesInCurrentFunction.size > 0) {
       let globalEnv: Environment | null = this.environment;
-      while (globalEnv?.enclosing !== null) {
-        globalEnv = globalEnv?.enclosing ?? null;
+      while (
+        globalEnv !== null &&
+        globalEnv.enclosing !== null &&
+        globalEnv.enclosing.enclosing !== null
+      ) {
+        globalEnv = globalEnv.enclosing;
       }
       if (globalEnv) {
         for (const name of this.globalNamesInCurrentFunction) {
