@@ -93,3 +93,37 @@ export function pvmlBoxToCseValue(value: PVMLBoxType): Value {
   }
   throw new Error(`TypeError: cannot convert PVML value of type '${typeof value}' to a string`);
 }
+
+/**
+ * Converts a CSE machine `Value` into the PVML runtime value shape — the
+ * reverse of `pvmlBoxToCseValue` above, used so PVML's parse()/tokenize()
+ * (see builtins.ts) can reuse CSE's own `transform()` (src/stdlib/parser.ts)
+ * directly instead of re-deriving its ~200-line AST-node-kind switch: PVML
+ * calls the real `parse()` + `transform()`, then converts only the single
+ * resulting `Value` tree through this function.
+ *
+ * `transform()`'s output only ever contains `string`/`number`/`bigint`/
+ * `bool`/`none`/`list` (pair-chain) values — never `closure`/`builtin`/
+ * `complex`/`iterator`/`function`/`error`/`multi_lambda` — so this converter
+ * is intentionally narrow, matching exactly what a parsed-AST result can
+ * contain; anything else throws rather than silently producing a wrong
+ * PVML value.
+ */
+export function cseValueToPvmlBox(value: Value): PVMLBoxType {
+  switch (value.type) {
+    case "none":
+      return null;
+    case "number":
+    case "bigint":
+    case "string":
+    case "bool":
+      return value.value;
+    case "list":
+      return { type: "array", elements: value.value.map(cseValueToPvmlBox) };
+    default:
+      throw new Error(
+        `TypeError: cannot convert CSE value of type '${value.type}' to a PVML value ` +
+          `(parse()/tokenize() never produce this type)`,
+      );
+  }
+}

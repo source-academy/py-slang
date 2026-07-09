@@ -145,9 +145,25 @@ export enum OpCodes {
   // has no bool-exclusion rule distinguishing §1/§2 from §3/§4, unlike
   // ==/!=/ordering (see EQG12 etc. above).
   POWG = 101,
+  // Call with the argument list taken from a runtime array rather than a
+  // compile-time-fixed count of stack slots (contrast CALL/CALLT's `numArgs`
+  // operand) — needed for call-site argument spreading (`f(*xs)`), where the
+  // spread source's length isn't known until runtime. Stack layout: [...
+  // func argsArray] with argsArray on top; pops both, dispatches exactly
+  // like CALL/CALLT would with argsArray.elements as the argument list (see
+  // PVMLInterpreter's dispatchCall). Deliberately *not* CALL/CALLT
+  // themselves gaining a "dynamic count" mode: those are opcodes ≤
+  // PYNTER_OPCODE_MAX, shared with native Pynter, whose semantics can't
+  // change. Nullary — no operand at all, unlike every other CALL* opcode,
+  // since both the callee and the argument list are already runtime values
+  // on the stack by the time this executes. Browser-pathway only; native
+  // Pynter has no representation for a runtime-variable-arity call (see
+  // PVMLCompiler's visitStarredExpr / visitCallExpr's spread-argument path).
+  CALLA = 102,
+  CALLTA = 103,
 }
 
-export const OPCODE_MAX = 101;
+export const OPCODE_MAX = 103;
 
 /**
  * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
@@ -177,6 +193,8 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.LGCBI]: "arbitrary-precision integers",
   [OpCodes.LGCC]: "complex numbers",
   [OpCodes.POWG]: "exponentiation (**)",
+  [OpCodes.CALLA]: "call-site argument spreading (*args)",
+  [OpCodes.CALLTA]: "call-site argument spreading (*args)",
 };
 
 /**

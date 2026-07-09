@@ -294,16 +294,15 @@ export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, strin
 /** Reasons a test case is skipped for the PVML compiler + PVMLInterpreter pathway,
  * checked in order — mirrors NATIVE_PYNTER_SKIP_REASONS below, for the same
  * reason: a case that's genuinely out of this pathway's scope should be a
- * labeled skip, not a failure someone has to keep re-diagnosing as "known". */
+ * labeled skip, not a failure someone has to keep re-diagnosing as "known".
+ * Currently empty: parse()/tokenize()/apply_in_underlying_python() are all
+ * wired up (see builtins.ts) — PARSE_FEATURE_CALL_RE below is only used by
+ * NATIVE_PYNTER_SKIP_REASONS now, native Pynter being the pathway that
+ * genuinely still doesn't (and won't) support them. */
 const PVML_SKIP_REASONS: {
   matches: (code: string) => boolean;
   reason: string;
-}[] = [
-  {
-    matches: code => PARSE_FEATURE_CALL_RE.test(code),
-    reason: "parse()/tokenize() have no PVML compiler/stdlib-group wiring",
-  },
-];
+}[] = [];
 
 /**
  * @param variant The Python chapter to compile test cases for (default 4, the

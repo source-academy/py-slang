@@ -13,6 +13,11 @@ import {
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import OpCodes from "../engines/pvml/opcodes";
 import { parse } from "../parser/parser-adapter";
+import linkedList from "../stdlib/linked-list";
+import misc from "../stdlib/misc";
+import math from "../stdlib/math";
+import parserGroup from "../stdlib/parser";
+import stream from "../stdlib/stream";
 import { generatePVMLTestCases, PVMLTestCases } from "./utils";
 
 /** The opcodes the entry function's compiled body contains, for compiler-only assertions
@@ -527,4 +532,285 @@ describe("PVML E2E", () => {
       ).toThrow(/Pynter/);
     });
   });
+
+  // Previously visitCallExpr required the callee to be a bare identifier —
+  // calling a lambda directly, a call's result, or a subscripted value all
+  // failed to compile. The interpreter's dispatchCall already handled a
+  // runtime PVMLPrimitive/PVMLClosure value dynamically regardless of how it
+  // got onto the stack (that's what already made `f = abs; f(-5)` work), so
+  // this is purely a compiler-side relaxation.
+  const computedCallTests: PVMLTestCases = {
+    "immediately-invoked lambda": [
+      ["(lambda x: x)(5)", 5, null],
+      ["(lambda x, y: x + y)(3, 4)", 7, null],
+    ],
+    "calling a call's result (curried functions)": [
+      ["def make_adder(n):\n    return lambda x: x + n\nmake_adder(3)(7)", 10, null],
+      ["def f(x):\n    return lambda y: x + y\nf(1)(2)", 3, null],
+      [
+        "def compose(f, g):\n    return lambda x: f(g(x))\ndouble = lambda x: x * 2\ninc = lambda x: x + 1\ncompose(double, inc)(5)",
+        12,
+        null,
+      ],
+    ],
+    "calling a subscripted value": [
+      ["fs = [lambda x: x * 2]\nfs[0](21)", 42, null],
+      ["fs = [abs, lambda x: -x]\nfs[0](-5)", 5, null],
+      ["fs = [abs, lambda x: -x]\nfs[1](5)", -5, null],
+    ],
+    "the existing bare-name fast path still works unchanged": [
+      ["def f(x):\n    return x + 1\nf(5)", 6, null],
+      ["abs(-5)", 5, null],
+    ],
+  };
+
+  describe("Computed / first-class function calls", () => generatePVMLTestCases(computedCallTests));
+
+  // Rest params (function-definition side, `def f(a, *rest)`) — the rest
+  // param always occupies exactly one fixed slot at compile time, bound to a
+  // PVMLArray of every argument from that slot onward (see PVMLIR's
+  // hasRestParam doc comment and dispatchCall in pvml-interpreter.ts).
+  const restParamTests: PVMLTestCases = {
+    "collects extra positional args into a list": [
+      ["def f(a, *rest):\n    return len(rest)\nf(1)", 0, null],
+      ["def f(a, *rest):\n    return len(rest)\nf(1, 2, 3)", 2, null],
+      ["def f(a, *rest):\n    return rest[0] + rest[1]\nf(1, 2, 3)", 5, null],
+    ],
+    "an entirely-variadic function": [
+      [
+        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\ntotal(1, 2, 3, 4)",
+        10,
+        null,
+      ],
+      [
+        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\ntotal()",
+        0,
+        null,
+      ],
+    ],
+    "too few args for the fixed params before the rest param": [
+      ["def f(a, b, *rest):\n    return a\nf(1)", Error, null],
+    ],
+  };
+
+  describe("Rest parameters (def f(a, *rest))", () => generatePVMLTestCases(restParamTests));
+
+  // Call-site argument spreading (`f(*xs)`) — xs's length isn't known until
+  // runtime, so this compiles to a flattened runtime args array + CALLA/
+  // CALLTA (see opcodes.ts's CALLA doc comment), independent of Phase 3's
+  // computed-callee support (the two combine freely).
+  const spreadCallTests: PVMLTestCases = {
+    "a plain spread call": [
+      ["def add3(a, b, c):\n    return a + b + c\nxs = [1, 2, 3]\nadd3(*xs)", 6, null],
+    ],
+    "spread mixed with fixed arguments, in either position": [
+      ["def f(a, b, c):\n    return a * 100 + b * 10 + c\nxs = [2, 3]\nf(1, *xs)", 123, null],
+      ["def f(a, b, c):\n    return a * 100 + b * 10 + c\nxs = [1, 2]\nf(*xs, 3)", 123, null],
+      [
+        "def f(a, b, c, d):\n    return a * 1000 + b * 100 + c * 10 + d\nxs = [2, 3]\nf(1, *xs, 4)",
+        1234,
+        null,
+      ],
+    ],
+    "multiple spreads in one call": [
+      [
+        "def f(a, b, c, d):\n    return a * 1000 + b * 100 + c * 10 + d\nxs = [1, 2]\nys = [3, 4]\nf(*xs, *ys)",
+        1234,
+        null,
+      ],
+    ],
+    "spreading into a primitive": [["xs = [3, 4]\nmax(*xs)", 4, null]],
+    "spreading into a variadic (rest-param) function": [
+      [
+        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\nxs = [1, 2, 3]\ntotal(*xs)",
+        6,
+        null,
+      ],
+    ],
+    "spreading into a computed callee": [
+      ["fns = [lambda a, b: a + b]\nxs = [10, 20]\nfns[0](*xs)", 30, null],
+    ],
+    "a spread call nested as another call's argument": [
+      ["def f(a, b):\n    return a + b\ndef g(*args):\n    return f(*args)\ng(3, 4)", 7, null],
+    ],
+    "too few args after flattening the spread": [
+      ["def f(a, b):\n    return a + b\nxs = [1]\nf(*xs)", Error, null],
+    ],
+  };
+
+  describe("Call-site argument spreading (f(*xs))", () => generatePVMLTestCases(spreadCallTests));
+
+  describe("Spread/rest parameters: rejected for native Pynter", () => {
+    test("a rest parameter fails to compile in targetsPynter mode", () => {
+      const ast = parse("def f(a, *rest):\n    return rest\nf(1, 2)\n");
+      expect(() =>
+        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
+      ).toThrow(/Pynter/);
+    });
+
+    test("a spread call argument fails to compile in targetsPynter mode", () => {
+      const ast = parse("def f(a, b):\n    return a + b\nxs = [1, 2]\nf(*xs)\n");
+      expect(() =>
+        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
+      ).toThrow(/Pynter/);
+    });
+  });
+
+  // The chapter-4 metacircular `parser` stdlib group — parse()/tokenize()
+  // reuse CSE's own transform()/lexer directly (see cse-interop.ts's
+  // cseValueToPvmlBox), and apply_in_underlying_python() is built on
+  // PVMLInterpreter's invokeValue (see its doc comment) rather than any
+  // CSE-style control/stash plumbing. Parse-tree/token results are asserted
+  // via str() since PVMLTestExpectedValue has no raw pair-chain variant.
+  const parserGroupGroups = [misc, math, linkedList, parserGroup];
+  const parserTests: PVMLTestCases = {
+    tokenize: [["str(tokenize('1 + 2'))", "['1', ['+', ['2', None]]]", null]],
+    parse: [
+      ["str(parse('1'))", "['literal', [1, None]]", null],
+      ["str(parse('x'))", "['name', ['x', None]]", null],
+    ],
+    apply_in_underlying_python: [
+      [
+        "def f(a, b):\n    return a + b\napply_in_underlying_python(f, pair(3, pair(4, None)))",
+        7,
+        null,
+      ],
+      ["apply_in_underlying_python(abs, pair(-5, None))", 5, null],
+      [
+        // Confirms invokeValue correctly drives a *nested* call (f calling
+        // g internally) to completion, not just a single-frame primitive.
+        "def g(x):\n    return x * 2\ndef f(a, b):\n    return g(a) + g(b)\napply_in_underlying_python(f, pair(3, pair(4, None)))",
+        14,
+        null,
+      ],
+    ],
+  };
+
+  describe("Chapter-4 parser group (parse/tokenize/apply_in_underlying_python)", () =>
+    generatePVMLTestCases(parserTests, 4, parserGroupGroups));
+
+  // Named numeric constants from the `math` stdlib group — referenced as
+  // bare values (never called), see PRIMITIVE_CONSTANTS in builtins.ts and
+  // PVMLCompiler's `isConstant` CompilerAnnotation case.
+  const mathConstantsTests: PVMLTestCases = {
+    "math_pi / math_e / math_tau": [
+      ["math_pi", Math.PI, null],
+      ["math_e", Math.E, null],
+      ["math_tau", 2 * Math.PI, null],
+    ],
+    "math_inf / math_nan": [
+      ["math_isinf(math_inf)", true, null],
+      ["math_isnan(math_nan)", true, null],
+    ],
+  };
+
+  describe("Named math constants (math_pi, math_e, math_inf, math_nan, math_tau)", () =>
+    generatePVMLTestCases(mathConstantsTests));
+
+  // The `math` module functions with no native-Pynter equivalent — new
+  // browser-pathway-only primitive indices 104-126 (see PRIMITIVE_FUNCTIONS'
+  // doc comment in builtins.ts), plus the pre-existing math_ceil/math_floor/
+  // math_trunc bigint-return bug fix discovered while porting them.
+  const newMathFnTests: PVMLTestCases = {
+    "ceil/floor/trunc return a genuine int, not a float (bug fix)": [
+      ["is_integer(math_ceil(3.2))", true, null],
+      ["is_integer(math_floor(3.8))", true, null],
+      ["is_integer(math_trunc(-3.8))", true, null],
+      ["math_ceil(3.2)", 4, null],
+      ["math_floor(3.8)", 3, null],
+      ["math_trunc(-3.8)", -3, null],
+    ],
+    "degrees / radians": [
+      ["math_degrees(math_pi)", 180, null],
+      ["math_radians(180)", Math.PI, null],
+    ],
+    "erf / erfc": [
+      ["math_erf(0)", 0, null],
+      ["math_erfc(0)", 1, null],
+    ],
+    "comb / factorial / gcd / isqrt / lcm / perm (arbitrary-precision int)": [
+      ["math_comb(5, 2)", 10, null],
+      ["math_factorial(5)", 120, null],
+      ["str(math_factorial(30))", "265252859812191058636308480000000", null],
+      ["math_gcd(12, 18)", 6, null],
+      ["math_gcd(12, 18, 24)", 6, null],
+      ["math_isqrt(17)", 4, null],
+      ["math_lcm(4, 6)", 12, null],
+      ["math_perm(5, 2)", 20, null],
+      ["math_perm(5)", 120, null],
+    ],
+    "fabs / fma / fmod / remainder / copysign": [
+      ["math_fabs(-5)", 5, null],
+      ["math_fma(2, 3, 1)", 7, null],
+      ["math_fmod(7, 3)", 1, null],
+      ["math_remainder(7, 3)", 1, null],
+      ["math_copysign(3, -1)", -3, null],
+    ],
+    "isfinite / isinf / isnan": [
+      ["math_isfinite(1)", true, null],
+      ["math_isfinite(math_inf)", false, null],
+      ["math_isinf(math_inf)", true, null],
+      ["math_isnan(math_nan)", true, null],
+      ["math_isnan(1)", false, null],
+    ],
+    "ldexp / exp2 / gamma / lgamma": [
+      ["math_ldexp(1, 3)", 8, null],
+      ["math_exp2(3)", 8, null],
+      ["math_gamma(5)", 24, null],
+      ["math_lgamma(5)", Math.log(24), null],
+    ],
+    "time_time (smoke test: returns a finite float)": [["math_isfinite(time_time())", true, null]],
+  };
+
+  describe("New math-module functions (Phase 6, browser-pathway-only primitives)", () =>
+    generatePVMLTestCases(newMathFnTests));
+
+  // arity() — mirrors CSE's arity() (misc.ts): a closure's fixed-parameter
+  // count (the rest param's own slot index, if any), or a primitive's
+  // registered minimum argument count (PRIMITIVE_MIN_ARGS in builtins.ts).
+  const arityTests: PVMLTestCases = {
+    builtins: [
+      ["arity(abs)", 1, null],
+      ["arity(pair)", 2, null],
+    ],
+    closures: [
+      ["def f(a, b):\n    return a\narity(f)", 2, null],
+      ["def f(a, *rest):\n    return a\narity(f)", 1, null],
+      ["arity(lambda: None)", 0, null],
+    ],
+  };
+
+  describe("arity()", () => generatePVMLTestCases(arityTests, 4, [misc, math, linkedList]));
+
+  // stream() — mirrors CSE's stream() (stdlib/stream.ts): a lazy,
+  // null-terminated sequence built from `pair(head, <0-arg continuation>)`,
+  // where the continuation is represented here as the same primitive with
+  // its remaining args pre-bound (PVMLPrimitive's `boundArgs`) rather than a
+  // runtime-synthesized closure — see builtins.ts case 76.
+  const streamTests: PVMLTestCases = {
+    "stream() with no args is the empty stream": [["stream()", null, null]],
+    "head / lazy tail": [
+      ["head(stream(1, 2, 3))", 1, null],
+      ["head(tail(stream(1, 2, 3))())", 2, null],
+      ["head(tail(tail(stream(1, 2, 3))())())", 3, null],
+      ["tail(stream(1))()", null, null],
+    ],
+    "arity of the lazy continuation is 0 (matches CSE's anonymous-stream builtin)": [
+      ["arity(tail(stream(1, 2)))", 0, null],
+    ],
+  };
+
+  describe("stream() — lazy, null-terminated (Phase 6)", () =>
+    generatePVMLTestCases(streamTests, 4, [misc, math, linkedList, stream]));
+
+  // `from X import Y` compiles to a no-op (matches CSE — see
+  // PVMLCompiler.visitFromImportStmt), rather than throwing, since SICPy has
+  // no real module system: every builtin is already globally available.
+  const fromImportTests: PVMLTestCases = {
+    "does not throw, and the rest of the program still runs": [
+      ["from math import sin\n1 + 1", 2, null],
+    ],
+  };
+
+  describe("`from X import Y` statement", () => generatePVMLTestCases(fromImportTests));
 });

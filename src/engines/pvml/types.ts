@@ -83,6 +83,18 @@ export interface PVMLClosure {
 export interface PVMLPrimitive {
   type: "primitive";
   primitiveIndex: number;
+  /**
+   * Arguments already supplied to a partially-applied primitive — used only
+   * by `stream()`'s recursive continuation (primitive index 76): each call
+   * returns `pair(head, <continuation with the remaining args bound>)`
+   * rather than a freshly synthesized closure (which this TS interpreter, or
+   * native Pynter, can't build at runtime — see builtins.ts case 76). When a
+   * `PVMLPrimitive` value with `boundArgs` is later called,
+   * `PVMLInterpreter.dispatchCall` prepends `boundArgs` to the call's actual
+   * arguments before dispatching. Absent/undefined for every other
+   * primitive.
+   */
+  boundArgs?: PVMLBoxType[];
 }
 
 /** Type guard: narrows PVMLBoxType to the object variants. */
@@ -185,6 +197,14 @@ export class PVMLIR {
    * gets a generic placeholder — see pvml-assembler.ts), so this is a
    * browser-pathway nicety, not something native Pynter needs or has. */
   readonly functionName: string;
+  /** Whether the last parameter (slot `numArgs - 1`) is a rest param
+   * (`def f(a, *rest): ...`) collecting every extra positional argument into
+   * a PVMLArray, rather than a plain fixed parameter. In-memory-only
+   * metadata, like `functionName` — not encoded in the serialised binary
+   * format (native Pynter's `targetsPynter` compile mode rejects `*args`
+   * outright at compile time, so a Pynter-targeted PVMLIR never has this
+   * `true` — see PVMLCompiler's visitStarredExpr). */
+  readonly hasRestParam: boolean;
 
   constructor(
     opcodes: Int32Array,
@@ -197,6 +217,7 @@ export class PVMLIR {
     numArgs: number,
     functionName: string = "(anonymous)",
     complexes: PyComplexNumber[] = [],
+    hasRestParam: boolean = false,
   ) {
     this.opcodes = opcodes;
     this.arg1s = arg1s;
@@ -209,6 +230,7 @@ export class PVMLIR {
     this.envSize = symbolCount + numArgs;
     this.numArgs = numArgs;
     this.functionName = functionName;
+    this.hasRestParam = hasRestParam;
   }
 
   /** Compatibility: reconstruct Instruction[] for assembler/debug (not hot path). */

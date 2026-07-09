@@ -31,13 +31,17 @@ export class PVMLIRBuilder {
   private static _functionIndex: number = 0;
   /** Display-only function name — see PVMLIR's `functionName` doc comment. */
   private functionName: string;
+  /** Whether the last parameter is a rest param (`def f(a, *rest)`) — see
+   * PVMLIR's `hasRestParam` doc comment. */
+  private hasRestParam: boolean;
 
   private lastLabelId: number = 0;
 
-  constructor(numArgs: number, functionName: string = "(anonymous)") {
+  constructor(numArgs: number, functionName: string = "(anonymous)", hasRestParam = false) {
     this.numArgs = numArgs;
     this.functionIndex = PVMLIRBuilder._functionIndex++;
     this.functionName = functionName;
+    this.hasRestParam = hasRestParam;
   }
 
   static resetIndex(): void {
@@ -48,8 +52,12 @@ export class PVMLIRBuilder {
     return this.functionIndex;
   }
 
-  createChildBuilder(numArgs: number, functionName: string = "(anonymous)"): PVMLIRBuilder {
-    const child = new PVMLIRBuilder(numArgs, functionName);
+  createChildBuilder(
+    numArgs: number,
+    functionName: string = "(anonymous)",
+    hasRestParam = false,
+  ): PVMLIRBuilder {
+    const child = new PVMLIRBuilder(numArgs, functionName, hasRestParam);
     this.children.push(child);
     return child;
   }
@@ -205,6 +213,7 @@ export class PVMLIRBuilder {
       this.numArgs,
       this.functionName,
       this.complexes.slice(), // copy for builder reuse
+      this.hasRestParam,
     );
   }
 }
@@ -248,6 +257,9 @@ const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
   STACK_EFFECTS[OpCodes.FLOORDIVG] = -1;
   STACK_EFFECTS[OpCodes.FLOORDIVF] = -1;
   STACK_EFFECTS[OpCodes.POWG] = -1;
+  // Pops func + argsArray, pushes the result (see opcodes.ts's CALLA doc comment).
+  STACK_EFFECTS[OpCodes.CALLA] = -1;
+  STACK_EFFECTS[OpCodes.CALLTA] = -1;
 
   // Comparison operations (-1, takes 2 operands, produces 1)
   STACK_EFFECTS[OpCodes.LTG] = -1;

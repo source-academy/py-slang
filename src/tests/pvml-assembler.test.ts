@@ -140,4 +140,21 @@ total
       expect(() => disassemble(good.slice(0, 4))).toThrow();
     });
   });
+
+  // These opcodes are structurally nullary (no operand, unlike LGCBI/LGCC's
+  // constant-pool index) and so *could* be encoded — but a program using
+  // them always also uses LGCBI for its int literals, which already can't
+  // be serialised, and targetsPynter mode rejects them outright at compile
+  // time — so assemble() defends explicitly anyway (see pvml-assembler.ts),
+  // rather than silently succeeding for an opcode that only "happens" to
+  // have nothing to encode.
+  describe("browser-pathway-only opcodes are rejected by assemble()/disassemble()", () => {
+    test("CALLA/CALLTA (spread calls) cannot be assembled", () => {
+      const ast = parse("def f(a, b, c):\n    return a + b + c\nxs = [1, 2, 3]\nf(*xs)\n");
+      // Not targetsPynter here — compiling for the browser target so the
+      // program actually contains CALLA to try to assemble.
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
+      expect(() => assemble(program)).toThrow();
+    });
+  });
 });

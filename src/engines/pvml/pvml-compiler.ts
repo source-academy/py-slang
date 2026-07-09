@@ -4,13 +4,19 @@ import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer";
 import { PVMLIRBuilder } from "./PVMLIRBuilder";
-import { PRIMITIVE_FUNCTIONS } from "./builtins";
+import { PRIMITIVE_CONSTANTS, PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
 import { PVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
 const I32_MAX = 2_147_483_647;
+
+/** Primitive index of the compiler-internal `_concat_arrays` helper (see
+ * builtins.ts's executePrimitive case 100) — never resolvable by name from
+ * Python source (no PRIMITIVE_FUNCTIONS entry), only ever emitted directly
+ * by compileSpreadCall. */
+const CONCAT_ARRAYS_PRIMITIVE_INDEX = 100;
 
 interface CompilerAnnotation {
   slot: number;
@@ -23,6 +29,13 @@ interface CompilerAnnotation {
    * `name` is what emitLoadSymbol/emitStoreSymbol emit LDGG/STGG with. */
   isGlobal?: boolean;
   name?: string;
+  /** True for a named numeric constant from a stdlib group (e.g. `math_pi`)
+   * — see PRIMITIVE_CONSTANTS' doc comment in builtins.ts. `slot`/`envLevel`
+   * are meaningless here, like `isGlobal`; `constantValue` is what
+   * emitLoadSymbol emits directly as an LGCF64 operand, bypassing the
+   * primitive-function-call machinery entirely (a constant is never called). */
+  isConstant?: boolean;
+  constantValue?: number;
 }
 
 export type ExpressionResult = {
@@ -163,7 +176,16 @@ export class PVMLCompiler
     // name, or "(anonymous)" for a lambda/multi-lambda, matching how the CSE
     // machine names these (src/stdlib/utils.ts's toPythonString).
     const functionName = node instanceof StmtNS.FunctionDef ? node.name.lexeme : "(anonymous)";
-    const builder = this.builder.createChildBuilder(numArgs, functionName);
+    // A rest param (`def f(a, *rest)`) is always the last parameter by
+    // grammar — see PVMLIR's `hasRestParam` doc comment. Native Pynter has
+    // no representation for a variadic-arity function at all, so reject this
+    // at compile time rather than silently producing a PVMLIR native Pynter
+    // could never execute correctly.
+    const hasRestParam = node.parameters.some(p => p.isStarred);
+    if (hasRestParam && this.targetsPynter) {
+      throw new Error("Rest parameters (*args) are not supported when compiling for native Pynter");
+    }
+    const builder = this.builder.createChildBuilder(numArgs, functionName, hasRestParam);
 
     const compiler = new PVMLCompiler(
       nextEnvironment,
@@ -229,16 +251,27 @@ export class PVMLCompiler
       parentEnv.enclosing.enclosing === null;
 
     if (isPrimitiveEnv) {
-      const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
-      if (primitiveIndex === undefined) {
-        throw new Error(`Primitive function ${name} not implemented`);
+      const constantValue = PRIMITIVE_CONSTANTS.get(name);
+      if (constantValue !== undefined) {
+        annotation = {
+          slot: -1,
+          envLevel: -1,
+          isPrimitive: false,
+          isConstant: true,
+          constantValue,
+        };
+      } else {
+        const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
+        if (primitiveIndex === undefined) {
+          throw new Error(`Primitive function ${name} not implemented`);
+        }
+        annotation = {
+          slot: primitiveIndex,
+          envLevel: 0,
+          isPrimitive: true,
+          primitiveIndex,
+        };
       }
-      annotation = {
-        slot: primitiveIndex,
-        envLevel: 0,
-        isPrimitive: true,
-        primitiveIndex,
-      };
     } else if (isModuleLevelEnv) {
       annotation = {
         slot: -1,
@@ -293,6 +326,13 @@ export class PVMLCompiler
   private emitLoadSymbol(token: Token): ExpressionResult {
     const annotation = this.getTokenAnnotation(token);
 
+    if (annotation.isConstant) {
+      // A named numeric constant (e.g. `math_pi`) — pushed directly as a
+      // float, bypassing the primitive-function-call machinery entirely
+      // (see PRIMITIVE_CONSTANTS' doc comment in builtins.ts).
+      this.builder.emitUnary(OpCodes.LGCF64, annotation.constantValue);
+      return { maxStackSize: 1 };
+    }
     if (annotation.isPrimitive) {
       // A primitive referenced as a value rather than called directly (e.g.
       // `is_function(print)`, `f = abs`) — NEWCP pushes a callable reference
@@ -317,6 +357,9 @@ export class PVMLCompiler
   private emitStoreSymbol(token: Token): void {
     const annotation = this.getTokenAnnotation(token);
 
+    if (annotation.isConstant) {
+      throw new Error(`Cannot assign to constant symbol: ${token.lexeme}`);
+    }
     if (annotation.isPrimitive) {
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
     }
@@ -374,7 +417,14 @@ export class PVMLCompiler
   }
 
   visitStarredExpr(_expr: ExprNS.Starred): ExpressionResult {
-    throw new Error("Starred expressions not yet supported in PVML compiler");
+    // A Starred expression as a direct call argument (`f(*xs)`) is handled
+    // entirely by visitCallExpr/compileSpreadCall, without ever visiting the
+    // node through here — that's the only place `*expr` syntax is valid in
+    // this language (no tuple-unpacking assignment targets exist at all, see
+    // AssignTarget in ast-types.ts), so reaching this method at all means a
+    // bare/standalone spread outside a call's argument list, which is a
+    // syntax error.
+    throw new Error("Starred expressions are only supported as call arguments (f(*xs))");
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
@@ -600,35 +650,136 @@ export class PVMLCompiler
     return { maxStackSize: operandResult.maxStackSize };
   }
 
-  visitCallExpr(expr: ExprNS.Call): ExpressionResult {
-    if (!(expr.callee instanceof ExprNS.Variable)) {
-      throw new Error("Unsupported call expression: callee must be an identifier");
-    }
-
-    const callee: ExprNS.Variable = expr.callee;
-
-    // CALLP/CALLTP (primitive calls) take their arguments directly off the
-    // stack with no function value involved (see callPrimitive) — only a
-    // non-primitive (closure) call needs its callee's value loaded first.
-    // Loading it here regardless would push a stray NEWCP value that CALLP
-    // never consumes, corrupting the stack for every primitive call.
-    const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
-    const functionStackEffect = isPrimitiveCallee
-      ? 0
-      : this.emitLoadSymbol(callee.name).maxStackSize;
-
+  /** Compiles a call's argument list left to right, returning the peak extra
+   * stack depth they need (relative to whatever's already on the stack —
+   * e.g. a callee value — when the first argument starts compiling). Shared
+   * by both branches of visitCallExpr. */
+  private compileCallArgs(args: ExprNS.Expr[]): number {
     let maxArgStackSize = 0;
-    for (let i = 0; i < expr.args.length; i++) {
-      const argResult = this.compile(expr.args[i]);
+    for (let i = 0; i < args.length; i++) {
+      const argResult = this.compile(args[i]);
       maxArgStackSize = Math.max(maxArgStackSize, i + argResult.maxStackSize);
     }
+    return maxArgStackSize;
+  }
+
+  visitCallExpr(expr: ExprNS.Call): ExpressionResult {
+    if (expr.args.some(arg => arg instanceof ExprNS.Starred)) {
+      // A spread argument (`f(*xs)`) makes the actual argument count runtime-
+      // variable, independent of whether the callee is a statically-known
+      // name — a spread call to a known function still needs CALLA/CALLTA,
+      // not the CALLP/CALL fast path below.
+      return this.compileSpreadCall(expr);
+    }
+
+    if (expr.callee instanceof ExprNS.Variable) {
+      const callee: ExprNS.Variable = expr.callee;
+
+      // CALLP/CALLTP (primitive calls) take their arguments directly off the
+      // stack with no function value involved (see callPrimitive) — only a
+      // non-primitive (closure) call needs its callee's value loaded first.
+      // Loading it here regardless would push a stray NEWCP value that CALLP
+      // never consumes, corrupting the stack for every primitive call.
+      const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
+      const functionStackEffect = isPrimitiveCallee
+        ? 0
+        : this.emitLoadSymbol(callee.name).maxStackSize;
+
+      const maxArgStackSize = this.compileCallArgs(expr.args);
+
+      const numArgs = expr.args.length;
+      this.emitFunctionCall(callee.name, numArgs);
+
+      return {
+        maxStackSize: functionStackEffect + maxArgStackSize,
+      };
+    }
+
+    // General case: the callee is a computed expression (a call result, an
+    // immediately-invoked lambda, a subscript, etc.), not a statically-known
+    // name — push whatever it evaluates to (a closure, or a first-class
+    // primitive reference), then dispatch via CALL/CALLT. There's no CALLP
+    // fast path here (no compile-time-known primitive index to encode), but
+    // the interpreter's dispatchCall already handles a runtime PVMLPrimitive
+    // callee value dynamically — the same mechanism that already makes
+    // `f = abs; f(-5)` work today.
+    const calleeResult = this.compile(expr.callee);
+    const maxArgStackSize = this.compileCallArgs(expr.args);
 
     const numArgs = expr.args.length;
-    this.emitFunctionCall(callee.name, numArgs);
+    const userOpcode = this.isTailCall ? OpCodes.CALLT : OpCodes.CALL;
+    this.builder.emitCall(userOpcode, numArgs);
 
     return {
-      maxStackSize: functionStackEffect + maxArgStackSize,
+      maxStackSize: calleeResult.maxStackSize + maxArgStackSize,
     };
+  }
+
+  /**
+   * Compiles a call with at least one spread argument (`f(*xs)`, or a mix
+   * like `f(a, *xs, b)`). `xs`'s length isn't known until runtime, but
+   * CALL/CALLT's `numArgs` operand is a static instruction byte (and, being
+   * ≤ PYNTER_OPCODE_MAX, its semantics can't change to accommodate this) —
+   * so instead this builds one flat runtime args array and dispatches via
+   * CALLA/CALLTA (see opcodes.ts's doc comment there).
+   *
+   * Each syntactic argument becomes one "piece": a plain argument is wrapped
+   * in a fresh 1-element array (compileSingleElementArray); a spread
+   * argument's value is used directly (it's already a Python list, i.e. a
+   * PVMLArray). CONCAT_ARRAYS_PRIMITIVE_INDEX (see builtins.ts's
+   * executePrimitive case 100) flattens all the pieces — however many there
+   * are, whichever are spreads — into one array in a single CALLP, since the
+   * *piece* count is always statically known even though the *flattened*
+   * length isn't.
+   */
+  private compileSpreadCall(expr: ExprNS.Call): ExpressionResult {
+    if (this.targetsPynter) {
+      throw new Error(
+        "Call-site argument spreading (*args) is not supported when compiling for native Pynter",
+      );
+    }
+
+    const calleeResult = this.compile(expr.callee);
+
+    let maxPieceStackSize = 0;
+    for (let i = 0; i < expr.args.length; i++) {
+      const arg = expr.args[i];
+      const pieceResult =
+        arg instanceof ExprNS.Starred
+          ? this.compile(arg.value)
+          : this.compileSingleElementArray(arg);
+      maxPieceStackSize = Math.max(maxPieceStackSize, i + pieceResult.maxStackSize);
+    }
+
+    this.builder.emitPrimitiveCall(OpCodes.CALLP, CONCAT_ARRAYS_PRIMITIVE_INDEX, expr.args.length);
+
+    const userOpcode = this.isTailCall ? OpCodes.CALLTA : OpCodes.CALLA;
+    this.builder.emitNullary(userOpcode);
+
+    return {
+      maxStackSize: calleeResult.maxStackSize + maxPieceStackSize,
+    };
+  }
+
+  /** Wraps a single compiled value in a fresh 1-element array — builds one
+   * "piece" for compileSpreadCall's argument flattening. Same NEWA/STAG
+   * pattern as visitListExpr, specialized to exactly one element. */
+  private compileSingleElementArray(expr: ExprNS.Expr): ExpressionResult {
+    const tmpSlot = this.getOrAssignSlot(
+      this.currentEnvironment,
+      `__spread_piece_${this.tmpCounter++}`,
+    );
+    this.builder.emitNullary(OpCodes.NEWA);
+    this.builder.emitUnary(OpCodes.STLG, tmpSlot);
+
+    this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+    this.builder.emitUnary(OpCodes.LGCI, 0);
+    const elemResult = this.compile(expr);
+    this.builder.emitNullary(OpCodes.STAG);
+
+    this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+
+    return { maxStackSize: Math.max(2 + elemResult.maxStackSize, 1) };
   }
 
   visitTernaryExpr(expr: ExprNS.Ternary): ExpressionResult {
@@ -827,7 +978,13 @@ export class PVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
-    throw new Error("FromImport not yet implemented in PVML compiler");
+    // A genuine no-op, matching the CSE machine's own FromImport handler
+    // (src/engines/cse/interpreter.ts): SICPy has no real per-file module
+    // system — every stdlib group's names are preloaded into the global
+    // scope by the runner/evaluator before any user code runs, so a name
+    // this statement "imports" is already resolvable by the time it's used.
+    this.builder.emitNullary(OpCodes.LGCU);
+    return { maxStackSize: 1 };
   }
 
   visitGlobalStmt(_stmt: StmtNS.Global): ExpressionResult {

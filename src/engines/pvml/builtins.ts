@@ -1,10 +1,25 @@
+import { erf, gamma, lgamma } from "mathjs";
 import { numericCompare } from "../cse/utils";
-import { toPythonString } from "../../stdlib/utils";
+import { minArgMap, toPythonString } from "../../stdlib/utils";
+import { transform } from "../../stdlib/parser";
+// Imported only for their module-load side effect of populating
+// `minArgMap` (via each builtin's `@Validate` decorator, see stdlib/utils.ts)
+// — used below to build PRIMITIVE_MIN_ARGS for arity(). `../../stdlib/parser`
+// (imported above for `transform`) already covers the parser group's own
+// names (parse/tokenize/apply_in_underlying_python).
+import "../../stdlib/misc";
+import "../../stdlib/math";
+import "../../stdlib/linked-list";
+import "../../stdlib/list";
+import "../../stdlib/pairmutator";
+import "../../stdlib/stream";
 import { PyComplexNumber } from "../../types";
-import { pvmlBoxToCseValue } from "./cse-interop";
-import type { PVMLBoxType } from "./types";
+import { parse as parsePython } from "../../parser/parser-adapter";
+import pythonLexer from "../../parser/lexer";
+import { cseValueToPvmlBox, pvmlBoxToCseValue } from "./cse-interop";
+import type { PVMLArray, PVMLBoxType } from "./types";
 import { getPVMLType, isPVMLObject, PVMLType } from "./types";
-import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
+import { MissingRequiredPositionalError, PVMLInterpreterError, ZeroDivisionError } from "./errors";
 
 /**
  * Maps canonical SICPy builtin names (as defined by the CSE machine's stdlib
@@ -70,6 +85,16 @@ import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
  * the primitive index before dispatch (pynter/vm/src/vm.c's
  * do_internal_function) and faults cleanly on an out-of-range one, exactly
  * like calling into a real unimplemented stub would.
+ *
+ * `parse`/`tokenize`/`apply_in_underlying_python` (the chapter-4 metacircular
+ * `parser` stdlib group, see src/stdlib/parser.ts and PyPvmlEvaluator4) are
+ * the same story as complex/real/imag: no Pynter equivalent, indices past
+ * the real table, safe via the same bounds-check. `parse`/`tokenize` reuse
+ * CSE's own `transform()`/lexer directly rather than re-deriving Python's
+ * AST-to-parse-tree conversion; `apply_in_underlying_python` is built on
+ * PVMLInterpreter's `invokeValue` (see its doc comment) rather than CSE's
+ * control/stash step-machine plumbing, which this interpreter has no
+ * equivalent of and doesn't need one for this.
  */
 export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["print", 5],
@@ -102,6 +127,11 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["real", 97],
   ["imag", 98],
   ["complex", 99],
+  // 100 is _concat_arrays, compiler-internal only (see PVMLCompiler's
+  // compileSpreadCall) — deliberately no name entry here.
+  ["parse", 101],
+  ["tokenize", 102],
+  ["apply_in_underlying_python", 103],
   ["abs", 32],
   ["math_acos", 33],
   ["math_acosh", 34],
@@ -132,6 +162,67 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_tan", 64],
   ["math_tanh", 65],
   ["math_trunc", 66],
+  // The Python `math` module functions below have no Source/native-Pynter
+  // equivalent at all (Pynter's real math_* table is Source's — i.e.
+  // JS Math.* — subset, matching what's mapped above this comment); same
+  // "no native counterpart" situation as is_integer/is_float/_gen_list/
+  // real/imag/complex/parse/tokenize above, so browser-pathway-only indices
+  // past Pynter's real dispatch table, no native Pynter C-side change.
+  ["math_degrees", 104],
+  ["math_erf", 105],
+  ["math_erfc", 106],
+  ["math_comb", 107],
+  ["math_factorial", 108],
+  ["math_gcd", 109],
+  ["math_isqrt", 110],
+  ["math_lcm", 111],
+  ["math_perm", 112],
+  ["math_fabs", 113],
+  ["math_fma", 114],
+  ["math_fmod", 115],
+  ["math_remainder", 116],
+  ["math_copysign", 117],
+  ["math_isfinite", 118],
+  ["math_isinf", 119],
+  ["math_isnan", 120],
+  ["math_ldexp", 121],
+  ["math_exp2", 122],
+  ["math_gamma", 123],
+  ["math_lgamma", 124],
+  ["math_radians", 125],
+  ["time_time", 126],
+]);
+
+/**
+ * Primitive-index -> minimum-argument-count lookup used by `arity()` (case
+ * 96 below) when its argument is a first-class primitive reference (e.g.
+ * `arity(abs)`) rather than a closure. Derived from the CSE machine's own
+ * `minArgMap` (stdlib/utils.ts, populated by each builtin's `@Validate`
+ * decorator as a side effect of the side-effect-only stdlib imports above)
+ * so the numbers can't drift from CSE's `arity()` (misc.ts) — a name with no
+ * `@Validate` decorator (e.g. `str`, `error`, the async `display`) defaults
+ * to CSE's own `minArgMap.get(builtin) || 0` fallback.
+ */
+const PRIMITIVE_MIN_ARGS: Map<number, number> = new Map(
+  [...PRIMITIVE_FUNCTIONS.entries()].map(([name, index]) => [index, minArgMap.get(name) || 0]),
+);
+
+/**
+ * Named numeric constants from the `math` stdlib group (src/stdlib/math.ts's
+ * `constantMap`) — `math_pi`, `math_e`, etc. Unlike everything in
+ * PRIMITIVE_FUNCTIONS above, these are referenced as plain values
+ * (`math_pi + 1`), never called (`math_pi()` isn't valid Python) — so they
+ * don't fit the primitive-function-call model at all. PVMLCompiler's
+ * getTokenAnnotation checks this map before PRIMITIVE_FUNCTIONS and, for a
+ * hit, emits the value directly (LGCF64) rather than a CALLP/NEWCP
+ * primitive reference — see its `isConstant` CompilerAnnotation case.
+ */
+export const PRIMITIVE_CONSTANTS: Map<string, number> = new Map([
+  ["math_e", Math.E],
+  ["math_inf", Infinity],
+  ["math_nan", NaN],
+  ["math_pi", Math.PI],
+  ["math_tau", 2 * Math.PI],
 ]);
 
 /**
@@ -182,6 +273,19 @@ function toPyComplexOperand(value: PVMLBoxType): PyComplexNumber | undefined {
   return undefined;
 }
 
+/** Builds a null-terminated pair-chain (PVML's linked-list representation,
+ * same 2-element-array shape as pair()) from a flat array — used by
+ * tokenize() to return its token list. Mirrors src/stdlib/parser.ts's
+ * vector_to_llist, for the same reason cse-interop.ts's converters exist:
+ * matching output shape, different box type. */
+function vectorToPvmlList(arr: PVMLBoxType[]): PVMLBoxType {
+  let res: PVMLBoxType = null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    res = { type: "array", elements: [arr[i], res] };
+  }
+  return res;
+}
+
 function unaryMath(args: PVMLBoxType[], name: string, fn: (x: number) => number): number {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
@@ -198,6 +302,88 @@ function binaryMath(
     throw new MissingRequiredPositionalError(`${name}() takes exactly 2 arguments`);
   const [a, b] = assertNumericArgs(args, name);
   return fn(a, b);
+}
+
+function ternaryMath(
+  args: PVMLBoxType[],
+  name: string,
+  fn: (a: number, b: number, c: number) => number,
+): number {
+  if (args.length !== 3)
+    throw new MissingRequiredPositionalError(`${name}() takes exactly 3 arguments`);
+  const [a, b, c] = assertNumericArgs(args, name);
+  return fn(a, b, c);
+}
+
+function unaryMathBool(args: PVMLBoxType[], name: string, fn: (x: number) => boolean): boolean {
+  if (args.length !== 1)
+    throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
+  const [x] = assertNumericArgs(args, name);
+  return fn(x);
+}
+
+/** Like unaryMath, but for the handful of math_* functions whose Python
+ * result is always an int (math.floor/ceil/trunc) — matches CSE's own
+ * math_floor/ceil/trunc (src/stdlib/math.ts), which return BigIntValue, not
+ * NumberValue, unlike the float-returning math_* functions everything else
+ * in this file wraps via plain unaryMath. An already-int argument passes
+ * through unchanged (full precision preserved, matching CSE) rather than
+ * round-tripping through Number — ceil/floor/trunc of an int is a no-op. */
+function unaryMathToInt(args: PVMLBoxType[], name: string, fn: (x: number) => number): bigint {
+  if (args.length !== 1)
+    throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
+  const [x] = args;
+  if (typeof x === "bigint") return x;
+  if (typeof x !== "number")
+    throw new PVMLInterpreterError(`TypeError: ${name}() requires numeric arguments`);
+  return BigInt(fn(x));
+}
+
+/** Euclidean algorithm, arbitrary precision — shared by math_gcd/math_lcm.
+ * Mirrors CSE's _gcdOfTwo (src/stdlib/math.ts). Assumes non-negative inputs
+ * (callers take the absolute value first). */
+function gcdOfTwo(a: bigint, b: bigint): bigint {
+  let x = a;
+  let y = b;
+  while (y !== 0n) {
+    const temp = x % y;
+    x = y;
+    y = temp;
+  }
+  return x < 0n ? -x : x;
+}
+
+/** Banker's rounding (round-half-to-even) for a float — used by
+ * math_remainder's IEEE-754 remainder definition. Mirrors CSE's
+ * _roundToEven (src/stdlib/math.ts). */
+function roundToEven(num: number): number {
+  const floorVal = Math.floor(num);
+  const ceilVal = Math.ceil(num);
+  const diffFloor = num - floorVal;
+  const diffCeil = ceilVal - num;
+  if (diffFloor < diffCeil) return floorVal;
+  if (diffCeil < diffFloor) return ceilVal;
+  return floorVal % 2 === 0 ? floorVal : ceilVal;
+}
+
+/** Fused multiply-add via Dekker's algorithm (single rounding for x*y+z) —
+ * used by math_fma. Mirrors CSE's _twoProd/_twoSum/_fusedMultiplyAdd
+ * (src/stdlib/math.ts), collapsed into one function since PVML has no
+ * equivalent need to expose the intermediates separately. */
+function fusedMultiplyAdd(x: number, y: number, z: number): number {
+  const prod = x * y;
+  const c = 134217729; // 2^27 + 1
+  const xHi = x * c - (x * c - x);
+  const xLo = x - xHi;
+  const yHi = y * c - (y * c - y);
+  const yLo = y - yHi;
+  const prodErr = xLo * yLo - (prod - xHi * yHi - xLo * yHi - xHi * yLo);
+
+  const sum = prod + z;
+  const v = sum - prod;
+  const sumErr = prod - (sum - v) + (z - v);
+
+  return sum + (prodErr + sumErr);
 }
 
 /** max()/min(): picks the winning argument by value (via the CSE-shared
@@ -238,6 +424,11 @@ export function executePrimitive(
   primitiveIndex: number,
   args: PVMLBoxType[],
   sendOutput: (message: string) => void,
+  /** Synchronously calls back into user Python code (a closure or another
+   * primitive) — see PVMLInterpreter's invokeValue doc comment. Only
+   * `apply_in_underlying_python` uses this; every other primitive ignores
+   * it. */
+  invokeValue: (func: PVMLBoxType, args: PVMLBoxType[]) => PVMLBoxType,
 ): PVMLBoxType {
   switch (primitiveIndex) {
     case 2: {
@@ -346,10 +537,27 @@ export function executePrimitive(
       return { type: "array", elements: new Array(n).fill(null) };
     }
 
-    case 96: // arity: not implemented here (no access to function IR from this scope)
+    case 96: {
+      // arity — mirrors CSE's arity() (misc.ts): for a closure, the number
+      // of fixed parameters (i.e. the rest param's own index, if any — a
+      // rest param, always the closure's *last* parameter here, absorbs
+      // every argument from that index onward, matching CSE's
+      // `variadicInstance` semantics); for a primitive, its registered
+      // minimum argument count (see PRIMITIVE_MIN_ARGS above).
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("arity() takes exactly 1 argument");
+      const func = args[0];
+      if (isPVMLObject(func) && func.type === "closure") {
+        const numFixedParams = func.ir.hasRestParam ? func.ir.numArgs - 1 : func.ir.numArgs;
+        return BigInt(numFixedParams);
+      }
+      if (isPVMLObject(func) && func.type === "primitive") {
+        return BigInt(PRIMITIVE_MIN_ARGS.get(func.primitiveIndex) ?? 0);
+      }
       throw new PVMLInterpreterError(
-        "NotImplementedError: arity() is not yet supported by the PVML/Pynter backend",
+        `TypeError: arity() argument must be a function, not '${getPVMLType(func)}'`,
       );
+    }
 
     case 97: // real — the real part of a complex number, as a float. Matches
       // CSE's real() (misc.ts): requires a genuine complex argument.
@@ -385,13 +593,90 @@ export function executePrimitive(
       return realPart.add(imagPart.mul(new PyComplexNumber(0, 1)));
     }
 
-    case 76: // stream: needs a runtime-synthesized continuation closure, which this
-      // TS interpreter can't create (closures reference statically compiled bytecode
-      // functions by index) — native Pynter can, since C continuations are built
-      // dynamically. No existing TS-interpreter-only test exercises this.
-      throw new PVMLInterpreterError(
-        "NotImplementedError: stream() is not yet supported by this TS interpreter",
-      );
+    case 100: {
+      // _concat_arrays — compiler-internal only, never resolvable by name
+      // from Python source (no PRIMITIVE_FUNCTIONS entry): PVMLCompiler's
+      // visitCallExpr emits a direct CALLP to this index when flattening a
+      // call with a spread argument (`f(*xs)`) into one runtime args array
+      // for CALLA/CALLTA — see opcodes.ts's CALLA doc comment. Each argument
+      // here is already a PVMLArray (a non-spread argument is compiled as a
+      // fresh 1-element array; a spread argument's value is used directly),
+      // so this just needs to flatten them into one.
+      return { type: "array", elements: args.flatMap(a => (a as PVMLArray).elements) };
+    }
+
+    case 101: {
+      // parse — reuses CSE's own transform() (src/stdlib/parser.ts) to build
+      // the parse-tree value, converting only the final result to a PVML
+      // value (cse-interop.ts's cseValueToPvmlBox) rather than re-deriving
+      // Python's ~200-line AST-to-parse-tree conversion. Matches CSE's own
+      // ParserBuiltins.parse (parser.ts) exactly, minus the Context coupling.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("parse() takes exactly 1 argument");
+      const [source] = args;
+      if (typeof source !== "string")
+        throw new PVMLInterpreterError("TypeError: parse() argument must be a string");
+      const ast = parsePython(source + "\n");
+      return cseValueToPvmlBox(transform(ast, new Set()));
+    }
+
+    case 102: {
+      // tokenize — wraps the shared pythonLexer directly (no CSE Value
+      // coupling to convert away at all, unlike parse() above).
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("tokenize() takes exactly 1 argument");
+      const [source] = args;
+      if (typeof source !== "string")
+        throw new PVMLInterpreterError("TypeError: tokenize() argument must be a string");
+      pythonLexer.reset(source);
+      const tokens: PVMLBoxType[] = [];
+      let tok;
+      while ((tok = pythonLexer.next())) {
+        tokens.push(tok.value);
+      }
+      return vectorToPvmlList(tokens);
+    }
+
+    case 103: {
+      // apply_in_underlying_python(func, args_list) — walks args_list (a
+      // pair-chain, same shape parser.ts:319-322 walks for CSE) into a flat
+      // array, then invokes func synchronously via PVMLInterpreter's
+      // invokeValue (see its doc comment) — no async/Promise needed here,
+      // unlike CSE's version, since this interpreter has no resumable
+      // step-machine to work around.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError(
+          "apply_in_underlying_python() takes exactly 2 arguments",
+        );
+      const [func, argsList] = args;
+      const argArray: PVMLBoxType[] = [];
+      let current: PVMLBoxType = argsList;
+      while (isPVMLObject(current) && current.type === "array" && current.elements.length === 2) {
+        argArray.push(current.elements[0]);
+        current = current.elements[1];
+      }
+      return invokeValue(func, argArray);
+    }
+
+    case 76: {
+      // stream — mirrors CSE's stream() (stdlib/stream.ts): `stream()`
+      // (no args) is the empty stream (None); `stream(a, b, c, ...)` is
+      // `pair(a, <continuation>)`, where calling the continuation with zero
+      // arguments recurses into `stream(b, c, ...)`. Rather than
+      // synthesizing a genuinely new closure at runtime (which, unlike
+      // native Pynter's C continuations, this TS interpreter — and real
+      // Pynter's own bytecode-index-based closures — can't do), the
+      // continuation is represented as this same primitive (index 76) with
+      // the remaining args pre-bound via PVMLPrimitive's `boundArgs` field;
+      // see PVMLInterpreter.dispatchCall, which prepends `boundArgs` before
+      // re-entering this same case.
+      if (args.length === 0) return null;
+      const [head, ...rest] = args;
+      return {
+        type: "array",
+        elements: [head, { type: "primitive", primitiveIndex: 76, boundArgs: rest }],
+      };
+    }
 
     case 30: {
       // range
@@ -434,8 +719,8 @@ export function executePrimitive(
       return unaryMath(args, "math_atanh", Math.atanh);
     case 40: // math_cbrt
       return unaryMath(args, "math_cbrt", Math.cbrt);
-    case 41: // math_ceil
-      return unaryMath(args, "math_ceil", Math.ceil);
+    case 41: // math_ceil — returns int (bigint), matching CSE's math_ceil; see unaryMathToInt.
+      return unaryMathToInt(args, "math_ceil", Math.ceil);
     case 43: // math_cos
       return unaryMath(args, "math_cos", Math.cos);
     case 44: // math_cosh
@@ -444,8 +729,8 @@ export function executePrimitive(
       return unaryMath(args, "math_exp", Math.exp);
     case 46: // math_expm1
       return unaryMath(args, "math_expm1", Math.expm1);
-    case 47: // math_floor
-      return unaryMath(args, "math_floor", Math.floor);
+    case 47: // math_floor — returns int (bigint); see unaryMathToInt.
+      return unaryMathToInt(args, "math_floor", Math.floor);
     case 51: // math_log
       return unaryMath(args, "math_log", Math.log);
     case 52: // math_log1p
@@ -509,8 +794,178 @@ export function executePrimitive(
       return unaryMath(args, "math_tan", Math.tan);
     case 65: // math_tanh
       return unaryMath(args, "math_tanh", Math.tanh);
-    case 66: // math_trunc
-      return unaryMath(args, "math_trunc", Math.trunc);
+    case 66: // math_trunc — returns int (bigint); see unaryMathToInt.
+      return unaryMathToInt(args, "math_trunc", Math.trunc);
+
+    case 104: // math_degrees
+      return unaryMath(args, "math_degrees", x => (x * 180) / Math.PI);
+
+    case 105: // math_erf
+      return unaryMath(args, "math_erf", x => erf(x));
+
+    case 106: // math_erfc
+      return unaryMath(args, "math_erfc", x => 1 - erf(x));
+
+    case 107: {
+      // math_comb(n, k) — binomial coefficient, arbitrary precision.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError("math_comb() takes exactly 2 arguments");
+      const [n, k] = assertIntArgs(args, "math_comb");
+      if (n < 0n || k < 0n)
+        throw new PVMLInterpreterError("ValueError: math_comb() not defined for negative values");
+      if (k > n) return 0n;
+      let result = 1n;
+      const kk = k > n - k ? n - k : k;
+      for (let i = 0n; i < kk; i++) {
+        result = (result * (n - i)) / (i + 1n);
+      }
+      return result;
+    }
+
+    case 108: {
+      // math_factorial(n)
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("math_factorial() takes exactly 1 argument");
+      const [n] = assertIntArgs(args, "math_factorial");
+      if (n < 0n)
+        throw new PVMLInterpreterError(
+          "ValueError: math_factorial() not defined for negative values",
+        );
+      let result = 1n;
+      for (let i = 1n; i <= n; i++) result *= i;
+      return result;
+    }
+
+    case 109: {
+      // math_gcd(*ints) — variadic.
+      if (args.length === 0) return 0n;
+      const values = assertIntArgs(args, "math_gcd").map(v => (v < 0n ? -v : v));
+      if (values.every(v => v === 0n)) return 0n;
+      let result = values[0];
+      for (let i = 1; i < values.length; i++) {
+        result = gcdOfTwo(result, values[i]);
+        if (result === 1n) break;
+      }
+      return result;
+    }
+
+    case 110: {
+      // math_isqrt(n) — integer square root, via binary search (matches
+      // CSE's math_isqrt exactly).
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("math_isqrt() takes exactly 1 argument");
+      const [n] = assertIntArgs(args, "math_isqrt");
+      if (n < 0n)
+        throw new PVMLInterpreterError("ValueError: math_isqrt() not defined for negative values");
+      if (n < 2n) return n;
+      let low = 1n;
+      let high = n;
+      while (low < high) {
+        const mid = (low + high + 1n) >> 1n;
+        if (mid * mid <= n) low = mid;
+        else high = mid - 1n;
+      }
+      return low;
+    }
+
+    case 111: {
+      // math_lcm(*ints) — variadic.
+      if (args.length === 0) return 1n;
+      const values = assertIntArgs(args, "math_lcm").map(v => (v < 0n ? -v : v));
+      if (values.some(v => v === 0n)) return 0n;
+      let result = values[0];
+      for (let i = 1; i < values.length; i++) {
+        const g = gcdOfTwo(result, values[i]);
+        result = (result / g) * values[i];
+        if (result === 0n) break;
+      }
+      return result;
+    }
+
+    case 112: {
+      // math_perm(n, k=n) — k defaults to n (falls back to factorial(n)).
+      if (args.length < 1 || args.length > 2)
+        throw new MissingRequiredPositionalError(
+          `math_perm() takes 1 to 2 arguments (${args.length} given)`,
+        );
+      const [n] = assertIntArgs([args[0]], "math_perm");
+      const k =
+        args.length === 2 && args[1] !== null ? assertIntArgs([args[1]], "math_perm")[0] : n;
+      if (n < 0n || k < 0n)
+        throw new PVMLInterpreterError("ValueError: math_perm() not defined for negative values");
+      if (k > n) return 0n;
+      let result = 1n;
+      for (let i = 0n; i < k; i++) result *= n - i;
+      return result;
+    }
+
+    case 113: {
+      // math_fabs — always a float, even for an int argument (unlike abs()).
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("math_fabs() takes exactly 1 argument");
+      const [x] = assertNumericArgs(args, "math_fabs");
+      return Math.abs(x);
+    }
+
+    case 114: // math_fma(x, y, z) — fused multiply-add.
+      return ternaryMath(args, "math_fma", (x, y, z) => {
+        if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) return NaN;
+        if (x === 0 && !Number.isFinite(y) && Number.isNaN(z)) return NaN;
+        if (y === 0 && !Number.isFinite(x) && Number.isNaN(z)) return NaN;
+        return fusedMultiplyAdd(x, y, z);
+      });
+
+    case 115: // math_fmod
+      return binaryMath(args, "math_fmod", (x, y) => {
+        if (y === 0) throw new ZeroDivisionError("math_fmod");
+        return x % y;
+      });
+
+    case 116: // math_remainder — IEEE 754 remainder (round-half-to-even quotient).
+      return binaryMath(args, "math_remainder", (x, y) => {
+        if (y === 0) throw new ZeroDivisionError("math_remainder");
+        const n = roundToEven(x / y);
+        return x - n * y;
+      });
+
+    case 117: // math_copysign
+      return binaryMath(args, "math_copysign", (x, y) => {
+        const absVal = Math.abs(x);
+        return y < 0 || Object.is(y, -0) ? -absVal : absVal;
+      });
+
+    case 118: // math_isfinite
+      return unaryMathBool(args, "math_isfinite", Number.isFinite);
+
+    case 119: // math_isinf
+      return unaryMathBool(args, "math_isinf", x => x === Infinity || x === -Infinity);
+
+    case 120: // math_isnan
+      return unaryMathBool(args, "math_isnan", Number.isNaN);
+
+    case 121: {
+      // math_ldexp(x, i) — x * 2**i; i must be an int.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError("math_ldexp() takes exactly 2 arguments");
+      const [x] = assertNumericArgs([args[0]], "math_ldexp");
+      const [i] = assertIntArgs([args[1]], "math_ldexp");
+      return x * Math.pow(2, Number(i));
+    }
+
+    case 122: // math_exp2
+      return unaryMath(args, "math_exp2", x => Math.pow(2, x));
+
+    case 123: // math_gamma
+      return unaryMath(args, "math_gamma", x => gamma(x));
+
+    case 124: // math_lgamma
+      return unaryMath(args, "math_lgamma", x => lgamma(x));
+
+    case 125: // math_radians
+      return unaryMath(args, "math_radians", x => (x * Math.PI) / 180);
+
+    case 126: // time_time — always a float, matching CSE's time_time (misc.ts).
+      return Date.now();
 
     default:
       throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);

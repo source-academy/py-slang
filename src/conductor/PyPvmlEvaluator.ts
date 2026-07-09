@@ -1,4 +1,4 @@
-import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
@@ -9,12 +9,10 @@ import list from "../stdlib/list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
+import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
-
-const VARIANT = 4;
-const GROUPS: Group[] = [misc, math, linkedList, list, pairmutator, stream];
 
 function once<T>(fn: () => T): () => T {
   let value: T | undefined;
@@ -43,18 +41,32 @@ function once<T>(fn: () => T): () => T {
  * `ensurePreludesLoaded`. A later chunk sees every name — variable or
  * function — any earlier chunk (or the prelude) defined, the same way a
  * CSE-machine REPL chunk sees an earlier one's global bindings.
+ *
+ * `PyPvmlEvaluatorBase` mirrors `PyCseEvaluatorBase`'s (variant, groups)
+ * parameterization exactly — see `PyPvmlEvaluator1..4` below, one per SICPy
+ * chapter, matching `VARIANT_GROUPS` in ../runner.ts.
  */
-export class PyPvmlEvaluator extends BasicEvaluator {
+abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
+  private readonly variant: number;
+  private readonly groups: Group[];
   private globalEnv = new Map<string, PVMLBoxType>();
-  private readonly preludeText = GROUPS.map(g => g.prelude ?? "")
-    .filter(p => p.trim())
-    .join("\n");
+  private readonly preludeText: string;
+  private readonly ensurePreludeLoaded: () => void;
 
-  private readonly ensurePreludeLoaded = once(() => {
-    if (this.preludeText.trim()) {
-      this.runChunk(this.preludeText);
-    }
-  });
+  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
+    super(conductor);
+    this.variant = variant;
+    this.groups = groups;
+    this.preludeText = groups
+      .map(g => g.prelude ?? "")
+      .filter(p => p.trim())
+      .join("\n");
+    this.ensurePreludeLoaded = once(() => {
+      if (this.preludeText.trim()) {
+        this.runChunk(this.preludeText);
+      }
+    });
+  }
 
   /** Compiles and runs one chunk of SICPy source against the persistent
    * `globalEnv`, seeding the resolver with whatever names are already there
@@ -65,15 +77,15 @@ export class PyPvmlEvaluator extends BasicEvaluator {
     const { errors, environments } = analyzeWithEnvironments(
       ast,
       source,
-      VARIANT,
-      GROUPS,
+      this.variant,
+      this.groups,
       [],
       Array.from(this.globalEnv.keys()),
     );
     if (errors.length > 0) {
       throw errors[0];
     }
-    const compiler = PVMLCompiler.fromProgram(ast, VARIANT, environments, true);
+    const compiler = PVMLCompiler.fromProgram(ast, this.variant, environments, true);
     const program = compiler.compileProgram(ast);
     const interpreter = new PVMLInterpreter(program, {
       sendOutput: msg => this.conductor.sendOutput(msg),
@@ -95,3 +107,32 @@ export class PyPvmlEvaluator extends BasicEvaluator {
     return Promise.resolve();
   }
 }
+
+export class PyPvmlEvaluator1 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 1, [misc, math]);
+  }
+}
+
+export class PyPvmlEvaluator2 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 2, [misc, math, linkedList]);
+  }
+}
+
+export class PyPvmlEvaluator3 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+  }
+}
+
+export class PyPvmlEvaluator4 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+  }
+}
+
+/** @deprecated Use PyPvmlEvaluator4 (or the chapter-appropriate variant)
+ * instead — kept as an alias so existing callers of the single hardcoded-
+ * chapter-4 evaluator don't break. */
+export class PyPvmlEvaluator extends PyPvmlEvaluator4 {}
