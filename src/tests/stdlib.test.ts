@@ -1005,15 +1005,6 @@ describe("Standard Library Tests", () => {
         ["[math_nan] == [math_nan]", true, null],
         ["x = [math_nan]\nx == x", true, null],
       ],
-      // equal matches == semantics on Python lists too (bool-as-int, as in Python)
-      "equal on lists": [
-        ["equal([True], [1])", true, null],
-        ["equal([True], [2])", false, null],
-        ["equal([1], [1.0])", true, null],
-        ["equal([1, [True]], [1.0, [1]])", true, null],
-        ["equal([1], [(1+0j)])", true, null],
-        ["[True] == [1]", true, null],
-      ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [
         ["1 is not 1", false, null],

@@ -112,28 +112,6 @@ def is_llist(xs):
     else:
         return False
 
-def equal(xs, ys):
-    """
-    Pure Function: Returns True if both have the same structure (pairs)
-    and identical values at corresponding leaf positions.
-    """
-    if is_pair(xs):
-        return (
-            is_pair(ys)
-            and equal(head(xs), head(ys))
-            and equal(tail(xs), tail(ys))
-        )
-    elif is_none(xs):
-        return is_none(ys)
-    elif is_integer(xs) or is_float(xs) or is_complex(xs):
-        return (is_integer(ys) or is_float(ys) or is_complex(ys)) and xs == ys
-    elif is_boolean(xs):
-        return is_boolean(ys) and ((xs and ys) or (not xs and not ys))
-    elif is_string(xs):
-        return is_string(ys) and xs == ys
-    else:
-        return False
-
 def length(xs):
     """
     Returns the length of the linked list xs.
