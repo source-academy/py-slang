@@ -35,8 +35,10 @@ import {
   literal,
   pairNode,
   paramNames,
+  pythonStringRepr,
   stringLiteral,
   substitute,
+  unparse,
 } from "./ast";
 
 type BuiltinFn = (args: StepNode[]) => StepNode;
@@ -111,6 +113,84 @@ const isNoneOf = (x: StepNode): StepNode => call("is_none", [x]);
 const isPairOf = (x: StepNode): StepNode => call("is_pair", [x]);
 
 /* -------------------------------------------------------------------------- */
+/*                              print_llist text                              */
+/* -------------------------------------------------------------------------- */
+// lists.ts must not import builtins.ts (see the module-level note above `fail`/`typeError`), so this
+// duplicates the leaf-repr cases of builtins.ts's own `pyStr` locally rather than sharing it.
+
+/** Python repr of a value that is not itself a pair. Pairs are handled by `printLlistText` below,
+ * which recurses through itself (not this function) for both head and tail, so a nested proper list
+ * still renders as `llist(...)` rather than falling back to bracket notation at that level. */
+function llistLeafRepr(node: StepNode): string {
+  if (node.type === "Literal") {
+    const v = node.value;
+    if (typeof v === "string") return pythonStringRepr(v);
+    return String(node.raw ?? v);
+  }
+  if (node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration") {
+    const name = (node.name ?? (node.id as StepNode | undefined)?.name) as string | undefined;
+    return `<function ${name ?? "<lambda>"}>`;
+  }
+  if (node.type === "Identifier") return `<built-in function ${String(node.name)}>`;
+  return unparse(node);
+}
+
+/** Whether the tail chain from `node` reaches `None` (a proper list). Iterative -- `printLlistText`
+ * below calls this once per *distinct* tail-chain suffix it renders (see its own doc comment), so a
+ * recursive version here would make the whole walk O(N^2) on a long chain, and risk a stack
+ * overflow on a long chain by itself regardless. */
+function isProperLlist(node: StepNode): boolean {
+  let current = node;
+  while (isPairNode(current)) {
+    current = (current.elements as StepNode[])[1];
+  }
+  return isEmptyList(current);
+}
+
+/**
+ * Box-and-pointer text for a linked list or pair, mirroring `linked-list.ts`'s `_print_llist` on
+ * the CSE side: a proper list (tail chain reaching `None`) renders as `llist(a, b, c)`; anything
+ * else renders as `[head, tail]`, recursing the same way at every level (so a proper-list head
+ * nested inside an improper structure still renders as `llist(...)`, not brackets). Plain
+ * recursion, no memoization keyed by node/object identity, so it can't reproduce js-slang's
+ * `display_list` sharing bug (source-academy/js-slang#1124): the same pair reached via two
+ * different paths in the structure is re-derived fresh from its own shape each time, never looked
+ * up from a stale cached classification.
+ *
+ * `isKnownImproper` avoids re-running `isProperLlist` on every tail suffix while unrolling an
+ * improper structure's bracket notation: once a tail position is known to continue an improper
+ * chain, the rest of that chain can only ever be improper too, so `helper` skips straight to the
+ * bracket case instead of re-walking the remaining tail to confirm it again. A *head* always gets a
+ * fresh check (`isKnownImproper: false`), since it's an independent substructure that may itself be
+ * a proper list.
+ */
+function printLlistText(node: StepNode): string {
+  function helper(n: StepNode, isKnownImproper: boolean): string {
+    if (isKnownImproper || !isProperLlist(n)) {
+      if (!isPairNode(n)) return llistLeafRepr(n);
+      const [h, t] = n.elements as StepNode[];
+      return `[${helper(h, false)}, ${helper(t, true)}]`;
+    }
+
+    const parts: string[] = [];
+    let current = n;
+    while (isPairNode(current)) {
+      const [h, t] = current.elements as StepNode[];
+      parts.push(helper(h, false));
+      current = t;
+    }
+    return `llist(${parts.join(", ")})`;
+  }
+  return helper(node, false);
+}
+
+/** The output text a `print_llist(xs)` call writes, for `reduce.ts`'s `contractCall` (mirrors how
+ * `formatPrintOutput` backs `print` there). */
+export function formatPrintLlistOutput(args: StepNode[]): string {
+  return printLlistText(args[0]) + "\n";
+}
+
+/* -------------------------------------------------------------------------- */
 /*                                 Primitives                                  */
 /* -------------------------------------------------------------------------- */
 // Computed directly from value arguments. `pair` builds a pair; the rest inspect/deconstruct one.
@@ -152,6 +232,13 @@ const primitives: Record<string, BuiltinFn> = {
     // is a no-op returning its first argument (matching Source's `draw_data`/`display_list`).
     if (args.length < 1) typeError("draw_data() takes at least 1 argument but 0 were given");
     return args[0];
+  },
+  print_llist: args => {
+    // The value itself (printLlistText's box-and-pointer text) is written to the output panel by
+    // reduce.ts's contractCall, which special-cases this name the same way it does `print`; this
+    // primitive only validates arity and yields None, print()'s own return value.
+    checkArity("print_llist", args, 1, 1);
+    return literal(null, "None");
   },
 };
 
@@ -436,6 +523,7 @@ export const listArities: Record<string, number> = {
   is_llist: 1,
   llist: 0,
   draw_data: 1,
+  print_llist: 1,
   length: 1,
   map: 2,
   build_llist: 2,
