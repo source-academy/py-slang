@@ -663,5 +663,8 @@ describe("Parser Stdlib Tests", () => {
   generateNativePynterTestCases(nestedTests, 3);
   generateNativePynterTestCases(parseErrorTests, 3);
   generateNativePynterTestCases(tokenizeTests, 3);
-  generateNativePynterTestCases(applyTests, 3);
+  // apply_in_underlying_python lives in the parser group (src/stdlib/parser.ts), which isn't part
+  // of VARIANT_GROUPS[3] — pass it explicitly, unlike the sibling calls above, so it actually
+  // resolves instead of silently falling back to the default §3 groups.
+  generateNativePynterTestCases(applyTests, 3, groups);
 });

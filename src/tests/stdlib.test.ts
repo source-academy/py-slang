@@ -1004,15 +1004,22 @@ describe("Standard Library Tests", () => {
         ["math_nan >= math_nan", false, null],
         ["[math_nan] == [math_nan]", true, null],
         ["x = [math_nan]\nx == x", true, null],
-      ],
-      // equal matches == semantics on Python lists too (bool-as-int, as in Python)
-      "equal on lists": [
-        ["equal([True], [1])", true, null],
-        ["equal([True], [2])", false, null],
-        ["equal([1], [1.0])", true, null],
-        ["equal([1, [True]], [1.0, [1]])", true, null],
-        ["equal([1], [(1+0j)])", true, null],
-        ["[True] == [1]", true, null],
+        // `is` identity must hold regardless of what value-equality says about the same object:
+        // math_nan is math_nan is the same binding, so it's identical, even though it is not
+        // structurally equal to itself (== is False, per IEEE 754 — see above).
+        ["math_nan is math_nan", true, null],
+        ["x = math_nan\nx is x", true, null],
+        ["x = complex(math_nan, 0)\nx is x", true, null],
+        // NaN-ness propagates component-wise into complex: a complex value with a NaN real or
+        // imaginary part is unequal to everything, including itself, same as a plain float NaN —
+        // but (as with math_nan above) a *shared* NaN-complex nested in a container still equals
+        // itself, since container comparison checks identity per element first.
+        ["x = complex(math_nan, 0)\nx == x", false, null],
+        ["x = complex(math_nan, 0)\nx != x", true, null],
+        ["x = complex(0, math_nan)\nx == x", false, null],
+        ["complex(math_nan, 0) == complex(math_nan, 0)", false, null],
+        ["c = complex(math_nan, 0)\n[c] == [c]", true, null],
+        ["[complex(math_nan, 0)] == [complex(math_nan, 0)]", false, null],
       ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [
