@@ -74,15 +74,6 @@ function llist(...values) {}
 function draw_data(...values) {}
 
 /**
- * Returns True if both have the same structure (pairs) and identical values at corresponding leaf positions.
- *
- * @param {value} <CODE>xs</CODE> - given value
- * @param {value} <CODE>ys</CODE> - given value
- * @returns {boolean} whether xs and ys are equal
- */
-function equal(xs, ys) {}
-
-/**
  * Returns the length of the linked list xs.
  *
  * @param {linked_list} <CODE>xs</CODE> - given linked list
