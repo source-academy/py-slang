@@ -323,8 +323,23 @@ export function handleExpandedEquality(
  * value instead, the same simplification structuralEquals already makes for
  * these types. Values of different types are never identical (so `xs is None`
  * is simply false for a list `xs`).
+ *
+ * The exact-same-object case is checked first, before any type- or
+ * value-based comparison: `x is x` must be true regardless of what
+ * value-equality would say about `x` compared to a *different* object with
+ * the same value — notably `x = math_nan; x is x` (true: same binding) vs.
+ * `x == x` (false: NaN is unequal to everything, including itself, per
+ * IEEE 754). Without this shortcut, the value-based fallback below would
+ * incorrectly report `x is x` as false whenever `x`'s own value-equality is
+ * false — not just for NaN floats, but for any NaN-containing complex value
+ * too (`complex(math_nan, 0) is complex(math_nan, 0)` — actually a *different*
+ * object each time, so still false, but `x is x` for one such binding must be
+ * true).
  */
 function pyIdentical(left: Value, right: Value): boolean {
+  if (left === right) {
+    return true;
+  }
   if (left.type !== right.type) {
     return false;
   }

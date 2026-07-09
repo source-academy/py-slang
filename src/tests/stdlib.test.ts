@@ -1004,6 +1004,12 @@ describe("Standard Library Tests", () => {
         ["math_nan >= math_nan", false, null],
         ["[math_nan] == [math_nan]", true, null],
         ["x = [math_nan]\nx == x", true, null],
+        // `is` identity must hold regardless of what value-equality says about the same object:
+        // math_nan is math_nan is the same binding, so it's identical, even though it is not
+        // structurally equal to itself (== is False, per IEEE 754 — see above).
+        ["math_nan is math_nan", true, null],
+        ["x = math_nan\nx is x", true, null],
+        ["x = complex(math_nan, 0)\nx is x", true, null],
       ],
       // equal matches == semantics on Python lists too (bool-as-int, as in Python)
       "equal on lists": [
