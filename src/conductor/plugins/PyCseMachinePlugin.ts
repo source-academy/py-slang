@@ -7,7 +7,7 @@ import type {
 import { Closure } from "../../engines/cse/closure";
 import { Context } from "../../engines/cse/context";
 import { Control } from "../../engines/cse/control";
-import { Environment } from "../../engines/cse/environment";
+import { Environment, UNASSIGNED } from "../../engines/cse/environment";
 import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
@@ -83,7 +83,10 @@ function formatValue(v: Value): string {
   }
 }
 
-function serializeValue(v: Value, envId = ""): SerializedValue {
+function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedValue {
+  // A local that createEnvironment preallocated at CALL time but that hasn't been
+  // assigned yet — mirrors js-slang's uninitialized-`const`/`let` placeholder rendering.
+  if (v === UNASSIGNED) return { displayValue: "", label: "unassigned" };
   if (v === undefined || v === null) return { displayValue: "None", label: "NoneType" };
   const base = { displayValue: formatValue(v), label: typeTranslator(v.type) };
   if (v.type === "closure") {
@@ -348,7 +351,7 @@ function serializeEnvChain(
     queue.push(env);
     visit(env.tail);
     for (const val of Object.values(env.head)) {
-      if (val && val.type === "closure") visit(val.closure?.environment);
+      if (val && val !== UNASSIGNED && val.type === "closure") visit(val.closure?.environment);
     }
   };
 
