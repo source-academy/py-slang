@@ -92,12 +92,6 @@ const bin = (operator: string, left: StepNode, right: StepNode): StepNode => ({
   left,
   right,
 });
-const or = (left: StepNode, right: StepNode): StepNode => ({
-  type: "LogicalExpression",
-  operator: "or",
-  left,
-  right,
-});
 /** Left-associative string concatenation: `concat(a, b, c)` ⇒ `(a + b) + c`. */
 const concat = (...parts: StepNode[]): StepNode => parts.reduce((acc, part) => bin("+", acc, part));
 const ret = (argument: StepNode): StepNode => ({ type: "ReturnStatement", argument });
