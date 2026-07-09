@@ -1,4 +1,5 @@
 import {
+  MissingRequiredPositionalError,
   RecursionError,
   TypeError,
   UnsupportedOperandTypeError,
@@ -933,6 +934,21 @@ describe("Standard Library Tests", () => {
         ["len(lambda x: x)", TypeError, null],
         ["len(print)", TypeError, null],
       ],
+      "max/min": [
+        ["max(1, 7, 3)", 7n, null],
+        ["min(4, 2, 9)", 2n, null],
+        ["max(1.5, 2.5)", 2.5, null],
+        ["max('a', 'c', 'b')", "c", null],
+        // Unlike CPython's max()/min(), which accept a single iterable
+        // argument (max([1, 2, 3]) == 3), this dialect's max/min always
+        // require >= 2 direct arguments -- there is no single-iterable form
+        // (see the chapter-3 "max/min: no single-iterable form" test below
+        // for the pair/list borderline case).
+        ["max(5)", MissingRequiredPositionalError, null],
+        ["min(5)", MissingRequiredPositionalError, null],
+        ["max()", MissingRequiredPositionalError, null],
+        ["min()", MissingRequiredPositionalError, null],
+      ],
       "CRLF tests": [
         ["hello = 'hello'\r\nhello", "hello", null],
         ["hello = 'hello'\r\nhello\r\n", "hello", null],
@@ -1029,6 +1045,17 @@ describe("Standard Library Tests", () => {
         ["a = '🎊🎉🔔❤️‍🩹'\na[0]", "🎊", null],
         ["a = '👨‍👩‍👧‍👦'\na[0]", "👨", null],
         ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
+      ],
+      // Unlike CPython's max()/min(), which accept a single iterable argument
+      // (max([1, 2, 3]) == 3), this dialect's max/min always require >= 2
+      // direct arguments. A list or pair is the borderline case: it *looks*
+      // like the single-iterable form CPython supports, but is rejected the
+      // same way max(5) is (see the chapter-1 "max/min" tests above), since
+      // it's still just one argument — a pair is a two-element Python list
+      // under the hood, so both forms hit the same arity check.
+      "max/min: no single-iterable form": [
+        ["max([1, 5])", MissingRequiredPositionalError, null],
+        ["max(pair(1, 5))", MissingRequiredPositionalError, null],
       ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
