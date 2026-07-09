@@ -82,5 +82,9 @@
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
     "wabt": "^1.0.37"
+  },
+  "resolutions": {
+    "@sourceacademy/common-cse-machine": "portal:/home/vakshay/plugins/src/common/cse-machine",
+    "@sourceacademy/runner-cse-machine": "portal:/home/vakshay/plugins/src/runner/cse-machine"
   }
 }

@@ -6,6 +6,7 @@ import {
   BoolValue,
   BuiltinValue,
   ComplexValue,
+  NoneValue,
   NumberValue,
   StringValue,
   Value,
@@ -435,6 +436,21 @@ export class MiscBuiltins {
     const obj = args[0];
     const result = toPythonString(obj, true);
     return { type: "string", value: result };
+  }
+
+  // Python's `breakpoint()` drops into a debugger; the CSE machine has no interactive debugger,
+  // so as a value it is simply a no-op that yields `None`. A zero-arg call resolving to this
+  // builtin is recognised by the CSE machine's step generator (interpreter.ts) as a breakpoint —
+  // it records the step so the host's breakpoint-navigation controls can jump to it, then this
+  // entry runs like any other builtin call. This mirrors the stepper's `breakpoint` entry
+  // (src/conductor/stepper/builtins.ts), which does the analogous thing for the substitution model.
+  static breakpoint(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
+    return { type: "none" };
   }
 }
 for (const builtin of Object.getOwnPropertyNames(MiscBuiltins)) {

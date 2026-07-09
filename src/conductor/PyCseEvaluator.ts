@@ -105,6 +105,9 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       const stash = new Stash();
       this.context.control = control;
       this.context.stash = stash;
+      // this.context persists across evaluateChunk calls; reset per-run state that the
+      // interpreter accumulates so a prior run's breakpoint() steps don't leak into this one.
+      this.context.runtime.breakpointSteps = [];
 
       // CSE chapters (3+): collect snapshots up to the step cap, then stop.
       // Output produced after the step cap is not emitted — that's intentional.
@@ -121,7 +124,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           }
         }
 
-        const snapshots = await collectSnapshots(
+        const { snapshots, breakpointSteps } = await collectSnapshots(
           this.context,
           control,
           stash,
@@ -132,7 +135,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           maxSnapshots,
         );
         flushOutput(this.conductor);
-        this.csePlugin.sendSnapshots(snapshots);
+        this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
       } else {
         await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
         flushOutput(this.conductor);
