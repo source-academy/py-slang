@@ -214,6 +214,22 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(result('len("hello")')).toBe("5");
   });
 
+  // Unlike CPython's max()/min(), which accept a single iterable argument
+  // (max([1, 2, 3]) == 3), this dialect's max/min always require >= 2 direct
+  // arguments -- there is no single-iterable form. A pair is a two-element
+  // Python list under the hood, so max(pair(1, 5)) is the borderline case:
+  // it *looks* like the single-iterable form CPython supports, but is
+  // rejected the same way max(5) is, since it's still just one argument.
+  test("max/min require at least 2 direct arguments — no single-iterable form", () => {
+    expect(explanations("max(5)").pop()).toBe("Evaluation stuck");
+    expect(explanations("min(5)").pop()).toBe("Evaluation stuck");
+    expect(result("max(5)")).toContain("takes at least 2 argument(s) but 1 were given");
+    expect(explanations("max(pair(1, 5))").pop()).toBe("Evaluation stuck");
+    expect(result("max(pair(1, 5))")).toContain("takes at least 2 argument(s) but 1 were given");
+    expect(result("arity(max)")).toBe("2");
+    expect(result("arity(min)")).toBe("2");
+  });
+
   test("type conversions", () => {
     expect(result("str(42)")).toBe("'42'");
     expect(result('repr("hi")')).toBe("\"'hi'\"");
