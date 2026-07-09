@@ -5,8 +5,17 @@ import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { Value } from "./stash";
 
+/**
+ * Sentinel stored in a Frame for a local variable that has been allocated (by CALL,
+ * per its owning function's static scan of assignments/def/for-targets) but not yet
+ * assigned a value. Distinguishes "declared, no value yet" from "no such local" so
+ * reads can raise the correct Python-shaped error instead of silently resolving to an
+ * unrelated binding of the same name further up the environment chain.
+ */
+export const UNASSIGNED = Symbol("unassigned");
+
 export interface Frame {
-  [name: string]: Value;
+  [name: string]: Value | typeof UNASSIGNED;
 }
 
 /**
@@ -108,6 +117,18 @@ export const createEnvironment = (
         isVariadic,
       ),
     );
+  }
+
+  // Allocate every local of this function (assignment/def/for targets, minus params
+  // already bound above) as UNASSIGNED right now, at CALL time — not lazily, whenever
+  // its first assignment happens to execute. This makes reads that race ahead of their
+  // binding (temporal-dead-zone reads, including free-variable reads from a nested
+  // closure) find an unassigned cell owned by this frame instead of falling through to
+  // an unrelated binding of the same name further up the chain (e.g. a global).
+  for (const name of closure.localVariables) {
+    if (!Object.prototype.hasOwnProperty.call(environment.head, name)) {
+      environment.head[name] = UNASSIGNED;
+    }
   }
 
   return environment;
