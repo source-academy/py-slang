@@ -81,11 +81,7 @@ describe("Stream Tests", () => {
       ["stream_to_llist(stream_member(3, stream(1, 2, 3, 4))) == llist(3, 4)", true, null],
       ["stream_member(9, stream(1, 2, 3, 4)) == None", true, null],
       ["stream_to_llist(stream_remove(2, stream(1, 2, 3, 2))) == llist(1, 3, 2)", true, null],
-      [
-        "stream_to_llist(stream_remove(9, stream(1, 2, 3, 2))) == llist(1, 2, 3, 2)",
-        true,
-        null,
-      ],
+      ["stream_to_llist(stream_remove(9, stream(1, 2, 3, 2))) == llist(1, 2, 3, 2)", true, null],
       ["stream_to_llist(stream_remove_all(2, stream(1, 2, 3, 2))) == llist(1, 3)", true, null],
       ["stream_remove_all(1, stream(1, 1)) == None", true, null],
       [
