@@ -801,6 +801,22 @@ export const generateCPythonTestCases = (
             return;
           }
         }
+        if (wanted.type === "complex" && result.result?.type === "complex") {
+          const aReal = result.result.value.real;
+          const aImag = result.result.value.imag;
+          const wReal = wanted.value.real;
+          const wImag = wanted.value.imag;
+          if (
+            typeof aReal === "number" &&
+            typeof wReal === "number" &&
+            typeof aImag === "number" &&
+            typeof wImag === "number"
+          ) {
+            expect(aReal).toBeCloseTo(wReal);
+            expect(aImag).toBeCloseTo(wImag);
+            return;
+          }
+        }
         expect(result.result).toEqual(wanted);
       };
 

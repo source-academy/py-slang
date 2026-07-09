@@ -104,18 +104,18 @@ def run_case(case):
     buf = io.StringIO()
     try:
         compiled = compile_capturing_last_expression(case["code"], case["id"])
-    except SyntaxError as error:
+    except Exception as error:
         return {
             "id": case["id"],
             "output": [],
-            "error": f"SyntaxError: {error}",
+            "error": f"{type(error).__name__}: {error}",
             "result": None,
         }
 
     try:
         with contextlib.redirect_stdout(buf):
             exec(compiled, globs)
-    except BaseException as error:  # noqa: BLE001 -- must not crash the batch
+    except Exception as error:  # noqa: BLE001 -- must not crash the batch
         return {
             "id": case["id"],
             "output": buf.getvalue().splitlines(),
@@ -133,6 +133,8 @@ def run_case(case):
 
 
 def main():
+    sys.stdin.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8")
     cases = json.load(sys.stdin)
     sys.stdout.write(json.dumps([run_case(case) for case in cases]))
     sys.stdout.write("\n")
