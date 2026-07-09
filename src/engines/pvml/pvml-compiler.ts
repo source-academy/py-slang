@@ -1,5 +1,5 @@
 import { ExprNS, StmtNS } from "../../ast-types";
-import { Environment, FunctionEnvironments, Resolver } from "../../resolver/resolver";
+import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer/tokenizer";

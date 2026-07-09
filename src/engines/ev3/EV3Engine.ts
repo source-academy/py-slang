@@ -1,5 +1,5 @@
 import { parse } from '../../parser/parser-adapter';
-import { analyzeWithEnvironments } from '../../resolver';
+import { Resolver } from '../../resolver';
 import ev3, { EV3_FUNCTIONS } from '../../stdlib/ev3';
 import math from '../../stdlib/math';
 import misc from '../../stdlib/misc';
@@ -21,9 +21,11 @@ export class EV3Engine {
     try {
       const script = code + '\n';
       const ast = parse(script);
-      const { errors, environments } = analyzeWithEnvironments(ast, script, 4, [misc, math, ev3]);
-      if (errors.length > 0) {
-        throw errors[0];
+
+      const resolver = new Resolver("", ast, [], [misc, math, ev3]);
+      const environments = resolver.resolveEnvironments(ast);
+      if (resolver.errors.length > 0) {
+        throw resolver.errors[0];
       }
 
       const compiler = PVMLCompiler.fromProgram(ast, environments, EV3_INTERNAL_FUNCTIONS);

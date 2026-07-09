@@ -1,7 +1,7 @@
-import { PRIMITIVE_FUNCTIONS } from "../svml/builtins";
 import { EV3_FUNCTIONS } from "../../stdlib/ev3";
-import OpCodes from "../svml/opcodes";
-import { SVMLProgram, SVMLIR } from "../svml/types";
+import { PRIMITIVE_FUNCTIONS } from "../pvml/builtins";
+import OpCodes from "../pvml/opcodes";
+import { PVMLIR, PVMLProgram } from "../pvml/types";
 
 export const EV3_DUMMY_OFFSET = 1000;
 
@@ -10,7 +10,7 @@ EV3_FUNCTIONS.forEach((name, i) => {
   PRIMITIVE_FUNCTIONS.set(name, EV3_DUMMY_OFFSET + i);
 });
 
-export function rewriteEv3PrimitiveCalls(program: SVMLProgram): SVMLProgram {
+export function rewriteEv3PrimitiveCalls(program: PVMLProgram): PVMLProgram {
   const functions = program.functions.map(fn => {
     const opcodes = fn.opcodes.slice();
     const arg1s = fn.arg1s.slice();
@@ -25,7 +25,7 @@ export function rewriteEv3PrimitiveCalls(program: SVMLProgram): SVMLProgram {
       }
     }
 
-    return new SVMLIR(
+    return new PVMLIR(
       opcodes,
       arg1s,
       fn.arg2s,
@@ -36,5 +36,5 @@ export function rewriteEv3PrimitiveCalls(program: SVMLProgram): SVMLProgram {
     );
   });
 
-  return new SVMLProgram(program.entryPoint, [...functions]);
+  return new PVMLProgram(program.entryPoint, [...functions]);
 }
