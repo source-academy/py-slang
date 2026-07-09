@@ -1,7 +1,9 @@
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import { executePrimitive } from "../engines/pvml/builtins";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import type { PVMLBoxType } from "../engines/pvml/types";
 import {
   MissingRequiredPositionalError,
   UnsupportedOperandTypeError,
@@ -801,6 +803,39 @@ f
         "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)\n",
       );
       expect(outputs).toEqual(["llist(llist(2, 3), llist(1, 2, 3))"]);
+    });
+
+    // Regression test for the O(N^2)/stack-overflow bug caught in review on #250: printLlistText
+    // used to re-run a *recursive* isProperLlist on every tail suffix while unrolling an improper
+    // structure's bracket notation, making the whole walk O(N^2) -- and that recursive isProperLlist
+    // could itself overflow the stack on a long chain even on its own. Built directly via
+    // executePrimitive (bypassing PVML compilation, which has no way to express a 50,000-element
+    // program compactly) so this isolates printLlistText's own complexity. improperN is well past
+    // where the old O(N^2) behavior would have made this test time out, but -- unlike the
+    // proper-list case below -- still bounded by the bracket notation's own inherent O(N) nesting
+    // depth (acknowledged, accepted limitation; matches the CSE machine's equivalent recursion-depth
+    // ceiling).
+    test("stays fast and stack-safe on large structures", () => {
+      const pairArr = (h: PVMLBoxType, t: PVMLBoxType): PVMLBoxType => ({
+        type: "array",
+        elements: [h, t],
+      });
+
+      const improperN = 3000;
+      let improperChain: PVMLBoxType = 999;
+      for (let i = improperN; i >= 1; i--) improperChain = pairArr(i, improperChain);
+      const improperOutputs: string[] = [];
+      executePrimitive(97, [improperChain], msg => improperOutputs.push(msg));
+      expect(improperOutputs[0].startsWith("[1, [2, [3,")).toBe(true);
+      expect(improperOutputs[0].endsWith("999" + "]".repeat(improperN))).toBe(true);
+
+      const properN = 50000;
+      let properChain: PVMLBoxType = null;
+      for (let i = properN; i >= 1; i--) properChain = pairArr(i, properChain);
+      const properOutputs: string[] = [];
+      executePrimitive(97, [properChain], msg => properOutputs.push(msg));
+      expect(properOutputs[0].startsWith("llist(1, 2, 3,")).toBe(true);
+      expect(properOutputs[0].endsWith(`${properN - 1}, ${properN})`)).toBe(true);
     });
   });
 

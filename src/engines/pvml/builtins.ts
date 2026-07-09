@@ -152,10 +152,16 @@ function isArrayPair(v: PVMLBoxType): v is Extract<PVMLBoxType, { type: "array" 
 
 /** Whether `v` is `None` or a pair whose tail is itself a proper linked list -- mirrors
  * linked-list.ts's `_is_llist` on the CSE side. Head shape is irrelevant: only the tail chain must
- * reach `None`, so e.g. `pair(llist(1, 2), llist(3, 4))` counts as a proper list of two elements. */
+ * reach `None`, so e.g. `pair(llist(1, 2), llist(3, 4))` counts as a proper list of two elements.
+ * Iterative -- `printLlistText` below calls this once per *distinct* tail-chain suffix it renders
+ * (see its own doc comment), so a recursive version here would make the whole walk O(N^2) on a long
+ * chain, and risk a stack overflow on a long chain by itself regardless. */
 function isProperLlist(v: PVMLBoxType): boolean {
-  if (v === null) return true;
-  return isArrayPair(v) && isProperLlist(v.elements[1]);
+  let current = v;
+  while (isArrayPair(current)) {
+    current = current.elements[1];
+  }
+  return current === null;
 }
 
 /**
@@ -177,19 +183,30 @@ function llistLeafRepr(v: PVMLBoxType): string {
  * renders as `[head, tail]`, recursing the same way at every level (so a proper-list *element*, e.g.
  * inside an improper pair, still renders as `llist(...)`, not `[...]`). Plain recursion, no
  * memoization keyed by value/object identity -- see the case 97 comment for why that matters.
+ *
+ * `isKnownImproper` avoids re-running `isProperLlist` on every tail suffix while unrolling an
+ * improper structure's bracket notation: once a tail position is known to continue an improper
+ * chain, the rest of that chain can only ever be improper too, so `helper` skips straight to the
+ * bracket case instead of re-walking the remaining tail to confirm it again. A *head* always gets a
+ * fresh check (`isKnownImproper: false`), since it's an independent substructure that may itself be
+ * a proper list.
  */
 function printLlistText(v: PVMLBoxType): string {
-  if (!isProperLlist(v)) {
-    if (!isArrayPair(v)) return llistLeafRepr(v);
-    return `[${printLlistText(v.elements[0])}, ${printLlistText(v.elements[1])}]`;
+  function helper(n: PVMLBoxType, isKnownImproper: boolean): string {
+    if (isKnownImproper || !isProperLlist(n)) {
+      if (!isArrayPair(n)) return llistLeafRepr(n);
+      return `[${helper(n.elements[0], false)}, ${helper(n.elements[1], true)}]`;
+    }
+
+    const parts: string[] = [];
+    let current = n;
+    while (isArrayPair(current)) {
+      parts.push(helper(current.elements[0], false));
+      current = current.elements[1];
+    }
+    return `llist(${parts.join(", ")})`;
   }
-  const parts: string[] = [];
-  let current = v;
-  while (isArrayPair(current)) {
-    parts.push(printLlistText(current.elements[0]));
-    current = current.elements[1];
-  }
-  return `llist(${parts.join(", ")})`;
+  return helper(v, false);
 }
 
 /**

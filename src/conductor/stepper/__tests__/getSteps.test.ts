@@ -1,7 +1,15 @@
-import { expressionStatement, identifier } from "../ast";
+import {
+  emptyList,
+  expressionStatement,
+  identifier,
+  literal,
+  pairNode,
+  type StepNode,
+} from "../ast";
 import { isBuiltinConstantName } from "../builtins";
 import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
+import { formatPrintLlistOutput } from "../lists";
 import { preprocessPython } from "../preprocess";
 
 // `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
@@ -876,9 +884,36 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   // pair object is re-derived fresh from its own structure every time it's visited, regardless of
   // which parent reached it.
   test("print_llist does not misrender a shared sub-list (js-slang#1124)", () => {
-    expect(
-      finalOutput("x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)"),
-    ).toBe("llist(llist(2, 3), llist(1, 2, 3))\n");
+    expect(finalOutput("x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)")).toBe(
+      "llist(llist(2, 3), llist(1, 2, 3))\n",
+    );
+  });
+
+  // Regression test for the O(N^2)/stack-overflow bug caught in review on #250: printLlistText used
+  // to re-run a *recursive* isProperLlist on every tail suffix while unrolling an improper
+  // structure's bracket notation, making the whole walk O(N^2) -- and that recursive isProperLlist
+  // could itself overflow the stack on a long chain even on its own. Built directly via the AST
+  // constructors (bypassing the stepper's per-statement execution, which has its own, unrelated
+  // scaling limits) so this isolates printLlistText's own complexity. `improperN` is well past where
+  // the old O(N^2) behavior would have made this test time out, but -- unlike the proper-list case
+  // below -- still bounded by the bracket notation's own inherent O(N) nesting depth (acknowledged,
+  // accepted limitation; matches the CSE machine's equivalent recursion-depth ceiling).
+  test("print_llist stays fast and stack-safe on large structures", () => {
+    const intLit = (n: number): StepNode => literal(BigInt(n), String(n), false);
+
+    const improperN = 3000;
+    let improperChain: StepNode = intLit(999);
+    for (let i = improperN; i >= 1; i--) improperChain = pairNode(intLit(i), improperChain);
+    const improperOutput = formatPrintLlistOutput([improperChain]);
+    expect(improperOutput.startsWith("[1, [2, [3,")).toBe(true);
+    expect(improperOutput.endsWith("999" + "]".repeat(improperN) + "\n")).toBe(true);
+
+    const properN = 50000;
+    let properChain: StepNode = emptyList();
+    for (let i = properN; i >= 1; i--) properChain = pairNode(intLit(i), properChain);
+    const properOutput = formatPrintLlistOutput([properChain]);
+    expect(properOutput.startsWith("llist(1, 2, 3,")).toBe(true);
+    expect(properOutput.endsWith(`${properN - 1}, ${properN})\n`)).toBe(true);
   });
 
   test("print_llist requires exactly 1 argument", () => {

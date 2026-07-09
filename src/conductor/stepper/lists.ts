@@ -135,33 +135,53 @@ function llistLeafRepr(node: StepNode): string {
   return unparse(node);
 }
 
+/** Whether the tail chain from `node` reaches `None` (a proper list). Iterative -- `printLlistText`
+ * below calls this once per *distinct* tail-chain suffix it renders (see its own doc comment), so a
+ * recursive version here would make the whole walk O(N^2) on a long chain, and risk a stack
+ * overflow on a long chain by itself regardless. */
+function isProperLlist(node: StepNode): boolean {
+  let current = node;
+  while (isPairNode(current)) {
+    current = (current.elements as StepNode[])[1];
+  }
+  return isEmptyList(current);
+}
+
 /**
  * Box-and-pointer text for a linked list or pair, mirroring `linked-list.ts`'s `_print_llist` on
  * the CSE side: a proper list (tail chain reaching `None`) renders as `llist(a, b, c)`; anything
- * else renders as `[head, tail]`, recursing through this same function at every level. Plain
+ * else renders as `[head, tail]`, recursing the same way at every level (so a proper-list head
+ * nested inside an improper structure still renders as `llist(...)`, not brackets). Plain
  * recursion, no memoization keyed by node/object identity, so it can't reproduce js-slang's
  * `display_list` sharing bug (source-academy/js-slang#1124): the same pair reached via two
  * different paths in the structure is re-derived fresh from its own shape each time, never looked
  * up from a stale cached classification.
+ *
+ * `isKnownImproper` avoids re-running `isProperLlist` on every tail suffix while unrolling an
+ * improper structure's bracket notation: once a tail position is known to continue an improper
+ * chain, the rest of that chain can only ever be improper too, so `helper` skips straight to the
+ * bracket case instead of re-walking the remaining tail to confirm it again. A *head* always gets a
+ * fresh check (`isKnownImproper: false`), since it's an independent substructure that may itself be
+ * a proper list.
  */
 function printLlistText(node: StepNode): string {
-  const isProperLlist = (n: StepNode): boolean =>
-    isEmptyList(n) || (isPairNode(n) && isProperLlist((n.elements as StepNode[])[1]));
+  function helper(n: StepNode, isKnownImproper: boolean): string {
+    if (isKnownImproper || !isProperLlist(n)) {
+      if (!isPairNode(n)) return llistLeafRepr(n);
+      const [h, t] = n.elements as StepNode[];
+      return `[${helper(h, false)}, ${helper(t, true)}]`;
+    }
 
-  if (!isProperLlist(node)) {
-    if (!isPairNode(node)) return llistLeafRepr(node);
-    const [h, t] = node.elements as StepNode[];
-    return `[${printLlistText(h)}, ${printLlistText(t)}]`;
+    const parts: string[] = [];
+    let current = n;
+    while (isPairNode(current)) {
+      const [h, t] = current.elements as StepNode[];
+      parts.push(helper(h, false));
+      current = t;
+    }
+    return `llist(${parts.join(", ")})`;
   }
-
-  const parts: string[] = [];
-  let current = node;
-  while (isPairNode(current)) {
-    const [h, t] = current.elements as StepNode[];
-    parts.push(printLlistText(h));
-    current = t;
-  }
-  return `llist(${parts.join(", ")})`;
+  return helper(node, false);
 }
 
 /** The output text a `print_llist(xs)` call writes, for `reduce.ts`'s `contractCall` (mirrors how
