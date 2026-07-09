@@ -88,12 +88,15 @@ describe("Standard Library Tests", () => {
         ["1+0j == 1.0", true, null], // complex == float
         ["1.5+0j == 1.5", true, null], // complex with float real == float
         ["1.5+1j == 1.5", false, null], // complex == diff float
+        // `==`/`!=` take any x any at Python §1 too (unified with §2 — see
+        // docs/specs/python_typing_middle_12.tex), except bool and function operands, which
+        // remain an error; None and cross-type comparisons now compare structurally instead.
         ["True == True", UnsupportedOperandTypeError, null], // bool == bool
         ["1 == True", UnsupportedOperandTypeError, null], // int == bool
-        ["1 == None", UnsupportedOperandTypeError, null], // int == None
+        ["1 == None", false, null], // int == None
         ["True == 1", UnsupportedOperandTypeError, null], // bool == int
-        ["None == 1", UnsupportedOperandTypeError, null], // None == int
-        ["None == None", UnsupportedOperandTypeError, null], // None == None
+        ["None == 1", false, null], // None == int
+        ["None == None", true, null], // None == None
         ["[] == []", FeatureNotSupportedError, null], // list literals are not supported,
         ["(lambda x: x) == (lambda x: x)", UnsupportedOperandTypeError, null], // function == diff function
         ["1 == (lambda x: x)", UnsupportedOperandTypeError, null], // int == function
@@ -101,13 +104,13 @@ describe("Standard Library Tests", () => {
         ["'' == ''", true, null], // empty string == empty string
         ["hello = 'hello'\nhello == 'hello'", true, null], // string == string
         ["hello = 'hello'\nhello == 'Hello'", false, null], // string == diff string
-        ["1 == ''", UnsupportedOperandTypeError, null], // int == string
-        ["'' == 1", UnsupportedOperandTypeError, null], // string == int
+        ["1 == ''", false, null], // int == string
+        ["'' == 1", false, null], // string == int
         ["'' == True", UnsupportedOperandTypeError, null], // string == bool
-        ["'' == None", UnsupportedOperandTypeError, null], // string == None
+        ["'' == None", false, null], // string == None
         ["'' == (lambda x: x)", UnsupportedOperandTypeError, null], // string == function
-        ["'' == 1.0", UnsupportedOperandTypeError, null], // string == float
-        ["'' == 1+0j", UnsupportedOperandTypeError, null], // string == complex
+        ["'' == 1.0", false, null], // string == float
+        ["'' == 1+0j", false, null], // string == complex
       ],
       inequality: [
         ["1 != 1", false, null], // int != int
@@ -133,23 +136,23 @@ describe("Standard Library Tests", () => {
         ["1.5+1j != 1.5", true, null], // complex != diff float
         ["True != True", UnsupportedOperandTypeError, null], // bool != bool
         ["1 != True", UnsupportedOperandTypeError, null], // int != bool
-        ["1 != None", UnsupportedOperandTypeError, null], // int != None
+        ["1 != None", true, null], // int != None
         ["True != 1", UnsupportedOperandTypeError, null], // bool != int
-        ["None != 1", UnsupportedOperandTypeError, null], // None != int
-        ["None != None", UnsupportedOperandTypeError, null], // None != None
+        ["None != 1", true, null], // None != int
+        ["None != None", false, null], // None != None
         ["(lambda x: x) != (lambda x: x)", UnsupportedOperandTypeError, null], // function != diff function
         ["(1 != (lambda x: x))", UnsupportedOperandTypeError, null], // int != function
         ["def a():\n    return 2\na != a", UnsupportedOperandTypeError, null], // function != function,
         ["'' != ''", false, null], // empty string != empty string
         ["hello = 'hello'\nhello != 'hello'", false, null], // string != string
         ["hello = 'hello'\nhello != 'Hello'", true, null], // string != diff string
-        ["1 != ''", UnsupportedOperandTypeError, null], // int != string
-        ["'' != 1", UnsupportedOperandTypeError, null], // string != int
+        ["1 != ''", true, null], // int != string
+        ["'' != 1", true, null], // string != int
         ["'' != True", UnsupportedOperandTypeError, null], // string != bool
-        ["'' != None", UnsupportedOperandTypeError, null], // string != None
+        ["'' != None", true, null], // string != None
         ["'' != (lambda x: x)", UnsupportedOperandTypeError, null], // string != function
-        ["'' != 1.0", UnsupportedOperandTypeError, null], // string != float
-        ["'' != 1+0j", UnsupportedOperandTypeError, null], // string != complex
+        ["'' != 1.0", true, null], // string != float
+        ["'' != 1+0j", true, null], // string != complex
       ],
       "gt, gte, lt, lte": [
         ["1 > 1", false, null], // int > int
@@ -956,24 +959,26 @@ describe("Standard Library Tests", () => {
 
   describe("Chapter 3 Builtins", () => {
     const miscTests: TestCases = {
-      // `is` applies to the reference types (list, function, None) at Python §3/§4
-      // and errors whenever either operand is a number, string or boolean, whose
-      // identity is unobservable (docs/specs/python_typing_middle_34.tex).
+      // `is` now applies to any x any at Python §3/§4 (docs/specs/python_typing_middle_34.tex),
+      // not just the reference types (list, function, None): numbers, strings and booleans are
+      // valid operands too. Since this interpreter has no real object identity for immutable
+      // primitives (each is a freshly wrapped value, not a boxed object) they compare by their
+      // underlying value instead, the same simplification `==` already makes for these types.
       "is operator": [
-        ["1 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
-        ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
-        ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
-        ["True is True", UnsupportedOperandTypeError, null], // bool is bool
-        ["1 is True", UnsupportedOperandTypeError, null], // int is bool
-        ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
-        ["1 is None", UnsupportedOperandTypeError, null], // number x reference is also an error
-        ["None is 1", UnsupportedOperandTypeError, null],
-        ["'' is None", UnsupportedOperandTypeError, null],
-        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null],
-        ["[1,2,3] is ''", UnsupportedOperandTypeError, null],
-        ["1 is (lambda x: x)", UnsupportedOperandTypeError, null],
-        ["a = [1,2,3]\na is 1", UnsupportedOperandTypeError, null],
+        ["1 is 1", true, null], // int is int, same value
+        ["1 is 1.0", false, null], // int is float — different types, never identical
+        ["3.14 is 3.14", true, null], // float is float, same value
+        ["(1+0j) is (1+0j)", true, null], // complex is complex, same value
+        ["True is True", true, null], // bool is bool, same value
+        ["1 is True", false, null], // int is bool — different types, never identical
+        ["hello = 'hello'\nhello is 'hello'", true, null], // string is string, same value
+        ["1 is None", false, null], // number x reference — different types, never identical
+        ["None is 1", false, null],
+        ["'' is None", false, null],
+        ["'' is (lambda x: x)", false, null],
+        ["[1,2,3] is ''", false, null],
+        ["1 is (lambda x: x)", false, null],
+        ["a = [1,2,3]\na is 1", false, null],
         ["None is None", true, null], // None is None
         ["(lambda x: x) is (lambda x: x)", false, null], // function is diff function
         ["def a():\n    return 2\na is a", true, null], // function is same function
@@ -1011,8 +1016,8 @@ describe("Standard Library Tests", () => {
       ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [
-        ["1 is not 1", UnsupportedOperandTypeError, null],
-        ["'x' is not 'x'", UnsupportedOperandTypeError, null],
+        ["1 is not 1", false, null],
+        ["'x' is not 'x'", false, null],
         ["None is not None", false, null],
         ["a = [1,2,3]\na is not a", false, null],
         ["a = [1,2,3]\nb = [1,2,3]\na is not b", true, null],
