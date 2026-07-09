@@ -32,12 +32,12 @@ def stream_tail(xs):
 
 
 def is_stream(xs):
-    return is_none(xs) or (
-        is_pair(xs)
-        and is_function(tail(xs))
-        and arity(tail(xs)) == 0
-        and is_stream(stream_tail(xs))
-    )
+    while is_pair(xs):
+        the_tail = tail(xs)
+        if not (is_function(the_tail) and arity(the_tail) == 0):
+            return False
+        xs = the_tail()
+    return is_none(xs)
 
 
 def llist_to_stream(xs):
@@ -82,14 +82,14 @@ def stream_for_each(fun, xs):
 
 
 def stream_reverse(xs):
-    def rev(original, reversed):
-        return (
-            reversed
-            if is_none(original)
-            else rev(stream_tail(original), pair(head(original), lambda: reversed))
-        )
-
-    return rev(xs, None)
+    reversed_acc = None
+    while not is_none(xs):
+        # Default argument binds the *current* reversed_acc at each iteration;
+        # a plain `lambda: reversed_acc` would all share the loop variable and
+        # see only its final value once forced.
+        reversed_acc = pair(head(xs), lambda acc=reversed_acc: acc)
+        xs = stream_tail(xs)
+    return reversed_acc
 
 
 def stream_append(xs, ys):
@@ -97,13 +97,11 @@ def stream_append(xs, ys):
 
 
 def stream_member(x, s):
-    return (
-        None
-        if is_none(s)
-        else s
-        if head(s) == x
-        else stream_member(x, stream_tail(s))
-    )
+    while not is_none(s):
+        if head(s) == x:
+            return s
+        s = stream_tail(s)
+    return None
 
 
 def stream_remove(v, xs):
@@ -117,23 +115,25 @@ def stream_remove(v, xs):
 
 
 def stream_remove_all(v, xs):
-    return (
-        None
-        if is_none(xs)
-        else stream_remove_all(v, stream_tail(xs))
-        if v == head(xs)
-        else pair(head(xs), lambda: stream_remove_all(v, stream_tail(xs)))
-    )
+    # Skip a run of matching elements iteratively rather than recursing once
+    # per removed element, then defer to the next call the same way
+    # stream_map/stream_filter do, so the result stays lazy.
+    while not is_none(xs) and v == head(xs):
+        xs = stream_tail(xs)
+    if is_none(xs):
+        return None
+    return pair(head(xs), lambda: stream_remove_all(v, stream_tail(xs)))
 
 
 def stream_filter(p, s):
-    return (
-        None
-        if is_none(s)
-        else pair(head(s), lambda: stream_filter(p, stream_tail(s)))
-        if p(head(s))
-        else stream_filter(p, stream_tail(s))
-    )
+    # Skip non-matching elements iteratively (the same shape as
+    # stream_remove_all above), then defer the rest lazily so filtering an
+    # infinite stream still works.
+    while not is_none(s) and not p(head(s)):
+        s = stream_tail(s)
+    if is_none(s):
+        return None
+    return pair(head(s), lambda: stream_filter(p, stream_tail(s)))
 
 
 def enum_stream(start, end):

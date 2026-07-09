@@ -72,6 +72,17 @@ MATH, LINKED LISTS, PAIR MUTATORS, LISTS, STREAM, MCE) correspond to the
 
 - Requires Python 3.10+.
 - `is_number` mirrors Scheme's `number?` primitive as used in the textbook.
+- `round`, `abs`, `len`, `max`, `min`, `str`, `repr`, `int`, `float`, `complex`,
+  `bool`, `print`, and `input` are plain CPython builtins, not reimplementations
+  of Source Academy Python's versions, so a few edge cases differ:
+  - `arity()` raises on a handful of CPython builtins whose signature isn't
+    introspectable (e.g. `arity(print)`, `arity(max)`, `arity(min)`,
+    `arity(str)`), where Source Academy Python's own `arity` returns a value.
+  - `is_function(int)` and `is_function(str)` are `True` here, since CPython's
+    `callable()` treats classes as callable — Source Academy Python's
+    tag-based check would say `False`.
+  - `max`/`min` accept the single-iterable form (`max([1, 2, 3])`); Source
+    Academy Python's versions require two or more direct arguments.
 
 ## Source & development
 

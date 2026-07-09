@@ -34,9 +34,12 @@ def _gen_list(n):
 
 
 def equal(xs, ys):
-    if is_pair(xs):
-        return is_pair(ys) and equal(head(xs), head(ys)) and equal(tail(xs), tail(ys))
-    elif is_none(xs):
+    while is_pair(xs):
+        if not is_pair(ys) or not equal(head(xs), head(ys)):
+            return False
+        xs = tail(xs)
+        ys = tail(ys)
+    if is_none(xs):
         return is_none(ys)
     elif is_integer(xs) or is_float(xs):
         return (is_integer(ys) or is_float(ys)) and xs == ys

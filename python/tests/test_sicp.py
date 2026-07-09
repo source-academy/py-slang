@@ -57,6 +57,26 @@ def test_type_predicates():
     assert not is_number(True) and not is_number("3")
 
 
+def test_large_inputs_avoid_recursion_error():
+    """Regression test for functions that used to recurse once per element:
+    CPython has no tail-call optimization, so a version that isn't properly
+    iterative/lazy raises RecursionError well before this size (the default
+    recursion limit is 1000)."""
+    n = 5000
+    xs = build_llist(lambda i: i, n)
+    ys = build_llist(lambda i: i, n)
+    assert equal(xs, ys)
+    assert not equal(xs, build_llist(lambda i: i + 1, n))
+
+    assert is_stream(enum_stream(1, n))
+    assert head(stream_reverse(enum_stream(1, n))) == n
+    assert stream_member(n, integers_from(1)) is not None
+    assert head(stream_filter(lambda x: x > n, integers_from(1))) == n + 1
+
+    run_of_matches = stream(*([1] * n + [2]))
+    assert head(stream_remove_all(1, run_of_matches)) == 2
+
+
 def test_misc_and_math():
     assert real(3 + 4j) == 3 and imag(3 + 4j) == 4
     assert arity(lambda a, b, c: None) == 3
