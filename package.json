@@ -82,5 +82,8 @@
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
     "wabt": "^1.0.37"
+  },
+  "resolutions": {
+    "@sourceacademy/conductor": "portal:/home/vakshay/conductor"
   }
 }

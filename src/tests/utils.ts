@@ -174,6 +174,7 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
     stdin: {
       stream: stdinStream,
       reader: stdinStream.getReader(),
+      setNextPrompt: () => {},
     },
   };
 };
