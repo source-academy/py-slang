@@ -23,6 +23,13 @@ function explanations(src: string) {
   return steps(src).map(s => s.markers?.[0]?.explanation ?? "");
 }
 
+/** The program's cumulative output (everything print/print_llist has written) on its last step; see
+ * the "cumulative print output per step" describe block below for the field's full behaviour. */
+function finalOutput(src: string): string | undefined {
+  const s = steps(src);
+  return (s[s.length - 1] as { output?: string }).output;
+}
+
 /** Collect every nodeId present in a serialized step's AST. */
 function nodeIds(ast: unknown): Set<string> {
   const ids = new Set<string>();
@@ -844,6 +851,39 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
   test("llist_to_string and for_each", () => {
     expect(result("llist_to_string(llist(1, 2))")).toBe("'[1, [2, None]]'");
     expect(result("for_each(lambda x: x, llist(1, 2, 3))")).toBe("True");
+  });
+
+  // print_llist renders box-and-pointer notation as text ("llist(...)" for a proper list, "[head,
+  // tail]" for an improper pair), like the CSE machine's and PVML's print_llist — unlike
+  // llist_to_string above, which always uses bracket notation.
+  test("print_llist renders llist(...) for a proper list and [head, tail] otherwise", () => {
+    expect(finalOutput("print_llist(llist(1, 2, 3))")).toBe("llist(1, 2, 3)\n");
+    expect(finalOutput("print_llist(None)")).toBe("llist()\n");
+    expect(finalOutput("print_llist(pair(1, 2))")).toBe("[1, 2]\n");
+    expect(finalOutput("print_llist(llist('a', 'b'))")).toBe("llist('a', 'b')\n");
+    expect(result("print_llist(llist(1, 2, 3))")).toBe("None"); // print_llist's own return value
+  });
+
+  test("print_llist: a proper-list element nested in an improper pair still renders as llist(...)", () => {
+    expect(finalOutput("print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))")).toBe(
+      "llist(llist(1, 2, 3), 4, 5, 6)\n",
+    );
+  });
+
+  // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong notation for
+  // a value reachable via two different paths in the same structure). print_llist's algorithm is
+  // plain recursion with no identity-keyed memoization, so it can't reproduce that bug: the same
+  // pair object is re-derived fresh from its own structure every time it's visited, regardless of
+  // which parent reached it.
+  test("print_llist does not misrender a shared sub-list (js-slang#1124)", () => {
+    expect(
+      finalOutput("x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)"),
+    ).toBe("llist(llist(2, 3), llist(1, 2, 3))\n");
+  });
+
+  test("print_llist requires exactly 1 argument", () => {
+    expect(explanations("print_llist()").pop()).toBe("Evaluation stuck");
+    expect(explanations("print_llist(1, 2)").pop()).toBe("Evaluation stuck");
   });
 
   test("list functions are first-class values", () => {

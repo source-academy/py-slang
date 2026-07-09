@@ -7,6 +7,9 @@ import {
   UnsupportedOperandTypeError,
   ZeroDivisionError,
 } from "../engines/pvml/errors";
+import linkedList from "../stdlib/linked-list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 
 function compileAndRun(code: string): unknown {
   const ast = parse(code);
@@ -735,6 +738,69 @@ f
     test("no output when print not called", () => {
       const { outputs } = compileAndRunWithOutput("1 + 1\n");
       expect(outputs).toHaveLength(0);
+    });
+  });
+
+  describe("print_llist", () => {
+    // PVMLCompiler.fromProgram's no-args default only registers [misc, math] (VARIANT_GROUPS[1]),
+    // so pair/llist/print_llist (linked-list group) need explicit environments with that group in
+    // scope -- compileAndRun/compileAndRunWithOutput above can't resolve them.
+    function compileAndRunWithLinkedList(code: string): { result: unknown; outputs: string[] } {
+      const groups = [misc, math, linkedList];
+      const ast = parse(code);
+      const { errors, environments } = analyzeWithEnvironments(ast, code, 2, groups);
+      if (errors.length > 0) throw new Error(errors.map(e => e.message).join("; "));
+      const outputs: string[] = [];
+      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const program = compiler.compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+      const result = PVMLInterpreter.toJSValue(interpreter.execute());
+      return { result, outputs };
+    }
+
+    test("renders a proper linked list as llist(...)", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(llist(1, 2, 3))\n");
+      expect(outputs).toEqual(["llist(1, 2, 3)"]);
+    });
+
+    test("renders None as llist()", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(None)\n");
+      expect(outputs).toEqual(["llist()"]);
+    });
+
+    test("renders a non-list pair as [head, tail]", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(pair(1, 2))\n");
+      expect(outputs).toEqual(["[1, 2]"]);
+    });
+
+    test("a proper-list element nested in an improper pair still renders as llist(...)", () => {
+      const { outputs } = compileAndRunWithLinkedList(
+        "print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))\n",
+      );
+      expect(outputs).toEqual(["llist(llist(1, 2, 3), 4, 5, 6)"]);
+    });
+
+    test("string elements render quoted", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(llist('a', 'b'))\n");
+      expect(outputs).toEqual(["llist('a', 'b')"]);
+    });
+
+    test("requires exactly 1 argument", () => {
+      expect(() => compileAndRunWithLinkedList("print_llist()\n")).toThrow(
+        MissingRequiredPositionalError,
+      );
+    });
+
+    // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong notation
+    // for a value reachable via two different paths in the same structure). print_llist's
+    // algorithm is plain recursion with no identity-keyed memoization, so it can't reproduce that
+    // bug: the same pair object is re-derived fresh from its own structure every time it's
+    // visited, regardless of which parent reached it.
+    test("does not misrender a shared sub-list (js-slang#1124)", () => {
+      const { outputs } = compileAndRunWithLinkedList(
+        "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)\n",
+      );
+      expect(outputs).toEqual(["llist(llist(2, 3), llist(1, 2, 3))"]);
     });
   });
 

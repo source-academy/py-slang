@@ -102,6 +102,11 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_tan", 64],
   ["math_tanh", 65],
   ["math_trunc", 66],
+  // `print_llist` has no native Pynter equivalent yet (unlike the slots above, this index is not
+  // backed by pynter/vm/src/primitives.c) -- added the same way is_integer/is_float/is_complex/
+  // _gen_list/arity were, as a new primitive appended past native's own table, so this only backs
+  // py-slang's own local TS PVMLInterpreter until a matching entry lands in the pynter repo.
+  ["print_llist", 97],
 ]);
 
 function assertNumericArgs(args: PVMLBoxType[], fn: string): number[] {
@@ -139,6 +144,52 @@ function pairElement(args: PVMLBoxType[], name: string, index: 0 | 1): PVMLBoxTy
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
   return pairArray(args[0], name).elements[index];
+}
+
+function isArrayPair(v: PVMLBoxType): v is Extract<PVMLBoxType, { type: "array" }> {
+  return isPVMLObject(v) && v.type === "array" && v.elements.length === 2;
+}
+
+/** Whether `v` is `None` or a pair whose tail is itself a proper linked list -- mirrors
+ * linked-list.ts's `_is_llist` on the CSE side. Head shape is irrelevant: only the tail chain must
+ * reach `None`, so e.g. `pair(llist(1, 2), llist(3, 4))` counts as a proper list of two elements. */
+function isProperLlist(v: PVMLBoxType): boolean {
+  if (v === null) return true;
+  return isArrayPair(v) && isProperLlist(v.elements[1]);
+}
+
+/**
+ * Python repr of a scalar (non-pair) leaf value for `print_llist`'s box-and-pointer text. PVML has
+ * no general str()/repr() support (case 90 above is an unimplemented stub, matching native Pynter),
+ * so this is deliberately minimal -- just the value shapes a linked-list leaf can actually be.
+ */
+function llistLeafRepr(v: PVMLBoxType): string {
+  if (v === null || v === undefined) return "None";
+  if (typeof v === "boolean") return v ? "True" : "False";
+  if (typeof v === "number") return String(v);
+  if (typeof v === "string") return `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  return "<function>";
+}
+
+/**
+ * Box-and-pointer text for a linked list or pair, matching linked-list.ts's `_print_llist` on the
+ * CSE side: a proper list (tail chain reaching `None`) renders as `llist(a, b, c)`; anything else
+ * renders as `[head, tail]`, recursing the same way at every level (so a proper-list *element*, e.g.
+ * inside an improper pair, still renders as `llist(...)`, not `[...]`). Plain recursion, no
+ * memoization keyed by value/object identity -- see the case 97 comment for why that matters.
+ */
+function printLlistText(v: PVMLBoxType): string {
+  if (!isProperLlist(v)) {
+    if (!isArrayPair(v)) return llistLeafRepr(v);
+    return `[${printLlistText(v.elements[0])}, ${printLlistText(v.elements[1])}]`;
+  }
+  const parts: string[] = [];
+  let current = v;
+  while (isArrayPair(current)) {
+    parts.push(printLlistText(current.elements[0]));
+    current = current.elements[1];
+  }
+  return `llist(${parts.join(", ")})`;
 }
 
 /**
@@ -245,6 +296,18 @@ export function executePrimitive(
       throw new PVMLInterpreterError(
         "NotImplementedError: arity() is not yet supported by the PVML/Pynter backend",
       );
+
+    case 97: {
+      // print_llist: box-and-pointer text, matching linked-list.ts's _print_llist on the CSE side.
+      // Plain uncached recursion -- no memoization keyed by value/object identity -- so it can't
+      // suffer js-slang's display_list sharing bug (source-academy/js-slang#1124): the same pair
+      // object reached via two different paths is re-derived fresh each time, not looked up from a
+      // stale cached classification.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("print_llist() takes exactly 1 argument");
+      sendOutput(printLlistText(args[0]));
+      return undefined;
+    }
 
     case 76: // stream: needs a runtime-synthesized continuation closure, which this
       // TS interpreter can't create (closures reference statically compiled bytecode

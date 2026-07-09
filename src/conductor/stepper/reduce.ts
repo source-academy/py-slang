@@ -43,6 +43,7 @@ import {
   unparse,
 } from "./ast";
 import { applyBuiltin, formatPrintOutput, isBuiltinFunctionName, isStepperValue } from "./builtins";
+import { formatPrintLlistOutput } from "./lists";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction — becomes `current` for the next step. */
@@ -581,9 +582,15 @@ function contractCall(node: StepNode): ReduceResult | null {
       postRedex: result,
       explanation: `Ran ${name}`,
       beforeExplanation: `Running ${name}`,
-      // `print` also writes to the program's output; record that text so the driver can show it in the
-      // stepper's output panel (from this call's "Ran print" step onward). `print` still yields `None`.
-      output: name === "print" ? formatPrintOutput(args) : undefined,
+      // `print`/`print_llist` also write to the program's output; record that text so the driver can
+      // show it in the stepper's output panel (from this call's "Ran ..." step onward). Both still
+      // yield `None`, same as every other call here.
+      output:
+        name === "print"
+          ? formatPrintOutput(args)
+          : name === "print_llist"
+            ? formatPrintLlistOutput(args)
+            : undefined,
     };
   }
 

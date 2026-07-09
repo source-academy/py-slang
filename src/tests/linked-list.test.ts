@@ -35,6 +35,18 @@ describe("Linked List Tests", () => {
         ["llist(llist(1, 2, 3), 4, 5, 6)"],
       ],
       ["print_llist(llist('a', 'b'))", null, ["llist('a', 'b')"]],
+      // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong
+      // notation for a value reachable via two different paths in the same structure: x1
+      // appears both standalone and as the tail of pair(1, x1), and the buggy js-slang
+      // implementation misclassified the second occurrence as an improper pair). print_llist's
+      // algorithm is plain recursion with no identity-keyed memoization, so it can't reproduce
+      // that bug: the same pair object is re-derived fresh from its own structure every time
+      // it's visited, regardless of which parent reached it.
+      [
+        "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)",
+        null,
+        ["llist(llist(2, 3), llist(1, 2, 3))"],
+      ],
     ],
     // equal matches == semantics: booleans compare as the ints they are
     // (as in Python), and the coercion stays legal at §2, where == itself
