@@ -63,14 +63,21 @@ export type InputStreamContext = ReadableContext<string> & {
 
 export const createInputStream = (conductor: IRunnerPlugin): InputStreamContext => {
   let pendingPrompt: string | undefined;
-  const stream = new ReadableStream<string>({
-    async pull(controller) {
-      const prompt = pendingPrompt;
-      pendingPrompt = undefined;
-      const input = await conductor.requestInput(prompt);
-      controller.enqueue(input);
+  const stream = new ReadableStream<string>(
+    {
+      async pull(controller) {
+        const prompt = pendingPrompt;
+        pendingPrompt = undefined;
+        const input = await conductor.requestInput(prompt);
+        controller.enqueue(input);
+      },
     },
-  });
+    // Default highWaterMark of 1 makes the stream eagerly pull() as soon as it's constructed
+    // (before any input() call sets a prompt), firing a phantom requestInput(undefined) and
+    // leaving the real prompt to be used one call late. highWaterMark: 0 makes pull() only run
+    // in direct response to reader.read().
+    { highWaterMark: 0 },
+  );
   const reader = stream.getReader();
   return {
     stream,
