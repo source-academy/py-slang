@@ -125,7 +125,8 @@ export function evaluateUnaryExpression(
  * numbers (`complex(nan, 0) == complex(nan, 0)` is False there too). */
 function isNaNValue(value: Value): boolean {
   if (value.type === "number") return Number.isNaN(value.value);
-  if (value.type === "complex") return Number.isNaN(value.value.real) || Number.isNaN(value.value.imag);
+  if (value.type === "complex")
+    return Number.isNaN(value.value.real) || Number.isNaN(value.value.imag);
   return false;
 }
 

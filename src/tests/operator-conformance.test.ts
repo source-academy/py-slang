@@ -20,7 +20,6 @@
  * do not.
  *
  * Not covered by the spec table (excluded from the sweep, see #198):
- *   - `//` floor division (implemented, but has no row in the table)
  *   - unary `+` (implemented, but has no row in the table)
  */
 import { StmtNS } from "../ast-types";
