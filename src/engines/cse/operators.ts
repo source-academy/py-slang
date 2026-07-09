@@ -120,9 +120,13 @@ export function evaluateUnaryExpression(
   }
 }
 
-/** A float NaN value; NaN is unequal to everything, including itself, as in CPython. */
+/** A float NaN value, or a complex value with a NaN real or imaginary component; NaN is unequal to
+ * everything, including itself, as in CPython — and that propagates component-wise into complex
+ * numbers (`complex(nan, 0) == complex(nan, 0)` is False there too). */
 function isNaNValue(value: Value): boolean {
-  return value.type === "number" && Number.isNaN(value.value);
+  if (value.type === "number") return Number.isNaN(value.value);
+  if (value.type === "complex") return Number.isNaN(value.value.real) || Number.isNaN(value.value.imag);
+  return false;
 }
 
 /**
