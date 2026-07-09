@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
@@ -15,7 +17,8 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { Group } from "../stdlib/utils";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
-import { makeValidatorsForChapter } from "../validator";
+import { FeatureNotSupportedError, makeValidatorsForChapter } from "../validator";
+import { BreakContinueOutsideLoopError } from "../validator/types";
 import Stmt = StmtNS.Stmt;
 
 /**
@@ -541,6 +544,274 @@ export const generateNativePynterTestCases = (
       }
       for (const [reason, cases] of skipBuckets) {
         test.skip.each(cases)(`$label (${reason})`, runTestCase);
+      }
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// CPython parity test utilities (issue #224)
+//
+// Reruns the same `TestCases` tables used by generateTestCases() (the CSE
+// suite) against real CPython + the `sourceacademy-sicp` package
+// (python/sicp/), so that a program's *entire result*, not just the library's
+// own pytest suite, is checked against the actual reference implementation
+// students eventually run their code on. One persistent `python3` subprocess
+// per describe block (scripts/cpython_batch_runner.py), fed every case as a
+// single JSON batch — the suite has thousands of cases, so a process spawned
+// per case would dominate the runtime.
+//
+// Opt-in: set CPYTHON_PATH to a `python3` binary (python/sicp/ is added to
+// its sys.path by the runner script itself — no install needed). Skipped
+// entirely otherwise, since CI doesn't have Python available by default.
+//
+// Unlike native-Pynter parity, a fair number of cases here are *expected* to
+// disagree with CPython by design, not because a pathway is behind on a
+// shared spec: Source Academy Python's own pedagogical restrictions (chapter-
+// gated syntax, `is` restricted to reference types, bool excluded from
+// arithmetic) have no CPython equivalent to compare against. Those are
+// filtered by CPYTHON_SKIP_REASONS the same way native-Pynter skips things
+// Pynter's VM can't do — the two lists barely overlap, since they're skipping
+// for opposite reasons (CPython is *more* permissive than this dialect,
+// Pynter is *less*). As with native-Pynter, failures that make it through the
+// skip list are informative, not necessarily a sign of broken infra — see
+// README.md.
+// ---------------------------------------------------------------------------
+
+const CPYTHON_BATCH_RUNNER = path.join(__dirname, "..", "..", "scripts", "cpython_batch_runner.py");
+
+/** A JSON-number-unsafe float value, round-tripped through the batch runner as a tagged string
+ * (JSON has no Infinity/NaN). */
+type CPythonFloat = number | "nan" | "inf" | "-inf";
+
+type CPythonValue =
+  | { type: "none" }
+  | { type: "bool"; value: boolean }
+  | { type: "int"; value: string }
+  | { type: "float"; value: CPythonFloat }
+  | { type: "complex"; value: { real: CPythonFloat; imag: CPythonFloat } }
+  | { type: "str"; value: string }
+  | { type: "list"; value: CPythonValue[] }
+  | { type: "other"; repr: string };
+
+interface CPythonCaseResult {
+  id: string;
+  output: string[];
+  error: string | null;
+  result: CPythonValue | null;
+}
+
+/** Runs `cases` through scripts/cpython_batch_runner.py in one subprocess, keyed by id. Throws if
+ * the runner itself couldn't execute (missing python3, sicp/ not importable, ...) — an individual
+ * case's own Python-level error is captured in its own result, not thrown here. */
+function runCPythonBatch(
+  pythonPath: string,
+  cases: { id: string; code: string }[],
+): Map<string, CPythonCaseResult> {
+  const stdout = execFileSync(pythonPath, [CPYTHON_BATCH_RUNNER], {
+    input: JSON.stringify(cases),
+    encoding: "utf-8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const results = JSON.parse(stdout) as CPythonCaseResult[];
+  return new Map(results.map(r => [r.id, r]));
+}
+
+function floatToComparable(n: number): CPythonFloat {
+  if (Number.isNaN(n)) return "nan";
+  if (n === Infinity) return "inf";
+  if (n === -Infinity) return "-inf";
+  return n;
+}
+
+/** Converts a CSE `TestOutputValue` to a value comparable with the batch runner's serialized
+ * result shape (same tagged-union shape on both sides). Unlike native-Pynter's
+ * expectedToComparable(), this needs no float32 rounding or complex-number exclusion — CPython has
+ * real doubles and real complex numbers, matching the CSE machine's own value model closely.
+ * `undefined` for a value the runner can't/doesn't decode (functions, etc.), same fallback
+ * native-Pynter's version uses. */
+function cpythonExpectedToComparable(expected: TestOutputValue): CPythonValue | undefined {
+  if (typeof expected === "bigint") return { type: "int", value: expected.toString() };
+  if (typeof expected === "number") return { type: "float", value: floatToComparable(expected) };
+  if (typeof expected === "boolean") return { type: "bool", value: expected };
+  if (typeof expected === "string") return { type: "str", value: expected };
+  if (expected === null) return { type: "none" };
+  if (expected instanceof PyComplexNumber) {
+    return {
+      type: "complex",
+      value: {
+        real: floatToComparable(expected.real),
+        imag: floatToComparable(expected.imag),
+      },
+    };
+  }
+  if (Array.isArray(expected)) {
+    const values = expected.map(cpythonExpectedToComparable);
+    if (values.some(v => v === undefined)) return undefined;
+    return { type: "list", value: values as CPythonValue[] };
+  }
+  return undefined;
+}
+
+/** Whether `expected` is a resolve-time chapter-gating restriction (a Python §<N> feature not
+ * being available yet — lists, `is`, loops, lambda, ... at an earlier chapter): purely a Source
+ * Academy Python pedagogical device with no CPython concept to compare against, since CPython has
+ * no notion of "chapter" at all — every one of these is valid CPython syntax regardless of which
+ * py-slang chapter validator is active. */
+function isChapterGatingError(expected: TestExpectedValue): boolean {
+  return (
+    typeof expected === "function" &&
+    (expected.prototype instanceof FeatureNotSupportedError ||
+      expected === FeatureNotSupportedError ||
+      expected.prototype instanceof BreakContinueOutsideLoopError ||
+      expected === BreakContinueOutsideLoopError)
+  );
+}
+
+/**
+ * Whether `code` is a call whose entire argument list is `True`/`False` and `expected` is an
+ * error: unlike CPython (where `bool` is an `int` subclass, so e.g. `abs(True) == 1`), this
+ * dialect deliberately excludes `bool` from every arithmetic/numeric builtin and operator (see
+ * `asIntIfBool`'s doc comment in operators.ts and the equivalent restriction across misc.ts/
+ * math.ts) — a pedagogical rule with no CPython equivalent, not a bug. High-volume: nearly every
+ * numeric builtin has one of these cases, so left unfiltered it would swamp genuinely interesting
+ * failures.
+ */
+const BOOL_REJECTION_CALL_RE = /^\w+\((?:True|False)(?:,\s*(?:True|False))*\)$/;
+
+function isBoolRejection(code: string, expected: TestExpectedValue): boolean {
+  return typeof expected === "function" && BOOL_REJECTION_CALL_RE.test(code.trim());
+}
+
+/**
+ * Matches a `while` loop whose condition is a bare non-comparison expression (a literal or an
+ * arithmetic/variable expression, with no comparison/boolean operator) -- e.g. `while 1:`,
+ * `while None:`, `while y + 1:`, but not `while i < 5:`. This dialect requires while-conditions to
+ * be exactly `bool`, unlike CPython's normal truthy/falsy semantics -- a pedagogical restriction
+ * with no CPython equivalent, like `isBoolRejection` above. Critical to skip, not just cosmetic:
+ * some of these (`while 1:`, `while y + 1:`) are genuine infinite loops under real CPython, since
+ * py-slang's error fires before the loop body ever runs but CPython has nothing to stop it -- left
+ * unfiltered, this hangs the whole batch runner (see issue #224 test-mode hang investigation).
+ */
+const WHILE_CONDITION_RE = /\bwhile\s+([^:\n]+):/;
+const COMPARISON_OR_BOOLEAN_OP_RE = /==|!=|<=|>=|<|>|\bin\b|\bis\b|\bnot\b|\band\b|\bor\b/;
+
+function isWhileNonBoolCondition(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const match = code.match(WHILE_CONDITION_RE);
+  return match !== null && !COMPARISON_OR_BOOLEAN_OP_RE.test(match[1]);
+}
+
+/** Reasons a test case is skipped for the CPython pathway, checked in order. */
+const CPYTHON_SKIP_REASONS: {
+  matches: (code: string, expected: TestExpectedValue) => boolean;
+  reason: string;
+}[] = [
+  {
+    matches: isBoolRejection,
+    reason: "bool is an int subclass in CPython, unlike this dialect's arithmetic/numeric builtins",
+  },
+  {
+    matches: isWhileNonBoolCondition,
+    reason:
+      "while-conditions must be exactly bool in this dialect, unlike CPython's truthy/falsy " +
+      "semantics -- some of these are genuine infinite loops under CPython",
+  },
+  {
+    matches: (_code, expected) => isChapterGatingError(expected),
+    reason: "chapter-gating is a Source Academy Python concept CPython has no equivalent of",
+  },
+  {
+    matches: code => involvesParseFeature(code),
+    reason: "parse()/tokenize() aren't part of Python 3 (sicp.mce has no equivalent)",
+  },
+];
+
+/**
+ * Reruns `testCases` (as already used with generateTestCases() for the CSE machine) through real
+ * CPython, at the given chapter `variant`. See the file-level comment above for gating and
+ * expectations.
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups, matching whatever
+ * non-default combination the sibling generateTestCases() call for the same suite uses.
+ */
+export const generateCPythonTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+) => {
+  void variant; // Not needed by the runner itself (sicp exposes the full superset of builtins
+  // unconditionally); kept as a parameter so call sites read the same as generateTestCases()'s.
+  void groups; // Same: sicp has no notion of "this group isn't loaded yet", so nothing to pass on.
+
+  const pythonPath = process.env.CPYTHON_PATH;
+  const describeBlock = pythonPath ? describe : describe.skip;
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describeBlock(`[cpython] ${funcName}`, () => {
+      const internalTestCases = createInternalTestCases(tests);
+      const supported: InternalTestCase[] = [];
+      const skipBuckets = new Map<string, InternalTestCase[]>();
+      for (const testCase of internalTestCases) {
+        const reason = CPYTHON_SKIP_REASONS.find(({ matches }) =>
+          matches(testCase.code, testCase.expected),
+        )?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
+        } else {
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
+        }
+      }
+
+      let batchResults: Map<string, CPythonCaseResult> = new Map();
+      if (pythonPath && supported.length > 0) {
+        beforeAll(() => {
+          batchResults = runCPythonBatch(
+            pythonPath,
+            supported.map((c, i) => ({ id: String(i), code: c.code })),
+          );
+        });
+      }
+
+      const runTestCase = (testCase: InternalTestCase, index: number) => {
+        const { expected, output } = testCase;
+        const result = batchResults.get(String(index));
+        if (!result) throw new Error("CPython batch result missing for this case");
+
+        if (typeof expected === "function") {
+          // CSE also expects a failure here; any CPython exception counts as agreement — exact
+          // exception class/message parity isn't the point (py-slang's own error names, like
+          // MissingRequiredPositionalError, don't exist in CPython).
+          expect(result.error).not.toBeNull();
+          return;
+        }
+
+        expect(result.error).toBeNull();
+        if (output !== null) {
+          expect(result.output).toEqual(output);
+        }
+
+        const wanted = cpythonExpectedToComparable(expected as TestOutputValue);
+        if (wanted === undefined || result.result === undefined) return; // not decodable; skip value check
+        if (wanted.type === "float" && result.result?.type === "float") {
+          const a = result.result.value;
+          const w = wanted.value;
+          if (typeof a === "number" && typeof w === "number") {
+            expect(a).toBeCloseTo(w);
+            return;
+          }
+        }
+        expect(result.result).toEqual(wanted);
+      };
+
+      if (supported.length > 0) {
+        test.each(supported.map((c, i) => ({ ...c, __index: i })))(
+          `$label`,
+          ({ __index, ...testCase }) => runTestCase(testCase, __index),
+        );
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$label (${reason})`, () => {});
       }
     });
   }

@@ -29,7 +29,7 @@ Then the Source Academy Python standard library is available:
 xs = llist(1, 2, 3)
 print(xs)                       # [1, [2, [3, None]]]
 print_llist(xs)                 # llist(1, 2, 3)
-print(list_length(build_list(lambda i: i * i, 5)))   # 5
+print(list_length([1, 4, 9, 16, 25]))                # 5
 print(math_sqrt(2))             # 1.4142135623730951
 print(eval_stream(integers_from(1), 4))              # [1, [2, [3, [4, None]]]]
 ```
@@ -56,7 +56,7 @@ The library mirrors the groups in `py-slang`'s standard library:
 | `sicp.math`          | `math_pi`, `math_e`, `math_tau`, `math_inf`, `math_nan`, and the `math_*` functions (`math_sqrt`, `math_sin`, `math_floor`, `math_comb`, …) |
 | `sicp.linked_list`   | `pair`, `head`, `tail`, `is_pair`, `llist`, `print_llist`, plus `map`, `filter`, `reduce`, `reverse`, `append`, `length`, `member`, `remove`, `enum_llist`, … |
 | `sicp.pair_mutators` | `set_head`, `set_tail` |
-| `sicp.list`          | `is_list`, `list_length`, `equal`, `build_list` |
+| `sicp.list`          | `is_list`, `list_length`, `equal` |
 | `sicp.stream`        | `stream`, `stream_map`, `stream_filter`, `stream_ref`, `integers_from`, `eval_stream`, … |
 
 `from sicp import *` brings the whole superset into scope, mirroring the

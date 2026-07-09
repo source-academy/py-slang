@@ -155,6 +155,37 @@ PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn pynter:report
 
 Pass `--failures` to also list the full name of every failing test, grouped by suite.
 
+#### Running the CPython ground-truth suite
+
+`yarn test` also includes a second opt-in suite — `generateCPythonTestCases()` in
+`src/tests/utils.ts`, used by the same test files as the Pynter suite above — that reruns the same
+test cases through plain CPython instead, using [`sourceacademy-sicp`](#sourceacademy-sicp--the-standard-library-for-plain-cpython)
+(the `python/` package in this repo) to provide the standard library. Where the Pynter suite checks
+that py-slang's own PVML/Pynter backend agrees with the CSE machine, this suite checks that the CSE
+machine's test cases themselves are true statements about Python — i.e. it uses CPython as ground
+truth to catch cases where a test's expected value is wrong, not just where py-slang's
+implementation is. It's opt-in and **not part of CI**: it exists purely as a local integrity check
+for the test suite, not a compatibility gate.
+
+To run it, point `CPYTHON_PATH` at a Python 3.10+ interpreter with `sourceacademy-sicp`'s
+dependencies available (any interpreter that can `import` the `python/sicp` package works, since
+it has no third-party dependencies of its own):
+
+```shell
+CPYTHON_PATH=python3 yarn test
+```
+
+Cases that test Source Academy Python's own pedagogical restrictions (chapter-gating, `bool`
+excluded from arithmetic builtins) are cleanly skipped rather than counted as failures, since
+CPython — unlike Pynter — is *more* permissive than this dialect, not less, and has no equivalent
+restriction to check against. Cases exercising `parse()`/`tokenize()` are skipped too, since those
+are py-slang-only metacircular-evaluator features with no CPython equivalent. To see just this
+suite's results, filter by its test-name tag:
+
+```shell
+CPYTHON_PATH=python3 yarn jest -t "\[cpython\]"
+```
+
 ### Regenerating the AST types and Parser
 
 The AST types need to be regenerated after changing
