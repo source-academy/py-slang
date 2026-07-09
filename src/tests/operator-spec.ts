@@ -103,7 +103,12 @@ const FRONT: Row[] = [
   { ops: ["+", "-", "*", "%", "//"], left: ["int"], right: ["int"], result: "int" },
   { ops: ["/"], left: ["int"], right: ["int"], result: "float" },
   { ops: ["+", "-", "*", "/", "%", "//"], left: ["int"], right: ["float"], result: "float" },
-  { ops: ["+", "-", "*", "/", "%", "//"], left: ["float"], right: ["int", "float"], result: "float" },
+  {
+    ops: ["+", "-", "*", "/", "%", "//"],
+    left: ["float"],
+    right: ["int", "float"],
+    result: "float",
+  },
   { ops: ["+", "-", "*", "/"], left: ["int"], right: ["complex"], result: "complex" },
   { ops: ["+", "-", "*", "/"], left: ["float"], right: ["complex"], result: "complex" },
   { ops: ["+", "-", "*", "/"], left: ["complex"], right: NUMERIC, result: "complex" },
