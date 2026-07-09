@@ -458,8 +458,8 @@ Object.assign(BUILTIN_FUNCTIONS, listBuiltins);
 
 /** Minimum argument counts for the built-ins, used by `arity` on a built-in name. */
 const BUILTIN_MIN_ARGS: Record<string, number> = {
-  min: 1,
-  max: 1,
+  min: 2,
+  max: 2,
   complex: 0,
   str: 0,
   print: 0,
@@ -489,7 +489,7 @@ function pyTypeName(node: StepNode): string {
 }
 
 function selectExtreme(name: string, args: StepNode[], wantMax: boolean): StepNode {
-  checkArity(name, args, 1, null);
+  checkArity(name, args, 2, null);
   // `bool` is excluded, like everywhere else in this dialect's arithmetic/comparison operators — see
   // `asNumber`.
   const numeric = args.every(a => isIntNode(a) || isFloatNode(a));

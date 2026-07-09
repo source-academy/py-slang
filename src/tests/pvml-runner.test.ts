@@ -28,7 +28,7 @@ describe("runCodePvml", () => {
       "hello\nProgram exited with fault no fault and result type undefined: undefined",
     );
     try {
-      const output = await runCodePvml('print("hello")\n', 2, { pynterPath: path });
+      const output = await runCodePvml('print("hello")\n', 3, { pynterPath: path });
       expect(output).toBe("hello\n");
     } finally {
       await cleanup();
@@ -36,7 +36,7 @@ describe("runCodePvml", () => {
   });
 
   test("throws a parse RunError on invalid syntax", async () => {
-    await expect(runCodePvml("def (:\n", 2, { pynterPath: "/unused" })).rejects.toMatchObject({
+    await expect(runCodePvml("def (:\n", 3, { pynterPath: "/unused" })).rejects.toMatchObject({
       kind: "parse",
     } satisfies Partial<RunError>);
   });
@@ -46,7 +46,7 @@ describe("runCodePvml", () => {
       "Program exited with fault divide by zero and result type undefined: undefined",
     );
     try {
-      await expect(runCodePvml("1 / 0\n", 2, { pynterPath: path })).rejects.toMatchObject({
+      await expect(runCodePvml("1 / 0\n", 3, { pynterPath: path })).rejects.toMatchObject({
         kind: "runtime",
       } satisfies Partial<RunError>);
     } finally {

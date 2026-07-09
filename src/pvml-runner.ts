@@ -61,6 +61,14 @@ export async function runCodePvmlDetailed(
   variant: number,
   options: RunPvmlOptions,
 ): Promise<RunPvmlResult> {
+  // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md) —
+  // it implements that chapter's semantics unconditionally, with no runtime
+  // notion of "chapter" to gate narrower/wider rules for §1/§2/§4. Reject
+  // anything else here rather than silently running it with the wrong rules.
+  if (variant !== 3) {
+    throw new RunError("parse", `Pynter only supports Python §3; got variant ${variant}.`);
+  }
+
   const { pynterPath, groups = VARIANT_GROUPS[variant] } = options;
   if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
 
