@@ -159,5 +159,7 @@ describe("Linked List Tests", () => {
   };
 
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
-  generateNativePynterTestCases(linkedListTests, 2, [misc, math, linkedList]);
+  // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
+  // programs, so run them there rather than at their nominal §2.
+  generateNativePynterTestCases(linkedListTests, 3, [misc, math, linkedList]);
 });

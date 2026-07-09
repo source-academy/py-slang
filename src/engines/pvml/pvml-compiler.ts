@@ -4,13 +4,19 @@ import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer/tokenizer";
 import { PVMLIRBuilder } from "./PVMLIRBuilder";
-import { PRIMITIVE_FUNCTIONS } from "./builtins";
+import { PRIMITIVE_CONSTANTS, PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
 import { PVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
 const I32_MAX = 2_147_483_647;
+
+/** Primitive index of the compiler-internal `_concat_arrays` helper (see
+ * builtins.ts's executePrimitive case 100) — never resolvable by name from
+ * Python source (no PRIMITIVE_FUNCTIONS entry), only ever emitted directly
+ * by compileSpreadCall. */
+const CONCAT_ARRAYS_PRIMITIVE_INDEX = 100;
 
 interface CompilerAnnotation {
   slot: number;
@@ -36,6 +42,20 @@ export class PVMLCompiler
   private builder: PVMLIRBuilder;
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
+  /**
+   * True immediately before compiling a Call (or Ternary) expression known
+   * to be in tail position — i.e. its value is returned right away, with
+   * nothing else left to do in this function call. Set *only* by
+   * compileTail, which is the sole entry point for tail-position compiling
+   * (see its doc comment for why the scoping has to be this narrow).
+   * visitCallExpr/compileSpreadCall/emitFunctionCall capture this flag into
+   * a local at their own entry and immediately reset the field to `false`
+   * before compiling their own children (arguments, callee) — a call that
+   * merely *appears inside* a tail-position expression (e.g. `g(x)` in
+   * `return f(g(x))`) is never itself a tail call, and must not reuse the
+   * current frame (CALLT's frame-reuse clears `currentFrame.stack`, which
+   * would corrupt any still-pending operands).
+   */
   private isTailCall: boolean;
   private internalFunctions?: Map<string, number>;
 
@@ -67,6 +87,9 @@ export class PVMLCompiler
     currentEnvironment: Environment,
     functionEnvironments: FunctionEnvironments,
     builder: PVMLIRBuilder,
+    variant: number,
+    useGlobalMap: boolean = false,
+    targetsPynter: boolean = false,
     tokenAnnotations: WeakMap<Token, CompilerAnnotation> = new WeakMap(),
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
@@ -77,6 +100,9 @@ export class PVMLCompiler
     this.currentEnvironment = currentEnvironment;
     this.functionEnvironments = functionEnvironments;
     this.isTailCall = false;
+    this.variant = variant;
+    this.useGlobalMap = useGlobalMap;
+    this.targetsPynter = targetsPynter;
     this.tokenAnnotations = tokenAnnotations;
     this.envSlotCounters = envSlotCounters;
     this.envSlotMaps = envSlotMaps;
@@ -96,6 +122,7 @@ export class PVMLCompiler
    */
   static fromProgram(
     program: StmtNS.FileInput,
+    variant: number,
     functionEnvironments?: FunctionEnvironments,
     internalFunctions?: Map<string, number>,
   ): PVMLCompiler {
@@ -130,12 +157,29 @@ export class PVMLCompiler
       nextEnvironment.lookupNameCurrentEnvWithError(param);
     }
     const numArgs = node.parameters.length;
-    const builder = this.builder.createChildBuilder(numArgs);
+    // Display-only name for str()/repr() on a closure over this function
+    // (see PVMLIR's `functionName` doc comment) — a FunctionDef's declared
+    // name, or "(anonymous)" for a lambda/multi-lambda, matching how the CSE
+    // machine names these (src/stdlib/utils.ts's toPythonString).
+    const functionName = node instanceof StmtNS.FunctionDef ? node.name.lexeme : "(anonymous)";
+    // A rest param (`def f(a, *rest)`) is always the last parameter by
+    // grammar — see PVMLIR's `hasRestParam` doc comment. Native Pynter has
+    // no representation for a variadic-arity function at all, so reject this
+    // at compile time rather than silently producing a PVMLIR native Pynter
+    // could never execute correctly.
+    const hasRestParam = node.parameters.some(p => p.isStarred);
+    if (hasRestParam && this.targetsPynter) {
+      throw new Error("Rest parameters (*args) are not supported when compiling for native Pynter");
+    }
+    const builder = this.builder.createChildBuilder(numArgs, functionName, hasRestParam);
 
     const compiler = new PVMLCompiler(
       nextEnvironment,
       this.functionEnvironments,
       builder,
+      this.variant,
+      this.useGlobalMap,
+      this.targetsPynter,
       this.tokenAnnotations,
       this.envSlotCounters,
       this.envSlotMaps,
@@ -246,6 +290,13 @@ export class PVMLCompiler
   private emitLoadSymbol(token: Token): ExpressionResult {
     const annotation = this.getTokenAnnotation(token);
 
+    if (annotation.isConstant) {
+      // A named numeric constant (e.g. `math_pi`) — pushed directly as a
+      // float, bypassing the primitive-function-call machinery entirely
+      // (see PRIMITIVE_CONSTANTS' doc comment in builtins.ts).
+      this.builder.emitUnary(OpCodes.LGCF64, annotation.constantValue);
+      return { maxStackSize: 1 };
+    }
     if (annotation.isPrimitive) {
       // A primitive referenced as a value rather than called directly (e.g.
       // `is_function(print)`, `f = abs`) — NEWCP pushes a callable reference
@@ -277,6 +328,11 @@ export class PVMLCompiler
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
     }
 
+    if (annotation.isGlobal) {
+      this.builder.emitUnary(OpCodes.STGG, annotation.name);
+      return;
+    }
+
     if (annotation.envLevel === 0) {
       this.builder.emitUnary(OpCodes.STLG, annotation.slot);
     } else {
@@ -284,7 +340,7 @@ export class PVMLCompiler
     }
   }
 
-  private emitFunctionCall(token: Token, numArgs: number): void {
+  private emitFunctionCall(token: Token, numArgs: number, isTailCall: boolean): void {
     const annotation = this.getTokenAnnotation(token);
 
     if (annotation.isInternal) {
@@ -294,7 +350,7 @@ export class PVMLCompiler
       const primitiveOpcode = this.isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
     } else {
-      const userOpcode = this.isTailCall ? OpCodes.CALLT : OpCodes.CALL;
+      const userOpcode = isTailCall ? OpCodes.CALLT : OpCodes.CALL;
       this.builder.emitCall(userOpcode, numArgs);
     }
   }
@@ -328,23 +384,47 @@ export class PVMLCompiler
   }
 
   visitStarredExpr(_expr: ExprNS.Starred): ExpressionResult {
-    throw new Error("Starred expressions not yet supported in PVML compiler");
+    // A Starred expression as a direct call argument (`f(*xs)`) is handled
+    // entirely by visitCallExpr/compileSpreadCall, without ever visiting the
+    // node through here — that's the only place `*expr` syntax is valid in
+    // this language (no tuple-unpacking assignment targets exist at all, see
+    // AssignTarget in ast-types.ts), so reaching this method at all means a
+    // bare/standalone spread outside a call's argument list, which is a
+    // syntax error.
+    throw new Error("Starred expressions are only supported as call arguments (f(*xs))");
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
-    const numValue = Number(expr.value);
-    if (Number.isInteger(numValue) && I32_MIN <= numValue && numValue <= I32_MAX) {
-      this.builder.emitUnary(OpCodes.LGCI, numValue);
+    if (this.targetsPynter) {
+      const numValue = Number(expr.value);
+      if (Number.isInteger(numValue) && I32_MIN <= numValue && numValue <= I32_MAX) {
+        this.builder.emitUnary(OpCodes.LGCI, numValue);
+      } else {
+        this.builder.emitUnary(OpCodes.LGCF64, numValue);
+      }
     } else {
-      this.builder.emitUnary(OpCodes.LGCF64, numValue);
+      // Always preserve full precision and the int/float distinction — see
+      // `targetsPynter`'s doc comment and opcodes.ts's LGCBI doc comment.
+      // `expr.value` is the literal's raw digit string (BigIntLiteral.value),
+      // not yet a JS bigint — emitUnary's string-vs-bigint dispatch relies on
+      // actually passing a `bigint` here, not a numeric string.
+      this.builder.emitUnary(OpCodes.LGCBI, BigInt(expr.value));
     }
 
     return { maxStackSize: 1 };
   }
 
-  visitComplexExpr(_expr: ExprNS.Complex): ExpressionResult {
-    // TODO: needs proper PVML support for complex numbers
-    throw new Error("Complex numbers not yet supported in PVML compiler");
+  visitComplexExpr(expr: ExprNS.Complex): ExpressionResult {
+    if (this.targetsPynter) {
+      // Native Pynter has zero complex-number support (no NaN-boxing tag, no
+      // arithmetic) and never will — see opcodes.ts's LGCC doc comment. Fail
+      // at compile time with a clear message rather than emitting an opcode
+      // that would only be caught later, opaquely, by assemble()'s
+      // targetMaxOpcode check.
+      throw new Error("Complex number literals are not supported when compiling for native Pynter");
+    }
+    this.builder.emitUnary(OpCodes.LGCC, expr.value);
+    return { maxStackSize: 1 };
   }
 
   visitListExpr(expr: ExprNS.List): ExpressionResult {
@@ -404,25 +484,48 @@ export class PVMLCompiler
         return OpCodes.MODG;
       case TokenType.DOUBLESLASH:
         return OpCodes.FLOORDIVG;
+      case TokenType.DOUBLESTAR:
+        return OpCodes.POWG;
       default:
         throw new Error(`Unsupported binary operator: ${operator.lexeme}`);
     }
   }
 
+  /**
+   * `==`/`!=`/ordering mean different things at §1/§2 (bool — and for `==`/`!=`,
+   * function — operands are rejected outright: docs/specs/python_typing_middle_12.tex)
+   * vs §3/§4 (bool participates as the int it is, no exclusions:
+   * python_typing_middle_34.tex). Rather than have the VM ask "which chapter is
+   * this program?" at runtime, the compiler bakes that choice into which of the
+   * two opcode families it emits — see the EQG12/NEQG12/LTG12/GTG12/LEG12/GEG12
+   * comment in opcodes.ts.
+   */
   private getCompareOpCode(operator: Token): number {
+    const restricted = this.variant <= 2;
     switch (operator.type) {
       case TokenType.LESS:
-        return OpCodes.LTG;
+        return restricted ? OpCodes.LTG12 : OpCodes.LTG;
       case TokenType.GREATER:
-        return OpCodes.GTG;
+        return restricted ? OpCodes.GTG12 : OpCodes.GTG;
       case TokenType.LESSEQUAL:
-        return OpCodes.LEG;
+        return restricted ? OpCodes.LEG12 : OpCodes.LEG;
       case TokenType.GREATEREQUAL:
-        return OpCodes.GEG;
+        return restricted ? OpCodes.GEG12 : OpCodes.GEG;
       case TokenType.DOUBLEEQUAL:
-        return OpCodes.EQG;
+        return restricted ? OpCodes.EQG12 : OpCodes.EQG;
       case TokenType.NOTEQUAL:
-        return OpCodes.NEQG;
+        return restricted ? OpCodes.NEQG12 : OpCodes.NEQG;
+      // `is`/`is not` only exist at §3/§4 at all (rejected at §1/§2 by
+      // NoIsOperatorValidator before compilation ever starts), so there's no
+      // chapter-gated opcode choice to make here. They test identity (Python
+      // pointer equality), a different question from `==`/`!=`'s structural
+      // equality — e.g. two separately-constructed but element-wise-equal
+      // lists are `==` but not `is`. They therefore get their own opcodes
+      // rather than reusing EQG/NEQG.
+      case TokenType.IS:
+        return OpCodes.EQP;
+      case TokenType.ISNOT:
+        return OpCodes.NEQP;
       default:
         throw new Error(`Unsupported comparison operator: ${operator.lexeme}`);
     }
@@ -514,12 +617,37 @@ export class PVMLCompiler
     return { maxStackSize: operandResult.maxStackSize };
   }
 
+  /** Compiles a call's argument list left to right, returning the peak extra
+   * stack depth they need (relative to whatever's already on the stack —
+   * e.g. a callee value — when the first argument starts compiling). Shared
+   * by both branches of visitCallExpr. */
+  private compileCallArgs(args: ExprNS.Expr[]): number {
+    let maxArgStackSize = 0;
+    for (let i = 0; i < args.length; i++) {
+      const argResult = this.compile(args[i]);
+      maxArgStackSize = Math.max(maxArgStackSize, i + argResult.maxStackSize);
+    }
+    return maxArgStackSize;
+  }
+
   visitCallExpr(expr: ExprNS.Call): ExpressionResult {
-    if (!(expr.callee instanceof ExprNS.Variable)) {
-      throw new Error("Unsupported call expression: callee must be an identifier");
+    // Capture-and-clear: this call's own tail-ness is whatever the ambient
+    // flag was on entry, but compiling its callee/arguments below must not
+    // see it — a nested call inside an argument (`f(g(x))`) or a computed
+    // callee is never itself in tail position. See isTailCall's doc comment.
+    const isTail = this.isTailCall;
+    this.isTailCall = false;
+
+    if (expr.args.some(arg => arg instanceof ExprNS.Starred)) {
+      // A spread argument (`f(*xs)`) makes the actual argument count runtime-
+      // variable, independent of whether the callee is a statically-known
+      // name — a spread call to a known function still needs CALLA/CALLTA,
+      // not the CALLP/CALL fast path below.
+      return this.compileSpreadCall(expr, isTail);
     }
 
-    const callee: ExprNS.Variable = expr.callee;
+    if (expr.callee instanceof ExprNS.Variable) {
+      const callee: ExprNS.Variable = expr.callee;
 
     // CALLP/CALLTP (primitive calls) and CALLV/CALLTV (VM-internal calls)
     // take their arguments directly off the stack with no function value
@@ -533,29 +661,123 @@ export class PVMLCompiler
       ? 0
       : this.emitLoadSymbol(callee.name).maxStackSize;
 
-    let maxArgStackSize = 0;
-    for (let i = 0; i < expr.args.length; i++) {
-      const argResult = this.compile(expr.args[i]);
-      maxArgStackSize = Math.max(maxArgStackSize, i + argResult.maxStackSize);
+      const maxArgStackSize = this.compileCallArgs(expr.args);
+
+      const numArgs = expr.args.length;
+      this.emitFunctionCall(callee.name, numArgs, isTail);
+
+      return {
+        maxStackSize: functionStackEffect + maxArgStackSize,
+      };
     }
 
+    // General case: the callee is a computed expression (a call result, an
+    // immediately-invoked lambda, a subscript, etc.), not a statically-known
+    // name — push whatever it evaluates to (a closure, or a first-class
+    // primitive reference), then dispatch via CALL/CALLT. There's no CALLP
+    // fast path here (no compile-time-known primitive index to encode), but
+    // the interpreter's dispatchCall already handles a runtime PVMLPrimitive
+    // callee value dynamically — the same mechanism that already makes
+    // `f = abs; f(-5)` work today.
+    const calleeResult = this.compile(expr.callee);
+    const maxArgStackSize = this.compileCallArgs(expr.args);
+
     const numArgs = expr.args.length;
-    this.emitFunctionCall(callee.name, numArgs);
+    const userOpcode = isTail ? OpCodes.CALLT : OpCodes.CALL;
+    this.builder.emitCall(userOpcode, numArgs);
 
     return {
-      maxStackSize: functionStackEffect + maxArgStackSize,
+      maxStackSize: calleeResult.maxStackSize + maxArgStackSize,
     };
   }
 
+  /**
+   * Compiles a call with at least one spread argument (`f(*xs)`, or a mix
+   * like `f(a, *xs, b)`). `xs`'s length isn't known until runtime, but
+   * CALL/CALLT's `numArgs` operand is a static instruction byte (and, being
+   * ≤ PYNTER_OPCODE_MAX, its semantics can't change to accommodate this) —
+   * so instead this builds one flat runtime args array and dispatches via
+   * CALLA/CALLTA (see opcodes.ts's doc comment there).
+   *
+   * Each syntactic argument becomes one "piece": a plain argument is wrapped
+   * in a fresh 1-element array (compileSingleElementArray); a spread
+   * argument's value is used directly (it's already a Python list, i.e. a
+   * PVMLArray). CONCAT_ARRAYS_PRIMITIVE_INDEX (see builtins.ts's
+   * executePrimitive case 100) flattens all the pieces — however many there
+   * are, whichever are spreads — into one array in a single CALLP, since the
+   * *piece* count is always statically known even though the *flattened*
+   * length isn't.
+   */
+  private compileSpreadCall(expr: ExprNS.Call, isTail: boolean): ExpressionResult {
+    if (this.targetsPynter) {
+      throw new Error(
+        "Call-site argument spreading (*args) is not supported when compiling for native Pynter",
+      );
+    }
+
+    const calleeResult = this.compile(expr.callee);
+
+    let maxPieceStackSize = 0;
+    for (let i = 0; i < expr.args.length; i++) {
+      const arg = expr.args[i];
+      const pieceResult =
+        arg instanceof ExprNS.Starred
+          ? this.compile(arg.value)
+          : this.compileSingleElementArray(arg);
+      maxPieceStackSize = Math.max(maxPieceStackSize, i + pieceResult.maxStackSize);
+    }
+
+    this.builder.emitPrimitiveCall(OpCodes.CALLP, CONCAT_ARRAYS_PRIMITIVE_INDEX, expr.args.length);
+
+    const userOpcode = isTail ? OpCodes.CALLTA : OpCodes.CALLA;
+    this.builder.emitNullary(userOpcode);
+
+    return {
+      maxStackSize: calleeResult.maxStackSize + maxPieceStackSize,
+    };
+  }
+
+  /** Wraps a single compiled value in a fresh 1-element array — builds one
+   * "piece" for compileSpreadCall's argument flattening. Same NEWA/STAG
+   * pattern as visitListExpr, specialized to exactly one element. */
+  private compileSingleElementArray(expr: ExprNS.Expr): ExpressionResult {
+    const tmpSlot = this.getOrAssignSlot(
+      this.currentEnvironment,
+      `__spread_piece_${this.tmpCounter++}`,
+    );
+    this.builder.emitNullary(OpCodes.NEWA);
+    this.builder.emitUnary(OpCodes.STLG, tmpSlot);
+
+    this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+    this.builder.emitUnary(OpCodes.LGCI, 0);
+    const elemResult = this.compile(expr);
+    this.builder.emitNullary(OpCodes.STAG);
+
+    this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+
+    return { maxStackSize: Math.max(2 + elemResult.maxStackSize, 1) };
+  }
+
   visitTernaryExpr(expr: ExprNS.Ternary): ExpressionResult {
+    // Captured once: whether this ternary itself is in tail position — only
+    // ever true when reached via compileTail (see its doc comment). If so,
+    // both branches are equally in tail position (whichever one executes is
+    // the last thing the function does) and are compiled via compileTail
+    // too, so a Call/Ternary nested in either branch is handled recursively.
+    // A plain `this.compile(...)` call (the non-tail case, e.g. this ternary
+    // is a call argument or an assignment's value) never sets isTailCall in
+    // the first place, so nothing needs clearing here for that branch.
+    const isTail = this.isTailCall;
+    this.isTailCall = false;
+
     const testResult = this.compile(expr.predicate);
     const elseLabel = this.builder.emitJump(OpCodes.BRF);
 
-    const conseqResult = this.compile(expr.consequent);
+    const conseqResult = isTail ? this.compileTail(expr.consequent) : this.compile(expr.consequent);
     const endLabel = this.builder.emitJump(OpCodes.BR);
 
     this.builder.markLabel(elseLabel);
-    const altResult = this.compile(expr.alternative);
+    const altResult = isTail ? this.compileTail(expr.alternative) : this.compile(expr.alternative);
 
     this.builder.markLabel(endLabel);
 
@@ -621,9 +843,44 @@ export class PVMLCompiler
       this.builder.emitNullary(OpCodes.RETG);
       return { maxStackSize: 1 };
     }
-    const result = this.compile(stmt.value);
+    // stmt.value is returned immediately with nothing left to do afterward —
+    // the definition of tail position.
+    const result = this.compileTail(stmt.value);
     this.builder.emitNullary(OpCodes.RETG);
     return result;
+  }
+
+  /**
+   * Compiles `expr` knowing it is in tail position — its value is returned
+   * immediately, with nothing else left to do in this function call. Called
+   * only from visitReturnStmt (for its direct `value`) and recursively from
+   * visitTernaryExpr's branches (whichever branch executes is equally the
+   * last thing the function does).
+   *
+   * This is the *only* place that ever sets `isTailCall = true`, and only
+   * immediately before dispatching directly into a Call (or Ternary, or a
+   * Grouping wrapping one) — for every other expression shape (`f(x) + 1`,
+   * `[f(x)]`, a bare variable, ...) it just calls the ordinary `compile()`,
+   * leaving `isTailCall` at its default `false`. This narrow scoping is
+   * deliberate: unlike Call/Ternary, most expression-compiling methods
+   * (visitBinaryExpr, visitUnaryExpr, ...) have no reason to know about
+   * isTailCall and don't clear it before compiling their own children — if
+   * this method blindly set the flag for *any* stmt.value shape, it would
+   * leak into e.g. `f(x)` inside `return f(x) + 1`, wrongly making a
+   * non-tail call reuse the current frame (CALLT clears
+   * `currentFrame.stack`, corrupting the pending `+ 1`).
+   */
+  private compileTail(expr: ExprNS.Expr): ExpressionResult {
+    if (expr instanceof ExprNS.Grouping) {
+      return this.compileTail(expr.expression);
+    }
+    if (expr instanceof ExprNS.Call || expr instanceof ExprNS.Ternary) {
+      this.isTailCall = true;
+      const result = this.compile(expr);
+      this.isTailCall = false;
+      return result;
+    }
+    return this.compile(expr);
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): ExpressionResult {
@@ -743,7 +1000,13 @@ export class PVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
-    throw new Error("FromImport not yet implemented in PVML compiler");
+    // A genuine no-op, matching the CSE machine's own FromImport handler
+    // (src/engines/cse/interpreter.ts): SICPy has no real per-file module
+    // system — every stdlib group's names are preloaded into the global
+    // scope by the runner/evaluator before any user code runs, so a name
+    // this statement "imports" is already resolvable by the time it's used.
+    this.builder.emitNullary(OpCodes.LGCU);
+    return { maxStackSize: 1 };
   }
 
   visitGlobalStmt(_stmt: StmtNS.Global): ExpressionResult {
@@ -776,9 +1039,11 @@ export class PVMLCompiler
     // FOR_ITER: if exhausted, pops iter and jumps to loopEnd; else pushes next value
     this.builder.emitJump(OpCodes.FOR_ITER, loopEndLabel);
 
-    // Iterator stays on stack below the value
-    const targetSlot = this.getOrAssignSlot(this.currentEnvironment, stmt.target.lexeme);
-    this.builder.emitUnary(OpCodes.STLG, targetSlot);
+    // Iterator stays on stack below the value. Routed through emitStoreSymbol
+    // (not a hardcoded local-slot store) so a module-level `for` target
+    // correctly uses STGG in useGlobalMap mode, exactly like any other
+    // module-level assignment — see emitStoreSymbol/getTokenAnnotation.
+    this.emitStoreSymbol(stmt.target);
 
     const bodyResult = this.compileStatements(stmt.body);
     // Body values aren't used; discard to maintain stack balance

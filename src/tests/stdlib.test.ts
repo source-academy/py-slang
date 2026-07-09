@@ -944,8 +944,14 @@ describe("Standard Library Tests", () => {
 
     generateTestCases(mathTests, 1, [misc, math]);
     generateTestCases(miscTests, 1, [misc, math]);
-    generateNativePynterTestCases(mathTests, 1);
-    generateNativePynterTestCases(miscTests, 1);
+    // Pynter only supports Python §3 (see pynter/README.md). mathTests is
+    // chapter-agnostic builtin behaviour (e.g. `abs(True)` is a TypeError
+    // regardless of chapter), so it's still valid to run at §3. miscTests,
+    // however, asserts §1-*specific* restrictions (bool/None/function
+    // excluded from ==/!=/ordering, list literals rejected) that are only
+    // true at §1/§2 — genuinely false at §3, not just "untested" there — so
+    // it's deliberately not run through Pynter at all here.
+    generateNativePynterTestCases(mathTests, 3);
   });
 
   describe("Chapter 3 Builtins", () => {

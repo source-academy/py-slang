@@ -5,7 +5,9 @@ import { parse } from "../parser/parser-adapter";
 
 function compileAndAssemble(code: string): Uint8Array {
   const ast = parse(code);
-  const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+  // This suite exercises the serialised binary format itself, which can't carry
+  // arbitrary-precision int literals (LGCBI) — see PVMLCompiler's `targetsPynter`.
+  const program = PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast);
   return assemble(program);
 }
 
@@ -37,7 +39,7 @@ describe("PVML assembler", () => {
   describe("disassemble round-trip", () => {
     test("function count is preserved", () => {
       const ast = parse("def f(x):\n    return x\nf(1)\n");
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast);
       expect(disassemble(assemble(program)).functions.length).toBe(program.functions.length);
     });
 
@@ -136,6 +138,23 @@ total
     test("truncated binary throws", () => {
       const good = compileAndAssemble("1\n");
       expect(() => disassemble(good.slice(0, 4))).toThrow();
+    });
+  });
+
+  // These opcodes are structurally nullary (no operand, unlike LGCBI/LGCC's
+  // constant-pool index) and so *could* be encoded — but a program using
+  // them always also uses LGCBI for its int literals, which already can't
+  // be serialised, and targetsPynter mode rejects them outright at compile
+  // time — so assemble() defends explicitly anyway (see pvml-assembler.ts),
+  // rather than silently succeeding for an opcode that only "happens" to
+  // have nothing to encode.
+  describe("browser-pathway-only opcodes are rejected by assemble()/disassemble()", () => {
+    test("CALLA/CALLTA (spread calls) cannot be assembled", () => {
+      const ast = parse("def f(a, b, c):\n    return a + b + c\nxs = [1, 2, 3]\nf(*xs)\n");
+      // Not targetsPynter here — compiling for the browser target so the
+      // program actually contains CALLA to try to assemble.
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
+      expect(() => assemble(program)).toThrow();
     });
   });
 });
