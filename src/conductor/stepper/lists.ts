@@ -92,23 +92,6 @@ const bin = (operator: string, left: StepNode, right: StepNode): StepNode => ({
   left,
   right,
 });
-const and = (left: StepNode, right: StepNode): StepNode => ({
-  type: "LogicalExpression",
-  operator: "and",
-  left,
-  right,
-});
-const or = (left: StepNode, right: StepNode): StepNode => ({
-  type: "LogicalExpression",
-  operator: "or",
-  left,
-  right,
-});
-const not = (argument: StepNode): StepNode => ({
-  type: "UnaryExpression",
-  operator: "not ",
-  argument,
-});
 /** Left-associative string concatenation: `concat(a, b, c)` ⇒ `(a + b) + c`. */
 const concat = (...parts: StepNode[]): StepNode => parts.reduce((acc, part) => bin("+", acc, part));
 const ret = (argument: StepNode): StepNode => ({ type: "ReturnStatement", argument });
@@ -181,50 +164,6 @@ const primitives: Record<string, BuiltinFn> = {
 // like the spec's library and Source's `$`-prefixed helpers.
 
 const library: Record<string, StepNode> = {
-  // equal(xs, ys): structural equality — pairs compared element-wise, leaves by value.
-  equal: lam(
-    ["xs", "ys"],
-    cond(
-      isPairOf(id("xs")),
-      and(
-        isPairOf(id("ys")),
-        and(
-          call("equal", [headOf(id("xs")), headOf(id("ys"))]),
-          call("equal", [tailOf(id("xs")), tailOf(id("ys"))]),
-        ),
-      ),
-      cond(
-        isNoneOf(id("xs")),
-        isNoneOf(id("ys")),
-        cond(
-          or(
-            call("is_integer", [id("xs")]),
-            or(call("is_float", [id("xs")]), call("is_complex", [id("xs")])),
-          ),
-          and(
-            or(
-              call("is_integer", [id("ys")]),
-              or(call("is_float", [id("ys")]), call("is_complex", [id("ys")])),
-            ),
-            bin("==", id("xs"), id("ys")),
-          ),
-          cond(
-            call("is_boolean", [id("xs")]),
-            and(
-              call("is_boolean", [id("ys")]),
-              or(and(id("xs"), id("ys")), and(not(id("xs")), not(id("ys")))),
-            ),
-            cond(
-              call("is_string", [id("xs")]),
-              and(call("is_string", [id("ys")]), bin("==", id("xs"), id("ys"))),
-              boolLit(false),
-            ),
-          ),
-        ),
-      ),
-    ),
-  ),
-
   // length(xs)
   length: lam(["xs"], call("_length", [id("xs"), intLit(0)])),
   _length: lam(
@@ -497,7 +436,6 @@ export const listArities: Record<string, number> = {
   is_llist: 1,
   llist: 0,
   draw_data: 1,
-  equal: 2,
   length: 1,
   map: 2,
   build_llist: 2,

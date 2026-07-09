@@ -834,11 +834,11 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     expect(result("remove_all(2, llist(2, 1, 2, 3))")).toBe("[1, [3, None]]");
   });
 
-  test("equal compares structure and leaf values", () => {
-    expect(result("equal(llist(1, 2, 3), llist(1, 2, 3))")).toBe("True");
-    expect(result("equal(llist(1, 2), llist(1, 3))")).toBe("False");
-    expect(result("equal(pair(1, pair(2, None)), llist(1, 2))")).toBe("True");
-    expect(result("equal(None, None)")).toBe("True");
+  test("== compares structure and leaf values", () => {
+    expect(result("llist(1, 2, 3) == llist(1, 2, 3)")).toBe("True");
+    expect(result("llist(1, 2) == llist(1, 3)")).toBe("False");
+    expect(result("pair(1, pair(2, None)) == llist(1, 2)")).toBe("True");
+    expect(result("None == None")).toBe("True");
   });
 
   test("llist_to_string and for_each", () => {
@@ -1162,7 +1162,7 @@ describe("Python stepper — list library edge built-ins", () => {
 
   test("a library function called with the wrong argument count is stuck", () => {
     expect(explanations("map(lambda x: x)").pop()).toBe("Evaluation stuck");
-    expect(result("equal(None)")).toContain("takes 2 argument(s) but 1 were given");
+    expect(result("append(None)")).toContain("takes 2 argument(s) but 1 were given");
   });
 });
 
