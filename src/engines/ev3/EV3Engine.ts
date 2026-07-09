@@ -34,7 +34,7 @@ export class EV3Engine {
         throw resolver.errors[0];
       }
 
-      const compiler = PVMLCompiler.fromProgram(ast, environments, EV3_INTERNAL_FUNCTIONS);
+      const compiler = PVMLCompiler.fromProgram(ast, 0, environments, EV3_INTERNAL_FUNCTIONS);
       const program = compiler.compileProgram(ast);
       const binary = assemble(program, PYNTER_OPCODE_MAX);
 
