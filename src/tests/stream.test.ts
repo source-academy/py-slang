@@ -157,5 +157,7 @@ equal(eval_stream(primes, 10), llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`,
   };
 
   generateTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
-  generateNativePynterTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
+  // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
+  // programs, so run them there rather than at their nominal §2.
+  generateNativePynterTestCases(streamTests, 3, [misc, math, linkedList, stream, pairmutator]);
 });

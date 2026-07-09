@@ -955,14 +955,55 @@ describe("Python stepper — integer comparisons and edge arithmetic", () => {
     expect(explanations('"a" < "b"').pop()).toBe("Evaluation complete"); // modelled, not stuck
   });
 
-  test("== / != are narrow in this dialect: only (numeric, numeric) or (string, string) succeed", () => {
-    // Unlike native Python, equality is not defined for every pair of values here — None, functions,
-    // and mismatched types are all a TypeError (stuck), not a structural/identity comparison.
-    for (const src of ["None == None", "None == 1", "None != None", "None != 1", "1 == '1'"]) {
+  test("== / != are structural over any x any at §1/§2, except bool and function operands", () => {
+    // `==`/`!=` take any x any at Python §1/§2 (see docs/specs/python_typing_middle_12.tex): None,
+    // pairs and mismatched types all compare structurally rather than erroring.
+    const cases: [string, string][] = [
+      ["None == None", "True"],
+      ["None == 1", "False"],
+      ["None != None", "False"],
+      ["None != 1", "True"],
+      ["1 == '1'", "False"],
+      ["1 != '1'", "True"],
+    ];
+    for (const [src, expected] of cases) {
+      expect(result(src)).toBe(expected);
+      expect(explanations(src).pop()).toBe("Evaluation complete");
+    }
+  });
+
+  test("bool and function operands are still excluded from == / != at §1/§2", () => {
+    for (const src of [
+      "True == 1",
+      "True == True",
+      "None == True",
+      "(lambda x: x) == (lambda x: x)",
+      // The exclusion applies wherever `==`/`!=` reaches, including elements found by recursing
+      // into pairs — not just the top-level operands.
+      "pair(1, True) == pair(1, True)",
+      "pair(1, 2) == pair(1, (lambda x: x))",
+    ]) {
       expect(explanations(src).pop()).toBe("Evaluation stuck");
       expect(result(src)).toContain("TypeError");
     }
-    expect(explanations("(lambda x: x) == (lambda x: x)").pop()).toBe("Evaluation stuck");
+  });
+
+  test("pairs compare structurally, recursively, under == at §2", () => {
+    const cases: [string, string][] = [
+      ["pair(1, 2) == pair(1, 2)", "True"],
+      ["pair(1, 2) == pair(1.0, 2)", "True"],
+      ["pair(1, 2) == pair(2, 2)", "False"],
+      ["pair(1, pair(2, 3)) == pair(1, pair(2, 3))", "True"],
+      ["pair(1, 2) == None", "False"],
+      ["pair(1, 2) != pair(1, 2)", "False"],
+      // Ints nested inside a pair compare exactly (bigint ===), not via a float-precision-losing
+      // `Number()` conversion — these two big ints round to the same IEEE-754 double but are unequal.
+      ["pair(100000000000000000001, 1) == pair(100000000000000000002, 1)", "False"],
+      ["pair(100000000000000000001, 1) == pair(100000000000000000001, 1)", "True"],
+    ];
+    for (const [src, expected] of cases) {
+      expect(result(src)).toBe(expected);
+    }
   });
 });
 

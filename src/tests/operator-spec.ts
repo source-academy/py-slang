@@ -10,9 +10,8 @@
  * the language specifications — the human source of truth:
  *
  *   docs/specs/python_typing_front.tex      (rows common to all chapters)
- *   docs/specs/python_typing_middle_1.tex   (`==`/`!=` rows for Python §1)
- *   docs/specs/python_typing_middle_2.tex   (`==`/`!=` rows for Python §2)
- *   docs/specs/python_typing_middle_34.tex  (`==`/`!=`/`is` rows for Python §3/§4)
+ *   docs/specs/python_typing_middle_12.tex  (`==`/`!=` rows for Python §1/§2)
+ *   docs/specs/python_typing_middle_34.tex  (`==`/`!=`/`is`/`is not` rows for Python §3/§4)
  *   docs/specs/python_typing_back.tex       (rows common to all chapters)
  *
  * When a `.tex` table changes, update the transcription here in the same PR.
@@ -93,7 +92,7 @@ interface Row {
 
 const NUMERIC: PyType[] = ["int", "float", "complex"];
 const ANY_34 = UNIVERSE_WITH_LIST;
-/** §2's `==`/`!=` universe: everything except bool and function (see MIDDLE_2 below). */
+/** §1/§2's `==`/`!=` universe: everything except bool and function (see MIDDLE_12 below). */
 const CHAPTER_2_EQUALITY_TYPES: PyType[] = UNIVERSE_WITH_LIST.filter(
   type => type !== "bool" && type !== "function",
 );
@@ -130,22 +129,15 @@ const BACK: Row[] = [
   { ops: [">", ">=", "<", "<="], left: ["str"], right: ["str"], result: "bool" },
 ];
 
-// docs/specs/python_typing_middle_1.tex — Python §1 only
-const MIDDLE_1: Row[] = [
-  { ops: ["==", "!="], left: NUMERIC, right: NUMERIC, result: "bool" },
-  { ops: ["==", "!="], left: ["str"], right: ["str"], result: "bool" },
-  { ops: [">", ">=", "<", "<="], left: ["int", "float"], right: ["int", "float"], result: "bool" },
-];
-
-// docs/specs/python_typing_middle_2.tex — Python §2 only.
+// docs/specs/python_typing_middle_12.tex — Python §1/§2 (unified).
 // `==`/`!=` compare structurally over any x any *except* bool and function,
 // which are excluded entirely (`bool x any -> error`, `any x bool -> error`,
-// `function x any -> error`, `any x function -> error`): a §2 comparison never
-// has to answer whether `True == 1` holds, or what function equality means
-// before `is` is introduced at §3/§4. Every other combination — including
-// cross-type and pair/None comparisons — is `bool`.
+// `function x any -> error`, `any x function -> error`): a §1/§2 comparison
+// never has to answer whether `True == 1` holds, or what function equality
+// means before `is` is introduced at §3/§4. Every other combination —
+// including cross-type and pair/None comparisons — is `bool`.
 // Ordering comparisons are unaffected: still int,float x int,float only.
-const MIDDLE_2: Row[] = [
+const MIDDLE_12: Row[] = [
   {
     ops: ["==", "!="],
     left: CHAPTER_2_EQUALITY_TYPES,
@@ -156,15 +148,11 @@ const MIDDLE_2: Row[] = [
 ];
 
 // docs/specs/python_typing_middle_34.tex — Python §3/§4 only.
-// `==`/`!=` take any x any; `is` is restricted to the reference types
-// (list, function, None) and errors whenever either operand is a number,
-// string or boolean (identity of immutable values is unobservable).
-// The error rows of the table are the sweep's default expectation.
+// `==`/`!=`/`is`/`is not` all take any x any (unrestricted — even numbers,
+// strings and booleans are valid `is` operands now).
 // Ordering comparisons admit booleans (as in CPython, bool being an int).
-const REFERENCE_TYPES: PyType[] = ["NoneType", "list", "function"];
 const MIDDLE_34: Row[] = [
-  { ops: ["==", "!="], left: ANY_34, right: ANY_34, result: "bool" },
-  { ops: ["is", "is not"], left: REFERENCE_TYPES, right: REFERENCE_TYPES, result: "bool" },
+  { ops: ["==", "!=", "is", "is not"], left: ANY_34, right: ANY_34, result: "bool" },
   {
     ops: [">", ">=", "<", "<="],
     left: ["int", "float", "bool"],
@@ -173,14 +161,11 @@ const MIDDLE_34: Row[] = [
   },
 ];
 
-const TABLE_1: Row[] = [...FRONT, ...MIDDLE_1, ...BACK];
-const TABLE_2: Row[] = [...FRONT, ...MIDDLE_2, ...BACK];
+const TABLE_12: Row[] = [...FRONT, ...MIDDLE_12, ...BACK];
 const TABLE_34: Row[] = [...FRONT, ...MIDDLE_34, ...BACK];
 
 function tableForChapter(chapter: number): Row[] {
-  if (chapter === 1) return TABLE_1;
-  if (chapter === 2) return TABLE_2;
-  return TABLE_34;
+  return chapter <= 2 ? TABLE_12 : TABLE_34;
 }
 
 export const BINARY_OPS_12 = [

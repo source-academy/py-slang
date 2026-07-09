@@ -5,9 +5,8 @@
  * the language specifications — the human source of truth:
  *
  *   docs/specs/python_typing_front.tex      (rows common to all chapters)
- *   docs/specs/python_typing_middle_1.tex   (`==`/`!=` rows for Python §1)
- *   docs/specs/python_typing_middle_2.tex   (`==`/`!=` rows for Python §2)
- *   docs/specs/python_typing_middle_34.tex  (`==`/`!=`/`is` rows for Python §3/§4)
+ *   docs/specs/python_typing_middle_12.tex  (`==`/`!=` rows for Python §1/§2)
+ *   docs/specs/python_typing_middle_34.tex  (`==`/`!=`/`is`/`is not` rows for Python §3/§4)
  *   docs/specs/python_typing_back.tex       (rows common to all chapters)
  *
  * When a `.tex` table changes, update the transcription here in the same PR.
@@ -297,6 +296,37 @@ describe("Operator conformance: directed cases", () => {
     }
   });
 
+  // `is`/`is not` at Python §3/§4 now take any x any (see MIDDLE_34 above), not
+  // just the reference types (list, function, None): numbers, strings and
+  // booleans are valid operands too. `xs is xs` (the same list) is True, two
+  // separately-built pairs are not identical even with equal contents, and
+  // immutable values (which have no real object identity in this interpreter)
+  // compare by their underlying value instead — the sweep above pins the
+  // stash *type* (always bool); this pins the actual boolean value.
+  test.each([[3], [4]])("`is` / `is not` identity semantics at Python §%d", async chapter => {
+    const cases: [string, boolean][] = [
+      ["None is None", true],
+      ["1 is 1", true],
+      ["1 is 1.0", false],
+      ["1.5 is 1.5", true],
+      ["'ab' is 'ab'", true],
+      ["True is True", true],
+      ["True is 1", false],
+      ["x = [1, 2]\ny = x\nx is y", true],
+      ["[1, 2] is [1, 2]", false],
+      ["(lambda x: x) is (lambda x: x)", false],
+      ["f = lambda x: x\ng = f\nf is g", true],
+      ["1 is not 2", true],
+      ["1 is not 1", false],
+    ];
+    for (const [code, expected] of cases) {
+      expect([code, await run(code, chapter)]).toStrictEqual([
+        code,
+        { kind: "value", stashType: "bool", value: expected },
+      ]);
+    }
+  });
+
   // Structural equality on lists at Python §3/§4, as in Python
   test.each([[3], [4]])("lists compare structurally under == at Python §%d", async chapter => {
     const cases: [string, boolean][] = [
@@ -318,73 +348,84 @@ describe("Operator conformance: directed cases", () => {
     }
   });
 
-  // At Python §2, == and != compare structurally over any x any except bool
-  // and function (see MIDDLE_2 above): cross-type comparisons, pairs (via
-  // `pair`) and None all participate. (At §1, == on None or a cross-type pair
-  // is an UnsupportedOperandTypeError — the sweep above pins that.)
-  test("pairs, None and cross-type values compare structurally under == at Python §2", async () => {
-    const cases: [string, boolean][] = [
-      ["pair(1, 2) == pair(1, 2)", true],
-      ["pair(1, pair(2, 3)) == pair(1, pair(2, 3))", true],
-      ["pair(1, 2) == pair(1.0, 2)", true],
-      ["pair(1, 2) == pair(2, 2)", false],
-      ["pair(1, 2) != pair(1, 2)", false],
-      ["x = pair(1, 2)\ny = x\nx == y", true],
-      ["None == None", true],
-      ["None != None", false],
-      ["pair(1, 2) == None", false],
-      ["None == pair(1, 2)", false],
-      ["1 == 'ab'", false],
-      ["1 != 'ab'", true],
-      ["None == 1", false],
-      ["1 == 1", true],
-      ["'ab' == 'ab'", true],
-    ];
-    for (const [code, expected] of cases) {
-      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
-        code,
-        { kind: "value", stashType: "bool", value: expected },
-      ]);
-    }
-  });
+  // At Python §1/§2, == and != compare structurally over any x any except bool
+  // and function (see MIDDLE_12 above): cross-type comparisons, pairs (via
+  // `pair`) and None all participate — including at §1, now that §1/§2 share
+  // one unified equality rule (`pair` remains reachable at §1 despite list
+  // *literals* being syntactically blocked there, since NoListsValidator only
+  // rejects `[...]`/subscript syntax, not calling a library function).
+  test.each([[1], [2]])(
+    "pairs, None and cross-type values compare structurally under == at Python §%d",
+    async chapter => {
+      const cases: [string, boolean][] = [
+        ["pair(1, 2) == pair(1, 2)", true],
+        ["pair(1, pair(2, 3)) == pair(1, pair(2, 3))", true],
+        ["pair(1, 2) == pair(1.0, 2)", true],
+        ["pair(1, 2) == pair(2, 2)", false],
+        ["pair(1, 2) != pair(1, 2)", false],
+        ["x = pair(1, 2)\ny = x\nx == y", true],
+        ["None == None", true],
+        ["None != None", false],
+        ["pair(1, 2) == None", false],
+        ["None == pair(1, 2)", false],
+        ["1 == 'ab'", false],
+        ["1 != 'ab'", true],
+        ["None == 1", false],
+        ["1 == 1", true],
+        ["'ab' == 'ab'", true],
+      ];
+      for (const [code, expected] of cases) {
+        expect([code, await run(code, chapter, [linkedList])]).toStrictEqual([
+          code,
+          { kind: "value", stashType: "bool", value: expected },
+        ]);
+      }
+    },
+  );
 
-  // bool and function are excluded from §2's ==/!= entirely (the sweep above
+  // bool and function are excluded from §1/§2's ==/!= entirely (the sweep above
   // pins this for the full type cross product); spelled out here for the
   // specific "does True == 1 hold" question the exclusion exists to avoid.
   // "function" covers both closures (lambdas) and library builtins (e.g.
-  // `head`) — excludedFromChapter2Equality must reject both.
-  test("bool and function are not valid == / != operands at Python §2", async () => {
-    for (const code of [
-      "True == 1",
-      "1 == True",
-      "True == True",
-      "True == None",
-      "None == True",
-      "(lambda x: x) == (lambda x: x)",
-      "(lambda x: x) == 1",
-      "head == head",
-      "head == 1",
-    ]) {
-      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
-        code,
-        { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
-      ]);
-    }
-  });
+  // `head`) — excludedFromChapter12Equality must reject both.
+  test.each([[1], [2]])(
+    "bool and function are not valid == / != operands at Python §%d",
+    async chapter => {
+      for (const code of [
+        "True == 1",
+        "1 == True",
+        "True == True",
+        "True == None",
+        "None == True",
+        "(lambda x: x) == (lambda x: x)",
+        "(lambda x: x) == 1",
+        "head == head",
+        "head == 1",
+      ]) {
+        expect([code, await run(code, chapter, [linkedList])]).toStrictEqual([
+          code,
+          { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
+        ]);
+      }
+    },
+  );
 
   // The bool/function exclusion applies wherever `==`/`!=` reaches, including
   // elements found by recursing into pairs — not just the top-level operands.
-  test("bool and function are not valid == / != operands even nested inside pairs at Python §2", async () => {
-    for (const code of ["pair(1, 2) == pair(True, 3)", "pair(head, 2) == pair(head, 2)"]) {
-      expect([code, await run(code, 2, [linkedList])]).toStrictEqual([
-        code,
-        { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
-      ]);
-    }
-  });
+  test.each([[1], [2]])(
+    "bool and function are not valid == / != operands even nested inside pairs at Python §%d",
+    async chapter => {
+      for (const code of ["pair(1, 2) == pair(True, 3)", "pair(head, 2) == pair(head, 2)"]) {
+        expect([code, await run(code, chapter, [linkedList])]).toStrictEqual([
+          code,
+          { kind: "runtime-error", name: UnsupportedOperandTypeError.name },
+        ]);
+      }
+    },
+  );
 
-  // None == None is True at Python §3/§4, as in Python
-  // (at §1, == on None is an UnsupportedOperandTypeError — the sweep pins that)
+  // None == None is True at every chapter, as in Python (the §1/§2 case is also
+  // covered, alongside cross-type/pair comparisons, by the directed test above)
   test.each([[3], [4]])("None equality at Python §%d", async chapter => {
     const cases: [string, boolean][] = [
       ["None == None", true],

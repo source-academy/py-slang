@@ -29,7 +29,10 @@ import {
   clone,
   complexLiteral,
   isComplexValue,
+  isEmptyList,
   isFunctionValue,
+  isPairNode,
+  isResultValue,
   isTruthy,
   isValue,
   literal,
@@ -314,12 +317,12 @@ function operandTypeName(node: StepNode): string {
  * Throws a Python `TypeError` for a binary operation that produced no result because its operand types
  * are genuinely unsupported (e.g. `1 + "a"`, `None < 2`, `True == 1`, a function in arithmetic). The
  * driver turns the throw into an error step before "Evaluation stuck", exactly as it already does for
- * `ZeroDivisionError`. Unlike native Python, `==`/`!=` are *not* defined for every pair of values in
- * this dialect: outside (numeric, numeric) and (string, string) — both already contracted before this
- * is reached — equality is itself unsupported (e.g. `None == None`, `True == 1`, two functions), so it
- * is diagnosed like any other operator. `str * int` repetition and `str % …` formatting are
- * combinations Python *does* allow but this teaching stepper simply does not model; they are left as a
- * silent "stuck" instead, so a valid operation is never mislabelled as an error.
+ * `ZeroDivisionError`. `==`/`!=` reach here only when excluded from this dialect's any x any equality
+ * (see docs/specs/python_typing_middle_12.tex): a `bool` or function operand (e.g. `True == 1`, two
+ * functions) — every other pair, already contracted above by `contractBinary`'s structural-equality
+ * fallback, never reaches this function for `==`/`!=`. `str * int` repetition and `str % …` formatting
+ * are combinations Python *does* allow but this teaching stepper simply does not model; they are left
+ * as a silent "stuck" instead, so a valid operation is never mislabelled as an error.
  */
 function reportBinaryTypeError(op: string, left: StepNode, right: StepNode): void {
   const lt = valueTypeName(left);
@@ -359,6 +362,53 @@ function stringBinary(op: string, l: string, r: string): StepNode | null {
   }
 }
 
+/** Whether `node`'s value is excluded from Python §1/§2's `==`/`!=` (see
+ * docs/specs/python_typing_middle_12.tex: `bool,function x any -> error`, `any x bool,function ->
+ * error`) — every other value, including `None` and pairs, is a valid operand. */
+function excludedFromEquality(node: StepNode): boolean {
+  return isBoolNode(node) || isFunctionValue(node);
+}
+
+/**
+ * Structural equality between two fully-reduced values, following Python §1/§2's any x any `==`/`!=`
+ * rule (see docs/specs/python_typing_middle_12.tex). `None` equals `None`; pairs compare element-wise,
+ * recursively, as in Python; numbers compare across int/float/complex (bigints exactly, as `intBinary`
+ * does at the top level; a mixed int/float pair promotes to `number`, with that type's usual precision
+ * limits — matching `contractBinary`'s existing top-level promotion); values of differing "shape" (e.g.
+ * a pair and `None`, or an `int` and a `str`) are unequal. `bool`/function operands are re-checked
+ * against `excludedFromEquality` at *every* recursion level, not just the top level, so a bool/function
+ * nested inside a pair (e.g. `pair(1, True) == pair(1, True)`) is still a TypeError, not a
+ * silently-wrong `False` — mirroring the CSE engine's `structuralEquals` in `src/engines/cse/operators.ts`.
+ * Same-domain numeric/string top-level operands are already resolved by `contractBinary`'s per-type
+ * dispatch above and never reach here at the top level, but recursing into a pair's elements can hit
+ * any combination, so every case is handled here too.
+ */
+function structuralEquals(op: string, left: StepNode, right: StepNode): boolean {
+  if (excludedFromEquality(left) || excludedFromEquality(right)) {
+    reportBinaryTypeError(op, left, right);
+    return false; // unreachable: reportBinaryTypeError always throws for bool/function operands
+  }
+  if (isPairNode(left) && isPairNode(right)) {
+    const le = left.elements as StepNode[];
+    const re = right.elements as StepNode[];
+    return structuralEquals(op, le[0], re[0]) && structuralEquals(op, le[1], re[1]);
+  }
+  if (isPairNode(left) || isPairNode(right)) return false;
+  if (isEmptyList(left) || isEmptyList(right)) return isEmptyList(left) && isEmptyList(right);
+  if (left.type !== "Literal" || right.type !== "Literal") return false;
+  const l = left.value;
+  const r = right.value;
+  if (typeof l === "bigint" && typeof r === "bigint") return l === r;
+  if (isNumericValue(l) && isNumericValue(r)) return Number(l) === Number(r);
+  if (isComplexValue(l) || isComplexValue(r)) {
+    const lc = toComplexValue(l);
+    const rc = toComplexValue(r);
+    return lc !== null && rc !== null && lc.real === rc.real && lc.imag === rc.imag;
+  }
+  if (typeof l === "string" && typeof r === "string") return l === r;
+  return false;
+}
+
 function contractBinary(node: StepNode): ReduceResult | null {
   const left = node.left as StepNode;
   const right = node.right as StepNode;
@@ -389,8 +439,20 @@ function contractBinary(node: StepNode): ReduceResult | null {
         result = floatBinary(op, ln, rn, true);
       }
     }
-    // No generic `==`/`!=` fallback here: outside the two cases above, equality is itself unsupported
-    // in this dialect (e.g. `None == None`, `True == 1`) — `reportBinaryTypeError` diagnoses it below.
+  }
+
+  if (
+    result === null &&
+    (op === "==" || op === "!=") &&
+    isResultValue(left) &&
+    isResultValue(right)
+  ) {
+    // Structural equality over any x any at Python §1/§2 (see docs/specs/python_typing_middle_12.tex)
+    // — pairs, `None`, and any cross-type combination the dispatch above does not resolve (e.g.
+    // `1 == 'ab'`, `None == []`). `structuralEquals` itself throws (via `reportBinaryTypeError`) when
+    // either operand — at the top level or nested inside a pair — is a `bool` or function value.
+    const eq = structuralEquals(op, left, right);
+    result = boolLiteral(op === "==" ? eq : !eq);
   }
 
   if (result === null) {
