@@ -120,28 +120,66 @@ export function evaluateUnaryExpression(
   }
 }
 
+/** A float NaN value; NaN is unequal to everything, including itself, as in CPython. */
+function isNaNValue(value: Value): boolean {
+  return value.type === "number" && Number.isNaN(value.value);
+}
+
 /**
- * Handles equality and inequality comparisons between any two non-list values, following Python §3 semantics.
- * This compares to the logic for Python §1 and §2 where equality and inequality for non-list values only applied to values of the same type.
- *
- * @param code The original source code being evaluated
- * @param command The AST node corresponding to the binary expression
- * @param context The global context state
- * @param operator The operator of the binary expression (either TokenType.DOUBLEEQUAL for equality or TokenType.NOTEQUAL for inequality)
- * @param left The left operand value
- * @param right The right operand value
- * @returns The result of the equality comparison
+ * As in CPython, where bool is a subclass of int, booleans participate in
+ * equality and ordering comparisons as the ints they are: coerce a boolean
+ * to its int value and leave every other value untouched.
  */
-export function handleExpandedEquality(
+function asIntIfBool(value: Value): Value {
+  return value.type === "bool" ? { type: "bigint", value: value.value ? 1n : 0n } : value;
+}
+
+/**
+ * Whether a value is a valid operand for numeric ordering comparisons
+ * (int, float or bool — bool as the int it is under CPython's rules).
+ */
+function isOrderable(value: Value): boolean {
+  return value.type === "bigint" || value.type === "number" || value.type === "bool";
+}
+
+/**
+ * Structural equality between any two values, following Python semantics
+ * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
+ * Numbers compare across int/float/complex, and booleans participate as in
+ * CPython, where bool is a subclass of int (True == 1 is True); `None == None`
+ * is true; lists compare element-wise (recursively), as in Python; values of
+ * other differing types are unequal; remaining same-type values compare by
+ * value where they carry one, and by reference otherwise.
+ *
+ * The identity shortcut mirrors CPython's container comparison, which checks
+ * `x is y` before `x == y` per element — so a list containing NaN equals
+ * itself, while distinct NaN values are unequal. (Top-level `nan == nan` on
+ * the very same object is CPython-False; handleExpandedEquality guards that
+ * case before calling this function.)
+ *
+ * Self-referential lists without shared identity exhaust the stack, mirroring
+ * CPython's RecursionError on such comparisons.
+ *
+ * When `restrictChapter2` is set, every operand pair — including elements
+ * reached by recursing into lists — is re-checked against
+ * excludedFromChapter2Equality: §2 excludes bool/function from `==`/`!=`
+ * everywhere the comparison reaches, not just at the top level, so
+ * `pair(1, 2) == pair(True, 3)` and `pair(head, 2) == pair(head, 2)` are
+ * errors at §2, not silently-wrong bools.
+ */
+function structuralEquals(
   code: string,
   command: ExprNS.Binary,
   context: Context,
   operator: TokenType,
   left: Value,
   right: Value,
-): Value {
-  // List equality is not supported via the equality operators, only via `is`.
-  if (left.type == "list" && right.type == "list") {
+  restrictChapter2: boolean,
+): boolean {
+  if (
+    restrictChapter2 &&
+    (excludedFromChapter2Equality(left) || excludedFromChapter2Equality(right))
+  ) {
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
@@ -154,47 +192,177 @@ export function handleExpandedEquality(
     );
   }
 
-  // Handle complex number equality
-  if (left.type == "complex" || right.type == "complex") {
-    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
-      return { type: "bool", value: operator == TokenType.NOTEQUAL };
-    }
-    return {
-      type: "bool",
-      value:
-        (operator == TokenType.NOTEQUAL) !==
-        PyComplexNumber.fromValue(context, code, command, left.value).equals(
-          PyComplexNumber.fromValue(context, code, command, right.value),
-        ),
-    };
+  // Identity shortcut: also lets comparisons of shared substructure terminate early.
+  if (left === right) {
+    return true;
   }
 
-  // Handle ints and floats
+  // As in CPython, booleans compare as the ints they are (True == 1, False == 0.0)
+  left = asIntIfBool(left);
+  right = asIntIfBool(right);
+
+  // NaN is unequal to everything, including another NaN (identity shortcut above
+  // deliberately wins for the same object, matching CPython's container rule)
+  if (isNaNValue(left) || isNaNValue(right)) {
+    return false;
+  }
+
+  // Complex number equality, coercing ints and floats
+  if (left.type == "complex" || right.type == "complex") {
+    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
+      return false;
+    }
+    return PyComplexNumber.fromValue(context, code, command, left.value).equals(
+      PyComplexNumber.fromValue(context, code, command, right.value),
+    );
+  }
+
+  // Ints and floats compare across types (1 == 1.0 is True)
   if (isNumeric(left) && isNumeric(right)) {
-    return {
-      type: "bool",
-      value: (operator == TokenType.NOTEQUAL) !== (pyCompare(left, right) === 0),
-    };
+    return pyCompare(left, right) === 0;
   }
 
   // If two types are different, they are not equal
   if (left.type != right.type) {
-    return { type: "bool", value: operator == TokenType.NOTEQUAL };
+    return false;
   }
 
-  // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
-  if ("value" in left && "value" in right) {
-    return {
-      type: "bool",
-      value: (left.value === right.value) !== (operator == TokenType.NOTEQUAL),
-    };
+  // None == None is true, as in Python
+  if (left.type == "none") {
+    return true;
   }
-  return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
+
+  // Lists compare element-wise, recursively, as in Python
+  if (left.type == "list" && right.type == "list") {
+    return (
+      left.value.length === right.value.length &&
+      left.value.every((element, i) =>
+        structuralEquals(
+          code,
+          command,
+          context,
+          operator,
+          element,
+          right.value[i],
+          restrictChapter2,
+        ),
+      )
+    );
+  }
+
+  // Remaining same-type values: by value where they carry one (e.g. strings),
+  // by reference otherwise (e.g. closures).
+  if ("value" in left && "value" in right) {
+    return left.value === right.value;
+  }
+  return left == right;
+}
+
+/**
+ * Whether a value is excluded from Python §2's any x any equality: bool (avoiding
+ * CPython's bool-as-int equality, e.g. `True == 1`, as a directly written §2
+ * comparison) and function values — both user-defined closures and library
+ * builtins (equality without `is` is left undefined until §3/§4 introduces it).
+ * See docs/specs/python_typing_middle_2.tex:
+ * `==,!= bool,function x any -> error`, `==,!= any x bool,function -> error`.
+ */
+function excludedFromChapter2Equality(value: Value): boolean {
+  return value.type === "bool" || value.type === "closure" || value.type === "builtin";
+}
+
+/**
+ * Handles equality and inequality comparisons using structural equality, total over all types.
+ * At Python §3/§4 this applies to any operand pair (see evaluateBinaryExpression). At Python §2
+ * it is used for any operand pair where neither side is excluded (see
+ * excludedFromChapter2Equality) — every other §1/§2 operand combination is unaffected by this
+ * function.
+ *
+ * @param code The original source code being evaluated
+ * @param command The AST node corresponding to the binary expression
+ * @param context The global context state
+ * @param operator The operator of the binary expression (either TokenType.DOUBLEEQUAL for equality or TokenType.NOTEQUAL for inequality)
+ * @param left The left operand value
+ * @param right The right operand value
+ * @param restrictChapter2 When true, re-applies excludedFromChapter2Equality at every level of
+ * recursion (not just the top-level operands), so nested bool/function values inside lists are
+ * also errors at §2. Unset (false) at §3/§4, where equality is unconditionally total.
+ * @returns The result of the equality comparison
+ */
+export function handleExpandedEquality(
+  code: string,
+  command: ExprNS.Binary,
+  context: Context,
+  operator: TokenType,
+  left: Value,
+  right: Value,
+  restrictChapter2 = false,
+): Value {
+  // A top-level NaN operand is unequal to everything — even the identical
+  // object (CPython: nan == nan is False). Checked here rather than in
+  // structuralEquals so that the identity shortcut still applies to NaN
+  // *elements* inside lists, as in CPython's container comparison.
+  if (isNaNValue(left) || isNaNValue(right)) {
+    return { type: "bool", value: operator == TokenType.NOTEQUAL };
+  }
+  return {
+    type: "bool",
+    value:
+      (operator == TokenType.NOTEQUAL) !==
+      structuralEquals(code, command, context, operator, left, right, restrictChapter2),
+  };
+}
+
+/**
+ * A value whose identity is unobservable: numbers (int, float, complex),
+ * strings and booleans. Applying `is` to these is an error
+ * (see docs/specs/python_typing_middle_34.tex): whether `1 is 1` holds is
+ * unspecified in Python (interning), so the operator is restricted to the
+ * reference types (list, function, None) where identity is meaningful.
+ */
+function hasUnobservableIdentity(value: Value): boolean {
+  switch (value.type) {
+    case "number":
+    case "bigint":
+    case "complex":
+    case "string":
+    case "bool":
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Identity (`is`) between two values of reference type (list, function or
+ * None), following Python §3/§4 semantics
+ * (see docs/specs/python_typing_middle_34.tex). Lists and function values
+ * compare by reference — `is` is what makes sharing of structure observable —
+ * and `None is None` is true. Values of different types are never identical
+ * (so `xs is None` is simply false for a list `xs`).
+ */
+function pyIdentical(left: Value, right: Value): boolean {
+  if (left.type !== right.type) {
+    return false;
+  }
+  switch (left.type) {
+    case "none":
+      return true;
+    case "list":
+      return left === right;
+    default:
+      // Function values: closures compare by their underlying closure;
+      // everything else (builtins etc.) by reference.
+      if ("closure" in left && "closure" in right) {
+        return left.closure === right.closure;
+      }
+      return left === right;
+  }
 }
 
 /**
  * The main function for evaluating a binary expression, which dispatches to the appropriate logic based on the operator and operand types.
- * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded equality semantics for Python §3.
+ * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded
+ * equality semantics for Python §3/§4 (any x any) and §2 (any x any except bool/function).
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
  * @param context The global context state
@@ -213,10 +381,70 @@ export function evaluateBinaryExpression(
   right: Value,
   variant: number,
 ): Value {
-  // Handle expanded equality semantics for Python §3,
-  // where equality and inequality comparisons between non-list values of different types are allowed
+  // Handle expanded equality semantics for Python §3/§4,
+  // where equality and inequality comparisons take any x any (structural equality)
   if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
     return handleExpandedEquality(code, command, context, operator, left, right);
+  }
+
+  // At Python §2, == and != compare structurally over anything allowed in §2 —
+  // including cross-type comparisons, pairs and None — except bool and function
+  // values, which are excluded entirely (see excludedFromChapter2Equality and
+  // docs/specs/python_typing_middle_2.tex). At §1, == and != keep the narrower
+  // rule enforced below.
+  if (
+    (operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) &&
+    variant == 2 &&
+    !excludedFromChapter2Equality(left) &&
+    !excludedFromChapter2Equality(right)
+  ) {
+    return handleExpandedEquality(code, command, context, operator, left, right, true);
+  }
+
+  // At Python §3/§4, booleans participate in ordering comparisons as the ints
+  // they are, as in CPython (True < 2 is True); see the
+  // `>,>=,<,<= int,float,bool` row of docs/specs/python_typing_middle_34.tex.
+  // At §1/§2 booleans are not valid ordering operands (python_typing_middle_12.tex).
+  // The coercion is gated on both operands already being orderable so that an
+  // unsupported comparison (e.g. `True < 'abc'`) reports 'bool', not 'int', in
+  // its error message.
+  if (
+    variant >= 3 &&
+    isOrderable(left) &&
+    isOrderable(right) &&
+    (operator == TokenType.LESS ||
+      operator == TokenType.LESSEQUAL ||
+      operator == TokenType.GREATER ||
+      operator == TokenType.GREATEREQUAL)
+  ) {
+    left = asIntIfBool(left);
+    right = asIntIfBool(right);
+  }
+
+  // Handle identity semantics for `is` / `is not`, which apply to values of
+  // reference type (list, function, None) and are an error whenever either
+  // operand is a number, string or boolean (identity of immutable values is
+  // unobservable). The `is` operator only exists at Python §3/§4; chapters 1
+  // and 2 reject it at validation time (NoIsOperatorValidator), and the
+  // variant gate here keeps the runtime as an independent backstop (at §1/§2
+  // the operator falls through to the generic unsupported-operand error).
+  if ((operator == TokenType.IS || operator == TokenType.ISNOT) && variant >= 3) {
+    if (hasUnobservableIdentity(left) || hasUnobservableIdentity(right)) {
+      handleRuntimeError(
+        context,
+        new UnsupportedOperandTypeError(
+          code,
+          command,
+          left.type,
+          right.type,
+          operatorTranslator(operator),
+        ),
+      );
+    }
+    return {
+      type: "bool",
+      value: (operator == TokenType.ISNOT) !== pyIdentical(left, right),
+    };
   }
 
   // Handle Complex numbers
@@ -286,11 +514,9 @@ export function evaluateBinaryExpression(
     );
   }
 
-  // Handle list operations (only referential equality)
+  // Handle list operations (`is`, `is not`, and §3/§4 `==`/`!=` are handled above;
+  // everything else on lists is an error)
   if (left.type == "list" || right.type == "list") {
-    if (operator == TokenType.IS && right.type === "list" && left.type === "list") {
-      return { type: "bool", value: left === right };
-    }
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
@@ -457,6 +683,11 @@ export function evaluateBinaryExpression(
     case TokenType.LESSEQUAL:
     case TokenType.GREATER:
     case TokenType.GREATEREQUAL: {
+      // As in CPython, NaN is unordered and unequal to everything, including
+      // itself: every comparison with a NaN operand is False except !=
+      if (isNaNValue(left) || isNaNValue(right)) {
+        return { type: "bool", value: operator == TokenType.NOTEQUAL };
+      }
       const cmp = pyCompare(left, right);
       let result: boolean;
       switch (operator) {

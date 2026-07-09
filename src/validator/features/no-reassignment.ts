@@ -6,8 +6,9 @@ import { ASTNode, FeatureValidator } from "../types";
 
 /**
  * Scope-aware validator that throws NameReassignmentError if a name is assigned more than once
- * within the same scope. Uses a WeakMap keyed on Environment so nested scopes are isolated.
- * Must be run inside the Resolver (with env passed) to work correctly.
+ * within the same scope, or if a parameter of the enclosing function/lambda is assigned at all.
+ * Uses a WeakMap keyed on Environment so nested scopes are isolated. Must be run inside the
+ * Resolver (with env passed) to work correctly.
  */
 export function createNoReassignmentValidator(): FeatureValidator {
   const declaredPerScope = new WeakMap<Environment, Set<string>>();
@@ -33,9 +34,11 @@ export function createNoReassignmentValidator(): FeatureValidator {
 
       if (!target) return;
 
+      // Parameters are already "declared" the moment their scope is entered — a body statement
+      // that assigns one is a reassignment, exactly like re-assigning a plain declared variable.
       let declared = declaredPerScope.get(env);
       if (!declared) {
-        declared = new Set();
+        declared = new Set(env.parameters);
         declaredPerScope.set(env, declared);
       }
       const name = target.lexeme;

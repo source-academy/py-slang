@@ -1,14 +1,15 @@
-export type SVMLBoxType =
+export type PVMLBoxType =
   | number
   | boolean
   | string
   | null
   | undefined
-  | SVMLClosure
-  | SVMLArray
-  | SVMLIterator;
+  | PVMLClosure
+  | PVMLPrimitive
+  | PVMLArray
+  | PVMLIterator;
 
-export enum SVMLType {
+export enum PVMLType {
   UNDEFINED = "undefined",
   NULL = "null",
   BOOLEAN = "boolean",
@@ -16,15 +17,16 @@ export enum SVMLType {
   STRING = "string",
   ARRAY = "array",
   CLOSURE = "closure",
+  PRIMITIVE = "primitive",
   ITERATOR = "iterator",
 }
 
-export interface SVMLArray {
+export interface PVMLArray {
   type: "array";
-  elements: SVMLBoxType[];
+  elements: PVMLBoxType[];
 }
 
-export interface SVMLIterator {
+export interface PVMLIterator {
   type: "iterator";
   kind: "range" | "list";
   // range fields
@@ -32,47 +34,61 @@ export interface SVMLIterator {
   stop?: number;
   step?: number;
   // list fields
-  array?: SVMLArray;
+  array?: PVMLArray;
   index?: number;
 }
 
-export interface SVMLClosure {
+export interface PVMLClosure {
   type: "closure";
   functionIndex: number;
-  parentEnv: SVMLEnvironment | null;
+  parentEnv: PVMLEnvironment | null;
 }
 
-/** Type guard: narrows SVMLBoxType to the three object variants. */
-export function isSVMLObject(value: SVMLBoxType): value is SVMLClosure | SVMLArray | SVMLIterator {
+/**
+ * A reference to a primitive function (e.g. `print`, `abs`) used as a
+ * first-class value rather than called directly — e.g. `is_function(print)`
+ * or `f = abs; f(-5)`. Mirrors native Pynter's "ifn" nanbox tag, which
+ * likewise represents a primitive function reference distinctly from a
+ * user-defined closure.
+ */
+export interface PVMLPrimitive {
+  type: "primitive";
+  primitiveIndex: number;
+}
+
+/** Type guard: narrows PVMLBoxType to the object variants. */
+export function isPVMLObject(
+  value: PVMLBoxType,
+): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
-export class SVMLEnvironment {
-  private locals: SVMLBoxType[];
-  private parent: SVMLEnvironment | null;
+export class PVMLEnvironment {
+  private locals: PVMLBoxType[];
+  private parent: PVMLEnvironment | null;
 
-  constructor(size: number, parent: SVMLEnvironment | null = null) {
+  constructor(size: number, parent: PVMLEnvironment | null = null) {
     this.locals = new Array(size).fill(undefined);
     this.parent = parent;
   }
 
-  get(slot: number): SVMLBoxType {
+  get(slot: number): PVMLBoxType {
     if (slot < 0 || slot >= this.locals.length) {
       throw new Error(`Environment slot ${slot} out of bounds (size: ${this.locals.length})`);
     }
     return this.locals[slot];
   }
 
-  set(slot: number, value: SVMLBoxType): void {
+  set(slot: number, value: PVMLBoxType): void {
     if (slot < 0 || slot >= this.locals.length) {
       throw new Error(`Environment slot ${slot} out of bounds (size: ${this.locals.length})`);
     }
     this.locals[slot] = value;
   }
 
-  getParent(level: number): SVMLEnvironment {
+  getParent(level: number): PVMLEnvironment {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
-    let env: SVMLEnvironment | null = this;
+    let env: PVMLEnvironment | null = this;
     for (let i = 0; i < level; i++) {
       if (!env.parent) {
         throw new Error(`No parent environment at level ${level}`);
@@ -87,15 +103,15 @@ export class SVMLEnvironment {
   }
 }
 
-/** @deprecated Use SVMLIR typed arrays directly */
+/** @deprecated Use PVMLIR typed arrays directly */
 export interface Instruction {
   opcode: number;
-  arg1?: SVMLBoxType;
-  arg2?: SVMLBoxType;
+  arg1?: PVMLBoxType;
+  arg2?: PVMLBoxType;
 }
 
 // ========================================================================
-// SVMLIR: immutable IR for a single function
+// PVMLIR: immutable IR for a single function
 // ========================================================================
 
 import OpCodes from "./opcodes";
@@ -103,10 +119,10 @@ import OpCodes from "./opcodes";
 /**
  * IR representation of a single compiled function.
  *
- * Produced by SVMLIRBuilder.build() and consumed by SVMLInterpreter.
+ * Produced by PVMLIRBuilder.build() and consumed by PVMLInterpreter.
  * Uses struct-of-arrays typed arrays for cache-friendly dispatch.
  */
-export class SVMLIR {
+export class PVMLIR {
   readonly opcodes: Int32Array;
   readonly arg1s: Float64Array;
   readonly arg2s: Int32Array;
@@ -151,49 +167,51 @@ export class SVMLIR {
 }
 
 // ========================================================================
-// SVMLProgram: immutable collection of SVMLIR functions
+// PVMLProgram: immutable collection of PVMLIR functions
 // ========================================================================
 
 /**
- * Immutable program representation: an entry point index and a list of SVMLIR functions.
+ * Immutable program representation: an entry point index and a list of PVMLIR functions.
  * Frozen after construction.
  */
-export class SVMLProgram {
+export class PVMLProgram {
   readonly entryPoint: number;
-  readonly functions: readonly SVMLIR[];
-  constructor(entryPoint: number, functions: SVMLIR[]) {
+  readonly functions: readonly PVMLIR[];
+  constructor(entryPoint: number, functions: PVMLIR[]) {
     this.entryPoint = entryPoint;
     this.functions = Object.freeze([...functions]);
     Object.freeze(this);
   }
 
   /** Return a new program with one function replaced by a specialized variant. */
-  withSpecializedFunction(index: number, newIR: SVMLIR): SVMLProgram {
+  withSpecializedFunction(index: number, newIR: PVMLIR): PVMLProgram {
     const fns = [...this.functions];
     fns[index] = newIR;
-    return new SVMLProgram(this.entryPoint, fns);
+    return new PVMLProgram(this.entryPoint, fns);
   }
 }
 
-export function getSVMLType(value: SVMLBoxType): SVMLType {
+export function getPVMLType(value: PVMLBoxType): PVMLType {
   if (typeof value === "number") {
-    return SVMLType.NUMBER;
+    return PVMLType.NUMBER;
   } else if (typeof value === "string") {
-    return SVMLType.STRING;
+    return PVMLType.STRING;
   } else if (typeof value === "boolean") {
-    return SVMLType.BOOLEAN;
+    return PVMLType.BOOLEAN;
   } else if (value === null) {
-    return SVMLType.NULL;
+    return PVMLType.NULL;
   } else if (value === undefined) {
-    return SVMLType.UNDEFINED;
-  } else if (isSVMLObject(value)) {
+    return PVMLType.UNDEFINED;
+  } else if (isPVMLObject(value)) {
     switch (value.type) {
       case "closure":
-        return SVMLType.CLOSURE;
+        return PVMLType.CLOSURE;
+      case "primitive":
+        return PVMLType.PRIMITIVE;
       case "array":
-        return SVMLType.ARRAY;
+        return PVMLType.ARRAY;
       case "iterator":
-        return SVMLType.ITERATOR;
+        return PVMLType.ITERATOR;
     }
   }
   throw new Error(`Unknown runtime type: ${typeof value}`);

@@ -3,10 +3,10 @@ import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { Token, TokenType } from "../../tokenizer";
-import { SVMLIRBuilder } from "./SVMLIRBuilder";
+import { PVMLIRBuilder } from "./PVMLIRBuilder";
 import { PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
-import { SVMLProgram } from "./types";
+import { PVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
@@ -23,17 +23,19 @@ export type ExpressionResult = {
   maxStackSize: number;
 };
 
-export class SVMLCompiler
+export class PVMLCompiler
   implements StmtNS.Visitor<ExpressionResult>, ExprNS.Visitor<ExpressionResult>
 {
-  private builder: SVMLIRBuilder;
+  private builder: PVMLIRBuilder;
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
   private isTailCall: boolean;
 
-  private tokenAnnotations = new WeakMap<Token, CompilerAnnotation>();
-  private envSlotCounters = new WeakMap<Environment, number>();
-  private envSlotMaps = new WeakMap<Environment, Map<string, number>>();
+  private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
+  private envSlotCounters: WeakMap<Environment, number>;
+  private envSlotMaps: WeakMap<Environment, Map<string, number>>;
+  /** The builder whose function scope corresponds to each Environment — see getOrAssignSlot(). */
+  private envBuilders: WeakMap<Environment, PVMLIRBuilder>;
   private tmpCounter = 0;
 
   private loopStack: Array<{
@@ -42,25 +44,45 @@ export class SVMLCompiler
     iteratorOnStack: boolean;
   }> = [];
 
+  /**
+   * `tokenAnnotations`/`envSlotCounters`/`envSlotMaps` default to fresh maps
+   * (the root compiler's case, via fromProgram) but MUST be passed through
+   * from `fromFunctionNode` when creating a child compiler for a nested
+   * function/lambda body. They track slot numbers per Environment object —
+   * if each nested compiler got its own fresh maps, the first time it
+   * resolves a name from an *enclosing* scope (e.g. a function referring to
+   * a sibling or to itself recursively) it would independently assign that
+   * name slot 0 in its own bookkeeping, colliding with whatever slot the
+   * parent compiler already assigned that same environment's other names.
+   */
   constructor(
     currentEnvironment: Environment,
     functionEnvironments: FunctionEnvironments,
-    builder: SVMLIRBuilder,
+    builder: PVMLIRBuilder,
+    tokenAnnotations: WeakMap<Token, CompilerAnnotation> = new WeakMap(),
+    envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
+    envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
+    envBuilders: WeakMap<Environment, PVMLIRBuilder> = new WeakMap(),
   ) {
     this.builder = builder;
     this.currentEnvironment = currentEnvironment;
     this.functionEnvironments = functionEnvironments;
     this.isTailCall = false;
+    this.tokenAnnotations = tokenAnnotations;
+    this.envSlotCounters = envSlotCounters;
+    this.envSlotMaps = envSlotMaps;
+    this.envBuilders = envBuilders;
+    this.envBuilders.set(currentEnvironment, builder);
   }
 
   /**
-   * Create SVMLCompiler from program AST.
+   * Create PVMLCompiler from program AST.
    * Pass pre-computed environments (from analyzeWithEnvironments) to avoid a second resolver run.
    */
   static fromProgram(
     program: StmtNS.FileInput,
     functionEnvironments?: FunctionEnvironments,
-  ): SVMLCompiler {
+  ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
       functionEnvironments = resolver.resolveEnvironments(program);
@@ -69,12 +91,12 @@ export class SVMLCompiler
     if (!mainEnv) {
       throw new Error("Main program environment not found");
     }
-    SVMLIRBuilder.resetIndex();
-    const builder = new SVMLIRBuilder(0);
-    return new SVMLCompiler(mainEnv, functionEnvironments, builder);
+    PVMLIRBuilder.resetIndex();
+    const builder = new PVMLIRBuilder(0);
+    return new PVMLCompiler(mainEnv, functionEnvironments, builder);
   }
 
-  fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): SVMLCompiler {
+  fromFunctionNode(node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda): PVMLCompiler {
     const nextEnvironment = this.functionEnvironments.get(node);
     if (!nextEnvironment) {
       throw new Error(`Function environment not found`);
@@ -85,7 +107,15 @@ export class SVMLCompiler
     const numArgs = node.parameters.length;
     const builder = this.builder.createChildBuilder(numArgs);
 
-    const compiler = new SVMLCompiler(nextEnvironment, this.functionEnvironments, builder);
+    const compiler = new PVMLCompiler(
+      nextEnvironment,
+      this.functionEnvironments,
+      builder,
+      this.tokenAnnotations,
+      this.envSlotCounters,
+      this.envSlotMaps,
+      this.envBuilders,
+    );
 
     const slotMap = new Map<string, number>();
     compiler.envSlotMaps.set(nextEnvironment, slotMap);
@@ -100,13 +130,13 @@ export class SVMLCompiler
     return compiler;
   }
 
-  compileProgram(program: StmtNS.FileInput): SVMLProgram {
+  compileProgram(program: StmtNS.FileInput): PVMLProgram {
     this.compile(program);
 
     const allBuilders = this.builder.getAllBuilders(true);
     const functions = allBuilders.map(b => b.build());
 
-    return new SVMLProgram(0, functions);
+    return new PVMLProgram(0, functions);
   }
 
   compile(node: StmtNS.Stmt | ExprNS.Expr): ExpressionResult {
@@ -163,7 +193,15 @@ export class SVMLCompiler
       slot = this.envSlotCounters.get(env)!;
       slotMap.set(name, slot);
       this.envSlotCounters.set(env, slot + 1);
-      this.builder.noteSymbolUsed();
+      // Charge the new local slot to whichever builder's function scope `env`
+      // actually is — NOT necessarily `this.builder`, since `env` can be an
+      // *enclosing* scope reached via a cross-scope reference (e.g. a
+      // function calling a sibling, or referring to itself recursively).
+      const owningBuilder = this.envBuilders.get(env);
+      if (!owningBuilder) {
+        throw new Error("No builder registered for environment");
+      }
+      owningBuilder.noteSymbolUsed();
     }
     return slot;
   }
@@ -172,7 +210,13 @@ export class SVMLCompiler
     const annotation = this.getTokenAnnotation(token);
 
     if (annotation.isPrimitive) {
-      return { maxStackSize: 0 };
+      // A primitive referenced as a value rather than called directly (e.g.
+      // `is_function(print)`, `f = abs`) — NEWCP pushes a callable reference
+      // to it, mirroring native Pynter's "ifn" nanbox tag. A direct call
+      // (`print(x)`) never reaches this branch: emitFunctionCall emits
+      // CALLP/CALLTP straight from the primitive index instead.
+      this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex);
+      return { maxStackSize: 1 };
     }
     if (annotation.envLevel === 0) {
       this.builder.emitUnary(OpCodes.LDLG, annotation.slot);
@@ -237,7 +281,7 @@ export class SVMLCompiler
   }
 
   visitStarredExpr(_expr: ExprNS.Starred): ExpressionResult {
-    throw new Error("Starred expressions not yet supported in SVML compiler");
+    throw new Error("Starred expressions not yet supported in PVML compiler");
   }
 
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): ExpressionResult {
@@ -252,19 +296,26 @@ export class SVMLCompiler
   }
 
   visitComplexExpr(_expr: ExprNS.Complex): ExpressionResult {
-    // TODO: needs proper SVML support for complex numbers
-    throw new Error("Complex numbers not yet supported in SVML compiler");
+    // TODO: needs proper PVML support for complex numbers
+    throw new Error("Complex numbers not yet supported in PVML compiler");
   }
 
   visitListExpr(expr: ExprNS.List): ExpressionResult {
     const n = expr.elements.length;
-    // Spill to a named slot because SVML has no direct stack-to-array-store
+    // Spill to a named slot because PVML has no direct stack-to-array-store
     const tmpSlot = this.getOrAssignSlot(
       this.currentEnvironment,
       `__list_tmp_${this.tmpCounter++}`,
     );
 
-    this.builder.emitUnary(OpCodes.LGCI, n);
+    // NEWA takes no size operand: native Pynter's op_new_a always creates an
+    // empty, auto-growing array (siarray_new(8) with count=0) and ignores
+    // whatever's on the stack — it never pops a size. Pushing one here (as
+    // this used to) left it stranded on the stack after NEWA, permanently
+    // corrupting stack balance for the rest of the program (every list
+    // literal leaked one value, eventually manifesting as a native stack
+    // overflow). STAG (via siarray_put) grows the array to fit as elements
+    // are stored below.
     this.builder.emitNullary(OpCodes.NEWA);
     this.builder.emitUnary(OpCodes.STLG, tmpSlot);
 
@@ -423,7 +474,15 @@ export class SVMLCompiler
 
     const callee: ExprNS.Variable = expr.callee;
 
-    const { maxStackSize: functionStackEffect } = this.emitLoadSymbol(callee.name);
+    // CALLP/CALLTP (primitive calls) take their arguments directly off the
+    // stack with no function value involved (see callPrimitive) — only a
+    // non-primitive (closure) call needs its callee's value loaded first.
+    // Loading it here regardless would push a stray NEWCP value that CALLP
+    // never consumes, corrupting the stack for every primitive call.
+    const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
+    const functionStackEffect = isPrimitiveCallee
+      ? 0
+      : this.emitLoadSymbol(callee.name).maxStackSize;
 
     let maxArgStackSize = 0;
     for (let i = 0; i < expr.args.length; i++) {
@@ -468,11 +527,20 @@ export class SVMLCompiler
   /** Compile a closure body, emit RETG, and emit NEWC in the parent scope. */
   private compileClosure(
     node: StmtNS.FunctionDef | ExprNS.Lambda | ExprNS.MultiLambda,
-    compileBody: (compiler: SVMLCompiler) => ExpressionResult,
+    compileBody: (compiler: PVMLCompiler) => ExpressionResult,
   ): ExpressionResult {
     const compiler = this.fromFunctionNode(node);
     const { maxStackSize } = compileBody(compiler);
-    // Functions must always return a value
+    // Falling off the end of a function body without hitting an explicit
+    // `return` yields None in Python, regardless of what the last statement
+    // happened to leave on the stack for compileStatements' stack-balance
+    // bookkeeping (a real value for a bare expression statement, or an
+    // internal `undefined` placeholder for e.g. an assignment) — discard it
+    // and return Python's None explicitly. An explicit `return` elsewhere in
+    // the body (visitReturnStmt) emits its own RETG and exits before ever
+    // reaching this point, so this only fires on true fallthrough.
+    compiler.builder.emitNullary(OpCodes.POPG);
+    compiler.builder.emitNullary(OpCodes.LGCN);
     compiler.builder.emitNullary(OpCodes.RETG);
     this.builder.emitUnary(OpCodes.NEWC, compiler.builder.getFunctionIndex());
     return { maxStackSize: Math.max(maxStackSize, 1) };
@@ -497,7 +565,10 @@ export class SVMLCompiler
 
   visitReturnStmt(stmt: StmtNS.Return): ExpressionResult {
     if (!stmt.value) {
-      this.builder.emitNullary(OpCodes.LGCU);
+      // Bare `return` (no expression) yields Python's None, not `undefined`
+      // — LGCN, not LGCU (LGCU is an internal stack-balance placeholder, not
+      // a real Python value; see compileClosure).
+      this.builder.emitNullary(OpCodes.LGCN);
       this.builder.emitNullary(OpCodes.RETG);
       return { maxStackSize: 1 };
     }
@@ -507,9 +578,25 @@ export class SVMLCompiler
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): ExpressionResult {
+    if (stmt.target instanceof ExprNS.Subscript) {
+      const arrResult = this.compile(stmt.target.value);
+      const idxResult = this.compile(stmt.target.index);
+      const valResult = this.compile(stmt.value);
+      this.builder.emitNullary(OpCodes.STAG);
+      this.builder.emitNullary(OpCodes.LGCU);
+      return {
+        maxStackSize: Math.max(
+          arrResult.maxStackSize,
+          1 + idxResult.maxStackSize,
+          2 + valResult.maxStackSize,
+          1,
+        ),
+      };
+    }
+
     const initResult = this.compile(stmt.value);
 
-    this.emitStoreSymbol((stmt.target as ExprNS.Variable).name);
+    this.emitStoreSymbol(stmt.target.name);
 
     this.builder.emitNullary(OpCodes.LGCU);
     return initResult;
@@ -582,7 +669,7 @@ export class SVMLCompiler
   }
 
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): ExpressionResult {
-    throw new Error("AnnAssign not yet implemented in SVML compiler");
+    throw new Error("AnnAssign not yet implemented in PVML compiler");
   }
 
   visitBreakStmt(_stmt: StmtNS.Break): ExpressionResult {
@@ -607,7 +694,7 @@ export class SVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
-    throw new Error("FromImport not yet implemented in SVML compiler");
+    throw new Error("FromImport not yet implemented in PVML compiler");
   }
 
   visitGlobalStmt(_stmt: StmtNS.Global): ExpressionResult {
@@ -621,7 +708,7 @@ export class SVMLCompiler
   }
 
   visitAssertStmt(_stmt: StmtNS.Assert): ExpressionResult {
-    throw new Error("Assert not yet implemented in SVML compiler");
+    throw new Error("Assert not yet implemented in PVML compiler");
   }
 
   visitForStmt(stmt: StmtNS.For): ExpressionResult {

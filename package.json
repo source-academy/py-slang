@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "regen": "tsx src/generate.ts && prettier --write src/ast-types.ts",
-    "compile-grammar": "nearleyc src/parser/python.ne | sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
+    "compile-grammar": "nearleyc src/parser/python.ne | LC_ALL=C sed -f src/parser/python-grammar.ts.sed |  prettier --stdin-filepath src/parser/python-grammar.ts > src/parser/python-grammar.ts && eslint --fix src/parser/python-grammar.ts",
     "build": "tsx scripts/build.ts",
     "build:repl": "rollup -c rollup.repl.mjs",
     "build:lib": "rollup -c rollup.lib.mjs",
@@ -25,6 +25,7 @@
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
     "test-coverage": "jest --coverage",
+    "pynter:report": "tsx scripts/pynter-parity-report.ts",
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
     "format:ci": "prettier --list-different \"**/*.{ts,tsx,json,js,mjs}\"",
@@ -69,7 +70,7 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
-    "@sourceacademy/common-cse-machine": "^0.1.0",
+    "@sourceacademy/common-cse-machine": "^0.2.0",
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0",
     "@sourceacademy/runner-cse-machine": "^1.0.0",

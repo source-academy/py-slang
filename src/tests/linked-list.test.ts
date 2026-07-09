@@ -7,7 +7,7 @@ import {
 import linkedList from "../stdlib/linked-list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { generateTestCases, TestCases } from "./utils";
+import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
 
 describe("Linked List Tests", () => {
   const linkedListTests: TestCases = {
@@ -35,6 +35,20 @@ describe("Linked List Tests", () => {
         ["llist(llist(1, 2, 3), 4, 5, 6)"],
       ],
       ["print_llist(llist('a', 'b'))", null, ["llist('a', 'b')"]],
+    ],
+    // equal matches == semantics: booleans compare as the ints they are
+    // (as in Python), and the coercion stays legal at §2, where == itself
+    // takes no bool operands
+    "equal semantics": [
+      ["equal(llist(True), llist(1))", true, null],
+      ["equal(llist(False), llist(0))", true, null],
+      ["equal(llist(True), llist(2))", false, null],
+      ["equal(llist(True), llist(1.0))", true, null],
+      ["equal(True, 1)", true, null],
+      ["equal(llist(1), llist(1.0))", true, null],
+      ["equal(llist(1), llist('a'))", false, null],
+      ["equal(llist(True, llist(2, 3)), llist(1, llist(2.0, 3)))", true, null],
+      ["equal(None, None)", true, null],
     ],
     "empty list boundaries": [
       ["equal(append(None, None), None)", true, null],
@@ -145,4 +159,5 @@ describe("Linked List Tests", () => {
   };
 
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
+  generateNativePynterTestCases(linkedListTests, 2, [misc, math, linkedList]);
 });
