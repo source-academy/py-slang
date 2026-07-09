@@ -48,6 +48,20 @@ export class PVMLCompiler
   private builder: PVMLIRBuilder;
   private currentEnvironment: Environment;
   private functionEnvironments: FunctionEnvironments;
+  /**
+   * True immediately before compiling a Call (or Ternary) expression known
+   * to be in tail position — i.e. its value is returned right away, with
+   * nothing else left to do in this function call. Set *only* by
+   * compileTail, which is the sole entry point for tail-position compiling
+   * (see its doc comment for why the scoping has to be this narrow).
+   * visitCallExpr/compileSpreadCall/emitFunctionCall capture this flag into
+   * a local at their own entry and immediately reset the field to `false`
+   * before compiling their own children (arguments, callee) — a call that
+   * merely *appears inside* a tail-position expression (e.g. `g(x)` in
+   * `return f(g(x))`) is never itself a tail call, and must not reuse the
+   * current frame (CALLT's frame-reuse clears `currentFrame.stack`, which
+   * would corrupt any still-pending operands).
+   */
   private isTailCall: boolean;
   /** The Python chapter being compiled for (1-4). Determines which of the
    * §1/§2- vs §3/§4-specific comparison opcodes getCompareOpCode() emits (see
@@ -376,14 +390,14 @@ export class PVMLCompiler
     }
   }
 
-  private emitFunctionCall(token: Token, numArgs: number): void {
+  private emitFunctionCall(token: Token, numArgs: number, isTailCall: boolean): void {
     const annotation = this.getTokenAnnotation(token);
 
     if (annotation.isPrimitive) {
-      const primitiveOpcode = this.isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
+      const primitiveOpcode = isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
     } else {
-      const userOpcode = this.isTailCall ? OpCodes.CALLT : OpCodes.CALL;
+      const userOpcode = isTailCall ? OpCodes.CALLT : OpCodes.CALL;
       this.builder.emitCall(userOpcode, numArgs);
     }
   }
@@ -664,12 +678,19 @@ export class PVMLCompiler
   }
 
   visitCallExpr(expr: ExprNS.Call): ExpressionResult {
+    // Capture-and-clear: this call's own tail-ness is whatever the ambient
+    // flag was on entry, but compiling its callee/arguments below must not
+    // see it — a nested call inside an argument (`f(g(x))`) or a computed
+    // callee is never itself in tail position. See isTailCall's doc comment.
+    const isTail = this.isTailCall;
+    this.isTailCall = false;
+
     if (expr.args.some(arg => arg instanceof ExprNS.Starred)) {
       // A spread argument (`f(*xs)`) makes the actual argument count runtime-
       // variable, independent of whether the callee is a statically-known
       // name — a spread call to a known function still needs CALLA/CALLTA,
       // not the CALLP/CALL fast path below.
-      return this.compileSpreadCall(expr);
+      return this.compileSpreadCall(expr, isTail);
     }
 
     if (expr.callee instanceof ExprNS.Variable) {
@@ -688,7 +709,7 @@ export class PVMLCompiler
       const maxArgStackSize = this.compileCallArgs(expr.args);
 
       const numArgs = expr.args.length;
-      this.emitFunctionCall(callee.name, numArgs);
+      this.emitFunctionCall(callee.name, numArgs, isTail);
 
       return {
         maxStackSize: functionStackEffect + maxArgStackSize,
@@ -707,7 +728,7 @@ export class PVMLCompiler
     const maxArgStackSize = this.compileCallArgs(expr.args);
 
     const numArgs = expr.args.length;
-    const userOpcode = this.isTailCall ? OpCodes.CALLT : OpCodes.CALL;
+    const userOpcode = isTail ? OpCodes.CALLT : OpCodes.CALL;
     this.builder.emitCall(userOpcode, numArgs);
 
     return {
@@ -732,7 +753,7 @@ export class PVMLCompiler
    * *piece* count is always statically known even though the *flattened*
    * length isn't.
    */
-  private compileSpreadCall(expr: ExprNS.Call): ExpressionResult {
+  private compileSpreadCall(expr: ExprNS.Call, isTail: boolean): ExpressionResult {
     if (this.targetsPynter) {
       throw new Error(
         "Call-site argument spreading (*args) is not supported when compiling for native Pynter",
@@ -753,7 +774,7 @@ export class PVMLCompiler
 
     this.builder.emitPrimitiveCall(OpCodes.CALLP, CONCAT_ARRAYS_PRIMITIVE_INDEX, expr.args.length);
 
-    const userOpcode = this.isTailCall ? OpCodes.CALLTA : OpCodes.CALLA;
+    const userOpcode = isTail ? OpCodes.CALLTA : OpCodes.CALLA;
     this.builder.emitNullary(userOpcode);
 
     return {
@@ -783,14 +804,25 @@ export class PVMLCompiler
   }
 
   visitTernaryExpr(expr: ExprNS.Ternary): ExpressionResult {
+    // Captured once: whether this ternary itself is in tail position — only
+    // ever true when reached via compileTail (see its doc comment). If so,
+    // both branches are equally in tail position (whichever one executes is
+    // the last thing the function does) and are compiled via compileTail
+    // too, so a Call/Ternary nested in either branch is handled recursively.
+    // A plain `this.compile(...)` call (the non-tail case, e.g. this ternary
+    // is a call argument or an assignment's value) never sets isTailCall in
+    // the first place, so nothing needs clearing here for that branch.
+    const isTail = this.isTailCall;
+    this.isTailCall = false;
+
     const testResult = this.compile(expr.predicate);
     const elseLabel = this.builder.emitJump(OpCodes.BRF);
 
-    const conseqResult = this.compile(expr.consequent);
+    const conseqResult = isTail ? this.compileTail(expr.consequent) : this.compile(expr.consequent);
     const endLabel = this.builder.emitJump(OpCodes.BR);
 
     this.builder.markLabel(elseLabel);
-    const altResult = this.compile(expr.alternative);
+    const altResult = isTail ? this.compileTail(expr.alternative) : this.compile(expr.alternative);
 
     this.builder.markLabel(endLabel);
 
@@ -856,9 +888,44 @@ export class PVMLCompiler
       this.builder.emitNullary(OpCodes.RETG);
       return { maxStackSize: 1 };
     }
-    const result = this.compile(stmt.value);
+    // stmt.value is returned immediately with nothing left to do afterward —
+    // the definition of tail position.
+    const result = this.compileTail(stmt.value);
     this.builder.emitNullary(OpCodes.RETG);
     return result;
+  }
+
+  /**
+   * Compiles `expr` knowing it is in tail position — its value is returned
+   * immediately, with nothing else left to do in this function call. Called
+   * only from visitReturnStmt (for its direct `value`) and recursively from
+   * visitTernaryExpr's branches (whichever branch executes is equally the
+   * last thing the function does).
+   *
+   * This is the *only* place that ever sets `isTailCall = true`, and only
+   * immediately before dispatching directly into a Call (or Ternary, or a
+   * Grouping wrapping one) — for every other expression shape (`f(x) + 1`,
+   * `[f(x)]`, a bare variable, ...) it just calls the ordinary `compile()`,
+   * leaving `isTailCall` at its default `false`. This narrow scoping is
+   * deliberate: unlike Call/Ternary, most expression-compiling methods
+   * (visitBinaryExpr, visitUnaryExpr, ...) have no reason to know about
+   * isTailCall and don't clear it before compiling their own children — if
+   * this method blindly set the flag for *any* stmt.value shape, it would
+   * leak into e.g. `f(x)` inside `return f(x) + 1`, wrongly making a
+   * non-tail call reuse the current frame (CALLT clears
+   * `currentFrame.stack`, corrupting the pending `+ 1`).
+   */
+  private compileTail(expr: ExprNS.Expr): ExpressionResult {
+    if (expr instanceof ExprNS.Grouping) {
+      return this.compileTail(expr.expression);
+    }
+    if (expr instanceof ExprNS.Call || expr instanceof ExprNS.Ternary) {
+      this.isTailCall = true;
+      const result = this.compile(expr);
+      this.isTailCall = false;
+      return result;
+    }
+    return this.compile(expr);
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): ExpressionResult {

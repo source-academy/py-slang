@@ -766,9 +766,13 @@ loop()
     });
 
     test("exceeding maxCallDepth throws", () => {
+      // Not tail-recursive: `1 +` is still pending after the recursive call
+      // returns, so this genuinely grows the call stack (unlike `return
+      // loop()` above, which the compiler now compiles as a tail call —
+      // see visitReturnStmt/compileTail — and so never grows call depth).
       const code = `
 def loop():
-    return loop()
+    return 1 + loop()
 loop()
 `;
       const ast = parse(code);

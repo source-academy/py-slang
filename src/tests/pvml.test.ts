@@ -11,6 +11,7 @@ import {
   ZeroDivisionError,
 } from "../engines/pvml/errors";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import OpCodes from "../engines/pvml/opcodes";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
@@ -28,6 +29,16 @@ function compiledEntryOpcodes(code: string, variant: number = 4): OpCodes[] {
   const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
   const entryFn = program.functions[program.entryPoint];
   return Array.from(entryFn.opcodes);
+}
+
+/** Every compiled function's opcodes (not just the entry point) — for
+ * tail-call assertions, which need to inspect a *nested* function's own
+ * body (e.g. does its `return f(x)` compile to CALLT?), not the top-level
+ * script. */
+function compiledAllOpcodes(code: string, variant: number = 4): OpCodes[][] {
+  const ast = parse(code.endsWith("\n") ? code : code + "\n");
+  const program = PVMLCompiler.fromProgram(ast, variant).compileProgram(ast);
+  return program.functions.map(fn => Array.from(fn.opcodes));
 }
 
 describe("PVML E2E", () => {
@@ -270,6 +281,90 @@ describe("PVML E2E", () => {
   };
 
   describe("Functions", () => generatePVMLTestCases(functionTests));
+
+  // Tail-call optimization: a Call directly returned (`return f(x)`) — or,
+  // recursively, either branch of a ternary directly returned
+  // (`return f(x) if c else g(x)`) — compiles to CALLT/CALLTP/CALLTA
+  // instead of CALL/CALLP/CALLA, reusing the current frame instead of
+  // pushing a new one (see PVMLCompiler's compileTail/isTailCall doc
+  // comments). Depths below comfortably exceed PVMLInterpreter's default
+  // maxCallDepth (1000) — these only pass if the call genuinely doesn't
+  // grow the frame chain, not merely because the depth limit is generous.
+  const tailCallTests: PVMLTestCases = {
+    "tail call via if/else statement branches": [
+      [
+        "def loop(n, acc):\n    if n == 0:\n        return acc\n    return loop(n - 1, acc + 1)\nloop(50000, 0)",
+        50000,
+        null,
+      ],
+    ],
+    "tail call via ternary (both branches)": [
+      [
+        "def loop(n, acc):\n    return acc if n == 0 else loop(n - 1, acc + 1)\nloop(50000, 0)",
+        50000,
+        null,
+      ],
+    ],
+    "tail call via nested/nested ternary branches": [
+      [
+        "def classify(n, acc):\n    return acc if n == 0 else (classify(n - 1, acc + 1) if n > 0 else acc)\nclassify(50000, 0)",
+        50000,
+        null,
+      ],
+    ],
+    "mutual tail recursion": [
+      [
+        "def is_even(n):\n    if n == 0:\n        return True\n    return is_odd(n - 1)\ndef is_odd(n):\n    if n == 0:\n        return False\n    return is_even(n - 1)\nis_even(50000)",
+        true,
+        null,
+      ],
+    ],
+    "computed (first-class) tail call": [
+      [
+        "def loop(n, acc):\n    if n == 0:\n        return acc\n    f = loop\n    return f(n - 1, acc + 1)\nloop(50000, 0)",
+        50000,
+        null,
+      ],
+    ],
+    "tail call via a parenthesized (Grouping) return value": [
+      [
+        "def loop(n, acc):\n    if n == 0:\n        return acc\n    return (loop(n - 1, acc + 1))\nloop(50000, 0)",
+        50000,
+        null,
+      ],
+    ],
+  };
+
+  describe("Tail-call optimization", () => generatePVMLTestCases(tailCallTests));
+
+  describe("Tail-call optimization: correctness of which calls are (not) tail calls", () => {
+    test("only the outer call is a tail call in `return f(g(x))`", () => {
+      const code =
+        "def g(x):\n    return x + 1\ndef f(x):\n    return x * 2\ndef h(x):\n    return f(g(x))\nh(5)\n";
+      const opcodes = compiledAllOpcodes(code).find(ops => ops.includes(OpCodes.CALLT));
+      expect(opcodes).toBeDefined();
+      expect(opcodes).toContain(OpCodes.CALL);
+      expect(opcodes).toContain(OpCodes.CALLT);
+    });
+
+    test("a call used as an operand (`return f(x) + 1`) is not a tail call", () => {
+      const code = "def f(x):\n    return x\ndef h(x):\n    return f(x) + 1\nh(5)\n";
+      const hOpcodes = compiledAllOpcodes(code).find(ops => ops.includes(OpCodes.ADDG));
+      expect(hOpcodes).toBeDefined();
+      expect(hOpcodes).toContain(OpCodes.CALL);
+      expect(hOpcodes).not.toContain(OpCodes.CALLT);
+    });
+
+    test("a genuinely non-tail-recursive function still hits maxCallDepth (sanity check)", () => {
+      const code =
+        "def sumto(n):\n    if n == 0:\n        return 0\n    return n + sumto(n - 1)\nsumto(10)\n";
+      const ast = parse(code);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
+      expect(() => interpreter.execute()).toThrow(/call depth/i);
+    });
+  });
+
   describe("Branches", () => generatePVMLTestCases(branchTests));
   describe("Loops", () => generatePVMLTestCases(loopTests));
   describe("Combined", () => generatePVMLTestCases(combinedTests));
