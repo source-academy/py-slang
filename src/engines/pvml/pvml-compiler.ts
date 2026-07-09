@@ -376,6 +376,14 @@ export class PVMLCompiler
         return OpCodes.EQG;
       case TokenType.NOTEQUAL:
         return OpCodes.NEQG;
+      // `is`/`is not` test identity (Python pointer equality), which is a
+      // different question from `==`/`!=`'s structural equality — e.g. two
+      // separately-constructed but element-wise-equal lists are `==` but not
+      // `is`. They therefore get their own opcodes rather than reusing EQG/NEQG.
+      case TokenType.IS:
+        return OpCodes.EQP;
+      case TokenType.ISNOT:
+        return OpCodes.NEQP;
       default:
         throw new Error(`Unsupported comparison operator: ${operator.lexeme}`);
     }

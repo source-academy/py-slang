@@ -474,6 +474,15 @@ export const generateNativePynterTestCases = (
   variant: number,
   groups?: Group[],
 ) => {
+  // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md) —
+  // every native-Pynter test case must be posed as a §3 program, regardless of
+  // which chapter the sibling generateTestCases() call for the same suite uses.
+  if (variant !== 3) {
+    throw new Error(
+      `generateNativePynterTestCases: Pynter only supports Python §3; got variant ${variant}.`,
+    );
+  }
+
   const pynterPath = process.env.PYNTER_RUNNER_PATH;
   const describeBlock = pynterPath ? describe : describe.skip;
 
