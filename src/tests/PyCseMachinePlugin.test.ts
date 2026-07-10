@@ -691,9 +691,8 @@ describe("breakpoint()", () => {
   });
 
   it("the recorded step's control has the breakpoint call on top", async () => {
-    const { snapshots, breakpointSteps } = await runAndCollectWithBreakpoints(
-      "breakpoint()\nx = 1",
-    );
+    const { snapshots, breakpointSteps } =
+      await runAndCollectWithBreakpoints("breakpoint()\nx = 1");
     expect(breakpointSteps).toHaveLength(1);
     const step = snapshots.find(s => s.stepIndex === breakpointSteps[0]);
     expect(step).toBeDefined();
