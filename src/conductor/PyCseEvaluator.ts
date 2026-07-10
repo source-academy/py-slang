@@ -106,8 +106,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.control = control;
       this.context.stash = stash;
       // this.context persists across evaluateChunk calls; reset per-run state that the
-      // interpreter accumulates so a prior run's breakpoint() steps don't leak into this one.
+      // interpreter accumulates so a prior run's breakpoint()/changepoint steps don't leak
+      // into this one.
       this.context.runtime.breakpointSteps = [];
+      this.context.runtime.changepointSteps = [];
+      this.context.runtime.break = false;
 
       // CSE chapters (3+): collect snapshots up to the step cap, then stop.
       // Output produced after the step cap is not emitted — that's intentional.
