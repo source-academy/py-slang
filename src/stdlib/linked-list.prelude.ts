@@ -18,36 +18,6 @@ def is_llist(xs):
     else:
         return False
 
-def equal(xs, ys):
-    """
-    Pure Function: Returns True if both have the same structure (pairs)
-    and equal values at corresponding leaf positions, where booleans
-    compare as the ints they are, as in Python (equal(True, 1) is True).
-    """
-    def as_num(v):
-        if is_boolean(v):
-            if v:
-                return 1
-            else:
-                return 0
-        else:
-            return v
-    if is_pair(xs):
-        return (
-            is_pair(ys)
-            and equal(head(xs), head(ys))
-            and equal(tail(xs), tail(ys))
-        )
-    elif is_none(xs):
-        return is_none(ys)
-    elif is_integer(xs) or is_float(xs) or is_complex(xs) or is_boolean(xs):
-        return ((is_integer(ys) or is_float(ys) or is_complex(ys) or is_boolean(ys))
-                and as_num(xs) == as_num(ys))
-    elif is_string(xs):
-        return is_string(ys) and xs == ys
-    else:
-        return False
-
 def length(xs):
     """
     Returns the length of the linked list xs.

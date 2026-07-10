@@ -84,21 +84,23 @@ export enum OpCodes {
   NEQG = 82,
   NEQF = 83,
   NEQB = 84,
-  FLOORDIVG = 85,
-  FLOORDIVF = 86,
-  NEWITER = 87,
-  FOR_ITER = 88,
+  EQP = 85, // pointer/identity equality (is)
+  NEQP = 86, // pointer/identity inequality (is not)
+  FLOORDIVG = 87,
+  FLOORDIVF = 88,
+  NEWITER = 89,
+  FOR_ITER = 90,
 }
 
-export const OPCODE_MAX = 88;
+export const OPCODE_MAX = 90;
 
 /**
- * Pynter's maximum supported opcode (op_neq_b = 0x54; currently identical to
- * Sinter's, since Pynter is presently an unmodified fork).
- * Opcodes above this value are py-slang extensions not present in the
- * compiled WASM binary.
+ * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
+ * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER) are py-slang extensions not
+ * yet implemented natively by Pynter (nor by the WASM Sinter/Pynter port).
+ * EQP/NEQP (is/is not) are below this threshold — Pynter implements them.
  */
-export const PYNTER_OPCODE_MAX = 0x54; // 84
+export const PYNTER_OPCODE_MAX = 0x56; // 86
 
 const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVG]: "floor division (//)",
