@@ -155,21 +155,22 @@ PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn pynter:report
 
 Pass `--failures` to also list the full name of every failing test, grouped by suite.
 
-#### Running the CPython ground-truth suite
+#### Testing `sourceacademy-sicp` against the CSE machine's own test suite
 
-`yarn test` also includes a second opt-in suite — `generateCPythonTestCases()` in
-`src/tests/utils.ts`, used by the same test files as the Pynter suite above — that reruns the same
-test cases through plain CPython instead, using [`sourceacademy-sicp`](#sourceacademy-sicp--the-standard-library-for-plain-cpython)
-(the `python/` package in this repo) to provide the standard library. Where the Pynter suite checks
-that py-slang's own PVML/Pynter backend agrees with the CSE machine, this suite checks that the CSE
-machine's test cases themselves are true statements about Python — i.e. it uses CPython as ground
-truth to catch cases where a test's expected value is wrong, not just where py-slang's
-implementation is. It's opt-in and **not part of CI**: it exists purely as a local integrity check
-for the test suite, not a compatibility gate.
+`yarn test` also includes `generateCPythonTestCases()` (`src/tests/utils.ts`, used by the same test
+files as the Pynter suite above), which reruns the same test cases through plain CPython instead,
+using [`sourceacademy-sicp`](#sourceacademy-sicp--the-standard-library-for-plain-cpython) (the
+`python/` package in this repo) to provide the standard library. This is the most thorough test
+`sourceacademy-sicp` gets: rather than a small hand-written smoke suite, it's exercised against
+every CSE-machine test case in this repo that's valid plain Python, using CPython itself as ground
+truth. Unlike the Pynter suite, **this runs in CI** (`node.js.yml` sets `CPYTHON_PATH: python3` for
+the `test-coverage` step) — `ubuntu-latest` ships Python 3 and `sourceacademy-sicp` has no
+third-party dependencies, so there's no extra setup cost. It also has a secondary benefit for
+py-slang itself: since it checks the CSE machine's test cases are true statements about Python, not
+just that py-slang agrees with itself, it catches cases where a test's *expected value* is wrong.
 
-To run it, point `CPYTHON_PATH` at a Python 3.10+ interpreter with `sourceacademy-sicp`'s
-dependencies available (any interpreter that can `import` the `python/sicp` package works, since
-it has no third-party dependencies of its own):
+To run it locally, point `CPYTHON_PATH` at a Python 3.10+ interpreter (any interpreter that can
+`import` the `python/sicp` package works):
 
 ```shell
 CPYTHON_PATH=python3 yarn test
@@ -245,6 +246,11 @@ Packaged for PyPI as `sourceacademy-sicp`. See
 [releasing](python/README.md#releasing), and the
 [Python §4 standard library reference](https://docs.sourceacademy.org/python/python_4/)
 for per-function documentation.
+
+Tested two ways in CI: its own smoke suite (`python/tests/test_sicp.py`, run by
+`python-package.yml` across Python 3.10–3.13), and — the more thorough of the two — by
+[replaying the CSE machine's own test suite through it](#testing-sourceacademy-sicp-against-the-cse-machines-own-test-suite),
+run as part of `yarn test` in `node.js.yml`.
 
 ## Prior Reading
 
