@@ -15,7 +15,7 @@ describe("Stream Tests", () => {
     "stream constructor and selectors": [
       ["head(stream(1, 2, 3))", 1n, null],
       ["head(stream_tail(stream(1, 2, 3)))", 2n, null],
-      ["equal(stream_tail(pair(42, lambda: None)), None)", true, null],
+      ["stream_tail(pair(42, lambda: None)) == None", true, null],
       ["stream()", null, null],
       ["stream_tail()", MissingRequiredPositionalError, null],
       ["stream_tail(1, 2)", TooManyPositionalArgumentsError, null],
@@ -36,72 +36,68 @@ describe("Stream Tests", () => {
       ["is_stream(1, 2)", TooManyPositionalArgumentsError, null],
     ],
     "stream/list conversion": [
-      ["equal(llist_to_stream(None), None)", true, null],
-      ["equal(stream_to_llist(None), None)", true, null],
-      ["equal(stream_to_llist(llist_to_stream(llist(1, 2, 3))), llist(1, 2, 3))", true, null],
-      ["equal(stream_to_llist(stream(4, 5)), llist(4, 5))", true, null],
-      ["equal(stream_to_llist(pair(1, lambda: pair(2, lambda: None))), llist(1, 2))", true, null],
+      ["llist_to_stream(None) == None", true, null],
+      ["stream_to_llist(None) == None", true, null],
+      ["stream_to_llist(llist_to_stream(llist(1, 2, 3))) == llist(1, 2, 3)", true, null],
+      ["stream_to_llist(stream(4, 5)) == llist(4, 5)", true, null],
+      ["stream_to_llist(pair(1, lambda: pair(2, lambda: None))) == llist(1, 2)", true, null],
     ],
     "length, map and build": [
       ["stream_length(stream(1, 2, 3, 4))", 4n, null],
       ["stream_length(None)", 0n, null],
       [
-        "equal(stream_to_llist(stream_map(lambda x: x + 1, stream(1, 2, 3))), llist(2, 3, 4))",
+        "stream_to_llist(stream_map(lambda x: x + 1, stream(1, 2, 3))) == llist(2, 3, 4)",
         true,
         null,
       ],
       [
-        "equal(stream_to_llist(stream_map(lambda x: x * 2, pair(1, lambda: pair(2, lambda: None)))), llist(2, 4))",
+        "stream_to_llist(stream_map(lambda x: x * 2, pair(1, lambda: pair(2, lambda: None)))) == llist(2, 4)",
         true,
         null,
       ],
-      ["equal(stream_map(lambda x: x + 1, None), None)", true, null],
-      ["equal(stream_to_llist(build_stream(lambda i: i * i, 4)), llist(0, 1, 4, 9))", true, null],
-      ["equal(build_stream(lambda i: i, 0), None)", true, null],
+      ["stream_map(lambda x: x + 1, None) == None", true, null],
+      ["stream_to_llist(build_stream(lambda i: i * i, 4)) == llist(0, 1, 4, 9)", true, null],
+      ["build_stream(lambda i: i, 0) == None", true, null],
     ],
     "for_each, reverse and append": [
       ["stream_for_each(lambda x: x, None)", true, []],
       ["stream_for_each(print, stream(1, 2, 3))", true, ["1", "2", "3"]],
-      ["equal(stream_to_llist(stream_reverse(stream(1, 2, 3))), llist(3, 2, 1))", true, null],
-      ["equal(stream_reverse(None), None)", true, null],
+      ["stream_to_llist(stream_reverse(stream(1, 2, 3))) == llist(3, 2, 1)", true, null],
+      ["stream_reverse(None) == None", true, null],
       [
-        "equal(stream_to_llist(stream_append(stream(1, 2), stream(3, 4))), llist(1, 2, 3, 4))",
+        "stream_to_llist(stream_append(stream(1, 2), stream(3, 4))) == llist(1, 2, 3, 4)",
         true,
         null,
       ],
       [
-        "equal(stream_to_llist(stream_append(pair(1, lambda: pair(2, lambda: None)), stream(3, 4))), llist(1, 2, 3, 4))",
+        "stream_to_llist(stream_append(pair(1, lambda: pair(2, lambda: None)), stream(3, 4))) == llist(1, 2, 3, 4)",
         true,
         null,
       ],
-      ["equal(stream_to_llist(stream_append(None, stream(3, 4))), llist(3, 4))", true, null],
-      ["equal(stream_to_llist(stream_append(stream(1, 2), None)), llist(1, 2))", true, null],
+      ["stream_to_llist(stream_append(None, stream(3, 4))) == llist(3, 4)", true, null],
+      ["stream_to_llist(stream_append(stream(1, 2), None)) == llist(1, 2)", true, null],
     ],
     "member, remove and filter": [
-      ["equal(stream_to_llist(stream_member(3, stream(1, 2, 3, 4))), llist(3, 4))", true, null],
-      ["equal(stream_member(9, stream(1, 2, 3, 4)), None)", true, null],
-      ["equal(stream_to_llist(stream_remove(2, stream(1, 2, 3, 2))), llist(1, 3, 2))", true, null],
+      ["stream_to_llist(stream_member(3, stream(1, 2, 3, 4))) == llist(3, 4)", true, null],
+      ["stream_member(9, stream(1, 2, 3, 4)) == None", true, null],
+      ["stream_to_llist(stream_remove(2, stream(1, 2, 3, 2))) == llist(1, 3, 2)", true, null],
+      ["stream_to_llist(stream_remove(9, stream(1, 2, 3, 2))) == llist(1, 2, 3, 2)", true, null],
+      ["stream_to_llist(stream_remove_all(2, stream(1, 2, 3, 2))) == llist(1, 3)", true, null],
+      ["stream_remove_all(1, stream(1, 1)) == None", true, null],
       [
-        "equal(stream_to_llist(stream_remove(9, stream(1, 2, 3, 2))), llist(1, 2, 3, 2))",
+        "stream_to_llist(stream_filter(lambda x: x % 2 == 0, stream(1, 2, 3, 4))) == llist(2, 4)",
         true,
         null,
       ],
-      ["equal(stream_to_llist(stream_remove_all(2, stream(1, 2, 3, 2))), llist(1, 3))", true, null],
-      ["equal(stream_remove_all(1, stream(1, 1)), None)", true, null],
-      [
-        "equal(stream_to_llist(stream_filter(lambda x: x % 2 == 0, stream(1, 2, 3, 4))), llist(2, 4))",
-        true,
-        null,
-      ],
-      ["equal(stream_filter(lambda x: x > 10, stream(1, 2, 3, 4)), None)", true, null],
+      ["stream_filter(lambda x: x > 10, stream(1, 2, 3, 4)) == None", true, null],
     ],
     "enum, eval and ref": [
-      ["equal(stream_to_llist(enum_stream(3, 6)), llist(3, 4, 5, 6))", true, null],
-      ["equal(enum_stream(6, 3), None)", true, null],
-      ["equal(eval_stream(stream(7, 8, 9), 2), llist(7, 8))", true, null],
-      ["equal(eval_stream(integers_from(5), 4), llist(5, 6, 7, 8))", true, null],
-      ["equal(eval_stream(pair(1, lambda: pair(2, lambda: None)), 2), llist(1, 2))", true, null],
-      ["equal(eval_stream(stream(1, 2, 3), 0), None)", true, null],
+      ["stream_to_llist(enum_stream(3, 6)) == llist(3, 4, 5, 6)", true, null],
+      ["enum_stream(6, 3) == None", true, null],
+      ["eval_stream(stream(7, 8, 9), 2) == llist(7, 8)", true, null],
+      ["eval_stream(integers_from(5), 4) == llist(5, 6, 7, 8)", true, null],
+      ["eval_stream(pair(1, lambda: pair(2, lambda: None)), 2) == llist(1, 2)", true, null],
+      ["eval_stream(stream(1, 2, 3), 0) == None", true, null],
       ["stream_ref(stream(10, 20, 30), 0)", 10n, null],
       ["stream_ref(stream(10, 20, 30), 2)", 30n, null],
       ["stream_ref(pair(10, lambda: pair(20, lambda: None)), 1)", 20n, null],
@@ -112,10 +108,9 @@ describe("Stream Tests", () => {
         `def more(a, b):
     return more(1, 1 + b) if a > b else pair(a, lambda: more(a + 1, b))
 more_and_more = more(1, 1)
-equal(
-    eval_stream(more_and_more, 15),
-    llist(1, 1, 2, 1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 4, 5)
-)`,
+eval_stream(
+    more_and_more, 15
+) == llist(1, 1, 2, 1, 2, 3, 1, 2, 3, 4, 1, 2, 3, 4, 5)`,
         true,
         null,
       ],
@@ -123,7 +118,7 @@ equal(
         `def fibgen(a, b):
     return pair(a, lambda: fibgen(b, a + b))
 fibs = fibgen(0, 1)
-equal(eval_stream(fibs, 10), llist(0, 1, 1, 2, 3, 5, 8, 13, 21, 34))`,
+eval_stream(fibs, 10) == llist(0, 1, 1, 2, 3, 5, 8, 13, 21, 34)`,
         true,
         null,
       ],
@@ -142,14 +137,14 @@ stream_ref(sqrt_stream(2), 5)`,
       [
         `def is_divisible(x, y):
     return x % y == 0
-    
+
 def sieve(s):
     return pair(
         head(s),
         lambda: sieve(stream_filter(lambda x: not is_divisible(x, head(s)), stream_tail(s)))
     )
 primes = sieve(integers_from(2))
-equal(eval_stream(primes, 10), llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`,
+eval_stream(primes, 10) == llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29)`,
         true,
         null,
       ],
@@ -157,5 +152,7 @@ equal(eval_stream(primes, 10), llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29))`,
   };
 
   generateTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
-  generateNativePynterTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
+  // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
+  // programs, so run them there rather than at their nominal §2.
+  generateNativePynterTestCases(streamTests, 3, [misc, math, linkedList, stream, pairmutator]);
 });
