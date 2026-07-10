@@ -1636,10 +1636,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-cse-machine@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "@sourceacademy/common-cse-machine@npm:0.2.0"
-  checksum: 10c0/da882e9f6f6bc3aae32c06e6f2d5de9050c21ad64b6c8bcab51427fd5817fd8ee83a53ad3c791edd3349adc4f68f1d4f438573d75f9b1741400b1247fe4089cd
+"@sourceacademy/common-cse-machine@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@sourceacademy/common-cse-machine@npm:0.3.0"
+  checksum: 10c0/c0462cc2dd8d779179c31d168aa3e71ea7f81818535166e38aeb3c048469fcf7eebc388ed4110d3300d6b6933cc310da3fbe4c3a4026746c5df409eb91dd7042
   languageName: node
   linkType: hard
 
@@ -1669,10 +1669,10 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/common-cse-machine": "npm:^0.2.0"
+    "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
-    "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
+    "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
@@ -1701,13 +1701,13 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@sourceacademy/runner-cse-machine@npm:^1.0.0":
-  version: 1.0.0
-  resolution: "@sourceacademy/runner-cse-machine@npm:1.0.0"
+"@sourceacademy/runner-cse-machine@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "@sourceacademy/runner-cse-machine@npm:3.0.0"
   peerDependencies:
-    "@sourceacademy/common-cse-machine": ">=0.1.0"
+    "@sourceacademy/common-cse-machine": ">=0.3.0"
     "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/9ff119df2783e9c2fc21a8107c5e87df26a914880bda442a9ddd562c39bb56b3889ee88bdaa1810a10206184ab15fabf6d6a95644e88d5dbe206525cbf409930
+  checksum: 10c0/dbf3c9220bb35b2f10d46dcfd13e1c827931d9bb9fb41266eff512d5859ab7734e594cda3b0e741a9896e8f7a3598cdb4d914ef13b7ecce941f8fc1798d8965e
   languageName: node
   linkType: hard
 
