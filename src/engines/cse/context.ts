@@ -5,7 +5,7 @@ import { ModuleContext, NativeStorage } from "../../types";
 import { Control } from "./control";
 import { Environment } from "./environment";
 import { BuiltinValue, Stash } from "./stash";
-import { ReadableContext, WritableContext } from "./streams";
+import { InputStreamContext, WritableContext } from "./streams";
 import { Node } from "./types";
 
 /**
@@ -25,7 +25,9 @@ export class Context {
         initialised: true;
         stdout: WritableContext<string>;
         stderr: WritableContext<ConductorError>;
-        stdin: ReadableContext<string>;
+        stdin: InputStreamContext;
+        /** Forces any output buffered by the current stdout stream out to the host immediately. */
+        flushStdout?: () => void;
       };
   public errors: RuntimeSourceError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
