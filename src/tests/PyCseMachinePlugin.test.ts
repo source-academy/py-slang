@@ -41,6 +41,12 @@ function makeEnv(id: string, name: string, head: Record<string, Value> = {}, tai
 
 /** Run Python code through a fresh context and collect CSE snapshots. */
 async function runAndCollect(code: string, variant = 3) {
+  const { snapshots } = await runAndCollectWithBreakpoints(code, variant);
+  return snapshots;
+}
+
+/** Like runAndCollect, but also returns the recorded breakpoint() step indices. */
+async function runAndCollectWithBreakpoints(code: string, variant = 3) {
   const ctx = new Context();
   for (const [name, val] of [...math.builtins, ...misc.builtins]) {
     ctx.nativeStorage.builtins.set(name, val);
@@ -542,7 +548,7 @@ describe("collectSnapshots", () => {
   it("returns an empty array when maxSnapshots is 0", async () => {
     const ctx = new Context();
     const ast = parse("x = 1\n");
-    const snapshots = await collectSnapshots(
+    const { snapshots } = await collectSnapshots(
       ctx,
       new Control(ast),
       new Stash(),
@@ -581,7 +587,7 @@ describe("collectSnapshots", () => {
     const ctx = new Context();
     const script = "x = 1 + 2 + 3\n";
     const ast = parse(script);
-    const snapshots = await collectSnapshots(
+    const { snapshots } = await collectSnapshots(
       ctx,
       new Control(ast),
       new Stash(),
@@ -666,5 +672,77 @@ f()`,
     const afterEnvStep = snapshots[envStepIndex + 1];
     const calleeFrameAfterEnv = afterEnvStep.environments.find(e => e.name === "f");
     expect(calleeFrameAfterEnv?.isActive).not.toBe(true);
+  });
+});
+
+// ── breakpoint() ──────────────────────────────────────────────────────────────
+
+describe("breakpoint()", () => {
+  it("evaluates to None and does not otherwise affect the program", async () => {
+    const snapshots = await runAndCollect("x = breakpoint()");
+    const last = snapshots[snapshots.length - 1];
+    const xBinding = last.environments.flatMap(e => e.bindings).find(b => b.name === "x");
+    expect(xBinding?.value.displayValue).toBe("None");
+  });
+
+  it("records a breakpointSteps entry at top level", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints("breakpoint()\nx = 1");
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("the recorded step's control has the breakpoint call on top", async () => {
+    const { snapshots, breakpointSteps } =
+      await runAndCollectWithBreakpoints("breakpoint()\nx = 1");
+    expect(breakpointSteps).toHaveLength(1);
+    const step = snapshots.find(s => s.stepIndex === breakpointSteps[0]);
+    expect(step).toBeDefined();
+    expect(step!.control[0]?.displayText).toContain("call");
+  });
+
+  it("is recorded inside a function body", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints(
+      `def f():
+    breakpoint()
+    return 1
+
+f()`,
+    );
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("is recorded on every iteration inside a loop, in ascending order", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints(
+      `for x in range(3):
+    breakpoint()`,
+    );
+    expect(breakpointSteps.length).toBe(3);
+    expect([...breakpointSteps].sort((a, b) => a - b)).toEqual(breakpointSteps);
+  });
+
+  it("is detected through an alias, not just literal source text", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints("bp = breakpoint\nbp()");
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("does not accumulate stale steps from a previous run on the same context", async () => {
+    const ctx = new Context();
+    for (const [name, val] of [...math.builtins, ...misc.builtins]) {
+      ctx.nativeStorage.builtins.set(name, val);
+    }
+    const run = async (code: string) => {
+      const script = code + "\n";
+      const ast = parse(script);
+      return collectSnapshots(ctx, new Control(ast), new Stash(), 100000, -1, 3, script);
+    };
+
+    const first = await run("breakpoint()");
+    expect(first.breakpointSteps.length).toBeGreaterThan(0);
+
+    // A second run reusing the same context/nativeStorage should not see the first run's
+    // breakpoint steps (PyCseEvaluator resets context.runtime.breakpointSteps per evaluateChunk;
+    // this test exercises collectSnapshots directly, so it clears runtime state itself).
+    ctx.runtime.breakpointSteps = [];
+    const second = await run("x = 1");
+    expect(second.breakpointSteps).toHaveLength(0);
   });
 });
