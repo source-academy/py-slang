@@ -797,28 +797,37 @@ function isLambdaRepr(code: string): boolean {
 }
 
 /**
- * Whether `code` is `arity(<name>)` for one of a handful of real CPython builtins whose actual
- * signature (as `arity()`'s `inspect`-based introspection sees it) doesn't match the fixed arity
- * this dialect's docs/tests assign it -- e.g. `max`/`min`/`round` accept optional/variadic
- * arguments in real Python, and `print`/`str`/`input` aren't introspectable the same way. Already
- * partially documented in python/README.md's Compatibility section; this is the same class,
- * extended to the other names this test suite happens to probe.
+ * Whether `code` is `arity(<name>)` where `<name>` is a real CPython builtin that
+ * `python/sicp` exposes by direct alias rather than reimplementing (every `math_*` name --
+ * `python/sicp/math.py` is literally `math_foo = _math.foo` for all of them -- plus the handful
+ * from python/README.md's Compatibility section: `round`, `max`, `min`, `str`, `input`, `complex`,
+ * ...). `arity()`'s `inspect`-based introspection on these reflects CPython's own C-level
+ * signature, not this dialect's fixed pedagogical arity, and that signature isn't even stable
+ * across CPython versions (e.g. `math.nextafter` gained an optional third parameter in 3.12) --
+ * so this can't be pinned to a fixed list of "currently mismatched" names without silently
+ * breaking again on the next Python release. Structural, not enumerated: skip the whole class.
  */
-const ARITY_MISMATCH_NAMES = new Set([
-  "print",
+const CPYTHON_NATIVE_BUILTIN_ARITY_NAMES = new Set([
+  "round",
+  "abs",
+  "len",
   "max",
   "min",
   "str",
-  "input",
+  "repr",
+  "int",
+  "float",
   "complex",
-  "round",
-  "math_perm",
-  "math_log",
+  "bool",
+  "print",
+  "input",
 ]);
 
-function isArityMismatch(code: string): boolean {
+function isArityOfNativeCPythonBuiltin(code: string): boolean {
   const match = code.trim().match(/^arity\((\w+)\)$/);
-  return match !== null && ARITY_MISMATCH_NAMES.has(match[1]);
+  if (match === null) return false;
+  const name = match[1];
+  return name.startsWith("math_") || CPYTHON_NATIVE_BUILTIN_ARITY_NAMES.has(name);
 }
 
 /** Whether `code` references `__program__`, a py-slang-only pseudo-variable (the literal source
@@ -875,9 +884,9 @@ const CPYTHON_SKIP_REASONS: {
     reason: "CPython's lambda repr embeds a memory address, so there's no stable value to compare",
   },
   {
-    matches: (code, _expected) => isArityMismatch(code),
+    matches: (code, _expected) => isArityOfNativeCPythonBuiltin(code),
     reason:
-      "arity() sees these CPython builtins' real (optional/variadic) signature, not the dialect's fixed one",
+      "arity() sees these CPython builtins' real (optional/variadic, version-dependent) signature, not the dialect's fixed one",
   },
   {
     matches: (code, _expected) => usesProgramIntrospection(code),
