@@ -1,4 +1,5 @@
 import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { createInputStream, InputStreamContext, receiveInput } from "../engines/cse/streams";
 import { MiscBuiltins } from "../stdlib/misc";
@@ -45,8 +46,7 @@ describe("input()", () => {
     const result = await MiscBuiltins.input(
       [{ type: "string", value: "Write your string here: " }],
       "",
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      {} as any,
+      {} as ExprNS.Call,
       context,
     );
 
@@ -60,8 +60,7 @@ describe("input()", () => {
     const { outputs, prompts, streams } = makeStreams("42");
     context.streams = streams;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await MiscBuiltins.input([], "", {} as any, context);
+    const result = await MiscBuiltins.input([], "", {} as ExprNS.Call, context);
 
     expect(result).toEqual({ type: "string", value: "42" });
     expect(outputs.join("")).toBe("");
@@ -78,9 +77,9 @@ describe("createInputStream (real ReadableStream, not a hand-rolled mock)", () =
     const requestedPrompts: (string | undefined)[] = [];
     let call = 0;
     const conductor = {
-      requestInput: async (prompt?: string) => {
+      requestInput: (prompt?: string) => {
         requestedPrompts.push(prompt);
-        return responses[call++];
+        return Promise.resolve(responses[call++]);
       },
     } as unknown as IRunnerPlugin;
     return { conductor, requestedPrompts };
