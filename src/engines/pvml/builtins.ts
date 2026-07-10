@@ -191,6 +191,12 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_lgamma", 124],
   ["math_radians", 125],
   ["time_time", 126],
+  // `print_llist` has no native Pynter equivalent yet (unlike the slots above, this index is not
+  // backed by pynter/vm/src/primitives.c) -- added the same way is_integer/is_float/is_complex/
+  // real/imag/complex/parse/tokenize/the math_* additions above were, as a new primitive appended
+  // past native's own table, so this only backs py-slang's own local TS PVMLInterpreter until a
+  // matching entry lands in the pynter repo.
+  ["print_llist", 127],
 ]);
 
 /**
@@ -414,6 +420,70 @@ function pairElement(args: PVMLBoxType[], name: string, index: 0 | 1): PVMLBoxTy
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
   return pairArray(args[0], name).elements[index];
+}
+
+function isArrayPair(v: PVMLBoxType): v is Extract<PVMLBoxType, { type: "array" }> {
+  return isPVMLObject(v) && v.type === "array" && v.elements.length === 2;
+}
+
+/** Whether `v` is `None` or a pair whose tail is itself a proper linked list -- mirrors
+ * linked-list.ts's `_is_llist` on the CSE side. Head shape is irrelevant: only the tail chain must
+ * reach `None`, so e.g. `pair(llist(1, 2), llist(3, 4))` counts as a proper list of two elements.
+ * Iterative -- `printLlistText` below calls this once per *distinct* tail-chain suffix it renders
+ * (see its own doc comment), so a recursive version here would make the whole walk O(N^2) on a long
+ * chain, and risk a stack overflow on a long chain by itself regardless. */
+function isProperLlist(v: PVMLBoxType): boolean {
+  let current = v;
+  while (isArrayPair(current)) {
+    current = current.elements[1];
+  }
+  return current === null;
+}
+
+/**
+ * Python repr of a scalar (non-pair) leaf value for `print_llist`'s box-and-pointer text. PVML has
+ * no general str()/repr() support (case 90 above is an unimplemented stub, matching native Pynter),
+ * so this is deliberately minimal -- just the value shapes a linked-list leaf can actually be.
+ */
+function llistLeafRepr(v: PVMLBoxType): string {
+  if (v === null || v === undefined) return "None";
+  if (typeof v === "boolean") return v ? "True" : "False";
+  if (typeof v === "number" || typeof v === "bigint") return String(v);
+  if (typeof v === "string") return `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+  if (v instanceof PyComplexNumber) return v.toString();
+  return "<function>";
+}
+
+/**
+ * Box-and-pointer text for a linked list or pair, matching linked-list.ts's `_print_llist` on the
+ * CSE side: a proper list (tail chain reaching `None`) renders as `llist(a, b, c)`; anything else
+ * renders as `[head, tail]`, recursing the same way at every level (so a proper-list *element*, e.g.
+ * inside an improper pair, still renders as `llist(...)`, not `[...]`). Plain recursion, no
+ * memoization keyed by value/object identity -- see the case 97 comment for why that matters.
+ *
+ * `isKnownImproper` avoids re-running `isProperLlist` on every tail suffix while unrolling an
+ * improper structure's bracket notation: once a tail position is known to continue an improper
+ * chain, the rest of that chain can only ever be improper too, so `helper` skips straight to the
+ * bracket case instead of re-walking the remaining tail to confirm it again. A *head* always gets a
+ * fresh check (`isKnownImproper: false`), since it's an independent substructure that may itself be
+ * a proper list.
+ */
+function printLlistText(v: PVMLBoxType): string {
+  function helper(n: PVMLBoxType, isKnownImproper: boolean): string {
+    if (isKnownImproper || !isProperLlist(n)) {
+      if (!isArrayPair(n)) return llistLeafRepr(n);
+      return `[${helper(n.elements[0], false)}, ${helper(n.elements[1], true)}]`;
+    }
+
+    const parts: string[] = [];
+    let current = n;
+    while (isArrayPair(current)) {
+      parts.push(helper(current.elements[0], false));
+      current = current.elements[1];
+    }
+    return `llist(${parts.join(", ")})`;
+  }
+  return helper(v, false);
 }
 
 /**
@@ -656,6 +726,18 @@ export function executePrimitive(
         current = current.elements[1];
       }
       return invokeValue(func, argArray);
+    }
+
+    case 127: {
+      // print_llist: box-and-pointer text, matching linked-list.ts's _print_llist on the CSE side.
+      // Plain uncached recursion -- no memoization keyed by value/object identity -- so it can't
+      // suffer js-slang's display_list sharing bug (source-academy/js-slang#1124): the same pair
+      // object reached via two different paths is re-derived fresh each time, not looked up from a
+      // stale cached classification.
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("print_llist() takes exactly 1 argument");
+      sendOutput(printLlistText(args[0]));
+      return undefined;
     }
 
     case 76: {

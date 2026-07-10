@@ -392,13 +392,20 @@ export class MiscBuiltins {
     };
   }
 
+  @Validate(0, 1, "input", true)
   static async input(
-    _args: Value[],
+    args: Value[],
     _source: string,
     _command: ExprNS.Call,
     context: Context,
   ): Promise<Value> {
-    const userInput = await receiveInput(context);
+    const prompt = args.length > 0 ? toPythonString(args[0]) : undefined;
+    if (prompt !== undefined) {
+      // Matches CPython: input(prompt) writes the prompt to stdout (no trailing newline)
+      // before blocking on stdin.
+      await displayOutput(context, prompt);
+    }
+    const userInput = await receiveInput(context, prompt);
     return { type: "string", value: userInput };
   }
 

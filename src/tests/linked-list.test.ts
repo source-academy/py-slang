@@ -35,50 +35,47 @@ describe("Linked List Tests", () => {
         ["llist(llist(1, 2, 3), 4, 5, 6)"],
       ],
       ["print_llist(llist('a', 'b'))", null, ["llist('a', 'b')"]],
-    ],
-    // equal matches == semantics: booleans compare as the ints they are
-    // (as in Python), and the coercion stays legal at §2, where == itself
-    // takes no bool operands
-    "equal semantics": [
-      ["equal(llist(True), llist(1))", true, null],
-      ["equal(llist(False), llist(0))", true, null],
-      ["equal(llist(True), llist(2))", false, null],
-      ["equal(llist(True), llist(1.0))", true, null],
-      ["equal(True, 1)", true, null],
-      ["equal(llist(1), llist(1.0))", true, null],
-      ["equal(llist(1), llist('a'))", false, null],
-      ["equal(llist(True, llist(2, 3)), llist(1, llist(2.0, 3)))", true, null],
-      ["equal(None, None)", true, null],
+      // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong
+      // notation for a value reachable via two different paths in the same structure: x1
+      // appears both standalone and as the tail of pair(1, x1), and the buggy js-slang
+      // implementation misclassified the second occurrence as an improper pair). print_llist's
+      // algorithm is plain recursion with no identity-keyed memoization, so it can't reproduce
+      // that bug: the same pair object is re-derived fresh from its own structure every time
+      // it's visited, regardless of which parent reached it.
+      [
+        "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)",
+        null,
+        ["llist(llist(2, 3), llist(1, 2, 3))"],
+      ],
     ],
     "empty list boundaries": [
-      ["equal(append(None, None), None)", true, null],
+      ["append(None, None) == None", true, null],
       ["length(llist())", 0n, null],
-      ["equal(llist(), None)", true, null],
-      ["equal(remove(1, None), None)", true, null],
-      ["equal(remove_all(1, None), None)", true, null],
-      ["equal(build_llist(lambda x: x, -1), None)", true, null],
-      ["equal(enum_llist(0, 0), llist(0))", true, null],
+      ["llist() == None", true, null],
+      ["remove(1, None) == None", true, null],
+      ["remove_all(1, None) == None", true, null],
+      ["build_llist(lambda x: x, -1) == None", true, null],
+      ["enum_llist(0, 0) == llist(0)", true, null],
     ],
     "error throwing limits": [
       ["llist_ref(llist(10, 20), 2)", UserError, null],
       ["llist_ref(llist(10, 20), -1)", UserError, null],
       ["length(pair(1, 2))", TypeError, null],
       ["map(lambda x: x, pair(1, 2))", TypeError, null],
-      ["equal(append(llist(1), 2), pair(1, 2))", true, null],
+      ["append(llist(1), 2) == pair(1, 2)", true, null],
     ],
     "extreme removal and filtering": [
-      ["equal(remove_all(1, llist(1, 1, 1, 1)), None)", true, null],
-      ["equal(remove(1, llist(1, 1, 1)), llist(1, 1))", true, null],
-      ["equal(filter(lambda x: False, llist(1, 2, 3)), None)", true, null],
-      ["equal(filter(lambda x: True, llist(1, 2, 3)), llist(1, 2, 3))", true, null],
+      ["remove_all(1, llist(1, 1, 1, 1)) == None", true, null],
+      ["remove(1, llist(1, 1, 1)) == llist(1, 1)", true, null],
+      ["filter(lambda x: False, llist(1, 2, 3)) == None", true, null],
+      ["filter(lambda x: True, llist(1, 2, 3)) == llist(1, 2, 3)", true, null],
     ],
     "equality strictness": [
-      ["equal(llist(1, 2), 1)", false, null], // List vs Int
-      ["equal(None, False)", false, null], // None vs Boolean
-      ["equal(pair(1, 2), pair(1, 2))", true, null], // Pair vs Pair (same)
-      ["equal(pair(1, 2), pair(1, 3))", false, null], // Pair vs Pair (diff tail)
-      ["equal(pair(1, 2), pair(2, 2))", false, null], // Pair vs Pair (diff head)
-      ["equal(llist(1, 2, 3), pair(1, pair(2, pair(3, None))))", true, null], // List vs manually constructed Pair chain
+      ["llist(1, 2) == 1", false, null], // List vs Int
+      ["pair(1, 2) == pair(1, 2)", true, null], // Pair vs Pair (same)
+      ["pair(1, 2) == pair(1, 3)", false, null], // Pair vs Pair (diff tail)
+      ["pair(1, 2) == pair(2, 2)", false, null], // Pair vs Pair (diff head)
+      ["llist(1, 2, 3) == pair(1, pair(2, pair(3, None)))", true, null], // List vs manually constructed Pair chain
     ],
     "validation checks": [
       ["is_pair(pair(1, 2))", true, null],
@@ -109,12 +106,12 @@ describe("Linked List Tests", () => {
       ["is_llist(lambda x: x)", false, null],
       ["is_llist()", MissingRequiredPositionalError, null],
       ["is_llist(1, 2)", TooManyPositionalArgumentsError, null],
-      ["equal(llist(1, 2), llist(1, 2))", true, null],
-      ["equal(llist(1, 2), llist(2, 1))", false, null],
-      ["equal(llist(1, llist(2, 3)), llist(1, llist(2, 3)))", true, null],
-      ["equal(llist(1, llist(2, 3)), llist(1, llist(3, 2)))", false, null],
-      ["equal(llist(1, 2), pair(2, pair(1, None)))", false, null],
-      ["equal(llist(1, 2), pair(1, pair(2, None)))", true, null],
+      ["llist(1, 2) == llist(1, 2)", true, null],
+      ["llist(1, 2) == llist(2, 1)", false, null],
+      ["llist(1, llist(2, 3)) == llist(1, llist(2, 3))", true, null],
+      ["llist(1, llist(2, 3)) == llist(1, llist(3, 2))", false, null],
+      ["llist(1, 2) == pair(2, pair(1, None))", false, null],
+      ["llist(1, 2) == pair(1, pair(2, None))", true, null],
     ],
     "structural operations": [
       ["length(llist(1, 2, 3, 4))", 4n, null],
@@ -124,29 +121,29 @@ describe("Linked List Tests", () => {
       ["llist_to_string(None)", "None", null],
     ],
     transformations: [
-      ["equal(map(lambda x: x + 1, llist(1, 2, 3)), llist(2, 3, 4))", true, null],
-      ["equal(map(lambda x: x + 1, None), None)", true, null],
-      ["equal(build_llist(lambda i: i * i, 4), llist(0, 1, 4, 9))", true, null],
-      ["equal(build_llist(lambda i: i, 0), None)", true, null],
-      ["equal(reverse(llist(1, 2, 3)), llist(3, 2, 1))", true, null],
-      ["equal(reverse(None), None)", true, null],
-      ["equal(append(llist(1, 2), llist(3, 4)), llist(1, 2, 3, 4))", true, null],
-      ["equal(append(None, llist(3, 4)), llist(3, 4))", true, null],
-      ["equal(append(llist(1, 2), None), llist(1, 2))", true, null],
-      ["equal(filter(lambda x: x % 2 == 0, llist(1, 2, 3, 4)), llist(2, 4))", true, null],
-      ["equal(filter(lambda x: x > 10, llist(1, 2, 3, 4)), None)", true, null],
-      ["equal(enum_llist(3, 6), llist(3, 4, 5, 6))", true, null],
-      ["equal(enum_llist(6, 3), None)", true, null],
+      ["map(lambda x: x + 1, llist(1, 2, 3)) == llist(2, 3, 4)", true, null],
+      ["map(lambda x: x + 1, None) == None", true, null],
+      ["build_llist(lambda i: i * i, 4) == llist(0, 1, 4, 9)", true, null],
+      ["build_llist(lambda i: i, 0) == None", true, null],
+      ["reverse(llist(1, 2, 3)) == llist(3, 2, 1)", true, null],
+      ["reverse(None) == None", true, null],
+      ["append(llist(1, 2), llist(3, 4)) == llist(1, 2, 3, 4)", true, null],
+      ["append(None, llist(3, 4)) == llist(3, 4)", true, null],
+      ["append(llist(1, 2), None) == llist(1, 2)", true, null],
+      ["filter(lambda x: x % 2 == 0, llist(1, 2, 3, 4)) == llist(2, 4)", true, null],
+      ["filter(lambda x: x > 10, llist(1, 2, 3, 4)) == None", true, null],
+      ["enum_llist(3, 6) == llist(3, 4, 5, 6)", true, null],
+      ["enum_llist(6, 3) == None", true, null],
     ],
     "search and removal": [
-      ["equal(member(1, llist(1, 2, 3, 4)), llist(1, 2, 3, 4))", true, null],
-      ["equal(llist(1, 2, 3), pair(1, pair(2, pair(3, None))))", true, null],
-      ["equal(member(3, llist(1, 2, 3, 4)), llist(3, 4))", true, null],
-      ["equal(member(9, llist(1, 2, 3, 4)), None)", true, null],
-      ["equal(remove(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))", true, null],
-      ["equal(remove(2, llist(1, 2, 3, 2)), llist(1, 3, 2))", true, null],
-      ["equal(remove_all(9, llist(1, 2, 3, 2)), llist(1, 2, 3, 2))", true, null],
-      ["equal(remove_all(2, llist(1, 2, 3, 2)), llist(1, 3))", true, null],
+      ["member(1, llist(1, 2, 3, 4)) == llist(1, 2, 3, 4)", true, null],
+      ["llist(1, 2, 3) == pair(1, pair(2, pair(3, None)))", true, null],
+      ["member(3, llist(1, 2, 3, 4)) == llist(3, 4)", true, null],
+      ["member(9, llist(1, 2, 3, 4)) == None", true, null],
+      ["remove(9, llist(1, 2, 3, 2)) == llist(1, 2, 3, 2)", true, null],
+      ["remove(2, llist(1, 2, 3, 2)) == llist(1, 3, 2)", true, null],
+      ["remove_all(9, llist(1, 2, 3, 2)) == llist(1, 2, 3, 2)", true, null],
+      ["remove_all(2, llist(1, 2, 3, 2)) == llist(1, 3)", true, null],
     ],
     "indexing and reducing": [
       ["llist_ref(llist(10, 20, 30), 0)", 10n, null],

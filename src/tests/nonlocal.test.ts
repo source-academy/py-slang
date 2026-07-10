@@ -418,6 +418,43 @@ outer()
         null,
       ],
     ],
+
+  // Issue #223: local variables must be allocated (as unassigned) by CALL, not lazily
+  // whenever their assignment happens to execute. Without this, a closure reading a local
+  // that hasn't been assigned yet on this control-flow path (here, `g()` runs before the
+  // unreachable `z = "local"`) falls through past the owning frame's empty cell and
+  // wrongly resolves to an unrelated same-named global instead of raising an error.
+  "closure reads a local before its assignment runs, with a same-named global present — raises FreeVariableUnboundError, not the global (#223)":
+    [
+      [
+        `
+z = "global"
+def f():
+    g = lambda: z
+    return g()
+    z = "local"
+print(f())
+`,
+        FreeVariableUnboundError,
+        null,
+      ],
+    ],
+
+  "closure reads a local after its assignment has run, with a same-named global present — resolves to the local (#223)":
+    [
+      [
+        `
+z = "global"
+def f():
+    z = "local"
+    g = lambda: z
+    return g()
+print(f())
+`,
+        null,
+        ["local"],
+      ],
+    ],
 };
 
 generateTestCases(nonlocalTests, 3, ch3);

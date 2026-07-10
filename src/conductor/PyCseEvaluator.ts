@@ -83,6 +83,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         stdout,
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
+        flushStdout: () => flushOutput(this.conductor),
       };
 
       await this.ensurePreludesLoaded();
