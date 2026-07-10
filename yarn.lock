@@ -1650,11 +1650,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@portal:/home/vakshay/conductor::locator=%40sourceacademy%2Fpy-slang%40workspace%3A.":
-  version: 0.0.0-use.local
-  resolution: "@sourceacademy/conductor@portal:/home/vakshay/conductor::locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
+"@sourceacademy/conductor@https://github.com/source-academy/conductor.git#0.6.0":
+  version: 0.6.0
+  resolution: "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#commit=e105c9cf1ee61a05bc1d3cab88078b5253451bd2"
+  checksum: 10c0/f45ec8600a30a0066b710b075a01bdde64b45d31bbb3908bbc98337252cb2c4f630c33383b759b5a7c143e1032e3403d4c6c4cd3009f4b431cc76d7e09ceecb0
   languageName: node
-  linkType: soft
+  linkType: hard
 
 "@sourceacademy/py-slang@workspace:.":
   version: 0.0.0-use.local
@@ -1670,7 +1671,7 @@ __metadata:
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.2.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
-    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0"
+    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.6.0"
     "@sourceacademy/runner-cse-machine": "npm:^1.0.0"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
