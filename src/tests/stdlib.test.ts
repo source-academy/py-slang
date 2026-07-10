@@ -977,6 +977,7 @@ describe("Standard Library Tests", () => {
     // it's deliberately not run through Pynter at all here.
     generateNativePynterTestCases(mathTests, 3);
     generateCPythonTestCases(mathTests, 1);
+    generateCPythonTestCases(miscTests, 1);
   });
 
   describe("Chapter 3 Builtins", () => {

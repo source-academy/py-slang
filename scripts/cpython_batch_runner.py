@@ -39,6 +39,14 @@ except ModuleNotFoundError:
     )
     sys.exit(1)
 
+# py-slang's CSE machine tolerates much deeper recursion than CPython's default limit (1000), so
+# some test cases recurse thousands of levels deep expecting a normal return, not RecursionError.
+# Raised well above what any current test case needs, but conservatively -- CPython's recursion
+# limit is a soft guard tied to the C stack, and setting it too high risks a hard segfault instead
+# of a clean RecursionError for tests that are *supposed* to hit the limit (e.g. genuine unbounded
+# recursion, which still raises RecursionError under this limit, just later).
+sys.setrecursionlimit(20000)
+
 BASE_GLOBALS = {}
 exec("from sicp import *", BASE_GLOBALS)
 

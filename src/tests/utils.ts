@@ -702,6 +702,132 @@ function isWhileNonBoolCondition(code: string, expected: TestExpectedValue): boo
   return match !== null && !COMPARISON_OR_BOOLEAN_OP_RE.test(match[1]);
 }
 
+/**
+ * Whether `code`'s last line is a bare `==`/`!=` comparison and `expected` is an error: equality
+ * in real Python never raises TypeError for any combination of built-in types (int/float/bool/
+ * str/None/function/complex all fall back to identity-based comparison, returning False rather
+ * than erroring), but this dialect deliberately rejects `bool`/function operands in `==`/`!=` as a
+ * pedagogical restriction (see `docs/specs/python_typing_middle_12.tex`) -- so any such case is
+ * unconditionally a chapter-only divergence, never a real CPython error.
+ */
+function isEqualityOperatorError(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return /==|!=/.test(last);
+}
+
+/**
+ * Whether `code` is a bare arithmetic/ordering operator expression (`+ - * / % **  < > <= >=`)
+ * between a bool/int literal pair, expecting an error: like `isBoolRejection` above but for
+ * operator syntax rather than call syntax (`True + True`, `1 > True`, ...) -- `bool` being an
+ * `int` subclass in CPython means none of these raise, unlike this dialect's exclusion of `bool`
+ * from arithmetic/ordering. `*` between two bool/int literals is ordinary multiplication here
+ * (`True * True == 1`); it's only string operands that make `*` mean repetition, which is a
+ * different divergence (`isStringRepetition` below) and doesn't overlap with this pattern, since
+ * this one requires both operands to be bool/int literals. Deliberately excludes string/None/
+ * function operands (`'' > True` genuinely raises in CPython too, since only int/bool support
+ * these operators with each other) and excludes `==`/`!=` (handled by `isEqualityOperatorError`
+ * above, with its own, unconditional rationale).
+ */
+const BOOL_NUMERIC_OPERATOR_RE =
+  /^(True|False|\d+)\s*(\*\*|<=|>=|<|>|\+|-|\*|\/|%)\s*(True|False|\d+)$/;
+
+function isBoolNumericOperator(code: string, expected: TestExpectedValue): boolean {
+  return typeof expected === "function" && BOOL_NUMERIC_OPERATOR_RE.test(code.trim());
+}
+
+/**
+ * Whether `code` is `<string literal> * <int/bool literal>` (or reversed) expecting an error:
+ * CPython's `*` between a string and an int (or bool, an int subclass) is sequence repetition
+ * (`'ab' * 3 == 'ababab'`), which this dialect doesn't support at all -- unlike every other
+ * skip reason here, CPython is *more* capable in this one specific case, not just more permissive
+ * about bool.
+ */
+const STRING_REPETITION_RE =
+  /^(?:'[^']*'\s*\*\s*(?:True|False|\d+)|(?:True|False|\d+)\s*\*\s*'[^']*')$/;
+
+function isStringRepetition(code: string, expected: TestExpectedValue): boolean {
+  return typeof expected === "function" && STRING_REPETITION_RE.test(code.trim());
+}
+
+/** Whether `code` is `-True` or `-False`: unary-minus form of the same bool/int-subclass
+ * divergence as `isBoolRejection`/`isBoolNumericOperator` above. */
+function isUnaryMinusBool(code: string, expected: TestExpectedValue): boolean {
+  const trimmed = code.trim();
+  return typeof expected === "function" && (trimmed === "-True" || trimmed === "-False");
+}
+
+/**
+ * Whether `code` is `not <non-bool>` expecting an error: real Python's `not` accepts any operand
+ * and uses its truthiness (`not 1` is `False`, `not ''` is `True`), unlike this dialect, which
+ * requires the operand to be exactly `bool`. Same restriction as `isWhileNonBoolCondition` above,
+ * applied to the unary `not` operator instead of a `while`-condition.
+ */
+function isNotNonBool(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const trimmed = code.trim();
+  if (!trimmed.startsWith("not ")) return false;
+  const operand = trimmed.slice(4).trim();
+  return operand !== "True" && operand !== "False";
+}
+
+/**
+ * Whether `code` is `<non-bool> and ...` / `<non-bool> or ...` expecting an error: like
+ * `isNotNonBool` above, real Python's `and`/`or` accept any left operand and short-circuit on its
+ * truthiness, never raising, unlike this dialect's requirement that it be exactly `bool`.
+ */
+function isAndOrNonBoolLeft(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const match = code.trim().match(/^(.+?)\s+(?:and|or)\s+.+$/);
+  if (match === null) return false;
+  const left = match[1].trim();
+  return left !== "True" && left !== "False";
+}
+
+/**
+ * Whether `code` is `str(lambda ...)` or `repr(lambda ...)`: this dialect prints a clean
+ * `<function (anonymous)>` for anonymous functions, but CPython's real repr for a lambda includes
+ * its memory address (`<function <lambda> at 0x...>`), which changes every run -- not just a
+ * different string, but a fundamentally non-reproducible one, so there's no CPython "ground
+ * truth" value to compare against here at all.
+ */
+function isLambdaRepr(code: string): boolean {
+  return /^(?:str|repr)\(lambda /.test(code.trim());
+}
+
+/**
+ * Whether `code` is `arity(<name>)` for one of a handful of real CPython builtins whose actual
+ * signature (as `arity()`'s `inspect`-based introspection sees it) doesn't match the fixed arity
+ * this dialect's docs/tests assign it -- e.g. `max`/`min`/`round` accept optional/variadic
+ * arguments in real Python, and `print`/`str`/`input` aren't introspectable the same way. Already
+ * partially documented in python/README.md's Compatibility section; this is the same class,
+ * extended to the other names this test suite happens to probe.
+ */
+const ARITY_MISMATCH_NAMES = new Set([
+  "print",
+  "max",
+  "min",
+  "str",
+  "input",
+  "complex",
+  "round",
+  "math_perm",
+  "math_log",
+]);
+
+function isArityMismatch(code: string): boolean {
+  const match = code.trim().match(/^arity\((\w+)\)$/);
+  return match !== null && ARITY_MISMATCH_NAMES.has(match[1]);
+}
+
+/** Whether `code` references `__program__`, a py-slang-only pseudo-variable (the literal source
+ * text of the running program) with no CPython equivalent -- same idea as `involvesParseFeature`
+ * below, just a different py-slang-specific feature. */
+function usesProgramIntrospection(code: string): boolean {
+  return /__program__/.test(code);
+}
+
 /** Reasons a test case is skipped for the CPython pathway, checked in order. */
 const CPYTHON_SKIP_REASONS: {
   matches: (code: string, expected: TestExpectedValue) => boolean;
@@ -716,6 +842,46 @@ const CPYTHON_SKIP_REASONS: {
     reason:
       "while-conditions must be exactly bool in this dialect, unlike CPython's truthy/falsy " +
       "semantics -- some of these are genuine infinite loops under CPython",
+  },
+  {
+    matches: isEqualityOperatorError,
+    reason: "==/!= never raise in CPython for any built-in type combination",
+  },
+  {
+    matches: isBoolNumericOperator,
+    reason:
+      "bool is an int subclass in CPython, unlike this dialect's arithmetic/ordering operators",
+  },
+  {
+    matches: isStringRepetition,
+    reason: "CPython supports string*int repetition, which this dialect doesn't implement",
+  },
+  {
+    matches: isUnaryMinusBool,
+    reason: "bool is an int subclass in CPython, unlike this dialect's unary minus",
+  },
+  {
+    matches: isNotNonBool,
+    reason:
+      "not/and/or require exactly bool operands in this dialect, unlike CPython's truthy/falsy semantics",
+  },
+  {
+    matches: isAndOrNonBoolLeft,
+    reason:
+      "not/and/or require exactly bool operands in this dialect, unlike CPython's truthy/falsy semantics",
+  },
+  {
+    matches: (code, _expected) => isLambdaRepr(code),
+    reason: "CPython's lambda repr embeds a memory address, so there's no stable value to compare",
+  },
+  {
+    matches: (code, _expected) => isArityMismatch(code),
+    reason:
+      "arity() sees these CPython builtins' real (optional/variadic) signature, not the dialect's fixed one",
+  },
+  {
+    matches: (code, _expected) => usesProgramIntrospection(code),
+    reason: "__program__ is a py-slang-only pseudo-variable with no CPython equivalent",
   },
   {
     matches: (_code, expected) => isChapterGatingError(expected),
