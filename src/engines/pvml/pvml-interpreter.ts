@@ -1293,9 +1293,11 @@ export class PVMLInterpreter {
     }
 
     if (!isPVMLObject(func) || func.type !== "closure") {
-      throw new Error(
-        `Cannot call non-closure value: ${JSON.stringify(PVMLInterpreter.toJSValue(func))}`,
-      );
+      // A proper PVMLInterpreterError (matching real Python's `TypeError: 'int' object is
+      // not callable`), not a plain JS Error — so this surfaces as a normal Python-level
+      // exception, consistent with every other type check in this file (e.g. arity()'s
+      // "must be a function" check in builtins.ts), rather than an uncaught JS error.
+      throw new PVMLInterpreterError(`TypeError: '${getPVMLType(func)}' object is not callable`);
     }
 
     const closure = func;

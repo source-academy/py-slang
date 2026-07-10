@@ -649,6 +649,10 @@ describe("PVML Additional Coverage", () => {
     test("ordered comparison of mixed types throws", () => {
       expect(() => compileAndRun('"x" < 3\n')).toThrow(UnsupportedOperandTypeError);
     });
+
+    test("calling a non-callable value raises a proper TypeError, not a raw JS crash", () => {
+      expect(() => compileAndRun("x = 5\nx()\n")).toThrow(/TypeError.*not callable/);
+    });
   });
 
   describe("Literals and expressions", () => {
@@ -929,6 +933,49 @@ loop()
 
     test("max() with zero arguments throws MissingRequiredPositionalError", () => {
       expect(() => compileAndRun("max()\n")).toThrow(MissingRequiredPositionalError);
+    });
+
+    // Verified against real CPython (math.remainder's IEEE 754 special cases).
+    test("max()/min() skip a NaN argument that isn't already the running winner", () => {
+      expect(compileAndRun("max(1, math_nan, 3)\n")).toBe(3);
+      expect(compileAndRun("min(3, math_nan, 1)\n")).toBe(1);
+    });
+
+    test("max()/min() return NaN if the first argument is NaN (matches CSE's plain >/< comparison)", () => {
+      expect(Number.isNaN(compileAndRun("max(math_nan, 1, 3)\n"))).toBe(true);
+      expect(Number.isNaN(compileAndRun("min(math_nan, 1, 3)\n"))).toBe(true);
+    });
+
+    test("math_remainder(finite, infinity) returns the finite value unchanged", () => {
+      expect(compileAndRun("math_remainder(5, math_inf)\n")).toBe(5);
+    });
+
+    test("math_remainder(infinity, finite) raises a domain error", () => {
+      expect(() => compileAndRun("math_remainder(math_inf, 5)\n")).toThrow(/ValueError.*domain/);
+    });
+
+    test("math_remainder(x, 0) raises a domain error, not a ZeroDivisionError", () => {
+      expect(() => compileAndRun("math_remainder(5, 0)\n")).toThrow(/ValueError.*domain/);
+    });
+
+    test("math_remainder propagates NaN", () => {
+      expect(Number.isNaN(compileAndRun("math_remainder(math_nan, 5)\n"))).toBe(true);
+    });
+
+    test("math_ldexp(0, huge exponent) is 0, not NaN", () => {
+      expect(compileAndRun("math_ldexp(0, 10**30)\n")).toBe(0);
+    });
+
+    test("math_ldexp overflow raises OverflowError", () => {
+      expect(() => compileAndRun("math_ldexp(1.0, 10**30)\n")).toThrow(/OverflowError/);
+    });
+
+    test("time_time() returns seconds, not milliseconds", () => {
+      const before = Date.now() / 1000;
+      const result = compileAndRun("time_time()\n") as number;
+      const after = Date.now() / 1000;
+      expect(result).toBeGreaterThanOrEqual(before - 1);
+      expect(result).toBeLessThanOrEqual(after + 1);
     });
   });
 });

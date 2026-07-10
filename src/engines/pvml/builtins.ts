@@ -396,13 +396,24 @@ function fusedMultiplyAdd(x: number, y: number, z: number): number {
  * `numericCompare`, which correctly orders bigint against float) and returns
  * it unchanged — preserving whichever int/float type it already was, unlike
  * assertNumericArgs' float coercion (matches CSE's max()/min() in
- * src/stdlib/misc.ts, which likewise return the original Value). */
+ * src/stdlib/misc.ts, which likewise return the original Value). CSE's
+ * version compares with plain `>`/`<` on the underlying values; since JS's
+ * `x > NaN`/`NaN > x` are always false in both directions, that gives it a
+ * specific NaN behavior for free, with no special-casing: once the current
+ * winner is NaN nothing can ever dethrone it (every later `cur > NaN`-style
+ * comparison is false), while a NaN that's never held the "winning" slot is
+ * simply skipped over (it can't beat anything either). `numericCompare` has
+ * no such built-in NaN handling (its own doc comment requires callers to
+ * check first), so this needs the explicit guard below to reproduce the same
+ * behavior. */
 function pickExtremum(args: PVMLBoxType[], fn: string, wantMax: boolean): PVMLBoxType {
   if (!args.every(a => typeof a === "number" || typeof a === "bigint"))
     throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
   let best = args[0];
   for (let i = 1; i < args.length; i++) {
     const cur = args[i];
+    if (typeof best === "number" && Number.isNaN(best)) continue;
+    if (typeof cur === "number" && Number.isNaN(cur)) continue;
     const cmp = numericCompare(cur, best);
     if (wantMax ? cmp > 0 : cmp < 0) best = cur;
   }
@@ -1003,9 +1014,19 @@ export function executePrimitive(
         return x % y;
       });
 
-    case 116: // math_remainder — IEEE 754 remainder (round-half-to-even quotient).
+    case 116: // math_remainder — IEEE 754 remainder (round-half-to-even quotient). Matches
+      // real Python's math.remainder special cases (verified against CPython): y == 0 or x
+      // infinite raises (a ValueError there, not a ZeroDivisionError -- remainder(x, 0) isn't
+      // really "dividing by zero" in the IEEE 754 sense), y infinite with finite x returns x
+      // unchanged (mod-by-infinity never reduces it), and NaN propagates like any other
+      // arithmetic NaN. Only the finite/finite case falls through to the round-half-to-even
+      // formula below.
       return binaryMath(args, "math_remainder", (x, y) => {
-        if (y === 0) throw new ZeroDivisionError("math_remainder");
+        if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
+        if (y === 0 || !Number.isFinite(x)) {
+          throw new PVMLInterpreterError("ValueError: math domain error");
+        }
+        if (!Number.isFinite(y)) return x;
         const n = roundToEven(x / y);
         return x - n * y;
       });
@@ -1026,12 +1047,21 @@ export function executePrimitive(
       return unaryMathBool(args, "math_isnan", Number.isNaN);
 
     case 121: {
-      // math_ldexp(x, i) — x * 2**i; i must be an int.
+      // math_ldexp(x, i) — x * 2**i; i must be an int. Verified against CPython: x === 0 is a
+      // fast path returning 0 unchanged even for a huge i (avoiding 0 * Infinity -> NaN once
+      // Math.pow(2, Number(i)) itself overflows), an already-infinite/NaN x passes through
+      // unchanged (that's not an overflow, just propagating the input), and only a genuine
+      // finite-x-becomes-infinite result raises OverflowError.
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("math_ldexp() takes exactly 2 arguments");
       const [x] = assertNumericArgs([args[0]], "math_ldexp");
       const [i] = assertIntArgs([args[1]], "math_ldexp");
-      return x * Math.pow(2, Number(i));
+      if (x === 0) return x;
+      const result = x * Math.pow(2, Number(i));
+      if (!Number.isFinite(result) && Number.isFinite(x)) {
+        throw new PVMLInterpreterError("OverflowError: math range error");
+      }
+      return result;
     }
 
     case 122: // math_exp2
@@ -1046,8 +1076,10 @@ export function executePrimitive(
     case 125: // math_radians
       return unaryMath(args, "math_radians", x => (x * Math.PI) / 180);
 
-    case 126: // time_time — always a float, matching CSE's time_time (misc.ts).
-      return Date.now();
+    case 126: // time_time — always a float, matching CSE's time_time (misc.ts). Python's
+      // time.time() is documented as seconds since the epoch, not milliseconds — divide
+      // Date.now()'s milliseconds down to match.
+      return Date.now() / 1000;
 
     default:
       throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);
