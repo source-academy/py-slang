@@ -72,7 +72,7 @@
   "dependencies": {
     "@sourceacademy/common-cse-machine": "^0.2.0",
     "@sourceacademy/common-stepper": "^0.0.1",
-    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.5.0",
+    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.6.0",
     "@sourceacademy/runner-cse-machine": "^1.0.0",
     "@sourceacademy/runner-stepper": "^0.0.1",
     "@sourceacademy/wasm-util": "^1.0.6",
