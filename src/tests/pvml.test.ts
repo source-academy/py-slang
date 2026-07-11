@@ -19,7 +19,7 @@ import misc from "../stdlib/misc";
 import math from "../stdlib/math";
 import parserGroup from "../stdlib/parser";
 import stream from "../stdlib/stream";
-import { generatePVMLTestCases, PVMLTestCases } from "./utils";
+import { asFloat, generatePVMLTestCases, PVMLTestCases } from "./utils";
 
 /** The opcodes the entry function's compiled body contains, for compiler-only assertions
  * that don't require the interpreter to execute them (e.g. opcodes the interpreter doesn't
@@ -604,12 +604,12 @@ describe("PVML E2E", () => {
       ["is_complex(5)", false, null],
     ],
     "abs() is the modulus": [
-      ["abs(3+4j)", 5, null],
+      ["abs(3+4j)", asFloat(5), null],
       ["is_float(abs(3+4j))", true, null],
     ],
     "real() / imag() / complex() constructor": [
-      ["real(3+4j)", 3, null],
-      ["imag(3+4j)", 4, null],
+      ["real(3+4j)", asFloat(3), null],
+      ["imag(3+4j)", asFloat(4), null],
       ["str(complex(3, 4))", "(3+4j)", null],
       ["real(5)", PVMLInterpreterError, null],
     ],
@@ -816,12 +816,12 @@ describe("PVML E2E", () => {
       ["math_trunc(-3.8)", -3, null],
     ],
     "degrees / radians": [
-      ["math_degrees(math_pi)", 180, null],
+      ["math_degrees(math_pi)", asFloat(180), null],
       ["math_radians(180)", Math.PI, null],
     ],
     "erf / erfc": [
-      ["math_erf(0)", 0, null],
-      ["math_erfc(0)", 1, null],
+      ["math_erf(0)", asFloat(0), null],
+      ["math_erfc(0)", asFloat(1), null],
     ],
     "comb / factorial / gcd / isqrt / lcm / perm (arbitrary-precision int)": [
       ["math_comb(5, 2)", 10, null],
@@ -835,11 +835,11 @@ describe("PVML E2E", () => {
       ["math_perm(5)", 120, null],
     ],
     "fabs / fma / fmod / remainder / copysign": [
-      ["math_fabs(-5)", 5, null],
-      ["math_fma(2, 3, 1)", 7, null],
-      ["math_fmod(7, 3)", 1, null],
-      ["math_remainder(7, 3)", 1, null],
-      ["math_copysign(3, -1)", -3, null],
+      ["math_fabs(-5)", asFloat(5), null],
+      ["math_fma(2, 3, 1)", asFloat(7), null],
+      ["math_fmod(7, 3)", asFloat(1), null],
+      ["math_remainder(7, 3)", asFloat(1), null],
+      ["math_copysign(3, -1)", asFloat(-3), null],
     ],
     "isfinite / isinf / isnan": [
       ["math_isfinite(1)", true, null],
@@ -849,9 +849,9 @@ describe("PVML E2E", () => {
       ["math_isnan(1)", false, null],
     ],
     "ldexp / exp2 / gamma / lgamma": [
-      ["math_ldexp(1, 3)", 8, null],
-      ["math_exp2(3)", 8, null],
-      ["math_gamma(5)", 24, null],
+      ["math_ldexp(1, 3)", asFloat(8), null],
+      ["math_exp2(3)", asFloat(8), null],
+      ["math_gamma(5)", asFloat(24), null],
       ["math_lgamma(5)", Math.log(24), null],
     ],
     "time_time (smoke test: returns a finite float)": [["math_isfinite(time_time())", true, null]],

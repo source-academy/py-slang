@@ -22,18 +22,24 @@ import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { PVMLBoxType } from "../engines/pvml/types";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 
+/** A Python script has no return value of its own (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment), so a chunk that wants to surface a value
+ * print()s it explicitly, and this returns everything printed alongside the
+ * threaded globalEnv — matching every other PVML test file's approach. */
 function runChunk(
   code: string,
   globalEnv: Map<string, PVMLBoxType>,
-): { result: unknown; globalEnv: Map<string, PVMLBoxType> } {
+): { outputs: string[]; globalEnv: Map<string, PVMLBoxType> } {
   const script = code.endsWith("\n") ? code : code + "\n";
   const ast = parse(script);
   const { errors, environments } = analyzeWithEnvironments(
     ast,
     script,
     4,
-    [],
+    [misc, math],
     [],
     Array.from(globalEnv.keys()),
   );
@@ -42,9 +48,13 @@ function runChunk(
   }
   const compiler = PVMLCompiler.fromProgram(ast, 4, environments, true);
   const program = compiler.compileProgram(ast);
-  const interpreter = new PVMLInterpreter(program, { globalEnv });
-  const result = PVMLInterpreter.toJSValue(interpreter.execute());
-  return { result, globalEnv: interpreter.getGlobalEnv() };
+  const outputs: string[] = [];
+  const interpreter = new PVMLInterpreter(program, {
+    globalEnv,
+    sendOutput: msg => outputs.push(msg),
+  });
+  interpreter.execute();
+  return { outputs, globalEnv: interpreter.getGlobalEnv() };
 }
 
 describe("PVML REPL persistence (useGlobalMap mode)", () => {
@@ -56,38 +66,38 @@ describe("PVML REPL persistence (useGlobalMap mode)", () => {
     // Python `int` values are genuine bigints here (see PVMLType.BIGINT).
     expect(globalEnv.get("x")).toBe(5n);
 
-    const r2 = runChunk("f()", globalEnv);
-    expect(r2.result).toBe(6n);
+    const r2 = runChunk("print(f())", globalEnv);
+    expect(r2.outputs).toEqual(["6"]);
 
-    const r3 = runChunk("x = x + 10\nx", r2.globalEnv);
-    expect(r3.result).toBe(15n);
+    const r3 = runChunk("x = x + 10\nprint(x)", r2.globalEnv);
+    expect(r3.outputs).toEqual(["15"]);
 
-    const r4 = runChunk("f()", r3.globalEnv);
-    expect(r4.result).toBe(16n);
+    const r4 = runChunk("print(f())", r3.globalEnv);
+    expect(r4.outputs).toEqual(["16"]);
   });
 
   test("chunk 2 can define a new global the array model couldn't have pre-sized", () => {
     let globalEnv = new Map<string, PVMLBoxType>();
     const r1 = runChunk("a = 1\n", globalEnv);
     globalEnv = r1.globalEnv;
-    const r2 = runChunk("b = 2\na + b", globalEnv);
-    expect(r2.result).toBe(3n);
+    const r2 = runChunk("b = 2\nprint(a + b)", globalEnv);
+    expect(r2.outputs).toEqual(["3"]);
   });
 
   test("`global` from within a function still works across chunks", () => {
     let globalEnv = new Map<string, PVMLBoxType>();
     const r1 = runChunk("def set_y():\n    global y\n    y = 99\nset_y()\n", globalEnv);
     globalEnv = r1.globalEnv;
-    const r2 = runChunk("y", globalEnv);
-    expect(r2.result).toBe(99n);
+    const r2 = runChunk("print(y)", globalEnv);
+    expect(r2.outputs).toEqual(["99"]);
   });
 
   test("nonlocal closures are unaffected by useGlobalMap mode", () => {
     const globalEnv = new Map<string, PVMLBoxType>();
     const r = runChunk(
-      "def outer():\n    n = 0\n    def inc():\n        nonlocal n\n        n = n + 1\n    inc()\n    inc()\n    return n\nouter()",
+      "def outer():\n    n = 0\n    def inc():\n        nonlocal n\n        n = n + 1\n    inc()\n    inc()\n    return n\nprint(outer())",
       globalEnv,
     );
-    expect(r.result).toBe(2n);
+    expect(r.outputs).toEqual(["2"]);
   });
 });

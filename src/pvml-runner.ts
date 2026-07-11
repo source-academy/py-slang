@@ -158,9 +158,6 @@ export interface RunPvmlInterpreterOptions {
 export interface RunPvmlInterpreterResult {
   /** Everything the program printed via print()/display(), concatenated. */
   output: string;
-  /** The program's final value, converted to a plain JS value the same way
-   * PyPvmlEvaluator reports evaluation results (see PVMLInterpreter.toJSValue). */
-  result: unknown;
 }
 
 /**
@@ -237,8 +234,11 @@ function runCodePvmlInterpreterSync(
       const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
       const program = compiler.compileProgram(ast);
       interpreter = new PVMLInterpreter(program, { sendOutput, globalEnv });
-      const result = interpreter.execute();
-      return { result, globalEnv: interpreter.getGlobalEnv() };
+      // A Python script has no return value of its own (see pvml-compiler.ts's
+      // visitFileInputStmt doc comment) — execute()'s return is always undefined
+      // now, so there's nothing worth keeping from it here.
+      interpreter.execute();
+      return { globalEnv: interpreter.getGlobalEnv() };
     } catch (e: unknown) {
       throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
     }
@@ -253,9 +253,9 @@ function runCodePvmlInterpreterSync(
     globalEnv = runChunk(preludeText, globalEnv).globalEnv;
   }
 
-  const { result } = runChunk(code, globalEnv);
+  runChunk(code, globalEnv);
 
-  return { output: outputs.join(""), result: PVMLInterpreter.toJSValue(result) };
+  return { output: outputs.join("") };
 }
 
 /**

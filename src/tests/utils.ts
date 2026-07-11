@@ -1,5 +1,5 @@
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
-import { StmtNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
@@ -14,7 +14,8 @@ import { RunError } from "../runner";
 import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { Group } from "../stdlib/utils";
+import { Group, toPythonFloat } from "../stdlib/utils";
+import { Token, TokenType } from "../tokenizer";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import Stmt = StmtNS.Stmt;
@@ -273,16 +274,48 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 type ErrorClass = new (...args: any[]) => Error;
 
 /**
+ * Marks a whole-number PVMLTestExpectedValue as a Python float, not an int
+ * (e.g. `asFloat(180)` for `math_degrees(math_pi) == 180.0`, not `180`) —
+ * needed because a plain whole-number `number` here means int by default
+ * (this table's own long-established convention: `["1 + 1", 2, null]` means
+ * the bigint `2n`, not the float `2.0`), and JS's `Number.isInteger(180)`
+ * can't otherwise tell "180" and "180.0" apart to know when that default is
+ * wrong. Real Python's own math module has plenty of these: `math_fmod`,
+ * `math_remainder`, `math_copysign`, `math_ldexp`, `math_exp2`, `math_gamma`,
+ * `math_degrees`, `math_erf`/`math_erfc`, `math_fabs` all return float even
+ * for whole-number inputs/outputs, verified against real CPython.
+ */
+class PyFloatMarker {
+  constructor(public readonly value: number) {}
+}
+export function asFloat(value: number): PyFloatMarker {
+  return new PyFloatMarker(value);
+}
+
+/**
  * Expected value for an PVML test case.
  * Python `int` results come back from toJSValue as a genuine JS `bigint`
  * (see PVMLType.BIGINT) — expressed here as a plain `number` for test-table
  * brevity; runTestCase() below compares a bigint result against it by value
- * (`Number(result) === expected`), not by `toBe`/`Object.is`. Complex-valued
+ * (`Number(result) === expected`), not by `toBe`/`Object.is`. A whole-number
+ * float result (as opposed to this dialect's own int-returning arithmetic)
+ * needs `asFloat(...)` instead — see its doc comment above — a fractional
+ * `number` (e.g. `3.14`) is unambiguous and needs no wrapper. Complex-valued
  * results have no dedicated variant here either — assert them via str()
  * (e.g. `["str(1+2j)", "(1+2j)", null]`), same idea.
- * `undefined` means the expression should evaluate to Python None / no return value.
+ * `undefined` means "don't check a result value at all" (e.g. the program's
+ * last statement isn't an expression, or is already an explicit print()
+ * call whose own return value isn't the point) — for Python `None` itself,
+ * use `null`.
  */
-export type PVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+export type PVMLTestExpectedValue =
+  | number
+  | boolean
+  | string
+  | null
+  | undefined
+  | ErrorClass
+  | PyFloatMarker;
 
 /**
  * Same shape as TestCases but with PVML-compatible expected values.
@@ -323,6 +356,58 @@ const PVML_SKIP_REASONS: {
  * are independent of one another, matching generateTestCases()/
  * generateNativePynterTestCases().
  */
+/**
+ * A Python script has no return value of its own (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment) — PVMLInterpreter.execute() always yields
+ * `undefined`. To let this test harness still check "what did the last
+ * expression evaluate to", it uses the same technique a real Python program
+ * would (and the exact one used elsewhere in this file's own generatePVMLTestCases
+ * call sites): print() the expression. If the program's last top-level
+ * statement is a bare expression, this rewrites it (in the already-parsed
+ * AST, not by re-serializing/re-parsing source text, so an expression with
+ * its own side effects is evaluated exactly once) into `print(<that
+ * expression>)`, and the last captured output line is compared against
+ * `expected`'s Python str() form — see expectedToPythonStr below. Requires
+ * `print` to be resolvable (i.e. the `misc` group, in scope for every
+ * generatePVMLTestCases call site below).
+ */
+function wrapLastExpressionInPrint(ast: StmtNS.FileInput): boolean {
+  const last = ast.statements[ast.statements.length - 1];
+  if (!(last instanceof StmtNS.SimpleExpr)) return false;
+  const token = new Token(TokenType.NAME, "print", last.startToken.line, 0, -1);
+  token.synthetic = true;
+  const printCallee = new ExprNS.Variable(token, token, token);
+  const call = new ExprNS.Call(last.startToken, last.endToken, printCallee, [last.expression]);
+  ast.statements[ast.statements.length - 1] = new StmtNS.SimpleExpr(
+    last.startToken,
+    last.endToken,
+    call,
+  );
+  return true;
+}
+
+/**
+ * The exact string print()/str() would produce for a PVMLTestExpectedValue
+ * (excluding the ErrorClass case, handled separately by a throw check) —
+ * compared against captured print() output. `number` is ambiguous between a
+ * Python int and float (unlike CSE's own TestOutputValue, which has a
+ * separate bigint case): a whole-number `number` is presumed to mean an int
+ * result (e.g. `5` -> `"5"`) since that's this dialect's more common case,
+ * not a fact this function can know for certain — a case where the actual
+ * result is a float (e.g. math_remainder, which always returns float in
+ * real Python even for int inputs) needs its own table entry using a
+ * non-integer-shaped expectation, or gets caught and corrected the same way
+ * pvml-interpreter.test.ts's math_remainder/math_ldexp cases were: run it,
+ * see what it actually prints, verify against real CPython, fix the table.
+ */
+function expectedToPythonStr(expected: number | boolean | string | null): string {
+  if (expected === null) return "None";
+  if (typeof expected === "boolean") return expected ? "True" : "False";
+  if (typeof expected === "string") return expected;
+  if (Number.isInteger(expected)) return String(expected);
+  return toPythonFloat(expected);
+}
+
 export const generatePVMLTestCases = (
   testCases: PVMLTestCases,
   variant: number = 4,
@@ -333,16 +418,26 @@ export const generatePVMLTestCases = (
     .filter(p => p.trim())
     .join("\n");
 
-  /** Runs `script` against `globalEnv` (mutated in place), returning the
-   * result and any print() output. Compiles+resolves fresh each call, using
-   * whatever names are already in `globalEnv` (from an earlier call with the
-   * same map, e.g. the prelude) so this script can reference them. */
+  /** Runs `script` against `globalEnv` (mutated in place). `capturedResult` is the printed text
+   * from wrapLastExpressionInPrint's auto-wrap (popped off `outputs` before returning, so it
+   * doesn't get mixed up with the code's own explicit print() calls) — `undefined` if the script's
+   * last statement wasn't a bare expression, i.e. nothing to capture. Compiles+resolves fresh each
+   * call, using whatever names are already in `globalEnv` (from an earlier call with the same map,
+   * e.g. the prelude) so this script can reference them. */
   const runAgainstGlobalEnv = (
     script: string,
     globalEnv: Map<string, PVMLBoxType>,
-  ): { result: PVMLBoxType; outputs: string[] } => {
+    wantsCapture: boolean = false,
+  ): { capturedResult: string | undefined; outputs: string[] } => {
     const source = script.endsWith("\n") ? script : script + "\n";
     const ast = parse(source);
+    // Only auto-wrap when the test case actually wants to observe a result
+    // (expected !== undefined) -- a case with expected: undefined isn't
+    // necessarily "the last statement isn't an expression" (e.g. a bare
+    // `print("hello")` call as the whole program *is* a SimpleExpr, but
+    // wrapping it again would double-call print, printing "None" for the
+    // inner call's own None return value instead of "hello").
+    const wrapped = wantsCapture && wrapLastExpressionInPrint(ast);
     const { errors, environments } = analyzeWithEnvironments(
       ast,
       source,
@@ -361,8 +456,9 @@ export const generatePVMLTestCases = (
       sendOutput: msg => outputs.push(msg),
       globalEnv,
     });
-    const result = interpreter.execute();
-    return { result, outputs };
+    interpreter.execute();
+    const capturedResult = wrapped ? outputs.pop() : undefined;
+    return { capturedResult, outputs };
   };
 
   type PVMLInternalCase = {
@@ -383,19 +479,25 @@ export const generatePVMLTestCases = (
       return;
     }
 
-    const { result: rawResult, outputs } = runAgainstGlobalEnv(code, globalEnv);
-    const result = PVMLInterpreter.toJSValue(rawResult);
+    const { capturedResult, outputs } = runAgainstGlobalEnv(
+      code,
+      globalEnv,
+      expected !== undefined,
+    );
 
     if (expected === undefined) {
-      expect(result).toBeUndefined();
-    } else if (expected === null) {
-      expect(result).toBeNull();
-    } else if (typeof result === "bigint" && typeof expected === "number") {
-      expect(Number(result)).toBe(expected);
-    } else if (typeof expected === "number" && !Number.isInteger(expected)) {
-      expect(result).toBeCloseTo(expected);
+      expect(capturedResult).toBeUndefined();
+    } else if (
+      expected instanceof PyFloatMarker ||
+      (typeof expected === "number" && !Number.isInteger(expected))
+    ) {
+      // Genuine floating-point computation (log, gamma, sqrt, ...) can legitimately differ in
+      // the last ULP depending on computation order/platform -- exact string comparison is too
+      // strict here, unlike the int/bool/string/None cases below, which have no such ambiguity.
+      const wanted = expected instanceof PyFloatMarker ? expected.value : expected;
+      expect(Number(capturedResult)).toBeCloseTo(wanted);
     } else {
-      expect(result).toBe(expected);
+      expect(capturedResult).toBe(expectedToPythonStr(expected));
     }
 
     if (output !== null) {
@@ -409,7 +511,12 @@ export const generatePVMLTestCases = (
         code,
         expected,
         output,
-        label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
+        label:
+          typeof expected === "function"
+            ? expected.name
+            : expected instanceof PyFloatMarker
+              ? `${expected.value}.0`
+              : JSON.stringify(expected),
       }));
 
       const supported: PVMLInternalCase[] = [];

@@ -848,14 +848,15 @@ export class PVMLCompiler
     const compiler = this.fromFunctionNode(node);
     const { maxStackSize } = compileBody(compiler);
     // Falling off the end of a function body without hitting an explicit
-    // `return` yields None in Python, regardless of what the last statement
-    // happened to leave on the stack for compileStatements' stack-balance
-    // bookkeeping (a real value for a bare expression statement, or an
-    // internal `undefined` placeholder for e.g. an assignment) — discard it
-    // and return Python's None explicitly. An explicit `return` elsewhere in
-    // the body (visitReturnStmt) emits its own RETG and exits before ever
-    // reaching this point, so this only fires on true fallthrough.
-    compiler.builder.emitNullary(OpCodes.POPG);
+    // `return` yields None in Python. compileBody (compileStatements, for a
+    // FunctionDef/MultiLambda; a single Return, for a Lambda) always leaves
+    // the stack exactly as it found it on the fallthrough path — statements
+    // other than a bare expression push nothing, and a bare expression
+    // statement pushes its value only to immediately pop it again — so there
+    // is nothing to discard here, just Python's None to push explicitly. An
+    // explicit `return` elsewhere in the body (visitReturnStmt) emits its
+    // own RETG and exits before ever reaching this point, so this only fires
+    // on true fallthrough.
     compiler.builder.emitNullary(OpCodes.LGCN);
     compiler.builder.emitNullary(OpCodes.RETG);
     this.builder.emitUnary(OpCodes.NEWC, compiler.builder.getFunctionIndex());
@@ -881,9 +882,7 @@ export class PVMLCompiler
 
   visitReturnStmt(stmt: StmtNS.Return): ExpressionResult {
     if (!stmt.value) {
-      // Bare `return` (no expression) yields Python's None, not `undefined`
-      // — LGCN, not LGCU (LGCU is an internal stack-balance placeholder, not
-      // a real Python value; see compileClosure).
+      // Bare `return` (no expression) yields Python's None explicitly.
       this.builder.emitNullary(OpCodes.LGCN);
       this.builder.emitNullary(OpCodes.RETG);
       return { maxStackSize: 1 };
@@ -928,38 +927,42 @@ export class PVMLCompiler
     return this.compile(expr);
   }
 
+  // Assign is a statement, not an expression — like every other statement
+  // (see compileStatements' doc comment), it leaves nothing on the stack:
+  // STAG/STLG/STPG/STGG each pop exactly what the preceding sub-expressions
+  // pushed (STAG: -3 for [array, index, value]; the plain-variable store
+  // opcodes: -1 for [value]), netting to zero.
   visitAssignStmt(stmt: StmtNS.Assign): ExpressionResult {
     if (stmt.target instanceof ExprNS.Subscript) {
       const arrResult = this.compile(stmt.target.value);
       const idxResult = this.compile(stmt.target.index);
       const valResult = this.compile(stmt.value);
       this.builder.emitNullary(OpCodes.STAG);
-      this.builder.emitNullary(OpCodes.LGCU);
       return {
         maxStackSize: Math.max(
           arrResult.maxStackSize,
           1 + idxResult.maxStackSize,
           2 + valResult.maxStackSize,
-          1,
         ),
       };
     }
 
     const initResult = this.compile(stmt.value);
-
     this.emitStoreSymbol(stmt.target.name);
-
-    this.builder.emitNullary(OpCodes.LGCU);
     return initResult;
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): ExpressionResult {
     const result = this.compileClosure(stmt, c => c.compileStatements(stmt.body));
     this.emitStoreSymbol(stmt.name);
-    this.builder.emitNullary(OpCodes.LGCU);
     return result;
   }
 
+  // If is a statement, leaving nothing on the stack (see compileStatements'
+  // doc comment) — both branches run through compileStatements, which
+  // always nets to zero, so the two paths trivially agree on stack depth at
+  // endLabel where they converge, with no placeholder value needed for a
+  // missing else branch.
   visitIfStmt(stmt: StmtNS.If): ExpressionResult {
     const testResult = this.compile(stmt.condition);
     const elseLabel = this.builder.emitJump(OpCodes.BRF);
@@ -968,12 +971,7 @@ export class PVMLCompiler
     const endLabel = this.builder.emitJump(OpCodes.BR);
 
     this.builder.markLabel(elseLabel);
-    const altResult = stmt.elseBlock
-      ? this.compileStatements(stmt.elseBlock)
-      : (() => {
-          this.builder.emitNullary(OpCodes.LGCU);
-          return { maxStackSize: 1 };
-        })();
+    const altResult = stmt.elseBlock ? this.compileStatements(stmt.elseBlock) : { maxStackSize: 0 };
 
     this.builder.markLabel(endLabel);
 
@@ -999,24 +997,21 @@ export class PVMLCompiler
     const testResult = this.compile(stmt.condition);
     this.builder.emitJump(OpCodes.BRF, endLabel);
 
+    // compileStatements always nets to zero, so nothing to discard here.
     const bodyResult = this.compileStatements(stmt.body);
-    // Body values aren't used; discard to maintain stack balance
-    this.builder.emitNullary(OpCodes.POPG);
     this.builder.emitJump(OpCodes.BR, loopLabel);
 
     this.loopStack.pop();
 
     this.builder.markLabel(endLabel);
-    this.builder.emitNullary(OpCodes.LGCU);
 
     return {
-      maxStackSize: Math.max(testResult.maxStackSize, bodyResult.maxStackSize, 1),
+      maxStackSize: Math.max(testResult.maxStackSize, bodyResult.maxStackSize),
     };
   }
 
   visitPassStmt(_stmt: StmtNS.Pass): ExpressionResult {
-    this.builder.emitNullary(OpCodes.LGCU);
-    return { maxStackSize: 1 };
+    return { maxStackSize: 0 };
   }
 
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): ExpressionResult {
@@ -1050,18 +1045,17 @@ export class PVMLCompiler
     // system — every stdlib group's names are preloaded into the global
     // scope by the runner/evaluator before any user code runs, so a name
     // this statement "imports" is already resolvable by the time it's used.
-    this.builder.emitNullary(OpCodes.LGCU);
-    return { maxStackSize: 1 };
+    // Emits nothing at all — like every statement (see compileStatements'
+    // doc comment), it has no value to leave on the stack.
+    return { maxStackSize: 0 };
   }
 
   visitGlobalStmt(_stmt: StmtNS.Global): ExpressionResult {
-    this.builder.emitNullary(OpCodes.LGCU);
-    return { maxStackSize: 1 };
+    return { maxStackSize: 0 };
   }
 
   visitNonLocalStmt(_stmt: StmtNS.NonLocal): ExpressionResult {
-    this.builder.emitNullary(OpCodes.LGCU);
-    return { maxStackSize: 1 };
+    return { maxStackSize: 0 };
   }
 
   visitAssertStmt(_stmt: StmtNS.Assert): ExpressionResult {
@@ -1090,9 +1084,8 @@ export class PVMLCompiler
     // module-level assignment — see emitStoreSymbol/getTokenAnnotation.
     this.emitStoreSymbol(stmt.target);
 
+    // compileStatements always nets to zero, so nothing to discard here.
     const bodyResult = this.compileStatements(stmt.body);
-    // Body values aren't used; discard to maintain stack balance
-    this.builder.emitNullary(OpCodes.POPG);
 
     this.builder.emitJump(OpCodes.BR, loopStartLabel);
 
@@ -1100,35 +1093,70 @@ export class PVMLCompiler
 
     // Iterator already popped by FOR_ITER on exhaustion
     this.builder.markLabel(loopEndLabel);
-    this.builder.emitNullary(OpCodes.LGCU);
 
     return { maxStackSize: Math.max(bodyResult.maxStackSize + 2, 2) };
   }
 
+  /**
+   * The only place a statement sequence's final value matters: a program's
+   * overall result (what the REPL/test harness reports as "what did running
+   * this produce"), which is not a Python language feature at all — Python
+   * statements never produce a value the way an expression does; running a
+   * script just runs it. This mirrors the CSE machine's own mechanism for
+   * the same non-interactive-but-testable need (runCSEMachine's
+   * `stash.peek() ?? None` after the whole program finishes): whatever the
+   * last bare-expression statement evaluated to, or None if the program's
+   * last statement isn't an expression (or there are no statements at all).
+   * The *last* statement is genuinely special only here — nowhere else, in
+   * particular not in compileStatements below, which every other statement
+   * sequence (function/lambda/if/while/for bodies) goes through instead.
+   */
+  /**
+   * A Python script has no "return value" at all — running one is exec(),
+   * not calling a function, and this dialect has no REPL/interactive mode
+   * that would need one (see compileStatements' doc comment: nothing here
+   * is "the value of the program" the way an expression has a value). The
+   * entry function's own body is compiled exactly like any other statement
+   * sequence, uniformly, with the last statement no different from any
+   * other; RETU (push JS `undefined`, not Python's `None` — see its doc
+   * comment in opcodes.ts) then ends execution without requiring anything
+   * on the stack at all, matching compileStatements' own net-zero
+   * guarantee.
+   */
   visitFileInputStmt(stmt: StmtNS.FileInput): ExpressionResult {
     const { maxStackSize } = this.compileStatements(stmt.statements);
-    this.builder.emitNullary(OpCodes.RETG);
-    return { maxStackSize: Math.max(maxStackSize, 1) };
+    this.builder.emitNullary(OpCodes.RETU);
+    return { maxStackSize };
   }
 
+  /**
+   * Compiles a statement sequence for a function/lambda/if/while/for body —
+   * and, via visitFileInputStmt above, the top-level program itself, with
+   * no special-casing there either. Always leaves the stack exactly as it
+   * found it (net-zero), matching Python's own statement semantics: only an
+   * expression used as a statement (SimpleExpr — e.g. a bare `1 + 1` or a
+   * call whose result is discarded) produces a value at all, and even that
+   * value is immediately popped again since nothing here needs it — every
+   * other statement kind (Assign, FunctionDef, If, While, For, Pass,
+   * Global, NonLocal, FromImport, Break, Continue, Return, ...) emits no
+   * placeholder value of its own to begin with. The *position* of a
+   * statement in this list never matters, including the last one: Python
+   * statements don't have a value, so there is no "value of a block" to
+   * propagate anywhere, top-level or nested. (Return/Break/Continue are
+   * also, individually, net-zero here despite transiently pushing something
+   * internally — Return's pushed value is consumed by its own RETG, and
+   * Break/Continue's own unconditional jump skips past whatever follows in
+   * this same statement list, so nothing here needs to pop after them
+   * either.)
+   */
   compileStatements(statements: StmtNS.Stmt[]): ExpressionResult {
-    if (statements.length === 0) {
-      this.builder.emitNullary(OpCodes.LGCU);
-      return { maxStackSize: 1 };
-    }
-
     let maxStackSize = 0;
 
-    for (let i = 0; i < statements.length; i++) {
-      const result = this.compile(statements[i]);
+    for (const stmt of statements) {
+      const isExprStmt = stmt instanceof StmtNS.SimpleExpr;
+      const result = this.compile(stmt);
       maxStackSize = Math.max(maxStackSize, result.maxStackSize);
-
-      // Assumption: every statement/expression leaves exactly one value.
-      // Earlier statement results are not needed and would otherwise accumulate,
-      // breaking block-level stack balance. Pop N-1 intermediates so only the last
-      // statement's value remains (the block result). Any leftovers indicate a
-      // compiler emission bug (e.g. extra LGCU or unconsumed operands).
-      if (i < statements.length - 1) {
+      if (isExprStmt) {
         this.builder.emitNullary(OpCodes.POPG);
       }
     }

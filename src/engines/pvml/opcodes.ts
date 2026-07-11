@@ -72,6 +72,13 @@ export enum OpCodes {
   RETG = 70,
   RETF = 71,
   RETB = 72,
+  // Returns JS `undefined` -- not Python's `None` (that's RETG/RETN with a
+  // real value already on the stack) -- for a caller that has no return
+  // value to speak of at all, not even a Python one. Requires nothing on
+  // the stack itself (see PVMLIRBuilder's STACK_EFFECTS[RETU] = 0): the
+  // interpreter pushes `undefined` internally before returning. Used by
+  // PVMLCompiler's visitFileInputStmt, since a whole Python script (exec(),
+  // not a function call) has no return value at all in this dialect.
   RETU = 73,
   RETN = 74,
   DUP = 75,

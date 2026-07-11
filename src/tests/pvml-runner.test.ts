@@ -76,10 +76,9 @@ describe("runCodePvmlInterpreter / runCodePvmlInterpreterDetailed", () => {
     expect(output).toBe("a\nb\n3\n");
   });
 
-  test("reports the program's final value alongside its output", async () => {
-    const { output, result } = await runCodePvmlInterpreterDetailed("1 + 2\n", 4);
+  test("a bare expression with no print() produces no output (exec mode has no return value)", async () => {
+    const { output } = await runCodePvmlInterpreterDetailed("1 + 2\n", 4);
     expect(output).toBe("");
-    expect(result).toBe(3n);
   });
 
   test("supports all four SICPy chapters, each with its own group's prelude available", async () => {

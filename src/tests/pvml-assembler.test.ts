@@ -11,10 +11,18 @@ function compileAndAssemble(code: string): Uint8Array {
   return assemble(program);
 }
 
-function roundTrip(code: string): unknown {
+/** A Python script has no return value of its own (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment), so — like pvml-interpreter.test.ts's
+ * compileAndRun — this observes a value by capturing what the (already
+ * disassembled and re-executed) program print()s, not by inspecting
+ * execute()'s own return value. */
+function roundTrip(code: string): string[] {
   const binary = compileAndAssemble(code);
   const program = disassemble(binary);
-  return PVMLInterpreter.toJSValue(new PVMLInterpreter(program).execute());
+  const outputs: string[] = [];
+  const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+  interpreter.execute();
+  return outputs;
 }
 
 describe("PVML assembler", () => {
@@ -43,20 +51,26 @@ describe("PVML assembler", () => {
       expect(disassemble(assemble(program)).functions.length).toBe(program.functions.length);
     });
 
+    // targetsPynter mode can't carry arbitrary-precision int literals (LGCBI, see
+    // compileAndAssemble's own comment above) -- int literals compile as float64 (LGCF64)
+    // instead, matching native Pynter's own NaN-boxed-double numeric model, so every int-valued
+    // result here genuinely prints as N.0, not N.
     test("integer arithmetic", () => {
-      expect(roundTrip("3 + 4\n")).toBe(7);
+      expect(roundTrip("print(3 + 4)\n")).toEqual(["7.0"]);
     });
 
     test("boolean expression", () => {
-      expect(roundTrip("1 < 2\n")).toBe(true);
+      expect(roundTrip("print(1 < 2)\n")).toEqual(["True"]);
     });
 
     test("conditional branch targets", () => {
-      expect(roundTrip("x = 10\nif x > 5:\n    x = 1\nelse:\n    x = 2\nx\n")).toBe(1);
+      expect(roundTrip("x = 10\nif x > 5:\n    x = 1\nelse:\n    x = 2\nprint(x)\n")).toEqual([
+        "1.0",
+      ]);
     });
 
     test("function definition and call", () => {
-      expect(roundTrip("def f(x):\n    return x + 1\nf(41)\n")).toBe(42);
+      expect(roundTrip("def f(x):\n    return x + 1\nprint(f(41))\n")).toEqual(["42.0"]);
     });
 
     test("for-loop over range(n)", () => {
@@ -64,9 +78,9 @@ describe("PVML assembler", () => {
 total = 0
 for i in range(5):
     total = total + i
-total
+print(total)
 `;
-      expect(roundTrip(code)).toBe(10);
+      expect(roundTrip(code)).toEqual(["10.0"]);
     });
 
     test("for-loop over range(start, stop, step)", () => {
@@ -74,9 +88,9 @@ total
 total = 0
 for i in range(0, 10, 2):
     total = total + i
-total
+print(total)
 `;
-      expect(roundTrip(code)).toBe(20);
+      expect(roundTrip(code)).toEqual(["20.0"]);
     });
 
     test("for-loop over list literal", () => {
@@ -84,9 +98,9 @@ total
 last = 0
 for x in [10, 20, 30]:
     last = x
-last
+print(last)
 `;
-      expect(roundTrip(code)).toBe(30);
+      expect(roundTrip(code)).toEqual(["30.0"]);
     });
 
     test("nested for-loops", () => {
@@ -95,21 +109,21 @@ total = 0
 for i in range(3):
     for j in range(3):
         total = total + 1
-total
+print(total)
 `;
-      expect(roundTrip(code)).toBe(9);
+      expect(roundTrip(code)).toEqual(["9.0"]);
     });
 
-    test("for-loop over empty range", () => {
-      expect(roundTrip("for i in range(0):\n    i\n")).toBeUndefined();
+    test("for-loop over empty range produces no output", () => {
+      expect(roundTrip("for i in range(0):\n    i\n")).toEqual([]);
     });
 
     test("float64 literal round-trips correctly", () => {
-      expect(roundTrip("3.141592653589793\n")).toBeCloseTo(3.141592653589793, 10);
+      expect(roundTrip("print(3.141592653589793)\n")).toEqual(["3.141592653589793"]);
     });
 
     test("multiple distinct string constants are preserved", () => {
-      expect(roundTrip('"hello" + " world"\n')).toBe("hello world");
+      expect(roundTrip('print("hello" + " world")\n')).toEqual(["hello world"]);
     });
 
     test("duplicate string constants deduplicate in binary", () => {
@@ -117,7 +131,7 @@ total
       const withDupe = compileAndAssemble('"x" + "x"\n');
       const withUnique = compileAndAssemble('"x" + "y"\n');
       expect(withDupe.byteLength).toBeLessThan(withUnique.byteLength);
-      expect(roundTrip('"x" + "x"\n')).toBe("xx");
+      expect(roundTrip('print("x" + "x")\n')).toEqual(["xx"]);
     });
   });
 

@@ -23,37 +23,42 @@ function makeMockConductor() {
 
 describe("PyPvmlEvaluator", () => {
   test("persists a global variable across evaluateChunk calls", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, results, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator(conductor);
 
     await evaluator.evaluateChunk("x = 5\n");
-    await evaluator.evaluateChunk("x + 1\n");
+    await evaluator.evaluateChunk("print(x + 1)\n");
 
     expect(errors).toEqual([]);
-    // Python `int` results are genuine bigints (see PVMLType.BIGINT) — this
-    // preserves full precision across the real evaluator/conductor pathway.
-    expect(results).toEqual([undefined, 6n]);
+    // This evaluator strictly targets exec mode, like a real Python script
+    // (see pvml-compiler.ts's visitFileInputStmt doc comment) — every chunk
+    // reports no result at all, regardless of what it computed; a chunk
+    // that wants to surface a value print()s it explicitly.
+    expect(results).toEqual([undefined, undefined]);
+    expect(outputs).toEqual(["6"]);
   });
 
   test("persists a function definition across evaluateChunk calls", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, results, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator(conductor);
 
     await evaluator.evaluateChunk("def f(x):\n    return x * 2\n");
-    await evaluator.evaluateChunk("f(21)\n");
+    await evaluator.evaluateChunk("print(f(21))\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([undefined, 42n]);
+    expect(results).toEqual([undefined, undefined]);
+    expect(outputs).toEqual(["42"]);
   });
 
   test("loads the linked-list prelude (pair/head/tail available from the first chunk)", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, results, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator(conductor);
 
-    await evaluator.evaluateChunk("head(pair(1, 2))\n");
+    await evaluator.evaluateChunk("print(head(pair(1, 2)))\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([1n]);
+    expect(results).toEqual([undefined]);
+    expect(outputs).toEqual(["1"]);
   });
 
   test("output via print() is forwarded to the conductor", async () => {
@@ -84,13 +89,13 @@ describe("PyPvmlEvaluator", () => {
 // src/validator/sublanguages.ts for that).
 describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
   test("chapter 1: basic functions work", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator1(conductor);
 
-    await evaluator.evaluateChunk("def f(x):\n    return x + 1\nf(5)\n");
+    await evaluator.evaluateChunk("def f(x):\n    return x + 1\nprint(f(5))\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([6n]);
+    expect(outputs).toEqual(["6"]);
   });
 
   test("chapter 1: list literals are rejected by the chapter's validators", async () => {
@@ -103,13 +108,13 @@ describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
   });
 
   test("chapter 2: linked-list prelude is available", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator2(conductor);
 
-    await evaluator.evaluateChunk("head(pair(1, 2))\n");
+    await evaluator.evaluateChunk("print(head(pair(1, 2)))\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([1n]);
+    expect(outputs).toEqual(["1"]);
   });
 
   test("chapter 2: list literals are still rejected", async () => {
@@ -122,14 +127,16 @@ describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
   });
 
   test("chapter 3: list literals and for-loops over range() work", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator3(conductor);
 
-    await evaluator.evaluateChunk("[1, 2, 3][0]\n");
-    await evaluator.evaluateChunk("total = 0\nfor i in range(3):\n    total = total + i\ntotal\n");
+    await evaluator.evaluateChunk("print([1, 2, 3][0])\n");
+    await evaluator.evaluateChunk(
+      "total = 0\nfor i in range(3):\n    total = total + i\nprint(total)\n",
+    );
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([1n, 3n]);
+    expect(outputs).toEqual(["1", "3"]);
   });
 
   test("chapter 3: for-loops over a non-range iterable are rejected", async () => {
@@ -142,16 +149,16 @@ describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
   });
 
   test("chapter 4: closures, `is`, and for-loops over any iterable work", async () => {
-    const { conductor, results, errors } = makeMockConductor();
+    const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
     await evaluator.evaluateChunk(
-      "def make_adder(n):\n    def add(x):\n        return x + n\n    return add\nadd3 = make_adder(3)\nadd3(7)\n",
+      "def make_adder(n):\n    def add(x):\n        return x + n\n    return add\nadd3 = make_adder(3)\nprint(add3(7))\n",
     );
-    await evaluator.evaluateChunk("1 is 1\n");
-    await evaluator.evaluateChunk("last = 0\nfor x in [1, 2, 3]:\n    last = x\nlast\n");
+    await evaluator.evaluateChunk("print(1 is 1)\n");
+    await evaluator.evaluateChunk("last = 0\nfor x in [1, 2, 3]:\n    last = x\nprint(last)\n");
 
     expect(errors).toEqual([]);
-    expect(results).toEqual([10n, true, 3n]);
+    expect(outputs).toEqual(["10", "True", "3"]);
   });
 });

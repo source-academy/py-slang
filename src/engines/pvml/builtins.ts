@@ -513,16 +513,22 @@ export function executePrimitive(
 ): PVMLBoxType {
   switch (primitiveIndex) {
     case 2: {
-      // len / list_length
+      // len / list_length — Python's len() returns an int, so this must be a bigint (matching
+      // PVMLType.BIGINT), not a plain JS number: v.elements.length is a number, and printing it
+      // unconverted silently produced a float ("5.0" instead of "5") -- a real bug JS's loose
+      // 5 === 5.0 equality had been hiding from the old return-value-comparison test suite.
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
-      if (isPVMLObject(v) && v.type === "array") return v.elements.length;
+      if (isPVMLObject(v) && v.type === "array") return BigInt(v.elements.length);
       throw new PVMLInterpreterError(`TypeError: object of type '${getPVMLType(v)}' has no len()`);
     }
 
-    case 5: // print/display
-      sendOutput(args.join(" "));
+    case 5: // print/display — proper Python str() formatting per argument (see str()/repr()
+      // below, case 90/91, which use this same toPythonString/pvmlBoxToCseValue machinery),
+      // matching CSE's own print() (misc.ts) exactly: bool as True/False, None as None, a list
+      // as [1, 2, 3] with repr-quoted string elements, not JS's own toString() conventions.
+      sendOutput(args.map(a => toPythonString(pvmlBoxToCseValue(a))).join(" "));
       return undefined;
 
     case 10: // error
