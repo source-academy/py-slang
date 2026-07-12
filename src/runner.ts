@@ -74,7 +74,7 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
     initialised: true as const,
     stdout: { stream: stdoutStream, writer: stdoutStream.getWriter() },
     stderr: { stream: stderrStream, writer: stderrStream.getWriter() },
-    stdin: { stream: stdinStream, reader: stdinStream.getReader() },
+    stdin: { stream: stdinStream, reader: stdinStream.getReader(), setNextPrompt: () => {} },
   };
 }
 

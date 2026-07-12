@@ -311,6 +311,29 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
+
+    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
+    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
+    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
+    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
+    // so it can be peeked here, before that instruction runs.
+    if (
+      !isPrelude &&
+      isInstr(command) &&
+      command.instrType === InstrType.APPLICATION &&
+      command.numOfArgs === 0
+    ) {
+      const callee = stash.peek();
+      if (callee?.type === "builtin" && callee.name === "breakpoint") {
+        // `steps` here is the count as of the end of the *previous* iteration — i.e. the
+        // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
+        // this very APPLICATION instruction on top of its control, which is what "steps - 1"
+        // below reproduces.
+        context.runtime.breakpointSteps.push(steps - 1);
+        context.runtime.break = true;
+      }
+    }
+
     control.pop();
     if (isNode(command)) {
       const node = command;

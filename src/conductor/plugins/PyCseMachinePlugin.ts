@@ -414,7 +414,7 @@ export async function collectSnapshots(
   variant: number,
   code: string,
   maxSnapshots: number = 1000,
-): Promise<CseSnapshot[]> {
+): Promise<{ snapshots: CseSnapshot[]; breakpointSteps: number[] }> {
   const snapshots: CseSnapshot[] = [];
   // Runtime-fabricated nodes (e.g. implicit range() bounds, the for-loop increment —
   // see utils.ts's evaluateForIterator/generateForIncrement) carry tokens pinned to
@@ -478,7 +478,12 @@ export async function collectSnapshots(
     });
   }
 
-  return snapshots;
+  // context.runtime.breakpointSteps is recorded by the interpreter regardless of the
+  // maxSnapshots cutoff above; filter out any indices past what was actually collected so the
+  // host never gets pointed at a step with no corresponding snapshot.
+  const breakpointSteps = context.runtime.breakpointSteps.filter(step => step < snapshots.length);
+
+  return { snapshots, breakpointSteps };
 }
 
 // The runner-side plugin that transports these snapshots now lives in
