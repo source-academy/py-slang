@@ -183,6 +183,9 @@ export function typeTranslator(type: Value["type"]): string {
       return "NoneType";
     case "closure":
       return "function";
+    case "builtin":
+      // Matches CPython's type(print).__name__.
+      return "builtin_function_or_method";
     default:
       return "unknown";
   }
@@ -224,6 +227,12 @@ export function operatorTranslator(operator: TokenType | string) {
       return "or";
     case TokenType.IS:
       return "is";
+    case TokenType.ISNOT:
+      return "is not";
+    case TokenType.IN:
+      return "in";
+    case TokenType.NOTIN:
+      return "not in";
     default:
       return String(operator);
   }

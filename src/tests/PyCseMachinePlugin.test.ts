@@ -41,6 +41,12 @@ function makeEnv(id: string, name: string, head: Record<string, Value> = {}, tai
 
 /** Run Python code through a fresh context and collect CSE snapshots. */
 async function runAndCollect(code: string, variant = 3) {
+  const { snapshots } = await runAndCollectWithBreakpoints(code, variant);
+  return snapshots;
+}
+
+/** Like runAndCollect, but also returns the recorded breakpoint() step indices. */
+async function runAndCollectWithBreakpoints(code: string, variant = 3) {
   const ctx = new Context();
   for (const [name, val] of [...math.builtins, ...misc.builtins]) {
     ctx.nativeStorage.builtins.set(name, val);
@@ -100,7 +106,7 @@ describe("formatValue", () => {
   });
 
   it("formats builtin function", () => {
-    expect(formatValue(builtin("abs"))).toBe("<built-in function abs>");
+    expect(formatValue(builtin("abs"))).toBe("abs");
   });
 
   it("formats short list", () => {
@@ -180,7 +186,9 @@ describe("serializeValue", () => {
 
   it("serializes builtin", () => {
     const v = serializeValue(builtin("print"));
-    expect(v.displayValue).toBe("<built-in function print>");
+    expect(v.displayValue).toBe("print");
+    expect(v.label).toBe("builtin_function_or_method");
+    expect(v.label).not.toBe("function"); // "function" is what closures get
   });
 });
 
@@ -404,6 +412,49 @@ describe("serializeControlItem", () => {
     expect((result.metadata as any)?.startLine).toBe(3);
     expect((result.metadata as any)?.endLine).toBe(3);
   });
+
+  // Regression tests for https://github.com/source-academy/py-slang/issues/228.
+  it("a real single-token node whose token is the very first token of the source renders its real text and line info", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 1, lexeme: "print" },
+        endToken: { indexInSource: 0, line: 1, lexeme: "print" },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("print");
+    expect((result.metadata as any)?.startLine).toBe(1);
+    expect((result.metadata as any)?.endLine).toBe(1);
+  });
+
+  it("a synthetic single-token node pinned to position 0 falls back to the generic KIND_LABEL, not the real text at position 0", () => {
+    const printCode = "print";
+    const result = serializeControlItem(
+      {
+        kind: "Variable",
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      printCode,
+    );
+    expect(result.displayText).toBe("var");
+    expect((result.metadata as any)?.startLine).toBeUndefined();
+  });
+
+  it("synthetic BigIntLiteral (e.g. implicit range() start/step bound) still shows its runtime value", () => {
+    const result = serializeControlItem(
+      {
+        kind: "BigIntLiteral",
+        value: 0n,
+        startToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+        endToken: { indexInSource: 0, line: 0, lexeme: "0", synthetic: true },
+      },
+      "for x in range(3):\n    pass\n",
+    );
+    expect(result.displayText).toBe("0");
+  });
 });
 
 // ── serializeEnvChain ─────────────────────────────────────────────────────────
@@ -441,6 +492,30 @@ describe("serializeEnvChain", () => {
     expect(frames[0].isOnCallStack).toBe(true);
   });
 
+  it("carries globalNames from the closure's globalVariables", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set(["x", "y"]) };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(callFrame.globalNames).toEqual(["x", "y"]);
+  });
+
+  it("omits globalNames when the closure declares no globals", () => {
+    const globalEnv = makeEnv("g", "global");
+    const callEnv = makeEnv("f1", "f", {}, globalEnv);
+    callEnv.closure = { globalVariables: new Set() };
+    const frames = serializeEnvChain([callEnv, globalEnv], [], [], callEnv);
+    const callFrame = frames.find(f => f.id === "f1")!;
+    expect(callFrame.globalNames).toBeUndefined();
+  });
+
+  it("omits globalNames for frames with no closure (e.g. the global frame)", () => {
+    const globalEnv = makeEnv("g", "global");
+    const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
+    expect(frames[0].globalNames).toBeUndefined();
+  });
+
   it("filters __program__ from bindings", () => {
     const globalEnv = makeEnv("g", "global", { __program__: none(), x: bigint(5n) });
     const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
@@ -473,7 +548,7 @@ describe("collectSnapshots", () => {
   it("returns an empty array when maxSnapshots is 0", async () => {
     const ctx = new Context();
     const ast = parse("x = 1\n");
-    const snapshots = await collectSnapshots(
+    const { snapshots } = await collectSnapshots(
       ctx,
       new Control(ast),
       new Stash(),
@@ -512,7 +587,7 @@ describe("collectSnapshots", () => {
     const ctx = new Context();
     const script = "x = 1 + 2 + 3\n";
     const ast = parse(script);
-    const snapshots = await collectSnapshots(
+    const { snapshots } = await collectSnapshots(
       ctx,
       new Control(ast),
       new Stash(),
@@ -537,5 +612,137 @@ describe("collectSnapshots", () => {
     for (const snap of withLine) {
       expect(snap.currentLine).toBeGreaterThan(0);
     }
+  });
+
+  // Regression test for https://github.com/source-academy/py-slang/issues/233.
+  it("currentLine never collapses to 0 during a for/range() loop's synthetic bookkeeping steps", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    for (const snap of snapshots) {
+      expect(snap.currentLine).not.toBe(0);
+    }
+    // Once the loop body has run at least once, currentLine should have reached line 2
+    // (print(x)) rather than getting stuck on line 1 forever.
+    expect(snapshots.some(s => s.currentLine === 2)).toBe(true);
+  });
+
+  it("currentLine alternates between the for-line and the body line across iterations, not stuck on one", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    const lines = snapshots.map(s => s.currentLine);
+    // Collapse consecutive duplicates: [1,1,1,2,2,1,1,2,2] -> [1,2,1,2].
+    const transitions = lines.filter((line, i) => line !== lines[i - 1]);
+    // The loop's per-iteration bookkeeping (implicit range() bounds, condition re-check,
+    // increment) is logically part of the for-statement (line 1), so currentLine should
+    // return there after each body execution (line 2) instead of getting stuck on
+    // whichever line last had a "real" (non-synthetic) node.
+    expect(transitions.filter(l => l === 1).length).toBeGreaterThan(1);
+    expect(transitions.filter(l => l === 2).length).toBeGreaterThan(1);
+  });
+
+  it("frame transition on return happens at the ENVIRONMENT instruction, not the return statement itself", async () => {
+    const snapshots = await runAndCollect(
+      `def f():
+    return 1
+
+f()`,
+    );
+
+    // The step where "return" (RESET) is about to execute: the callee frame must still be
+    // the active one — the frame transition must not have happened yet.
+    const returnStepIndex = snapshots.findIndex(s => s.control[0]?.displayText === "return");
+    expect(returnStepIndex).toBeGreaterThan(-1);
+    const returnStep = snapshots[returnStepIndex];
+    const calleeFrame = returnStep.environments.find(e => e.name === "f");
+    expect(calleeFrame).toBeDefined();
+    expect(calleeFrame!.isActive).toBe(true);
+
+    // The very next step: RESET has fired (now a no-op) and is consumed. The callee frame
+    // must still be present and active — nothing should have changed yet.
+    const afterReturn = snapshots[returnStepIndex + 1];
+    const calleeFrameAfterReturn = afterReturn.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterReturn).toBeDefined();
+    expect(calleeFrameAfterReturn!.isActive).toBe(true);
+
+    // Only once the ENVIRONMENT instruction executes does the active frame move back — the
+    // callee frame ("f") must no longer be the active one (it may still be listed, no longer
+    // on the call stack, or pruned entirely).
+    const envStepIndex = snapshots.findIndex(
+      (s, i) => i > returnStepIndex && s.control[0]?.displayText === "ENVIRONMENT",
+    );
+    expect(envStepIndex).toBeGreaterThan(returnStepIndex);
+    const afterEnvStep = snapshots[envStepIndex + 1];
+    const calleeFrameAfterEnv = afterEnvStep.environments.find(e => e.name === "f");
+    expect(calleeFrameAfterEnv?.isActive).not.toBe(true);
+  });
+});
+
+// ── breakpoint() ──────────────────────────────────────────────────────────────
+
+describe("breakpoint()", () => {
+  it("evaluates to None and does not otherwise affect the program", async () => {
+    const snapshots = await runAndCollect("x = breakpoint()");
+    const last = snapshots[snapshots.length - 1];
+    const xBinding = last.environments.flatMap(e => e.bindings).find(b => b.name === "x");
+    expect(xBinding?.value.displayValue).toBe("None");
+  });
+
+  it("records a breakpointSteps entry at top level", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints("breakpoint()\nx = 1");
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("the recorded step's control has the breakpoint call on top", async () => {
+    const { snapshots, breakpointSteps } =
+      await runAndCollectWithBreakpoints("breakpoint()\nx = 1");
+    expect(breakpointSteps).toHaveLength(1);
+    const step = snapshots.find(s => s.stepIndex === breakpointSteps[0]);
+    expect(step).toBeDefined();
+    expect(step!.control[0]?.displayText).toContain("call");
+  });
+
+  it("is recorded inside a function body", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints(
+      `def f():
+    breakpoint()
+    return 1
+
+f()`,
+    );
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("is recorded on every iteration inside a loop, in ascending order", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints(
+      `for x in range(3):
+    breakpoint()`,
+    );
+    expect(breakpointSteps.length).toBe(3);
+    expect([...breakpointSteps].sort((a, b) => a - b)).toEqual(breakpointSteps);
+  });
+
+  it("is detected through an alias, not just literal source text", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints("bp = breakpoint\nbp()");
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("does not accumulate stale steps from a previous run on the same context", async () => {
+    const ctx = new Context();
+    for (const [name, val] of [...math.builtins, ...misc.builtins]) {
+      ctx.nativeStorage.builtins.set(name, val);
+    }
+    const run = async (code: string) => {
+      const script = code + "\n";
+      const ast = parse(script);
+      return collectSnapshots(ctx, new Control(ast), new Stash(), 100000, -1, 3, script);
+    };
+
+    const first = await run("breakpoint()");
+    expect(first.breakpointSteps.length).toBeGreaterThan(0);
+
+    // A second run reusing the same context/nativeStorage should not see the first run's
+    // breakpoint steps (PyCseEvaluator resets context.runtime.breakpointSteps per evaluateChunk;
+    // this test exercises collectSnapshots directly, so it clears runtime state itself).
+    ctx.runtime.breakpointSteps = [];
+    const second = await run("x = 1");
+    expect(second.breakpointSteps).toHaveLength(0);
   });
 });

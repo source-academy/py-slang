@@ -6,14 +6,27 @@
  *   [code, expectedValue, expectedOutput]
  */
 import { UnsupportedOperandTypeError, ZeroDivisionError } from "../engines/pvml/errors";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import OpCodes from "../engines/pvml/opcodes";
+import { parse } from "../parser/parser-adapter";
 import { generatePVMLTestCases, PVMLTestCases } from "./utils";
+
+/** The opcodes the entry function's compiled body contains, for compiler-only assertions
+ * that don't require the interpreter to execute them (e.g. opcodes the interpreter doesn't
+ * implement yet). */
+function compiledEntryOpcodes(code: string): OpCodes[] {
+  const ast = parse(code.endsWith("\n") ? code : code + "\n");
+  const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+  const entryFn = program.functions[program.entryPoint];
+  return Array.from(entryFn.opcodes);
+}
 
 describe("PVML E2E", () => {
   const functionTests: PVMLTestCases = {
     "simple calls": [
       ["def add(x, y):\n    return x + y\nadd(3, 4)", 7, null],
-      ["def noop():\n    pass\nnoop()", undefined, null],
-      ["def f():\n    return\nf()", undefined, null],
+      ["def noop():\n    pass\nnoop()", null, null],
+      ["def f():\n    return\nf()", null, null],
     ],
     "nested and higher-order": [
       [
@@ -216,4 +229,28 @@ describe("PVML E2E", () => {
   describe("Loops", () => generatePVMLTestCases(loopTests));
   describe("Combined", () => generatePVMLTestCases(combinedTests));
   describe("Errors", () => generatePVMLTestCases(errorTests));
+
+  // `is`/`is not` compile to their own EQP/NEQP opcodes, distinct from `==`/`!=`'s
+  // EQG/NEQG (see pvml-compiler.ts's getCompareOpCode) — `is`/`is not` test Python
+  // pointer/identity equality, a different question from `==`/`!=`'s structural
+  // equality. The PVML interpreter doesn't execute EQP/NEQP yet, so this only
+  // pins what the compiler emits, not runtime behaviour.
+  describe("Compiler: is / is not opcodes", () => {
+    test("`is` compiles to EQP, not EQG", () => {
+      expect(compiledEntryOpcodes("1 is 1")).toContain(OpCodes.EQP);
+      expect(compiledEntryOpcodes("1 is 1")).not.toContain(OpCodes.EQG);
+    });
+
+    test("`is not` compiles to NEQP, not NEQG", () => {
+      expect(compiledEntryOpcodes("1 is not 1")).toContain(OpCodes.NEQP);
+      expect(compiledEntryOpcodes("1 is not 1")).not.toContain(OpCodes.NEQG);
+    });
+
+    test("`==`/`!=` still compile to EQG/NEQG, not EQP/NEQP", () => {
+      expect(compiledEntryOpcodes("1 == 1")).toContain(OpCodes.EQG);
+      expect(compiledEntryOpcodes("1 == 1")).not.toContain(OpCodes.EQP);
+      expect(compiledEntryOpcodes("1 != 1")).toContain(OpCodes.NEQG);
+      expect(compiledEntryOpcodes("1 != 1")).not.toContain(OpCodes.NEQP);
+    });
+  });
 });

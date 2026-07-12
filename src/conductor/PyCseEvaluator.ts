@@ -96,6 +96,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
         stdout,
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
+        flushStdout: () => flushOutput(this.conductor),
       };
       this.context.conductor = this.conductor;
       this.context.evaluator = this;
@@ -119,6 +120,12 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       const stash = new Stash();
       this.context.control = control;
       this.context.stash = stash;
+      // this.context persists across evaluateChunk calls; reset per-run state that the
+      // interpreter accumulates so a prior run's breakpoint()/changepoint steps don't leak
+      // into this one.
+      this.context.runtime.breakpointSteps = [];
+      this.context.runtime.changepointSteps = [];
+      this.context.runtime.break = false;
 
       // CSE chapters (3+): collect snapshots up to the step cap, then stop.
       // Output produced after the step cap is not emitted — that's intentional.
@@ -135,7 +142,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
           }
         }
 
-        const snapshots = await collectSnapshots(
+        const { snapshots, breakpointSteps } = await collectSnapshots(
           this.context,
           control,
           stash,
@@ -146,7 +153,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
           maxSnapshots,
         );
         flushOutput(this.conductor);
-        this.csePlugin.sendSnapshots(snapshots);
+        this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
       } else {
         await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
         flushOutput(this.conductor);

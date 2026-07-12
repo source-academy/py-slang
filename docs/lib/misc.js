@@ -1,4 +1,43 @@
 /**
+ * A simplified version of the Python built-in <CODE>print</CODE> function.
+ * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
+ * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
+ * output (<CODE>sys.stdout</CODE>), followed by a newline character. See the official Python
+ * documentation for <CODE>print</CODE>.
+ *
+ * @param {any} <CODE>*object</CODE> - object(s) to be printed to the standard output
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function print(...object) { }
+
+/**
+ * Prints the provided <CODE>*object</CODE> arguments to the standard output (similar to a simplified
+ * <CODE>print</CODE>) and then raises an exception. This function accepts a variable number of arguments,
+ * converts them to their <CODE>string</CODE> representations using <CODE>str()</CODE>, outputs them (with a
+ * newline) just like what <CODE>print</CODE> does, and immediately halts execution by raising an exception.
+ *
+ * @param {any} <CODE>*object</CODE> - Objects to be printed to the standard output
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function error(...object) { }
+
+/**
+ * Evaluates to the <CODE>None</CODE> value with no effect on the program — the Python analogue of
+ * JavaScript's <CODE>debugger;</CODE> statement. In the stepper, <CODE>breakpoint()</CODE> additionally
+ * marks a step that the breakpoint navigation can jump to.
+ *
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function breakpoint() { }
+
+/**
+ * Return the number of milliseconds elapsed since <CODE>January 1, 1970 00:00:00 UTC</CODE>.
+ *
+ * @returns {float} current time in milliseconds
+ */
+function time_time() { }
+
+/**
  * Return the absolute value of <CODE>x</CODE>.
  * For an <CODE>int</CODE> input, it returns the non-negative integer equivalent.
  * For a <CODE>float</CODE> input, it returns the positive floating-point number representing its magnitude.

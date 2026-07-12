@@ -428,6 +428,10 @@ export class PVMLInterpreter {
           this.createClosure(a1);
           break;
 
+        case OpCodes.NEWCP:
+          this.push({ type: "primitive", primitiveIndex: a1 });
+          break;
+
         case OpCodes.CALL:
           this.call(a1, false);
           break;
@@ -791,6 +795,15 @@ export class PVMLInterpreter {
     if (__DEBUG__)
       debug(`[CALL] Popped function: ${JSON.stringify(PVMLInterpreter.toJSValue(func))}`);
 
+    // A primitive referenced as a value (NEWCP) rather than called directly
+    // — e.g. `f = abs; f(-5)` — has no function-table entry/frame of its
+    // own; dispatch it the same way CALLP/CALLTP do.
+    if (isPVMLObject(func) && func.type === "primitive") {
+      const result = executePrimitive(func.primitiveIndex, args, this.onOutput);
+      this.push(result);
+      return;
+    }
+
     if (!isPVMLObject(func) || func.type !== "closure") {
       throw new Error(
         `Cannot call non-closure value: ${JSON.stringify(PVMLInterpreter.toJSValue(func))}`,
@@ -895,10 +908,11 @@ export class PVMLInterpreter {
   // ========================================================================
 
   private createArray(): void {
-    const size = this.pop() as number;
+    // No size operand: native Pynter's NEWA (op_new_a) always creates an
+    // empty, auto-growing array and never pops one — see visitListExpr.
     const arr: PVMLArray = {
       type: "array",
-      elements: new Array(size).fill(undefined),
+      elements: [],
     };
     this.push(arr);
   }
@@ -911,11 +925,9 @@ export class PVMLInterpreter {
       throw new Error("Cannot index non-array value");
     }
 
-    if (index < 0 || index >= arr.elements.length) {
-      throw new Error(`Array index ${index} out of bounds (length: ${arr.elements.length})`);
-    }
-
-    this.push(arr.elements[index]);
+    // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
+    // fault, it yields undefined.
+    this.push(index >= 0 && index < arr.elements.length ? arr.elements[index] : undefined);
   }
 
   private storeArrayElement(): void {
@@ -927,10 +939,12 @@ export class PVMLInterpreter {
       throw new Error("Cannot index non-array value");
     }
 
-    if (index < 0 || index >= arr.elements.length) {
-      throw new Error(`Array index ${index} out of bounds (length: ${arr.elements.length})`);
+    if (index < 0) {
+      throw new Error(`Array index ${index} out of bounds`);
     }
 
+    // Mirrors native Pynter's siarray_put: writing past the end grows the
+    // array (leaving a gap of `undefined`s) rather than faulting.
     arr.elements[index] = value;
   }
 
@@ -947,6 +961,7 @@ export class PVMLInterpreter {
       return value;
     if (isPVMLObject(value)) {
       if (value.type === "closure") return `<closure:${value.functionIndex}>`;
+      if (value.type === "primitive") return `<primitive:${value.primitiveIndex}>`;
       if (value.type === "array") return value.elements.map(e => PVMLInterpreter.toJSValue(e));
       if (value.type === "iterator") return `<iterator>`;
     }

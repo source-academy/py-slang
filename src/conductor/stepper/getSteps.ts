@@ -27,12 +27,25 @@ interface Marker {
   redex?: StepNode;
   redexType?: "beforeMarker" | "afterMarker";
   explanation?: string;
+  /** Whether this marker's redex is a `breakpoint()` statement — see `serializeMarker`. */
+  isBreakpoint?: boolean;
 }
 
 interface Step {
   ast: StepNode;
   markers?: Marker[];
+  /** The program's cumulative output (everything `print` has written) up to and including this step. */
+  output?: string;
 }
+
+/**
+ * {@link SerializedStepperStep} widened with the `output` field. `output` was added to the shared
+ * protocol type in `@sourceacademy/common-stepper` 0.0.2; until this package bumps its dependency to
+ * that, we widen locally so the runner can still emit it. The field crosses the runner→host channel as
+ * plain JSON regardless of the static type, and the host reads it from its own (already-updated)
+ * protocol type. TODO: drop this alias once the `@sourceacademy/common-stepper` dependency is ≥ 0.0.2.
+ */
+type SerializedStep = SerializedStepperStep & { output?: string };
 
 /**
  * Whether `prog` is a finished result rather than a tree stuck mid-reduction. A completed program is
@@ -52,7 +65,20 @@ function isComplete(prog: StepNode): boolean {
 }
 
 function drive(prog: StepNode, contractionLimit: number): Step[] {
-  const steps: Step[] = [{ ast: prog, markers: [{ explanation: "Start of evaluation" }] }];
+  // The program's cumulative output so far. A `print(...)` contraction reports its text via
+  // `result.output`; we append it *between* that contraction's before and after steps, so the text
+  // first appears on the "Ran print" (after) step and persists on every step after it. Every step
+  // carries the running total, so the host's output panel shows exactly what had been printed by that
+  // point as the slider moves (empty "" before the first print).
+  let output = "";
+  const steps: Step[] = [];
+  // Every step must carry the *current* running total, so pushing goes through this closure instead
+  // of each call site restating `output` — a plain `steps.push` would silently omit it.
+  const pushStep = (ast: StepNode, markers?: Marker[]): void => {
+    steps.push({ ast, markers, output });
+  };
+
+  pushStep(prog, [{ explanation: "Start of evaluation" }]);
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
@@ -64,47 +90,45 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
       const message = error instanceof Error ? error.message : String(error);
-      steps.push({ ast: current, markers: [{ redexType: "beforeMarker", explanation: message }] });
-      steps.push({ ast: current, markers: [{ explanation: "Evaluation stuck" }] });
+      pushStep(current, [{ redexType: "beforeMarker", explanation: message }]);
+      pushStep(current, [{ explanation: "Evaluation stuck" }]);
       return steps;
     }
     if (result === null) {
       // No further contraction: the program is either a finished value ("Evaluation complete") or a
       // tree that cannot reduce yet is not a value ("Evaluation stuck"), exactly as Source reports.
-      steps.push({
-        ast: current,
-        markers: [
-          { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
-        ],
-      });
+      pushStep(current, [
+        { explanation: isComplete(current) ? "Evaluation complete" : "Evaluation stuck" },
+      ]);
       return steps;
     }
 
-    steps.push({
-      ast: current,
-      markers: [
-        {
-          redex: result.preRedex,
-          redexType: "beforeMarker",
-          explanation: result.beforeExplanation,
-        },
-      ],
-    });
-    steps.push({
+    pushStep(current, [
+      {
+        redex: result.preRedex,
+        redexType: "beforeMarker",
+        explanation: result.beforeExplanation,
+        isBreakpoint: result.isBreakpoint,
+      },
+    ]);
+    // Apply this contraction's output (only a `print` produces any) so the after step and everything
+    // after it show it, while the before ("Running print") step above still shows the prior total.
+    if (result.output !== undefined) output += result.output;
+    pushStep(
       // `postNode` (set by a contraction that discards a finished value — see its doc comment on
       // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
       // regardless, so the discarded statement is actually gone by the next contraction.
-      ast: result.postNode ?? result.node,
-      markers: [
+      result.postNode ?? result.node,
+      [
         result.postRedex
           ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
           : { redexType: "afterMarker", explanation: result.explanation },
       ],
-    });
+    );
 
     current = result.node;
     if (i === contractionLimit - 1) {
-      steps.push({ ast: current, markers: [{ explanation: "Maximum number of steps exceeded" }] });
+      pushStep(current, [{ explanation: "Maximum number of steps exceeded" }]);
     }
   }
 
@@ -127,7 +151,7 @@ function isNode(value: unknown): value is StepNode {
  * Cycle-safe via an on-path set (any node revisited while still an ancestor becomes a child-less
  * stub), guaranteeing a finite, structured-clone-able tree.
  */
-function serializeStep(step: Step): SerializedStepperStep {
+function serializeStep(step: Step): SerializedStep {
   let counter = 0;
   const ids = new Map<StepNode, string>();
   const onPath = new Set<StepNode>();
@@ -172,14 +196,31 @@ function serializeStep(step: Step): SerializedStepperStep {
     if (marker.redex) {
       const redexId = ids.get(marker.redex);
       if (redexId !== undefined) out.redexId = redexId;
-      out.redexNodeType = marker.redex.type;
+      // `redexNodeType` drives the host's breakpoint navigation (the double-arrow jumps to a marker
+      // whose type is "DebuggerStatement"), so it belongs on the before marker only — an after marker
+      // still carries `redexId`/`redexType` (so its redex is highlighted — e.g. a `breakpoint()`/`pass`
+      // shown green one last time before it is discarded), but emitting `redexNodeType` there too would
+      // make the double-arrow also stop on that post-reduction step (landing on "Evaluated breakpoint
+      // statement", not just "Evaluating …"). A `breakpoint()` redex is never actually typed
+      // "DebuggerStatement" (see `stepHead`'s `ExpressionStatement` case in reduce.ts — it is detected
+      // by resolved identity, not a dedicated node type, so aliasing like `bp = breakpoint; bp()` still
+      // matches), so `isBreakpoint` overrides what would otherwise be the redex's real node type.
+      if (marker.redexType === "beforeMarker") {
+        out.redexNodeType = marker.isBreakpoint ? "DebuggerStatement" : marker.redex.type;
+      }
     }
     if (marker.redexType !== undefined) out.redexType = marker.redexType;
     if (marker.explanation !== undefined) out.explanation = marker.explanation;
     return out;
   };
 
-  return step.markers ? { ast, markers: step.markers.map(serializeMarker) } : { ast };
+  const out: SerializedStep = step.markers
+    ? { ast, markers: step.markers.map(serializeMarker) }
+    : { ast };
+  // Emit `output` only when non-empty; the host defaults an absent field to "" and always shows the
+  // (possibly empty) output panel once code has run, so pre-print steps need not carry an empty string.
+  if (step.output) out.output = step.output;
+  return out;
 }
 
 /* -------------------------------------------------------------------------- */

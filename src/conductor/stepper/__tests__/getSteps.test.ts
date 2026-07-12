@@ -1,7 +1,15 @@
-import { expressionStatement, identifier } from "../ast";
+import {
+  emptyList,
+  expressionStatement,
+  identifier,
+  literal,
+  pairNode,
+  type StepNode,
+} from "../ast";
 import { isBuiltinConstantName } from "../builtins";
 import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
+import { formatPrintLlistOutput } from "../lists";
 import { preprocessPython } from "../preprocess";
 
 // `chapter` defaults to 2 so the existing §2 (list-library) tests resolve those names; the
@@ -21,6 +29,13 @@ function result(src: string) {
 
 function explanations(src: string) {
   return steps(src).map(s => s.markers?.[0]?.explanation ?? "");
+}
+
+/** The program's cumulative output (everything print/print_llist has written) on its last step; see
+ * the "cumulative print output per step" describe block below for the field's full behaviour. */
+function finalOutput(src: string): string | undefined {
+  const s = steps(src);
+  return (s[s.length - 1] as { output?: string }).output;
 }
 
 /** Collect every nodeId present in a serialized step's AST. */
@@ -197,6 +212,22 @@ describe("Python stepper — built-in functions and constants", () => {
     expect(result("max(1, 7, 3)")).toBe("7");
     expect(result("min(4, 2, 9)")).toBe("2");
     expect(result('len("hello")')).toBe("5");
+  });
+
+  // Unlike CPython's max()/min(), which accept a single iterable argument
+  // (max([1, 2, 3]) == 3), this dialect's max/min always require >= 2 direct
+  // arguments -- there is no single-iterable form. A pair is a two-element
+  // Python list under the hood, so max(pair(1, 5)) is the borderline case:
+  // it *looks* like the single-iterable form CPython supports, but is
+  // rejected the same way max(5) is, since it's still just one argument.
+  test("max/min require at least 2 direct arguments — no single-iterable form", () => {
+    expect(explanations("max(5)").pop()).toBe("Evaluation stuck");
+    expect(explanations("min(5)").pop()).toBe("Evaluation stuck");
+    expect(result("max(5)")).toContain("takes at least 2 argument(s) but 1 were given");
+    expect(explanations("max(pair(1, 5))").pop()).toBe("Evaluation stuck");
+    expect(result("max(pair(1, 5))")).toContain("takes at least 2 argument(s) but 1 were given");
+    expect(result("arity(max)")).toBe("2");
+    expect(result("arity(min)")).toBe("2");
   });
 
   test("type conversions", () => {
@@ -834,16 +865,76 @@ describe("Python stepper — pairs and linked lists (Python §2)", () => {
     expect(result("remove_all(2, llist(2, 1, 2, 3))")).toBe("[1, [3, None]]");
   });
 
-  test("equal compares structure and leaf values", () => {
-    expect(result("equal(llist(1, 2, 3), llist(1, 2, 3))")).toBe("True");
-    expect(result("equal(llist(1, 2), llist(1, 3))")).toBe("False");
-    expect(result("equal(pair(1, pair(2, None)), llist(1, 2))")).toBe("True");
-    expect(result("equal(None, None)")).toBe("True");
+  test("== compares structure and leaf values", () => {
+    expect(result("llist(1, 2, 3) == llist(1, 2, 3)")).toBe("True");
+    expect(result("llist(1, 2) == llist(1, 3)")).toBe("False");
+    expect(result("pair(1, pair(2, None)) == llist(1, 2)")).toBe("True");
+    expect(result("None == None")).toBe("True");
   });
 
   test("llist_to_string and for_each", () => {
     expect(result("llist_to_string(llist(1, 2))")).toBe("'[1, [2, None]]'");
     expect(result("for_each(lambda x: x, llist(1, 2, 3))")).toBe("True");
+  });
+
+  // print_llist renders box-and-pointer notation as text ("llist(...)" for a proper list, "[head,
+  // tail]" for an improper pair), like the CSE machine's and PVML's print_llist — unlike
+  // llist_to_string above, which always uses bracket notation.
+  test("print_llist renders llist(...) for a proper list and [head, tail] otherwise", () => {
+    expect(finalOutput("print_llist(llist(1, 2, 3))")).toBe("llist(1, 2, 3)\n");
+    expect(finalOutput("print_llist(None)")).toBe("llist()\n");
+    expect(finalOutput("print_llist(pair(1, 2))")).toBe("[1, 2]\n");
+    expect(finalOutput("print_llist(llist('a', 'b'))")).toBe("llist('a', 'b')\n");
+    expect(result("print_llist(llist(1, 2, 3))")).toBe("None"); // print_llist's own return value
+  });
+
+  test("print_llist: a proper-list element nested in an improper pair still renders as llist(...)", () => {
+    expect(finalOutput("print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))")).toBe(
+      "llist(llist(1, 2, 3), 4, 5, 6)\n",
+    );
+  });
+
+  // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong notation for
+  // a value reachable via two different paths in the same structure). print_llist's algorithm is
+  // plain recursion with no identity-keyed memoization, so it can't reproduce that bug: the same
+  // pair object is re-derived fresh from its own structure every time it's visited, regardless of
+  // which parent reached it.
+  test("print_llist does not misrender a shared sub-list (js-slang#1124)", () => {
+    expect(finalOutput("x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)")).toBe(
+      "llist(llist(2, 3), llist(1, 2, 3))\n",
+    );
+  });
+
+  // Regression test for the O(N^2)/stack-overflow bug caught in review on #250: printLlistText used
+  // to re-run a *recursive* isProperLlist on every tail suffix while unrolling an improper
+  // structure's bracket notation, making the whole walk O(N^2) -- and that recursive isProperLlist
+  // could itself overflow the stack on a long chain even on its own. Built directly via the AST
+  // constructors (bypassing the stepper's per-statement execution, which has its own, unrelated
+  // scaling limits) so this isolates printLlistText's own complexity. `improperN` is well past where
+  // the old O(N^2) behavior would have made this test time out, but -- unlike the proper-list case
+  // below -- still bounded by the bracket notation's own inherent O(N) nesting depth (acknowledged,
+  // accepted limitation; matches the CSE machine's equivalent recursion-depth ceiling).
+  test("print_llist stays fast and stack-safe on large structures", () => {
+    const intLit = (n: number): StepNode => literal(BigInt(n), String(n), false);
+
+    const improperN = 3000;
+    let improperChain: StepNode = intLit(999);
+    for (let i = improperN; i >= 1; i--) improperChain = pairNode(intLit(i), improperChain);
+    const improperOutput = formatPrintLlistOutput([improperChain]);
+    expect(improperOutput.startsWith("[1, [2, [3,")).toBe(true);
+    expect(improperOutput.endsWith("999" + "]".repeat(improperN) + "\n")).toBe(true);
+
+    const properN = 50000;
+    let properChain: StepNode = emptyList();
+    for (let i = properN; i >= 1; i--) properChain = pairNode(intLit(i), properChain);
+    const properOutput = formatPrintLlistOutput([properChain]);
+    expect(properOutput.startsWith("llist(1, 2, 3,")).toBe(true);
+    expect(properOutput.endsWith(`${properN - 1}, ${properN})\n`)).toBe(true);
+  });
+
+  test("print_llist requires exactly 1 argument", () => {
+    expect(explanations("print_llist()").pop()).toBe("Evaluation stuck");
+    expect(explanations("print_llist(1, 2)").pop()).toBe("Evaluation stuck");
   });
 
   test("list functions are first-class values", () => {
@@ -955,14 +1046,55 @@ describe("Python stepper — integer comparisons and edge arithmetic", () => {
     expect(explanations('"a" < "b"').pop()).toBe("Evaluation complete"); // modelled, not stuck
   });
 
-  test("== / != are narrow in this dialect: only (numeric, numeric) or (string, string) succeed", () => {
-    // Unlike native Python, equality is not defined for every pair of values here — None, functions,
-    // and mismatched types are all a TypeError (stuck), not a structural/identity comparison.
-    for (const src of ["None == None", "None == 1", "None != None", "None != 1", "1 == '1'"]) {
+  test("== / != are structural over any x any at §1/§2, except bool and function operands", () => {
+    // `==`/`!=` take any x any at Python §1/§2 (see docs/specs/python_typing_middle_12.tex): None,
+    // pairs and mismatched types all compare structurally rather than erroring.
+    const cases: [string, string][] = [
+      ["None == None", "True"],
+      ["None == 1", "False"],
+      ["None != None", "False"],
+      ["None != 1", "True"],
+      ["1 == '1'", "False"],
+      ["1 != '1'", "True"],
+    ];
+    for (const [src, expected] of cases) {
+      expect(result(src)).toBe(expected);
+      expect(explanations(src).pop()).toBe("Evaluation complete");
+    }
+  });
+
+  test("bool and function operands are still excluded from == / != at §1/§2", () => {
+    for (const src of [
+      "True == 1",
+      "True == True",
+      "None == True",
+      "(lambda x: x) == (lambda x: x)",
+      // The exclusion applies wherever `==`/`!=` reaches, including elements found by recursing
+      // into pairs — not just the top-level operands.
+      "pair(1, True) == pair(1, True)",
+      "pair(1, 2) == pair(1, (lambda x: x))",
+    ]) {
       expect(explanations(src).pop()).toBe("Evaluation stuck");
       expect(result(src)).toContain("TypeError");
     }
-    expect(explanations("(lambda x: x) == (lambda x: x)").pop()).toBe("Evaluation stuck");
+  });
+
+  test("pairs compare structurally, recursively, under == at §2", () => {
+    const cases: [string, string][] = [
+      ["pair(1, 2) == pair(1, 2)", "True"],
+      ["pair(1, 2) == pair(1.0, 2)", "True"],
+      ["pair(1, 2) == pair(2, 2)", "False"],
+      ["pair(1, pair(2, 3)) == pair(1, pair(2, 3))", "True"],
+      ["pair(1, 2) == None", "False"],
+      ["pair(1, 2) != pair(1, 2)", "False"],
+      // Ints nested inside a pair compare exactly (bigint ===), not via a float-precision-losing
+      // `Number()` conversion — these two big ints round to the same IEEE-754 double but are unequal.
+      ["pair(100000000000000000001, 1) == pair(100000000000000000002, 1)", "False"],
+      ["pair(100000000000000000001, 1) == pair(100000000000000000001, 1)", "True"],
+    ];
+    for (const [src, expected] of cases) {
+      expect(result(src)).toBe(expected);
+    }
   });
 });
 
@@ -1121,7 +1253,7 @@ describe("Python stepper — list library edge built-ins", () => {
 
   test("a library function called with the wrong argument count is stuck", () => {
     expect(explanations("map(lambda x: x)").pop()).toBe("Evaluation stuck");
-    expect(result("equal(None)")).toContain("takes 2 argument(s) but 1 were given");
+    expect(result("append(None)")).toContain("takes 2 argument(s) but 1 were given");
   });
 });
 
@@ -1334,5 +1466,219 @@ describe("Python stepper — complex numbers", () => {
 
   test("complex arithmetic composes with user code", () => {
     expect(result("f = lambda z: z * z\nf(1+1j)")).toBe("2j");
+  });
+});
+
+describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", () => {
+  // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op for
+  // evaluation (like `pass`) that the host's breakpoint navigation (the double-arrow) can jump to. The
+  // host recognises a breakpoint step by a marker whose `redexNodeType` is "DebuggerStatement" (see the
+  // web-stepper host's `stepNextBreakpoint`). Unlike every other marker field, this one is *not* simply
+  // the redex's actual node type: `breakpoint()` stays an ordinary `CallExpression`/`ExpressionStatement`
+  // (see `translate.ts`), detected by *resolved identity* at reduction time in `stepHead` (reduce.ts) —
+  // `redexNodeType` is set explicitly there (see `serializeMarker` in getSteps.ts) rather than derived
+  // from the tree. That is what makes aliasing (`bp = breakpoint; bp()`) behave exactly like a direct
+  // `breakpoint()` call, the same way `p = print; p(1)` already behaves exactly like `print(1)`.
+
+  test("preprocessing accepts breakpoint() in every chapter (it is a built-in name)", () => {
+    expect(preprocess("breakpoint()")).toBeNull();
+    expect(preprocess("breakpoint()", 1)).toBeNull();
+    expect(preprocess("breakpoint()\nx = 1\nx + 1")).toBeNull();
+  });
+
+  test("evaluates as a no-op, exactly like pass (never affects the result)", () => {
+    expect(result("breakpoint()\n1 + 1")).toBe("2");
+    expect(result("x = 5\nbreakpoint()\nx + 1")).toBe("6");
+    // Inside a function body too (a breakpoint before the return); the return value is unchanged.
+    expect(result("def f(x):\n  breakpoint()\n  return x + 1\nf(4)")).toBe("5");
+  });
+
+  test("produces a before/after pair reading 'Evaluating'/'Evaluated breakpoint statement'", () => {
+    expect(explanations("breakpoint()\n1 + 1")).toEqual([
+      "Start of evaluation",
+      "Evaluating breakpoint statement",
+      "Evaluated breakpoint statement",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Evaluation complete",
+    ]);
+  });
+
+  test("only the 'Evaluating' step is a breakpoint target — never the 'Evaluated' one (#188)", () => {
+    // The double-arrow must land on "Evaluating breakpoint statement", not the following "Evaluated
+    // breakpoint statement". The host picks a target by `redexNodeType === "DebuggerStatement"`, so the
+    // *before* step must carry it and the *after* step must not — for every breakpoint, including when
+    // there are several. (`stepNextBreakpoint` scans forward for the next such marker, so a flagged
+    // after step would make it stop on the wrong, post-reduction step.)
+    const s = steps("breakpoint()\nx = 1\nbreakpoint()\nx");
+    const flagged = s
+      .filter(step => step.markers?.[0]?.redexNodeType === "DebuggerStatement")
+      .map(step => step.markers?.[0]?.explanation);
+    expect(flagged).toEqual(["Evaluating breakpoint statement", "Evaluating breakpoint statement"]);
+
+    const before = s.find(
+      step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
+    );
+    expect(before?.markers?.[0]?.redexType).toBe("beforeMarker");
+    // The redex id resolves to a node in that step's tree (it is highlighted).
+    expect(nodeIds(before!.ast).has(before!.markers![0].redexId!)).toBe(true);
+
+    const after = s.find(
+      step => step.markers?.[0]?.explanation === "Evaluated breakpoint statement",
+    );
+    expect(after?.markers?.[0]?.redexType).toBe("afterMarker");
+    expect(after?.markers?.[0]?.redexNodeType).toBeUndefined();
+  });
+
+  test("green flash before discard: the statement is shown highlighted green on the after step, like pass", () => {
+    // Like `pass`, the after step ("Evaluated breakpoint statement") keeps the statement present and
+    // highlights it green (an afterMarker whose redexId resolves to the call still in the tree); only
+    // the *next* contraction's before step shows it actually gone.
+    const s = steps("breakpoint()\n1 + 1");
+    const beforeIdx = s.findIndex(
+      step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
+    );
+    const before = s[beforeIdx];
+    const after = s[beforeIdx + 1];
+    expect(after.markers?.[0]?.explanation).toBe("Evaluated breakpoint statement");
+
+    // Before (red) and after (green) both still contain the breakpoint call, highlighted via a
+    // resolvable redexId — an ordinary ExpressionStatement/CallExpression, not a dedicated node type
+    // (see reduce.ts's stepHead).
+    expect((before.ast as any).body[0].type).toBe("ExpressionStatement");
+    expect(before.markers?.[0]?.redexType).toBe("beforeMarker");
+    expect(nodeIds(before.ast).has(before.markers![0].redexId!)).toBe(true);
+
+    expect((after.ast as any).body[0].type).toBe("ExpressionStatement"); // still present (green flash)
+    expect(after.markers?.[0]?.redexType).toBe("afterMarker");
+    expect(nodeIds(after.ast).has(after.markers![0].redexId!)).toBe(true);
+
+    // The next step (the following before step) is where it is finally gone; `1 + 1` is now the head.
+    expect((s[beforeIdx + 2].ast as any).body[0].type).toBe("ExpressionStatement");
+  });
+
+  test("renders as the breakpoint() call the student typed (an ordinary CallExpression)", () => {
+    // No dedicated node type: `breakpoint()` translates to a plain CallExpression (see translate.ts)
+    // and renders through the same Identifier/CallExpression templates as any other built-in call.
+    const stmt = (steps("breakpoint()\n1")[0].ast as any).body[0];
+    expect(stmt.type).toBe("ExpressionStatement");
+    expect(stmt.expression.type).toBe("CallExpression");
+    expect(stmt.expression.callee.type).toBe("Identifier");
+    expect(stmt.expression.callee.name).toBe("breakpoint");
+    expect(stmt.expression.arguments).toEqual([]);
+  });
+
+  test("used as an expression it degrades to a no-op returning None (not the debugger form)", () => {
+    // Only the bare-statement form is the debugger; in expression position `breakpoint()` is an
+    // ordinary built-in call that yields None, so the program still resolves rather than getting stuck.
+    expect(result("x = breakpoint()\nx")).toBe("None");
+    expect(explanations("x = breakpoint()\nx").pop()).toBe("Evaluation complete");
+  });
+
+  test("aliased via a variable behaves exactly like breakpoint() itself, just as p = print; p(1) does", () => {
+    // The bug this fixes: detection used to match the student's literal source text ("breakpoint()"),
+    // so an alias silently lost the debugger behaviour. It is now resolved identity at reduction time
+    // (stepHead in reduce.ts): `bp`, once substituted to the `breakpoint` builtin, is indistinguishable
+    // from writing `breakpoint()` directly — same wording, same nav target, same no-op evaluation.
+    const src = "bp = breakpoint\nbp()\n1 + 1";
+    expect(result(src)).toBe("2");
+    expect(explanations(src)).toEqual([
+      "Start of evaluation",
+      "Declaring and substituting bp into the rest of the block",
+      "Declared and substituted bp into the rest of the block",
+      "Evaluating breakpoint statement",
+      "Evaluated breakpoint statement",
+      "Evaluating binary expression 1 + 1",
+      "Evaluated binary expression 1 + 1",
+      "Evaluating 2",
+      "Evaluated 2",
+      "Evaluation complete",
+    ]);
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].markers?.[0]?.explanation).toBe("Evaluating breakpoint statement");
+  });
+
+  test("aliasing also works inside a function body", () => {
+    const src = "def f(x):\n  bp = breakpoint\n  bp()\n  return x + 1\nf(4)";
+    expect(result(src)).toBe("5");
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+  });
+
+  test("aliased and used as an expression still degrades to a no-op (not a breakpoint target)", () => {
+    // Aliasing must not *widen* what counts as the debugger form either: `bp()` in expression position
+    // degrades exactly like `breakpoint()` does in the direct case above.
+    const src = "bp = breakpoint\nx = bp()\nx";
+    expect(result(src)).toBe("None");
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(0);
+  });
+});
+
+describe("Python stepper — cumulative print output per step", () => {
+  // Each serialized step carries the program's cumulative textual output (everything `print` has
+  // written) up to that step, so the host can show a running output panel that grows with the slider.
+  // The field is a runner addition to the serialized step (see getSteps.ts); read it via a cast.
+  const outputs = (src: string): (string | undefined)[] =>
+    steps(src).map(s => (s as { output?: string }).output);
+
+  // Each step's explanation paired with that step's cumulative output.
+  const rows = (src: string): [string, string | undefined][] =>
+    steps(src).map(s => [s.markers?.[0]?.explanation ?? "", (s as { output?: string }).output]);
+
+  test("a print's text appears on its 'Ran print' step, not its 'Running print' step", () => {
+    const r = rows('print("hello")');
+    const running = r.find(([e]) => e === "Running print");
+    const ran = r.find(([e]) => e === "Ran print");
+    expect(running?.[1]).toBeUndefined(); // before the print runs, no output yet
+    expect(ran?.[1]).toBe("hello\n"); // the output appears exactly on the "Ran print" step
+  });
+
+  test("output is cumulative: each print appends to everything printed before it", () => {
+    // Two separate prints — the second's step output includes the first's, in order.
+    const ranOutputs = rows('print("a")\nprint(1, 2)')
+      .filter(([e]) => e === "Ran print")
+      .map(([, o]) => o);
+    expect(ranOutputs).toEqual(["a\n", "a\n1 2\n"]);
+  });
+
+  test("once printed, the output persists on every later step through 'Evaluation complete'", () => {
+    const o = outputs('print("x")\n1 + 1');
+    expect(o[o.length - 1]).toBe("x\n"); // still present on the terminal step
+    // Every step from the "Ran print" step onward carries it; none of them drops back to empty.
+    const firstWithOutput = o.findIndex(x => x === "x\n");
+    expect(firstWithOutput).toBeGreaterThan(-1);
+    expect(o.slice(firstWithOutput).every(x => x === "x\n")).toBe(true);
+  });
+
+  test("formatting mirrors CPython defaults: space-separated args, trailing newline, print() is blank", () => {
+    const ran = (src: string) =>
+      rows(src)
+        .filter(([e]) => e === "Ran print")
+        .map(([, o]) => o);
+    expect(ran('print("a", "b", "c")')).toEqual(["a b c\n"]); // sep=' '
+    expect(ran("print()")).toEqual(["\n"]); // just the end='\n'
+    expect(ran("print(3 * 4)")).toEqual(["12\n"]); // the argument is reduced to a value first
+    expect(ran("print(True)\nprint(None)")).toEqual(["True\n", "True\nNone\n"]); // Python reprs
+  });
+
+  test("a program that never prints carries no output field on any step", () => {
+    expect(outputs("1 + 1\nx = 2\nx * x").every(o => o === undefined)).toBe(true);
+  });
+
+  test("output accumulates across a print inside a function body and a later top-level print", () => {
+    const ran = rows('def f(x):\n  print(x)\n  return x + 1\nf(5)\nprint("done")')
+      .filter(([e]) => e === "Ran print")
+      .map(([, o]) => o);
+    expect(ran).toEqual(["5\n", "5\ndone\n"]);
   });
 });

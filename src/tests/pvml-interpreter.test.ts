@@ -1,12 +1,17 @@
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import { executePrimitive } from "../engines/pvml/builtins";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import type { PVMLBoxType } from "../engines/pvml/types";
 import {
   MissingRequiredPositionalError,
   UnsupportedOperandTypeError,
   ZeroDivisionError,
 } from "../engines/pvml/errors";
+import linkedList from "../stdlib/linked-list";
+import math from "../stdlib/math";
+import misc from "../stdlib/misc";
 
 function compileAndRun(code: string): unknown {
   const ast = parse(code);
@@ -667,13 +672,13 @@ describe("PVML Additional Coverage", () => {
       expect(compileAndRun("pass\n")).toBeUndefined();
     });
 
-    test("bare return yields undefined", () => {
+    test("bare return yields None", () => {
       const code = `
 def f():
     return
 f()
 `;
-      expect(compileAndRun(code)).toBeUndefined();
+      expect(compileAndRun(code)).toBeNull();
     });
 
     test("while with continue skips iteration", () => {
@@ -735,6 +740,102 @@ f
     test("no output when print not called", () => {
       const { outputs } = compileAndRunWithOutput("1 + 1\n");
       expect(outputs).toHaveLength(0);
+    });
+  });
+
+  describe("print_llist", () => {
+    // PVMLCompiler.fromProgram's no-args default only registers [misc, math] (VARIANT_GROUPS[1]),
+    // so pair/llist/print_llist (linked-list group) need explicit environments with that group in
+    // scope -- compileAndRun/compileAndRunWithOutput above can't resolve them.
+    function compileAndRunWithLinkedList(code: string): { result: unknown; outputs: string[] } {
+      const groups = [misc, math, linkedList];
+      const ast = parse(code);
+      const { errors, environments } = analyzeWithEnvironments(ast, code, 2, groups);
+      if (errors.length > 0) throw new Error(errors.map(e => e.message).join("; "));
+      const outputs: string[] = [];
+      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const program = compiler.compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+      const result = PVMLInterpreter.toJSValue(interpreter.execute());
+      return { result, outputs };
+    }
+
+    test("renders a proper linked list as llist(...)", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(llist(1, 2, 3))\n");
+      expect(outputs).toEqual(["llist(1, 2, 3)"]);
+    });
+
+    test("renders None as llist()", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(None)\n");
+      expect(outputs).toEqual(["llist()"]);
+    });
+
+    test("renders a non-list pair as [head, tail]", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(pair(1, 2))\n");
+      expect(outputs).toEqual(["[1, 2]"]);
+    });
+
+    test("a proper-list element nested in an improper pair still renders as llist(...)", () => {
+      const { outputs } = compileAndRunWithLinkedList(
+        "print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))\n",
+      );
+      expect(outputs).toEqual(["llist(llist(1, 2, 3), 4, 5, 6)"]);
+    });
+
+    test("string elements render quoted", () => {
+      const { outputs } = compileAndRunWithLinkedList("print_llist(llist('a', 'b'))\n");
+      expect(outputs).toEqual(["llist('a', 'b')"]);
+    });
+
+    test("requires exactly 1 argument", () => {
+      expect(() => compileAndRunWithLinkedList("print_llist()\n")).toThrow(
+        MissingRequiredPositionalError,
+      );
+    });
+
+    // Regression test for source-academy/js-slang#1124 (display_list rendered the wrong notation
+    // for a value reachable via two different paths in the same structure). print_llist's
+    // algorithm is plain recursion with no identity-keyed memoization, so it can't reproduce that
+    // bug: the same pair object is re-derived fresh from its own structure every time it's
+    // visited, regardless of which parent reached it.
+    test("does not misrender a shared sub-list (js-slang#1124)", () => {
+      const { outputs } = compileAndRunWithLinkedList(
+        "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)\n",
+      );
+      expect(outputs).toEqual(["llist(llist(2, 3), llist(1, 2, 3))"]);
+    });
+
+    // Regression test for the O(N^2)/stack-overflow bug caught in review on #250: printLlistText
+    // used to re-run a *recursive* isProperLlist on every tail suffix while unrolling an improper
+    // structure's bracket notation, making the whole walk O(N^2) -- and that recursive isProperLlist
+    // could itself overflow the stack on a long chain even on its own. Built directly via
+    // executePrimitive (bypassing PVML compilation, which has no way to express a 50,000-element
+    // program compactly) so this isolates printLlistText's own complexity. improperN is well past
+    // where the old O(N^2) behavior would have made this test time out, but -- unlike the
+    // proper-list case below -- still bounded by the bracket notation's own inherent O(N) nesting
+    // depth (acknowledged, accepted limitation; matches the CSE machine's equivalent recursion-depth
+    // ceiling).
+    test("stays fast and stack-safe on large structures", () => {
+      const pairArr = (h: PVMLBoxType, t: PVMLBoxType): PVMLBoxType => ({
+        type: "array",
+        elements: [h, t],
+      });
+
+      const improperN = 3000;
+      let improperChain: PVMLBoxType = 999;
+      for (let i = improperN; i >= 1; i--) improperChain = pairArr(i, improperChain);
+      const improperOutputs: string[] = [];
+      executePrimitive(97, [improperChain], msg => improperOutputs.push(msg));
+      expect(improperOutputs[0].startsWith("[1, [2, [3,")).toBe(true);
+      expect(improperOutputs[0].endsWith("999" + "]".repeat(improperN))).toBe(true);
+
+      const properN = 50000;
+      let properChain: PVMLBoxType = null;
+      for (let i = properN; i >= 1; i--) properChain = pairArr(i, properChain);
+      const properOutputs: string[] = [];
+      executePrimitive(97, [properChain], msg => properOutputs.push(msg));
+      expect(properOutputs[0].startsWith("llist(1, 2, 3,")).toBe(true);
+      expect(properOutputs[0].endsWith(`${properN - 1}, ${properN})`)).toBe(true);
     });
   });
 

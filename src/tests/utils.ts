@@ -174,6 +174,7 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
     stdin: {
       stream: stdinStream,
       reader: stdinStream.getReader(),
+      setNextPrompt: () => {},
     },
   };
 };
@@ -385,6 +386,29 @@ function expectedToComparable(expected: TestOutputValue): unknown {
   return undefined;
 }
 
+/**
+ * Compares a Pynter float result against the CSE (float64) reference value.
+ * Pynter's floats are IEEE-754 single-precision, so the reference value must
+ * be rounded to float32 before comparing — otherwise every comparison is
+ * inflated by the fp64→fp32 rounding a *correct* Pynter would also incur.
+ * The tolerance is relative to that rounded value's magnitude (a fixed
+ * absolute tolerance is meaningless once a value exceeds a few thousand, and
+ * too generous once it's near zero), with a generous ULP budget on top to
+ * absorb rounding compounded across chained float32 arithmetic (loops,
+ * transcendental functions) rather than a single operation.
+ */
+const FLOAT32_EPSILON = Math.pow(2, -23);
+const FLOAT32_ULP_BUDGET = 4096;
+
+export function isCloseToFloat32(actual: unknown, wanted: number): boolean {
+  if (typeof actual !== "number") return false;
+  if (Number.isNaN(wanted)) return Number.isNaN(actual);
+  const rounded = Math.fround(wanted);
+  if (!Number.isFinite(rounded)) return actual === rounded;
+  const tolerance = FLOAT32_EPSILON * FLOAT32_ULP_BUDGET * Math.max(Math.abs(rounded), 1);
+  return Math.abs(actual - rounded) <= tolerance;
+}
+
 /** Matches a Python imaginary-number literal: 3j, .5j, 1.2j, 1.j, 1e3j, 1e-3j, 1J, etc. */
 const COMPLEX_LITERAL_RE = /(?<![a-zA-Z_])(?:\d+\.\d*|\.\d+|\d+)(?:[eE][+-]?\d+)?[jJ]\b/;
 
@@ -410,11 +434,55 @@ function involvesComplexNumbers(code: string, expected: TestExpectedValue): bool
 }
 
 /**
+ * Matches a call to parse()/tokenize(): these turn SICPy source text into a
+ * data structure for py-slang's own metacircular-evaluator feature (chapter
+ * 4's stdlib/parser.ts). That's not a Python 3 language or library feature —
+ * it has no meaningful analogue once a program is compiled to bytecode and
+ * run on a VM like Pynter, so it's out of scope for parity here regardless
+ * of Pynter's own capabilities.
+ */
+const PARSE_FEATURE_CALL_RE = /\b(?:parse|tokenize)\s*\(/;
+
+function involvesParseFeature(code: string): boolean {
+  return PARSE_FEATURE_CALL_RE.test(code);
+}
+
+/** Reasons a test case is skipped for the native Pynter pathway, checked in order. */
+const NATIVE_PYNTER_SKIP_REASONS: {
+  matches: (code: string, expected: TestExpectedValue) => boolean;
+  reason: string;
+}[] = [
+  { matches: involvesComplexNumbers, reason: "Pynter does not support complex numbers" },
+  {
+    matches: code => involvesParseFeature(code),
+    reason: "parse()/tokenize() aren't part of Python 3",
+  },
+];
+
+/**
  * Reruns `testCases` (as already used with generateTestCases() for the CSE
  * machine) through the PVML compiler + native Pynter, at the given chapter
  * `variant`. See the file-level comment above for gating/expectations.
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups,
+ * matching whatever non-default combination the sibling generateTestCases()
+ * call for the same suite uses (e.g. stream tests run CSE at variant 2 with
+ * extra `stream`/`pairmutator` groups layered on).
  */
-export const generateNativePynterTestCases = (testCases: TestCases, variant: number) => {
+export const generateNativePynterTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+) => {
+  // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md) —
+  // every native-Pynter test case must be posed as a §3 program, regardless of
+  // which chapter the sibling generateTestCases() call for the same suite uses.
+  if (variant !== 3) {
+    throw new Error(
+      `generateNativePynterTestCases: Pynter only supports Python §3; got variant ${variant}.`,
+    );
+  }
+
   const pynterPath = process.env.PYNTER_RUNNER_PATH;
   const describeBlock = pynterPath ? describe : describe.skip;
 
@@ -423,7 +491,7 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
       const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
         let result;
         try {
-          result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath! });
+          result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath!, groups });
         } catch (e) {
           if (typeof expected === "function") {
             // CSE also expects a failure here; any RunError counts as agreement.
@@ -446,31 +514,34 @@ export const generateNativePynterTestCases = (testCases: TestCases, variant: num
 
         const actual = pynterResultToComparable(result);
         const wanted = expectedToComparable(expected);
-        if (typeof wanted === "number" && !Number.isInteger(wanted)) {
-          expect(actual).toBeCloseTo(wanted, 2);
+        if (result.resultType === "float" && typeof wanted === "number") {
+          expect(isCloseToFloat32(actual, wanted)).toBe(true);
         } else {
           expect(actual).toEqual(wanted);
         }
       };
 
       const internalTestCases = createInternalTestCases(tests);
-      const supported = internalTestCases.filter(
-        ({ code, expected }) => !involvesComplexNumbers(code, expected),
-      );
-      const unsupportedComplex = internalTestCases.filter(({ code, expected }) =>
-        involvesComplexNumbers(code, expected),
-      );
+      const supported: InternalTestCase[] = [];
+      const skipBuckets = new Map<string, InternalTestCase[]>();
+      for (const testCase of internalTestCases) {
+        const reason = NATIVE_PYNTER_SKIP_REASONS.find(({ matches }) =>
+          matches(testCase.code, testCase.expected),
+        )?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
+        } else {
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
+        }
+      }
 
       // test.each throws if given an empty array, rather than registering zero
       // tests, so only call it for groups that actually have cases in each bucket.
       if (supported.length > 0) {
         test.each(supported)(`$label`, runTestCase);
       }
-      if (unsupportedComplex.length > 0) {
-        test.skip.each(unsupportedComplex)(
-          `$label (Pynter does not support complex numbers)`,
-          runTestCase,
-        );
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$label (${reason})`, runTestCase);
       }
     });
   }

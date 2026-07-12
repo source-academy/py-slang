@@ -1,4 +1,5 @@
 import {
+  MissingRequiredPositionalError,
   RecursionError,
   TypeError,
   UnsupportedOperandTypeError,
@@ -88,12 +89,15 @@ describe("Standard Library Tests", () => {
         ["1+0j == 1.0", true, null], // complex == float
         ["1.5+0j == 1.5", true, null], // complex with float real == float
         ["1.5+1j == 1.5", false, null], // complex == diff float
+        // `==`/`!=` take any x any at Python §1 too (unified with §2 — see
+        // docs/specs/python_typing_middle_12.tex), except bool and function operands, which
+        // remain an error; None and cross-type comparisons now compare structurally instead.
         ["True == True", UnsupportedOperandTypeError, null], // bool == bool
         ["1 == True", UnsupportedOperandTypeError, null], // int == bool
-        ["1 == None", UnsupportedOperandTypeError, null], // int == None
+        ["1 == None", false, null], // int == None
         ["True == 1", UnsupportedOperandTypeError, null], // bool == int
-        ["None == 1", UnsupportedOperandTypeError, null], // None == int
-        ["None == None", UnsupportedOperandTypeError, null], // None == None
+        ["None == 1", false, null], // None == int
+        ["None == None", true, null], // None == None
         ["[] == []", FeatureNotSupportedError, null], // list literals are not supported,
         ["(lambda x: x) == (lambda x: x)", UnsupportedOperandTypeError, null], // function == diff function
         ["1 == (lambda x: x)", UnsupportedOperandTypeError, null], // int == function
@@ -101,13 +105,13 @@ describe("Standard Library Tests", () => {
         ["'' == ''", true, null], // empty string == empty string
         ["hello = 'hello'\nhello == 'hello'", true, null], // string == string
         ["hello = 'hello'\nhello == 'Hello'", false, null], // string == diff string
-        ["1 == ''", UnsupportedOperandTypeError, null], // int == string
-        ["'' == 1", UnsupportedOperandTypeError, null], // string == int
+        ["1 == ''", false, null], // int == string
+        ["'' == 1", false, null], // string == int
         ["'' == True", UnsupportedOperandTypeError, null], // string == bool
-        ["'' == None", UnsupportedOperandTypeError, null], // string == None
+        ["'' == None", false, null], // string == None
         ["'' == (lambda x: x)", UnsupportedOperandTypeError, null], // string == function
-        ["'' == 1.0", UnsupportedOperandTypeError, null], // string == float
-        ["'' == 1+0j", UnsupportedOperandTypeError, null], // string == complex
+        ["'' == 1.0", false, null], // string == float
+        ["'' == 1+0j", false, null], // string == complex
       ],
       inequality: [
         ["1 != 1", false, null], // int != int
@@ -133,23 +137,23 @@ describe("Standard Library Tests", () => {
         ["1.5+1j != 1.5", true, null], // complex != diff float
         ["True != True", UnsupportedOperandTypeError, null], // bool != bool
         ["1 != True", UnsupportedOperandTypeError, null], // int != bool
-        ["1 != None", UnsupportedOperandTypeError, null], // int != None
+        ["1 != None", true, null], // int != None
         ["True != 1", UnsupportedOperandTypeError, null], // bool != int
-        ["None != 1", UnsupportedOperandTypeError, null], // None != int
-        ["None != None", UnsupportedOperandTypeError, null], // None != None
+        ["None != 1", true, null], // None != int
+        ["None != None", false, null], // None != None
         ["(lambda x: x) != (lambda x: x)", UnsupportedOperandTypeError, null], // function != diff function
         ["(1 != (lambda x: x))", UnsupportedOperandTypeError, null], // int != function
         ["def a():\n    return 2\na != a", UnsupportedOperandTypeError, null], // function != function,
         ["'' != ''", false, null], // empty string != empty string
         ["hello = 'hello'\nhello != 'hello'", false, null], // string != string
         ["hello = 'hello'\nhello != 'Hello'", true, null], // string != diff string
-        ["1 != ''", UnsupportedOperandTypeError, null], // int != string
-        ["'' != 1", UnsupportedOperandTypeError, null], // string != int
+        ["1 != ''", true, null], // int != string
+        ["'' != 1", true, null], // string != int
         ["'' != True", UnsupportedOperandTypeError, null], // string != bool
-        ["'' != None", UnsupportedOperandTypeError, null], // string != None
+        ["'' != None", true, null], // string != None
         ["'' != (lambda x: x)", UnsupportedOperandTypeError, null], // string != function
-        ["'' != 1.0", UnsupportedOperandTypeError, null], // string != float
-        ["'' != 1+0j", UnsupportedOperandTypeError, null], // string != complex
+        ["'' != 1.0", true, null], // string != float
+        ["'' != 1+0j", true, null], // string != complex
       ],
       "gt, gte, lt, lte": [
         ["1 > 1", false, null], // int > int
@@ -933,6 +937,21 @@ describe("Standard Library Tests", () => {
         ["len(lambda x: x)", TypeError, null],
         ["len(print)", TypeError, null],
       ],
+      "max/min": [
+        ["max(1, 7, 3)", 7n, null],
+        ["min(4, 2, 9)", 2n, null],
+        ["max(1.5, 2.5)", 2.5, null],
+        ["max('a', 'c', 'b')", "c", null],
+        // Unlike CPython's max()/min(), which accept a single iterable
+        // argument (max([1, 2, 3]) == 3), this dialect's max/min always
+        // require >= 2 direct arguments -- there is no single-iterable form
+        // (see the chapter-3 "max/min: no single-iterable form" test below
+        // for the pair/list borderline case).
+        ["max(5)", MissingRequiredPositionalError, null],
+        ["min(5)", MissingRequiredPositionalError, null],
+        ["max()", MissingRequiredPositionalError, null],
+        ["min()", MissingRequiredPositionalError, null],
+      ],
       "CRLF tests": [
         ["hello = 'hello'\r\nhello", "hello", null],
         ["hello = 'hello'\r\nhello\r\n", "hello", null],
@@ -944,65 +963,89 @@ describe("Standard Library Tests", () => {
 
     generateTestCases(mathTests, 1, [misc, math]);
     generateTestCases(miscTests, 1, [misc, math]);
-    generateNativePynterTestCases(mathTests, 1);
-    generateNativePynterTestCases(miscTests, 1);
+    // Pynter only supports Python §3 (see pynter/README.md). mathTests is
+    // chapter-agnostic builtin behaviour (e.g. `abs(True)` is a TypeError
+    // regardless of chapter), so it's still valid to run at §3. miscTests,
+    // however, asserts §1-*specific* restrictions (bool/None/function
+    // excluded from ==/!=/ordering, list literals rejected) that are only
+    // true at §1/§2 — genuinely false at §3, not just "untested" there — so
+    // it's deliberately not run through Pynter at all here.
+    generateNativePynterTestCases(mathTests, 3);
   });
 
   describe("Chapter 3 Builtins", () => {
     const miscTests: TestCases = {
+      // `is` now applies to any x any at Python §3/§4 (docs/specs/python_typing_middle_34.tex),
+      // not just the reference types (list, function, None): numbers, strings and booleans are
+      // valid operands too. Since this interpreter has no real object identity for immutable
+      // primitives (each is a freshly wrapped value, not a boxed object) they compare by their
+      // underlying value instead, the same simplification `==` already makes for these types.
       "is operator": [
-        ["1 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["2 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["1 is (1+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["2 is (1.0+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["3 is (1+1j)", UnsupportedOperandTypeError, null], // int is complex
-        ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
-        ["1 is 2.0", UnsupportedOperandTypeError, null], // int is diff float
-        ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
-        ["3.15 is 3.14", UnsupportedOperandTypeError, null], // float is diff float
-        ["1.0 is 1", UnsupportedOperandTypeError, null], // float is int
-        ["1.0 is 2", UnsupportedOperandTypeError, null], // float is diff int
-        ["1.0 is (1+0j)", UnsupportedOperandTypeError, null], // float is complex
-        ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
-        ["-(1+0j) is (1+1j)", UnsupportedOperandTypeError, null], // complex is complex with diff imaginary
-        ["(1.2+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex with diff real
-        ["(1.2+1j) is (1.2+1.2j)", UnsupportedOperandTypeError, null], // complex is diff complex
-        ["(1+0j) is 1", UnsupportedOperandTypeError, null], // complex is int
-        ["(1.0+0j) is 1", UnsupportedOperandTypeError, null], // complex with float real is int
-        ["(1+0j) is 1.0", UnsupportedOperandTypeError, null], // complex is float
-        ["(1.5+0j) is 1.5", UnsupportedOperandTypeError, null], // complex with float real is float
-        ["(1.5+1j) is 1.5", UnsupportedOperandTypeError, null], // complex is diff float
-        ["True is True", UnsupportedOperandTypeError, null], // bool is bool
-        ["1 is True", UnsupportedOperandTypeError, null], // int is bool
-        ["1 is None", UnsupportedOperandTypeError, null], // int is None
-        ["True is 1", UnsupportedOperandTypeError, null], // bool is int
-        ["None is 1", UnsupportedOperandTypeError, null], // None is int
-        ["None is None", UnsupportedOperandTypeError, null], // None is None
-        ["(lambda x: x) is (lambda x: x)", UnsupportedOperandTypeError, null], // function is diff function
-        ["(1 is (lambda x: x))", UnsupportedOperandTypeError, null], // int is function
-        ["def a():\n    return 2\na is a", UnsupportedOperandTypeError, null], // function is function,
-        ["'' is ''", UnsupportedOperandTypeError, null], // empty string is empty string
-        ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
-        ["hello = 'hello'\nhello is 'Hello'", UnsupportedOperandTypeError, null], // string is diff string
-        ["'a' is 'abc'", UnsupportedOperandTypeError, null], // string is longer string
-        ["'a' is 'A'", UnsupportedOperandTypeError, null], // string is string with diff case
-        ["'#' is '$'", UnsupportedOperandTypeError, null], // string is string with diff character
-        ["1 is ''", UnsupportedOperandTypeError, null], // int is string
-        ["'' is 1", UnsupportedOperandTypeError, null], // string is int
-        ["'' is True", UnsupportedOperandTypeError, null], // string is bool
-        ["'' is None", UnsupportedOperandTypeError, null], // string is None
-        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null], // string is function
-        ["'' is 1.0", UnsupportedOperandTypeError, null], // string is float
-        ["'' is (1+0j)", UnsupportedOperandTypeError, null], // string is complex
-        ["1 is 0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is 0.0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is (0+0j)", UnsupportedOperandTypeError, null], // int is zero
+        ["1 is 1", true, null], // int is int, same value
+        ["1 is 1.0", false, null], // int is float — different types, never identical
+        ["3.14 is 3.14", true, null], // float is float, same value
+        ["(1+0j) is (1+0j)", true, null], // complex is complex, same value
+        ["True is True", true, null], // bool is bool, same value
+        ["1 is True", false, null], // int is bool — different types, never identical
+        ["hello = 'hello'\nhello is 'hello'", true, null], // string is string, same value
+        ["1 is None", false, null], // number x reference — different types, never identical
+        ["None is 1", false, null],
+        ["'' is None", false, null],
+        ["'' is (lambda x: x)", false, null],
+        ["[1,2,3] is ''", false, null],
+        ["1 is (lambda x: x)", false, null],
+        ["a = [1,2,3]\na is 1", false, null],
+        ["None is None", true, null], // None is None
+        ["(lambda x: x) is (lambda x: x)", false, null], // function is diff function
+        ["def a():\n    return 2\na is a", true, null], // function is same function
+        ["f = lambda x: x\ng = f\nf is g", true, null], // function is its alias
+        ["a = [1,2,3]\na is None", false, null], // list is None (the Python idiom)
+        ["(lambda x: x) is None", false, null], // function is None
+        ["None is []", false, null], // None is list
         ["[1,2,3] is [1,2,3]", false, null], // list is list with same elements
         ["a = [1,2,3]\na is a", true, null], // list is itself
+        ["a = [1,2,3]\nb = a\na is b", true, null], // list is its alias
         ["a = [1,2,3]\na is [1,2,3]", false, null], // list is different list with same elements
         ["[1,2,3] is [1,2,4]", false, null], // list is different list with different elements
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
-        ["[1,2,3] is ''", UnsupportedOperandTypeError, null], // list is string
+        ["[1,2,3] is (lambda x: x)", false, null], // list is function
+      ],
+      // math_nan is a shared singleton value; as in CPython, nan == nan is
+      // False even for the identical object, while a list containing that nan
+      // equals itself (container comparison checks identity per element first)
+      "NaN comparisons": [
+        ["math_nan == math_nan", false, null],
+        ["math_nan != math_nan", true, null],
+        ["math_nan < 1", false, null],
+        ["math_nan >= math_nan", false, null],
+        ["[math_nan] == [math_nan]", true, null],
+        ["x = [math_nan]\nx == x", true, null],
+        // `is` identity must hold regardless of what value-equality says about the same object:
+        // math_nan is math_nan is the same binding, so it's identical, even though it is not
+        // structurally equal to itself (== is False, per IEEE 754 — see above).
+        ["math_nan is math_nan", true, null],
+        ["x = math_nan\nx is x", true, null],
+        ["x = complex(math_nan, 0)\nx is x", true, null],
+        // NaN-ness propagates component-wise into complex: a complex value with a NaN real or
+        // imaginary part is unequal to everything, including itself, same as a plain float NaN —
+        // but (as with math_nan above) a *shared* NaN-complex nested in a container still equals
+        // itself, since container comparison checks identity per element first.
+        ["x = complex(math_nan, 0)\nx == x", false, null],
+        ["x = complex(math_nan, 0)\nx != x", true, null],
+        ["x = complex(0, math_nan)\nx == x", false, null],
+        ["complex(math_nan, 0) == complex(math_nan, 0)", false, null],
+        ["c = complex(math_nan, 0)\n[c] == [c]", true, null],
+        ["[complex(math_nan, 0)] == [complex(math_nan, 0)]", false, null],
+      ],
+      // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
+      "is not operator": [
+        ["1 is not 1", false, null],
+        ["'x' is not 'x'", false, null],
+        ["None is not None", false, null],
+        ["a = [1,2,3]\na is not a", false, null],
+        ["a = [1,2,3]\nb = [1,2,3]\na is not b", true, null],
+        ["a = [1,2,3]\na is not None", true, null],
+        ["(lambda x: x) is not (lambda x: x)", true, null],
       ],
       arity: [
         ["arity((lambda *args: args))", 0n, null],
@@ -1020,6 +1063,17 @@ describe("Standard Library Tests", () => {
         ["a = '🎊🎉🔔❤️‍🩹'\na[0]", "🎊", null],
         ["a = '👨‍👩‍👧‍👦'\na[0]", "👨", null],
         ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
+      ],
+      // Unlike CPython's max()/min(), which accept a single iterable argument
+      // (max([1, 2, 3]) == 3), this dialect's max/min always require >= 2
+      // direct arguments. A list or pair is the borderline case: it *looks*
+      // like the single-iterable form CPython supports, but is rejected the
+      // same way max(5) is (see the chapter-1 "max/min" tests above), since
+      // it's still just one argument — a pair is a two-element Python list
+      // under the hood, so both forms hit the same arity check.
+      "max/min: no single-iterable form": [
+        ["max([1, 5])", MissingRequiredPositionalError, null],
+        ["max(pair(1, 5))", MissingRequiredPositionalError, null],
       ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);

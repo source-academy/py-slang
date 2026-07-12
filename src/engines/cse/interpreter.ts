@@ -335,6 +335,29 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
+
+    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
+    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
+    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
+    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
+    // so it can be peeked here, before that instruction runs.
+    if (
+      !isPrelude &&
+      isInstr(command) &&
+      command.instrType === InstrType.APPLICATION &&
+      command.numOfArgs === 0
+    ) {
+      const callee = stash.peek();
+      if (callee?.type === "builtin" && callee.name === "breakpoint") {
+        // `steps` here is the count as of the end of the *previous* iteration — i.e. the
+        // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
+        // this very APPLICATION instruction on top of its control, which is what "steps - 1"
+        // below reproduces.
+        context.runtime.breakpointSteps.push(steps - 1);
+        context.runtime.break = true;
+      }
+    }
+
     control.pop();
 
     if (isNode(command)) {
@@ -875,12 +898,16 @@ const cmdEvaluators: CmdEvaluators = {
   [InstrType.RESET]: function (
     _code: string,
     _command: ResetInstr,
-    context: Context,
+    _context: Context,
     _control: Control,
     _stash: Stash,
     _isPrelude: boolean,
   ) {
-    popEnvironment(context);
+    // Environment restoration is handled entirely by the paired ENVIRONMENT instruction
+    // (always pushed immediately below this RESET by the APPLICATION handler), whose while
+    // loop pops back to the caller's environment. Popping here too was redundant — it made
+    // the frame transition happen a step early, at the return statement itself, instead of
+    // at the ENVIRONMENT instruction where the CSE machine visualizer animates it.
   },
 
   [InstrType.ASSIGNMENT]: function (
@@ -1141,13 +1168,18 @@ const cmdEvaluators: CmdEvaluators = {
         return;
       }
       control.push(instr);
+      // Line is the real for-statement's line — this per-iteration bookkeeping is
+      // logically part of evaluating that statement, not a separate, lineless step.
+      const forLine = node.startToken.line;
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
-        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+        const token = new Token(TokenType.BIGINT, value.toString(), forLine, 0, -1);
+        token.synthetic = true;
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
       const v1Lit = generateBigIntLiteral(start.value);
       const v3Lit = generateBigIntLiteral(step.value);
-      const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      const plusToken = new Token(TokenType.PLUS, "+", forLine, 0, -1);
+      plusToken.synthetic = true;
       const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
       Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));
@@ -1155,7 +1187,7 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(nextStartExpr);
       control.push(instrCreator.continueMarkerInstr(node));
       control.push(...instr.body.slice().reverse());
-      control.push(generateForIncrement(node.target.lexeme, start.value));
+      control.push(generateForIncrement(node.target.lexeme, start.value, forLine));
     }
   },
   [InstrType.CONTINUE_MARKER]: function () {},

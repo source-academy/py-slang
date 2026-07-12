@@ -145,6 +145,16 @@ all. To see just this suite's results, filter by its test-name tag:
 PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn jest -t "\[pvml/pynter\]"
 ```
 
+Alternatively, `yarn pynter:report` (`scripts/pynter-parity-report.ts`) runs the whole suite and prints
+a Markdown table of pass/attempted counts and pass rate per test file — handy for seeing what to
+work on at a glance, or pasting into a PR description:
+
+```shell
+PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn pynter:report
+```
+
+Pass `--failures` to also list the full name of every failing test, grouped by suite.
+
 ### Regenerating the AST types and Parser
 
 The AST types need to be regenerated after changing
@@ -189,6 +199,21 @@ Documentation on the Python libraries are generated from inline documentation in
 ```bash
 $ cd docs/python;  python -m http.server 8000
 ```
+
+## `sourceacademy-sicp` — the standard library for plain CPython
+
+The [`python/`](python/) directory contains **`sourceacademy-sicp`**, a companion
+package that ports this Python standard library — `pair`, `head`, `tail`,
+`llist`, the `math_*` functions, streams, and so on — to ordinary CPython. With
+`from sicp import *`, CS1101S / SICP (Python edition) programs run the same way
+outside Source Academy. It is kept here, next to the `src/stdlib/` groups it
+mirrors, so the two do not drift apart.
+
+Packaged for PyPI as `sourceacademy-sicp`. See
+[`python/README.md`](python/README.md) for installation, usage, and
+[releasing](python/README.md#releasing), and the
+[Python §4 standard library reference](https://docs.sourceacademy.org/python/python_4/)
+for per-function documentation.
 
 ## Prior Reading
 
