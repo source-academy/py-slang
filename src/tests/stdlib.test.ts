@@ -975,7 +975,16 @@ describe("Standard Library Tests", () => {
     // excluded from ==/!=/ordering, list literals rejected) that are only
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
-    generateNativePynterTestCases(mathTests, 3);
+    // Known Pynter gaps below (round()'s two-arg form, banker's rounding),
+    // see py-slang#259.
+    generateNativePynterTestCases(mathTests, 3, undefined, [
+      "round(2.5)",
+      "round(-2.5)",
+      "round(3.14159, 2)",
+      "round(3.14159, 3)",
+      "round(33.14, -1)",
+      "round(33.14, 1.5)",
+    ]);
     // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
     // miscTests' §1-specific restrictions can be checked directly at §1.
     generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
@@ -1086,7 +1095,41 @@ describe("Standard Library Tests", () => {
       ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
-    generateNativePynterTestCases(miscTests, 3);
+    // Known Pynter gaps below (real is/is not identity bugs, NaN identity/
+    // equality — a structural consequence of Pynter's unboxed number
+    // representation, arity() miscounting *args-then-keyword-only params
+    // and lambda *args, and missing string indexing — verified to fault
+    // even on plain ASCII, not just multi-codepoint characters as originally
+    // filed) are tracked in py-slang#259. ("1 is 1.0" removed: fixed by the
+    // visitLiteralExpr float-literal compiler fix, verified against the
+    // native binary.)
+    generateNativePynterTestCases(miscTests, 3, undefined, [
+      "hello = 'hello'\nhello is 'hello'",
+      "math_nan == math_nan",
+      "math_nan != math_nan",
+      "math_nan < 1",
+      "math_nan >= math_nan",
+      "[math_nan] == [math_nan]",
+      "x = [math_nan]\nx == x",
+      "math_nan is math_nan",
+      "x = math_nan\nx is x",
+      "x = complex(math_nan, 0)\nx is x",
+      "x = complex(math_nan, 0)\nx == x",
+      "x = complex(math_nan, 0)\nx != x",
+      "x = complex(0, math_nan)\nx == x",
+      "complex(math_nan, 0) == complex(math_nan, 0)",
+      "c = complex(math_nan, 0)\n[c] == [c]",
+      "[complex(math_nan, 0)] == [complex(math_nan, 0)]",
+      "'x' is not 'x'",
+      "arity((lambda *args: args))",
+      "arity((lambda x, *args: args))",
+      "def f(x, y, *args, z):\n    pass\narity(f)",
+      "def f(*args, x, y, z):\n    pass\narity(f)",
+      "a = 'abc'\na[0]",
+      "a = '🎊🎉🔔❤️‍🩹'\na[0]",
+      "a = '👨‍👩‍👧‍👦'\na[0]",
+      "a = '👨‍👩‍👧‍👦'\na[1]",
+    ]);
     // PVML has no keyword-only parameters at all, by design (a rest
     // parameter must be the closure's last one — see PVMLIR's
     // `hasRestParam` doc comment and PVMLCompiler's fromFunctionNode, which

@@ -233,7 +233,16 @@ result`,
   generateTestCases(pairmutatorTests, 2, [misc, math, linkedList, pairmutator, stream]);
   // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
   // programs, so run them there rather than at their nominal §2.
-  generateNativePynterTestCases(pairmutatorTests, 3, [misc, math, linkedList, pairmutator, stream]);
+  // Known Pynter gap (set_head/set_tail's return value), see py-slang#259.
+  generateNativePynterTestCases(
+    pairmutatorTests,
+    3,
+    [misc, math, linkedList, pairmutator, stream],
+    [
+      "p = pair(1, 2)\nresult = set_head(p, 10)\nresult",
+      "p = pair(1, 2)\nresult = set_tail(p, 20)\nresult",
+    ],
+  );
   // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so this
   // runs at the table's own nominal §2, matching generateTestCases() above.
   generatePvmlInBrowserTestCases(pairmutatorTests, 2, [

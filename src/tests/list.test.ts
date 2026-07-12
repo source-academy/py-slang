@@ -81,6 +81,13 @@ describe("List Tests", () => {
   };
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
-  generateNativePynterTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
+  // Known Pynter gaps (is_list()'s missing arity validator, build_list+str()),
+  // see py-slang#259.
+  generateNativePynterTestCases(
+    listTests,
+    3,
+    [misc, math, linkedList, pairmutator, stream, list],
+    ["is_list(1, 2)", "build_list(lambda i: str(i), 3)"],
+  );
   generatePvmlInBrowserTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
 });

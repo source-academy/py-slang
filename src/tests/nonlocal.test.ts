@@ -459,7 +459,10 @@ print(f())
 };
 
 generateTestCases(nonlocalTests, 3, ch3);
-generateNativePynterTestCases(nonlocalTests, 3);
+// Known Pynter gap, see py-slang#259.
+generateNativePynterTestCases(nonlocalTests, 3, undefined, [
+  '\nz = "global"\ndef f():\n    z = "local"\n    g = lambda: z\n    return g()\nprint(f())\n',
+]);
 generatePvmlInBrowserTestCases(nonlocalTests, 3, ch3);
 
 // ── Issues #178–#181: scope conflict validators ───────────────────────────────

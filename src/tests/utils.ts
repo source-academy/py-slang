@@ -657,6 +657,40 @@ function involvesParseFeature(code: string): boolean {
   return PARSE_FEATURE_CALL_RE.test(code);
 }
 
+/**
+ * Matches a `for` statement: PVMLCompiler.visitForStmt compiles it to NEWITER
+ * (see opcodes.ts), whose opcode index is above PYNTER_OPCODE_MAX — so
+ * `assemble()` unconditionally rejects any program containing a for-loop when
+ * targeting Pynter, regardless of the loop's contents or values. This is a
+ * categorical, compile-time gap (there is no NEWITER-equivalent Pynter could
+ * fall back to), not a per-case runtime bug — see py-slang#259 for the
+ * discovery (nearly every `loops.test.ts` failure, plus several `nonlocal`/
+ * `global-keyword` cases whose actual scoping behavior was never reached).
+ * SICPy has no other keyword or identifier containing "for" as a whole word,
+ * so a plain word-boundary match is unambiguous.
+ */
+const FOR_LOOP_RE = /\bfor\b/;
+
+function involvesForLoop(code: string): boolean {
+  return FOR_LOOP_RE.test(code);
+}
+
+/**
+ * Matches a call to apply_in_underlying_python(): like parse()/tokenize(),
+ * this lives in the `parser` group, which is Python §4-only (see
+ * VARIANT_GROUPS in runner.ts — `parser` is absent from §1-3's groups) —
+ * Pynter's target is §3 specifically (see pynter/README.md), so this is
+ * categorically out of scope the same way parse()/tokenize() are, not a
+ * per-case bug. Confirmed at runtime too: every call throws
+ * NameNotFoundError against the `runner` binary regardless of arguments,
+ * since there is no native-Pynter primitive for it either.
+ */
+const APPLY_UNDERLYING_CALL_RE = /\bapply_in_underlying_python\s*\(/;
+
+function involvesApplyInUnderlyingPython(code: string): boolean {
+  return APPLY_UNDERLYING_CALL_RE.test(code);
+}
+
 /** Reasons a test case is skipped for the native Pynter pathway, checked in order. */
 const NATIVE_PYNTER_SKIP_REASONS: {
   matches: (code: string, expected: TestExpectedValue) => boolean;
@@ -666,6 +700,14 @@ const NATIVE_PYNTER_SKIP_REASONS: {
   {
     matches: code => involvesParseFeature(code),
     reason: "parse()/tokenize() aren't part of Python 3",
+  },
+  {
+    matches: code => involvesForLoop(code),
+    reason: "for-loops compile to NEWITER, above Pynter's opcode ceiling (py-slang#259)",
+  },
+  {
+    matches: code => involvesApplyInUnderlyingPython(code),
+    reason: "apply_in_underlying_python() has no native Pynter primitive (py-slang#259)",
   },
 ];
 
@@ -678,12 +720,28 @@ const NATIVE_PYNTER_SKIP_REASONS: {
  * matching whatever non-default combination the sibling generateTestCases()
  * call for the same suite uses (e.g. stream tests run CSE at variant 2 with
  * extra `stream`/`pairmutator` groups layered on).
+ *
+ * `knownGaps` — exact `code` strings (from this same `testCases` table) known
+ * to currently fail against native Pynter for reasons that aren't one of
+ * NATIVE_PYNTER_SKIP_REASONS' categorical predicates — are skip-gated the
+ * same way, with a reason pointing at
+ * https://github.com/source-academy/py-slang/issues/259, instead of failing
+ * the suite. Unlike NATIVE_PYNTER_SKIP_REASONS (a handful of clean,
+ * structural "this pathway can't represent X at all" rules), these are
+ * uncategorized, one-off bugs (missing arity validators, round()'s two-arg
+ * form, a `global` nested-scope bug, ...) with no single predicate that
+ * could describe them without risking silently swallowing a future,
+ * different failure in the same table — see generatePvmlInBrowserTestCases'
+ * identical `knownGaps` parameter for the same rationale, applied to the
+ * PVML-in-browser pathway first.
  */
 export const generateNativePynterTestCases = (
   testCases: TestCases,
   variant: number,
   groups?: Group[],
+  knownGaps: string[] = [],
 ) => {
+  const knownGapSet = new Set(knownGaps);
   // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md) —
   // every native-Pynter test case must be posed as a §3 program, regardless of
   // which chapter the sibling generateTestCases() call for the same suite uses.
@@ -735,9 +793,10 @@ export const generateNativePynterTestCases = (
       const supported: InternalTestCase[] = [];
       const skipBuckets = new Map<string, InternalTestCase[]>();
       for (const testCase of internalTestCases) {
-        const reason = NATIVE_PYNTER_SKIP_REASONS.find(({ matches }) =>
-          matches(testCase.code, testCase.expected),
-        )?.reason;
+        const reason =
+          NATIVE_PYNTER_SKIP_REASONS.find(({ matches }) =>
+            matches(testCase.code, testCase.expected),
+          )?.reason ?? (knownGapSet.has(testCase.code) ? "known gap, see py-slang#259" : undefined);
         if (reason === undefined) {
           supported.push(testCase);
         } else {

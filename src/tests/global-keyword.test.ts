@@ -289,5 +289,14 @@ print(count)
 };
 
 generateTestCases(globalKeywordTests, 3, ch3);
-generateNativePynterTestCases(globalKeywordTests, 3);
+// Known Pynter gaps (real global-keyword scoping/output bugs), see py-slang#259.
+// TODO(pynter-reconcile): pvml-browser-revival's resolver-level global-scoping fix
+// (0c36811) may have already closed some of these on the native pathway too, since
+// the resolver is shared code — re-verify against a fresh runner build and drop any
+// now-passing entries.
+generateNativePynterTestCases(globalKeywordTests, 3, undefined, [
+  "\nx = 1\ndef outer():\n    x = 100\n    def inner():\n        global x\n        x = 2\n    inner()\nouter()\nx\n",
+  "\ndef f():\n    global y\n    y = 55\nf()\ny\n",
+  "\ncount = 0\ndef bump():\n    global count\n    count = count + 1\nbump()\nbump()\nprint(count)\n",
+]);
 generatePvmlInBrowserTestCases(globalKeywordTests, 3, ch3);

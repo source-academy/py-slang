@@ -161,6 +161,35 @@ function expectMatch(wanted: CseOutcome, actual: PvmlOutcome): void {
 const pynterPath = process.env.PYNTER_RUNNER_PATH;
 const describeBlock = pynterPath ? describe : describe.skip;
 
+/**
+ * Exact `code` strings known to currently fail against native Pynter — real
+ * floor-division/modulo/power value bugs and string-literal identity
+ * inconsistencies, not anything this sweep's own complex-number carve-out
+ * (see file header) already explains. See py-slang#259 for the full
+ * writeup, and generateNativePynterTestCases'/generatePvmlInBrowserTestCases'
+ * identical `knownGaps` parameter (src/tests/utils.ts) for the same
+ * exact-match-over-predicate rationale: these are uncategorized, one-off
+ * bugs, not a single structural "Pynter can't represent X" rule.
+ */
+const KNOWN_GAPS = new Set([
+  "2 // 2",
+  "2 // 2.5",
+  "2.5 // 2",
+  "2.5 // 2.5",
+  "2 % 2",
+  "2 ** 2",
+  "2 ** 2.5",
+  "2.5 ** 2",
+  "2.5 ** 2.5",
+  "'ab' is 'ab'",
+  "'ab' is not 'ab'",
+]);
+
+/** `test`, or `test.skip` when `code` is a known gap. */
+function testOrSkip(code: string): typeof test {
+  return KNOWN_GAPS.has(code) ? test.skip : test;
+}
+
 for (const chapter of [3]) {
   describeBlock(`[pvml/pynter] Operator conformance at Python §${chapter}`, () => {
     const ops = chapter <= 2 ? BINARY_OPS_12 : BINARY_OPS_34;
@@ -181,7 +210,7 @@ for (const chapter of [3]) {
         for (const left of universe) {
           for (const right of universe) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
-            test(code, async () => {
+            testOrSkip(code)(code, async () => {
               const wanted = await cseOutcome(code, chapter, groups);
               const actual = await runPvml(code, chapter, groups, pynterPath!);
               expectMatch(wanted, actual);

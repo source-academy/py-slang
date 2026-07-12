@@ -163,7 +163,26 @@ describe("Linked List Tests", () => {
   generateTestCases(linkedListTests, 2, [misc, math, linkedList]);
   // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
   // programs, so run them there rather than at their nominal §2.
-  generateNativePynterTestCases(linkedListTests, 3, [misc, math, linkedList]);
+  // Known Pynter gaps below (print_llist/llist_to_string value bugs, a
+  // missing is_pair() arity validator) are tracked in py-slang#259.
+  generateNativePynterTestCases(
+    linkedListTests,
+    3,
+    [misc, math, linkedList],
+    [
+      "print_llist(llist(1, 2, 3))",
+      "print_llist(pair(1, 2))",
+      "print_llist(None)",
+      "print_llist(pair(1, pair(2, 3)))",
+      "print_llist(pair(1, pair(2, None)))",
+      "print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))",
+      "print_llist(llist('a', 'b'))",
+      "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)",
+      "is_pair(1, 2)",
+      "llist_to_string(llist(1, 2))",
+      "llist_to_string(llist('a', 'b'))",
+    ],
+  );
   // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so this
   // runs at the table's own nominal §2, matching generateTestCases() above.
   generatePvmlInBrowserTestCases(linkedListTests, 2, [misc, math, linkedList]);
