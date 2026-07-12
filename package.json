@@ -74,7 +74,7 @@
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.6.0",
     "@sourceacademy/runner-cse-machine": "^3.0.0",
-    "@sourceacademy/runner-module-loader": "../plugins/src/runner/module-loader",
+    "@sourceacademy/runner-module-loader": "^0.0.1",
     "@sourceacademy/runner-stepper": "^0.0.1",
     "@sourceacademy/wasm-util": "^1.0.6",
     "commander": "^14.0.3",
