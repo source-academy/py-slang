@@ -14,7 +14,12 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Standard Library Tests", () => {
   describe("Chapter 1 Builtins", () => {
@@ -971,6 +976,10 @@ describe("Standard Library Tests", () => {
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
     generateNativePynterTestCases(mathTests, 3);
+    // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
+    // miscTests' §1-specific restrictions can be checked directly at §1.
+    generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
+    generatePvmlInBrowserTestCases(miscTests, 1, [misc, math]);
   });
 
   describe("Chapter 3 Builtins", () => {
@@ -1078,5 +1087,13 @@ describe("Standard Library Tests", () => {
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
     generateNativePynterTestCases(miscTests, 3);
+    generatePvmlInBrowserTestCases(miscTests, 3, [
+      misc,
+      math,
+      linkedList,
+      stream,
+      list,
+      pairmutator,
+    ]);
   });
 });

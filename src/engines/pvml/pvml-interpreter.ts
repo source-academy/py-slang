@@ -975,24 +975,67 @@ export class PVMLInterpreter {
     return l ** r;
   }
 
+  /**
+   * Structural equality between any two PVML values, matching Python/CPython
+   * semantics (mirrors the CSE machine's own structuralEquals in
+   * cse/operators.ts, which is the authoritative reference this is checked
+   * against — see operator-conformance-pvml.test.ts): numeric values compare
+   * across int/float/complex via numericEquals; lists compare element-wise,
+   * recursively; every other value compares by reference (`===`), which
+   * already gives correct by-value semantics for JS primitives boxed here
+   * (strings, None/null) and correct reference semantics for the rest
+   * (closures, primitives, iterators) — CSE has no separate value-equality
+   * notion for those either, see structuralEquals' own "by reference"
+   * fallback.
+   *
+   * `restrictChapter12`, when set, re-applies `isExcludedFromChapter12Equality`
+   * at *every* level of recursion, not just the top-level operands — so a
+   * bool/function nested inside a list is still an error at §1/§2 (e.g.
+   * `pair(1, 2) == pair(True, 3)`), not a silently-wrong bool. `op` is only
+   * used to build that error's message.
+   */
+  private static valuesEqual(
+    left: PVMLBoxType,
+    right: PVMLBoxType,
+    restrictChapter12: boolean,
+    op: "==" | "!=" = "==",
+  ): boolean {
+    if (
+      restrictChapter12 &&
+      (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right))
+    ) {
+      throw new UnsupportedOperandTypeError(op, getPVMLType(left), getPVMLType(right));
+    }
+    if (left === right) return true;
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      return PVMLInterpreter.numericEquals(left, right);
+    }
+    if (
+      isPVMLObject(left) &&
+      left.type === "array" &&
+      isPVMLObject(right) &&
+      right.type === "array"
+    ) {
+      return (
+        left.elements.length === right.elements.length &&
+        left.elements.every((el, i) =>
+          PVMLInterpreter.valuesEqual(el, right.elements[i], restrictChapter12, op),
+        )
+      );
+    }
+    return false;
+  }
+
   private strictEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    if (isArithmeticValue(left) && isArithmeticValue(right)) {
-      this.push(PVMLInterpreter.numericEquals(left, right));
-    } else {
-      this.push(left === right);
-    }
+    this.push(PVMLInterpreter.valuesEqual(left, right, false));
   }
 
   private strictNotEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    if (isArithmeticValue(left) && isArithmeticValue(right)) {
-      this.push(!PVMLInterpreter.numericEquals(left, right));
-    } else {
-      this.push(left !== right);
-    }
+    this.push(!PVMLInterpreter.valuesEqual(left, right, false));
   }
 
   /** §1/§2's `==`/`!=` (see docs/specs/python_typing_middle_12.tex): bool and
@@ -1002,55 +1045,53 @@ export class PVMLInterpreter {
   private strictEqual12(): void {
     const right = this.pop();
     const left = this.pop();
-    const leftType = getPVMLType(left);
-    const rightType = getPVMLType(right);
-    if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
-      throw new UnsupportedOperandTypeError("==", leftType, rightType);
-    }
-    if (isArithmeticValue(left) && isArithmeticValue(right)) {
-      this.push(PVMLInterpreter.numericEquals(left, right));
-    } else {
-      this.push(left === right);
-    }
+    this.push(PVMLInterpreter.valuesEqual(left, right, true, "=="));
   }
 
   private strictNotEqual12(): void {
     const right = this.pop();
     const left = this.pop();
-    const leftType = getPVMLType(left);
-    const rightType = getPVMLType(right);
-    if (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right)) {
-      throw new UnsupportedOperandTypeError("!=", leftType, rightType);
-    }
-    if (isArithmeticValue(left) && isArithmeticValue(right)) {
-      this.push(!PVMLInterpreter.numericEquals(left, right));
-    } else {
-      this.push(left !== right);
-    }
+    this.push(!PVMLInterpreter.valuesEqual(left, right, true, "!="));
   }
 
   /**
    * `is`: Python pointer/identity equality, as distinct from `==`'s structural
-   * equality (see docs/specs/python_typing_tail_34.tex). Arrays and closures
-   * are boxed JS objects here, so `===` already compares them by reference —
-   * two separately-built lists with equal elements are `is`-unequal even
-   * though `==`-equal. Scalars (number/string/boolean/None) have no separate
+   * equality (see docs/specs/python_typing_tail_34.tex; mirrors the CSE
+   * machine's own pyIdentical in cse/operators.ts, checked against directly
+   * by operator-conformance-pvml.test.ts). Arrays and closures are boxed JS
+   * objects here, so `===` already compares them by reference — two
+   * separately-built lists with equal elements are `is`-unequal even though
+   * `==`-equal. Scalars (number/string/boolean/None) have no separate
    * identity in this representation, so `===` on them doubles as identity;
    * this still satisfies the spec's only hard guarantee (`None`/`True`/`False`
    * are each a single instance system-wide), since JS gives that for free.
+   * Complex numbers are a boxed JS object (PyComplexNumber) like arrays, but
+   * — unlike arrays — are conceptually just another immutable scalar with no
+   * separate identity (matching pyIdentical's own explicit complex case), so
+   * `===` alone is wrong for them: two separately-constructed but
+   * value-equal complex numbers must still be `is`-identical, which needs an
+   * explicit `.equals()` check, not JS reference comparison.
    * Deliberately no bool-as-int coercion (unlike EQG/NEQG above) — `1 is True`
    * must be false, since `is` never treats values of different types as equal.
    */
+  private static identical(left: PVMLBoxType, right: PVMLBoxType): boolean {
+    if (left === right) return true;
+    if (left instanceof PyComplexNumber && right instanceof PyComplexNumber) {
+      return left.equals(right);
+    }
+    return false;
+  }
+
   private identityEqual(): void {
     const right = this.pop();
     const left = this.pop();
-    this.push(left === right);
+    this.push(PVMLInterpreter.identical(left, right));
   }
 
   private identityNotEqual(): void {
     const right = this.pop();
     const left = this.pop();
-    this.push(left !== right);
+    this.push(!PVMLInterpreter.identical(left, right));
   }
 
   private genericOrderedComparison(op: "<" | ">" | "<=" | ">="): void {

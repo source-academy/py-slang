@@ -1,6 +1,7 @@
 import { FeatureNotSupportedError } from "../validator";
 import {
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
   toPythonAstAndResolve,
@@ -289,3 +290,4 @@ print(count)
 
 generateTestCases(globalKeywordTests, 3, ch3);
 generateNativePynterTestCases(globalKeywordTests, 3);
+generatePvmlInBrowserTestCases(globalKeywordTests, 3, ch3);

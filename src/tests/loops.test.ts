@@ -7,7 +7,12 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { TypeError, UserError } from "../errors/errors";
 import { FeatureNotSupportedError } from "../validator";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Loop Tests", () => {
   const loopTests: TestCases = {
@@ -89,4 +94,5 @@ describe("Loop Tests", () => {
 
   generateTestCases(loopTests, 3, [misc, math, linkedList, stream, pairmutator, list]);
   generateNativePynterTestCases(loopTests, 3);
+  generatePvmlInBrowserTestCases(loopTests, 3, [misc, math, linkedList, stream, pairmutator, list]);
 });

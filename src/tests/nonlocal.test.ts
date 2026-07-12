@@ -4,6 +4,7 @@ import list from "../stdlib/list";
 import linkedList from "../stdlib/linked-list";
 import {
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
   toPythonAstAndResolve,
@@ -459,6 +460,7 @@ print(f())
 
 generateTestCases(nonlocalTests, 3, ch3);
 generateNativePynterTestCases(nonlocalTests, 3);
+generatePvmlInBrowserTestCases(nonlocalTests, 3, ch3);
 
 // ── Issues #178–#181: scope conflict validators ───────────────────────────────
 // These are always SyntaxErrors regardless of chapter; tested with chapter 3.

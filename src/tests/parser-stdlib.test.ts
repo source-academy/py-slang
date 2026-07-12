@@ -6,7 +6,12 @@ import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 const groups = [misc, math, linkedList, list, pairmutator, stream, parser];
 
@@ -667,4 +672,33 @@ describe("Parser Stdlib Tests", () => {
   // of VARIANT_GROUPS[3] — pass it explicitly, unlike the sibling calls above, so it actually
   // resolves instead of silently falling back to the default §3 groups.
   generateNativePynterTestCases(applyTests, 3, groups);
+
+  // Unlike native Pynter, PVML-in-browser supports parse()/tokenize() (see
+  // cse-interop.ts's pvmlBoxToCseValue/cseValueToPvmlBox, which let it reuse
+  // CSE's own transform()) and isn't restricted to §3, so every table here
+  // — including parseErrorTests/tokenizeTests, which native Pynter can't run
+  // at all — is checked at its nominal §4, matching generateTestCases() above.
+  generatePvmlInBrowserTestCases(literalTests, 4, groups);
+  generatePvmlInBrowserTestCases(nameTests, 4, groups);
+  generatePvmlInBrowserTestCases(binaryTests, 4, groups);
+  generatePvmlInBrowserTestCases(unaryTests, 4, groups);
+  generatePvmlInBrowserTestCases(boolOpTests, 4, groups);
+  generatePvmlInBrowserTestCases(compareTests, 4, groups);
+  generatePvmlInBrowserTestCases(conditionalTests, 4, groups);
+  generatePvmlInBrowserTestCases(loopTests, 4, groups);
+  generatePvmlInBrowserTestCases(functionTests, 4, groups);
+  generatePvmlInBrowserTestCases(lambdaTests, 4, groups);
+  generatePvmlInBrowserTestCases(applicationTests, 4, groups);
+  generatePvmlInBrowserTestCases(assignTests, 4, groups);
+  generatePvmlInBrowserTestCases(listTests, 4, groups);
+  generatePvmlInBrowserTestCases(starredTests, 4, groups);
+  generatePvmlInBrowserTestCases(controlFlowTests, 4, groups);
+  generatePvmlInBrowserTestCases(scopeTests, 4, groups);
+  generatePvmlInBrowserTestCases(assertTests, 4, groups);
+  generatePvmlInBrowserTestCases(importTests, 4, groups);
+  generatePvmlInBrowserTestCases(sequenceTests, 4, groups);
+  generatePvmlInBrowserTestCases(nestedTests, 4, groups);
+  generatePvmlInBrowserTestCases(parseErrorTests, 4, groups);
+  generatePvmlInBrowserTestCases(tokenizeTests, 4, groups);
+  generatePvmlInBrowserTestCases(applyTests, 4, groups);
 });

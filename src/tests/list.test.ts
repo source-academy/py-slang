@@ -9,7 +9,12 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("List Tests", () => {
   const listTests: TestCases = {
@@ -77,4 +82,5 @@ describe("List Tests", () => {
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
   generateNativePynterTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
+  generatePvmlInBrowserTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
 });
