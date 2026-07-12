@@ -1162,12 +1162,13 @@ const cmdEvaluators: CmdEvaluators = {
   ) {
     // Tail-Call Optimisation
     const topElement = control.peek();
+    let shouldPushEnvInstr = true;
     if (
       topElement !== undefined &&
       isInstr(topElement) &&
       topElement.instrType === InstrType.ENVIRONMENT
     ) {
-      control.pop();
+      shouldPushEnvInstr = false;
       while (currentEnvironment(context).id !== topElement.env.id) {
         popEnvironment(context);
       }
@@ -1210,8 +1211,10 @@ const cmdEvaluators: CmdEvaluators = {
 
     if (callable?.type == "closure") {
       const closure = callable.closure;
-      const callerEnv = currentEnvironment(context);
-      control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
+      if (shouldPushEnvInstr) {
+        const callerEnv = currentEnvironment(context);
+        control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
+      }
       if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
