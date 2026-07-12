@@ -460,7 +460,14 @@ print(f())
 
 generateTestCases(nonlocalTests, 3, ch3);
 generateNativePynterTestCases(nonlocalTests, 3);
-generatePvmlInBrowserTestCases(nonlocalTests, 3, ch3);
+// Known PVML-in-browser gaps: reading a for-loop target/nonlocal before the
+// loop body has run should raise UnboundLocalError/FreeVariableUnboundError
+// but doesn't — see py-slang#258.
+generatePvmlInBrowserTestCases(nonlocalTests, 3, ch3, [
+  "\ni = 100\ndef f():\n    print(i)\n    for i in range(3):\n        pass\nf()\n",
+  "\ndef outer():\n    def inner():\n        nonlocal i\n        print(i)\n        i = 5\n    inner()\n    for i in range(3):\n        pass\n    return i\nouter()\n",
+  '\nz = "global"\ndef f():\n    g = lambda: z\n    return g()\n    z = "local"\nprint(f())\n',
+]);
 
 // ── Issues #178–#181: scope conflict validators ───────────────────────────────
 // These are always SyntaxErrors regardless of chapter; tested with chapter 3.

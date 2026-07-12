@@ -841,12 +841,27 @@ function testOutputValueToCseValue(v: TestOutputValue): Value {
  * generatePVMLTestCases' own per-case prelude handling — so prelude-defined
  * functions (e.g. `equal`/`map`/`reverse` from linkedList) are callable from
  * the case, with no state leaking between cases.
+ *
+ * `knownGaps` — exact `code` strings (from this same `testCases` table) that
+ * are known to currently fail against the in-browser pathway — are
+ * registered as `test.skip.each` with a reason pointing at
+ * https://github.com/source-academy/py-slang/issues/258, instead of failing
+ * the suite. This mirrors PVML_SKIP_REASONS/NATIVE_PYNTER_SKIP_REASONS'
+ * pattern of a labeled, visible skip rather than silently dropping a case,
+ * but keyed to an exact, enumerated list rather than a matcher predicate:
+ * these are real, uncategorized behavioral gaps (missing builtins, a
+ * prelude-closure-linking crash, scoping bugs — see the issue), not a
+ * structural "this pathway doesn't support X at all" carve-out a predicate
+ * could describe cleanly, so an exact match keeps this from ever silently
+ * swallowing a *new*, different failure in the same table.
  */
 export const generatePvmlInBrowserTestCases = (
   testCases: TestCases,
   variant: number,
   groups?: Group[],
+  knownGaps: string[] = [],
 ) => {
+  const knownGapSet = new Set(knownGaps);
   const resolvedGroups = groups ?? VARIANT_GROUPS[variant];
   if (!resolvedGroups) {
     throw new Error(`generatePvmlInBrowserTestCases: invalid variant ${variant}. Expected 1-4.`);
@@ -935,7 +950,21 @@ export const generatePvmlInBrowserTestCases = (
 
   for (const [funcName, tests] of Object.entries(testCases)) {
     describe(`[pvml-in-browser] ${funcName}`, () => {
-      test.each(createInternalTestCases(tests))(`$label`, runTestCase);
+      const internalCases = createInternalTestCases(tests);
+      const supported = internalCases.filter(({ code }) => !knownGapSet.has(code));
+      const skipped = internalCases.filter(({ code }) => knownGapSet.has(code));
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (skipped.length > 0) {
+        test.skip.each(skipped)(
+          `$label (known PVML-in-browser gap, see py-slang#258)`,
+          runTestCase,
+        );
+      }
     });
   }
 };

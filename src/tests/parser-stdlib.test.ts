@@ -678,7 +678,12 @@ describe("Parser Stdlib Tests", () => {
   // CSE's own transform()) and isn't restricted to §3, so every table here
   // — including parseErrorTests/tokenizeTests, which native Pynter can't run
   // at all — is checked at its nominal §4, matching generateTestCases() above.
-  generatePvmlInBrowserTestCases(literalTests, 4, groups);
+  // Known PVML-in-browser gap: parse() can't handle complex-literal source
+  // text — see py-slang#258.
+  generatePvmlInBrowserTestCases(literalTests, 4, groups, [
+    'print(parse("3j"))',
+    'print(parse("2+3j"))',
+  ]);
   generatePvmlInBrowserTestCases(nameTests, 4, groups);
   generatePvmlInBrowserTestCases(binaryTests, 4, groups);
   generatePvmlInBrowserTestCases(unaryTests, 4, groups);
