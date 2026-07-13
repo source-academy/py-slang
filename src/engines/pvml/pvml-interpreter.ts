@@ -1015,7 +1015,8 @@ export class PVMLInterpreter {
    */
   private static isNaNValue(value: PVMLBoxType): boolean {
     if (typeof value === "number") return Number.isNaN(value);
-    if (value instanceof PyComplexNumber) return Number.isNaN(value.real) || Number.isNaN(value.imag);
+    if (value instanceof PyComplexNumber)
+      return Number.isNaN(value.real) || Number.isNaN(value.imag);
     return false;
   }
 

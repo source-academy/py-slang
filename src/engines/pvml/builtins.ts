@@ -1198,9 +1198,7 @@ export function executePrimitive(
 
     case 130: // input — see PRIMITIVE_FUNCTIONS' doc comment: a real CSE feature this
       // synchronous interpreter has no async-stdin equivalent of.
-      throw new PVMLInterpreterError(
-        "input() is not supported by the PVML-in-browser pathway",
-      );
+      throw new PVMLInterpreterError("input() is not supported by the PVML-in-browser pathway");
 
     default:
       throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);
