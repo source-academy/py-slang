@@ -25,7 +25,6 @@ export type ModuleFunction = (
 ) => ModuleFunctionGenerator;
 
 export enum InstrType {
-  RESET = "Reset",
   WHILE = "WhileInstr",
   FOR = "ForInstr",
   ASSIGNMENT = "Assignment",
@@ -123,10 +122,6 @@ export interface EndOfFunctionBodyInstr extends BaseInstr {
   instrType: InstrType.END_OF_FUNCTION_BODY;
 }
 
-export interface ResetInstr extends BaseInstr {
-  instrType: InstrType.RESET;
-}
-
 export interface PopInstr extends BaseInstr {
   instrType: InstrType.POP;
 }
@@ -156,7 +151,6 @@ export type Instr =
   | BranchInstr
   | EnvInstr
   | EndOfFunctionBodyInstr
-  | ResetInstr
   | PopInstr
   | BoolOpInstr
   | ListAccessInstr

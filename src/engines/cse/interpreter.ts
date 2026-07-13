@@ -48,7 +48,6 @@ import {
   ListInstr,
   ModuleFunctionCallInstr,
   PopInstr,
-  ResetInstr,
   UnOpInstr,
   WhileInstr,
 } from "./types";
@@ -743,7 +742,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.ENVIRONMENT)) {
         break;
       }
     }
@@ -895,20 +894,6 @@ const cmdEvaluators: CmdEvaluators = {
   /**
    * Instructions
    */
-  [InstrType.RESET]: function (
-    _code: string,
-    _command: ResetInstr,
-    _context: Context,
-    _control: Control,
-    _stash: Stash,
-    _isPrelude: boolean,
-  ) {
-    // Environment restoration is handled entirely by the paired ENVIRONMENT instruction
-    // (always pushed immediately below this RESET by the APPLICATION handler), whose while
-    // loop pops back to the caller's environment. Popping here too was redundant — it made
-    // the frame transition happen a step early, at the return statement itself, instead of
-    // at the ENVIRONMENT instruction where the CSE machine visualizer animates it.
-  },
 
   [InstrType.ASSIGNMENT]: function (
     code: string,
@@ -1201,13 +1186,16 @@ const cmdEvaluators: CmdEvaluators = {
   ) {
     // Tail-Call Optimisation
     const topElement = control.peek();
+    let shouldPushEnvInstr = true;
     if (
       topElement !== undefined &&
       isInstr(topElement) &&
-      topElement.instrType === InstrType.RESET
+      topElement.instrType === InstrType.ENVIRONMENT
     ) {
-      control.pop();
-      popEnvironment(context);
+      shouldPushEnvInstr = false;
+      while (currentEnvironment(context).id !== topElement.env.id) {
+        popEnvironment(context);
+      }
     }
 
     const numOfArgs = instr.numOfArgs;
@@ -1247,9 +1235,10 @@ const cmdEvaluators: CmdEvaluators = {
 
     if (callable?.type == "closure") {
       const closure = callable.closure;
-      const callerEnv = currentEnvironment(context);
-      control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
-      control.push(instrCreator.resetInstr(instr.srcNode));
+      if (shouldPushEnvInstr) {
+        const callerEnv = currentEnvironment(context);
+        control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
+      }
       if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }

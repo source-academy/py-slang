@@ -158,7 +158,6 @@ const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
   [InstrType.BRANCH]: "Branch",
   [InstrType.WHILE]: "While", // py: "WhileInstr" → js: "While"
   [InstrType.FOR]: "For", // py: "ForInstr"   → js: "For"
-  [InstrType.RESET]: "Reset",
   [InstrType.LIST]: "ArrayLiteral", // py: "ListLiteral" → js: "ArrayLiteral"
   [InstrType.LIST_ACCESS]: "ArrayAccess", // py: "ListAccess"  → js: "ArrayAccess"
   [InstrType.LIST_ASSIGNMENT]: "ArrayAssignment", // py: "ListAssignment" → js: "ArrayAssignment"
@@ -198,8 +197,6 @@ const PY_TO_JS_NODE_TYPE: Record<string, string> = {
 
 function instrDisplayText(item: ControlStackItem): string {
   switch (item.instrType as InstrType) {
-    case InstrType.RESET:
-      return "return";
     case InstrType.END_OF_FUNCTION_BODY:
       return "return None";
     case InstrType.POP:

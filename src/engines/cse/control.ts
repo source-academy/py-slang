@@ -38,7 +38,7 @@ export class Control extends Stack<ControlItem> {
     if (item !== undefined && isEnvDependent(item)) {
       this.numEnvDependentItems--;
     }
-    if (item !== undefined && isInstr(item) && item.instrType === InstrType.RESET) {
+    if (item !== undefined && isInstr(item) && item.instrType === InstrType.ENVIRONMENT) {
       this.numFunctionResets--;
     }
     return item;
@@ -49,7 +49,7 @@ export class Control extends Stack<ControlItem> {
       if (isEnvDependent(item)) {
         this.numEnvDependentItems++;
       }
-      if (isInstr(item) && item.instrType === InstrType.RESET) {
+      if (isInstr(item) && item.instrType === InstrType.ENVIRONMENT) {
         this.numFunctionResets++;
       }
     });
