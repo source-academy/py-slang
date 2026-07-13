@@ -437,11 +437,13 @@ export class PVMLCompiler
           this.builder.emitNullary(value ? OpCodes.LGCB1 : OpCodes.LGCB0);
           break;
         case "number":
-          if (Number.isInteger(value) && I32_MIN <= value && value <= I32_MAX) {
-            this.builder.emitUnary(OpCodes.LGCI, value);
-          } else {
-            this.builder.emitUnary(OpCodes.LGCF64, value);
-          }
+          // Reached only for Python float literals — int literals go through
+          // BigIntLiteral (see visitBigIntLiteralExpr), never this node (see
+          // python-grammar.ts's astBigInt vs this node's construction site).
+          // A whole-numbered float like `1.0` must still compile as a float,
+          // never LGCI, or it becomes bit-identical to the int `1` in native
+          // Pynter's NaN-box encoding (breaking `1 is 1.0`).
+          this.builder.emitUnary(OpCodes.LGCF64, value);
           break;
         case "string":
           this.builder.emitUnary(OpCodes.LGCS, value);
