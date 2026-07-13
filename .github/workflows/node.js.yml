@@ -32,3 +32,39 @@ jobs:
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  native-pynter-parity:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout py-slang
+        uses: actions/checkout@v6
+      - name: Checkout pynter
+        uses: actions/checkout@v6
+        with:
+          repository: source-academy/pynter
+          # Pinned deliberately, bumped in its own reviewed commit when
+          # py-slang wants to adopt a pynter-side change — never floats on
+          # pynter's own master, so a pynter-side change can't silently
+          # break this job with no corresponding py-slang diff to explain it.
+          ref: f6cd35b35dff2c3d8c971faf9a1ada98a2259e89
+          path: pynter
+      - name: Build pynter runner
+        working-directory: pynter
+        run: |
+          mkdir build
+          cd build
+          cmake .. -DCMAKE_BUILD_TYPE=Release
+          make -j$(nproc)
+      - run: corepack enable
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+      - run: yarn install --frozen-lockfile
+      - run: yarn run build --all
+      - name: Run native Pynter parity suite
+        env:
+          PYNTER_RUNNER_PATH: ${{ github.workspace }}/pynter/build/runner/runner
+        run: npx jest
