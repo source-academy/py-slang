@@ -184,6 +184,26 @@ export const OPCODE_MAX = 103;
  */
 export const PYNTER_OPCODE_MAX = 0x56; // 86
 
+/**
+ * Opcodes native Pynter implements beyond the base 0..PYNTER_OPCODE_MAX
+ * range, as they land in the native VM (github.com/source-academy/pynter) —
+ * additions here must be matched by an actual `case` in that repo's vm.c
+ * dispatch switch, verified against a real build, before being added.
+ *
+ * This exists (rather than just raising PYNTER_OPCODE_MAX) because native
+ * support doesn't land in opcode-number order: e.g. NEWITER/FOR_ITER (89/90)
+ * can be implemented before FLOORDIVG/FLOORDIVF (87/88) — a single "opcode ≤
+ * max" threshold can't express that gap, only a set can.
+ */
+export const PYNTER_ADDITIONAL_SUPPORTED_OPCODES: ReadonlySet<number> = new Set([
+  // Populated as native Pynter gains support for opcodes above PYNTER_OPCODE_MAX.
+]);
+
+/** Whether native Pynter implements `opcode` today — see PYNTER_OPCODE_MAX and PYNTER_ADDITIONAL_SUPPORTED_OPCODES' doc comments. */
+export function isSupportedByNativePynter(opcode: number): boolean {
+  return opcode <= PYNTER_OPCODE_MAX || PYNTER_ADDITIONAL_SUPPORTED_OPCODES.has(opcode);
+}
+
 const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVG]: "floor division (//)",
   [OpCodes.FLOORDIVF]: "floor division (//)",

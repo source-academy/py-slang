@@ -1,5 +1,10 @@
 import Buffer from "../../utils/buffer";
-import OpCodes, { getInstructionSize, OPCODE_MAX, unsupportedOpcodeMessage } from "./opcodes";
+import OpCodes, {
+  getInstructionSize,
+  isSupportedByNativePynter,
+  OPCODE_MAX,
+  unsupportedOpcodeMessage,
+} from "./opcodes";
 import { Instruction, PVMLProgram, PVMLIR } from "./types";
 
 const SVM_MAGIC = 0x5005acad;
@@ -48,7 +53,7 @@ function writeStringConstant(b: Buffer, s: string) {
   b.putU(8, 0);
 }
 
-function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
+function serialiseFunction(f: PVMLIR, restrictToNativePynter?: boolean): ImFunction {
   const code = f.toInstructions();
   const { stackSize, envSize, numArgs } = f;
   const holes: Hole[] = [];
@@ -67,7 +72,7 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
     if (instr.opcode < 0 || instr.opcode > OPCODE_MAX) {
       throw new Error(`Invalid opcode ${instr.opcode.toString()}`);
     }
-    if (targetMaxOpcode !== undefined && instr.opcode > targetMaxOpcode) {
+    if (restrictToNativePynter && !isSupportedByNativePynter(instr.opcode)) {
       throw new Error(unsupportedOpcodeMessage(instr.opcode));
     }
     const opcode: OpCodes = instr.opcode;
@@ -187,12 +192,12 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
   };
 }
 
-export function assemble(p: PVMLProgram, targetMaxOpcode?: number): Uint8Array {
+export function assemble(p: PVMLProgram, restrictToNativePynter?: boolean): Uint8Array {
   const entrypointIndex = p.entryPoint;
   const jsonFns = p.functions;
 
   // serialise all the functions
-  const imFns = jsonFns.map(fn => serialiseFunction(fn, targetMaxOpcode));
+  const imFns = jsonFns.map(fn => serialiseFunction(fn, restrictToNativePynter));
 
   // collect all string constants
   const uniqueStrings = [

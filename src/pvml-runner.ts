@@ -24,7 +24,6 @@
  */
 
 import { ExprNS, StmtNS } from "./ast-types";
-import { PYNTER_OPCODE_MAX } from "./engines/pvml/opcodes";
 import { NativePynterError, runNativePynter } from "./engines/pvml/pynter/native-pynter";
 import { assemble } from "./engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "./engines/pvml/pvml-compiler";
@@ -180,7 +179,7 @@ export async function runCodePvmlDetailed(
   try {
     const compiler = PVMLCompiler.fromProgram(ast, variant, environments, false, true);
     const program = compiler.compileProgram(ast);
-    binary = assemble(program, PYNTER_OPCODE_MAX);
+    binary = assemble(program, true);
   } catch (e: unknown) {
     throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
   }

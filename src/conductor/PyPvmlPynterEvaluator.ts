@@ -1,5 +1,4 @@
 import { BasicEvaluator } from "@sourceacademy/conductor/runner";
-import { PYNTER_OPCODE_MAX } from "../engines/pvml/opcodes";
 import { assemble } from "../engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import initPynter, { PynterValue } from "../engines/pvml/pynter/pynter-wasm";
@@ -38,7 +37,7 @@ export class PyPvmlPynterEvaluator extends BasicEvaluator {
       }
       const compiler = PVMLCompiler.fromProgram(ast, 3, environments, false, true);
       const program = compiler.compileProgram(ast);
-      const binary = assemble(program, PYNTER_OPCODE_MAX);
+      const binary = assemble(program, true);
 
       if (!this.pynter) {
         this.pynter = await initPynter({
