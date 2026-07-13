@@ -606,24 +606,6 @@ function involvesParseFeature(code: string): boolean {
 }
 
 /**
- * Matches a `for` statement: PVMLCompiler.visitForStmt compiles it to NEWITER
- * (see opcodes.ts), whose opcode index is above PYNTER_OPCODE_MAX — so
- * `assemble()` unconditionally rejects any program containing a for-loop when
- * targeting Pynter, regardless of the loop's contents or values. This is a
- * categorical, compile-time gap (there is no NEWITER-equivalent Pynter could
- * fall back to), not a per-case runtime bug — see py-slang#259 for the
- * discovery (nearly every `loops.test.ts` failure, plus several `nonlocal`/
- * `global-keyword` cases whose actual scoping behavior was never reached).
- * SICPy has no other keyword or identifier containing "for" as a whole word,
- * so a plain word-boundary match is unambiguous.
- */
-const FOR_LOOP_RE = /\bfor\b/;
-
-function involvesForLoop(code: string): boolean {
-  return FOR_LOOP_RE.test(code);
-}
-
-/**
  * Matches a call to apply_in_underlying_python(): like parse()/tokenize(),
  * this lives in the `parser` group, which is Python §4-only (see
  * VARIANT_GROUPS in runner.ts — `parser` is absent from §1-3's groups) —
@@ -648,10 +630,6 @@ const NATIVE_PYNTER_SKIP_REASONS: {
   {
     matches: code => involvesParseFeature(code),
     reason: "parse()/tokenize() aren't part of Python 3",
-  },
-  {
-    matches: code => involvesForLoop(code),
-    reason: "for-loops compile to NEWITER, above Pynter's opcode ceiling (py-slang#259)",
   },
   {
     matches: code => involvesApplyInUnderlyingPython(code),

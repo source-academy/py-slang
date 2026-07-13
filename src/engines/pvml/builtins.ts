@@ -118,7 +118,15 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["len", 2],
   ["list_length", 2], // Same concept as len() for list.ts; see note above.
   ["llist", 27], // Native `list(...)` builds an identical null-terminated cons chain.
-  ["range", 30],
+  // 131, not the alphabetically-natural-looking 30: native Pynter's own
+  // sivmfn_primitives[] array (a plain C array indexed positionally) never
+  // had a "range" slot at all until this session added one — and 30 is
+  // already `list_to_string` there. Every other primitive index in this
+  // table happens to already match native's real array position (a
+  // long-established, if undocumented, convention), so range() needs a
+  // genuinely free number instead of reusing 30 — see native's
+  // primitives.c for the corresponding padded array slot.
+  ["range", 131],
   ["set_head", 74],
   ["set_tail", 75],
   ["stream", 76], // Variadic lazy-stream constructor; identical semantics to native's.
@@ -836,7 +844,7 @@ export function executePrimitive(
       };
     }
 
-    case 30: {
+    case 131: {
       // range
       if (args.length < 1 || args.length > 3)
         throw new MissingRequiredPositionalError(
