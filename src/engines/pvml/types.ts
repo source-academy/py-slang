@@ -205,6 +205,25 @@ export class PVMLIR {
    * outright at compile time, so a Pynter-targeted PVMLIR never has this
    * `true` — see PVMLCompiler's visitStarredExpr). */
   readonly hasRestParam: boolean;
+  /**
+   * The function table of the PVMLProgram this function was compiled into —
+   * stamped by PVMLProgram's constructor once every sibling PVMLIR exists,
+   * so left empty here and populated after construction (the one
+   * intentionally non-readonly field on this otherwise-immutable class).
+   *
+   * NEWC/NEWCP/NEWCV (creating a nested closure — e.g. a self- or
+   * sibling-reference inside a recursive prelude function) resolve their
+   * function-index operand against *this* array, not whichever program the
+   * currently-running PVMLInterpreter instance happens to hold: a closure's
+   * `ir` (see PVMLClosure's doc comment) can outlive the compilation that
+   * produced it — e.g. a prelude function stored in PVMLInterpreter's
+   * persistent globalEnv and later called from a separately-compiled REPL
+   * chunk, each running on its own PVMLInterpreter/PVMLProgram pair (see
+   * pvml-runner.ts's runCodePvmlInterpreterSync). Indexing into that later
+   * interpreter's unrelated program.functions would either miss entirely or
+   * silently resolve to the wrong function.
+   */
+  siblings: readonly PVMLIR[] = [];
 
   constructor(
     opcodes: Int32Array,
@@ -266,6 +285,11 @@ export class PVMLProgram {
   constructor(entryPoint: number, functions: PVMLIR[]) {
     this.entryPoint = entryPoint;
     this.functions = Object.freeze([...functions]);
+    // Stamp each function with a back-reference to this program's own
+    // function table — see PVMLIR's `siblings` doc comment.
+    for (const fn of this.functions) {
+      fn.siblings = this.functions;
+    }
     Object.freeze(this);
   }
 

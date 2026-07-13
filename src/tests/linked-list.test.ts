@@ -166,36 +166,5 @@ describe("Linked List Tests", () => {
   generateNativePynterTestCases(linkedListTests, 3, [misc, math, linkedList]);
   // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so this
   // runs at the table's own nominal §2, matching generateTestCases() above.
-  // Most of the known gaps below are one crash: calling a *recursive* or
-  // sibling-referencing prelude-defined function (append/remove/
-  // llist_to_string/reduce) throws "Function at index N not found" — see
-  // py-slang#258 for the minimal repro and a couple of unrelated missing
-  // arity validators (is_pair).
-  generatePvmlInBrowserTestCases(
-    linkedListTests,
-    2,
-    [misc, math, linkedList],
-    [
-      "append(None, None) == None",
-      "remove(1, None) == None",
-      "remove_all(1, None) == None",
-      "append(llist(1), 2) == pair(1, 2)",
-      "remove_all(1, llist(1, 1, 1, 1)) == None",
-      "remove(1, llist(1, 1, 1)) == llist(1, 1)",
-      "is_pair()",
-      "is_pair(1, 2)",
-      "llist_to_string(llist(1, 2))",
-      "llist_to_string(llist('a', 'b'))",
-      "llist_to_string(None)",
-      "append(llist(1, 2), llist(3, 4)) == llist(1, 2, 3, 4)",
-      "append(None, llist(3, 4)) == llist(3, 4)",
-      "append(llist(1, 2), None) == llist(1, 2)",
-      "remove(9, llist(1, 2, 3, 2)) == llist(1, 2, 3, 2)",
-      "remove(2, llist(1, 2, 3, 2)) == llist(1, 3, 2)",
-      "remove_all(9, llist(1, 2, 3, 2)) == llist(1, 2, 3, 2)",
-      "remove_all(2, llist(1, 2, 3, 2)) == llist(1, 3)",
-      "reduce(lambda x, y: x + y, 10, None)",
-      "reduce(lambda x, y: x + y, 0, llist(1, 2, 3, 4))",
-    ],
-  );
+  generatePvmlInBrowserTestCases(linkedListTests, 2, [misc, math, linkedList]);
 });

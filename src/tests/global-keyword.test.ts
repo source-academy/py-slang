@@ -290,8 +290,4 @@ print(count)
 
 generateTestCases(globalKeywordTests, 3, ch3);
 generateNativePynterTestCases(globalKeywordTests, 3);
-// Known PVML-in-browser gaps (real scoping bugs), tracked in py-slang#258.
-generatePvmlInBrowserTestCases(globalKeywordTests, 3, ch3, [
-  "\nglobal i\nprint(i)\n",
-  "\nx = 1\ndef outer():\n    x = 100\n    def inner():\n        global x\n        x = 2\n    inner()\nouter()\nx\n",
-]);
+generatePvmlInBrowserTestCases(globalKeywordTests, 3, ch3);

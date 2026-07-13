@@ -1,7 +1,14 @@
 import { numericCompare, pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types";
 import { executePrimitive } from "./builtins";
-import { PVMLInterpreterError, UnsupportedOperandTypeError, ZeroDivisionError } from "./errors";
+import {
+  FreeVariableUnboundError,
+  NameError,
+  PVMLInterpreterError,
+  UnboundLocalError,
+  UnsupportedOperandTypeError,
+  ZeroDivisionError,
+} from "./errors";
 import OpCodes from "./opcodes";
 import {
   getPVMLType,
@@ -146,11 +153,25 @@ export class PVMLInterpreter {
       /** Pre-existing global environment to use (and mutate in place) instead
        * of starting with an empty one — see `globalEnv` above. */
       globalEnv?: Map<string, PVMLBoxType>;
+      /** This chunk's own source text, exposed to running Python code as the
+       * `__program__` global — mirrors the CSE machine's own
+       * `pyDefineVariable(context, "__program__", ...)` (interpreter.ts).
+       * Set (overwriting any prior value in a shared `globalEnv`) so each
+       * chunk in a REPL sequence sees its own text, not an earlier chunk's —
+       * matching CSE's identical "latest chunk wins" behavior, since it
+       * re-defines the same global on every runCode() call too. Only
+       * meaningful when `program` was compiled in useGlobalMap mode (see
+       * PVMLCompiler's `useGlobalMap` field doc) — see getTokenAnnotation's
+       * `__program__` special case. */
+      programText?: string;
     },
   ) {
     this.program = program;
     this.currentFrame = null;
     this.globalEnv = options?.globalEnv ?? new Map();
+    if (options?.programText !== undefined) {
+      this.globalEnv.set("__program__", options.programText);
+    }
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
 
@@ -310,9 +331,17 @@ export class PVMLInterpreter {
 
       // Name-indexed global variable access (see `globalEnv` field doc) —
       // a1 is a string-table index, same encoding as LGCS.
-      case OpCodes.LDGG:
-        this.push(this.globalEnv.get(ir.strings[a1]));
+      case OpCodes.LDGG: {
+        const globalName = ir.strings[a1];
+        // .get() alone can't tell "assigned None" (a real `null` entry) apart
+        // from "never assigned" (no entry at all, `.get` also returns
+        // `undefined`) — see NameError's doc comment.
+        if (!this.globalEnv.has(globalName)) {
+          throw new NameError(`NameError: name '${globalName}' is not defined`);
+        }
+        this.push(this.globalEnv.get(globalName));
         break;
+      }
 
       case OpCodes.STGG:
         this.globalEnv.set(ir.strings[a1], this.pop());
@@ -975,18 +1004,89 @@ export class PVMLInterpreter {
     return l ** r;
   }
 
+  /** Whether `value` is a NaN float, or a complex value with a NaN real or
+   * imaginary component — mirrors the CSE machine's own isNaNValue
+   * (cse/operators.ts). Used to guard the top-level identity shortcut in
+   * `valuesEqual` below (see its doc comment) — never called on array
+   * elements, where `structuralElementsEqual`'s own `identical()`-based
+   * shortcut (which *does* treat matching-payload NaN as identical, since an
+   * unboxed number here has no other notion of identity — see `identical`'s
+   * own doc comment) is what CSE's container-comparison rule actually needs.
+   */
+  private static isNaNValue(value: PVMLBoxType): boolean {
+    if (typeof value === "number") return Number.isNaN(value);
+    if (value instanceof PyComplexNumber) return Number.isNaN(value.real) || Number.isNaN(value.imag);
+    return false;
+  }
+
+  /**
+   * Structural equality between two *array elements* reached while recursing
+   * through `valuesEqual` (never called on the top-level operands — see
+   * `valuesEqual`'s own doc comment for why the shortcut here would be wrong
+   * there). Mirrors CSE's structuralEquals (cse/operators.ts): checks `x is
+   * y` (via `identical`) before `x == y`, so a list containing NaN still
+   * equals itself — CPython's own container-comparison rule (list/tuple/dict
+   * equality short-circuits identical elements before ever calling their
+   * `__eq__`), which is what makes `[math_nan] == [math_nan]` true even
+   * though bare `math_nan == math_nan` (guarded at the top level, above)
+   * isn't.
+   */
+  private static structuralElementsEqual(
+    left: PVMLBoxType,
+    right: PVMLBoxType,
+    restrictChapter12: boolean,
+    op: "==" | "!=",
+  ): boolean {
+    if (
+      restrictChapter12 &&
+      (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right))
+    ) {
+      throw new UnsupportedOperandTypeError(op, getPVMLType(left), getPVMLType(right));
+    }
+    if (PVMLInterpreter.identical(left, right)) return true;
+    if (isArithmeticValue(left) && isArithmeticValue(right)) {
+      return PVMLInterpreter.numericEquals(left, right);
+    }
+    if (
+      isPVMLObject(left) &&
+      left.type === "array" &&
+      isPVMLObject(right) &&
+      right.type === "array"
+    ) {
+      return (
+        left.elements.length === right.elements.length &&
+        left.elements.every((el, i) =>
+          PVMLInterpreter.structuralElementsEqual(el, right.elements[i], restrictChapter12, op),
+        )
+      );
+    }
+    return false;
+  }
+
   /**
    * Structural equality between any two PVML values, matching Python/CPython
-   * semantics (mirrors the CSE machine's own structuralEquals in
-   * cse/operators.ts, which is the authoritative reference this is checked
-   * against — see operator-conformance-pvml.test.ts): numeric values compare
-   * across int/float/complex via numericEquals; lists compare element-wise,
-   * recursively; every other value compares by reference (`===`), which
+   * semantics (mirrors the CSE machine's own structuralEquals/
+   * handleExpandedEquality split in cse/operators.ts, which is the
+   * authoritative reference this is checked against — see
+   * operator-conformance-pvml.test.ts): numeric values compare across
+   * int/float/complex via numericEquals; lists compare element-wise,
+   * recursively (via structuralElementsEqual, which — unlike this top-level
+   * function — *does* apply CPython's identity-before-equality container
+   * shortcut); every other value compares by reference (`===`), which
    * already gives correct by-value semantics for JS primitives boxed here
    * (strings, None/null) and correct reference semantics for the rest
    * (closures, primitives, iterators) — CSE has no separate value-equality
    * notion for those either, see structuralEquals' own "by reference"
    * fallback.
+   *
+   * A top-level NaN operand (a NaN float, or a complex value with a NaN
+   * component) is unequal to everything, even the very same object/binding
+   * (CPython: `nan == nan` is False even for one shared `nan`) — checked
+   * *before* the identity shortcut below, mirroring CSE's
+   * handleExpandedEquality, which applies this same guard before ever
+   * calling structuralEquals, specifically so the identity shortcut still
+   * fires for a NaN *element* nested inside a list (structuralElementsEqual
+   * above), just not for the top-level comparison itself.
    *
    * `restrictChapter12`, when set, re-applies `isExcludedFromChapter12Equality`
    * at *every* level of recursion, not just the top-level operands — so a
@@ -1006,6 +1106,7 @@ export class PVMLInterpreter {
     ) {
       throw new UnsupportedOperandTypeError(op, getPVMLType(left), getPVMLType(right));
     }
+    if (PVMLInterpreter.isNaNValue(left) || PVMLInterpreter.isNaNValue(right)) return false;
     if (left === right) return true;
     if (isArithmeticValue(left) && isArithmeticValue(right)) {
       return PVMLInterpreter.numericEquals(left, right);
@@ -1019,7 +1120,7 @@ export class PVMLInterpreter {
       return (
         left.elements.length === right.elements.length &&
         left.elements.every((el, i) =>
-          PVMLInterpreter.valuesEqual(el, right.elements[i], restrictChapter12, op),
+          PVMLInterpreter.structuralElementsEqual(el, right.elements[i], restrictChapter12, op),
         )
       );
     }
@@ -1073,9 +1174,26 @@ export class PVMLInterpreter {
    * explicit `.equals()` check, not JS reference comparison.
    * Deliberately no bool-as-int coercion (unlike EQG/NEQG above) — `1 is True`
    * must be false, since `is` never treats values of different types as equal.
+   *
+   * NaN floats need one more special case on top of the `===` shortcut
+   * above: `math_nan` (the *only* source of a NaN float in this dialect —
+   * there's no general string-parsing `float()` here to build an
+   * independent one) is a single shared JS `number` primitive value, and
+   * every reference to it — or to a variable bound to it — pushes that same
+   * `NaN` primitive onto the stack. But unlike CSE's boxed Value objects,
+   * where two reads of the same binding are the same JS *object* (so `===`
+   * already succeeds), a JS `number` primitive has no identity of its own:
+   * `NaN === NaN` is false even for what is conceptually "the same" NaN.
+   * Without this, `math_nan is math_nan`/`x = math_nan; x is x` would
+   * wrongly report false. Since this dialect has no way to construct a NaN
+   * float that should be considered a *different* one, treating any two
+   * NaN numbers as identical is exactly right here, not just a workaround.
    */
   private static identical(left: PVMLBoxType, right: PVMLBoxType): boolean {
     if (left === right) return true;
+    if (typeof left === "number" && typeof right === "number") {
+      return Number.isNaN(left) && Number.isNaN(right);
+    }
     if (left instanceof PyComplexNumber && right instanceof PyComplexNumber) {
       return left.equals(right);
     }
@@ -1150,6 +1268,12 @@ export class PVMLInterpreter {
       throw new Error("No current frame");
     }
     const value = this.currentFrame.env.get(slot);
+    // `undefined` is PVMLEnvironment's initial fill value, never a real
+    // stored value (None is the distinct `null` — see UnboundLocalError's
+    // doc comment) — so this slot has never been assigned yet.
+    if (value === undefined) {
+      throw new UnboundLocalError("UnboundLocalError: local variable referenced before assignment");
+    }
     this.push(value);
   }
 
@@ -1175,6 +1299,13 @@ export class PVMLInterpreter {
     const value = parentEnv.get(slot);
     if (__DEBUG__)
       debug(`[LDPG] Loaded value: ${JSON.stringify(PVMLInterpreter.toJSValue(value))}`);
+    // See loadLocal's identical `undefined` check — the enclosing function's
+    // own slot hasn't been assigned yet.
+    if (value === undefined) {
+      throw new FreeVariableUnboundError(
+        "FreeVariableUnboundError: free variable referenced before assignment in enclosing scope",
+      );
+    }
     this.push(value);
   }
 
@@ -1227,7 +1358,16 @@ export class PVMLInterpreter {
       throw new Error("No current frame");
     }
 
-    const ir = this.program.functions[functionIndex];
+    // Resolve against the *currently executing function's own* sibling
+    // table (PVMLIR's `siblings`), not `this.program` (this interpreter
+    // instance's own, possibly unrelated, program — see PVMLIR's `siblings`
+    // doc comment, and invokeValue's identical reasoning for dispatching
+    // calls through `closure.ir` directly). A self- or sibling-reference
+    // inside a prelude function compiled and run in an earlier
+    // PVMLInterpreter instance must still resolve against *that*
+    // compilation's function table when the resulting closure is later
+    // invoked from a different instance (e.g. a later REPL chunk).
+    const ir = this.currentFrame.ir.siblings[functionIndex];
     if (!ir) {
       throw new Error(`Function at index ${functionIndex} not found`);
     }
@@ -1509,6 +1649,17 @@ export class PVMLInterpreter {
   private loadArrayElement(): void {
     const index = this.pop() as number;
     const arr = this.pop();
+
+    if (typeof arr === "string") {
+      // Python's str is a sequence of Unicode code points, not UTF-16 code
+      // units — the spread operator splits on code points (surrogate pairs
+      // included), matching len()'s identical use of it (see builtins.ts's
+      // case 2) so e.g. '👨‍👩‍👧‍👦'[1] is the lone ZWJ code point between the
+      // first two family-emoji members, not half a surrogate pair.
+      const codePoints = [...arr];
+      this.push(index >= 0 && index < codePoints.length ? codePoints[index] : undefined);
+      return;
+    }
 
     if (!isPVMLObject(arr) || arr.type !== "array") {
       throw new Error("Cannot index non-array value");

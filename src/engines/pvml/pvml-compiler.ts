@@ -190,12 +190,24 @@ export class PVMLCompiler
     // name, or "(anonymous)" for a lambda/multi-lambda, matching how the CSE
     // machine names these (src/stdlib/utils.ts's toPythonString).
     const functionName = node instanceof StmtNS.FunctionDef ? node.name.lexeme : "(anonymous)";
-    // A rest param (`def f(a, *rest)`) is always the last parameter by
-    // grammar — see PVMLIR's `hasRestParam` doc comment. Native Pynter has
-    // no representation for a variadic-arity function at all, so reject this
-    // at compile time rather than silently producing a PVMLIR native Pynter
-    // could never execute correctly.
-    const hasRestParam = node.parameters.some(p => p.isStarred);
+    // A rest param (`def f(a, *rest)`) must be the closure's *last*
+    // parameter — see PVMLIR's `hasRestParam` doc comment, whose whole
+    // encoding (numArgs - 1 fixed params, the last slot absorbing every
+    // remaining argument) assumes this. Unlike real Python, PVML has no
+    // notion of a keyword-only parameter at all (there's no keyword-argument
+    // call syntax to bind one), so `def f(x, *args, z): ...` — legal Python,
+    // making `z` keyword-only — isn't a smaller PVML feature gap to close;
+    // it's simply not expressible here. Reject it at compile time rather
+    // than silently mis-splitting parameters (`hasRestParam` used to key
+    // only off "is *any* parameter starred", which for a case like this
+    // treated the trailing `z` as the rest param instead of `args`).
+    const starredIndex = node.parameters.findIndex(p => p.isStarred);
+    const hasRestParam = starredIndex !== -1;
+    if (hasRestParam && starredIndex !== node.parameters.length - 1) {
+      throw new Error(
+        "A rest parameter (*args) must be the last parameter — PVML has no keyword-only parameters",
+      );
+    }
     if (hasRestParam && this.targetsPynter) {
       throw new Error("Rest parameters (*args) are not supported when compiling for native Pynter");
     }
@@ -264,7 +276,19 @@ export class PVMLCompiler
       parentEnv.enclosing !== null &&
       parentEnv.enclosing.enclosing === null;
 
-    if (isPrimitiveEnv) {
+    // `__program__` (the running script's own source text — see
+    // PVMLInterpreter's `programText` constructor option) sits in the
+    // resolver's absolute-root names map alongside every other builtin (see
+    // resolver.ts's initial `moduleNames`), so it would otherwise hit
+    // isPrimitiveEnv below and fail as an unregistered primitive: unlike
+    // every other root-level name, its value isn't known until the
+    // interpreter actually runs (it's the literal source text of whichever
+    // chunk is executing), so it can't be a PRIMITIVE_FUNCTIONS/
+    // PRIMITIVE_CONSTANTS entry — it's injected into globalEnv at runtime
+    // instead, the same LDGG mechanism as any other useGlobalMap-mode global.
+    if (this.useGlobalMap && name === "__program__") {
+      annotation = { slot: -1, envLevel: -1, isPrimitive: false, isGlobal: true, name };
+    } else if (isPrimitiveEnv) {
       const constantValue = PRIMITIVE_CONSTANTS.get(name);
       if (constantValue !== undefined) {
         annotation = {

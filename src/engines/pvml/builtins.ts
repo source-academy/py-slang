@@ -19,7 +19,12 @@ import pythonLexer from "../../parser/lexer";
 import { cseValueToPvmlBox, pvmlBoxToCseValue } from "./cse-interop";
 import type { PVMLArray, PVMLBoxType } from "./types";
 import { getPVMLType, isPVMLObject, PVMLType } from "./types";
-import { MissingRequiredPositionalError, PVMLInterpreterError, ZeroDivisionError } from "./errors";
+import {
+  MissingRequiredPositionalError,
+  PVMLInterpreterError,
+  ValueError,
+  ZeroDivisionError,
+} from "./errors";
 
 /**
  * Maps canonical SICPy builtin names (as defined by the CSE machine's stdlib
@@ -197,6 +202,20 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   // past native's own table, so this only backs py-slang's own local TS PVMLInterpreter until a
   // matching entry lands in the pynter repo.
   ["print_llist", 127],
+  // `math_nextafter`/`math_ulp` are themselves unimplemented stubs on the CSE
+  // side too (misc.ts/math.ts: both throw "not implemented" if actually
+  // called) — registered here only so a *bare reference* to the name (e.g.
+  // `arity(math_nextafter)`, which never calls it) compiles and reports the
+  // correct arity, exactly mirroring CSE's own `@Validate` decorator on
+  // these two. `input()` is a genuine, working CSE feature but needs real
+  // async stdin plumbing (Context.streams — see input.test.ts) this
+  // synchronous TS interpreter has no equivalent of; same reasoning applies:
+  // registered for arity() introspection only. All three throw a clear
+  // "not implemented"/"not supported" error below if ever actually called,
+  // rather than silently misdispatching.
+  ["math_nextafter", 128],
+  ["math_ulp", 129],
+  ["input", 130],
 ]);
 
 /**
@@ -407,14 +426,23 @@ function fusedMultiplyAdd(x: number, y: number, z: number): number {
  * check first), so this needs the explicit guard below to reproduce the same
  * behavior. */
 function pickExtremum(args: PVMLBoxType[], fn: string, wantMax: boolean): PVMLBoxType {
-  if (!args.every(a => typeof a === "number" || typeof a === "bigint"))
-    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
+  const allNumeric = args.every(a => typeof a === "number" || typeof a === "bigint");
+  const allString = args.every(a => typeof a === "string");
+  if (!allNumeric && !allString)
+    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric or string arguments`);
   let best = args[0];
   for (let i = 1; i < args.length; i++) {
     const cur = args[i];
+    if (allString) {
+      // Plain JS `<`/`>` compares by UTF-16 code unit, matching CSE's own
+      // max()/min() (misc.ts) — same as codepoint order for the BMP.
+      if (wantMax ? (cur as string) > (best as string) : (cur as string) < (best as string))
+        best = cur;
+      continue;
+    }
     if (typeof best === "number" && Number.isNaN(best)) continue;
     if (typeof cur === "number" && Number.isNaN(cur)) continue;
-    const cmp = numericCompare(cur, best);
+    const cmp = numericCompare(cur as number | bigint, best as number | bigint);
     if (wantMax ? cmp > 0 : cmp < 0) best = cur;
   }
   return best;
@@ -521,6 +549,10 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("len() takes exactly 1 argument");
       const v = args[0];
       if (isPVMLObject(v) && v.type === "array") return BigInt(v.elements.length);
+      // The spread operator counts Unicode code points, not UTF-16 code
+      // units — matching CSE's own len() (misc.ts) and Python's str being a
+      // sequence of code points (e.g. len('👋🌍') is 2, not 4).
+      if (typeof v === "string") return BigInt([...v].length);
       throw new PVMLInterpreterError(`TypeError: object of type '${getPVMLType(v)}' has no len()`);
     }
 
@@ -538,6 +570,8 @@ export function executePrimitive(
       return pairElement(args, "head", 0);
 
     case 16: // is_list
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("is_list() takes exactly 1 argument");
       return isPVMLObject(args[0]) && args[0].type === "array";
 
     case 17: // is_boolean
@@ -560,6 +594,8 @@ export function executePrimitive(
       );
 
     case 22: // is_pair
+      if (args.length !== 1)
+        throw new MissingRequiredPositionalError("is_pair() takes exactly 1 argument");
       return isPVMLObject(args[0]) && args[0].type === "array" && args[0].elements.length === 2;
 
     case 24: // is_string
@@ -666,11 +702,34 @@ export function executePrimitive(
       return args[0].imag;
 
     case 99: {
-      // complex(real, imag) — the constructor form (as distinct from the
-      // `a+bj` literal syntax, compiled via LGCC — see PVMLCompiler's
-      // visitComplexExpr). Matches CSE's complex() (misc.ts): real + imag*i.
+      // complex() — the constructor form (as distinct from the `a+bj`
+      // literal syntax, compiled via LGCC — see PVMLCompiler's
+      // visitComplexExpr). Matches CSE's complex() (misc.ts):
+      //   - complex(): 0j.
+      //   - complex(x): x coerced to complex — int/float/bool/complex
+      //     unchanged in kind, or a string parsed the same way a `a+bj`
+      //     literal's own text would be (PyComplexNumber.fromString, shared
+      //     with CSE — see cse-interop.ts's own use of it).
+      //   - complex(real, imag): real + imag*i, neither argument a string.
+      if (args.length === 0) return new PyComplexNumber(0, 0);
+      if (args.length === 1) {
+        const [x] = args;
+        if (typeof x === "string") {
+          try {
+            return PyComplexNumber.fromString(x);
+          } catch {
+            throw new ValueError(`ValueError: complex() arg is a malformed string`);
+          }
+        }
+        const value = toPyComplexOperand(x);
+        if (!value)
+          throw new PVMLInterpreterError(
+            `TypeError: complex() first argument must be a string or a number, not '${getPVMLType(x)}'`,
+          );
+        return value;
+      }
       if (args.length !== 2)
-        throw new MissingRequiredPositionalError("complex() takes exactly 2 arguments");
+        throw new MissingRequiredPositionalError("complex() takes at most 2 arguments");
       const realPart = toPyComplexOperand(args[0]);
       const imagPart = toPyComplexOperand(args[1]);
       if (!realPart || !imagPart)
@@ -864,23 +923,66 @@ export function executePrimitive(
       return Math.random();
 
     case 59: {
-      // round (1-arg form, matching this primitive's signature): banker's
-      // rounding (round-half-to-even) to the nearest int, always returning a
-      // bigint regardless of whether the input was int or float — mirrors
-      // CSE's round() with no ndigits (misc.ts). Plain Math.round() would be
-      // wrong here twice over: it rounds .5 away from zero instead of to
-      // even, and it returns a float instead of Python's int result.
-      if (args.length !== 1)
-        throw new MissingRequiredPositionalError("round() takes exactly 1 argument");
-      const [x] = args;
+      // round (1-arg form, or an explicit `None` ndigits): banker's rounding
+      // (round-half-to-even) to the nearest int, always returning a bigint
+      // regardless of whether the input was int or float — mirrors CSE's
+      // round() with no ndigits (misc.ts). Plain Math.round() would be wrong
+      // here twice over: it rounds .5 away from zero instead of to even, and
+      // it returns a float instead of Python's int result.
+      if (args.length !== 1 && args.length !== 2)
+        throw new MissingRequiredPositionalError("round() takes 1 or 2 arguments");
+      const [x, ndigits] = args;
       if (typeof x !== "number" && typeof x !== "bigint")
         throw new PVMLInterpreterError("TypeError: round() requires numeric arguments");
+
+      if (args.length === 1 || ndigits === null) {
+        const shifted = new Intl.NumberFormat("en-US", {
+          roundingMode: "halfEven",
+          useGrouping: false,
+          maximumFractionDigits: 0,
+        } as Intl.NumberFormatOptions).format(x);
+        return BigInt(shifted);
+      }
+
+      // 2-arg form: round to `ndigits` decimal places instead, preserving
+      // the input's own type (float stays float, int stays int — an int
+      // input with non-negative ndigits is returned completely unrounded,
+      // since there's nothing after the decimal point to round away).
+      // Mirrors CSE's round() (misc.ts) exactly, including its
+      // negative-ndigits handling: divide by 10**-ndigits, round to a whole
+      // number, multiply back — effectively rounding to a power-of-ten
+      // position left of the decimal point.
+      if (typeof ndigits !== "bigint")
+        throw new PVMLInterpreterError(
+          `TypeError: '${getPVMLType(ndigits)}' object cannot be interpreted as an integer`,
+        );
+
+      if (typeof x === "number") {
+        if (ndigits >= 0n) {
+          const shifted = new Intl.NumberFormat("en-US", {
+            roundingMode: "halfEven",
+            useGrouping: false,
+            maximumFractionDigits: Number(ndigits),
+          } as Intl.NumberFormatOptions).format(x);
+          return Number(shifted);
+        }
+        const scale = 10 ** -Number(ndigits);
+        const shifted = new Intl.NumberFormat("en-US", {
+          roundingMode: "halfEven",
+          useGrouping: false,
+          maximumFractionDigits: 0,
+        } as Intl.NumberFormatOptions).format(x / scale);
+        return Number(shifted) * scale;
+      }
+
+      if (ndigits >= 0n) return x;
+      const scale = 10n ** -ndigits;
       const shifted = new Intl.NumberFormat("en-US", {
         roundingMode: "halfEven",
         useGrouping: false,
         maximumFractionDigits: 0,
-      } as Intl.NumberFormatOptions).format(x);
-      return BigInt(shifted);
+      } as Intl.NumberFormatOptions).format(Number(x) / Number(scale));
+      return BigInt(shifted) * scale;
     }
 
     case 61: // math_sin
@@ -1086,6 +1188,19 @@ export function executePrimitive(
       // time.time() is documented as seconds since the epoch, not milliseconds — divide
       // Date.now()'s milliseconds down to match.
       return Date.now() / 1000;
+
+    case 128: // math_nextafter — see PRIMITIVE_FUNCTIONS' doc comment: an unimplemented
+      // stub on the CSE side too.
+      throw new PVMLInterpreterError("math_nextafter not implemented");
+
+    case 129: // math_ulp — see math_nextafter above.
+      throw new PVMLInterpreterError("math_ulp not implemented");
+
+    case 130: // input — see PRIMITIVE_FUNCTIONS' doc comment: a real CSE feature this
+      // synchronous interpreter has no async-stdin equivalent of.
+      throw new PVMLInterpreterError(
+        "input() is not supported by the PVML-in-browser pathway",
+      );
 
     default:
       throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);

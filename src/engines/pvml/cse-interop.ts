@@ -103,11 +103,13 @@ export function pvmlBoxToCseValue(value: PVMLBoxType): Value {
  * resulting `Value` tree through this function.
  *
  * `transform()`'s output only ever contains `string`/`number`/`bigint`/
- * `bool`/`none`/`list` (pair-chain) values — never `closure`/`builtin`/
- * `complex`/`iterator`/`function`/`error`/`multi_lambda` — so this converter
- * is intentionally narrow, matching exactly what a parsed-AST result can
- * contain; anything else throws rather than silently producing a wrong
- * PVML value.
+ * `bool`/`none`/`complex`/`list` (pair-chain) values — never `closure`/
+ * `builtin`/`iterator`/`function`/`error`/`multi_lambda` (a complex literal
+ * in the parsed source, e.g. `3j`, does show up here: parser.ts's transform()
+ * embeds it as a `complex` Value wrapping the same `PyComplexNumber` PVML
+ * itself uses, see below) — so this converter is intentionally narrow,
+ * matching exactly what a parsed-AST result can contain; anything else
+ * throws rather than silently producing a wrong PVML value.
  */
 export function cseValueToPvmlBox(value: Value): PVMLBoxType {
   switch (value.type) {
@@ -117,6 +119,7 @@ export function cseValueToPvmlBox(value: Value): PVMLBoxType {
     case "bigint":
     case "string":
     case "bool":
+    case "complex":
       return value.value;
     case "list":
       return { type: "array", elements: value.value.map(cseValueToPvmlBox) };

@@ -233,7 +233,7 @@ function runCodePvmlInterpreterSync(
     try {
       const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
       const program = compiler.compileProgram(ast);
-      interpreter = new PVMLInterpreter(program, { sendOutput, globalEnv });
+      interpreter = new PVMLInterpreter(program, { sendOutput, globalEnv, programText: script });
       // A Python script has no return value of its own (see pvml-compiler.ts's
       // visitFileInputStmt doc comment) — execute()'s return is always undefined
       // now, so there's nothing worth keeping from it here.

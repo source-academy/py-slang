@@ -455,6 +455,7 @@ export const generatePVMLTestCases = (
     const interpreter = new PVMLInterpreter(program, {
       sendOutput: msg => outputs.push(msg),
       globalEnv,
+      programText: script,
     });
     interpreter.execute();
     const capturedResult = wrapped ? outputs.pop() : undefined;
@@ -902,6 +903,7 @@ export const generatePvmlInBrowserTestCases = (
     const interpreter = new PVMLInterpreter(program, {
       sendOutput: msg => outputs.push(msg),
       globalEnv,
+      programText: script,
     });
     interpreter.execute();
     const capturedResult = wrapped
@@ -932,6 +934,17 @@ export const generatePvmlInBrowserTestCases = (
     if (typeof expected === "number") {
       expect(Number(capturedResult)).toBeCloseTo(expected);
     } else if (expected instanceof PyComplexNumber) {
+      if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
+        // NaN never round-trips through fromString()/toBeCloseTo below (NaN
+        // isn't "close to" anything, including itself) — and needs no
+        // tolerance anyway, since NaN/Infinity print deterministically, no
+        // floating-point rounding involved. Compare the captured string
+        // directly against the same toString() the interpreter's own
+        // print() used to produce it (mirrors generateTestCases()'s own
+        // `isNaN(expected.real) ? NaN : expect.closeTo(...)` special case).
+        expect(capturedResult).toBe(expected.toString());
+        return;
+      }
       // Complex arithmetic is genuine floating-point computation too (not a
       // fixed-precision encoding like bigint/bool/string/None) — real/imag
       // parts get the same toBeCloseTo tolerance as a top-level `number`

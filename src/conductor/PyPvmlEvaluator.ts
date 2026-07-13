@@ -90,6 +90,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
     const interpreter = new PVMLInterpreter(program, {
       sendOutput: msg => this.conductor.sendOutput(msg),
       globalEnv: this.globalEnv,
+      programText: script,
     });
     const result = interpreter.execute();
     this.globalEnv = interpreter.getGlobalEnv();

@@ -82,13 +82,5 @@ describe("List Tests", () => {
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
   generateNativePynterTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
-  // Known PVML-in-browser gap: is_list()'s arity validator is missing
-  // entirely (wrong arg count silently accepted instead of raising) — see
-  // py-slang#258.
-  generatePvmlInBrowserTestCases(
-    listTests,
-    3,
-    [misc, math, linkedList, pairmutator, stream, list],
-    ["is_list()", "is_list(1, 2)"],
-  );
+  generatePvmlInBrowserTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
 });
