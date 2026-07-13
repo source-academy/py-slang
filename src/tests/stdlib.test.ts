@@ -976,7 +976,14 @@ describe("Standard Library Tests", () => {
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
     // Known Pynter gaps below (round()'s two-arg form, banker's rounding),
-    // see py-slang#259.
+    // see py-slang#259. abs(±2^31-ish) is a newly-found, separate gap: native
+    // Pynter's small-int range is only 21 bits (NANBOX_INTMAX/MIN, see
+    // nanbox.h), narrower than the compiler's 32-bit LGCI-vs-LGCF64 encoding
+    // decision (I32_MIN/I32_MAX in pvml-compiler.ts) — a literal this large
+    // still compiles to LGCI, but native Pynter's own NANBOX_WRAP_INT then
+    // silently falls back to a float at runtime once it's out of the 21-bit
+    // range, so abs() of a value already at the edge of int32 comes back as
+    // a float instead of an int.
     generateNativePynterTestCases(mathTests, 3, undefined, [
       "round(2.5)",
       "round(-2.5)",
@@ -984,6 +991,8 @@ describe("Standard Library Tests", () => {
       "round(3.14159, 3)",
       "round(33.14, -1)",
       "round(33.14, 1.5)",
+      "abs(-2147483648)",
+      "abs(2147483647)",
     ]);
     // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
     // miscTests' §1-specific restrictions can be checked directly at §1.

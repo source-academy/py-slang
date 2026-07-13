@@ -23,6 +23,7 @@
  * returns concatenated print() output, throws RunError on any failure.
  */
 
+import { ExprNS, StmtNS } from "./ast-types";
 import { PYNTER_OPCODE_MAX } from "./engines/pvml/opcodes";
 import { NativePynterError, runNativePynter } from "./engines/pvml/pynter/native-pynter";
 import { assemble } from "./engines/pvml/pvml-assembler";
@@ -33,6 +34,7 @@ import { parse } from "./parser";
 import { analyzeWithEnvironments } from "./resolver";
 import { RunError, VARIANT_GROUPS } from "./runner";
 import type { Group } from "./stdlib/utils";
+import { Token, TokenType } from "./tokenizer";
 
 export interface RunPvmlOptions {
   /** Path to a built native Pynter `runner` binary. */
@@ -44,15 +46,76 @@ export interface RunPvmlOptions {
    * the `stream`/`pairmutator` groups added on top).
    */
   groups?: Group[];
+  /**
+   * Rewrite the program's last top-level statement into `print(<that
+   * expression>)` before compiling, if it's a bare expression not already a
+   * print()/display() call. Native Pynter's execution model is exec-mode
+   * only (see pvml-compiler.ts's visitFileInputStmt doc comment: the
+   * compiled program never leaves a value on the stack, always ending in
+   * RETU) — this is the only way to observe such a value, the same
+   * technique runCodePvmlInterpreterDetailed's callers already use for the
+   * browser pathway (see generatePvmlInBrowserTestCases in src/tests/utils.ts).
+   * The captured line surfaces as `capturedResult` below, popped off of
+   * `output` so it doesn't corrupt an `output`-only assertion.
+   */
+  captureLastExpression?: boolean;
 }
 
 export interface RunPvmlResult {
-  /** Everything the program printed via print()/display(), concatenated. */
+  /** Everything the program printed via print()/display(), concatenated — excludes the line captured by `captureLastExpression`, if any. */
   output: string;
-  /** The type of the program's final value, as reported by Pynter (e.g. "integer", "string"). */
+  /**
+   * The last top-level bare expression's value, as Python's str() would
+   * render it — only set when `captureLastExpression` was requested. `"None"`
+   * if the program's last statement was already its own print()/display()
+   * call (that call's own, always-`None`, return value), `undefined` if the
+   * last statement wasn't a bare expression at all (an assignment, `def`, ...).
+   */
+  capturedResult?: string;
+  /** The type of the program's final value, as reported by Pynter (e.g. "integer", "string"). Always reflects RETU's `undefined` today — see visitFileInputStmt's doc comment — kept for fault diagnostics, not result comparison. */
   resultType: string;
-  /** The program's final value, as reported by Pynter, still in its raw string form. */
+  /** The program's final value, as reported by Pynter, still in its raw string form. See resultType's doc comment. */
   resultValue: string;
+}
+
+/**
+ * Whether `expr` is a bare call to `print`/`display` (both the same
+ * primitive — see builtins.ts's PRIMITIVE_FUNCTIONS, index 5). Guards
+ * wrapLastExpressionInPrint below against double-wrapping a program whose
+ * last statement is already its own print()/display() call.
+ */
+export function isBarePrintCall(expr: ExprNS.Expr): boolean {
+  return (
+    expr instanceof ExprNS.Call &&
+    expr.callee instanceof ExprNS.Variable &&
+    (expr.callee.name.lexeme === "print" || expr.callee.name.lexeme === "display")
+  );
+}
+
+/**
+ * Rewrites `ast`'s last top-level statement, in place, from a bare
+ * expression into `print(<that expression>)` — in the already-parsed AST,
+ * not by re-serializing/re-parsing source text, so an expression with its
+ * own side effects is evaluated exactly once. Returns whether a rewrite
+ * happened (false if the last statement isn't a bare expression at all,
+ * e.g. an assignment or `def`, in which case there's nothing to capture).
+ * Requires `print` to be resolvable in whatever stdlib groups the caller
+ * compiles against (the `misc` group, in scope for every VARIANT_GROUPS
+ * default).
+ */
+export function wrapLastExpressionInPrint(ast: StmtNS.FileInput): boolean {
+  const last = ast.statements[ast.statements.length - 1];
+  if (!(last instanceof StmtNS.SimpleExpr)) return false;
+  const token = new Token(TokenType.NAME, "print", last.startToken.line, 0, -1);
+  token.synthetic = true;
+  const printCallee = new ExprNS.Variable(token, token, token);
+  const call = new ExprNS.Call(last.startToken, last.endToken, printCallee, [last.expression]);
+  ast.statements[ast.statements.length - 1] = new StmtNS.SimpleExpr(
+    last.startToken,
+    last.endToken,
+    call,
+  );
+  return true;
 }
 
 /**
@@ -100,6 +163,14 @@ export async function runCodePvmlDetailed(
     throw new RunError("parse", String((e as { message?: string })?.message ?? e));
   }
 
+  let alreadyPrintsLastExpr = false;
+  let wrappedLastExpr = false;
+  if (options.captureLastExpression) {
+    const last = ast.statements[ast.statements.length - 1];
+    alreadyPrintsLastExpr = last instanceof StmtNS.SimpleExpr && isBarePrintCall(last.expression);
+    wrappedLastExpr = !alreadyPrintsLastExpr && wrapLastExpressionInPrint(ast);
+  }
+
   const { errors, environments } = analyzeWithEnvironments(ast, fullSource, variant, groups);
   if (errors.length > 0) {
     throw new RunError("analysis", errors.map(e => e.message).join("\n"));
@@ -131,7 +202,23 @@ export async function runCodePvmlDetailed(
     );
   }
 
-  return { output: result.output, resultType: result.resultType, resultValue: result.resultValue };
+  let output = result.output;
+  let capturedResult: string | undefined;
+  if (wrappedLastExpr) {
+    // Every print()/display() call appends exactly one "\n" (see
+    // native-pynter.ts's output-parsing doc comment) — the wrapped call's
+    // own line is always the last one, popped off so it doesn't corrupt an
+    // `output`-only assertion (see generatePvmlInBrowserTestCases' identical
+    // technique for the browser pathway).
+    const trimmed = output.endsWith("\n") ? output.slice(0, -1) : output;
+    const lastNewline = trimmed.lastIndexOf("\n");
+    capturedResult = lastNewline === -1 ? trimmed : trimmed.slice(lastNewline + 1);
+    output = lastNewline === -1 ? "" : trimmed.slice(0, lastNewline + 1);
+  } else if (alreadyPrintsLastExpr) {
+    capturedResult = "None";
+  }
+
+  return { output, capturedResult, resultType: result.resultType, resultValue: result.resultValue };
 }
 
 /**

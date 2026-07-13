@@ -33,7 +33,7 @@ import { parse } from "../parser/parser-adapter";
 import { runCodePvmlDetailed } from "../pvml-runner";
 import { Resolver } from "../resolver";
 import { RunError, VARIANT_GROUPS } from "../runner";
-import { Group } from "../stdlib/utils";
+import { Group, toPythonString } from "../stdlib/utils";
 import { makeValidatorsForChapter } from "../validator";
 import {
   BINARY_OPS_12,
@@ -49,7 +49,7 @@ function pvmlUniverseForChapter(chapter: number): PyType[] {
   return universeForChapter(chapter).filter(type => type !== "complex");
 }
 
-type CseOutcome = { kind: "value"; stashType: string; value: unknown } | { kind: "error" };
+type CseOutcome = { kind: "value"; stashType: string; text: string } | { kind: "error" };
 
 /**
  * Evaluates `code` through the CSE machine to get the reference outcome.
@@ -57,7 +57,9 @@ type CseOutcome = { kind: "value"; stashType: string; value: unknown } | { kind:
  * distinguishes resolve- vs runtime-errors by class name for its own
  * assertions, which this file doesn't need — any error means "the operation
  * is rejected", matching how generateNativePynterTestCases treats CSE error
- * expectations elsewhere.
+ * expectations elsewhere. `text` is the exact string print() would produce
+ * for the popped value (via toPythonString) — see runPvml's doc comment for
+ * why this is what gets compared, rather than the value itself.
  */
 async function cseOutcome(code: string, chapter: number, groups: Group[]): Promise<CseOutcome> {
   const script = code + "\n";
@@ -93,42 +95,19 @@ async function cseOutcome(code: string, chapter: number, groups: Group[]): Promi
   return {
     kind: "value",
     stashType: lastPopped?.type ?? "none",
-    value: lastPopped && "value" in lastPopped ? lastPopped.value : undefined,
+    text: lastPopped ? toPythonString(lastPopped) : "None",
   };
 }
 
-/** Maps a CSE stash type to native Pynter's resultType tag. */
-const PVML_RESULT_TYPE: Partial<Record<string, string>> = {
-  bigint: "integer",
-  number: "float",
-  bool: "boolean",
-  string: "string",
-};
+type PvmlOutcome = { kind: "value"; text: string } | { kind: "error" };
 
-function pvmlValueMatches(
-  wantType: string,
-  wantValue: unknown,
-  pvmlResultType: string,
-  pvmlResultValue: string,
-): boolean {
-  const expectedTag = PVML_RESULT_TYPE[wantType];
-  if (expectedTag === undefined || pvmlResultType !== expectedTag) return false;
-  switch (expectedTag) {
-    case "integer":
-      return Number(pvmlResultValue) === Number(wantValue);
-    case "float":
-      return isCloseToFloat32(Number(pvmlResultValue), Number(wantValue));
-    case "boolean":
-      return (pvmlResultValue === "true") === wantValue;
-    case "string":
-      return pvmlResultValue === wantValue;
-    default:
-      return false;
-  }
-}
-
-type PvmlOutcome = { kind: "value"; resultType: string; resultValue: string } | { kind: "error" };
-
+/**
+ * Native Pynter's execution model is exec-mode only (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment) — a compiled program never leaves a value
+ * on the stack, so `captureLastExpression` (print()-wrapping the last bare
+ * expression) is the only way to observe one, mirroring
+ * generateNativePynterTestCases' identical technique in src/tests/utils.ts.
+ */
 async function runPvml(
   code: string,
   chapter: number,
@@ -136,8 +115,12 @@ async function runPvml(
   pynterPath: string,
 ): Promise<PvmlOutcome> {
   try {
-    const result = await runCodePvmlDetailed(code, chapter, { pynterPath, groups });
-    return { kind: "value", resultType: result.resultType, resultValue: result.resultValue };
+    const result = await runCodePvmlDetailed(code, chapter, {
+      pynterPath,
+      groups,
+      captureLastExpression: true,
+    });
+    return { kind: "value", text: result.capturedResult ?? "" };
   } catch (e) {
     if (e instanceof RunError) return { kind: "error" };
     throw e;
@@ -149,9 +132,14 @@ function expectMatch(wanted: CseOutcome, actual: PvmlOutcome): void {
   if (wanted.kind === "value") {
     expect(actual.kind).toBe("value");
     if (actual.kind === "value") {
-      expect(
-        pvmlValueMatches(wanted.stashType, wanted.value, actual.resultType, actual.resultValue),
-      ).toBe(true);
+      // Native Pynter's floats are single-precision, unlike the CSE
+      // reference's float64 — compare numerically with tolerance rather
+      // than exact text (see isCloseToFloat32's own doc comment).
+      if (wanted.stashType === "number") {
+        expect(isCloseToFloat32(Number(actual.text), Number(wanted.text))).toBe(true);
+      } else {
+        expect(actual.text).toBe(wanted.text);
+      }
     }
   } else {
     expect(actual.kind).toBe("error");

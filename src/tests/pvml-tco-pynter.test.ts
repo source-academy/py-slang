@@ -27,9 +27,11 @@ describeBlock("[pvml/pynter] Tail-call optimization on the real native runner", 
       "        return acc\n" +
       "    return loop(n - 1, acc + 1)\n" +
       "loop(50000, 0)\n";
-    const result = await runCodePvmlDetailed(code, 3, { pynterPath: pynterPath! });
-    expect(result.resultType).toBe("integer");
-    expect(result.resultValue).toBe("50000");
+    const result = await runCodePvmlDetailed(code, 3, {
+      pynterPath: pynterPath!,
+      captureLastExpression: true,
+    });
+    expect(result.capturedResult).toBe("50000");
   });
 
   test("deep tail recursion via ternary (both branches) succeeds", async () => {
@@ -37,9 +39,11 @@ describeBlock("[pvml/pynter] Tail-call optimization on the real native runner", 
       "def loop(n, acc):\n" +
       "    return acc if n == 0 else loop(n - 1, acc + 1)\n" +
       "loop(50000, 0)\n";
-    const result = await runCodePvmlDetailed(code, 3, { pynterPath: pynterPath! });
-    expect(result.resultType).toBe("integer");
-    expect(result.resultValue).toBe("50000");
+    const result = await runCodePvmlDetailed(code, 3, {
+      pynterPath: pynterPath!,
+      captureLastExpression: true,
+    });
+    expect(result.capturedResult).toBe("50000");
   });
 
   test("mutual tail recursion succeeds", async () => {
@@ -53,9 +57,11 @@ describeBlock("[pvml/pynter] Tail-call optimization on the real native runner", 
       "        return False\n" +
       "    return is_even(n - 1)\n" +
       "is_even(50000)\n";
-    const result = await runCodePvmlDetailed(code, 3, { pynterPath: pynterPath! });
-    expect(result.resultType).toBe("boolean");
-    expect(result.resultValue).toBe("true");
+    const result = await runCodePvmlDetailed(code, 3, {
+      pynterPath: pynterPath!,
+      captureLastExpression: true,
+    });
+    expect(result.capturedResult).toBe("True");
   });
 
   // Sanity check: a genuinely non-tail-recursive function (`n +` is still

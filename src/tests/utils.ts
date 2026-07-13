@@ -1,5 +1,5 @@
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
-import { ExprNS, StmtNS } from "../ast-types";
+import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
@@ -11,11 +11,10 @@ import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments, Resolver } from "../resolver";
 import { RunError, VARIANT_GROUPS } from "../runner";
-import { runCodePvmlDetailed } from "../pvml-runner";
+import { isBarePrintCall, runCodePvmlDetailed, wrapLastExpressionInPrint } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { Group, toPythonFloat, toPythonString } from "../stdlib/utils";
-import { Token, TokenType } from "../tokenizer";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import Stmt = StmtNS.Stmt;
@@ -362,29 +361,16 @@ const PVML_SKIP_REASONS: {
  * `undefined`. To let this test harness still check "what did the last
  * expression evaluate to", it uses the same technique a real Python program
  * would (and the exact one used elsewhere in this file's own generatePVMLTestCases
- * call sites): print() the expression. If the program's last top-level
- * statement is a bare expression, this rewrites it (in the already-parsed
- * AST, not by re-serializing/re-parsing source text, so an expression with
- * its own side effects is evaluated exactly once) into `print(<that
- * expression>)`, and the last captured output line is compared against
- * `expected`'s Python str() form — see expectedToPythonStr below. Requires
- * `print` to be resolvable (i.e. the `misc` group, in scope for every
- * generatePVMLTestCases call site below).
+ * call sites, and by native Pynter's own generateNativePynterTestCases below —
+ * see wrapLastExpressionInPrint's doc comment in pvml-runner.ts): print() the
+ * expression. If the program's last top-level statement is a bare expression,
+ * this rewrites it (in the already-parsed AST, not by re-serializing/
+ * re-parsing source text, so an expression with its own side effects is
+ * evaluated exactly once) into `print(<that expression>)`, and the last
+ * captured output line is compared against `expected`'s Python str() form —
+ * see expectedToPythonStr below. Requires `print` to be resolvable (i.e. the
+ * `misc` group, in scope for every generatePVMLTestCases call site below).
  */
-function wrapLastExpressionInPrint(ast: StmtNS.FileInput): boolean {
-  const last = ast.statements[ast.statements.length - 1];
-  if (!(last instanceof StmtNS.SimpleExpr)) return false;
-  const token = new Token(TokenType.NAME, "print", last.startToken.line, 0, -1);
-  token.synthetic = true;
-  const printCallee = new ExprNS.Variable(token, token, token);
-  const call = new ExprNS.Call(last.startToken, last.endToken, printCallee, [last.expression]);
-  ast.statements[ast.statements.length - 1] = new StmtNS.SimpleExpr(
-    last.startToken,
-    last.endToken,
-    call,
-  );
-  return true;
-}
 
 /**
  * The exact string print()/str() would produce for a PVMLTestExpectedValue
@@ -558,44 +544,6 @@ export const generatePVMLTestCases = (
 // pathway's known, current limitations.
 // ---------------------------------------------------------------------------
 
-/** Converts a Pynter result (type name + raw value string) to a JS value comparable to `expected`. */
-function pynterResultToComparable(result: { resultType: string; resultValue: string }): unknown {
-  switch (result.resultType) {
-    case "integer":
-    case "float":
-      return Number(result.resultValue);
-    case "boolean":
-      return result.resultValue === "true";
-    case "string":
-      return result.resultValue;
-    case "null":
-      return null;
-    case "undefined":
-      return undefined;
-    default:
-      // arrays, functions: not decoded from the native trailer today.
-      return undefined;
-  }
-}
-
-/** Converts a CSE `TestOutputValue` to a JS value comparable to pynterResultToComparable()'s output. */
-function expectedToComparable(expected: TestOutputValue): unknown {
-  if (typeof expected === "bigint") {
-    // Pynter numbers are single-precision floats/32-bit ints, not arbitrary-precision.
-    return Number(expected);
-  }
-  if (
-    typeof expected === "number" ||
-    typeof expected === "string" ||
-    typeof expected === "boolean" ||
-    expected === null
-  ) {
-    return expected;
-  }
-  // PyComplexNumber and arrays aren't representable by the native result trailer today.
-  return undefined;
-}
-
 /**
  * Compares a Pynter float result against the CSE (float64) reference value.
  * Pynter's floats are IEEE-754 single-precision, so the reference value must
@@ -716,6 +664,20 @@ const NATIVE_PYNTER_SKIP_REASONS: {
  * machine) through the PVML compiler + native Pynter, at the given chapter
  * `variant`. See the file-level comment above for gating/expectations.
  *
+ * Native Pynter's execution model is exec-mode only (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment) — a compiled program never leaves a value
+ * on the stack, so the only way to observe "what did the last expression
+ * evaluate to" is the same print()-wrapping technique
+ * generatePvmlInBrowserTestCases already uses for the browser pathway (see
+ * runCodePvmlDetailed's `captureLastExpression` option in pvml-runner.ts):
+ * the captured line is compared, as text, against `expected` rendered
+ * through the same toPythonString() this dialect's own print() builtin uses.
+ * A top-level `number` (always a Python float — a whole-number *int* result
+ * uses TestOutputValue's `bigint` variant instead, per this dialect's
+ * convention) is compared with float32 tolerance (isCloseToFloat32) rather
+ * than exact text, since native Pynter's floats are single-precision, unlike
+ * the CSE reference's float64.
+ *
  * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups,
  * matching whatever non-default combination the sibling generateTestCases()
  * call for the same suite uses (e.g. stream tests run CSE at variant 2 with
@@ -759,7 +721,11 @@ export const generateNativePynterTestCases = (
       const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
         let result;
         try {
-          result = await runCodePvmlDetailed(code, variant, { pynterPath: pynterPath!, groups });
+          result = await runCodePvmlDetailed(code, variant, {
+            pynterPath: pynterPath!,
+            groups,
+            captureLastExpression: typeof expected !== "function",
+          });
         } catch (e) {
           if (typeof expected === "function") {
             // CSE also expects a failure here; any RunError counts as agreement.
@@ -780,12 +746,10 @@ export const generateNativePynterTestCases = (
           expect(result.output).toBe(output.map(line => `${line}\n`).join(""));
         }
 
-        const actual = pynterResultToComparable(result);
-        const wanted = expectedToComparable(expected);
-        if (result.resultType === "float" && typeof wanted === "number") {
-          expect(isCloseToFloat32(actual, wanted)).toBe(true);
+        if (typeof expected === "number") {
+          expect(isCloseToFloat32(Number(result.capturedResult), expected)).toBe(true);
         } else {
-          expect(actual).toEqual(wanted);
+          expect(result.capturedResult).toBe(toPythonString(testOutputValueToCseValue(expected)));
         }
       };
 
@@ -832,23 +796,14 @@ export const generateNativePynterTestCases = (
 // generateTestCases() call for the same table.
 // ---------------------------------------------------------------------------
 
-/**
- * Whether `expr` is a bare call to `print`/`display` (both the same
- * primitive — see builtins.ts's PRIMITIVE_FUNCTIONS, index 5). A shared
- * TestCases table entry occasionally already ends in one of these itself
- * (e.g. parser-stdlib.test.ts's `'print(parse("42"))'`, printing a parsed
- * data structure as its own way of observing it), with `expected: null` for
- * that call's own (always-None) return value — the auto-wrap below must not
- * wrap such a case again (`print(print(...))`), or it would print an extra
- * "None" line and corrupt the `output` assertion.
- */
-function isBarePrintCall(expr: ExprNS.Expr): boolean {
-  return (
-    expr instanceof ExprNS.Call &&
-    expr.callee instanceof ExprNS.Variable &&
-    (expr.callee.name.lexeme === "print" || expr.callee.name.lexeme === "display")
-  );
-}
+// isBarePrintCall is imported from pvml-runner.ts (see its doc comment there):
+// a shared TestCases table entry occasionally already ends in a bare
+// print()/display() call itself (e.g. parser-stdlib.test.ts's
+// `'print(parse("42"))'`, printing a parsed data structure as its own way of
+// observing it), with `expected: null` for that call's own (always-None)
+// return value — the auto-wrap below must not wrap such a case again
+// (`print(print(...))`), or it would print an extra "None" line and corrupt
+// the `output` assertion.
 
 /**
  * Converts a TestOutputValue (see TestCases' own doc comment) into a CSE
