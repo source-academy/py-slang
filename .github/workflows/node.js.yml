@@ -50,7 +50,7 @@ jobs:
           # py-slang wants to adopt a pynter-side change — never floats on
           # pynter's own master, so a pynter-side change can't silently
           # break this job with no corresponding py-slang diff to explain it.
-          ref: 233f05afc4bf44f843cfdc1502b9715c0a3aa843
+          ref: 06e67a05d6ccc1cee0080e58d7169b27fc06dc82
           path: pynter
       - name: Build pynter runner
         working-directory: pynter

@@ -175,15 +175,15 @@ export const OPCODE_MAX = 103;
 /**
  * Pynter's original/base maximum supported opcode (op_neq_p = 0x56).
  * Opcodes above this value are py-slang extensions not implemented by that
- * base opcode set — some (FLOORDIVG/FLOORDIVF, the EQG12/NEQG12/LTG12/
- * GTG12/LEG12/GEG12 §1/§2-restricted comparisons) still aren't implemented
- * natively at all; others (NEWITER/FOR_ITER) have since landed — see
- * PYNTER_ADDITIONAL_SUPPORTED_OPCODES below, the actual gate `assemble()`
- * checks against. The §1/§2 comparison opcodes in particular will never
- * need a native opcode, since the native Pynter pathway is permanently
- * gated to Python §3 only (see pvml-runner.ts) — only py-slang's own
- * PVMLInterpreter ever executes them. EQP/NEQP (is/is not) are below this
- * threshold — Pynter has always implemented them.
+ * base opcode set — some (the EQG12/NEQG12/LTG12/GTG12/LEG12/GEG12 §1/§2-
+ * restricted comparisons) still aren't implemented natively at all and
+ * never will be; others (NEWITER/FOR_ITER, FLOORDIVG/FLOORDIVF, POWG) have
+ * since landed — see PYNTER_ADDITIONAL_SUPPORTED_OPCODES below, the actual
+ * gate `assemble()` checks against. The §1/§2 comparison opcodes in
+ * particular will never need a native opcode, since the native Pynter
+ * pathway is permanently gated to Python §3 only (see pvml-runner.ts) —
+ * only py-slang's own PVMLInterpreter ever executes them. EQP/NEQP (is/is
+ * not) are below this threshold — Pynter has always implemented them.
  */
 export const PYNTER_OPCODE_MAX = 0x56; // 86
 
@@ -195,17 +195,22 @@ export const PYNTER_OPCODE_MAX = 0x56; // 86
  *
  * This exists (rather than just raising PYNTER_OPCODE_MAX) because native
  * support doesn't land in opcode-number order: e.g. NEWITER/FOR_ITER (89/90)
- * can be implemented before FLOORDIVG/FLOORDIVF (87/88) — a single "opcode ≤
- * max" threshold can't express that gap, only a set can.
+ * landed before FLOORDIVG/FLOORDIVF (87/88) — a single "opcode ≤ max"
+ * threshold can't express that gap, only a set can.
  */
 export const PYNTER_ADDITIONAL_SUPPORTED_OPCODES: ReadonlySet<number> = new Set([
   // op_new_iter/op_for_iter (0x59/0x5A), plus the range() native primitive
   // at its own (non-sequential — see builtins.ts's PRIMITIVE_FUNCTIONS
-  // comment) index, landed in pynter's for-loop-support branch. 0x57/0x58
-  // (FLOORDIVG/FLOORDIVF) remain unimplemented — this is exactly the gap
-  // this Set exists to express (see doc comment above).
+  // comment) index, landed in pynter's for-loop-support branch.
   OpCodes.NEWITER,
   OpCodes.FOR_ITER,
+  // op_floordiv_g/op_floordiv_f (0x57/0x58) and op_pow_g (0x65, matching
+  // OpCodes.POWG's own value directly — see pynter's opcode.h) landed
+  // together in source-academy/pynter#17, alongside the op_mod_g/op_mod_f
+  // int-typing + floored-modulo-semantics fix in #16.
+  OpCodes.FLOORDIVG,
+  OpCodes.FLOORDIVF,
+  OpCodes.POWG,
 ]);
 
 /** Whether native Pynter implements `opcode` today — see PYNTER_OPCODE_MAX and PYNTER_ADDITIONAL_SUPPORTED_OPCODES' doc comments. */
@@ -214,8 +219,6 @@ export function isSupportedByNativePynter(opcode: number): boolean {
 }
 
 const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
-  [OpCodes.FLOORDIVG]: "floor division (//)",
-  [OpCodes.FLOORDIVF]: "floor division (//)",
   [OpCodes.EQG12]: "§1/§2 comparison semantics",
   [OpCodes.NEQG12]: "§1/§2 comparison semantics",
   [OpCodes.LTG12]: "§1/§2 comparison semantics",
@@ -226,7 +229,6 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.STGG]: "incremental/persistent global variables",
   [OpCodes.LGCBI]: "arbitrary-precision integers",
   [OpCodes.LGCC]: "complex numbers",
-  [OpCodes.POWG]: "exponentiation (**)",
   [OpCodes.CALLA]: "call-site argument spreading (*args)",
   [OpCodes.CALLTA]: "call-site argument spreading (*args)",
 };

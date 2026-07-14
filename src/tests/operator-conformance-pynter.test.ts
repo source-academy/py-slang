@@ -151,25 +151,18 @@ const describeBlock = pynterPath ? describe : describe.skip;
 
 /**
  * Exact `code` strings known to currently fail against native Pynter — real
- * floor-division/modulo/power value bugs and string-literal identity
- * inconsistencies, not anything this sweep's own complex-number carve-out
- * (see file header) already explains. See py-slang#259 for the full
- * writeup, and generateNativePynterTestCases'/generatePvmlInBrowserTestCases'
- * identical `knownGaps` parameter (src/tests/utils.ts) for the same
- * exact-match-over-predicate rationale: these are uncategorized, one-off
- * bugs, not a single structural "Pynter can't represent X" rule.
+ * value bugs, not anything this sweep's own complex-number carve-out (see
+ * file header) already explains. See py-slang#259 for the full writeup, and
+ * generateNativePynterTestCases'/generatePvmlInBrowserTestCases' identical
+ * `knownGaps` parameter (src/tests/utils.ts) for the same exact-match-over-
+ * predicate rationale: these are uncategorized, one-off bugs, not a single
+ * structural "Pynter can't represent X" rule.
+ *
+ * Previously included the `//`/`%`/`**` value-typing bugs fixed by
+ * source-academy/pynter#16/#17 — empty now that those are merged and
+ * pinned (see the CI workflow's pynter `ref`).
  */
-const KNOWN_GAPS = new Set([
-  "2 // 2",
-  "2 // 2.5",
-  "2.5 // 2",
-  "2.5 // 2.5",
-  "2 % 2",
-  "2 ** 2",
-  "2 ** 2.5",
-  "2.5 ** 2",
-  "2.5 ** 2.5",
-]);
+const KNOWN_GAPS = new Set<string>([]);
 
 /** `test`, or `test.skip` when `code` is a known gap. */
 function testOrSkip(code: string): typeof test {
