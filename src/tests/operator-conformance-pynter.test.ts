@@ -169,13 +169,27 @@ const KNOWN_GAPS = new Set([
   "2 ** 2.5",
   "2.5 ** 2",
   "2.5 ** 2.5",
-  "'ab' is 'ab'",
-  "'ab' is not 'ab'",
 ]);
 
 /** `test`, or `test.skip` when `code` is a known gap. */
 function testOrSkip(code: string): typeof test {
   return KNOWN_GAPS.has(code) ? test.skip : test;
+}
+
+/**
+ * `is`/`is not` between two independently-constructed instances of an
+ * immutable type with no language-guaranteed identity semantics. Python
+ * doesn't specify whether `'ab' is 'ab'` is True or False — a conformant
+ * runtime may intern/hash-cons identical string literals to save space, or
+ * may just as legitimately allocate a fresh object for each occurrence (as
+ * native Pynter's op_lgc_s currently does). Unlike KNOWN_GAPS above (real
+ * bugs Pynter should eventually fix), there is no single "correct" answer
+ * here to pin against whatever the CSE machine happens to do — but the
+ * operation still must succeed and produce an actual bool, never an error
+ * (see the dedicated relaxed-assertion test generated for these below).
+ */
+function isUnspecifiedIdentityCase(op: string, left: PyType, right: PyType): boolean {
+  return (op === "is" || op === "is not") && left === right && left === "str";
 }
 
 for (const chapter of [3]) {
@@ -198,6 +212,20 @@ for (const chapter of [3]) {
         for (const left of universe) {
           for (const right of universe) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
+            if (isUnspecifiedIdentityCase(op, left, right)) {
+              // No pinned expected value (see isUnspecifiedIdentityCase's doc
+              // comment) — but the comparison itself is always well-typed and
+              // must succeed with an actual bool, whichever way identity
+              // happens to land.
+              test(code, async () => {
+                const actual = await runPvml(code, chapter, groups, pynterPath!);
+                expect(actual.kind).toBe("value");
+                if (actual.kind === "value") {
+                  expect(["True", "False"]).toContain(actual.text);
+                }
+              });
+              continue;
+            }
             testOrSkip(code)(code, async () => {
               const wanted = await cseOutcome(code, chapter, groups);
               const actual = await runPvml(code, chapter, groups, pynterPath!);

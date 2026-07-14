@@ -303,13 +303,20 @@ describe("Operator conformance: directed cases", () => {
   // immutable values (which have no real object identity in this interpreter)
   // compare by their underlying value instead — the sweep above pins the
   // stash *type* (always bool); this pins the actual boolean value.
+  //
+  // Deliberately NOT pinned here: `'ab' is 'ab'` (two separately-constructed
+  // string literals of equal value). Python doesn't specify whether that's
+  // True or False — a conformant runtime may intern/hash-cons identical
+  // string literals, or may just as legitimately allocate a fresh object
+  // each time (see native Pynter, which does the latter). Asserting one
+  // answer here would pin this implementation's arbitrary choice as if it
+  // were a language requirement.
   test.each([[3], [4]])("`is` / `is not` identity semantics at Python §%d", async chapter => {
     const cases: [string, boolean][] = [
       ["None is None", true],
       ["1 is 1", true],
       ["1 is 1.0", false],
       ["1.5 is 1.5", true],
-      ["'ab' is 'ab'", true],
       ["True is True", true],
       ["True is 1", false],
       ["x = [1, 2]\ny = x\nx is y", true],
