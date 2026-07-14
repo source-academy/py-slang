@@ -15,13 +15,13 @@ declare namespace RuntimeExports {
     opts?: any | undefined,
   ): any;
   /**
-   * @param {string=} returnType
+   * @param {string|null=} returnType
    * @param {Array=} argTypes
    * @param {Object=} opts
    */
   function cwrap(
     ident: any,
-    returnType?: string | undefined,
+    returnType?: (string | null) | undefined,
     argTypes?: any[] | undefined,
     opts?: any | undefined,
   ): any;

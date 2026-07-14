@@ -44,9 +44,9 @@ export default async function init(props: Record<string, unknown> = {}): Promise
   // These are the WASM-exported symbol names actually compiled into
   // pynterwasm.wasm (see Pynter's devices/wasm/wasm/lib.c); they keep
   // Pynter's internal "si"-prefix convention, which this rename didn't touch.
-  const alloc_heap = module.cwrap("siwasm_alloc_heap", undefined, ["number"]);
+  const alloc_heap = module.cwrap("siwasm_alloc_heap", null, ["number"]);
   const alloc = module.cwrap("siwasm_alloc", "number", ["number"]);
-  const free = module.cwrap("siwasm_free", undefined, ["number"]);
+  const free = module.cwrap("siwasm_free", null, ["number"]);
   const run = module.cwrap("siwasm_run", "number", ["number", "number"]);
 
   // Initialise the Pynter heap (required before any run call)
