@@ -1650,10 +1650,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@https://github.com/source-academy/conductor.git#0.6.0":
-  version: 0.6.0
-  resolution: "@sourceacademy/conductor@https://github.com/source-academy/conductor.git#commit=e105c9cf1ee61a05bc1d3cab88078b5253451bd2"
-  checksum: 10c0/f45ec8600a30a0066b710b075a01bdde64b45d31bbb3908bbc98337252cb2c4f630c33383b759b5a7c143e1032e3403d4c6c4cd3009f4b431cc76d7e09ceecb0
+"@sourceacademy/conductor@npm:^0.7.0":
+  version: 0.7.0
+  resolution: "@sourceacademy/conductor@npm:0.7.0"
+  checksum: 10c0/30088c7c6682e76c5421ba80c0890d680650c964c02edb5083ec730ed2a722221702fae1dfd32e9d7e9c520216179de4bbabbbb8971025a98798620da2d6d74c
   languageName: node
   linkType: hard
 
@@ -1671,7 +1671,7 @@ __metadata:
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
-    "@sourceacademy/conductor": "https://github.com/source-academy/conductor.git#0.6.0"
+    "@sourceacademy/conductor": "npm:^0.7.0"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
