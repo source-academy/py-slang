@@ -15,15 +15,6 @@ for CS1101S or the SICP Python edition runs the same way on your own machine.
 pip install sourceacademy-sicp
 ```
 
-**Not on PyPI yet.** No GitHub Release has been cut, so the `publish` job
-below has never run and this currently fails with "No matching distribution
-found". Until a release exists, install straight from this repository
-instead:
-
-```bash
-pip install "git+https://github.com/source-academy/py-slang.git#subdirectory=python"
-```
-
 ## Use
 
 Put this at the top of your program:
