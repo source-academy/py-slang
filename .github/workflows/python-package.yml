@@ -21,6 +21,20 @@ defaults:
     working-directory: python
 
 jobs:
+  format:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install --upgrade pip "black==26.5.1"
+      - name: Check formatting with Black
+        run: black --check --diff .
+
   test:
     if: github.event_name != 'release'
     runs-on: ubuntu-latest
