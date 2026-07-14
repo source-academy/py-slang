@@ -64,6 +64,8 @@ math_trunc = _math.trunc
 math_ulp = _math.ulp
 
 # Added to CPython's math module only recently; provide fallbacks.
-math_cbrt = getattr(_math, "cbrt", lambda x: _math.copysign(abs(x) ** (1 / 3), x))  # 3.11+
-math_exp2 = getattr(_math, "exp2", lambda x: 2.0 ** x)  # 3.11+
+math_cbrt = getattr(
+    _math, "cbrt", lambda x: _math.copysign(abs(x) ** (1 / 3), x)
+)  # 3.11+
+math_exp2 = getattr(_math, "exp2", lambda x: 2.0**x)  # 3.11+
 math_fma = getattr(_math, "fma", lambda x, y, z: x * y + z)  # 3.13+
