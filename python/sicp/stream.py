@@ -64,7 +64,9 @@ def stream_length(xs):
 
 
 def stream_map(f, s):
-    return None if is_none(s) else pair(f(head(s)), lambda: stream_map(f, stream_tail(s)))
+    return (
+        None if is_none(s) else pair(f(head(s)), lambda: stream_map(f, stream_tail(s)))
+    )
 
 
 def build_stream(fun, n):
@@ -93,7 +95,11 @@ def stream_reverse(xs):
 
 
 def stream_append(xs, ys):
-    return ys if is_none(xs) else pair(head(xs), lambda: stream_append(stream_tail(xs), ys))
+    return (
+        ys
+        if is_none(xs)
+        else pair(head(xs), lambda: stream_append(stream_tail(xs), ys))
+    )
 
 
 def stream_member(x, s):
@@ -108,9 +114,11 @@ def stream_remove(v, xs):
     return (
         None
         if is_none(xs)
-        else stream_tail(xs)
-        if v == head(xs)
-        else pair(head(xs), lambda: stream_remove(v, stream_tail(xs)))
+        else (
+            stream_tail(xs)
+            if v == head(xs)
+            else pair(head(xs), lambda: stream_remove(v, stream_tail(xs)))
+        )
     )
 
 
