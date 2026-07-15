@@ -7,7 +7,12 @@ import {
 import linkedList from "../stdlib/linked-list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Linked List Tests", () => {
   const linkedListTests: TestCases = {
@@ -159,4 +164,5 @@ describe("Linked List Tests", () => {
   // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
   // programs, so run them there rather than at their nominal §2.
   generateNativePynterTestCases(linkedListTests, 3, [misc, math, linkedList]);
+  generateCPythonTestCases(linkedListTests, 3, [misc, math, linkedList]);
 });

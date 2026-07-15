@@ -14,7 +14,12 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Standard Library Tests", () => {
   describe("Chapter 1 Builtins", () => {
@@ -971,6 +976,8 @@ describe("Standard Library Tests", () => {
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
     generateNativePynterTestCases(mathTests, 3);
+    generateCPythonTestCases(mathTests, 1);
+    generateCPythonTestCases(miscTests, 1);
   });
 
   describe("Chapter 3 Builtins", () => {

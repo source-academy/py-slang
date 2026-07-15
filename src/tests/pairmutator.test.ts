@@ -8,7 +8,12 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
-import { generateNativePynterTestCases, generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Pair Mutator Tests", () => {
   const pairmutatorTests: TestCases = {
@@ -229,4 +234,5 @@ result`,
   // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
   // programs, so run them there rather than at their nominal §2.
   generateNativePynterTestCases(pairmutatorTests, 3, [misc, math, linkedList, pairmutator, stream]);
+  generateCPythonTestCases(pairmutatorTests, 3, [misc, math, linkedList, pairmutator, stream]);
 });
