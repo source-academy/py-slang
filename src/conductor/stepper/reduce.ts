@@ -386,8 +386,14 @@ function excludedFromEquality(node: StepNode): boolean {
  */
 function structuralEquals(op: string, left: StepNode, right: StepNode): boolean {
   if (excludedFromEquality(left) || excludedFromEquality(right)) {
-    reportBinaryTypeError(op, left, right);
-    return false; // unreachable: reportBinaryTypeError always throws for bool/function operands
+    // Not `reportBinaryTypeError`: it silently no-ops when a side's `valueTypeName` is `null` (its
+    // deliberate "stuck, not error" fallback for arithmetic on a pair/function — see its own doc
+    // comment), which would swallow this genuine bool/function equality error whenever the *other*
+    // operand happens to be a pair (e.g. `pair(1, 2) == True`). `operandTypeName` names every operand
+    // shape reaching here, so this always throws.
+    throw new Error(
+      `TypeError: unsupported operand type(s) for ${op}: '${operandTypeName(left)}' and '${operandTypeName(right)}'`,
+    );
   }
   if (isPairNode(left) && isPairNode(right)) {
     const le = left.elements as StepNode[];
