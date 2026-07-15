@@ -30,13 +30,12 @@ import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
  * calls it. Pointing it at the stub lets compilation succeed; it only faults
  * if actually called at runtime.
  *
- * `is_integer`/`is_float`/`is_complex`/`_gen_list` have no Source-standard-
- * library equivalent (Source's is_number() doesn't distinguish int/float,
- * Source has no complex numbers, and nothing builds a None-filled array), so
- * they were added as new native primitives appended to the end of Pynter's
- * dispatch table (see SIVMFN_PRIMITIVE_COUNT in
- * pynter/vm/include/pynter/internal_fn.h) rather than reused from an
- * existing slot.
+ * `is_integer`/`is_float`/`is_complex` have no Source-standard-library
+ * equivalent (Source's is_number() doesn't distinguish int/float, and Source
+ * has no complex numbers), so they were added as new native primitives
+ * appended to the end of Pynter's dispatch table (see
+ * SIVMFN_PRIMITIVE_COUNT in pynter/vm/include/pynter/internal_fn.h) rather
+ * than reused from an existing slot.
  *
  * `is_list`/`list_length` (list.ts, over Python list literals, which PVML
  * represents as native's raw arrays) are deliberately mapped to native's
@@ -47,7 +46,6 @@ import { MissingRequiredPositionalError, PVMLInterpreterError } from "./errors";
 export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["print", 5],
   ["display", 5], // Alias for print
-  ["_gen_list", 95],
   ["arity", 96],
   ["error", 10],
   ["head", 14],
@@ -104,7 +102,7 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_trunc", 66],
   // `print_llist` has no native Pynter equivalent yet (unlike the slots above, this index is not
   // backed by pynter/vm/src/primitives.c) -- added the same way is_integer/is_float/is_complex/
-  // _gen_list/arity were, as a new primitive appended past native's own table, so this only backs
+  // arity were, as a new primitive appended past native's own table, so this only backs
   // py-slang's own local TS PVMLInterpreter until a matching entry lands in the pynter repo.
   ["print_llist", 97],
 ]);
@@ -300,14 +298,6 @@ export function executePrimitive(
 
     case 94: // is_complex: PVML has no complex number representation
       return false;
-
-    case 95: {
-      // _gen_list
-      if (args.length !== 1)
-        throw new MissingRequiredPositionalError("_gen_list() takes exactly 1 argument");
-      const [n] = assertNumericArgs(args, "_gen_list");
-      return { type: "array", elements: new Array(n).fill(null) };
-    }
 
     case 96: // arity: not implemented here (no access to function IR from this scope)
       throw new PVMLInterpreterError(

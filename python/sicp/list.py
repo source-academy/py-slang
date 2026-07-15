@@ -29,10 +29,6 @@ def list_length(xs):
     return len(xs)
 
 
-def _gen_list(n):
-    return [None] * n
-
-
 def equal(xs, ys):
     while is_pair(xs):
         if not is_pair(ys) or not equal(head(xs), head(ys)):
@@ -60,15 +56,3 @@ def equal(xs, ys):
         return True
     else:
         return False
-
-
-def build_list(fun, n):
-    """Return a list of length ``n`` whose i-th element is ``fun(i)``."""
-    if n < 0:
-        error("build_list: n must be a nonnegative integer")
-    result = _gen_list(n)
-    i = 0
-    while i < n:
-        result[i] = fun(i)
-        i = i + 1
-    return result
