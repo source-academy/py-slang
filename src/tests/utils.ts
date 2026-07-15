@@ -670,18 +670,32 @@ function isChapterGatingError(expected: TestExpectedValue): boolean {
 }
 
 /**
- * Whether `code` is a call whose entire argument list is `True`/`False` and `expected` is an
- * error: unlike CPython (where `bool` is an `int` subclass, so e.g. `abs(True) == 1`), this
- * dialect deliberately excludes `bool` from every arithmetic/numeric builtin and operator (see
- * `asIntIfBool`'s doc comment in operators.ts and the equivalent restriction across misc.ts/
- * math.ts) — a pedagogical rule with no CPython equivalent, not a bug. High-volume: nearly every
- * numeric builtin has one of these cases, so left unfiltered it would swamp genuinely interesting
- * failures.
+ * Builtins that accept int/float/complex freely but specifically exclude `bool` — the actual
+ * "dialect deliberately excludes bool" surface `isBoolRejection` below is about. Confirmed against
+ * source, not guessed: every math.ts function using the shared `isNumeric()` helper (which
+ * excludes `bool` by construction — see its own doc comment) is `math_`-prefixed, plus misc.ts's
+ * `abs`/`max`/`min`/`round`, which reject `bool` via their own type switches for the same reason.
+ * Deliberately excludes lookalikes like `arity`/`len`, which also raise TypeError for an all-bool
+ * argument list but for an unrelated reason (not callable / no length) — seeing *any* value there,
+ * bool included, is genuinely wrong in both this dialect and CPython, not a bool-vs-int-subclass
+ * divergence, so those cases should still be checked against CPython, not skipped.
  */
-const BOOL_REJECTION_CALL_RE = /^\w+\((?:True|False)(?:,\s*(?:True|False))*\)$/;
+const BOOL_EXCLUDING_NUMERIC_BUILTIN_RE = /^(?:abs|max|min|round|math_\w+)$/;
+
+/**
+ * Whether `code` is a call to one of the builtins above whose entire argument list is
+ * `True`/`False` and `expected` is an error: unlike CPython (where `bool` is an `int` subclass, so
+ * e.g. `abs(True) == 1`), this dialect deliberately excludes `bool` from every arithmetic/numeric
+ * builtin and operator (see `asIntIfBool`'s doc comment in operators.ts) — a pedagogical rule with
+ * no CPython equivalent, not a bug. High-volume: nearly every numeric builtin has one of these
+ * cases, so left unfiltered it would swamp genuinely interesting failures.
+ */
+const BOOL_REJECTION_CALL_RE = /^(\w+)\((?:True|False)(?:,\s*(?:True|False))*\)$/;
 
 function isBoolRejection(code: string, expected: TestExpectedValue): boolean {
-  return typeof expected === "function" && BOOL_REJECTION_CALL_RE.test(code.trim());
+  if (typeof expected !== "function") return false;
+  const match = BOOL_REJECTION_CALL_RE.exec(code.trim());
+  return match !== null && BOOL_EXCLUDING_NUMERIC_BUILTIN_RE.test(match[1]);
 }
 
 /**
@@ -939,19 +953,27 @@ export const generateCPythonTestCases = (
         }
       }
 
+      // Stable id assigned once, here — every downstream use (the batch request sent to CPython,
+      // and test.each's own per-case key) reads from this single array, rather than each
+      // independently re-deriving "index into `supported`" via its own separate `.map((c, i) =>
+      // ...)`. Two such re-derivations only agree today because both happen to iterate the same
+      // unmutated `supported` array; a filter/sort introduced between them later would silently
+      // misattribute a CPython result to the wrong test case.
+      const supportedWithId = supported.map((c, i) => ({ ...c, id: String(i) }));
+
       let batchResults: Map<string, CPythonCaseResult> = new Map();
-      if (pythonPath && supported.length > 0) {
+      if (pythonPath && supportedWithId.length > 0) {
         beforeAll(() => {
           batchResults = runCPythonBatch(
             pythonPath,
-            supported.map((c, i) => ({ id: String(i), code: c.code })),
+            supportedWithId.map(({ id, code }) => ({ id, code })),
           );
         });
       }
 
-      const runTestCase = (testCase: InternalTestCase, index: number) => {
+      const runTestCase = (testCase: InternalTestCase, id: string) => {
         const { expected, output } = testCase;
-        const result = batchResults.get(String(index));
+        const result = batchResults.get(id);
         if (!result) throw new Error("CPython batch result missing for this case");
 
         if (typeof expected === "function") {
@@ -996,11 +1018,8 @@ export const generateCPythonTestCases = (
         expect(result.result).toEqual(wanted);
       };
 
-      if (supported.length > 0) {
-        test.each(supported.map((c, i) => ({ ...c, __index: i })))(
-          `$label`,
-          ({ __index, ...testCase }) => runTestCase(testCase, __index),
-        );
+      if (supportedWithId.length > 0) {
+        test.each(supportedWithId)(`$label`, ({ id, ...testCase }) => runTestCase(testCase, id));
       }
       for (const [reason, cases] of skipBuckets) {
         test.skip.each(cases)(`$label (${reason})`, () => {});
