@@ -28,7 +28,7 @@ import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
 import { listLiteralValues, loadModules, moduleToPython } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
-import { ListValue, Stash, Value } from "./stash";
+import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
 import {
   AppInstr,
@@ -1090,7 +1090,7 @@ const cmdEvaluators: CmdEvaluators = {
     // Tag as a genuine list literal so module interop (pythonToModule) can tell it apart from a
     // pair()/llist()-built value or a module PAIR round-tripped through Python, none of which reach
     // this instruction - see listLiteralValues' definition in modules.ts.
-    listLiteralValues.add(listValue as ListValue);
+    listLiteralValues.add(listValue);
     stash.push(listValue);
   },
 

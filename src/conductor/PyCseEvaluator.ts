@@ -445,19 +445,19 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     );
     return list;
   }
-  async is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
+  is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
     let current: TypedValue<DataType> = xs;
     while (current.type !== DataType.EMPTY_LIST) {
       if (current.type !== DataType.PAIR) {
-        return false;
+        return Promise.resolve(false);
       }
       const pair = this.pairMap.get(current.value);
       if (pair === undefined) {
-        return false;
+        return Promise.resolve(false);
       }
       current = pair.tail;
     }
-    return true;
+    return Promise.resolve(true);
   }
   list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
     return new Promise((resolve, reject) => {

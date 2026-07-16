@@ -244,7 +244,7 @@ describe("module interop conversions", () => {
       const moduleList = await pythonToModule(context, "", undefined, pythonList);
 
       expect(moduleList.type).toBe(DataType.PAIR);
-      let current = moduleList as TypedValue<DataType>;
+      let current = moduleList;
       const elements: TypedValue<DataType>[] = [];
       while (current.type === DataType.PAIR) {
         elements.push(await evaluator.pair_head(current));
