@@ -179,7 +179,8 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     { head: TypedValue<DataType>; tail: TypedValue<DataType> }
   >();
   private arrayMap = new Map<
-    TypedValue<DataType.ARRAY>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ArrayIdentifier<any>,
     { type: DataType; elements: TypedValue<DataType>[] }
   >();
   private closureMap = new Map<
@@ -262,11 +263,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       type: DataType.ARRAY,
       value: this.uniqueId++ as ArrayIdentifier<typeof t>,
     };
-    this.arrayMap.set(arrayValue, { type: t, elements });
+    this.arrayMap.set(arrayValue.value, { type: t, elements });
     return Promise.resolve(arrayValue);
   }
   array_length(a: TypedValue<DataType.ARRAY>): Promise<number> {
-    const array = this.arrayMap.get(a);
+    const array = this.arrayMap.get(a.value);
     if (!array) {
       throw new Error(`Invalid array identifier: ${a.value}`);
     }
@@ -280,7 +281,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     a: TypedValue<DataType.ARRAY, DataType.VOID>,
     idx: number,
   ): Promise<TypedValue<DataType>> {
-    const array = this.arrayMap.get(a);
+    const array = this.arrayMap.get(a.value);
 
     if (!array) {
       throw new Error(`Invalid array identifier: ${a.value}`);
@@ -300,7 +301,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
   }
 
   array_type<T extends DataType>(a: TypedValue<DataType.ARRAY, T>): Promise<NoInfer<T>> {
-    return Promise.resolve(a.value.__type);
+    const array = this.arrayMap.get(a.value);
+    if (array === undefined) {
+      throw new Error(`Invalid array identifier: ${a.value}`);
+    }
+    return Promise.resolve(array.type as NoInfer<T>);
   }
   array_set(
     a: TypedValue<DataType.ARRAY, DataType.VOID>,
@@ -312,7 +317,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     idx: number,
     tv: TypedValue<NoInfer<T>>,
   ): Promise<void> {
-    const array = this.arrayMap.get(a) as
+    const array = this.arrayMap.get(a.value) as
       | { type: T; elements: TypedValue<NoInfer<T>>[] }
       | undefined;
 
@@ -333,7 +338,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     type?: T,
     length?: number,
   ): Promise<void> {
-    const array = this.arrayMap.get(a);
+    const array = this.arrayMap.get(a.value);
     if (!array) {
       throw new Error(`Invalid array identifier: ${a.value}`);
     }
@@ -368,17 +373,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     args: TypedValue<DataType>[],
     returnType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
-    const value = this.closureMap.get(c.value)?.func(...args);
-    if (value === undefined) {
+    const closure = this.closureMap.get(c.value);
+    if (closure === undefined) {
       throw new Error(`Invalid closure identifier: ${c.value}`);
     }
-    if (c.value.__ret !== returnType) {
-      const expectedReturnType = this.closureMap.get(c.value)?.sig.returnType;
-      if (expectedReturnType !== returnType) {
-        throw new Error(`Expected return type ${returnType}, got ${expectedReturnType}`);
-      }
+    if (closure.sig.returnType !== returnType) {
+      throw new Error(`Expected return type ${returnType}, got ${closure.sig.returnType}`);
     }
-    return value as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
+    return closure.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
   }
   closure_call_unchecked<T extends DataType>(
     c: TypedValue<DataType.CLOSURE, T>,
@@ -444,12 +446,18 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     return list;
   }
   async is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
-    return (
-      xs.type === DataType.EMPTY_LIST ||
-      (xs.type === DataType.PAIR &&
-        this.pairMap.has(xs.value) &&
-        (await this.is_list(this.pairMap.get(xs.value)!.tail as TypedValue<DataType.LIST>)))
-    );
+    let current: TypedValue<DataType> = xs;
+    while (current.type !== DataType.EMPTY_LIST) {
+      if (current.type !== DataType.PAIR) {
+        return false;
+      }
+      const pair = this.pairMap.get(current.value);
+      if (pair === undefined) {
+        return false;
+      }
+      current = pair.tail;
+    }
+    return true;
   }
   list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
     return new Promise((resolve, reject) => {
