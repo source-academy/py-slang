@@ -6,7 +6,12 @@ import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
-import { generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 const groups = [misc, math, linkedList, list, pairmutator, stream, parser];
 
@@ -581,23 +586,36 @@ describe("Parser Stdlib Tests", () => {
   // apply_in_underlying_python
   const applyTests: TestCases = {
     "apply_in_underlying_python — single arg builtins": [
-      ["apply_in_underlying_python(abs, linked_list(-5))", 5n, null],
-      ["apply_in_underlying_python(abs, linked_list(-42))", 42n, null],
-      ["apply_in_underlying_python(abs, linked_list(0))", 0n, null],
+      ["apply_in_underlying_python(abs, llist(-5))", 5n, null],
+      ["apply_in_underlying_python(abs, llist(-42))", 42n, null],
+      ["apply_in_underlying_python(abs, llist(0))", 0n, null],
     ],
     "apply_in_underlying_python — multi arg builtins": [
-      ["apply_in_underlying_python(max, linked_list(1, 2, 3))", 3n, null],
-      ["apply_in_underlying_python(min, linked_list(5, 2, 8))", 2n, null],
-      ["apply_in_underlying_python(max, linked_list(-1, -5, -2))", -1n, null],
+      ["apply_in_underlying_python(max, llist(1, 2, 3))", 3n, null],
+      ["apply_in_underlying_python(min, llist(5, 2, 8))", 2n, null],
+      ["apply_in_underlying_python(max, llist(-1, -5, -2))", -1n, null],
     ],
     "apply_in_underlying_python — empty args": [
-      ["apply_in_underlying_python(linked_list, None)", null, null],
+      ["apply_in_underlying_python(llist, None)", null, null],
     ],
     "apply_in_underlying_python — type errors": [
-      ["apply_in_underlying_python(1, linked_list(1))", TypeError, null],
-      ['apply_in_underlying_python("abs", linked_list(1))', TypeError, null],
-      ["apply_in_underlying_python(True, linked_list(1))", TypeError, null],
-      ["apply_in_underlying_python(None, linked_list(1))", TypeError, null],
+      ["apply_in_underlying_python(1, llist(1))", TypeError, null],
+      ['apply_in_underlying_python("abs", llist(1))', TypeError, null],
+      ["apply_in_underlying_python(True, llist(1))", TypeError, null],
+      ["apply_in_underlying_python(None, llist(1))", TypeError, null],
+    ],
+    "apply_in_underlying_python — non-primitive functions": [
+      ["apply_in_underlying_python(lambda x: x + 1, llist(5))", 6n, null],
+      [
+        "def f(x, y, *args):\n    return x + y + (f(*args) if len(args) > 0 else 0)\napply_in_underlying_python(f, llist(1, 2, 3, 4))",
+        10n,
+        null,
+      ],
+      [
+        'def g(x, y): return x + " " + y\napply_in_underlying_python(g, llist("hello", "world"))',
+        "hello world",
+        null,
+      ],
     ],
   };
 
@@ -624,4 +642,38 @@ describe("Parser Stdlib Tests", () => {
   generateTestCases(parseErrorTests, 4, groups);
   generateTestCases(tokenizeTests, 4, groups);
   generateTestCases(applyTests, 4, groups);
+
+  // Pynter only supports Python §3 (see pynter/README.md), unlike the CSE
+  // sweep above (§4) — still valid §3 programs where they don't use parse()/
+  // tokenize() (parseErrorTests/tokenizeTests are skip-gated for that reason).
+  generateNativePynterTestCases(literalTests, 3);
+  generateNativePynterTestCases(nameTests, 3);
+  generateNativePynterTestCases(binaryTests, 3);
+  generateNativePynterTestCases(unaryTests, 3);
+  generateNativePynterTestCases(boolOpTests, 3);
+  generateNativePynterTestCases(compareTests, 3);
+  generateNativePynterTestCases(conditionalTests, 3);
+  generateNativePynterTestCases(loopTests, 3);
+  generateNativePynterTestCases(functionTests, 3);
+  generateNativePynterTestCases(lambdaTests, 3);
+  generateNativePynterTestCases(applicationTests, 3);
+  generateNativePynterTestCases(assignTests, 3);
+  generateNativePynterTestCases(listTests, 3);
+  generateNativePynterTestCases(starredTests, 3);
+  generateNativePynterTestCases(controlFlowTests, 3);
+  generateNativePynterTestCases(scopeTests, 3);
+  generateNativePynterTestCases(assertTests, 3);
+  generateNativePynterTestCases(importTests, 3);
+  generateNativePynterTestCases(sequenceTests, 3);
+  generateNativePynterTestCases(nestedTests, 3);
+  generateNativePynterTestCases(parseErrorTests, 3);
+  generateNativePynterTestCases(tokenizeTests, 3);
+  // apply_in_underlying_python lives in the parser group (src/stdlib/parser.ts), which isn't part
+  // of VARIANT_GROUPS[3] — pass it explicitly, unlike the sibling calls above, so it actually
+  // resolves instead of silently falling back to the default §3 groups.
+  generateNativePynterTestCases(applyTests, 3, groups);
+  // The only table in this file not built entirely around parse()/tokenize() (see
+  // involvesParseFeature in utils.ts) — apply_in_underlying_python has a real CPython equivalent
+  // (sicp.mce), unlike parse()/tokenize() themselves, so it's the one worth comparing.
+  generateCPythonTestCases(applyTests, 3, groups);
 });

@@ -3,7 +3,6 @@ import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
 import { BigIntValue, BoolValue, BuiltinValue, Value } from "../engines/cse/stash";
 import { TypeError } from "../errors";
-import listPrelude from "./list.prelude";
 import { GroupName, minArgMap, Validate } from "./utils";
 
 const listBuiltins = new Map<string, BuiltinValue>();
@@ -33,25 +32,6 @@ class ListBuiltins {
     const list = args[0];
     return { type: "bool", value: list.type === "list" };
   }
-
-  // A helper function to generate a list of a given length
-  @Validate(1, 1, "_gen_list", true)
-  static _gen_list(
-    args: Value[],
-    _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
-  ): Value {
-    const length = args[0];
-    if (length.type !== "bigint") {
-      throw new Error("_gen_list expects a bigint as the first argument");
-    }
-    const list: Value[] = [];
-    for (let i = BigInt(0); i < length.value; i++) {
-      list.push({ type: "none" });
-    }
-    return { type: "list", value: list };
-  }
 }
 for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
   if (typeof ListBuiltins[builtin as keyof typeof ListBuiltins] === "function") {
@@ -65,6 +45,6 @@ for (const builtin of Object.getOwnPropertyNames(ListBuiltins)) {
 }
 export default {
   name: GroupName.LIST,
-  prelude: listPrelude,
+  prelude: "",
   builtins: listBuiltins,
 };

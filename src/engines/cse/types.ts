@@ -15,7 +15,6 @@ export interface StatementSequence {
 }
 
 export enum InstrType {
-  RESET = "Reset",
   WHILE = "WhileInstr",
   FOR = "ForInstr",
   ASSIGNMENT = "Assignment",
@@ -112,10 +111,6 @@ export interface EndOfFunctionBodyInstr extends BaseInstr {
   instrType: InstrType.END_OF_FUNCTION_BODY;
 }
 
-export interface ResetInstr extends BaseInstr {
-  instrType: InstrType.RESET;
-}
-
 export interface PopInstr extends BaseInstr {
   instrType: InstrType.POP;
 }
@@ -139,7 +134,6 @@ export type Instr =
   | BranchInstr
   | EnvInstr
   | EndOfFunctionBodyInstr
-  | ResetInstr
   | PopInstr
   | BoolOpInstr
   | ListAccessInstr
@@ -165,6 +159,9 @@ export function typeTranslator(type: Value["type"]): string {
       return "NoneType";
     case "closure":
       return "function";
+    case "builtin":
+      // Matches CPython's type(print).__name__.
+      return "builtin_function_or_method";
     default:
       return "unknown";
   }
@@ -206,6 +203,12 @@ export function operatorTranslator(operator: TokenType | string) {
       return "or";
     case TokenType.IS:
       return "is";
+    case TokenType.ISNOT:
+      return "is not";
+    case TokenType.IN:
+      return "in";
+    case TokenType.NOTIN:
+      return "not in";
     default:
       return String(operator);
   }

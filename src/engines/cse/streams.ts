@@ -23,6 +23,28 @@ export function createOutputStream(conductor: IRunnerPlugin): WritableContext<st
   return { stream, writer };
 }
 
+export function createBufferedOutputStream(): {
+  context: WritableContext<string>;
+  flush: (conductor: IRunnerPlugin) => void;
+} {
+  let buffer = "";
+  const stream = new WritableStream<string>({
+    write: chunk => {
+      buffer += chunk;
+    },
+  });
+  const writer = stream.getWriter();
+  return {
+    context: { stream, writer },
+    flush: (conductor: IRunnerPlugin) => {
+      if (buffer !== "") {
+        conductor.sendOutput(buffer);
+        buffer = "";
+      }
+    },
+  };
+}
+
 export function createErrorStream(conductor: IRunnerPlugin): WritableContext<ConductorError> {
   const stream = new WritableStream<ConductorError>({
     write: chunk => {
@@ -34,15 +56,36 @@ export function createErrorStream(conductor: IRunnerPlugin): WritableContext<Con
   return { stream, writer };
 }
 
-export const createInputStream = (conductor: IRunnerPlugin): ReadableContext<string> => {
-  const stream = new ReadableStream<string>({
-    async pull(controller) {
-      const input = await conductor.requestInput();
-      controller.enqueue(input);
+export type InputStreamContext = ReadableContext<string> & {
+  /** Sets the prompt to show the user on the next `requestInput()` round-trip, if any. */
+  setNextPrompt: (prompt?: string) => void;
+};
+
+export const createInputStream = (conductor: IRunnerPlugin): InputStreamContext => {
+  let pendingPrompt: string | undefined;
+  const stream = new ReadableStream<string>(
+    {
+      async pull(controller) {
+        const prompt = pendingPrompt;
+        pendingPrompt = undefined;
+        const input = await conductor.requestInput(prompt);
+        controller.enqueue(input);
+      },
     },
-  });
+    // Default highWaterMark of 1 makes the stream eagerly pull() as soon as it's constructed
+    // (before any input() call sets a prompt), firing a phantom requestInput(undefined) and
+    // leaving the real prompt to be used one call late. highWaterMark: 0 makes pull() only run
+    // in direct response to reader.read().
+    { highWaterMark: 0 },
+  );
   const reader = stream.getReader();
-  return { stream, reader };
+  return {
+    stream,
+    reader,
+    setNextPrompt: prompt => {
+      pendingPrompt = prompt;
+    },
+  };
 };
 
 export const displayError = async (
@@ -73,8 +116,13 @@ export const displayOutput = async (context: Context, output: string) => {
   }
 };
 
-export const receiveInput = async (context: Context): Promise<string> => {
+export const receiveInput = async (context: Context, prompt?: string): Promise<string> => {
   if (context.streams.initialised) {
+    // Force out any output already buffered (e.g. earlier print()s in this chunk) so the user
+    // sees it before we block waiting for their answer, rather than it sitting unsent until the
+    // whole chunk finishes.
+    context.streams.flushStdout?.();
+    context.streams.stdin.setNextPrompt(prompt);
     const reader = context.streams.stdin.reader;
     const { value } = await reader.read();
     return value ?? "";

@@ -33,6 +33,7 @@ as follows:
                                     \ \textit{range-args}\ \term{)}\ \term{:}\ \textit{block}                                & \text{for loop}                         \\
                             & |   & \term{break}                                                                             & \text{break statement}                  \\
                             & |   & \term{continue}                                                                          & \text{continue statement}               \\
+                            & |   & \term{global}\ \textit{name}                                                           & \text{global statement}                   \\
                             & |   & \term{nonlocal}\ \textit{name}                                                           & \text{nonlocal statement}               \\
                             & |   & \textit{expression}                                                                      & \text{expression statement}             \\[1mm]
 \textit{range-args}         & ::= & \textit{expression}\ [\ \term{,}\ \textit{expression}\ ]
@@ -61,7 +62,7 @@ as follows:
                             & |   & \textit{expression}\term{[}\textit{expression}\term{]}                                   & \text{list access}                      \\
                             & |   & \term{[}\ \textit{expressions}\ \term{]}                                                 & \text{literal list expression}          \\
                             & |   & \term{(}\ \textit{expression}\ \term{)}                                                  & \text{parenthesised expression}         \\[1mm]
-\textit{binary-operator}    & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%} |\ \term{is} &                                         \\
+\textit{binary-operator}    & ::= & \term{+}\ |\ \term{-}\ |\ \term{*}\ |\ \term{/}\ |\ \term{**}\ |\ \term{\%}\ |\ \term{is}\ |\ \term{is not} &                                         \\
                             & |   & \term{==}\ |\ \term{!=}\ |\ \term{>}\ |\ \term{<}\ |\ \term{>=}\ |\ \term{<=}            & \text{binary operator}                  \\[1mm]
 \textit{unary-operator}     & ::= & \term{not}\ |\ \term{-}\ |\ \term{+}                                                     & \text{unary operator}                   \\[1mm]
 \textit{binary-logical}     & ::= & \term{and}\ |\ \term{or}                                                                 & \text{logical composition symbol}       \\[1mm]

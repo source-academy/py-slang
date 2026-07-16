@@ -25,9 +25,11 @@ export class FeatureNotSupportedError extends Error {
 export class BreakContinueOutsideLoopError extends Error {
   node: ASTNode;
 
-  constructor(node: ASTNode) {
+  constructor(node: ASTNode, kind: "break" | "continue") {
     const tok = node.startToken;
-    super(`Break or continue statement not within a loop (line ${tok.line}, col ${tok.col})`);
+    // Matches CPython's distinct wording for each keyword.
+    const detail = kind === "break" ? "'break' outside loop" : "'continue' not properly in loop";
+    super(`${detail} (line ${tok.line}, col ${tok.col})`);
     this.name = "BreakContinueOutsideLoopError";
     this.node = node;
   }

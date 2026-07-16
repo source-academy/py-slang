@@ -32,7 +32,7 @@ export type Group = {
 
   /**
    * The builtins are primitive built-in values implemented in TypeScript. They are to provide functionalities that are not easily implemented in the required sublanguage of Python,
-   * such as variadic functions in Python §2 (e.g., `linked_list`)
+   * such as variadic functions in Python §2 (e.g., `llist`)
    *
    * They are stored as a map from the name of the built-in value to its corresponding implementation.
    */
@@ -41,7 +41,7 @@ export type Group = {
 
 export const minArgMap = new Map<string, number>();
 
-export function Validate<T extends Value | Promise<Value>>(
+export function Validate<T extends Value | undefined | Promise<Value | undefined>>(
   minArgs: number | null,
   maxArgs: number | null,
   functionName: string,

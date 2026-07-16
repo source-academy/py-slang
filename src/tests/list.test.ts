@@ -1,15 +1,16 @@
-import {
-  MissingRequiredPositionalError,
-  TooManyPositionalArgumentsError,
-  UserError,
-} from "../errors";
+import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
-import { generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("List Tests", () => {
   const listTests: TestCases = {
@@ -28,52 +29,29 @@ describe("List Tests", () => {
       ["list_length(1, 2)", TooManyPositionalArgumentsError, null],
       ["list_length(1)", TypeError, null],
     ],
-    "equal on lists": [
-      ["equal([], [])", true, null],
-      ["equal([1, 2, 3], [1, 2, 3])", true, null],
-      ["equal([1, [2, 3], 4], [1, [2, 3], 4])", true, null],
-      ["equal([1, 2], [2, 1])", false, null],
-      ["equal([1, 2, 3], [1, 2])", false, null],
-      ["equal([1, [2, 3]], [1, [2, 4]])", false, null],
-      ["xs = [10, 20, 30]\nys = [10, 20, 30]\nequal(xs, ys)", true, null],
-      [
-        "xs = build_list(lambda i: [i, i + 1], 3)\nys = build_list(lambda i: [i, i + 1], 3)\nequal(xs, ys)",
-        true,
-        null,
-      ],
-      [
-        "xs = build_list(lambda i: i, 4)\nys = build_list(lambda i: i + 1, 4)\nequal(xs, ys)",
-        false,
-        null,
-      ],
-    ],
-    build_list: [
-      ["build_list(lambda i: i, 0)", [], null],
-      ["build_list(lambda i: i, 5)", [0n, 1n, 2n, 3n, 4n], null],
-      ["build_list(lambda i: i * i, 5)", [0n, 1n, 4n, 9n, 16n], null],
-      ["build_list(lambda i: i % 2 == 0, 4)", [true, false, true, false], null],
-      ["build_list(lambda i: str(i), 3)", ["0", "1", "2"], null],
-      [
-        "build_list(lambda i: [i, i + 1], 3)",
-        [
-          [0n, 1n],
-          [1n, 2n],
-          [2n, 3n],
-        ],
-        null,
-      ],
-      ["build_list(lambda i: i, -1)", UserError, null],
+    "structural == on lists": [
+      ["[] == []", true, null],
+      ["[1, 2, 3] == [1, 2, 3]", true, null],
+      ["[1, [2, 3], 4] == [1, [2, 3], 4]", true, null],
+      ["[1, 2] == [2, 1]", false, null],
+      ["[1, 2, 3] == [1, 2]", false, null],
+      ["[1, [2, 3]] == [1, [2, 4]]", false, null],
+      ["xs = [10, 20, 30]\nys = [10, 20, 30]\nxs == ys", true, null],
+      ["xs = [[0, 1], [1, 2], [2, 3]]\nys = [[0, 1], [1, 2], [2, 3]]\nxs == ys", true, null],
+      ["xs = [0, 1, 2, 3]\nys = [1, 2, 3, 4]\nxs == ys", false, null],
     ],
     "array behavior with list helpers": [
       ["xs = [10, 20, 30]\nxs[1]", 20n, null],
       ["xs = [10, 20, 30]\nxs[1] = 99\nxs", [10n, 99n, 30n], null],
       ["xs = [1, 2, 3]\nlist_length(xs)", 3n, null],
       ["xs = [1, 2, 3]\nxs[0] = 100\nlist_length(xs)", 3n, null],
-      ["xs = build_list(lambda i: i + 1, 4)\nxs", [1n, 2n, 3n, 4n], null],
-      ["xs = build_list(lambda i: i + 1, 4)\nxs[2]", 3n, null],
-      ["xs = build_list(lambda i: i + 1, 4)\nxs[2] = 42\nxs", [1n, 2n, 42n, 4n], null],
+      ["xs = [1, 2, 3, 4]\nxs", [1n, 2n, 3n, 4n], null],
+      ["xs = [1, 2, 3, 4]\nxs[2]", 3n, null],
+      ["xs = [1, 2, 3, 4]\nxs[2] = 42\nxs", [1n, 2n, 42n, 4n], null],
     ],
   };
 
   generateTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
+  generateNativePynterTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
+  generateCPythonTestCases(listTests, 3, [misc, math, linkedList, pairmutator, stream, list]);
 });

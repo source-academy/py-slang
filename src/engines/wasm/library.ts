@@ -2,7 +2,6 @@ import { i32, i64, wasm, WasmCall, WasmInstruction } from "@sourceacademy/wasm-u
 import { Group, GroupName } from "../../stdlib/utils";
 import {
   ARITY_FX,
-  BOOLISE_FX,
   ERROR_MAP,
   GEN_LIST_FX,
   GET_LEX_ADDR_FX,
@@ -25,7 +24,6 @@ import {
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
-  TYPE_TAG,
 } from "./runtime";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
@@ -73,7 +71,6 @@ const miscLib: LibFuncType[] = [
   funcHelper("_gen_list", 1).body(x => wasm.call(GEN_LIST_FX).args(x)),
   funcHelper("arity", 1).body(x => wasm.call(ARITY_FX).args(x)),
 
-  funcHelper("bool", 1).body(x => [i32.const(TYPE_TAG.BOOL), wasm.call(BOOLISE_FX).args(x)]),
   funcHelper("is_int", 1).body(x => wasm.call(IS_INT_FX).args(x)),
   funcHelper("is_float", 1).body(x => wasm.call(IS_FLOAT_FX).args(x)),
   funcHelper("is_complex", 1).body(x => wasm.call(IS_COMPLEX_FX).args(x)),
@@ -106,7 +103,8 @@ const linkedListLib: LibFuncType[] = [
 
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
   ]),
-  funcHelper("linked_list", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
+  funcHelper("llist", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
+  funcHelper("is_llist", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
 ];
 
 const pairMutatorLib: LibFuncType[] = [

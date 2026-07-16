@@ -4,8 +4,9 @@ export {
   PyCseEvaluator3,
   PyCseEvaluator4,
 } from "./PyCseEvaluator";
-export { PySvmlEvaluator } from "./PySvmlEvaluator";
-export { PySvmlSinterEvaluator } from "./PySvmlSinterEvaluator";
+export { PyPvmlEvaluator } from "./PyPvmlEvaluator";
+export { PyPvmlPynterEvaluator } from "./PyPvmlPynterEvaluator";
+export { PyStepperEvaluator1, PyStepperEvaluator2 } from "./PyStepperEvaluator";
 export {
   PyWasmEvaluator1,
   PyWasmEvaluator2,

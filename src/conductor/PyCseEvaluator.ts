@@ -1,11 +1,13 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Context } from "../engines/cse/context";
+import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
+import { Stash } from "../engines/cse/stash";
 import {
+  createBufferedOutputStream,
   createErrorStream,
   createInputStream,
-  createOutputStream,
   destroyStreams,
   displayError,
 } from "../engines/cse/streams";
@@ -19,6 +21,8 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
+import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -33,12 +37,22 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
+  private readonly preludeText: string;
   private readonly ensurePreludesLoaded: () => Promise<void>;
+  private readonly csePlugin: CseMachinePlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
+    this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
+
+    // Cast bridges the IPlugin type difference between this repo's (local/portal)
+    // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
+    // use the same published conductor, the cast can be removed.
+    this.csePlugin = conductor.registerPlugin(
+      CseMachinePlugin as never,
+    ) as unknown as CseMachinePlugin;
 
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
@@ -47,18 +61,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     }
 
     this.ensurePreludesLoaded = once(async () => {
-      let prelude = "";
-      for (const group of this.groups) {
-        if (group.prelude) {
-          prelude += group.prelude + "\n";
-        }
+      if (this.preludeText.trim()) {
+        const ast = parse(this.preludeText + "\n");
+        await evaluate(this.preludeText + "\n", ast, this.context, {
+          isPrelude: true,
+          variant: this.variant,
+          groups: [],
+        });
       }
-      const ast = parse(prelude + "\n");
-      await evaluate(prelude, ast, this.context, {
-        isPrelude: true,
-        variant: this.variant,
-        groups: [],
-      });
       if (this.context.errors.length > 0) {
         throw this.context.errors;
       }
@@ -66,12 +76,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
+    const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
     try {
       this.context.streams = {
         initialised: true,
-        stdout: createOutputStream(this.conductor),
+        stdout,
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
+        flushStdout: () => flushOutput(this.conductor),
       };
 
       await this.ensurePreludesLoaded();
@@ -90,11 +102,50 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         throw errors;
       }
 
-      await evaluate(script, ast, this.context, {
-        variant: this.variant,
-        groups: this.groups,
-      });
+      const control = new Control(ast);
+      const stash = new Stash();
+      this.context.control = control;
+      this.context.stash = stash;
+      // this.context persists across evaluateChunk calls; reset per-run state that the
+      // interpreter accumulates so a prior run's breakpoint()/changepoint steps don't leak
+      // into this one.
+      this.context.runtime.breakpointSteps = [];
+      this.context.runtime.changepointSteps = [];
+      this.context.runtime.break = false;
+
+      // CSE chapters (3+): collect snapshots up to the step cap, then stop.
+      // Output produced after the step cap is not emitted — that's intentional.
+      // Chapters 1-2: run to completion via the generator (maxSnapshots=0 → no
+      // snapshots collected, CSE tab never appears) so stdout/errors are emitted.
+      if (this.variant >= 3) {
+        const configRaw = await this.conductor.requestFile("/__cse_config__");
+        let maxSnapshots = 1000;
+        if (configRaw) {
+          try {
+            maxSnapshots = (JSON.parse(configRaw) as { stepLimit?: number }).stepLimit ?? 1000;
+          } catch {
+            // malformed config — fall back to default step limit
+          }
+        }
+
+        const { snapshots, breakpointSteps } = await collectSnapshots(
+          this.context,
+          control,
+          stash,
+          100000,
+          -1,
+          this.variant,
+          script,
+          maxSnapshots,
+        );
+        flushOutput(this.conductor);
+        this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
+      } else {
+        await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+        flushOutput(this.conductor);
+      }
     } catch (e) {
+      flushOutput(this.conductor);
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(
         errors.map(e => {

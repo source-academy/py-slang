@@ -55,8 +55,8 @@ const mooLexer = moo.compile({
   ws: /[ \t]+/,
   comment: /#[^\r\n]*/,
 
-  number_complex: /(?:\d+\.?\d*|\.\d+)[jJ]/,
-  number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?/,
+  number_complex: /(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[jJ]/,
+  number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+/,
   number_hex: /0[xX][0-9a-fA-F]+/,
   number_oct: /0[oO][0-7]+/,
   number_bin: /0[bB][01]+/,
@@ -261,9 +261,9 @@ interface PythonLexerState extends moo.LexerState {
   pos: number;
 }
 
-class PythonLexer implements moo.Lexer {
-  private tokens: moo.Token[] = [];
-  private pos = 0;
+export class PythonLexer implements moo.Lexer {
+  tokens: moo.Token[] = [];
+  pos = 0;
 
   reset(data?: string, state?: moo.LexerState): this {
     if (state && "pos" in state && typeof state.pos === "number") {

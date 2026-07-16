@@ -5,6 +5,7 @@ import { NoBreakContinueValidator } from "./features/no-break-continue";
 import { NoIsOperatorValidator } from "./features/no-is-operator";
 import { NoListsValidator } from "./features/no-lists";
 import { NoLoopsValidator } from "./features/no-loops";
+import { NoGlobalValidator } from "./features/no-global";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { NoRestParamsValidator } from "./features/no-rest-params";
@@ -21,6 +22,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoLoopsValidator,
     createNoReassignmentValidator(),
     NoBreakContinueValidator,
+    NoGlobalValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
     NoSpreadValidator,
@@ -30,7 +32,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
 }
 
 /**
- * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments, no is operator.
+ * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no global, no nonlocal, no rest params, no annotated assignments, no is operator.
  * Linked-list library available (None as linked list expression).
  */
 export function makeChapter2Validators(): FeatureValidator[] {
@@ -39,6 +41,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoLoopsValidator,
     createNoReassignmentValidator(),
     NoBreakContinueValidator,
+    NoGlobalValidator,
     NoNonlocalValidator,
     NoRestParamsValidator,
     NoSpreadValidator,
