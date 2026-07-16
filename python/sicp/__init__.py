@@ -13,7 +13,7 @@ The library is assembled from submodules, each mirroring a group in
     sicp.math          math.ts          math_pi, math_sqrt, ... (the math_* names)
     sicp.linked_list   linked-list.ts   pair, head, tail, llist, map, filter, ...
     sicp.pair_mutators pairmutator.ts   set_head, set_tail
-    sicp.list          list.ts          is_list, list_length, equal, build_list
+    sicp.list          list.ts          is_list, list_length, equal
     sicp.stream        stream.ts        stream, stream_map, integers_from, ...
     sicp.mce           (mce group)      apply_in_underlying_python
 

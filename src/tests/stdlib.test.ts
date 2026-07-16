@@ -15,6 +15,7 @@ import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
 import {
+  generateCPythonTestCases,
   generateNativePynterTestCases,
   generatePvmlInBrowserTestCases,
   generateTestCases,
@@ -980,6 +981,8 @@ describe("Standard Library Tests", () => {
     // miscTests' §1-specific restrictions can be checked directly at §1.
     generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
     generatePvmlInBrowserTestCases(miscTests, 1, [misc, math]);
+    generateCPythonTestCases(mathTests, 1);
+    generateCPythonTestCases(miscTests, 1);
   });
 
   describe("Chapter 3 Builtins", () => {

@@ -65,13 +65,12 @@ import {
  * PRIMITIVE_FUNCTIONS entry of its own, so borrowing its stub slot for
  * `repr` doesn't take anything away from a real feature.
  *
- * `is_integer`/`is_float`/`is_complex`/`_gen_list` have no Source-standard-
- * library equivalent (Source's is_number() doesn't distinguish int/float,
- * Source has no complex numbers, and nothing builds a None-filled array), so
- * they were added as new native primitives appended to the end of Pynter's
- * dispatch table (see SIVMFN_PRIMITIVE_COUNT in
- * pynter/vm/include/pynter/internal_fn.h) rather than reused from an
- * existing slot.
+ * `is_integer`/`is_float`/`is_complex` have no Source-standard-library
+ * equivalent (Source's is_number() doesn't distinguish int/float, and Source
+ * has no complex numbers), so they were added as new native primitives
+ * appended to the end of Pynter's dispatch table (see
+ * SIVMFN_PRIMITIVE_COUNT in pynter/vm/include/pynter/internal_fn.h) rather
+ * than reused from an existing slot.
  *
  * `is_list`/`list_length` (list.ts, over Python list literals, which PVML
  * represents as native's raw arrays) are deliberately mapped to native's
@@ -104,7 +103,6 @@ import {
 export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["print", 5],
   ["display", 5], // Alias for print
-  ["_gen_list", 95],
   ["arity", 96],
   ["error", 10],
   ["head", 14],
@@ -170,8 +168,8 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   // The Python `math` module functions below have no Source/native-Pynter
   // equivalent at all (Pynter's real math_* table is Source's — i.e.
   // JS Math.* — subset, matching what's mapped above this comment); same
-  // "no native counterpart" situation as is_integer/is_float/_gen_list/
-  // real/imag/complex/parse/tokenize above, so browser-pathway-only indices
+  // "no native counterpart" situation as is_integer/is_float/real/imag/
+  // complex/parse/tokenize above, so browser-pathway-only indices
   // past Pynter's real dispatch table, no native Pynter C-side change.
   ["math_degrees", 104],
   ["math_erf", 105],
@@ -196,8 +194,6 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_lgamma", 124],
   ["math_radians", 125],
   ["time_time", 126],
-  // `print_llist` has no native Pynter equivalent yet (unlike the slots above, this index is not
-  // backed by pynter/vm/src/primitives.c) -- added the same way is_integer/is_float/is_complex/
   // real/imag/complex/parse/tokenize/the math_* additions above were, as a new primitive appended
   // past native's own table, so this only backs py-slang's own local TS PVMLInterpreter until a
   // matching entry lands in the pynter repo.
@@ -651,14 +647,6 @@ export function executePrimitive(
 
     case 94: // is_complex
       return args[0] instanceof PyComplexNumber;
-
-    case 95: {
-      // _gen_list
-      if (args.length !== 1)
-        throw new MissingRequiredPositionalError("_gen_list() takes exactly 1 argument");
-      const [n] = assertNumericArgs(args, "_gen_list");
-      return { type: "array", elements: new Array(n).fill(null) };
-    }
 
     case 96: {
       // arity — mirrors CSE's arity() (misc.ts): for a closure, the number

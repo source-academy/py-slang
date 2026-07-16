@@ -9,6 +9,7 @@ import misc from "../stdlib/misc";
 import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import {
+  generateCPythonTestCases,
   generateNativePynterTestCases,
   generatePvmlInBrowserTestCases,
   generateTestCases,
@@ -243,4 +244,5 @@ result`,
     pairmutator,
     stream,
   ]);
+  generateCPythonTestCases(pairmutatorTests, 3, [misc, math, linkedList, pairmutator, stream]);
 });

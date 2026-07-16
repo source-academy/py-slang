@@ -8,6 +8,7 @@ import linkedList from "../stdlib/linked-list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import {
+  generateCPythonTestCases,
   generateNativePynterTestCases,
   generatePvmlInBrowserTestCases,
   generateTestCases,
@@ -167,4 +168,5 @@ describe("Linked List Tests", () => {
   // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so this
   // runs at the table's own nominal §2, matching generateTestCases() above.
   generatePvmlInBrowserTestCases(linkedListTests, 2, [misc, math, linkedList]);
+  generateCPythonTestCases(linkedListTests, 3, [misc, math, linkedList]);
 });

@@ -95,8 +95,9 @@ def map(f, xs):
 
 
 def build_llist(fun, n):
-    if n < 0:
-        error("build_llist expects a nonnegative length, but encountered", n)
+    # py-slang's own build_llist (linked-list.prelude.ts) does not validate n >= 0 -- for any
+    # n <= 0, range(n - 1, -1, -1) is empty and this silently returns None, matching that. Found
+    # by the CPython test mode (issue #224): this used to raise instead.
     result = None
     for i in range(n - 1, -1, -1):
         result = pair(fun(i), result)

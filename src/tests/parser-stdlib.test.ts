@@ -7,6 +7,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import {
+  generateCPythonTestCases,
   generateNativePynterTestCases,
   generatePvmlInBrowserTestCases,
   generateTestCases,
@@ -701,4 +702,9 @@ describe("Parser Stdlib Tests", () => {
   generatePvmlInBrowserTestCases(parseErrorTests, 4, groups);
   generatePvmlInBrowserTestCases(tokenizeTests, 4, groups);
   generatePvmlInBrowserTestCases(applyTests, 4, groups);
+
+  // The only table in this file not built entirely around parse()/tokenize() (see
+  // involvesParseFeature in utils.ts) — apply_in_underlying_python has a real CPython equivalent
+  // (sicp.mce), unlike parse()/tokenize() themselves, so it's the one worth comparing.
+  generateCPythonTestCases(applyTests, 3, groups);
 });

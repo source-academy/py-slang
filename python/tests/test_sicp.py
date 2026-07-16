@@ -33,8 +33,7 @@ def test_pair_mutation():
 
 def test_lists_and_equal():
     assert is_list([1, 2, 3]) and not is_list(None)
-    assert list_length(build_list(lambda i: i * i, 4)) == 4
-    assert build_list(lambda i: i, 3) == [0, 1, 2]
+    assert list_length([1, 4, 9, 16]) == 4
     assert equal(llist(1, llist(2, 3)), llist(1, llist(2, 3)))
     assert not equal(llist(1, 2), llist(1, 3))
 
@@ -42,7 +41,9 @@ def test_lists_and_equal():
 def test_streams():
     assert eval_stream(integers_from(1), 4) == llist(1, 2, 3, 4)
     assert stream_ref(integers_from(10), 5) == 15
-    assert eval_stream(stream_map(lambda x: x * x, integers_from(1)), 3) == llist(1, 4, 9)
+    assert eval_stream(stream_map(lambda x: x * x, integers_from(1)), 3) == llist(
+        1, 4, 9
+    )
     assert is_stream(enum_stream(1, 3))
 
 
@@ -93,7 +94,9 @@ def test_misc_and_math():
 if __name__ == "__main__":
     import traceback
 
-    tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    tests = [
+        v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)
+    ]
     failures = 0
     for t in tests:
         try:
