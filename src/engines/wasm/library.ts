@@ -104,7 +104,6 @@ const linkedListLib: LibFuncType[] = [
     wasm.call(GET_LIST_ELEMENT_FX).args(x, wasm.call(MAKE_INT_FX).args(i64.const(1))),
   ]),
   funcHelper("llist", 0, false, true).body(x => wasm.call(MAKE_LINKED_LIST_FX).args(x)),
-  funcHelper("is_llist", 1).body(x => wasm.call(IS_LINKED_LIST_FX).args(x)),
 ];
 
 const pairMutatorLib: LibFuncType[] = [

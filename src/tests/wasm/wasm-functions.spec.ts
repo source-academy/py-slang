@@ -99,7 +99,7 @@ f()
 `;
 
     expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
-      new Error("Name x is used prior to nonlocal declaration!"),
+      expect.any(ResolverErrors.ScopeConflictError),
     );
   });
 
