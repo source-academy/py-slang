@@ -343,12 +343,12 @@ describe("module interop conversions", () => {
       const roundTripped = await pythonToModule(context, "", undefined, asPython);
 
       expect(roundTripped.type).toBe(DataType.PAIR);
-      await expect(
-        evaluator.pair_head(roundTripped as TypedValue<DataType.PAIR>),
-      ).resolves.toEqual({ type: DataType.NUMBER, value: 1 });
-      await expect(
-        evaluator.pair_tail(roundTripped as TypedValue<DataType.PAIR>),
-      ).resolves.toEqual({ type: DataType.NUMBER, value: 2 });
+      await expect(evaluator.pair_head(roundTripped as TypedValue<DataType.PAIR>)).resolves.toEqual(
+        { type: DataType.NUMBER, value: 1 },
+      );
+      await expect(evaluator.pair_tail(roundTripped as TypedValue<DataType.PAIR>)).resolves.toEqual(
+        { type: DataType.NUMBER, value: 2 },
+      );
     });
 
     test("wraps Python builtins as module closures", async () => {
