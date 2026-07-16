@@ -65,7 +65,7 @@ export const IS_PAIR_FX = wasm
   );
 
 export const MAKE_LINKED_LIST_FX = wasm
-  .func("$_make_linked_list")
+  .func("$_make_llist")
   .params({ $tag: i32, $val: i64 })
   .locals({ $i: i32, $acc_tag: i32, $acc_val: i64, $elem_tag: i32, $elem_val: i64 })
   .results(i32, i64)

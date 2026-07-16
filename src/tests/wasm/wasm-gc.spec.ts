@@ -638,7 +638,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
       groups: [linkedList],
@@ -661,7 +661,7 @@ def reverse(xs):
         return None
     return append(reverse(tail(xs)), pair(head(xs), None))
 
-reverse(linked_list(${[...Array(50).keys()].join(", ")}))
+reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
     await expect(
       compileToWasmAndRun(pythonCode, false, { disableGC: true, groups: [linkedList] }),

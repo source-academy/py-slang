@@ -106,8 +106,8 @@ describe("Linked list tests", () => {
   const compileWithLinkedList = (pythonCode: string) =>
     compileToWasmAndRun(pythonCode, true, { groups: [linkedList, pairMutator] });
 
-  it("linked_list constructs a linked list from a Python list", async () => {
-    const pythonCode = `head(tail(linked_list(1, 2, 3)))`;
+  it("llist constructs a linked list from a Python list", async () => {
+    const pythonCode = `head(tail(llist(1, 2, 3)))`;
     const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("2");
@@ -115,7 +115,7 @@ describe("Linked list tests", () => {
 
   it("set_head mutates linked list", async () => {
     const pythonCode = `
-l = linked_list(10, 20, 30)
+l = llist(10, 20, 30)
 set_head(l, 99)
 head(l)
 `;
@@ -138,29 +138,29 @@ head(l)
     expect(renderedResult).toBe("False");
   });
 
-  it("is_linked_list identifies linked list correctly", async () => {
-    const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+  it("is_llist identifies linked list correctly", async () => {
+    const pythonCode = `is_llist(llist(1, 2, 3))`;
     const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
-  it("is_linked_list identifies linked lists created with nested pairs", async () => {
-    const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, None))))`;
+  it("is_llist identifies linked lists created with nested pairs", async () => {
+    const pythonCode = `is_llist(pair(1, pair(2, pair(3, None))))`;
     const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
-  it("is_linked_list identifies non-linked lists correctly", async () => {
-    const pythonCode = `is_linked_list([1, 2, 3])`;
+  it("is_llist identifies non-linked lists correctly", async () => {
+    const pythonCode = `is_llist([1, 2, 3])`;
     const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
-  it("is_linked_list identifies non-linked lists created with pairs correctly", async () => {
-    const pythonCode = `is_linked_list(pair(1, pair(2, pair(3, 4))))`;
+  it("is_llist identifies non-linked lists created with pairs correctly", async () => {
+    const pythonCode = `is_llist(pair(1, pair(2, pair(3, 4))))`;
     const { rawResult, renderedResult } = await compileWithLinkedList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");

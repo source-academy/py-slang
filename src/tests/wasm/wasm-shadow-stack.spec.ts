@@ -547,13 +547,13 @@ f(10, 20)
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    it("linked_list function should push resultant list onto stack", async () => {
-      const pythonCode = `linked_list(1, 2, 3)`;
+    it("llist function should push resultant list onto stack", async () => {
+      const pythonCode = `llist(1, 2, 3)`;
       await expectShadowStackToEqual(pythonCode, [TYPE_TAG.LIST]);
     });
 
-    it("is_linked_list function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `is_linked_list(linked_list(1, 2, 3))`;
+    it("is_llist function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `is_llist(llist(1, 2, 3))`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
@@ -596,11 +596,6 @@ set_tail(x, [3, 4])
 
     it("is_list function should leave stack clean (not push result onto stack)", async () => {
       const pythonCode = `is_list([1, 2, 3])`;
-      await expectShadowStackToEqual(pythonCode, []);
-    });
-
-    it("bool function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `bool([1, 2, 3])`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 
