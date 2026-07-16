@@ -10,8 +10,17 @@ import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
-import { BuiltinValue, Value } from "./stash";
+import { BuiltinValue, ListValue, Value } from "./stash";
 import { ModuleFunctionGenerator } from "./types";
+
+/**
+ * Marks a freshly-built list Value as a genuine Python list literal (as opposed to a value built by
+ * pair()/llist(), or one round-tripped from a module's DataType.PAIR) - see the "list" case in
+ * pythonToModule for why this distinction can't be made from shape alone. A side-tag rather than a
+ * shape change so nothing else that already treats list literals as a flat array (indexing, len(),
+ * iteration, etc.) needs to change.
+ */
+export const listLiteralValues = new WeakSet<ListValue>();
 
 export class ModuleNotFoundError extends RuntimeSourceError {
   constructor(public readonly moduleName: string) {
@@ -56,16 +65,35 @@ export async function pythonToModule(
       return { type: DataType.CONST_STRING, value: value.value };
     case "none":
       return { type: DataType.EMPTY_LIST, value: null };
-    case "list":
-      const array = await context.evaluator.array_make(DataType.VOID, value.value.length);
-      for (let i = 0; i < value.value.length; i++) {
-        await context.evaluator.array_set(
-          array,
-          i,
-          await pythonToModule(context, code, command, value.value[i]),
-        );
+    case "list": {
+      // A list literal (tagged at construction in the InstrType.LIST microcode) is unambiguously a
+      // Source list, of any length including 2 - fold it into a proper PAIR/EMPTY_LIST chain, or
+      // list-typed module parameters (e.g. sound's consecutively/simultaneously/stacking_adsr
+      // envelopes) would silently see zero (or the wrong) elements instead of the list the student
+      // actually wrote. The length !== 2 check is a defensive fallback only - pair()/llist()/module
+      // round-trips always produce exactly 2-element links, so an untagged value should never
+      // actually hit it, but building a chain is still the safer default if one somehow did.
+      if (listLiteralValues.has(value) || value.value.length !== 2) {
+        let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
+        for (let i = value.value.length - 1; i >= 0; i--) {
+          chain = await context.evaluator.pair_make(
+            await pythonToModule(context, code, command, value.value[i]),
+            chain,
+          );
+        }
+        return chain;
       }
-      return array;
+      // Otherwise this came from pair()/llist(), or a module PAIR round-tripped through
+      // moduleToPython - both always produce exactly 2-element links, reconstructed here as a single
+      // pair_make(head, tail) without requiring the chain to terminate in None, since a module PAIR
+      // need not be a proper list (e.g. sound's Sound is (wavesPair, duration), a dotted pair whose
+      // second element is a number, not another list link).
+      const [head, tail] = value.value;
+      return context.evaluator.pair_make(
+        await pythonToModule(context, code, command, head),
+        await pythonToModule(context, code, command, tail),
+      );
+    }
     case "opaque":
       return { type: DataType.OPAQUE, value: value.value as OpaqueIdentifier };
     case "builtin":

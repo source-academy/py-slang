@@ -8,8 +8,8 @@ import {
 import { ExprNS, StmtNS } from "../ast-types";
 import { Closure } from "../engines/cse/closure";
 import { Context } from "../engines/cse/context";
-import { moduleToPython, pythonToModule } from "../engines/cse/modules";
-import { BuiltinValue, Value } from "../engines/cse/stash";
+import { listLiteralValues, moduleToPython, pythonToModule } from "../engines/cse/modules";
+import { BuiltinValue, ListValue, Value } from "../engines/cse/stash";
 import { toPythonAst } from "./utils";
 
 type StoredClosure = {
@@ -226,8 +226,12 @@ describe("module interop conversions", () => {
       });
     });
 
-    test("converts Python lists to module arrays recursively", async () => {
-      const { context } = makeContext();
+    test("converts a Python list literal of any length (other than 2) into a proper PAIR/EMPTY_LIST chain", async () => {
+      // Regression test: pair()/llist()/module round-trips always produce exactly 2-element links,
+      // so any other length can only be a list literal (visitListExpr) - it must become a genuine
+      // Source list, not an ARRAY, or list-typed module parameters (e.g. sound's consecutively)
+      // would silently see zero elements instead of the list the student actually wrote.
+      const { context, evaluator } = makeContext();
       const pythonList: Value = {
         type: "list",
         value: [
@@ -237,12 +241,114 @@ describe("module interop conversions", () => {
         ],
       };
 
-      const moduleArray = await pythonToModule(context, "", undefined, pythonList);
+      const moduleList = await pythonToModule(context, "", undefined, pythonList);
 
-      expect(moduleArray.type).toBe(DataType.ARRAY);
-      await expect(moduleToPython(context, "", undefined, moduleArray)).resolves.toEqual(
-        pythonList,
+      expect(moduleList.type).toBe(DataType.PAIR);
+      let current = moduleList as TypedValue<DataType>;
+      const elements: TypedValue<DataType>[] = [];
+      while (current.type === DataType.PAIR) {
+        elements.push(await evaluator.pair_head(current));
+        current = await evaluator.pair_tail(current);
+      }
+      expect(current.type).toBe(DataType.EMPTY_LIST);
+      expect(elements).toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        expect.objectContaining({ type: DataType.PAIR }),
+        { type: DataType.BOOLEAN, value: false },
+      ]);
+
+      // The single-element nested list is itself a proper 1-element chain, not an ARRAY.
+      const nested = elements[1] as TypedValue<DataType.PAIR>;
+      await expect(evaluator.pair_head(nested)).resolves.toEqual({
+        type: DataType.CONST_STRING,
+        value: "nested",
+      });
+      await expect(evaluator.pair_tail(nested)).resolves.toEqual({
+        type: DataType.EMPTY_LIST,
+        value: null,
+      });
+    });
+
+    test("converts an empty Python list literal into EMPTY_LIST, not an empty ARRAY", async () => {
+      const { context } = makeContext();
+      await expect(
+        pythonToModule(context, "", undefined, { type: "list", value: [] }),
+      ).resolves.toEqual({ type: DataType.EMPTY_LIST, value: null });
+    });
+
+    test("a 2-element list literal (tagged via listLiteralValues) becomes a proper chain, not a raw dotted pair", async () => {
+      // Regression test: exactly 2 elements is the one length that's genuinely ambiguous between a
+      // list literal and a dotted pair. The InstrType.LIST microcode tags every literal it builds, so
+      // this simulates that tag directly (this test doesn't go through the actual interpreter).
+      const { context, evaluator } = makeContext();
+      const literal: ListValue = {
+        type: "list",
+        value: [
+          { type: "number", value: 1 },
+          { type: "number", value: 2 },
+        ],
+      };
+      listLiteralValues.add(literal);
+
+      const moduleList = await pythonToModule(context, "", undefined, literal);
+
+      expect(moduleList.type).toBe(DataType.PAIR);
+      const pair = moduleList as TypedValue<DataType.PAIR>;
+      await expect(evaluator.pair_head(pair)).resolves.toEqual({ type: DataType.NUMBER, value: 1 });
+      const tail = await evaluator.pair_tail(pair);
+      expect(tail.type).toBe(DataType.PAIR);
+      await expect(evaluator.pair_head(tail as TypedValue<DataType.PAIR>)).resolves.toEqual({
+        type: DataType.NUMBER,
+        value: 2,
+      });
+      await expect(evaluator.pair_tail(tail as TypedValue<DataType.PAIR>)).resolves.toEqual({
+        type: DataType.EMPTY_LIST,
+        value: null,
+      });
+    });
+
+    test("an untagged 2-element list (e.g. a module PAIR round-tripped through Python) still becomes a raw dotted pair", async () => {
+      const { context, evaluator } = makeContext();
+      // Not tagged in listLiteralValues, matching what moduleToPython produces for a DataType.PAIR.
+      const dotted: Value = {
+        type: "list",
+        value: [
+          { type: "number", value: 1 },
+          { type: "number", value: 2 },
+        ],
+      };
+
+      const moduleValue = await pythonToModule(context, "", undefined, dotted);
+
+      expect(moduleValue.type).toBe(DataType.PAIR);
+      const pair = moduleValue as TypedValue<DataType.PAIR>;
+      await expect(evaluator.pair_head(pair)).resolves.toEqual({ type: DataType.NUMBER, value: 1 });
+      // The tail is the raw second element directly, not another PAIR link.
+      await expect(evaluator.pair_tail(pair)).resolves.toEqual({ type: DataType.NUMBER, value: 2 });
+    });
+
+    test("round-trips a dotted pair (tail not None-terminated) back into a module PAIR, not an ARRAY", async () => {
+      // Regression test: a module (e.g. sound's Sound, (wavesPair, duration)) may return a PAIR
+      // whose tail is arbitrary data rather than another list link. moduleToPython turns that into
+      // a 2-element Python list; passing it back into another module call must reconstruct a PAIR
+      // (via pair_make), not an ARRAY, or ptm(mtp(pairObject)) isn't a fixpoint for anything that
+      // isn't a None-terminated chain.
+      const { context, evaluator } = makeContext();
+      const pair = await evaluator.pair_make(
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
       );
+
+      const asPython = await moduleToPython(context, "", undefined, pair);
+      const roundTripped = await pythonToModule(context, "", undefined, asPython);
+
+      expect(roundTripped.type).toBe(DataType.PAIR);
+      await expect(
+        evaluator.pair_head(roundTripped as TypedValue<DataType.PAIR>),
+      ).resolves.toEqual({ type: DataType.NUMBER, value: 1 });
+      await expect(
+        evaluator.pair_tail(roundTripped as TypedValue<DataType.PAIR>),
+      ).resolves.toEqual({ type: DataType.NUMBER, value: 2 });
     });
 
     test("wraps Python builtins as module closures", async () => {

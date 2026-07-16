@@ -26,9 +26,9 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
-import { loadModules, moduleToPython } from "./modules";
+import { listLiteralValues, loadModules, moduleToPython } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
-import { Stash, Value } from "./stash";
+import { ListValue, Stash, Value } from "./stash";
 import { displayError } from "./streams";
 import {
   AppInstr,
@@ -1086,7 +1086,12 @@ const cmdEvaluators: CmdEvaluators = {
         elements.unshift(element);
       }
     }
-    stash.push({ type: "list", value: elements });
+    const listValue: Value = { type: "list", value: elements };
+    // Tag as a genuine list literal so module interop (pythonToModule) can tell it apart from a
+    // pair()/llist()-built value or a module PAIR round-tripped through Python, none of which reach
+    // this instruction - see listLiteralValues' definition in modules.ts.
+    listLiteralValues.add(listValue as ListValue);
+    stash.push(listValue);
   },
 
   [InstrType.WHILE]: function (

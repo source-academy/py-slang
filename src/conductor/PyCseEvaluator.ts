@@ -183,7 +183,8 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     { type: DataType; elements: TypedValue<DataType>[] }
   >();
   private closureMap = new Map<
-    TypedValue<DataType.CLOSURE>,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ClosureIdentifier<any>,
     {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       sig: IFunctionSignature<any, any>;
@@ -353,26 +354,26 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
       type: DataType.CLOSURE,
       value: this.uniqueId++ as ClosureIdentifier<Ret>,
     };
-    this.closureMap.set(closureValue, { sig, func, dependsOn });
+    this.closureMap.set(closureValue.value, { sig, func, dependsOn });
     return Promise.resolve(closureValue);
   }
   closure_is_vararg(c: TypedValue<DataType.CLOSURE>): Promise<boolean> {
-    return Promise.resolve(this.closureMap.get(c)?.isVararg ?? false);
+    return Promise.resolve(this.closureMap.get(c.value)?.isVararg ?? false);
   }
   closure_arity(c: TypedValue<DataType.CLOSURE>): Promise<number> {
-    return Promise.resolve(this.closureMap.get(c)?.sig.args.length ?? 0);
+    return Promise.resolve(this.closureMap.get(c.value)?.sig.args.length ?? 0);
   }
   closure_call<T extends DataType>(
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
     returnType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
-    const value = this.closureMap.get(c)?.func(...args);
+    const value = this.closureMap.get(c.value)?.func(...args);
     if (value === undefined) {
       throw new Error(`Invalid closure identifier: ${c.value}`);
     }
     if (c.value.__ret !== returnType) {
-      const expectedReturnType = this.closureMap.get(c)?.sig.returnType;
+      const expectedReturnType = this.closureMap.get(c.value)?.sig.returnType;
       if (expectedReturnType !== returnType) {
         throw new Error(`Expected return type ${returnType}, got ${expectedReturnType}`);
       }
@@ -383,14 +384,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator implements IDataHandler
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
-    return this.closureMap.get(c)?.func(...args) as AsyncGenerator<
+    return this.closureMap.get(c.value)?.func(...args) as AsyncGenerator<
       void,
       TypedValue<NoInfer<T>>,
       undefined
     >;
   }
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
-    const closure = this.closureMap.get(c);
+    const closure = this.closureMap.get(c.value);
     if (!closure) {
       throw new Error(`Invalid closure identifier: ${c.value}`);
     }
