@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { operatorTranslator } from "../engines/cse/types";
+import { operatorTranslator, typeTranslator } from "../engines/cse/types";
 import { Token } from "../tokenizer";
 import { TokenType } from "../tokenizer/tokenizer";
 export enum ErrorType {
@@ -89,28 +89,6 @@ export class RuntimeSourceError implements SourceError {
 
   public elaborate() {
     return this.explain();
-  }
-}
-
-// Local copy to avoid circular import from utils
-function typeTranslator(type: string): string {
-  switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "bool":
-      return "bool";
-    case "string":
-      return "str";
-    case "complex":
-      return "complex";
-    case "none":
-      return "NoneType";
-    case "closure":
-      return "function";
-    default:
-      return "unknown";
   }
 }
 

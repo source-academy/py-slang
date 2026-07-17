@@ -143,7 +143,7 @@ export type Instr =
   | ContinueInstr
   | ContinueMarkerInstr;
 
-export function typeTranslator(type: Value["type"]): string {
+export function typeTranslator(type: Value["type"] | string): string {
   switch (type) {
     case "bigint":
       return "int";
@@ -153,6 +153,8 @@ export function typeTranslator(type: Value["type"]): string {
       return "bool";
     case "string":
       return "str";
+    case "list":
+      return "list";
     case "complex":
       return "complex";
     case "none":
