@@ -71,7 +71,12 @@ function transformParam(p: FunctionParam): Value {
   return nameNode;
 }
 
-function transform(
+/** Exported for reuse by the PVML browser pathway's own parse()/tokenize()
+ * (see src/engines/pvml/builtins.ts) — pure, no CSE Context/runtime coupling
+ * despite living alongside ParserBuiltins below, so it converts to a PVML
+ * runtime value just as readily as a CSE one (see cse-interop.ts's
+ * cseValueToPvmlBox). */
+export function transform(
   node: ExprNS.Expr | StmtNS.Stmt | null | undefined,
   declaredNames: Set<string>,
 ): Value {

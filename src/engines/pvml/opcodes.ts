@@ -72,6 +72,13 @@ export enum OpCodes {
   RETG = 70,
   RETF = 71,
   RETB = 72,
+  // Returns JS `undefined` -- not Python's `None` (that's RETG/RETN with a
+  // real value already on the stack) -- for a caller that has no return
+  // value to speak of at all, not even a Python one. Requires nothing on
+  // the stack itself (see PVMLIRBuilder's STACK_EFFECTS[RETU] = 0): the
+  // interpreter pushes `undefined` internally before returning. Used by
+  // PVMLCompiler's visitFileInputStmt, since a whole Python script (exec(),
+  // not a function call) has no return value at all in this dialect.
   RETU = 73,
   RETN = 74,
   DUP = 75,
@@ -90,14 +97,89 @@ export enum OpCodes {
   FLOORDIVF = 88,
   NEWITER = 89,
   FOR_ITER = 90,
+  // §1/§2-restricted comparison opcodes: bool (and, for EQG12/NEQG12, function)
+  // operands are rejected outright, matching docs/specs/python_typing_middle_12.tex
+  // (bool/function excluded from ==/!=; ordering never admits bool). The
+  // unqualified EQG/NEQG/LTG/GTG/LEG/GEG opcodes are the §3/§4 semantics
+  // instead (bool participates as the int it is — python_typing_middle_34.tex).
+  // The PVML compiler picks between the two based on the chapter it's
+  // compiling for, so neither the compiler's downstream consumers nor the
+  // interpreter need a runtime "which chapter is this" check — see
+  // PVMLCompiler's `variant` field and getCompareOpCode().
+  EQG12 = 91,
+  NEQG12 = 92,
+  LTG12 = 93,
+  GTG12 = 94,
+  LEG12 = 95,
+  GEG12 = 96,
+  // Name-indexed global variable access, distinct from LDLG/LDPG/STLG/STPG's
+  // fixed-size-array-slot model: Python's module/global scope can gain brand
+  // new names at any time (`global x` introducing a name with no top-level
+  // assignment; a REPL session where chunk N+1 defines a name chunk N didn't
+  // have), which a statically-sized array can't accommodate without knowing
+  // every global up front. LDGG/STGG instead read/write a dynamically-growable
+  // name-indexed store (see PVMLInterpreter's globalEnv), so the interpreter/VM
+  // never needs to know a program's full set of globals ahead of time. Opt-in
+  // at the compiler level (PVMLCompiler's `useGlobalMap`, off by default) —
+  // only py-slang's own PVMLInterpreter, for its incremental/persistent
+  // (browser REPL) use case, ever needs this; every other consumer (native
+  // Pynter's single-shot prelude+script compilation, the test suite) keeps
+  // using the plain slot-based module environment unchanged.
+  LDGG = 97,
+  STGG = 98,
+  // Loads an arbitrary-precision int literal from the bigint constant pool
+  // (PVMLIR's `bigints`, indexed by this opcode's arg1 — mirrors LGCS's
+  // string-constant-pool encoding, needed because arg1s is a Float64Array
+  // and can't carry a bigint payload beyond float64 precision directly).
+  // Browser-pathway only, matching the CSE machine's own bigint/number int-
+  // float split (full-power desktop browser use case — see PVMLCompiler's
+  // visitBigIntLiteralExpr). Native Pynter has no equivalent and isn't meant
+  // to: its NaN-boxed ints are a deliberately narrow 20-bit range (embedded/
+  // microcontroller target), nowhere near needing arbitrary precision.
+  LGCBI = 99,
+  // Loads a complex literal from the complex constant pool (PVMLIR's
+  // `complexes`, indexed by this opcode's arg1 — mirrors LGCBI's bigint-
+  // constant-pool encoding exactly, needed because arg1s (Float64Array)
+  // can't carry a real+imaginary pair). Browser-pathway only, matching the
+  // CSE machine's own complex-number support (full-power desktop browser
+  // use case — see PVMLCompiler's visitComplexExpr). Native Pynter has zero
+  // complex-number support and isn't meant to gain any.
+  LGCC = 100,
+  // Generic exponentiation (`**`), all numeric types (int/float/complex) —
+  // added alongside complex numbers since raising to a complex power, or a
+  // number to a complex power, is a real, non-corner-case operation
+  // (see PVMLInterpreter's powArith). No chapter-gated variant needed: `**`
+  // has no bool-exclusion rule distinguishing §1/§2 from §3/§4, unlike
+  // ==/!=/ordering (see EQG12 etc. above).
+  POWG = 101,
+  // Call with the argument list taken from a runtime array rather than a
+  // compile-time-fixed count of stack slots (contrast CALL/CALLT's `numArgs`
+  // operand) — needed for call-site argument spreading (`f(*xs)`), where the
+  // spread source's length isn't known until runtime. Stack layout: [...
+  // func argsArray] with argsArray on top; pops both, dispatches exactly
+  // like CALL/CALLT would with argsArray.elements as the argument list (see
+  // PVMLInterpreter's dispatchCall). Deliberately *not* CALL/CALLT
+  // themselves gaining a "dynamic count" mode: those are opcodes ≤
+  // PYNTER_OPCODE_MAX, shared with native Pynter, whose semantics can't
+  // change. Nullary — no operand at all, unlike every other CALL* opcode,
+  // since both the callee and the argument list are already runtime values
+  // on the stack by the time this executes. Browser-pathway only; native
+  // Pynter has no representation for a runtime-variable-arity call (see
+  // PVMLCompiler's visitStarredExpr / visitCallExpr's spread-argument path).
+  CALLA = 102,
+  CALLTA = 103,
 }
 
-export const OPCODE_MAX = 90;
+export const OPCODE_MAX = 103;
 
 /**
  * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
- * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER) are py-slang extensions not
- * yet implemented natively by Pynter (nor by the WASM Sinter/Pynter port).
+ * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER, and the EQG12/NEQG12/LTG12/
+ * GTG12/LEG12/GEG12 §1/§2-restricted comparisons) are py-slang extensions not
+ * implemented natively by Pynter (nor by the WASM Sinter/Pynter port). The
+ * §1/§2 comparison opcodes in particular will never need to be, since the
+ * native Pynter pathway is permanently gated to Python §3 only (see
+ * pvml-runner.ts) — only py-slang's own PVMLInterpreter ever executes them.
  * EQP/NEQP (is/is not) are below this threshold — Pynter implements them.
  */
 export const PYNTER_OPCODE_MAX = 0x56; // 86
@@ -107,6 +189,19 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.FLOORDIVF]: "floor division (//)",
   [OpCodes.NEWITER]: "for loops",
   [OpCodes.FOR_ITER]: "for loops",
+  [OpCodes.EQG12]: "§1/§2 comparison semantics",
+  [OpCodes.NEQG12]: "§1/§2 comparison semantics",
+  [OpCodes.LTG12]: "§1/§2 comparison semantics",
+  [OpCodes.GTG12]: "§1/§2 comparison semantics",
+  [OpCodes.LEG12]: "§1/§2 comparison semantics",
+  [OpCodes.GEG12]: "§1/§2 comparison semantics",
+  [OpCodes.LDGG]: "incremental/persistent global variables",
+  [OpCodes.STGG]: "incremental/persistent global variables",
+  [OpCodes.LGCBI]: "arbitrary-precision integers",
+  [OpCodes.LGCC]: "complex numbers",
+  [OpCodes.POWG]: "exponentiation (**)",
+  [OpCodes.CALLA]: "call-site argument spreading (*args)",
+  [OpCodes.CALLTA]: "call-site argument spreading (*args)",
 };
 
 /**
@@ -160,6 +255,10 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.BR:
     case OpCodes.JMP:
     case OpCodes.FOR_ITER:
+    case OpCodes.LDGG:
+    case OpCodes.STGG:
+    case OpCodes.LGCBI:
+    case OpCodes.LGCC:
       return 5;
 
     case OpCodes.LDCF64:

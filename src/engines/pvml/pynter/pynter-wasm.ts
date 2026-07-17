@@ -61,7 +61,7 @@ export default async function init(props: Record<string, unknown> = {}): Promise
     switch (type) {
       case 1: // pynter_type_undefined
         return { type: "undefined" };
-      case 2: // pynter_type_null
+      case 2: // pynter_type_none
         return { type: "NoneType" };
       case 3: // pynter_type_boolean
         return { type: "bool", value: raw32 === 1 };

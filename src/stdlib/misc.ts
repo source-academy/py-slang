@@ -293,8 +293,9 @@ export class MiscBuiltins {
     _command: ExprNS.Call,
     _context: Context,
   ): NumberValue {
-    const currentTime = Date.now();
-    return { type: "number", value: currentTime };
+    // Python's time.time() is documented as seconds since the epoch, not milliseconds — divide
+    // Date.now()'s milliseconds down to match.
+    return { type: "number", value: Date.now() / 1000 };
   }
 
   @Validate(1, 1, "is_none", true)

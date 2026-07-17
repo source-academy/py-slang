@@ -5,6 +5,7 @@ import linkedList from "../stdlib/linked-list";
 import {
   generateCPythonTestCases,
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
   toPythonAstAndResolve,
@@ -460,6 +461,7 @@ print(f())
 
 generateTestCases(nonlocalTests, 3, ch3);
 generateNativePynterTestCases(nonlocalTests, 3);
+generatePvmlInBrowserTestCases(nonlocalTests, 3, ch3);
 generateCPythonTestCases(nonlocalTests, 3);
 
 // ── Issues #178–#181: scope conflict validators ───────────────────────────────
