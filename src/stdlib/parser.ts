@@ -311,12 +311,12 @@ class ParserBuiltins {
   }
 
   @Validate(2, 2, "apply_in_underlying_python", false)
-  static async apply_in_underlying_python(
+  static apply_in_underlying_python(
     args: Value[],
-    source: string,
+    _source: string,
     command: ExprNS.Call,
     context: Context,
-  ): Promise<Value | undefined> {
+  ): undefined {
     const func = args[0];
     const argList = args[1];
     const argArray: Value[] = [];
@@ -324,10 +324,6 @@ class ParserBuiltins {
     while (current && current.type === "list" && current.value.length === 2) {
       argArray.push(current.value[0]);
       current = current.value[1];
-    }
-
-    if (func.type === "builtin") {
-      return func.func(argArray, source, command, context);
     }
     context.stash.push(func);
     argArray.forEach(arg => context.stash.push(arg));

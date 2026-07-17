@@ -26,6 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
+import { listLiteralValues, loadModules, moduleToPython } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -45,6 +46,7 @@ import {
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
+  ModuleFunctionCallInstr,
   PopInstr,
   UnOpInstr,
   WhileInstr,
@@ -147,6 +149,8 @@ export async function evaluate(
     context.control = new Control(program);
     context.stash = new Stash();
 
+    await evaluateImports(program as StmtNS.FileInput, context, code);
+
     // Adaptation for new feature
     const result = await runCSEMachine(
       code,
@@ -167,44 +171,60 @@ export async function evaluate(
   }
 }
 
-// function evaluateImports(program: StmtNS.Stmt, context: Context) {
-//   try {
-//     const [importNodeMap] = filterImportDeclarations(program)
-//     const environment = currentEnvironment(context)
-//     for (const [moduleName, nodes] of importNodeMap) {
-//       const functions = context.nativeStorage.loadedModules[moduleName]
-//       for (const node of nodes) {
-//         for (const spec of node.specifiers) {
-//           declareIdentifier(context, spec.local.name, node, environment)
-//           let obj: any
+type ModuleImportMapValue = { name: string; alias: string | undefined; node: StmtNS.FromImport };
+function filterImportDeclarations(program: StmtNS.FileInput): Map<string, ModuleImportMapValue[]> {
+  const importNodeMap = new Map<string, ModuleImportMapValue[]>();
+  for (const stmt of program.statements) {
+    if (stmt instanceof StmtNS.FromImport) {
+      const moduleName = stmt.module.lexeme;
+      if (!importNodeMap.has(moduleName)) {
+        importNodeMap.set(moduleName, []);
+      }
+      importNodeMap.get(moduleName)!.push(
+        ...stmt.names.map(spec => ({
+          name: spec.name.lexeme,
+          alias: spec.alias?.lexeme,
+          node: stmt,
+        })),
+      );
+    }
+  }
+  return importNodeMap;
+}
 
-//           switch (spec.type) {
-//             case 'ImportSpecifier': {
-//               if (spec.imported.type === 'Identifier') {
-//                 obj = functions[spec.imported.name];
-//               } else {
-//                 throw new Error(`Unexpected literal import: ${spec.imported.value}`);
-//               }
-//               break
-//             }
-//             case 'ImportDefaultSpecifier': {
-//               obj = functions.default
-//               break
-//             }
-//             case 'ImportNamespaceSpecifier': {
-//               obj = functions
-//               break
-//             }
-//           }
+async function evaluateImports(
+  program: StmtNS.FileInput,
+  context: Context,
+  code: string,
+): Promise<void> {
+  const importNodeMap = filterImportDeclarations(program);
+  if (importNodeMap.size === 0) {
+    return;
+  }
+  if (context.evaluator === null || context.conductor === null) {
+    throw new Error("Context is not properly initialized with evaluator and conductor");
+  }
 
-//           defineVariable(context, spec.local.name, obj, true, node)
-//         }
-//       }
-//     }
-//   } catch (error) {
-//     handleRuntimeError(context, error as RuntimeSourceError)
-//   }
-// }
+  await loadModules(context, [...importNodeMap.keys()]);
+  for (const [moduleName, nodes] of importNodeMap) {
+    for (const node of nodes) {
+      const importedFunc = context.nativeStorage.loadedModules[moduleName]?.[node.name];
+      if (!importedFunc) {
+        throw new error.ModuleFunctionNotFoundError(moduleName, moduleName, node.name, node.node);
+      }
+    }
+    await Promise.all(
+      nodes.map(async node => {
+        const importedFunc = context.nativeStorage.loadedModules[moduleName][node.name];
+        pyDefineVariable(
+          context,
+          node.alias || node.name,
+          await moduleToPython(context, code, undefined, importedFunc.value),
+        );
+      }),
+    );
+  }
+}
 
 /**
  * The primary runner/loop of the explicit control evaluator.
@@ -276,6 +296,9 @@ export async function* generateCSEMachineStateStream(
   variant: number,
   isPrelude: boolean = false,
 ) {
+  // Evaluate imports before starting the main evaluation loop
+  await evaluateImports(control.peek() as StmtNS.FileInput, context, code);
+
   // steps: number of steps completed
   let steps = 0;
 
@@ -335,6 +358,7 @@ export async function* generateCSEMachineStateStream(
     }
 
     control.pop();
+
     if (isNode(command)) {
       const node = command;
 
@@ -1062,7 +1086,12 @@ const cmdEvaluators: CmdEvaluators = {
         elements.unshift(element);
       }
     }
-    stash.push({ type: "list", value: elements });
+    const listValue: Value = { type: "list", value: elements };
+    // Tag as a genuine list literal so module interop (pythonToModule) can tell it apart from a
+    // pair()/llist()-built value or a module PAIR round-tripped through Python, none of which reach
+    // this instruction - see listLiteralValues' definition in modules.ts.
+    listLiteralValues.add(listValue);
+    stash.push(listValue);
   },
 
   [InstrType.WHILE]: function (
@@ -1232,7 +1261,17 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      if (result !== undefined) {
+      if (result === undefined) {
+        return;
+      }
+      if ("next" in result) {
+        const funcCallInstr: ModuleFunctionCallInstr = {
+          instrType: InstrType.MODULE_FUNCTION_CALL,
+          generator: result,
+          srcNode: instr.srcNode,
+        };
+        control.push(funcCallInstr);
+      } else {
         stash.push(result);
       }
     } else {
@@ -1347,5 +1386,21 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     stash.push({ type: "none" });
+  },
+
+  [InstrType.MODULE_FUNCTION_CALL]: async function (
+    code: string,
+    instr: ModuleFunctionCallInstr,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    _isPrelude: boolean,
+  ) {
+    control.push(instr);
+    const nextValue = await instr.generator.next();
+    if (nextValue.done) {
+      control.pop();
+      stash.push(await moduleToPython(context, code, instr.srcNode, nextValue.value));
+    }
   },
 };
