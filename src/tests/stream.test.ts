@@ -11,6 +11,7 @@ import stream from "../stdlib/stream";
 import {
   generateCPythonTestCases,
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
 } from "./utils";
@@ -160,5 +161,8 @@ eval_stream(primes, 10) == llist(2, 3, 5, 7, 11, 13, 17, 19, 23, 29)`,
   // Pynter only supports Python §3 (see pynter/README.md) — still valid §3
   // programs, so run them there rather than at their nominal §2.
   generateNativePynterTestCases(streamTests, 3, [misc, math, linkedList, stream, pairmutator]);
+  // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so this
+  // runs at the table's own nominal §2, matching generateTestCases() above.
+  generatePvmlInBrowserTestCases(streamTests, 2, [misc, math, linkedList, stream, pairmutator]);
   generateCPythonTestCases(streamTests, 3, [misc, math, linkedList, stream, pairmutator]);
 });

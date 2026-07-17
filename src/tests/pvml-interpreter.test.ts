@@ -13,25 +13,23 @@ import linkedList from "../stdlib/linked-list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 
-function compileAndRun(code: string): unknown {
+/**
+ * Runs `code` and returns everything print()ed, in order. A Python script
+ * has no return value of its own (see pvml-compiler.ts's visitFileInputStmt
+ * doc comment) — PVMLInterpreter.execute() always yields JS `undefined` now
+ * — so this is the only way to observe a value at all. Test cases that want
+ * to check "what does this expression evaluate to" print() it explicitly in
+ * their own source, exactly like you'd actually verify that in real
+ * (non-interactive) Python, and assert on the captured output text.
+ */
+function compileAndRun(code: string, variant: number = 4): string[] {
   const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
+  const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
-  const interpreter = new PVMLInterpreter(program);
-  const result = interpreter.execute();
-
-  return PVMLInterpreter.toJSValue(result);
-}
-
-function compileAndRunWithOutput(code: string): { result: unknown; outputs: string[] } {
   const outputs: string[] = [];
-  const ast = parse(code);
-  const compiler = PVMLCompiler.fromProgram(ast);
-  const program = compiler.compileProgram(ast);
-  const interpreter = new PVMLInterpreter(program, {
-    sendOutput: msg => outputs.push(msg),
-  });
-  return { result: PVMLInterpreter.toJSValue(interpreter.execute()), outputs };
+  const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+  interpreter.execute();
+  return outputs;
 }
 
 describe("PVML Interpreter Tests", () => {
@@ -41,10 +39,9 @@ describe("PVML Interpreter Tests", () => {
 def add(x, y):
     return x + y
 
-add(5, 3)
+print(add(5, 3))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(8);
+      expect(compileAndRun(code)).toEqual(["8"]);
     });
 
     test("Multiple arithmetic operations", () => {
@@ -52,10 +49,9 @@ add(5, 3)
 def calculate(a, b, c):
     return (a + b) * c - a
 
-calculate(2, 3, 4)
+print(calculate(2, 3, 4))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(18); // (2 + 3) * 4 - 2 = 20 - 2 = 18
+      expect(compileAndRun(code)).toEqual(["18"]); // (2 + 3) * 4 - 2 = 20 - 2 = 18
     });
   });
 
@@ -68,10 +64,9 @@ def fibonacci(n):
     else:
         return fibonacci(n - 1) + fibonacci(n - 2)
 
-fibonacci(10)
+print(fibonacci(10))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(55);
+      expect(compileAndRun(code)).toEqual(["55"]);
     });
 
     test("Factorial calculation", () => {
@@ -82,10 +77,9 @@ def factorial(n):
     else:
         return n * factorial(n - 1)
 
-factorial(5)
+print(factorial(5))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(120);
+      expect(compileAndRun(code)).toEqual(["120"]);
     });
 
     test("Ackermann function", () => {
@@ -99,10 +93,9 @@ def ackermann(m, n):
         else:
             return ackermann(m - 1, ackermann(m, n - 1))
 
-ackermann(3, 4)
+print(ackermann(3, 4))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(125);
+      expect(compileAndRun(code)).toEqual(["125"]);
     });
   });
 
@@ -115,10 +108,9 @@ def square(x):
 def sum_of_squares(a, b):
     return square(a) + square(b)
 
-sum_of_squares(3, 4)
+print(sum_of_squares(3, 4))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(25); // 9 + 16 = 25
+      expect(compileAndRun(code)).toEqual(["25"]); // 9 + 16 = 25
     });
 
     test("Multiple nested calls", () => {
@@ -132,10 +124,9 @@ def triple(x):
 def combine(a, b):
     return double(a) + triple(b)
 
-combine(5, 4)
+print(combine(5, 4))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(22); // 10 + 12 = 22
+      expect(compileAndRun(code)).toEqual(["22"]); // 10 + 12 = 22
     });
   });
 
@@ -154,10 +145,9 @@ def is_odd(n):
     else:
         return is_even(n - 1)
 
-is_even(6)
+print(is_even(6))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(true);
+      expect(compileAndRun(code)).toEqual(["True"]);
     });
 
     test("Odd number check", () => {
@@ -174,10 +164,9 @@ def is_odd(n):
     else:
         return is_even(n - 1)
 
-is_odd(7)
+print(is_odd(7))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(true);
+      expect(compileAndRun(code)).toEqual(["True"]);
     });
   });
 
@@ -188,42 +177,37 @@ def apply(f, x):
     return f(x)
 
 double = lambda x: x * 2
-apply(double, 5)
+print(apply(double, 5))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(10);
+      expect(compileAndRun(code)).toEqual(["10"]);
     });
 
     test("Lambda with multiple parameters", () => {
       const code = `
 multiply = lambda x, y: x * y
-multiply(6, 7)
+print(multiply(6, 7))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(42);
+      expect(compileAndRun(code)).toEqual(["42"]);
     });
   });
 
   describe("Primitive Functions", () => {
     test("Absolute value function", () => {
-      const code = `abs(-5)
+      const code = `print(abs(-5))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(5);
+      expect(compileAndRun(code)).toEqual(["5"]);
     });
 
     test("Max function with multiple arguments", () => {
-      const code = `max(3, 7, 2, 9)
+      const code = `print(max(3, 7, 2, 9))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(9);
+      expect(compileAndRun(code)).toEqual(["9"]);
     });
 
     test("Min function with multiple arguments", () => {
-      const code = `min(3, 7, 2, 9)
+      const code = `print(min(3, 7, 2, 9))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(2);
+      expect(compileAndRun(code)).toEqual(["2"]);
     });
   });
 
@@ -242,10 +226,9 @@ def max_of_three(a, b, c):
         else:
             return c
 
-max_of_three(5, 9, 3)
+print(max_of_three(5, 9, 3))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(9);
+      expect(compileAndRun(code)).toEqual(["9"]);
     });
 
     test("Complex conditional logic", () => {
@@ -262,20 +245,18 @@ def classify_number(n):
         else:
             return "small negative or zero"
 
-classify_number(15)
+print(classify_number(15))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe("large positive");
+      expect(compileAndRun(code)).toEqual(["large positive"]);
     });
   });
 
   describe("PVML Generic Semantics", () => {
     test("String comparison works for generic ordered ops", () => {
       const code = `
-"apple" < "banana"
+print("apple" < "banana")
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(true);
+      expect(compileAndRun(code)).toEqual(["True"]);
     });
 
     test("not on non-boolean throws UnsupportedOperandTypeError", () => {
@@ -302,10 +283,9 @@ else:
 def add_and_check(x, y):
     return (x + y) == 7
 
-add_and_check(3, 4)
+print(add_and_check(3, 4))
 `;
-      const result = compileAndRun(code);
-      expect(result).toBe(true);
+      expect(compileAndRun(code)).toEqual(["True"]);
     });
   });
 
@@ -324,9 +304,9 @@ add_and_check(3, 4)
 total = 0
 for i in range(5):
     total = total + i
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(10);
+      expect(compileAndRun(code)).toEqual(["10"]);
     });
 
     test("for x in list literal: last value", () => {
@@ -334,16 +314,16 @@ total
 last = 0
 for x in [10, 20, 30]:
     last = x
-last
+print(last)
 `;
-      expect(compileAndRun(code)).toBe(30);
+      expect(compileAndRun(code)).toEqual(["30"]);
     });
 
     test("list subscript", () => {
       const code = `
-[1, 2, 3][1]
+print([1, 2, 3][1])
 `;
-      expect(compileAndRun(code)).toBe(2);
+      expect(compileAndRun(code)).toEqual(["2"]);
     });
 
     test("range with start, stop, step", () => {
@@ -351,9 +331,9 @@ last
 last = -1
 for i in range(0, 10, 2):
     last = i
-last
+print(last)
 `;
-      expect(compileAndRun(code)).toBe(8);
+      expect(compileAndRun(code)).toEqual(["8"]);
     });
 
     test("break exits for loop early", () => {
@@ -363,9 +343,9 @@ for i in range(10):
     if i == 3:
         break
     result = result + i
-result
+print(result)
 `;
-      expect(compileAndRun(code)).toBe(3); // 0+1+2 = 3
+      expect(compileAndRun(code)).toEqual(["3"]); // 0+1+2 = 3
     });
 
     test("nested for loops", () => {
@@ -374,19 +354,19 @@ total = 0
 for i in range(3):
     for j in range(3):
         total = total + 1
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(9);
+      expect(compileAndRun(code)).toEqual(["9"]);
     });
 
-    test("for loop over empty range produces undefined", () => {
+    test("for loop over empty range leaves the variable unchanged", () => {
       const code = `
 x = 42
 for i in range(0):
     x = 0
-x
+print(x)
 `;
-      expect(compileAndRun(code)).toBe(42);
+      expect(compileAndRun(code)).toEqual(["42"]);
     });
 
     test("range two-argument form", () => {
@@ -394,9 +374,9 @@ x
 total = 0
 for i in range(3, 7):
     total = total + i
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(18); // 3+4+5+6
+      expect(compileAndRun(code)).toEqual(["18"]); // 3+4+5+6
     });
 
     test("range negative step counts down", () => {
@@ -404,9 +384,9 @@ total
 total = 0
 for i in range(5, 0, -1):
     total = total + i
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(15); // 5+4+3+2+1
+      expect(compileAndRun(code)).toEqual(["15"]); // 5+4+3+2+1
     });
 
     test("range with positive step and start >= stop produces empty range", () => {
@@ -414,9 +394,9 @@ total
 x = 99
 for i in range(5, 0):
     x = 0
-x
+print(x)
 `;
-      expect(compileAndRun(code)).toBe(99);
+      expect(compileAndRun(code)).toEqual(["99"]);
     });
 
     test("range with negative step and start <= stop produces empty range", () => {
@@ -424,9 +404,9 @@ x
 x = 99
 for i in range(0, 5, -1):
     x = 0
-x
+print(x)
 `;
-      expect(compileAndRun(code)).toBe(99);
+      expect(compileAndRun(code)).toEqual(["99"]);
     });
 
     test("for over empty list does not execute body", () => {
@@ -434,9 +414,9 @@ x
 x = 99
 for item in []:
     x = 0
-x
+print(x)
 `;
-      expect(compileAndRun(code)).toBe(99);
+      expect(compileAndRun(code)).toEqual(["99"]);
     });
 
     test("for loop over list literal: collect all values", () => {
@@ -444,9 +424,9 @@ x
 total = 0
 for x in [10, 20, 30, 40]:
     total = total + x
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(100);
+      expect(compileAndRun(code)).toEqual(["100"]);
     });
 
     test("continue skips rest of loop body", () => {
@@ -456,9 +436,9 @@ for i in range(6):
     if i == 3:
         continue
     total = total + i
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(12); // 0+1+2+4+5 = 12
+      expect(compileAndRun(code)).toEqual(["12"]); // 0+1+2+4+5 = 12
     });
 
     test("break in while loop", () => {
@@ -468,33 +448,33 @@ while i < 10:
     if i == 4:
         break
     i = i + 1
-i
+print(i)
 `;
-      expect(compileAndRun(code)).toBe(4);
+      expect(compileAndRun(code)).toEqual(["4"]);
     });
 
     test("len of list literal", () => {
-      expect(compileAndRun("len([1, 2, 3])\n")).toBe(3);
+      expect(compileAndRun("print(len([1, 2, 3]))\n")).toEqual(["3"]);
     });
 
     test("len of empty list", () => {
-      expect(compileAndRun("len([])\n")).toBe(0);
+      expect(compileAndRun("print(len([]))\n")).toEqual(["0"]);
     });
 
     test("len of list variable", () => {
       const code = `
 xs = [10, 20, 30, 40, 50]
-len(xs)
+print(len(xs))
 `;
-      expect(compileAndRun(code)).toBe(5);
+      expect(compileAndRun(code)).toEqual(["5"]);
     });
 
     test("list subscript first element", () => {
-      expect(compileAndRun("[7, 8, 9][0]\n")).toBe(7);
+      expect(compileAndRun("print([7, 8, 9][0])\n")).toEqual(["7"]);
     });
 
     test("list subscript last element", () => {
-      expect(compileAndRun("[7, 8, 9][2]\n")).toBe(9);
+      expect(compileAndRun("print([7, 8, 9][2])\n")).toEqual(["9"]);
     });
 
     test("list built in loop via subscript", () => {
@@ -503,9 +483,9 @@ xs = [0, 0, 0]
 total = 0
 for i in range(3):
     total = total + xs[i]
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(0);
+      expect(compileAndRun(code)).toEqual(["0"]);
     });
 
     test("if without else inside loop does not corrupt stack", () => {
@@ -514,9 +494,9 @@ count = 0
 for i in range(5):
     if i > 2:
         count = count + 1
-count
+print(count)
 `;
-      expect(compileAndRun(code)).toBe(2); // i=3 and i=4
+      expect(compileAndRun(code)).toEqual(["2"]); // i=3 and i=4
     });
 
     test("break on first iteration", () => {
@@ -524,9 +504,9 @@ count
 result = 99
 for i in range(5):
     break
-result
+print(result)
 `;
-      expect(compileAndRun(code)).toBe(99);
+      expect(compileAndRun(code)).toEqual(["99"]);
     });
 
     test("nested break only exits inner loop", () => {
@@ -537,9 +517,9 @@ for i in range(3):
         if j == 2:
             break
         total = total + 1
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(6); // 3 outer iters * 2 inner iters each
+      expect(compileAndRun(code)).toEqual(["6"]); // 3 outer iters * 2 inner iters each
     });
   });
 
@@ -569,39 +549,39 @@ total
 describe("PVML Additional Coverage", () => {
   describe("Arithmetic operators", () => {
     test("floor division positive", () => {
-      expect(compileAndRun("7 // 2\n")).toBe(3);
+      expect(compileAndRun("print(7 // 2)\n")).toEqual(["3"]);
     });
 
     test("floor division negative rounds toward -infinity", () => {
-      expect(compileAndRun("-7 // 2\n")).toBe(-4);
+      expect(compileAndRun("print(-7 // 2)\n")).toEqual(["-4"]);
     });
 
     test("modulo positive", () => {
-      expect(compileAndRun("10 % 3\n")).toBe(1);
+      expect(compileAndRun("print(10 % 3)\n")).toEqual(["1"]);
     });
 
     test("modulo Python semantics: negative dividend", () => {
-      expect(compileAndRun("-7 % 3\n")).toBe(2);
+      expect(compileAndRun("print(-7 % 3)\n")).toEqual(["2"]);
     });
 
     test("modulo Python semantics: negative divisor", () => {
-      expect(compileAndRun("7 % -3\n")).toBe(-2);
+      expect(compileAndRun("print(7 % -3)\n")).toEqual(["-2"]);
     });
 
     test("true division returns float", () => {
-      expect(compileAndRun("5 / 2\n")).toBeCloseTo(2.5);
+      expect(compileAndRun("print(5 / 2)\n")).toEqual(["2.5"]);
     });
 
     test("float literal", () => {
-      expect(compileAndRun("3.14\n")).toBeCloseTo(3.14);
+      expect(compileAndRun("print(3.14)\n")).toEqual(["3.14"]);
     });
 
     test("string concatenation", () => {
-      expect(compileAndRun('"hello" + " world"\n')).toBe("hello world");
+      expect(compileAndRun('print("hello" + " world")\n')).toEqual(["hello world"]);
     });
 
     test("unary plus is identity", () => {
-      expect(compileAndRun("+42\n")).toBe(42);
+      expect(compileAndRun("print(+42)\n")).toEqual(["42"]);
     });
   });
 
@@ -635,50 +615,54 @@ describe("PVML Additional Coverage", () => {
     test("ordered comparison of mixed types throws", () => {
       expect(() => compileAndRun('"x" < 3\n')).toThrow(UnsupportedOperandTypeError);
     });
+
+    test("calling a non-callable value raises a proper TypeError, not a raw JS crash", () => {
+      expect(() => compileAndRun("x = 5\nx()\n")).toThrow(/TypeError.*not callable/);
+    });
   });
 
   describe("Literals and expressions", () => {
-    test("None literal compiles to null", () => {
-      expect(compileAndRun("None\n")).toBeNull();
+    test("None literal prints as None", () => {
+      expect(compileAndRun("print(None)\n")).toEqual(["None"]);
     });
 
     test("ternary expression true branch", () => {
-      expect(compileAndRun("1 if True else 2\n")).toBe(1);
+      expect(compileAndRun("print(1 if True else 2)\n")).toEqual(["1"]);
     });
 
     test("ternary expression false branch", () => {
-      expect(compileAndRun("1 if False else 2\n")).toBe(2);
+      expect(compileAndRun("print(1 if False else 2)\n")).toEqual(["2"]);
     });
 
     test("boolean and short-circuits on false left", () => {
-      expect(compileAndRun("False and True\n")).toBe(false);
+      expect(compileAndRun("print(False and True)\n")).toEqual(["False"]);
     });
 
     test("boolean and evaluates right when left is true", () => {
-      expect(compileAndRun("True and True\n")).toBe(true);
+      expect(compileAndRun("print(True and True)\n")).toEqual(["True"]);
     });
 
     test("boolean or short-circuits on true left", () => {
-      expect(compileAndRun("True or False\n")).toBe(true);
+      expect(compileAndRun("print(True or False)\n")).toEqual(["True"]);
     });
 
     test("boolean or evaluates right when left is false", () => {
-      expect(compileAndRun("False or False\n")).toBe(false);
+      expect(compileAndRun("print(False or False)\n")).toEqual(["False"]);
     });
   });
 
   describe("Statements", () => {
-    test("pass statement", () => {
-      expect(compileAndRun("pass\n")).toBeUndefined();
+    test("pass statement produces no output", () => {
+      expect(compileAndRun("pass\n")).toEqual([]);
     });
 
     test("bare return yields None", () => {
       const code = `
 def f():
     return
-f()
+print(f())
 `;
-      expect(compileAndRun(code)).toBeNull();
+      expect(compileAndRun(code)).toEqual(["None"]);
     });
 
     test("while with continue skips iteration", () => {
@@ -690,9 +674,9 @@ while i < 6:
     if i == 3:
         continue
     total = total + i
-total
+print(total)
 `;
-      expect(compileAndRun(code)).toBe(18);
+      expect(compileAndRun(code)).toEqual(["18"]);
     });
   });
 
@@ -705,86 +689,82 @@ def make_adder(n):
     return add
 
 add5 = make_adder(5)
-add5(3)
+print(add5(3))
 `;
-      expect(compileAndRun(code)).toBe(8);
+      expect(compileAndRun(code)).toEqual(["8"]);
     });
   });
 
-  describe("toJSValue representations", () => {
-    test("closure stringifies as <closure:N>", () => {
+  describe("Python str() of function/array values", () => {
+    test("a named closure prints as <function name>", () => {
       const code = `
 def f(x):
     return x
-f
+print(f)
 `;
-      expect(compileAndRun(code)).toMatch(/^<closure:\d+>$/);
+      expect(compileAndRun(code)).toEqual(["<function f>"]);
     });
 
-    test("array round-trips through toJSValue", () => {
-      expect(compileAndRun("[1, 2, 3]\n")).toEqual([1, 2, 3]);
+    test("array prints as [1, 2, 3]", () => {
+      expect(compileAndRun("print([1, 2, 3])\n")).toEqual(["[1, 2, 3]"]);
     });
   });
 
   describe("Print / sendOutput", () => {
     test("print() routes through sendOutput callback", () => {
-      const { outputs } = compileAndRunWithOutput('print("hello")\n');
-      expect(outputs).toEqual(["hello"]);
+      expect(compileAndRun('print("hello")\n')).toEqual(["hello"]);
     });
 
     test("multiple print calls each trigger callback", () => {
-      const { outputs } = compileAndRunWithOutput('print("a")\nprint("b")\n');
-      expect(outputs).toEqual(["a", "b"]);
+      expect(compileAndRun('print("a")\nprint("b")\n')).toEqual(["a", "b"]);
     });
 
     test("no output when print not called", () => {
-      const { outputs } = compileAndRunWithOutput("1 + 1\n");
-      expect(outputs).toHaveLength(0);
+      expect(compileAndRun("1 + 1\n")).toEqual([]);
     });
   });
 
   describe("print_llist", () => {
     // PVMLCompiler.fromProgram's no-args default only registers [misc, math] (VARIANT_GROUPS[1]),
     // so pair/llist/print_llist (linked-list group) need explicit environments with that group in
-    // scope -- compileAndRun/compileAndRunWithOutput above can't resolve them.
-    function compileAndRunWithLinkedList(code: string): { result: unknown; outputs: string[] } {
+    // scope -- compileAndRun above can't resolve them.
+    function compileAndRunWithLinkedList(code: string): string[] {
       const groups = [misc, math, linkedList];
       const ast = parse(code);
       const { errors, environments } = analyzeWithEnvironments(ast, code, 2, groups);
       if (errors.length > 0) throw new Error(errors.map(e => e.message).join("; "));
       const outputs: string[] = [];
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, 2, environments);
       const program = compiler.compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
-      const result = PVMLInterpreter.toJSValue(interpreter.execute());
-      return { result, outputs };
+      interpreter.execute();
+      return outputs;
     }
 
     test("renders a proper linked list as llist(...)", () => {
-      const { outputs } = compileAndRunWithLinkedList("print_llist(llist(1, 2, 3))\n");
-      expect(outputs).toEqual(["llist(1, 2, 3)"]);
+      expect(compileAndRunWithLinkedList("print_llist(llist(1, 2, 3))\n")).toEqual([
+        "llist(1, 2, 3)",
+      ]);
     });
 
     test("renders None as llist()", () => {
-      const { outputs } = compileAndRunWithLinkedList("print_llist(None)\n");
-      expect(outputs).toEqual(["llist()"]);
+      expect(compileAndRunWithLinkedList("print_llist(None)\n")).toEqual(["llist()"]);
     });
 
     test("renders a non-list pair as [head, tail]", () => {
-      const { outputs } = compileAndRunWithLinkedList("print_llist(pair(1, 2))\n");
-      expect(outputs).toEqual(["[1, 2]"]);
+      expect(compileAndRunWithLinkedList("print_llist(pair(1, 2))\n")).toEqual(["[1, 2]"]);
     });
 
     test("a proper-list element nested in an improper pair still renders as llist(...)", () => {
-      const { outputs } = compileAndRunWithLinkedList(
-        "print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))\n",
-      );
-      expect(outputs).toEqual(["llist(llist(1, 2, 3), 4, 5, 6)"]);
+      expect(
+        compileAndRunWithLinkedList("print_llist(pair(llist(1, 2, 3), llist(4, 5, 6)))\n"),
+      ).toEqual(["llist(llist(1, 2, 3), 4, 5, 6)"]);
     });
 
     test("string elements render quoted", () => {
-      const { outputs } = compileAndRunWithLinkedList("print_llist(llist('a', 'b'))\n");
-      expect(outputs).toEqual(["llist('a', 'b')"]);
+      expect(compileAndRunWithLinkedList("print_llist(llist('a', 'b'))\n")).toEqual([
+        "llist('a', 'b')",
+      ]);
     });
 
     test("requires exactly 1 argument", () => {
@@ -799,10 +779,11 @@ f
     // bug: the same pair object is re-derived fresh from its own structure every time it's
     // visited, regardless of which parent reached it.
     test("does not misrender a shared sub-list (js-slang#1124)", () => {
-      const { outputs } = compileAndRunWithLinkedList(
-        "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)\n",
-      );
-      expect(outputs).toEqual(["llist(llist(2, 3), llist(1, 2, 3))"]);
+      expect(
+        compileAndRunWithLinkedList(
+          "x1 = llist(2, 3)\nx2 = llist(x1, pair(1, x1))\nprint_llist(x2)\n",
+        ),
+      ).toEqual(["llist(llist(2, 3), llist(1, 2, 3))"]);
     });
 
     // Regression test for the O(N^2)/stack-overflow bug caught in review on #250: printLlistText
@@ -825,7 +806,14 @@ f
       let improperChain: PVMLBoxType = 999;
       for (let i = improperN; i >= 1; i--) improperChain = pairArr(i, improperChain);
       const improperOutputs: string[] = [];
-      executePrimitive(97, [improperChain], msg => improperOutputs.push(msg));
+      executePrimitive(
+        127,
+        [improperChain],
+        msg => improperOutputs.push(msg),
+        () => {
+          throw new Error("print_llist should never call invokeValue");
+        },
+      );
       expect(improperOutputs[0].startsWith("[1, [2, [3,")).toBe(true);
       expect(improperOutputs[0].endsWith("999" + "]".repeat(improperN))).toBe(true);
 
@@ -833,7 +821,14 @@ f
       let properChain: PVMLBoxType = null;
       for (let i = properN; i >= 1; i--) properChain = pairArr(i, properChain);
       const properOutputs: string[] = [];
-      executePrimitive(97, [properChain], msg => properOutputs.push(msg));
+      executePrimitive(
+        127,
+        [properChain],
+        msg => properOutputs.push(msg),
+        () => {
+          throw new Error("print_llist should never call invokeValue");
+        },
+      );
       expect(properOutputs[0].startsWith("llist(1, 2, 3,")).toBe(true);
       expect(properOutputs[0].endsWith(`${properN - 1}, ${properN})`)).toBe(true);
     });
@@ -847,19 +842,23 @@ def loop():
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxInstructions: 50 });
       expect(() => interpreter.execute()).toThrow(/instruction limit/i);
     });
 
     test("exceeding maxCallDepth throws", () => {
+      // Not tail-recursive: `1 +` is still pending after the recursive call
+      // returns, so this genuinely grows the call stack (unlike `return
+      // loop()` above, which the compiler now compiles as a tail call —
+      // see visitReturnStmt/compileTail — and so never grows call depth).
       const code = `
 def loop():
-    return loop()
+    return 1 + loop()
 loop()
 `;
       const ast = parse(code);
-      const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
+      const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
       expect(() => interpreter.execute()).toThrow(/call depth/i);
     });
@@ -867,20 +866,22 @@ loop()
 
   describe("fromProgram with pre-computed environments", () => {
     test("accepts pre-computed environments and skips resolver", () => {
-      const code = "def f(x):\n    return x + 1\nf(10)\n";
+      const code = "def f(x):\n    return x + 1\nprint(f(10))\n";
       const ast = parse(code);
-      const { environments } = analyzeWithEnvironments(ast, code, 4);
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
-      const result = PVMLInterpreter.toJSValue(
-        new PVMLInterpreter(compiler.compileProgram(ast)).execute(),
-      );
-      expect(result).toBe(11);
+      const { environments } = analyzeWithEnvironments(ast, code, 4, [misc, math]);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, environments);
+      const outputs: string[] = [];
+      const interpreter = new PVMLInterpreter(compiler.compileProgram(ast), {
+        sendOutput: msg => outputs.push(msg),
+      });
+      interpreter.execute();
+      expect(outputs).toEqual(["11"]);
     });
   });
 
   describe("Builtins coverage", () => {
     test("round() rounds half-up", () => {
-      expect(compileAndRun("round(3.5)\n")).toBe(4);
+      expect(compileAndRun("print(round(3.5))\n")).toEqual(["4"]);
     });
 
     test("min() with a single argument throws MissingRequiredPositionalError", () => {
@@ -897,6 +898,52 @@ loop()
 
     test("max() with zero arguments throws MissingRequiredPositionalError", () => {
       expect(() => compileAndRun("max()\n")).toThrow(MissingRequiredPositionalError);
+    });
+
+    // Verified against real CPython (math.remainder's IEEE 754 special cases).
+    test("max()/min() skip a NaN argument that isn't already the running winner", () => {
+      expect(compileAndRun("print(max(1, math_nan, 3))\n")).toEqual(["3"]);
+      expect(compileAndRun("print(min(3, math_nan, 1))\n")).toEqual(["1"]);
+    });
+
+    test("max()/min() return NaN if the first argument is NaN (matches CSE's plain >/< comparison)", () => {
+      expect(compileAndRun("print(max(math_nan, 1, 3))\n")).toEqual(["nan"]);
+      expect(compileAndRun("print(min(math_nan, 1, 3))\n")).toEqual(["nan"]);
+    });
+
+    test("math_remainder(finite, infinity) returns the finite value unchanged", () => {
+      // math.remainder always returns a float in real Python, even for two int inputs.
+      expect(compileAndRun("print(math_remainder(5, math_inf))\n")).toEqual(["5.0"]);
+    });
+
+    test("math_remainder(infinity, finite) raises a domain error", () => {
+      expect(() => compileAndRun("math_remainder(math_inf, 5)\n")).toThrow(/ValueError.*domain/);
+    });
+
+    test("math_remainder(x, 0) raises a domain error, not a ZeroDivisionError", () => {
+      expect(() => compileAndRun("math_remainder(5, 0)\n")).toThrow(/ValueError.*domain/);
+    });
+
+    test("math_remainder propagates NaN", () => {
+      expect(compileAndRun("print(math_remainder(math_nan, 5))\n")).toEqual(["nan"]);
+    });
+
+    test("math_ldexp(0, huge exponent) is 0, not NaN", () => {
+      // math.ldexp always returns a float in real Python.
+      expect(compileAndRun("print(math_ldexp(0, 10**30))\n")).toEqual(["0.0"]);
+    });
+
+    test("math_ldexp overflow raises OverflowError", () => {
+      expect(() => compileAndRun("math_ldexp(1.0, 10**30)\n")).toThrow(/OverflowError/);
+    });
+
+    test("time_time() returns seconds, not milliseconds", () => {
+      const before = Date.now() / 1000;
+      const outputs = compileAndRun("print(time_time())\n");
+      const after = Date.now() / 1000;
+      const result = Number(outputs[0]);
+      expect(result).toBeGreaterThanOrEqual(before - 1);
+      expect(result).toBeLessThanOrEqual(after + 1);
     });
   });
 });

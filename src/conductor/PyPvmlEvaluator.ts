@@ -1,27 +1,106 @@
-import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import linkedList from "../stdlib/linked-list";
+import list from "../stdlib/list";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
+import pairmutator from "../stdlib/pairmutator";
+import parser from "../stdlib/parser";
+import stream from "../stdlib/stream";
+import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 
-export class PyPvmlEvaluator extends BasicEvaluator {
+function once<T>(fn: () => T): () => T {
+  let value: T | undefined;
+  let done = false;
+  return () => {
+    if (!done) {
+      value = fn();
+      done = true;
+    }
+    return value as T;
+  };
+}
+
+/**
+ * Compiles Python to PVML bytecode and runs it on PVMLInterpreter, a
+ * pure-TypeScript bytecode VM (no WASM, no native binary — runs directly
+ * wherever this evaluator is loaded, e.g. in the browser).
+ *
+ * Mirrors PyCseEvaluatorBase's persistence model (see PyCseEvaluator.ts) but
+ * adapted to a compiled/bytecode pipeline instead of a tree-walking
+ * interpreter: one persistent `globalEnv` (a dynamically-growable,
+ * name-indexed global environment — see PVMLInterpreter's `globalEnv` field
+ * and PVMLCompiler's `useGlobalMap` mode) survives across evaluateChunk()
+ * calls, and each group's SICPy prelude source is compiled and run into it
+ * exactly once, memoized via `once()` just like the CSE evaluator's
+ * `ensurePreludesLoaded`. A later chunk sees every name — variable or
+ * function — any earlier chunk (or the prelude) defined, the same way a
+ * CSE-machine REPL chunk sees an earlier one's global bindings.
+ *
+ * `PyPvmlEvaluatorBase` mirrors `PyCseEvaluatorBase`'s (variant, groups)
+ * parameterization exactly — see `PyPvmlEvaluator1..4` below, one per SICPy
+ * chapter, matching `VARIANT_GROUPS` in ../runner.ts.
+ */
+abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
+  private readonly variant: number;
+  private readonly groups: Group[];
+  private globalEnv = new Map<string, PVMLBoxType>();
+  private readonly preludeText: string;
+  private readonly ensurePreludeLoaded: () => void;
+
+  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
+    super(conductor);
+    this.variant = variant;
+    this.groups = groups;
+    this.preludeText = groups
+      .map(g => g.prelude ?? "")
+      .filter(p => p.trim())
+      .join("\n");
+    this.ensurePreludeLoaded = once(() => {
+      if (this.preludeText.trim()) {
+        this.runChunk(this.preludeText);
+      }
+    });
+  }
+
+  /** Compiles and runs one chunk of SICPy source against the persistent
+   * `globalEnv`, seeding the resolver with whatever names are already there
+   * (from the prelude or earlier chunks) so this chunk can reference them. */
+  private runChunk(script: string): PVMLBoxType {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      this.variant,
+      this.groups,
+      [],
+      Array.from(this.globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, this.variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => this.conductor.sendOutput(msg),
+      globalEnv: this.globalEnv,
+      programText: script,
+    });
+    const result = interpreter.execute();
+    this.globalEnv = interpreter.getGlobalEnv();
+    return result;
+  }
+
   evaluateChunk(chunk: string): Promise<void> {
     try {
-      const script = chunk + "\n";
-      const ast = parse(script);
-      const { errors, environments } = analyzeWithEnvironments(ast, script, 4, [misc, math]);
-      if (errors.length > 0) {
-        throw errors[0];
-      }
-      const compiler = PVMLCompiler.fromProgram(ast, environments);
-      const program = compiler.compileProgram(ast);
-      const interpreter = new PVMLInterpreter(program, {
-        sendOutput: msg => this.conductor.sendOutput(msg),
-      });
-      const returnValue = interpreter.execute();
+      this.ensurePreludeLoaded();
+      const returnValue = this.runChunk(chunk);
       this.conductor.sendResult(PVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));
@@ -29,3 +108,32 @@ export class PyPvmlEvaluator extends BasicEvaluator {
     return Promise.resolve();
   }
 }
+
+export class PyPvmlEvaluator1 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 1, [misc, math]);
+  }
+}
+
+export class PyPvmlEvaluator2 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 2, [misc, math, linkedList]);
+  }
+}
+
+export class PyPvmlEvaluator3 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+  }
+}
+
+export class PyPvmlEvaluator4 extends PyPvmlEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+  }
+}
+
+/** @deprecated Use PyPvmlEvaluator4 (or the chapter-appropriate variant)
+ * instead — kept as an alias so existing callers of the single hardcoded-
+ * chapter-4 evaluator don't break. */
+export class PyPvmlEvaluator extends PyPvmlEvaluator4 {}
