@@ -45,15 +45,18 @@ In either case, the evaluator is compiled to `dist/<evaluatorName>.js` and `dist
 
 ### List of evaluators
 
-| Name                                                                                                                                             | Description                                                                                                                                                                                        |
-| ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [PyCseEvaluator1](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L95)  | Interprets Python §1 programs using the CSE machine                                                                                                                                                |
-| [PyCseEvaluator2](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L101) | Interprets Python §2 programs using the CSE machine                                                                                                                                                |
-| [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine                                                                                                                                                |
-| [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine                                                                                                                                                |
-| [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it                                                                                                                                           |
-| [PyPvmlEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                         | Evaluates the Python AST via a handwritten Typescript compiler and interpreter                                                                                                                     |
-| [PyPvmlPynterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlPynterEvaluator.ts)                             | Evaluates the Python AST with the same compiler as `PyPvmlEvaluator`, but a different interpreter. It uses the WebAssembly port of the [Sinter](https://github.com/source-academy/sinter) project. |
+| Name                                                                                                                                             | Description                                                                                                                                                                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [PyCseEvaluator1](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L95)  | Interprets Python §1 programs using the CSE machine                                                                                                                                                                                                                                       |
+| [PyCseEvaluator2](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L101) | Interprets Python §2 programs using the CSE machine                                                                                                                                                                                                                                       |
+| [PyCseEvaluator3](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L107) | Interprets Python §3 programs using the CSE machine                                                                                                                                                                                                                                       |
+| [PyCseEvaluator4](https://github.com/source-academy/py-slang/blob/36351039fcd1f6dfbac3df10bf1ef084a44f029b/src/conductor/PyCseEvaluator.ts#L113) | Interprets Python §4 programs using the CSE machine                                                                                                                                                                                                                                       |
+| [PyWasmEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyWasmEvaluator.ts)                                         | Compiles Python §4 programs into WebAssembly and runs it                                                                                                                                                                                                                                  |
+| [PyPvmlEvaluator1](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                        | Compiles Python §1 programs to PVML bytecode and runs them on a handwritten, pure-TypeScript compiler/interpreter ("PVML-in-browser") — no WASM, no native binary                                                                                                                         |
+| [PyPvmlEvaluator2](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                        | Same as `PyPvmlEvaluator1`, for Python §2                                                                                                                                                                                                                                                 |
+| [PyPvmlEvaluator3](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                        | Same as `PyPvmlEvaluator1`, for Python §3                                                                                                                                                                                                                                                 |
+| [PyPvmlEvaluator4](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlEvaluator.ts)                                        | Same as `PyPvmlEvaluator1`, for Python §4. `PyPvmlEvaluator` is a deprecated alias for this one, kept for existing callers                                                                                                                                                                |
+| [PyPvmlPynterEvaluator](https://github.com/source-academy/py-slang/tree/main/src/conductor/PyPvmlPynterEvaluator.ts)                             | Compiles Python §3 programs with the same PVML compiler as `PyPvmlEvaluator1..4`, but runs them on the WebAssembly port of [Sinter](https://github.com/source-academy/sinter)/Pynter instead. Currently only wires up the `misc` and `math` stdlib groups, unlike the other PVML pathways |
 
 ### Using the evaluators
 
@@ -84,20 +87,22 @@ yarn wasm <path to python file>
 
 ### Running the standalone CLI (repl)
 
-`py-slang` can also be run as a standalone CLI, outside of Conductor, via `src/repl.ts`. By default it evaluates a SICPy file through the CSE machine:
+`py-slang` can also be run as a standalone CLI, outside of Conductor, via `src/repl.ts`. It supports three engines, selected with `-e`/`--engine` (or the `PY_SLANG_ENGINE` environment variable — an explicit `--engine` flag takes precedence over it):
 
 ```shell
 yarn build:repl
-yarn repl <path to python file> [-v <1-4>]
+yarn repl <path to python file> [-v <1-4>]                       # cse (default): the tree-walking CSE machine
+yarn repl <path to python file> --engine pvml-browser [-v <1-4>] # PVML bytecode on PVMLInterpreter, pure TypeScript
+yarn repl <path to python file> --engine pvml --pynter <path> -v 3 # PVML bytecode on a native Pynter binary
 ```
 
-Alternatively, `--engine pvml` compiles the file to PVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of the CSE machine — the same compiler used by `PyPvmlEvaluator`/`PyPvmlPynterEvaluator`, but executed by a native C VM rather than a WASM port or the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary:
+`--engine pvml-browser` compiles the file to PVML bytecode and runs it directly on `PVMLInterpreter` — the same pure-TypeScript, no-native-binary-required VM `PyPvmlEvaluator1..4` use in the Conductor pathway (see the evaluator table above). It supports all four SICPy chapters, the same stdlib groups as the CSE machine at each chapter (`VARIANT_GROUPS` in `src/runner.ts`), and — like the other two engines — proper tail-call optimization (see below).
+
+`--engine pvml` instead compiles the file to PVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary — the same compiler as `--engine pvml-browser`, but executed by a native C VM instead of the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary, and only supports `-v 3` (SICPy §3) — the CLI exits with an error for any other variant, or if `--pynter` is omitted:
 
 ```shell
 yarn repl <path to python file> --engine pvml --pynter <path to pynter's runner binary> -v 3
 ```
-
-`--engine pvml` only supports `-v 3` (SICPy §3) today; the CLI exits with an error for any other variant.
 
 For example, if `pynter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
 
@@ -105,9 +110,13 @@ For example, if `pynter` is checked out as a sibling of `py-slang` (i.e. both un
 yarn repl <path to python file> --engine pvml --pynter ../pynter/build/runner/runner -v 3
 ```
 
-Note that the PVML compiler currently only wires up the `misc` and `math` stdlib groups (matching `PyPvmlEvaluator`/`PyPvmlPynterEvaluator`), so even within §3 many programs relying on linked lists, streams, or mutable pairs/lists aren't supported via `--engine pvml` yet. `src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine pvml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage as the PVML compiler and Pynter itself gain features.
+`src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine pvml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage; see "Running the test suite" below.
 
 The bytecode format itself — currently identical to SVML, the format [Sinter](https://github.com/source-academy/sinter) executes — is documented in the [py-slang wiki](https://github.com/source-academy/py-slang/wiki), forked from the [js-slang SVML wiki](https://github.com/source-academy/js-slang/wiki/SVML-Specification) so it can be edited to describe PVML (py-slang's own bytecode target) without touching the canonical SVML docs. See [PVML-Specification](https://github.com/source-academy/py-slang/wiki/PVML-Specification) for the wire format and [PVML-Instruction-Set](https://github.com/source-academy/py-slang/wiki/PVML-Instruction-Set) for the opcode reference — the latter also documents a known mismatch between py-slang's primitive-function index table and the one built into Sinter/Pynter today.
+
+#### Tail-call optimization
+
+Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pvml-browser` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
 
 ### Running the test suite
 
@@ -117,17 +126,28 @@ Ensure that all tests pass before committing.
 yarn test
 ```
 
+`yarn test` always runs two engines' worth of tests, no extra setup required:
+
+- The CSE machine's own test suite.
+- The PVML-in-browser pathway's test suite (`pvml.test.ts`, `pvml-compiler.test.ts`,
+  `pvml-interpreter.test.ts`, `pvml-assembler.test.ts`, `PyPvmlEvaluator.test.ts`, and others) —
+  compiles to PVML bytecode and runs it on `PVMLInterpreter`, the pure-TypeScript VM (see
+  "Running the standalone CLI (repl)" above), so it needs no native binary either.
+
+A third, opt-in suite reruns test cases against a native Pynter binary instead — see below.
+
 #### Running the PVML/Pynter native parity suite
 
-`yarn test` always runs the CSE machine tests. It also includes an opt-in suite —
 `generateNativePynterTestCases()` in `src/tests/utils.ts`, used by the `stdlib`, `global-keyword`,
 `nonlocal`, `loops`, `linked-list`, `pairmutator`, `list`, `stream`, and `parser-stdlib` test files
-— that reruns the same test cases through the PVML compiler and a native
-[Pynter](https://github.com/source-academy/pynter) `runner` binary instead (see "Running the
-standalone CLI (repl)" above for background). It's skipped by default, since it needs a locally
-built Pynter binary that CI doesn't have.
+— reruns the same test cases through the PVML compiler and a native
+[Pynter](https://github.com/source-academy/pynter) `runner` binary instead of `PVMLInterpreter`
+(see "Running the standalone CLI (repl)" above for background). It's skipped by default, since it
+needs a locally built Pynter binary that CI doesn't have. `src/tests/pvml-tco-pynter.test.ts` (see
+"Tail-call optimization" above) and `src/tests/operator-conformance-pynter.test.ts` are opt-in the
+same way, for the same reason.
 
-To run it, build `runner` from the Pynter repo (see its
+To run these, build `runner` from the Pynter repo (see its
 [build instructions](https://github.com/source-academy/pynter#build-locally)) and point
 `PYNTER_RUNNER_PATH` at the resulting binary:
 
@@ -135,11 +155,12 @@ To run it, build `runner` from the Pynter repo (see its
 PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn test
 ```
 
-Failures here are expected and informative, not a sign of broken infra: the PVML compiler
-currently only wires up the `misc` and `math` stdlib groups, so anything relying on linked lists,
-streams, or mutable pairs/lists fails at analysis, not at Pynter. Complex-number cases are cleanly
-skipped rather than counted as failures or passes, since Pynter's VM has no complex number type at
-all. To see just this suite's results, filter by its test-name tag:
+Failures here are expected and informative, not a sign of broken infra: they reflect real, current
+gaps between the PVML/Pynter pathway and the CSE machine (a feature the compiler or native Pynter
+doesn't support yet, not usually a wholesale missing stdlib group — the PVML compiler wires up the
+same `VARIANT_GROUPS` as the CSE machine by default). Complex-number cases are cleanly skipped
+rather than counted as failures or passes, since Pynter's VM has no complex number type at all. To
+see just this suite's results, filter by its test-name tag:
 
 ```shell
 PYNTER_RUNNER_PATH=../pynter/build/runner/runner yarn jest -t "\[pvml/pynter\]"

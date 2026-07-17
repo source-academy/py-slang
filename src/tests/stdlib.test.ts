@@ -17,6 +17,7 @@ import { FeatureNotSupportedError } from "../validator";
 import {
   generateCPythonTestCases,
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
 } from "./utils";
@@ -976,6 +977,10 @@ describe("Standard Library Tests", () => {
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
     generateNativePynterTestCases(mathTests, 3);
+    // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
+    // miscTests' §1-specific restrictions can be checked directly at §1.
+    generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
+    generatePvmlInBrowserTestCases(miscTests, 1, [misc, math]);
     generateCPythonTestCases(mathTests, 1);
     generateCPythonTestCases(miscTests, 1);
   });
@@ -1085,5 +1090,30 @@ describe("Standard Library Tests", () => {
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
     generateNativePynterTestCases(miscTests, 3);
+    // PVML has no keyword-only parameters at all, by design (a rest
+    // parameter must be the closure's last one — see PVMLIR's
+    // `hasRestParam` doc comment and PVMLCompiler's fromFunctionNode, which
+    // rejects `def f(x, *args, z): ...` at compile time). The two
+    // `*args`-then-keyword-only arity() entries in miscTests.arity assert
+    // CSE's real-Python keyword-only arity (2/0) — correct for CSE (tested
+    // above), meaningless for this pathway, so they're dropped from the
+    // table passed here entirely rather than run and skipped: this isn't a
+    // gap PVML-in-browser could ever close, not even in principle.
+    const miscTestsForPvmlInBrowser: TestCases = {
+      ...miscTests,
+      arity: miscTests.arity.filter(
+        ([code]) =>
+          code !== "def f(x, y, *args, z):\n    pass\narity(f)" &&
+          code !== "def f(*args, x, y, z):\n    pass\narity(f)",
+      ),
+    };
+    generatePvmlInBrowserTestCases(miscTestsForPvmlInBrowser, 3, [
+      misc,
+      math,
+      linkedList,
+      stream,
+      list,
+      pairmutator,
+    ]);
   });
 });

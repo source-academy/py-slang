@@ -33,6 +33,22 @@ export class Environment {
   // the scope's body — this set lets a chapter's no-reassignment validator tell "declared as a
   // parameter" apart from "declared by a body statement" so it can flag a parameter reassignment.
   parameters: Set<string>;
+  /**
+   * Names this function scope declared `global` (empty for the module scope
+   * and for any scope with no `global` statement — see
+   * visitFunctionDefStmt's `globalNamesInCurrentFunction` scan). A name in
+   * here is deliberately absent from `names` (declareName skips it — see the
+   * `resolve(Stmt[])` array branch), so a plain `names`-chain walk starting
+   * *inside* this scope correctly never finds a binding here — but without
+   * consulting this set too, that same walk would keep going outward and
+   * could wrongly land on an *enclosing function's own same-named local*
+   * (e.g. `def outer(): x = 1; def inner(): global x` — `inner`'s `global x`
+   * must resolve straight to module scope, never to outer's local `x`,
+   * exactly like real Python: a `global` declaration bypasses every
+   * enclosing function scope, not just the declaring one). See
+   * lookupNameEnv's use of this.
+   */
+  globalNames: Set<string>;
   constructor(
     source: string,
     enclosing: Environment | null,
@@ -46,6 +62,20 @@ export class Environment {
     this.moduleBindings = new Set();
     this.definedNames = new Set();
     this.parameters = parameters;
+    this.globalNames = new Set();
+  }
+
+  /** Walk outward to the module-level environment — one level below the
+   * absolute-root (builtins/prelude) environment. Shared by lookupNameEnv's
+   * `global`-declaration shortcut and visitFunctionDefStmt/visitGlobalStmt's
+   * identical "declare this name at module scope" walk. */
+  getModuleEnvironment(): Environment | null {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let env: Environment | null = this;
+    while (env !== null && env.enclosing !== null && env.enclosing.enclosing !== null) {
+      env = env.enclosing;
+    }
+    return env;
   }
 
   /*
@@ -73,10 +103,16 @@ export class Environment {
    * Returns the Environment where the name is found, or null if not found.
    */
   lookupNameEnv(identifier: Token): Environment | null {
-    if (this.names.has(identifier.lexeme)) {
-      return this;
-    }
-    for (let curr = this.enclosing; curr !== null; curr = curr.enclosing) {
+    // A `global` declaration anywhere between here and the module scope
+    // (inclusive) redirects straight to module scope, bypassing every
+    // scope's own `names` — including an enclosing *function's* own local of
+    // the same name, which would otherwise wrongly win the walk below purely
+    // by being nearer. See `globalNames`' doc comment.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    for (let curr: Environment | null = this; curr !== null; curr = curr.enclosing) {
+      if (curr.globalNames.has(identifier.lexeme)) {
+        return curr.getModuleEnvironment();
+      }
       if (curr.names.has(identifier.lexeme)) {
         return curr;
       }
@@ -197,6 +233,14 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // can legitimately be bound anywhere in the module body, not just textually before a
   // nested function that reads it.
   private moduleStatements: StmtNS.Stmt[] = [];
+  /** Names already bound at module (global) scope before this resolve() call
+   * — e.g. a REPL's previous chunks, or a prelude compiled into the same
+   * persistent global environment. Unlike `preludeNames` (constructor param,
+   * seeded into the *root* builtins environment), these are seeded into the
+   * *module*-level environment `visitFileInputStmt` creates, so they resolve
+   * as ordinary global variables/functions, not primitives — see
+   * PVMLCompiler's `useGlobalMap` mode, which depends on that distinction. */
+  private readonly moduleNames: string[];
 
   constructor(
     source: string,
@@ -204,6 +248,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     validators: FeatureValidator[] = [],
     groups: Group[] = [],
     preludeNames: string[] = [],
+    moduleNames: string[] = [],
   ) {
     this.source = source;
     this.ast = ast;
@@ -212,6 +257,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.validators = validators;
     this.errors = [];
     this.functionEnvironments = new Map();
+    this.moduleNames = moduleNames;
     // The global environment
     this.environment = new Environment(
       source,
@@ -326,7 +372,11 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitFileInputStmt(stmt: StmtNS.FileInput): void {
     // Create a new environment.
     const oldEnv = this.environment;
-    this.environment = new Environment(this.source, this.environment, new Map());
+    this.environment = new Environment(
+      this.source,
+      this.environment,
+      new Map(this.moduleNames.map(name => [name, new Token(TokenType.NAME, name, 0, 0, 0)])),
+    );
     this.functionEnvironments.set(stmt, this.environment);
     // #181 also applies at module level: e.g. `i = 3` followed by `global i` is a
     // SyntaxError in real Python, even though `global` is otherwise a no-op there.
@@ -358,17 +408,26 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const oldNonlocalNames = this.nonlocalNamesInCurrentFunction;
     this.globalNamesInCurrentFunction = this.scanGlobalDeclarations(stmt.body);
     this.nonlocalNamesInCurrentFunction = this.scanNonlocalDeclarations(stmt.body);
+    // Stamp this function's own scope with its `global` declarations — see
+    // `globalNames`' doc comment on Environment — so lookupNameEnv can
+    // redirect straight to module scope for these names regardless of what
+    // an enclosing function scope happens to also bind.
+    this.environment.globalNames = this.globalNamesInCurrentFunction;
 
     // Run scope conflict checks before resolving the body.
     this.checkFunctionScopeConflicts(stmt);
 
-    // Declare global names in the outermost (module-level) environment so that
-    // variable lookups within this function can find them via the chain walk.
+    // Declare global names in the outermost *module-level* environment (not the
+    // absolute-root builtins/prelude environment one level further out — see
+    // visitGlobalStmt's isModuleLevel check for the same "one below root" test)
+    // so that variable lookups within this function can find them via the chain
+    // walk. This matters even for a name with no top-level assignment at all
+    // (`def f(): global y; y = 1` with no `y` anywhere at module scope): without
+    // this, PVMLCompiler's getTokenAnnotation would resolve `y` all the way to
+    // the builtins environment and misinterpret it as an unimplemented
+    // primitive function, rather than a fresh module-level variable slot.
     if (this.globalNamesInCurrentFunction.size > 0) {
-      let globalEnv: Environment | null = this.environment;
-      while (globalEnv?.enclosing !== null) {
-        globalEnv = globalEnv?.enclosing ?? null;
-      }
+      const globalEnv = this.environment.getModuleEnvironment();
       if (globalEnv) {
         for (const name of this.globalNamesInCurrentFunction) {
           if (!globalEnv.names.has(name)) {

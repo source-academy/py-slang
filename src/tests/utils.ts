@@ -1,21 +1,23 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
-import { StmtNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
-import { Resolver } from "../resolver";
-import { RunError } from "../runner";
+import { analyzeWithEnvironments, Resolver } from "../resolver";
+import { RunError, VARIANT_GROUPS } from "../runner";
 import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { Group } from "../stdlib/utils";
+import { Group, toPythonFloat, toPythonString } from "../stdlib/utils";
+import { Token, TokenType } from "../tokenizer";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
 import { FeatureNotSupportedError, makeValidatorsForChapter } from "../validator";
 import { BreakContinueOutsideLoopError } from "../validator/types";
@@ -275,11 +277,48 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 type ErrorClass = new (...args: any[]) => Error;
 
 /**
- * Expected value for an PVML test case.
- * PVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
- * `undefined` means the expression should evaluate to Python None / no return value.
+ * Marks a whole-number PVMLTestExpectedValue as a Python float, not an int
+ * (e.g. `asFloat(180)` for `math_degrees(math_pi) == 180.0`, not `180`) —
+ * needed because a plain whole-number `number` here means int by default
+ * (this table's own long-established convention: `["1 + 1", 2, null]` means
+ * the bigint `2n`, not the float `2.0`), and JS's `Number.isInteger(180)`
+ * can't otherwise tell "180" and "180.0" apart to know when that default is
+ * wrong. Real Python's own math module has plenty of these: `math_fmod`,
+ * `math_remainder`, `math_copysign`, `math_ldexp`, `math_exp2`, `math_gamma`,
+ * `math_degrees`, `math_erf`/`math_erfc`, `math_fabs` all return float even
+ * for whole-number inputs/outputs, verified against real CPython.
  */
-export type PVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+class PyFloatMarker {
+  constructor(public readonly value: number) {}
+}
+export function asFloat(value: number): PyFloatMarker {
+  return new PyFloatMarker(value);
+}
+
+/**
+ * Expected value for an PVML test case.
+ * Python `int` results come back from toJSValue as a genuine JS `bigint`
+ * (see PVMLType.BIGINT) — expressed here as a plain `number` for test-table
+ * brevity; runTestCase() below compares a bigint result against it by value
+ * (`Number(result) === expected`), not by `toBe`/`Object.is`. A whole-number
+ * float result (as opposed to this dialect's own int-returning arithmetic)
+ * needs `asFloat(...)` instead — see its doc comment above — a fractional
+ * `number` (e.g. `3.14`) is unambiguous and needs no wrapper. Complex-valued
+ * results have no dedicated variant here either — assert them via str()
+ * (e.g. `["str(1+2j)", "(1+2j)", null]`), same idea.
+ * `undefined` means "don't check a result value at all" (e.g. the program's
+ * last statement isn't an expression, or is already an explicit print()
+ * call whose own return value isn't the point) — for Python `None` itself,
+ * use `null`.
+ */
+export type PVMLTestExpectedValue =
+  | number
+  | boolean
+  | string
+  | null
+  | undefined
+  | ErrorClass
+  | PyFloatMarker;
 
 /**
  * Same shape as TestCases but with PVML-compatible expected values.
@@ -289,49 +328,220 @@ export type PVMLTestExpectedValue = number | boolean | string | null | undefined
  */
 export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
-export const generatePVMLTestCases = (testCases: PVMLTestCases) => {
+/** Reasons a test case is skipped for the PVML compiler + PVMLInterpreter pathway,
+ * checked in order — mirrors NATIVE_PYNTER_SKIP_REASONS below, for the same
+ * reason: a case that's genuinely out of this pathway's scope should be a
+ * labeled skip, not a failure someone has to keep re-diagnosing as "known".
+ * Currently empty: parse()/tokenize()/apply_in_underlying_python() are all
+ * wired up (see builtins.ts) — PARSE_FEATURE_CALL_RE below is only used by
+ * NATIVE_PYNTER_SKIP_REASONS now, native Pynter being the pathway that
+ * genuinely still doesn't (and won't) support them. */
+const PVML_SKIP_REASONS: {
+  matches: (code: string) => boolean;
+  reason: string;
+}[] = [];
+
+/**
+ * @param variant The Python chapter to compile test cases for (default 4, the
+ * broadest — matches PyPvmlEvaluator's own hardcoded chapter). Matters both
+ * for chapter-gated operator semantics (`==`/`!=`/ordering's bool handling,
+ * `is`/`is not`) and for which chapter's validators (NoListsValidator,
+ * NoIsOperatorValidator, ...) apply during resolution.
+ * @param groups Stdlib groups to load — same as generateTestCases()'s
+ * `groups` param. Defaults to `[misc, math]` (this pathway's own previous,
+ * implicit default) rather than `[]`, so existing callers that don't
+ * override it keep seeing `print`/etc. Each group's SICPy prelude (if any)
+ * is compiled and run once per test case, into the same PVMLInterpreter
+ * globalEnv the case itself then runs against (PVMLCompiler's `useGlobalMap`
+ * mode — see its doc comment), so prelude-defined functions (e.g.
+ * `pair`/`head` from linkedList) are callable from the case. Each case gets
+ * a *fresh* globalEnv — unlike PyPvmlEvaluator's REPL semantics, cases here
+ * are independent of one another, matching generateTestCases()/
+ * generateNativePynterTestCases().
+ */
+/**
+ * A Python script has no return value of its own (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment) — PVMLInterpreter.execute() always yields
+ * `undefined`. To let this test harness still check "what did the last
+ * expression evaluate to", it uses the same technique a real Python program
+ * would (and the exact one used elsewhere in this file's own generatePVMLTestCases
+ * call sites): print() the expression. If the program's last top-level
+ * statement is a bare expression, this rewrites it (in the already-parsed
+ * AST, not by re-serializing/re-parsing source text, so an expression with
+ * its own side effects is evaluated exactly once) into `print(<that
+ * expression>)`, and the last captured output line is compared against
+ * `expected`'s Python str() form — see expectedToPythonStr below. Requires
+ * `print` to be resolvable (i.e. the `misc` group, in scope for every
+ * generatePVMLTestCases call site below).
+ */
+function wrapLastExpressionInPrint(ast: StmtNS.FileInput): boolean {
+  const last = ast.statements[ast.statements.length - 1];
+  if (!(last instanceof StmtNS.SimpleExpr)) return false;
+  const token = new Token(TokenType.NAME, "print", last.startToken.line, 0, -1);
+  token.synthetic = true;
+  const printCallee = new ExprNS.Variable(token, token, token);
+  const call = new ExprNS.Call(last.startToken, last.endToken, printCallee, [last.expression]);
+  ast.statements[ast.statements.length - 1] = new StmtNS.SimpleExpr(
+    last.startToken,
+    last.endToken,
+    call,
+  );
+  return true;
+}
+
+/**
+ * The exact string print()/str() would produce for a PVMLTestExpectedValue
+ * (excluding the ErrorClass case, handled separately by a throw check) —
+ * compared against captured print() output. `number` is ambiguous between a
+ * Python int and float (unlike CSE's own TestOutputValue, which has a
+ * separate bigint case): a whole-number `number` is presumed to mean an int
+ * result (e.g. `5` -> `"5"`) since that's this dialect's more common case,
+ * not a fact this function can know for certain — a case where the actual
+ * result is a float (e.g. math_remainder, which always returns float in
+ * real Python even for int inputs) needs its own table entry using a
+ * non-integer-shaped expectation, or gets caught and corrected the same way
+ * pvml-interpreter.test.ts's math_remainder/math_ldexp cases were: run it,
+ * see what it actually prints, verify against real CPython, fix the table.
+ */
+function expectedToPythonStr(expected: number | boolean | string | null): string {
+  if (expected === null) return "None";
+  if (typeof expected === "boolean") return expected ? "True" : "False";
+  if (typeof expected === "string") return expected;
+  if (Number.isInteger(expected)) return String(expected);
+  return toPythonFloat(expected);
+}
+
+export const generatePVMLTestCases = (
+  testCases: PVMLTestCases,
+  variant: number = 4,
+  groups: Group[] = [misc, math],
+) => {
+  const preludeText = groups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+
+  /** Runs `script` against `globalEnv` (mutated in place). `capturedResult` is the printed text
+   * from wrapLastExpressionInPrint's auto-wrap (popped off `outputs` before returning, so it
+   * doesn't get mixed up with the code's own explicit print() calls) — `undefined` if the script's
+   * last statement wasn't a bare expression, i.e. nothing to capture. Compiles+resolves fresh each
+   * call, using whatever names are already in `globalEnv` (from an earlier call with the same map,
+   * e.g. the prelude) so this script can reference them. */
+  const runAgainstGlobalEnv = (
+    script: string,
+    globalEnv: Map<string, PVMLBoxType>,
+    wantsCapture: boolean = false,
+  ): { capturedResult: string | undefined; outputs: string[] } => {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    // Only auto-wrap when the test case actually wants to observe a result
+    // (expected !== undefined) -- a case with expected: undefined isn't
+    // necessarily "the last statement isn't an expression" (e.g. a bare
+    // `print("hello")` call as the whole program *is* a SimpleExpr, but
+    // wrapping it again would double-call print, printing "None" for the
+    // inner call's own None return value instead of "hello").
+    const wrapped = wantsCapture && wrapLastExpressionInPrint(ast);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      variant,
+      groups,
+      [],
+      Array.from(globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const outputs: string[] = [];
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => outputs.push(msg),
+      globalEnv,
+      programText: script,
+    });
+    interpreter.execute();
+    const capturedResult = wrapped ? outputs.pop() : undefined;
+    return { capturedResult, outputs };
+  };
+
+  type PVMLInternalCase = {
+    code: string;
+    expected: PVMLTestExpectedValue;
+    output: string[] | null;
+    label: string;
+  };
+
+  const runTestCase = ({ code, expected, output }: PVMLInternalCase) => {
+    const globalEnv = new Map<string, PVMLBoxType>();
+    if (preludeText.trim()) {
+      runAgainstGlobalEnv(preludeText, globalEnv);
+    }
+
+    if (typeof expected === "function") {
+      expect(() => runAgainstGlobalEnv(code, globalEnv)).toThrow(expected);
+      return;
+    }
+
+    const { capturedResult, outputs } = runAgainstGlobalEnv(
+      code,
+      globalEnv,
+      expected !== undefined,
+    );
+
+    if (expected === undefined) {
+      expect(capturedResult).toBeUndefined();
+    } else if (
+      expected instanceof PyFloatMarker ||
+      (typeof expected === "number" && !Number.isInteger(expected))
+    ) {
+      // Genuine floating-point computation (log, gamma, sqrt, ...) can legitimately differ in
+      // the last ULP depending on computation order/platform -- exact string comparison is too
+      // strict here, unlike the int/bool/string/None cases below, which have no such ambiguity.
+      const wanted = expected instanceof PyFloatMarker ? expected.value : expected;
+      expect(Number(capturedResult)).toBeCloseTo(wanted);
+    } else {
+      expect(capturedResult).toBe(expectedToPythonStr(expected));
+    }
+
+    if (output !== null) {
+      expect(outputs).toEqual(output);
+    }
+  };
+
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
-      test.each(
-        tests.map(([code, expected, output]) => ({
-          code,
-          expected,
-          output,
-          label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
-        })),
-      )("$code → $label", ({ code, expected, output }) => {
-        const source = code.endsWith("\n") ? code : code + "\n";
-        if (typeof expected === "function") {
-          expect(() => {
-            const ast = parse(source);
-            const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
-            new PVMLInterpreter(program).execute();
-          }).toThrow(expected);
-          return;
-        }
+      const internalCases: PVMLInternalCase[] = tests.map(([code, expected, output]) => ({
+        code,
+        expected,
+        output,
+        label:
+          typeof expected === "function"
+            ? expected.name
+            : expected instanceof PyFloatMarker
+              ? `${expected.value}.0`
+              : JSON.stringify(expected),
+      }));
 
-        const outputs: string[] = [];
-        const ast = parse(source);
-        const program = PVMLCompiler.fromProgram(ast).compileProgram(ast);
-        const interpreter = new PVMLInterpreter(program, {
-          sendOutput: msg => outputs.push(msg),
-        });
-        const result = PVMLInterpreter.toJSValue(interpreter.execute());
-
-        if (expected === undefined) {
-          expect(result).toBeUndefined();
-        } else if (expected === null) {
-          expect(result).toBeNull();
-        } else if (typeof expected === "number" && !Number.isInteger(expected)) {
-          expect(result).toBeCloseTo(expected);
+      const supported: PVMLInternalCase[] = [];
+      const skipBuckets = new Map<string, PVMLInternalCase[]>();
+      for (const testCase of internalCases) {
+        const reason = PVML_SKIP_REASONS.find(({ matches }) => matches(testCase.code))?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
         } else {
-          expect(result).toBe(expected);
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
         }
+      }
 
-        if (output !== null) {
-          expect(outputs).toEqual(output);
-        }
-      });
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)("$code → $label", runTestCase);
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$code → $label (${reason})`, runTestCase);
+      }
     });
   }
 };
@@ -545,6 +755,231 @@ export const generateNativePynterTestCases = (
       }
       for (const [reason, cases] of skipBuckets) {
         test.skip.each(cases)(`$label (${reason})`, runTestCase);
+      }
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PVML-in-browser parity test utilities
+//
+// Reruns the same `TestCases` tables already used with generateTestCases()
+// (the CSE machine) and generateNativePynterTestCases() (native Pynter)
+// against the PVML compiler + PVMLInterpreter — the pure-TypeScript
+// "PVML-in-browser" VM (see pvml-runner.ts's runCodePvmlInterpreterDetailed).
+// No native binary is involved, so — unlike generateNativePynterTestCases,
+// gated behind PYNTER_RUNNER_PATH — this runs unconditionally. Unlike native
+// Pynter (§3 only, see runCodePvmlDetailed's doc comment), the in-browser
+// interpreter supports all four SICPy chapters, so `variant` is a required
+// parameter here, matching generateTestCases()'s own signature, rather than
+// hardcoded to 3 — callers should pass the same variant as their sibling
+// generateTestCases() call for the same table.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether `expr` is a bare call to `print`/`display` (both the same
+ * primitive — see builtins.ts's PRIMITIVE_FUNCTIONS, index 5). A shared
+ * TestCases table entry occasionally already ends in one of these itself
+ * (e.g. parser-stdlib.test.ts's `'print(parse("42"))'`, printing a parsed
+ * data structure as its own way of observing it), with `expected: null` for
+ * that call's own (always-None) return value — the auto-wrap below must not
+ * wrap such a case again (`print(print(...))`), or it would print an extra
+ * "None" line and corrupt the `output` assertion.
+ */
+function isBarePrintCall(expr: ExprNS.Expr): boolean {
+  return (
+    expr instanceof ExprNS.Call &&
+    expr.callee instanceof ExprNS.Variable &&
+    (expr.callee.name.lexeme === "print" || expr.callee.name.lexeme === "display")
+  );
+}
+
+/**
+ * Converts a TestOutputValue (see TestCases' own doc comment) into a CSE
+ * `Value`, so it can be rendered with the exact same toPythonString() the
+ * PVML print() builtin itself uses (see builtins.ts case 5) — comparing the
+ * two engines' output through one shared formatter, rather than a second
+ * hand-written one that could drift from either.
+ */
+function testOutputValueToCseValue(v: TestOutputValue): Value {
+  if (v === null) return { type: "none" };
+  if (typeof v === "bigint") return { type: "bigint", value: v };
+  if (typeof v === "number") return { type: "number", value: v };
+  if (typeof v === "boolean") return { type: "bool", value: v };
+  if (typeof v === "string") return { type: "string", value: v };
+  if (v instanceof PyComplexNumber) return { type: "complex", value: v };
+  return { type: "list", value: v.map(testOutputValueToCseValue) };
+}
+
+/**
+ * Reruns `testCases` through the PVML compiler + PVMLInterpreter (in-browser),
+ * at the given chapter `variant`. A Python script has no return value of its
+ * own (see pvml-compiler.ts's visitFileInputStmt doc comment), so — exactly
+ * as generatePVMLTestCases and operator-conformance-pvml.test.ts already do
+ * — a case's last bare-expression statement is rewritten (in the parsed AST,
+ * not by re-serializing source, so a side-effecting expression still runs
+ * only once) into `print(<that expression>)`, unless it's already a bare
+ * print()/display() call (see isBarePrintCall, whose own return is always
+ * None). Captured output is then compared, as text, against `expected`
+ * rendered through the very same toPythonString() PVML's own print()
+ * builtin uses.
+ *
+ * `bigint`/`bool`/`string`/`null`/`list` expected values are compared
+ * exactly — this dialect's ints are arbitrary-precision (LGCBI, not a
+ * float-precision-limited encoding) and every other case has no
+ * floating-point imprecision to account for. A top-level `number` (always a
+ * Python float here — a whole-number *int* result uses TestOutputValue's
+ * `bigint` variant instead) is compared with `toBeCloseTo` rather than exact
+ * text, and a `complex` result's real/imag parts likewise: a math builtin
+ * (or complex arithmetic itself) needing its own numerical approximation
+ * (gamma, erf, ...) can differ from CSE's own implementation in the last ULP
+ * without either being wrong — matching the tolerance generateTestCases()
+ * already applies to these same table entries (see its own `expect.closeTo`
+ * on both `number` and `complex`'s `real`/`imag`).
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups,
+ * matching whatever non-default combination the sibling generateTestCases()/
+ * generateNativePynterTestCases() call for the same suite uses (e.g. stream
+ * tests add `stream`/`pairmutator` groups on top). Each group's prelude is
+ * compiled and run once per test case into a *fresh* globalEnv — mirroring
+ * generatePVMLTestCases' own per-case prelude handling — so prelude-defined
+ * functions (e.g. `equal`/`map`/`reverse` from linkedList) are callable from
+ * the case, with no state leaking between cases.
+ *
+ * `knownGaps` — exact `code` strings (from this same `testCases` table) that
+ * are known to currently fail against the in-browser pathway — are
+ * registered as `test.skip.each` with a reason pointing at
+ * https://github.com/source-academy/py-slang/issues/258, instead of failing
+ * the suite. This mirrors PVML_SKIP_REASONS/NATIVE_PYNTER_SKIP_REASONS'
+ * pattern of a labeled, visible skip rather than silently dropping a case,
+ * but keyed to an exact, enumerated list rather than a matcher predicate:
+ * these are real, uncategorized behavioral gaps (missing builtins, a
+ * prelude-closure-linking crash, scoping bugs — see the issue), not a
+ * structural "this pathway doesn't support X at all" carve-out a predicate
+ * could describe cleanly, so an exact match keeps this from ever silently
+ * swallowing a *new*, different failure in the same table.
+ */
+export const generatePvmlInBrowserTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+  knownGaps: string[] = [],
+) => {
+  const knownGapSet = new Set(knownGaps);
+  const resolvedGroups = groups ?? VARIANT_GROUPS[variant];
+  if (!resolvedGroups) {
+    throw new Error(`generatePvmlInBrowserTestCases: invalid variant ${variant}. Expected 1-4.`);
+  }
+  const preludeText = resolvedGroups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+
+  /** Compiles+runs `script` fresh against `globalEnv` (mutated in place),
+   * using whatever names are already in it (e.g. from an earlier prelude
+   * run). Mirrors generatePVMLTestCases' own runAgainstGlobalEnv, plus the
+   * isBarePrintCall double-wrap guard described above. */
+  const runAgainstGlobalEnv = (
+    script: string,
+    globalEnv: Map<string, PVMLBoxType>,
+    wantsCapture: boolean = false,
+  ): { capturedResult: string | undefined; outputs: string[] } => {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    const last = ast.statements[ast.statements.length - 1];
+    const alreadyPrints = last instanceof StmtNS.SimpleExpr && isBarePrintCall(last.expression);
+    const wrapped = wantsCapture && !alreadyPrints && wrapLastExpressionInPrint(ast);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      variant,
+      resolvedGroups,
+      [],
+      Array.from(globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const outputs: string[] = [];
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => outputs.push(msg),
+      globalEnv,
+      programText: script,
+    });
+    interpreter.execute();
+    const capturedResult = wrapped
+      ? outputs.pop()
+      : wantsCapture && alreadyPrints
+        ? "None"
+        : undefined;
+    return { capturedResult, outputs };
+  };
+
+  const runTestCase = ({ code, expected, output }: InternalTestCase) => {
+    const globalEnv = new Map<string, PVMLBoxType>();
+    if (preludeText.trim()) {
+      runAgainstGlobalEnv(preludeText, globalEnv);
+    }
+
+    if (typeof expected === "function") {
+      expect(() => runAgainstGlobalEnv(code, globalEnv)).toThrow();
+      return;
+    }
+
+    const { capturedResult, outputs } = runAgainstGlobalEnv(code, globalEnv, true);
+
+    if (output !== null) {
+      expect(outputs).toEqual(output);
+    }
+
+    if (typeof expected === "number") {
+      expect(Number(capturedResult)).toBeCloseTo(expected);
+    } else if (expected instanceof PyComplexNumber) {
+      if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
+        // NaN never round-trips through fromString()/toBeCloseTo below (NaN
+        // isn't "close to" anything, including itself) — and needs no
+        // tolerance anyway, since NaN/Infinity print deterministically, no
+        // floating-point rounding involved. Compare the captured string
+        // directly against the same toString() the interpreter's own
+        // print() used to produce it (mirrors generateTestCases()'s own
+        // `isNaN(expected.real) ? NaN : expect.closeTo(...)` special case).
+        expect(capturedResult).toBe(expected.toString());
+        return;
+      }
+      // Complex arithmetic is genuine floating-point computation too (not a
+      // fixed-precision encoding like bigint/bool/string/None) — real/imag
+      // parts get the same toBeCloseTo tolerance as a top-level `number`
+      // above, matching the tolerance generateTestCases() itself already
+      // applies to these same table entries (see its own `expect.closeTo`
+      // on `real`/`imag`). toPythonString()'s complex format wraps
+      // non-zero-real values in parens (see PyComplexNumber.toString()),
+      // which fromString() doesn't accept back, so strip them first.
+      const parsed = PyComplexNumber.fromString((capturedResult ?? "").replace(/^\(|\)$/g, ""));
+      expect(parsed.real).toBeCloseTo(expected.real);
+      expect(parsed.imag).toBeCloseTo(expected.imag);
+    } else {
+      expect(capturedResult).toBe(toPythonString(testOutputValueToCseValue(expected)));
+    }
+  };
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describe(`[pvml-in-browser] ${funcName}`, () => {
+      const internalCases = createInternalTestCases(tests);
+      const supported = internalCases.filter(({ code }) => !knownGapSet.has(code));
+      const skipped = internalCases.filter(({ code }) => knownGapSet.has(code));
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (skipped.length > 0) {
+        test.skip.each(skipped)(
+          `$label (known PVML-in-browser gap, see py-slang#258)`,
+          runTestCase,
+        );
       }
     });
   }

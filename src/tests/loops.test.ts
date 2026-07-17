@@ -10,6 +10,7 @@ import { FeatureNotSupportedError } from "../validator";
 import {
   generateCPythonTestCases,
   generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
   generateTestCases,
   TestCases,
 } from "./utils";
@@ -94,5 +95,6 @@ describe("Loop Tests", () => {
 
   generateTestCases(loopTests, 3, [misc, math, linkedList, stream, pairmutator, list]);
   generateNativePynterTestCases(loopTests, 3);
+  generatePvmlInBrowserTestCases(loopTests, 3, [misc, math, linkedList, stream, pairmutator, list]);
   generateCPythonTestCases(loopTests, 3);
 });
