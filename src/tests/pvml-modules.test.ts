@@ -75,6 +75,38 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Mirrors sound's actual sine_sound -> play shape precisely: sine_sound's own body wraps a
+  // plain JS wave as a *new* closure (waveToConductorClosure -> closure_make), and play's own
+  // body later calls that closure many times via closure_call_unchecked (sampleWave's loop) -
+  // not just one call each, an extern creating a closure that a *different* extern then
+  // repeatedly invokes.
+  const makeWave = await dh.closure_make(
+    { returnType: DataType.CLOSURE, args: [DataType.NUMBER] },
+    async function* (freq: TypedValue<DataType.NUMBER>) {
+      return dh.closure_make(
+        { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+        // eslint-disable-next-line @typescript-eslint/require-await
+        async function* (t: TypedValue<DataType.NUMBER>) {
+          return num(Math.sin(freq.value * t.value));
+        },
+      );
+    },
+  );
+
+  const sampleWave = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.CLOSURE] },
+    async function* (wave: TypedValue<DataType.CLOSURE>) {
+      let sum = num(0);
+      for (let i = 0; i < 5; i += 1) {
+        sum = yield* dh.closure_call_unchecked(
+          wave as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
+          [num(i)],
+        );
+      }
+      return sum;
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -83,6 +115,8 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
       { symbol: "make_pair", value: makePair },
+      { symbol: "make_wave", value: makeWave },
+      { symbol: "sample_wave", value: sampleWave },
     ],
   } as unknown as IModulePlugin;
 }
@@ -130,6 +164,29 @@ describe("PyPvmlEvaluator module imports", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["42.0"]);
+  });
+
+  test("a closure created by one module call and invoked by another reports a clear error, not a stack underflow", async () => {
+    // Mirrors sound's actual sine_sound -> play shape: sine_sound's own body wraps a plain wave
+    // as a *new* closure (waveToConductorClosure -> closure_make), and play's own body later
+    // calls that closure many times (sampleWave's loop). Any closure that crosses the module
+    // boundary is represented in PVML as an "extern" value, so invoking it later re-enters via
+    // invokeValue with func itself being an extern - dispatchCall's extern branch parks
+    // pendingExtern and returns without ever changing currentFrame, which used to let this fall
+    // straight through invokeValue's while loop (whose condition never became true) into
+    // `this.pop()` on a stack nothing had been pushed to - "Stack underflow", not this error.
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import sample_wave, make_wave\nsample_wave(make_wave(440))\n",
+    );
+
+    expect(errors).toHaveLength(1);
+    const [error] = errors as { toString(): string }[];
+    expect(String(error)).toMatch(
+      /cannot call imported module function .* from inside a callback/,
+    );
   });
 
   test("a module function can call a Python closure back (higher-order)", async () => {

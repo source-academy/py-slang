@@ -1675,8 +1675,15 @@ export class PVMLInterpreter {
 
     this.dispatchCall(func, args, false);
 
-    while (this.currentFrame && this.currentFrame !== origFrame) {
-      this.step();
+    // dispatchCall's extern branch (see its own doc comment) never touches currentFrame at all -
+    // it just parks pendingExtern and returns, whether func itself is the extern (this call sets
+    // pendingExtern with currentFrame still === origFrame, so the loop below would never run even
+    // once) or func's own body makes a nested extern call partway through stepping (pendingExtern
+    // appears while currentFrame !== origFrame, mid-loop). The condition checks pendingExtern
+    // first specifically to catch the former case - previously only the latter was handled, so a
+    // func that was itself an extern silently fell through to `this.pop()` on a stack nothing had
+    // been pushed to ("Stack underflow"), instead of the clear error below.
+    while (this.pendingExtern || (this.currentFrame && this.currentFrame !== origFrame)) {
       if (this.pendingExtern) {
         // This loop is synchronous (its callers — primitives, and module
         // callbacks re-entering via executeAsync's callPvml — expect a plain
@@ -1692,6 +1699,7 @@ export class PVMLInterpreter {
             `callback that was itself invoked by a module or primitive`,
         );
       }
+      this.step();
     }
 
     return this.pop();
