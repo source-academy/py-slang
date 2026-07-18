@@ -144,17 +144,21 @@ export async function pvmlToModule(
       case "primitive":
       case "extern": {
         // Any callable PVML value a module receives becomes a conductor
-        // closure that re-enters the interpreter synchronously (see
-        // PVMLHostCall). dispatchCall handles closure and primitive values
-        // uniformly; an extern passed back to a module is rejected at call
-        // time by invokeValue's nested-extern guard rather than here, since
-        // merely holding it is harmless.
+        // closure that re-enters the interpreter (see PVMLHostCall).
+        // dispatchCall handles closure and primitive values uniformly; an
+        // extern passed back to a module - e.g. a closure created by one
+        // module call and later invoked by another, such as sound's
+        // sine_sound producing a wave that play() later samples - awaits
+        // cleanly here too, since callPvml (invokeValueAsync) can itself
+        // await a pending nested extern call rather than having to reject
+        // it the way primitive dispatch's separate, synchronous re-entry
+        // point must.
         const arity = value.type === "closure" ? value.ir.numArgs : 0;
         async function* callback(
           ...args: TypedValue<DataType>[]
         ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
           const pvmlArgs = await Promise.all(args.map(a => moduleToPvml(dh, a, "callback")));
-          const result = callPvml(value, pvmlArgs);
+          const result = await callPvml(value, pvmlArgs);
           return pvmlToModule(dh, result, callPvml);
         }
         return dh.closure_make(

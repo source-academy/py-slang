@@ -107,6 +107,35 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Mirrors sound's simultaneously(list(sine_sound(...), sine_sound(...))): a *third* extern
+  // (combineWaves) creates its own brand-new closure whose own body, when later sampled, calls
+  // back into two other module-crossing closures - a genuinely deeper chain than makeWave's
+  // (module creates closure -> different module samples it once). Here: module A creates two
+  // closures, module B combines them into a new closure of its own, module C samples *that* -
+  // which in turn re-invokes the original two, each independently re-entering the interpreter.
+  const combineWaves = await dh.closure_make(
+    { returnType: DataType.CLOSURE, args: [DataType.CLOSURE, DataType.CLOSURE] },
+    async function* (
+      waveA: TypedValue<DataType.CLOSURE>,
+      waveB: TypedValue<DataType.CLOSURE>,
+    ) {
+      return dh.closure_make(
+        { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+        async function* (t: TypedValue<DataType.NUMBER>) {
+          const a = yield* dh.closure_call_unchecked(
+            waveA as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
+            [t],
+          );
+          const b = yield* dh.closure_call_unchecked(
+            waveB as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
+            [t],
+          );
+          return num(a.value + b.value);
+        },
+      );
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -117,6 +146,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "make_pair", value: makePair },
       { symbol: "make_wave", value: makeWave },
       { symbol: "sample_wave", value: sampleWave },
+      { symbol: "combine_waves", value: combineWaves },
     ],
   } as unknown as IModulePlugin;
 }
@@ -166,27 +196,49 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(outputs).toEqual(["42.0"]);
   });
 
-  test("a closure created by one module call and invoked by another reports a clear error, not a stack underflow", async () => {
+  test("a closure created by one module call can be invoked by another, repeatedly", async () => {
     // Mirrors sound's actual sine_sound -> play shape: sine_sound's own body wraps a plain wave
     // as a *new* closure (waveToConductorClosure -> closure_make), and play's own body later
     // calls that closure many times (sampleWave's loop). Any closure that crosses the module
-    // boundary is represented in PVML as an "extern" value, so invoking it later re-enters via
-    // invokeValue with func itself being an extern - dispatchCall's extern branch parks
-    // pendingExtern and returns without ever changing currentFrame, which used to let this fall
-    // straight through invokeValue's while loop (whose condition never became true) into
-    // `this.pop()` on a stack nothing had been pushed to - "Stack underflow", not this error.
-    const { conductor, errors } = makeMockConductor();
+    // boundary is represented in PVML as an "extern" value - invoking it later re-enters via
+    // invokeValueAsync with func itself being an extern, awaiting dispatchCall's parked
+    // pendingExtern instead of rejecting it (see invokeValueAsync's doc comment). Previously this
+    // threw "Stack underflow" (a missing guard), then a correctly-surfaced but unhelpful
+    // "cannot call imported module function" RuntimeError (the guard doing its documented job,
+    // just not what real modules like sound actually need) - now it genuinely completes.
+    // print(...), not a bare statement - capturing a bare top-level extern call's value as the
+    // chunk's own result is a separate, pre-existing bug (also reproducible with no closures
+    // involved at all, e.g. a bare `double(double(21))`), independent of this one.
+    const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
     await evaluator.evaluateChunk(
-      "from testmod import sample_wave, make_wave\nsample_wave(make_wave(440))\n",
+      "from testmod import sample_wave, make_wave\nprint(sample_wave(make_wave(440)))\n",
     );
 
-    expect(errors).toHaveLength(1);
-    const [error] = errors as { toString(): string }[];
-    expect(String(error)).toMatch(
-      /cannot call imported module function .* from inside a callback/,
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual([String(Math.sin(440 * 4))]);
+  });
+
+  test("nesting goes deeper than one level: a combined closure invoking two other module-crossing closures", async () => {
+    // Mirrors sound's play(simultaneously(list(sine_sound(...), sine_sound(...)))): module A
+    // (make_wave) creates two closures crossing into student code, module B (combine_waves)
+    // creates a brand-new closure of its own whose body calls back into *both* of those, and
+    // module C (sample_wave) samples that combined closure - so invokeValueAsync's own await of
+    // one pending extern (combine_waves's combined closure) must itself, from within that same
+    // await, correctly handle two further nested pending externs (waveA, waveB).
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import sample_wave, make_wave, combine_waves\n" +
+        "combined = combine_waves(make_wave(440), make_wave(220))\n" +
+        "print(sample_wave(combined))\n",
     );
+
+    expect(errors).toEqual([]);
+    const expected = Math.sin(440 * 4) + Math.sin(220 * 4);
+    expect(outputs).toEqual([String(expected)]);
   });
 
   test("a module function can call a Python closure back (higher-order)", async () => {

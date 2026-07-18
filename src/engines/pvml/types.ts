@@ -143,14 +143,21 @@ export interface PVMLOpaque {
 }
 
 /**
- * Synchronously re-enters the interpreter to call a PVML closure/primitive
- * value from host code — a bound PVMLInterpreter.invokeValue, passed to a
- * PVMLExtern's `fn` so imported-module callbacks (e.g. a student function
- * handed to a module's higher-order export) can call back into user code.
- * A function type rather than a PVMLInterpreter reference to keep this
- * module free of a circular import on the interpreter.
+ * Re-enters the interpreter to call a PVML closure/primitive value from host
+ * code — a bound PVMLInterpreter.invokeValueAsync, passed to a PVMLExtern's
+ * `fn` so imported-module callbacks (e.g. a student function handed to a
+ * module's higher-order export, or a closure created by one module and
+ * later invoked by another - see sound's sine_sound producing a wave that
+ * play() later samples) can call back into user code. Async, unlike
+ * primitive dispatch's own separate, still-synchronous re-entry point
+ * (builtins.ts's own inline `invokeValue` type) - every caller of this hook
+ * (PVMLExtern.fn itself, and modules.ts's pvmlToModule conversions) is
+ * already an async function, so there's no synchronous context here that a
+ * pending nested extern call would need to avoid awaiting. A function type
+ * rather than a PVMLInterpreter reference to keep this module free of a
+ * circular import on the interpreter.
  */
-export type PVMLHostCall = (func: PVMLBoxType, args: PVMLBoxType[]) => PVMLBoxType;
+export type PVMLHostCall = (func: PVMLBoxType, args: PVMLBoxType[]) => Promise<PVMLBoxType>;
 
 /**
  * A host (imported-module) function value — what a conductor module's
