@@ -149,11 +149,13 @@ export type Instr =
  * family of TypeError messages (see `UnsupportedOperandTypeError` in both
  * src/errors/errors.ts and src/engines/pvml/errors.ts) — spelled-out words
  * ("integer", "boolean") over CPython's own abbreviations ("int", "bool"),
- * and "None" over "NoneType". Deliberately separate from `typeTranslator`
- * itself, which other consumers (the CSE Machine visualizer's stash-value
- * labels, PyCseMachinePlugin.ts) still need in its original, more
- * CPython-literal form — changing `typeTranslator`'s own output would have
- * silently changed those debugger labels too.
+ * "None" over "NoneType", and "function" over "builtin_function_or_method"
+ * (no user-visible distinction between a builtin and a closure here, same
+ * reasoning as "closure" itself already collapsing to "function"). Deliberately
+ * separate from `typeTranslator` itself, which other consumers (the CSE
+ * Machine visualizer's stash-value labels, PyCseMachinePlugin.ts) still need
+ * in its original, more CPython-literal form — changing `typeTranslator`'s
+ * own output would have silently changed those debugger labels too.
  */
 export function friendlyTypeName(pythonTypeName: string): string {
   switch (pythonTypeName) {
@@ -165,6 +167,8 @@ export function friendlyTypeName(pythonTypeName: string): string {
       return "string";
     case "NoneType":
       return "None";
+    case "builtin_function_or_method":
+      return "function";
     default:
       return pythonTypeName;
   }
