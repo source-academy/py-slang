@@ -2,15 +2,16 @@ import { compileToWasmAndRun } from "../../engines/wasm";
 import { ERROR_MAP, TYPE_TAG } from "../../engines/wasm/runtime";
 import linkedList from "../../stdlib/linked-list";
 
+// Basic single-op arithmetic/comparison cases for every type combination are
+// covered far more rigorously by operator-conformance-wasm.test.ts's
+// spec-table sweep (all four chapters, cross-checked against a live CSE
+// reference instead of hand-typed expected values -- it's what caught the
+// complex-division and GEN_LIST_FX bugs this suite's own hand-picked cases
+// missed). What's left here is coverage that sweep can't provide by
+// construction: parser precedence (a compound expression, not a single binary
+// op), literal-rendering edge cases the sweep's fixed representative literals
+// never hit, and UTF-8/multibyte string handling.
 describe("Arithmetic operator tests (int, float, complex, string)", () => {
-  // --- INT ARITHMETIC ---
-  it("int addition", async () => {
-    const pythonCode = `1 + 2`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("3");
-  });
-
   it("mixed int arithmetic with precedence", async () => {
     const pythonCode = `2 + 3 * 4 - 5`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
@@ -18,63 +19,7 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(renderedResult).toBe("9");
   });
 
-  it("int division (floor div semantics unsupported -> float?)", async () => {
-    const pythonCode = `5 / 2`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
-    expect(renderedResult).toBe("2.5");
-  });
-
-  // --- FLOAT ARITHMETIC ---
-  it("float addition", async () => {
-    const pythonCode = `1.5 + 2.25`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
-    expect(renderedResult).toBe("3.75");
-  });
-
-  it("mixed int + float -> float", async () => {
-    const pythonCode = `3 + 2.5`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
-    expect(renderedResult).toBe("5.5");
-  });
-
-  it("float multiplication", async () => {
-    const pythonCode = `1.2 * 3.4`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.FLOAT);
-    expect(renderedResult).toBe("4.08");
-  });
-
-  // --- COMPLEX ARITHMETIC ---
-  it("complex addition", async () => {
-    const pythonCode = `
-(1+2j) + (3+4j)
-`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("4 + 6j");
-  });
-
-  it("complex multiplication", async () => {
-    const pythonCode = `
-(2+3j) * (4+5j)
-`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("-7 + 22j");
-  });
-
-  it("complex with real (int) -> complex", async () => {
-    const pythonCode = `
-(1+2j) + 10
-`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("11 + 2j");
-  });
-
+  // --- COMPLEX LITERAL RENDERING ---
   it("pure imaginary output omits leading zero real part", async () => {
     const pythonCode = `2j`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
@@ -89,14 +34,7 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(renderedResult).toBe("1 - 2j");
   });
 
-  // --- STRING ARITHMETIC ---
-  it("string concatenation with +", async () => {
-    const pythonCode = `"hello" + " world"`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
-    expect(renderedResult).toBe("hello world");
-  });
-
+  // --- STRING: UTF-8 ---
   it("string literal with multibyte UTF-8 characters", async () => {
     const pythonCode = `"😀"`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
@@ -110,80 +48,33 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
     expect(renderedResult).toBe("😀é");
   });
+});
 
-  it("string + int should error (type mismatch)", async () => {
-    const pythonCode = `"a" + 1`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE),
+// Precise error *messages* (not just success-vs-error, which the sweep
+// already checks across the full type matrix) for a couple of named failure
+// paths worth pinning down explicitly.
+describe("Named error messages", () => {
+  it("complex ordering comparisons report COMPLEX_COMPARISON", async () => {
+    await expect(compileToWasmAndRun(`(1+1j) < (2+2j)`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.COMPLEX_COMPARISON),
     );
   });
 
-  it("unary minus on string should error", async () => {
-    const pythonCode = `-"a"`;
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
-      new Error(ERROR_MAP.NEG_NOT_SUPPORT),
+  it("string ordering against a non-string reports COMPARE_OP_UNKNOWN_TYPE", async () => {
+    await expect(compileToWasmAndRun(`"x" < 3`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE),
     );
   });
 });
 
-describe("Comparison operator tests (int, float, complex, string)", () => {
-  const expectComparisonToBe = async (pythonCode: string, expected: "True" | "False") => {
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
-    expect(renderedResult).toBe(expected);
-  };
-
-  const expectComparisonToError = async (pythonCode: string, errorMessage: string) => {
-    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(new Error(errorMessage));
-  };
-
-  // --- INT COMPARE ---
-  it("int ==", async () => expectComparisonToBe(`3 == 3`, "True"));
-  it("int !=", async () => expectComparisonToBe(`3 != 4`, "True"));
-  it("int <", async () => expectComparisonToBe(`5 < 1`, "False"));
-  it("int <=", async () => expectComparisonToBe(`5 <= 5`, "True"));
-  it("int >", async () => expectComparisonToBe(`7 > 2`, "True"));
-  it("int >=", async () => expectComparisonToBe(`2 >= 9`, "False"));
-
-  // --- FLOAT/INT MIXED COMPARE ---
-  it("float/int ==", async () => expectComparisonToBe(`1.5 == 1.5`, "True"));
-  it("float/int !=", async () => expectComparisonToBe(`1.5 != 2`, "True"));
-  it("float/int <", async () => expectComparisonToBe(`1.5 < 2`, "True"));
-  it("float/int <=", async () => expectComparisonToBe(`2.0 <= 2`, "True"));
-  it("float/int >", async () => expectComparisonToBe(`3.25 > 3`, "True"));
-  it("float/int >=", async () => expectComparisonToBe(`3.0 >= 4`, "False"));
-
-  // --- COMPLEX COMPARE ---
-  it("complex ==", async () => expectComparisonToBe(`(1+2j) == (1+2j)`, "True"));
-  it("complex !=", async () => expectComparisonToBe(`(1+2j) != (2+1j)`, "True"));
-
-  it("complex < must error", async () =>
-    expectComparisonToError(`(1+1j) < (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
-  it("complex <= must error", async () =>
-    expectComparisonToError(`(1+1j) <= (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
-  it("complex > must error", async () =>
-    expectComparisonToError(`(1+1j) > (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
-  it("complex >= must error", async () =>
-    expectComparisonToError(`(1+1j) >= (2+2j)`, ERROR_MAP.COMPLEX_COMPARISON));
-
-  // --- STRING COMPARE ---
-  it("string ==", async () => expectComparisonToBe(`"abc" == "abc"`, "True"));
-  it("string !=", async () => expectComparisonToBe(`"abc" != "abd"`, "True"));
-  it("string <", async () => expectComparisonToBe(`"apple" < "banana"`, "True"));
-  it("string <=", async () => expectComparisonToBe(`"apple" <= "apple"`, "True"));
-  it("string >", async () => expectComparisonToBe(`"pear" > "orange"`, "True"));
-  it("string >=", async () => expectComparisonToBe(`"pear" >= "zebra"`, "False"));
-
-  it("string < non-string must error", async () =>
-    expectComparisonToError(`"x" < 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
-  it("string <= non-string must error", async () =>
-    expectComparisonToError(`"x" <= 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
-  it("string > non-string must error", async () =>
-    expectComparisonToError(`"x" > 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
-  it("string >= non-string must error", async () =>
-    expectComparisonToError(`"x" >= 3`, ERROR_MAP.COMPARE_OP_UNKNOWN_TYPE));
-});
-
+// `and`/`or`'s *left* operand, and `not`'s sole operand, must be an actual
+// bool -- see docs/specs/python_typing_back.tex: `and`/`or` are typed
+// `bool, any -> any` (only the *right* operand of `and`/`or` is `any`), and
+// `not` is `bool -> bool`. Unlike real Python (where any value's truthiness
+// is valid here), this SICPy dialect deliberately restricts these three
+// operators' bool-typed operand to an actual bool -- see CSE's
+// evaluateUnaryExpression / BOOL_OP instruction handler, which reject e.g.
+// `not 5` and `5 and 3` outright.
 describe("Boolean tests", () => {
   // --- NOT OPERATOR ---
   it("not True", async () => {
@@ -193,60 +84,59 @@ describe("Boolean tests", () => {
     expect(renderedResult).toBe("False");
   });
 
-  it("not 0", async () => {
-    const pythonCode = `not 0`;
+  it("not False", async () => {
+    const pythonCode = `not False`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
 
-  it("not nonzero", async () => {
-    const pythonCode = `not 5`;
+  it("not on a non-bool operand errors", async () => {
+    await expect(compileToWasmAndRun(`not 5`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
+  });
+
+  // --- AND ---
+  it("False and 5 -> False (short-circuits on the falsy left operand)", async () => {
+    const pythonCode = `False and 5`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("False");
   });
 
-  // --- AND ---
-  it("0 and 5 -> 0 (first falsy)", async () => {
-    const pythonCode = `0 and 5`;
+  it("True and 0 -> 0", async () => {
+    const pythonCode = `True and 0`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("0");
   });
 
-  it("5 and 0 -> 0", async () => {
-    const pythonCode = `5 and 0`;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("0");
-  });
-
-  it("5 and 3 -> 3 (last truthy)", async () => {
-    const pythonCode = `5 and 3`;
+  it("True and 3 -> 3", async () => {
+    const pythonCode = `True and 3`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
 
-  it("'hello' and 10 -> 10", async () => {
-    const pythonCode = `"hello" and 10`;
+  it("True and 'hello' -> 'hello'", async () => {
+    const pythonCode = `True and "hello"`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("10");
+    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
+    expect(renderedResult).toBe("hello");
   });
 
-  it("'hello' and '' -> ''", async () => {
-    const pythonCode = `"hello" and ""`;
+  it("True and '' -> ''", async () => {
+    const pythonCode = `True and ""`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
     expect(renderedResult).toBe("");
   });
 
-  it("pair and None -> None", async () => {
+  it("True and None -> None", async () => {
     const pythonCode = `
 p = pair(1,2)
-p and None
+True and None
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
       groups: [linkedList],
@@ -255,35 +145,47 @@ p and None
     expect(renderedResult).toBe("None");
   });
 
+  it("and with a non-bool left operand errors", async () => {
+    await expect(compileToWasmAndRun(`5 and 3`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
+  });
+
   // --- OR ---
-  it("0 or 5 -> 5 (first truthy)", async () => {
-    const pythonCode = `0 or 5`;
+  it("False or 5 -> 5", async () => {
+    const pythonCode = `False or 5`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("5");
   });
 
-  it("'' or 'abc' -> 'abc'", async () => {
-    const pythonCode = `"" or "abc"`;
+  it("False or 'abc' -> 'abc'", async () => {
+    const pythonCode = `False or "abc"`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.STRING);
     expect(renderedResult).toBe("abc");
   });
 
-  it("'x' or 100 -> 'x'", async () => {
-    const pythonCode = `"x" or 100`;
+  it("True or 100 -> True (short-circuits on the truthy left operand)", async () => {
+    const pythonCode = `True or 100`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.STRING);
-    expect(renderedResult).toBe("x");
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 
-  it("None or pair(1,2) -> pair", async () => {
-    const pythonCode = `None or pair(1,2)`;
+  it("False or pair(1,2) -> pair", async () => {
+    const pythonCode = `False or pair(1,2)`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true, {
       groups: [linkedList],
     });
     expect(rawResult[0]).not.toBe(TYPE_TAG.NONE);
     expect(renderedResult).toBe("[1, 2]");
+  });
+
+  it("or with a non-bool left operand errors", async () => {
+    await expect(compileToWasmAndRun(`5 or 3`, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
   });
 
   // --- SHORT CIRCUITING ---
@@ -292,12 +194,12 @@ p and None
 x = 0
 def boom():
     x = x + 1  # would error if executed
-0 and boom()
+False and boom()
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    // must return 0 (falsy) without calling boom()
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("0");
+    // must return False without calling boom()
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("False");
   });
 
   it("or short-circuits (second expr not evaluated)", async () => {
@@ -305,10 +207,11 @@ def boom():
 x = 0
 def boom():
     x = x + 1  # would error if executed
-1 or boom()
+True or boom()
 `;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("1");
+    // must return True without calling boom()
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
   });
 });

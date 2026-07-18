@@ -31,6 +31,7 @@ export async function compileScriptToWasmBinary(
     makeLibraryFunctions(groups),
     interactiveMode,
     options.pageCount ?? 1,
+    options.chapter ?? 4,
   );
   const passes: IrPass[] = [
     ...(options.irPasses ?? []),
