@@ -935,6 +935,13 @@ export const generatePvmlInBrowserTestCases = (
     }
 
     if (typeof expected === "number") {
+      if (Number.isNaN(expected)) {
+        // NaN isn't "close to" anything, including itself, so toBeCloseTo
+        // below would always fail here -- compare the printed "nan" string
+        // instead, same as the PyComplexNumber NaN case just below.
+        expect(capturedResult).toBe("nan");
+        return;
+      }
       expect(Number(capturedResult)).toBeCloseTo(expected);
     } else if (expected instanceof PyComplexNumber) {
       if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
@@ -1118,19 +1125,33 @@ function isChapterGatingError(expected: TestExpectedValue): boolean {
 const BOOL_EXCLUDING_NUMERIC_BUILTIN_RE = /^(?:abs|max|min|round|math_\w+)$/;
 
 /**
- * Whether `code` is a call to one of the builtins above whose entire argument list is
- * `True`/`False` and `expected` is an error: unlike CPython (where `bool` is an `int` subclass, so
- * e.g. `abs(True) == 1`), this dialect deliberately excludes `bool` from every arithmetic/numeric
- * builtin and operator (see `asIntIfBool`'s doc comment in operators.ts) — a pedagogical rule with
- * no CPython equivalent, not a bug. High-volume: nearly every numeric builtin has one of these
- * cases, so left unfiltered it would swamp genuinely interesting failures.
+ * Whether `code` is a call to one of the builtins above where every argument is a plain
+ * `True`/`False`/numeric literal, at least one of them `True`/`False`, and `expected` is an error:
+ * unlike CPython (where `bool` is an `int` subclass, so e.g. `abs(True) == 1`), this dialect
+ * deliberately excludes `bool` from every arithmetic/numeric builtin and operator (see
+ * `asIntIfBool`'s doc comment in operators.ts) — a pedagogical rule with no CPython equivalent, not
+ * a bug. High-volume: nearly every numeric builtin has one of these cases, so left unfiltered it
+ * would swamp genuinely interesting failures. Deliberately allows a *mix* of a bool literal with a
+ * plain numeric one (`math_fmod(True, 1)`, `math_remainder(1, True)`), not just an all-bool
+ * argument list — a multi-arg builtin's bool-rejection check can fire on either position, and
+ * CPython accepts the mixed call exactly as readily as the all-bool one (bool is still an int
+ * subclass either way). The "at least one bool" requirement is what keeps this from also matching
+ * an unrelated all-numeric domain-check case like `math_sqrt(-1)` (a genuine ValueError in both
+ * this dialect and CPython, not a bool-vs-int-subclass divergence at all).
  */
-const BOOL_REJECTION_CALL_RE = /^(\w+)\((?:True|False)(?:,\s*(?:True|False))*\)$/;
+const BOOL_REJECTION_CALL_RE = /^(\w+)\(([^()]*)\)$/;
+const BOOL_OR_PLAIN_NUMERIC_ARG_RE = /^(?:True|False|-?\d+(?:\.\d+)?)$/;
 
 function isBoolRejection(code: string, expected: TestExpectedValue): boolean {
   if (typeof expected !== "function") return false;
   const match = BOOL_REJECTION_CALL_RE.exec(code.trim());
-  return match !== null && BOOL_EXCLUDING_NUMERIC_BUILTIN_RE.test(match[1]);
+  if (match === null || !BOOL_EXCLUDING_NUMERIC_BUILTIN_RE.test(match[1])) return false;
+  const args = match[2].split(",").map(a => a.trim());
+  return (
+    args.length > 0 &&
+    args.every(a => BOOL_OR_PLAIN_NUMERIC_ARG_RE.test(a)) &&
+    args.some(a => a === "True" || a === "False")
+  );
 }
 
 /**
