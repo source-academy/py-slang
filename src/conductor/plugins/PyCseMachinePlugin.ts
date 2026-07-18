@@ -77,6 +77,8 @@ function formatValue(v: Value): string {
       // The "this is a builtin" fact is carried separately via `label`
       // (see serializeValue / typeTranslator), same pattern as closures.
       return v.name;
+    case "opaque":
+      return `<opaque value>`;
     default:
       v satisfies never;
       return "?";
@@ -162,6 +164,7 @@ const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
   [InstrType.CONTINUE_MARKER]: "ContinueMarker", // py: "continueMarker" → js: "ContinueMarker"
   [InstrType.BREAK]: "Break", // py: "BreakInstr"  → js: "Break"
   [InstrType.CONTINUE]: "Continue", // py: "ContinueInstr" → js: "Continue"
+  [InstrType.MODULE_FUNCTION_CALL]: "ModuleFunctionCall",
 };
 
 // Map py-slang AST node kinds → js-slang ESTree node type names so the animation
@@ -224,6 +227,8 @@ function instrDisplayText(item: ControlStackItem): string {
     case InstrType.BINARY_OP:
     case InstrType.BOOL_OP:
       return operatorTranslator(item.symbol!);
+    case InstrType.MODULE_FUNCTION_CALL:
+      return `mod call ${item.numOfArgs}`;
     default:
       return String(item.instrType);
   }
@@ -242,6 +247,9 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     }
     // Extra fields consumed by specific animations.
     if (item.instrType === InstrType.APPLICATION && item.numOfArgs !== undefined) {
+      meta.numOfArgs = item.numOfArgs;
+    }
+    if (item.instrType === InstrType.MODULE_FUNCTION_CALL && item.numOfArgs !== undefined) {
       meta.numOfArgs = item.numOfArgs;
     }
     if (item.instrType === InstrType.ASSIGNMENT && item.symbol !== undefined) {

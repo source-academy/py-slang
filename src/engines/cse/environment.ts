@@ -3,7 +3,8 @@ import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from 
 import { Closure } from "./closure";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
-import { Value } from "./stash";
+import { listLiteralValues } from "./modules";
+import { ListValue, Value } from "./stash";
 
 /**
  * Sentinel stored in a Frame for a local variable that has been allocated (by CALL,
@@ -83,7 +84,13 @@ export const createEnvironment = (
       // Rest parameter: collect remaining args into a list value.
       // Spread flattening in the Application handler detects these via
       // val.type === "list" and expands val.value inline.
-      environment.head[paramName] = { type: "list", value: args.slice(index) };
+      const restArgs: ListValue = { type: "list", value: args.slice(index) };
+      // A flat, arbitrary-length collection - the same category as a bracket literal (visitListExpr/
+      // InstrType.LIST), not a pair()/llist() chain - so module interop (pythonToModule) needs the
+      // same tag to reconstruct it as a proper PAIR/EMPTY_LIST chain rather than misreading an
+      // exactly-2-arg case as a dotted pair. See listLiteralValues' definition in modules.ts.
+      listLiteralValues.add(restArgs);
+      environment.head[paramName] = restArgs;
       consumed = true;
       return;
     }

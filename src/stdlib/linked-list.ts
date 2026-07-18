@@ -10,8 +10,22 @@ import { GroupName, minArgMap, toPythonString, Validate } from "./utils";
 
 const linkedListBuiltins = new Map<string, BuiltinValue>();
 
-const isPair = (value: Value): value is ListValue => {
+export const isPair = (value: Value): value is ListValue => {
   return value.type === "list" && value.value.length === 2;
+};
+
+/**
+ * Whether `value` is a proper linked list: a chain of pairs (as constructed by `pair()`/`llist()`)
+ * terminated by `None`, rather than an arbitrary 2-element list. Distinguishing this from a bare
+ * `isPair()` check matters at the module interop boundary (see `pythonToModule`'s "list" case in
+ * `engines/cse/modules.ts`), where a plain 2-element list shouldn't be misidentified as a pair
+ * chain just because it happens to have length 2.
+ */
+export const isProperList = (value: Value): boolean => {
+  if (value.type === "none") {
+    return true;
+  }
+  return isPair(value) && isProperList(value.value[1]);
 };
 
 class LinkedListBuiltins {
@@ -62,10 +76,7 @@ class LinkedListBuiltins {
   }
 
   static _is_llist(value: Value): boolean {
-    if (value.type === "none") {
-      return true;
-    }
-    return isPair(value) && LinkedListBuiltins._is_llist(value.value[1]);
+    return isProperList(value);
   }
 
   static _print_llist(

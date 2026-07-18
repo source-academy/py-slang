@@ -290,8 +290,3 @@ export interface NativeStorage {
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;
 }
-
-export interface ModuleContext {
-  state: null | unknown;
-  tabs: null | unknown[];
-}
