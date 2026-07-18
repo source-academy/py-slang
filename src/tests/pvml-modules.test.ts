@@ -120,10 +120,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   // which in turn re-invokes the original two, each independently re-entering the interpreter.
   const combineWaves = await dh.closure_make(
     { returnType: DataType.CLOSURE, args: [DataType.CLOSURE, DataType.CLOSURE] },
-    async function* (
-      waveA: TypedValue<DataType.CLOSURE>,
-      waveB: TypedValue<DataType.CLOSURE>,
-    ) {
+    async function* (waveA: TypedValue<DataType.CLOSURE>, waveB: TypedValue<DataType.CLOSURE>) {
       return dh.closure_make(
         { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
         async function* (t: TypedValue<DataType.NUMBER>) {
@@ -435,5 +432,45 @@ describe("PyPvmlEvaluator module imports", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["0.0", "2.0", "4.0", "6.0"]);
+  });
+
+  test("a long chain of cold callbacks (play_matrix's indefinite % 16 loop) doesn't degrade or leak state", async () => {
+    // play_matrix never stops on its own - it wraps forever via `counter % 16` until
+    // stop_matrix() cancels it. A short 4-step chain proves the mechanism works at all; this
+    // checks the *same* mechanism holds up well past one full matrix cycle (60 steps here - a
+    // few laps around 16 columns), with no accumulating slowdown/state corruption and every step
+    // still landing in the right order.
+    scheduledCallbacks = [];
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    const STEPS = 60;
+    await evaluator.evaluateChunk(
+      "from testmod import schedule_later, double\n" +
+        "def step(n):\n" +
+        "    print(double(n))\n" +
+        `    if n < ${STEPS - 1}:\n` +
+        "        schedule_later(lambda: step(n + 1))\n" +
+        "step(0)\n",
+    );
+
+    expect(errors).toEqual([]);
+
+    const dh = evaluator as unknown as IDataHandler;
+    let drained = 0;
+    while (scheduledCallbacks.length > 0) {
+      const cb = scheduledCallbacks.shift()!;
+      const gen = dh.closure_call_unchecked(cb, []);
+      let step = await gen.next();
+      while (!step.done) {
+        step = await gen.next();
+      }
+      drained += 1;
+    }
+
+    expect(errors).toEqual([]);
+    expect(drained).toBe(STEPS - 1);
+    expect(outputs).toHaveLength(STEPS);
+    expect(outputs).toEqual(Array.from({ length: STEPS }, (_, i) => `${(i * 2).toFixed(1)}`));
   });
 });
