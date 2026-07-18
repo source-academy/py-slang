@@ -935,6 +935,13 @@ export const generatePvmlInBrowserTestCases = (
     }
 
     if (typeof expected === "number") {
+      if (Number.isNaN(expected)) {
+        // NaN isn't "close to" anything, including itself, so toBeCloseTo
+        // below would always fail here -- compare the printed "nan" string
+        // instead, same as the PyComplexNumber NaN case just below.
+        expect(capturedResult).toBe("nan");
+        return;
+      }
       expect(Number(capturedResult)).toBeCloseTo(expected);
     } else if (expected instanceof PyComplexNumber) {
       if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {

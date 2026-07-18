@@ -2,10 +2,13 @@ import { RunError, runCode } from "../runner";
 
 describe("runner.ts: runCode()", () => {
   describe("happy path", () => {
-    test.each([1, 2, 3, 4])("evaluates and captures print() output at variant %d", async variant => {
-      const output = await runCode("print(1 + 1)", variant);
-      expect(output).toBe("2\n");
-    });
+    test.each([1, 2, 3, 4])(
+      "evaluates and captures print() output at variant %d",
+      async variant => {
+        const output = await runCode("print(1 + 1)", variant);
+        expect(output).toBe("2\n");
+      },
+    );
 
     test("concatenates output from multiple print() calls", async () => {
       const output = await runCode("print(1)\nprint(2)\nprint(3)", 4);

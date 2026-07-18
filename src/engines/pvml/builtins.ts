@@ -337,7 +337,7 @@ function unaryMath(
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
   const [x] = assertNumericArgs(args, name, variant);
-  if (domainCheck && !domainCheck(x)) {
+  if (domainCheck && !Number.isNaN(x) && !domainCheck(x)) {
     throw new PVMLInterpreterError("ValueError: math domain error");
   }
   return fn(x);

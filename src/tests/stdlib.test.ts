@@ -76,18 +76,22 @@ describe("Standard Library Tests", () => {
         ["math_acos(0.5)", 1.0471975511965979, null],
         ["math_acos(2)", ValueError, null],
         ["math_acos(True)", TypeError, null],
+        // NaN propagates rather than tripping the [-1, 1] domain check -- see #275's Gemini review.
+        ["math_acos(math_nan)", NaN, null],
       ],
       math_acosh: [
         ["math_acosh(1)", 0, null],
         ["math_acosh(2.0)", 1.3169578969248166, null],
         ["math_acosh(0.5)", ValueError, null],
         ["math_acosh(True)", TypeError, null],
+        ["math_acosh(math_nan)", NaN, null],
       ],
       math_asin: [
         ["math_asin(1)", 1.5707963267948966, null],
         ["math_asin(0.5)", 0.5235987755982989, null],
         ["math_asin(2)", ValueError, null],
         ["math_asin(True)", TypeError, null],
+        ["math_asin(math_nan)", NaN, null],
       ],
       math_asinh: [
         ["math_asinh(1)", 0.881373587019543, null],
@@ -110,6 +114,7 @@ describe("Standard Library Tests", () => {
         ["math_atanh(0.5)", 0.5493061443340548, null],
         ["math_atanh(1)", ValueError, null],
         ["math_atanh(True)", TypeError, null],
+        ["math_atanh(math_nan)", NaN, null],
       ],
       math_cosh: [
         ["math_cosh(0)", 1, null],
@@ -279,24 +284,28 @@ describe("Standard Library Tests", () => {
         ["math_log(8,0)", ValueError, null],
         ["math_log(True)", TypeError, null],
         ["math_log(8, True)", TypeError, null],
+        ["math_log(math_nan)", NaN, null],
       ],
       math_log10: [
         ["math_log10(100)", 2, null],
         ["math_log10(1000.0)", 3, null],
         ["math_log10(0)", ValueError, null],
         ["math_log10(True)", TypeError, null],
+        ["math_log10(math_nan)", NaN, null],
       ],
       math_log1p: [
         ["math_log1p(0)", 0, null],
         ["math_log1p(1.0)", 0.6931471805599453, null],
         ["math_log1p(-1)", ValueError, null],
         ["math_log1p(True)", TypeError, null],
+        ["math_log1p(math_nan)", NaN, null],
       ],
       math_log2: [
         ["math_log2(8)", 3, null],
         ["math_log2(0.5)", -1, null],
         ["math_log2(0)", ValueError, null],
         ["math_log2(True)", TypeError, null],
+        ["math_log2(math_nan)", NaN, null],
       ],
       math_pow: [
         ["math_pow(2,10)", 1024, null],
@@ -329,6 +338,7 @@ describe("Standard Library Tests", () => {
         ["math_sqrt(2.0)", 1.4142135623730951, null],
         ["math_sqrt(-1)", ValueError, null],
         ["math_sqrt(True)", TypeError, null],
+        ["math_sqrt(math_nan)", NaN, null],
       ],
     };
     // PVML-in-browser's assertIntArgs deliberately treats a plain float as
