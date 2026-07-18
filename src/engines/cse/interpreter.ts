@@ -276,6 +276,12 @@ export async function* generateCSEMachineStateStream(
   variant: number,
   isPrelude: boolean = false,
 ) {
+  // Stamped here, not just by evaluate(), since this is the one function every
+  // execution path funnels through (evaluate()'s own runCSEMachine, and
+  // PyCseMachinePlugin.ts's collectSnapshots, both call this directly) — see
+  // Context.variant's own doc comment for why error construction needs it.
+  context.variant = variant;
+
   // steps: number of steps completed
   let steps = 0;
 
@@ -1016,6 +1022,7 @@ const cmdEvaluators: CmdEvaluators = {
           new UnsupportedOperandTypeError(
             code,
             boolOpNode,
+            context,
             left.type,
             "",
             boolOpNode.operator.type,

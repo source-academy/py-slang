@@ -32,6 +32,16 @@ export class Context {
   public errors: RuntimeSourceError[] = [];
   public moduleContexts: { [name: string]: ModuleContext };
   public prelude: string | null = null;
+  /** The SICPy chapter (1-4) currently running — stamped once by evaluate()
+   * (interpreter.ts). Lets error construction sites (e.g.
+   * UnsupportedOperandTypeError) phrase a type name chapter-appropriately
+   * (a "pair" and a length-2 "list" are the exact same runtime value here,
+   * with no way to tell them apart from the value alone — the chapter is
+   * what makes that call unambiguous: chapters 1-2 have no list-literal
+   * syntax at all, per NoListsValidator, so any array-shaped value there
+   * can only have come from pair()). Defaults to 4 (unrestricted), matching
+   * IOptions' own default. */
+  public variant: number = 4;
   runtime: {
     break: boolean;
     debuggerOn: boolean;

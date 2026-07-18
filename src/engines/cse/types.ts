@@ -156,8 +156,17 @@ export type Instr =
  * Machine visualizer's stash-value labels, PyCseMachinePlugin.ts) still need
  * in its original, more CPython-literal form — changing `typeTranslator`'s
  * own output would have silently changed those debugger labels too.
+ *
+ * `variant` (the SICPy chapter, 1-4) additionally governs "list": a pair and
+ * a length-2 list are the exact same runtime value in this dialect (no tag
+ * distinguishes "made via pair()" from "made via list-literal syntax"), so
+ * the value alone can't say which word is right. The chapter can, though —
+ * chapters 1-2 have no list-literal syntax at all (NoListsValidator), so any
+ * array-shaped value there can only have come from pair()/linked-list
+ * construction, unambiguously. At chapter 3+, where both syntaxes coexist
+ * and the ambiguity is real, "list" stays the reasonable default.
  */
-export function friendlyTypeName(pythonTypeName: string): string {
+export function friendlyTypeName(pythonTypeName: string, variant?: number): string {
   switch (pythonTypeName) {
     case "int":
       return "integer";
@@ -169,6 +178,8 @@ export function friendlyTypeName(pythonTypeName: string): string {
       return "None";
     case "builtin_function_or_method":
       return "function";
+    case "list":
+      return variant !== undefined && variant <= 2 ? "pair" : "list";
     default:
       return pythonTypeName;
   }

@@ -16,8 +16,8 @@ export class PVMLInterpreterError extends Error {
 }
 
 export class UnsupportedOperandTypeError extends PVMLInterpreterError {
-  constructor(operand: string, ...wrongTypes: PVMLType[]) {
-    const msg = `TypeError: unsupported operand type(s) for ${operand}: ${wrongTypes.map(t => friendlyTypeName(t)).join(" and ")}`;
+  constructor(variant: number, operand: string, ...wrongTypes: PVMLType[]) {
+    const msg = `TypeError: unsupported operand type(s) for ${operand}: ${wrongTypes.map(t => friendlyTypeName(t, variant)).join(" and ")}`;
     super(msg);
   }
 }

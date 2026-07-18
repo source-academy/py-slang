@@ -143,6 +143,12 @@ export class PVMLInterpreter {
   private instructionCount: number = 0;
   private maxInstructionLimit: number = 1000000;
 
+  /** The SICPy chapter (1-4) `program` was compiled for — see Context.variant's
+   * doc comment (src/engines/cse/context.ts) for why error construction needs
+   * it (a "pair" and a length-2 "list" are the exact same runtime value here).
+   * Defaults to 4 (unrestricted), matching the CSE machine's own default. */
+  private variant: number = 4;
+
   constructor(
     program: PVMLProgram,
     options?: {
@@ -164,6 +170,8 @@ export class PVMLInterpreter {
        * PVMLCompiler's `useGlobalMap` field doc) — see getTokenAnnotation's
        * `__program__` special case. */
       programText?: string;
+      /** The chapter `program` was compiled for — see `variant` above. */
+      variant?: number;
     },
   ) {
     this.program = program;
@@ -179,6 +187,7 @@ export class PVMLInterpreter {
       if (options.maxStackSize) this.maxStackSize = options.maxStackSize;
       if (options.maxCallDepth) this.maxCallDepth = options.maxCallDepth;
       if (options.maxInstructions) this.maxInstructionLimit = options.maxInstructions;
+      if (options.variant) this.variant = options.variant;
     }
   }
 
@@ -372,7 +381,7 @@ export class PVMLInterpreter {
         } else if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
           this.push((left as string) + (right as string));
         } else {
-          throw new UnsupportedOperandTypeError("+", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "+", leftType, rightType);
         }
         break;
       }
@@ -391,7 +400,7 @@ export class PVMLInterpreter {
         if (isArithmeticValue(left) && isArithmeticValue(right)) {
           this.push(PVMLInterpreter.numericArith("-", left, right));
         } else {
-          throw new UnsupportedOperandTypeError("-", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "-", leftType, rightType);
         }
         break;
       }
@@ -410,7 +419,7 @@ export class PVMLInterpreter {
         if (isArithmeticValue(left) && isArithmeticValue(right)) {
           this.push(PVMLInterpreter.numericArith("*", left, right));
         } else {
-          throw new UnsupportedOperandTypeError("*", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "*", leftType, rightType);
         }
         break;
       }
@@ -429,7 +438,7 @@ export class PVMLInterpreter {
         if (isArithmeticValue(left) && isArithmeticValue(right)) {
           this.push(PVMLInterpreter.numericArith("/", left, right));
         } else {
-          throw new UnsupportedOperandTypeError("/", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "/", leftType, rightType);
         }
         break;
       }
@@ -449,7 +458,7 @@ export class PVMLInterpreter {
         if (isNumericValue(left) && isNumericValue(right)) {
           this.push(PVMLInterpreter.numericArith("//", left, right));
         } else {
-          throw new UnsupportedOperandTypeError("//", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "//", leftType, rightType);
         }
         break;
       }
@@ -468,7 +477,7 @@ export class PVMLInterpreter {
         if (isNumericValue(left) && isNumericValue(right)) {
           this.push(PVMLInterpreter.numericArith("%", left, right));
         } else {
-          throw new UnsupportedOperandTypeError("%", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "%", leftType, rightType);
         }
         break;
       }
@@ -488,7 +497,7 @@ export class PVMLInterpreter {
         if (isArithmeticValue(left) && isArithmeticValue(right)) {
           this.push(PVMLInterpreter.powArith(left, right));
         } else {
-          throw new UnsupportedOperandTypeError("**", leftType, rightType);
+          throw new UnsupportedOperandTypeError(this.variant, "**", leftType, rightType);
         }
         break;
       }
@@ -503,7 +512,7 @@ export class PVMLInterpreter {
         } else if (operand instanceof PyComplexNumber) {
           this.push(new PyComplexNumber(-operand.real, -operand.imag));
         } else {
-          throw new UnsupportedOperandTypeError("-", operandType);
+          throw new UnsupportedOperandTypeError(this.variant, "-", operandType);
         }
         break;
       }
@@ -515,7 +524,7 @@ export class PVMLInterpreter {
       case OpCodes.NOTG: {
         const operand = this.pop();
         if (typeof operand !== "boolean") {
-          throw new UnsupportedOperandTypeError("not", getPVMLType(operand));
+          throw new UnsupportedOperandTypeError(this.variant, "not", getPVMLType(operand));
         }
         this.push(!operand);
         break;
@@ -1037,12 +1046,13 @@ export class PVMLInterpreter {
     right: PVMLBoxType,
     restrictChapter12: boolean,
     op: "==" | "!=",
+    variant: number,
   ): boolean {
     if (
       restrictChapter12 &&
       (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right))
     ) {
-      throw new UnsupportedOperandTypeError(op, getPVMLType(left), getPVMLType(right));
+      throw new UnsupportedOperandTypeError(variant, op, getPVMLType(left), getPVMLType(right));
     }
     if (PVMLInterpreter.identical(left, right)) return true;
     if (isArithmeticValue(left) && isArithmeticValue(right)) {
@@ -1057,7 +1067,13 @@ export class PVMLInterpreter {
       return (
         left.elements.length === right.elements.length &&
         left.elements.every((el, i) =>
-          PVMLInterpreter.structuralElementsEqual(el, right.elements[i], restrictChapter12, op),
+          PVMLInterpreter.structuralElementsEqual(
+            el,
+            right.elements[i],
+            restrictChapter12,
+            op,
+            variant,
+          ),
         )
       );
     }
@@ -1100,12 +1116,13 @@ export class PVMLInterpreter {
     right: PVMLBoxType,
     restrictChapter12: boolean,
     op: "==" | "!=" = "==",
+    variant: number = 4,
   ): boolean {
     if (
       restrictChapter12 &&
       (isExcludedFromChapter12Equality(left) || isExcludedFromChapter12Equality(right))
     ) {
-      throw new UnsupportedOperandTypeError(op, getPVMLType(left), getPVMLType(right));
+      throw new UnsupportedOperandTypeError(variant, op, getPVMLType(left), getPVMLType(right));
     }
     if (PVMLInterpreter.isNaNValue(left) || PVMLInterpreter.isNaNValue(right)) return false;
     if (left === right) return true;
@@ -1121,7 +1138,13 @@ export class PVMLInterpreter {
       return (
         left.elements.length === right.elements.length &&
         left.elements.every((el, i) =>
-          PVMLInterpreter.structuralElementsEqual(el, right.elements[i], restrictChapter12, op),
+          PVMLInterpreter.structuralElementsEqual(
+            el,
+            right.elements[i],
+            restrictChapter12,
+            op,
+            variant,
+          ),
         )
       );
     }
@@ -1131,13 +1154,13 @@ export class PVMLInterpreter {
   private strictEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    this.push(PVMLInterpreter.valuesEqual(left, right, false));
+    this.push(PVMLInterpreter.valuesEqual(left, right, false, "==", this.variant));
   }
 
   private strictNotEqual(): void {
     const right = PVMLInterpreter.asNumberIfBool(this.pop());
     const left = PVMLInterpreter.asNumberIfBool(this.pop());
-    this.push(!PVMLInterpreter.valuesEqual(left, right, false));
+    this.push(!PVMLInterpreter.valuesEqual(left, right, false, "!=", this.variant));
   }
 
   /** §1/§2's `==`/`!=` (see docs/specs/python_typing_middle_12.tex): bool and
@@ -1147,13 +1170,13 @@ export class PVMLInterpreter {
   private strictEqual12(): void {
     const right = this.pop();
     const left = this.pop();
-    this.push(PVMLInterpreter.valuesEqual(left, right, true, "=="));
+    this.push(PVMLInterpreter.valuesEqual(left, right, true, "==", this.variant));
   }
 
   private strictNotEqual12(): void {
     const right = this.pop();
     const left = this.pop();
-    this.push(!PVMLInterpreter.valuesEqual(left, right, true, "!="));
+    this.push(!PVMLInterpreter.valuesEqual(left, right, true, "!=", this.variant));
   }
 
   /**
@@ -1232,7 +1255,7 @@ export class PVMLInterpreter {
       else this.push(l >= r);
       return;
     }
-    throw new UnsupportedOperandTypeError(op, leftType, rightType);
+    throw new UnsupportedOperandTypeError(this.variant, op, leftType, rightType);
   }
 
   /** §1/§2's ordering comparisons (see docs/specs/python_typing_middle_12.tex):
@@ -1257,7 +1280,7 @@ export class PVMLInterpreter {
       else this.push(l >= r);
       return;
     }
-    throw new UnsupportedOperandTypeError(op, leftType, rightType);
+    throw new UnsupportedOperandTypeError(this.variant, op, leftType, rightType);
   }
 
   // ========================================================================
@@ -1333,7 +1356,7 @@ export class PVMLInterpreter {
   private branchIfTrue(offset: number): void {
     const condition = this.pop();
     if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getPVMLType(condition));
+      throw new UnsupportedOperandTypeError(this.variant, "branch", getPVMLType(condition));
     }
     if (condition) {
       this.branch(offset);
@@ -1343,7 +1366,7 @@ export class PVMLInterpreter {
   private branchIfFalse(offset: number): void {
     const condition = this.pop();
     if (typeof condition !== "boolean") {
-      throw new UnsupportedOperandTypeError("branch", getPVMLType(condition));
+      throw new UnsupportedOperandTypeError(this.variant, "branch", getPVMLType(condition));
     }
     if (!condition) {
       this.branch(offset);

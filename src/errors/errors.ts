@@ -147,6 +147,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
   constructor(
     source: string,
     node: ExprNS.Binary | ExprNS.BoolOp | ExprNS.Unary,
+    context: Context,
     wrongType1: string,
     wrongType2: string,
     operand: string | TokenType,
@@ -156,7 +157,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
 
     const index = node.startToken.indexInSource;
     const operatorStr = operatorTranslator(operand);
-    const typeStr1 = friendlyTypeName(typeTranslator(wrongType1));
+    const typeStr1 = friendlyTypeName(typeTranslator(wrongType1), context.variant);
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
@@ -174,7 +175,7 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
       suggestion = `You are using the unary '${operatorStr}' operator on ${typeStr1}, which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
     } else {
       // Format for Binary operators
-      const typeStr2 = friendlyTypeName(typeTranslator(wrongType2));
+      const typeStr2 = friendlyTypeName(typeTranslator(wrongType2), context.variant);
       hint = `TypeError: unsupported operand type(s) for ${operatorStr}: ${typeStr1} and ${typeStr2}`;
       suggestion = `You are using the '${operatorStr}' operator between ${typeStr1} and ${typeStr2}, which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`;
     }
