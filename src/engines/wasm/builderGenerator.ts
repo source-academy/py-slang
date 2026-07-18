@@ -121,12 +121,18 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration!`);
+        // Mirrors CSE's FreeVariableUnboundError (src/errors/errors.ts): a
+        // `nonlocal`-declared name read before its owning enclosing scope
+        // has assigned it a value.
+        throw new Error(
+          `NameError: cannot access free variable '${curr[index].name}' where it is not associated with a value in enclosing scope`,
+        );
       }
 
       return [this.environment.length - 1 - i, index];
     }
-    throw new Error(`Name ${name} not defined!`);
+    // Mirrors CSE's NameError (src/errors/errors.ts).
+    throw new Error(`NameError: name '${name}' is not defined`);
   }
 
   private collectDeclarations(
