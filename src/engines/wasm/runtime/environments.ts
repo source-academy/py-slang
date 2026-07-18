@@ -88,6 +88,22 @@ export const PRE_APPLY_FX = wasm
   .params({ $tag: i32, $val: i64, $arg_len: i32 })
   .results(i32)
   .body(
+    // An imported-module function (see TYPE_TAG.HOSTREF): allocate a plain
+    // env of exactly arg_len slots for the arguments (the modules.call host
+    // import reads them out of it — see APPLY's hostref branch), and push
+    // the callee onto the shadow stack explicitly. A closure callee is
+    // already there (GET_LEX_ADDR pushes GCable values), but a hostref is
+    // an immediate, so without this push APPLY's callee pop would consume
+    // the wrong entry. ALLOC_ENV's parent-reload only matches a CLOSURE
+    // shadow-stack entry, so the env's parent stays 0 — correct, a module
+    // function has no lexical parent here.
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.HOSTREF))).then(
+      wasm
+        .call(SILENT_PUSH_SHADOW_STACK_FX)
+        .args(i32.const(TYPE_TAG.HOSTREF), local.get("$val")),
+      wasm.return(wasm.call(ALLOC_ENV_FX).args(local.get("$arg_len"))),
+    ),
+
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
       .then(
@@ -156,6 +172,7 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
     .locals({
       [RETURN_ENV_NAME]: i32,
       $val: i64,
+      $callee_tag: i32,
       $additional_args: i32,
       $i: i32,
       $arg_ptr: i32,
@@ -179,11 +196,52 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       ),
       wasm.call(DISCARD_SHADOW_STACK_FX),
 
-      // pop closure from shadow stack into locals
+      // pop callee from shadow stack into locals (tag kept: a hostref callee
+      // dispatches to the modules.call host import below, not the br_table)
       wasm.call(POP_SHADOW_STACK_FX),
-      wasm.raw`(local.set $val) (drop)`,
+      wasm.raw`(local.set $val) (local.set $callee_tag)`,
 
       // return env remains on the shadow stack for the return instruction to use after the call
+
+      // An imported-module function (TYPE_TAG.HOSTREF): the args sit in the
+      // env PRE_APPLY allocated (CURR_ENV, arg_len slots) — hand the handle
+      // index, the env pointer and the arg count to the modules.call host
+      // import, which reads/converts the args, runs the (async, JSPI-
+      // suspended) module function, materialises the result as a wasm value
+      // and returns it. RETURN_NONVOID_SUFFIX then restores the caller env
+      // with the exact same shadow-stack discipline as a normal function
+      // return. Arity/starred handling is host-side, except the starred bit
+      // itself, which must be rejected here: the unpacking machinery below
+      // is closure-specific.
+      wasm.if(i32.eq(local.get("$callee_tag"), i32.const(TYPE_TAG.HOSTREF))).then(
+        local.set("$i", i32.const(0)),
+        wasm.loop("$hostref_star_check").body(
+          wasm.if(i32.lt_s(local.get("$i"), local.get("$arg_len"))).then(
+            wasm
+              .if(
+                i32.shr_u(
+                  i32.load(
+                    i32.add(
+                      i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))),
+                      i32.const(ENV_HEAD_SIZE),
+                    ),
+                  ),
+                  i32.const(31),
+                ),
+              )
+              .then(
+                wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HOSTREF_STARRED))),
+                wasm.unreachable(),
+              ),
+            local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+            wasm.br("$hostref_star_check"),
+          ),
+        ),
+        wasm
+          .call("$_host_module_call")
+          .args(i32.wrap_i64(local.get("$val")), global.get(CURR_ENV), local.get("$arg_len")),
+        wasm.return(...RETURN_NONVOID_SUFFIX),
+      ),
 
       local.set(
         "$arity",

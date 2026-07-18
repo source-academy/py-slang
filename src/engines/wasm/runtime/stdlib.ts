@@ -196,6 +196,7 @@ export const importedLogs = [
   wasm.import("console", "log_list").func("$_log_list").params(i32, i32),
   wasm.import("console", "log_error").func("$_log_error").params(i32),
   wasm.import("console", "log_raw").func("$_log_raw").params(i32, i64),
+  wasm.import("console", "log_hostref").func("$_log_hostref").params(i64),
 ];
 
 export const LOG_FX = wasm
@@ -278,6 +279,9 @@ export const LOG_FX = wasm
           ),
         wasm.return(),
       ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.HOSTREF)))
+      .then(wasm.call("$_log_hostref").args(local.get("$value")), wasm.return()),
 
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LOG_UNKNOWN_TYPE))),
     wasm.unreachable(),
