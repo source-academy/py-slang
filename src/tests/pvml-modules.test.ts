@@ -26,6 +26,11 @@ function makeMockConductor(withModuleLoader: boolean = true) {
   return { conductor, results, errors, outputs };
 }
 
+/** Captures closures handed to "schedule_later" (see makeTestModule) instead of actually
+ * scheduling them — the test invokes them manually, after evaluateChunk has already resolved,
+ * to reproduce sound_matrix's real set_timeout firing from outside any active chunk execution. */
+let scheduledCallbacks: TypedValue<DataType.CLOSURE>[] = [];
+
 /** Builds a fake conductor module ("testmod") exercising every export shape
  * the converter handles: a constant, plain functions, a higher-order
  * function (module -> Python callback), and an opaque handle round-trip.
@@ -136,6 +141,19 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Mirrors sound_matrix's real set_timeout(f, t): stores the callback instead of actually
+  // scheduling it on a real timer, so the test can invoke it after evaluateChunk has already
+  // resolved — reproducing a callback firing from *outside* any active chunk execution, same as
+  // a genuine window.setTimeout would.
+  const scheduleLater = await dh.closure_make(
+    { returnType: DataType.VOID, args: [DataType.CLOSURE] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (f: TypedValue<DataType.CLOSURE>) {
+      scheduledCallbacks.push(f);
+      return { type: DataType.VOID, value: undefined } as TypedValue<DataType.VOID>;
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -147,6 +165,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "make_wave", value: makeWave },
       { symbol: "sample_wave", value: sampleWave },
       { symbol: "combine_waves", value: combineWaves },
+      { symbol: "schedule_later", value: scheduleLater },
     ],
   } as unknown as IModulePlugin;
 }
@@ -346,5 +365,75 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(second.errors).toEqual([]);
     expect(first.outputs).toEqual(["1.0"]);
     expect(second.outputs).toEqual(["1.0"]);
+  });
+
+  test("a callback fired after evaluateChunk resolves can still call a module function (set_timeout-style cold re-entry)", async () => {
+    // Reproduces sound_matrix's real set_timeout: the scheduled Python closure isn't invoked
+    // until after evaluateChunk's own executeAsync() has already returned and unwound
+    // currentFrame back to null (and allowExtern back to false) — exactly what a genuine
+    // window.setTimeout firing later does. The callback itself calls another module function
+    // (double), matching sequence()'s own recursive set_timeout(...) / play(...) calls in the
+    // real Tone Matrix script.
+    scheduledCallbacks = [];
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import schedule_later, double\n" +
+        "def callback():\n" +
+        "    print(double(21))\n" +
+        "schedule_later(callback)\n",
+    );
+
+    expect(errors).toEqual([]);
+    expect(scheduledCallbacks).toHaveLength(1);
+
+    const dh = evaluator as unknown as IDataHandler;
+    const gen = dh.closure_call_unchecked(scheduledCallbacks[0], []);
+    let step = await gen.next();
+    while (!step.done) {
+      step = await gen.next();
+    }
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["42.0"]);
+  });
+
+  test("a chain of cold callbacks, each scheduling the next (sequence()-style recursion), all run", async () => {
+    // The actual bug: sequence(matrix, column) plays a column, then set_timeout's the *next*
+    // column. The first scheduled call fires fine, but its own body scheduling yet another
+    // callback is itself a module call made from a cold, frame-less re-entry — this is the case
+    // that silently died before the fix (invokeValueAsync threw "No current frame", swallowed by
+    // sound_matrix's fire-and-forget drainGenerator call).
+    scheduledCallbacks = [];
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import schedule_later, double\n" +
+        "def step(n):\n" +
+        "    print(double(n))\n" +
+        "    if n < 3:\n" +
+        "        schedule_later(lambda: step(n + 1))\n" +
+        "step(0)\n",
+    );
+
+    expect(errors).toEqual([]);
+    expect(scheduledCallbacks).toHaveLength(1);
+
+    const dh = evaluator as unknown as IDataHandler;
+    // Drain each scheduled callback in turn — invoking one may itself schedule the next, exactly
+    // like a real setTimeout chain firing one after another.
+    while (scheduledCallbacks.length > 0) {
+      const cb = scheduledCallbacks.shift()!;
+      const gen = dh.closure_call_unchecked(cb, []);
+      let step = await gen.next();
+      while (!step.done) {
+        step = await gen.next();
+      }
+    }
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["0.0", "2.0", "4.0", "6.0"]);
   });
 });

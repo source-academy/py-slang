@@ -1525,7 +1525,14 @@ export class PVMLInterpreter {
    * `args` got collected.
    */
   private dispatchCall(func: PVMLBoxType, args: PVMLBoxType[], isTailCall: boolean): void {
-    if (!this.currentFrame) {
+    // A tail call mutates the existing frame in place, so it genuinely needs one to already
+    // exist. A non-tail call doesn't - the closure branch below always builds a brand new frame
+    // (callerFrame: this.currentFrame, which may itself be null), and the extern branch never
+    // touches currentFrame at all. This lets invokeValueAsync re-enter with no current frame at
+    // all (a scheduled callback firing after executeAsync() has already returned and unwound) -
+    // see its own doc comment. The primitive branch still implicitly requires a frame (via
+    // push()), which throws its own clear error if that's ever not the case.
+    if (!this.currentFrame && isTailCall) {
       throw new Error("No current frame");
     }
 
@@ -1629,6 +1636,12 @@ export class PVMLInterpreter {
       );
 
     if (isTailCall) {
+      // Reachable only when currentFrame is non-null - the guard at the top of this method
+      // already throws otherwise - but written out again here so TS can narrow it (that guard's
+      // null check is conditional on isTailCall, so it doesn't narrow this far on its own).
+      if (!this.currentFrame) {
+        throw new Error("No current frame");
+      }
       this.currentFrame.closure = closure;
       this.currentFrame.ir = funcDef;
       this.currentFrame.pc = 0;
@@ -1723,26 +1736,45 @@ export class PVMLInterpreter {
    * do. Otherwise identical to `invokeValue`: same frame-based nested-call
    * mechanism, just awaiting `extern.fn` (mirroring `executeAsync`'s own
    * driver loop) instead of throwing when `pendingExtern` appears.
+   *
+   * Unlike `invokeValue`, `origFrame` here may legitimately be `null`: a
+   * scheduled callback (e.g. sound_matrix's `set_timeout`) fires from a real
+   * JS timer that can run well after the top-level chunk's own
+   * `executeAsync()` has already returned and unwound `currentFrame` back to
+   * null (and reset `allowExtern` to false in its `finally`). That isn't a
+   * broken state to reject - it just means this call is now the top-level
+   * driver instead of a nested one. `dispatchCall` builds a fresh frame with
+   * `callerFrame: null` in that case (see its own doc comment), and the loop
+   * below already terminates correctly either way: "until currentFrame is
+   * back to origFrame" reads as "until currentFrame is null again" when
+   * `origFrame` is null, exactly matching a self-contained sub-run. Without
+   * this, any module call made from inside a `set_timeout` callback that
+   * fires after the chunk finished (i.e. the second scheduled call onward)
+   * threw "No current frame" inside the callback's async generator, silently
+   * discarded by sound_matrix's fire-and-forget `void drainGenerator(...)` -
+   * the recursion just stopped with no visible error.
    */
   private async invokeValueAsync(func: PVMLBoxType, args: PVMLBoxType[]): Promise<PVMLBoxType> {
     const origFrame = this.currentFrame;
-    if (!origFrame) {
-      throw new Error("No current frame");
-    }
+    const wasAllowExtern = this.allowExtern;
+    this.allowExtern = true;
+    try {
+      this.dispatchCall(func, args, false);
 
-    this.dispatchCall(func, args, false);
-
-    while (this.pendingExtern || (this.currentFrame && this.currentFrame !== origFrame)) {
-      if (this.pendingExtern) {
-        const { extern, args: externArgs } = this.pendingExtern;
-        this.pendingExtern = undefined;
-        this.push(await extern.fn(externArgs, (f, a) => this.invokeValueAsync(f, a)));
-        continue;
+      while (this.pendingExtern || (this.currentFrame && this.currentFrame !== origFrame)) {
+        if (this.pendingExtern) {
+          const { extern, args: externArgs } = this.pendingExtern;
+          this.pendingExtern = undefined;
+          this.push(await extern.fn(externArgs, (f, a) => this.invokeValueAsync(f, a)));
+          continue;
+        }
+        this.step();
       }
-      this.step();
-    }
 
-    return this.pop();
+      return this.pop();
+    } finally {
+      this.allowExtern = wasAllowExtern;
+    }
   }
 
   private callPrimitive(primitiveIndex: number, numArgs: number): void {
