@@ -161,7 +161,49 @@ export type Instr =
   | ContinueMarkerInstr
   | ModuleFunctionCallInstr;
 
-export function typeTranslator(type: Value["type"]): string {
+/**
+ * Reworks a `typeTranslator`/PVML `getPVMLType()` output into the friendlier,
+ * unquoted wording used specifically by the "unsupported operand type(s)"
+ * family of TypeError messages (see `UnsupportedOperandTypeError` in both
+ * src/errors/errors.ts and src/engines/pvml/errors.ts) — spelled-out words
+ * ("integer", "boolean") over CPython's own abbreviations ("int", "bool"),
+ * "None" over "NoneType", and "function" over "builtin_function_or_method"
+ * (no user-visible distinction between a builtin and a closure here, same
+ * reasoning as "closure" itself already collapsing to "function"). Deliberately
+ * separate from `typeTranslator` itself, which other consumers (the CSE
+ * Machine visualizer's stash-value labels, PyCseMachinePlugin.ts) still need
+ * in its original, more CPython-literal form — changing `typeTranslator`'s
+ * own output would have silently changed those debugger labels too.
+ *
+ * `variant` (the SICPy chapter, 1-4) additionally governs "list": a pair and
+ * a length-2 list are the exact same runtime value in this dialect (no tag
+ * distinguishes "made via pair()" from "made via list-literal syntax"), so
+ * the value alone can't say which word is right. The chapter can, though —
+ * chapters 1-2 have no list-literal syntax at all (NoListsValidator), so any
+ * array-shaped value there can only have come from pair()/linked-list
+ * construction, unambiguously. At chapter 3+, where both syntaxes coexist
+ * and the ambiguity is real, "list" stays the reasonable default.
+ */
+export function friendlyTypeName(pythonTypeName: string, variant?: number): string {
+  switch (pythonTypeName) {
+    case "int":
+      return "integer";
+    case "bool":
+      return "boolean";
+    case "str":
+      return "string";
+    case "NoneType":
+      return "None";
+    case "builtin_function_or_method":
+      return "function";
+    case "list":
+      return variant !== undefined && variant <= 2 ? "pair" : "list";
+    default:
+      return pythonTypeName;
+  }
+}
+
+export function typeTranslator(type: Value["type"] | string): string {
   switch (type) {
     case "bigint":
       return "int";
@@ -171,6 +213,8 @@ export function typeTranslator(type: Value["type"]): string {
       return "bool";
     case "string":
       return "str";
+    case "list":
+      return "list";
     case "complex":
       return "complex";
     case "none":
@@ -181,7 +225,15 @@ export function typeTranslator(type: Value["type"]): string {
       // Matches CPython's type(print).__name__.
       return "builtin_function_or_method";
     default:
-      return "unknown";
+      // `type` is now `Value["type"] | string` (see this function's own
+      // history: errors.ts's TypeError class calls this with a plain
+      // `string`, not always a genuine Value["type"] tag) — an unrecognized
+      // input isn't necessarily a bug, it may already be a valid Python type
+      // name (or some other string a future caller passes deliberately).
+      // Passing it through unchanged, not collapsing it to "unknown", is
+      // what keeps that widened parameter type actually safe to call with
+      // arbitrary strings.
+      return type;
   }
 }
 

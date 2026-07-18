@@ -27,7 +27,10 @@ function compileAndRun(code: string, variant: number = 4): string[] {
   const compiler = PVMLCompiler.fromProgram(ast, variant);
   const program = compiler.compileProgram(ast);
   const outputs: string[] = [];
-  const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+  const interpreter = new PVMLInterpreter(program, {
+    sendOutput: msg => outputs.push(msg),
+    variant,
+  });
   interpreter.execute();
   return outputs;
 }
@@ -208,6 +211,16 @@ print(multiply(6, 7))
       const code = `print(min(3, 7, 2, 9))
 `;
       expect(compileAndRun(code)).toEqual(["2"]);
+    });
+
+    // A primitive reached as a first-class value (f = abs) goes through
+    // dispatchCall's own boundArgs-aware branch, not the CALLP opcode's
+    // direct path every other test in this section exercises.
+    test("A primitive called through a first-class reference", () => {
+      const code = `f = abs
+print(f(-5))
+`;
+      expect(compileAndRun(code)).toEqual(["5"]);
     });
   });
 
@@ -543,10 +556,116 @@ print(total)
     test("len() with non-array argument throws with type information", () => {
       expect(() => compileAndRun("len(42)\n")).toThrow(/TypeError/);
     });
+
+    test("assertNumericArgs: math_sin() with a string argument names the actual type", () => {
+      expect(() => compileAndRun('math_sin("hello")\n')).toThrow(
+        "TypeError: unsupported argument type for math_sin: string",
+      );
+    });
+
+    test("assertIntArgs: range() with a non-int argument names the actual type", () => {
+      expect(() => compileAndRun("for i in range('a'):\n    pass\n")).toThrow(
+        "TypeError: unsupported argument type for range: string",
+      );
+    });
+
+    test("unaryMathToInt: math_ceil() with a string argument names the actual type", () => {
+      expect(() => compileAndRun('math_ceil("hello")\n')).toThrow(
+        "TypeError: unsupported argument type for math_ceil: string",
+      );
+    });
+
+    test("pickExtremum: max() with mismatched argument types names the odd one out", () => {
+      expect(() => compileAndRun("max(1, 'a')\n")).toThrow(
+        "TypeError: unsupported argument type for max: string",
+      );
+    });
+
+    test("pickExtremum: args[0] itself neither numeric nor string names args[0]'s own type", () => {
+      expect(() => compileAndRun("max(None, 1)\n")).toThrow(
+        "TypeError: unsupported argument type for max: None",
+      );
+    });
+
+    // branchIfFalse's own non-bool check is already exercised above ("branch
+    // condition must be boolean", "PVML Generic Semantics"). Its sibling,
+    // branchIfTrue, has no reachable test: the compiler only ever emits BRF
+    // (branch-if-false) for if/while conditions, never BRT, short of
+    // hand-assembling bytecode that uses BRT directly.
   });
 });
 
 describe("PVML Additional Coverage", () => {
+  // These math_* primitives were never individually exercised by name
+  // anywhere in the suite -- unaryMath/binaryMath themselves are covered via
+  // math_ceil/math_cos/etc., but each primitive's own dispatch case (case 33
+  // for math_acos, and so on) was still dead as far as coverage is
+  // concerned. One call each, checked against the real JS Math function it
+  // wraps.
+  describe("Previously-unexercised math_* primitives", () => {
+    // testValue is per-case since these functions don't share one common
+    // domain (e.g. math_acosh needs x >= 1, unlike everything else here).
+    const unaryCases: [number, string, (x: number) => number, number][] = [
+      [33, "math_acos", Math.acos, 0.5],
+      [34, "math_acosh", Math.acosh, 2],
+      [35, "math_asin", Math.asin, 0.5],
+      [36, "math_asinh", Math.asinh, 0.5],
+      [37, "math_atan", Math.atan, 0.5],
+      [39, "math_atanh", Math.atanh, 0.5],
+      [40, "math_cbrt", Math.cbrt, 0.5],
+      [44, "math_cosh", Math.cosh, 0.5],
+      [45, "math_exp", Math.exp, 0.5],
+      [46, "math_expm1", Math.expm1, 0.5],
+      [51, "math_log", Math.log, 0.5],
+      [52, "math_log1p", Math.log1p, 0.5],
+      [53, "math_log2", Math.log2, 0.5],
+      [54, "math_log10", Math.log10, 0.5],
+      [62, "math_sinh", Math.sinh, 0.5],
+      [63, "math_sqrt", Math.sqrt, 0.5],
+      [64, "math_tan", Math.tan, 0.5],
+      [65, "math_tanh", Math.tanh, 0.5],
+    ];
+
+    test.each(unaryCases)(
+      "primitive %i (%s) matches the JS Math function it wraps",
+      (index, name, fn, testValue) => {
+        const result = executePrimitive(
+          index,
+          [testValue],
+          () => {},
+          () => {
+            throw new Error(`${name} should never call invokeValue`);
+          },
+        );
+        expect(result).toBeCloseTo(fn(testValue));
+      },
+    );
+
+    test("math_atan2(1, 2) matches Math.atan2(1, 2)", () => {
+      const result = executePrimitive(
+        38,
+        [1, 2],
+        () => {},
+        () => {
+          throw new Error("math_atan2 should never call invokeValue");
+        },
+      );
+      expect(result).toBeCloseTo(Math.atan2(1, 2));
+    });
+
+    test("math_pow(2, 10) matches Math.pow(2, 10)", () => {
+      const result = executePrimitive(
+        57,
+        [2, 10],
+        () => {},
+        () => {
+          throw new Error("math_pow should never call invokeValue");
+        },
+      );
+      expect(result).toBeCloseTo(Math.pow(2, 10));
+    });
+  });
+
   describe("Arithmetic operators", () => {
     test("floor division positive", () => {
       expect(compileAndRun("print(7 // 2)\n")).toEqual(["3"]);
@@ -728,15 +847,18 @@ print(f)
     // PVMLCompiler.fromProgram's no-args default only registers [misc, math] (VARIANT_GROUPS[1]),
     // so pair/llist/print_llist (linked-list group) need explicit environments with that group in
     // scope -- compileAndRun above can't resolve them.
-    function compileAndRunWithLinkedList(code: string): string[] {
+    function compileAndRunWithLinkedList(code: string, variant: number = 2): string[] {
       const groups = [misc, math, linkedList];
       const ast = parse(code);
-      const { errors, environments } = analyzeWithEnvironments(ast, code, 2, groups);
+      const { errors, environments } = analyzeWithEnvironments(ast, code, variant, groups);
       if (errors.length > 0) throw new Error(errors.map(e => e.message).join("; "));
       const outputs: string[] = [];
-      const compiler = PVMLCompiler.fromProgram(ast, 2, environments);
+      const compiler = PVMLCompiler.fromProgram(ast, variant, environments);
       const program = compiler.compileProgram(ast);
-      const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+      const interpreter = new PVMLInterpreter(program, {
+        sendOutput: msg => outputs.push(msg),
+        variant,
+      });
       interpreter.execute();
       return outputs;
     }
@@ -831,6 +953,34 @@ print(f)
       );
       expect(properOutputs[0].startsWith("llist(1, 2, 3,")).toBe(true);
       expect(properOutputs[0].endsWith(`${properN - 1}, ${properN})`)).toBe(true);
+    });
+  });
+
+  describe("Chapter 1/2 structural equality: nested bool exclusion", () => {
+    function compileAndRunAtChapter(code: string, variant: number): string[] {
+      const groups = [misc, math, linkedList];
+      const ast = parse(code);
+      const { errors, environments } = analyzeWithEnvironments(ast, code, variant, groups);
+      if (errors.length > 0) throw new Error(errors.map(e => e.message).join("; "));
+      const outputs: string[] = [];
+      const compiler = PVMLCompiler.fromProgram(ast, variant, environments);
+      const program = compiler.compileProgram(ast);
+      const interpreter = new PVMLInterpreter(program, {
+        sendOutput: msg => outputs.push(msg),
+        variant,
+      });
+      interpreter.execute();
+      return outputs;
+    }
+
+    // isExcludedFromChapter12Equality applies at *every* level of recursion
+    // for structuralElementsEqual, not just the top-level operands -- so a
+    // bool nested inside a pair is still an error at §1/§2, even though the
+    // top-level operands (two pairs) are themselves perfectly comparable.
+    test("a bool nested inside a pair is still excluded at chapter 2", () => {
+      expect(() => compileAndRunAtChapter("pair(1, 2) == pair(True, 3)\n", 2)).toThrow(
+        "TypeError: unsupported operand type(s) for ==: integer and boolean",
+      );
     });
   });
 

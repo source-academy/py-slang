@@ -18,7 +18,7 @@ class PairmutatorBuiltins {
     const head = args[0];
     const tail = args[1];
     if (head.type !== "list" || head.value.length !== 2) {
-      handleRuntimeError(context, new TypeError(source, command, context, head.type, "pair"));
+      handleRuntimeError(context, new TypeError(source, command, context, head.type));
     }
     head.value[0] = tail;
     return { type: "none" };
@@ -34,7 +34,7 @@ class PairmutatorBuiltins {
     const head = args[0];
     const tail = args[1];
     if (head.type !== "list" || head.value.length !== 2) {
-      handleRuntimeError(context, new TypeError(source, command, context, head.type, "pair"));
+      handleRuntimeError(context, new TypeError(source, command, context, head.type));
     }
     head.value[1] = tail;
     return { type: "none" };
