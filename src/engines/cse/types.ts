@@ -207,7 +207,15 @@ export function typeTranslator(type: Value["type"] | string): string {
       // Matches CPython's type(print).__name__.
       return "builtin_function_or_method";
     default:
-      return "unknown";
+      // `type` is now `Value["type"] | string` (see this function's own
+      // history: errors.ts's TypeError class calls this with a plain
+      // `string`, not always a genuine Value["type"] tag) — an unrecognized
+      // input isn't necessarily a bug, it may already be a valid Python type
+      // name (or some other string a future caller passes deliberately).
+      // Passing it through unchanged, not collapsing it to "unknown", is
+      // what keeps that widened parameter type actually safe to call with
+      // arbitrary strings.
+      return type;
   }
 }
 
