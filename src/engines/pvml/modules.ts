@@ -78,6 +78,9 @@ export async function moduleToPvml(
           }
           return moduleToPvml(dh, step.value, name);
         },
+        // Carries the exact conductor closure identity through - see PVMLExtern's doc comment for
+        // why (pvmlToModule's fast path when this same value later crosses back into a module).
+        originalClosure: closureValue,
       };
       return extern;
     }
@@ -140,19 +143,25 @@ export async function pvmlToModule(
         }
         return chain;
       }
+      case "extern":
+        // This extern already carries the exact conductor closure it was minted from (see
+        // PVMLExtern's doc comment) - hand that back directly instead of wrapping it in a new
+        // closure_make'd callback. Mirrors the CSE machine's own pythonToModule fast path ("case
+        // builtin: if 'id' in value.func"). Without this, a closure that round-trips across the
+        // module boundary (e.g. sound's sine_sound producing a wave that play() samples 44100
+        // times/sec) pays a fresh dispatchCall/invokeValueAsync round trip on *every* sample
+        // instead of a direct closureMap lookup - measured at ~2.4x the per-sample cost of the
+        // equivalent CSE path for exactly this shape.
+        if (value.originalClosure) {
+          return value.originalClosure;
+        }
+      // No originalClosure (shouldn't happen for any extern moduleToPvml creates today, but fall
+      // through to the general wrapping path below rather than assume it can't occur).
       case "closure":
-      case "primitive":
-      case "extern": {
+      case "primitive": {
         // Any callable PVML value a module receives becomes a conductor
         // closure that re-enters the interpreter (see PVMLHostCall).
-        // dispatchCall handles closure and primitive values uniformly; an
-        // extern passed back to a module - e.g. a closure created by one
-        // module call and later invoked by another, such as sound's
-        // sine_sound producing a wave that play() later samples - awaits
-        // cleanly here too, since callPvml (invokeValueAsync) can itself
-        // await a pending nested extern call rather than having to reject
-        // it the way primitive dispatch's separate, synchronous re-entry
-        // point must.
+        // dispatchCall handles closure and primitive values uniformly.
         const arity = value.type === "closure" ? value.ir.numArgs : 0;
         async function* callback(
           ...args: TypedValue<DataType>[]

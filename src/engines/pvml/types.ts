@@ -1,3 +1,5 @@
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
+
 import { PyComplexNumber } from "../../types";
 
 export type PVMLBoxType =
@@ -174,6 +176,18 @@ export interface PVMLExtern {
   /** The module export's symbol name — display only (str()/repr()/toJSValue). */
   name: string;
   fn: (args: PVMLBoxType[], callPvml: PVMLHostCall) => Promise<PVMLBoxType>;
+  /**
+   * Set only by moduleToPvml's DataType.CLOSURE case, to the exact conductor closure this extern
+   * wraps. Lets pvmlToModule's reverse conversion recognise "this PVML value already has a stable
+   * conductor closure identity" and hand that closure straight back rather than minting a new
+   * wrapper closure around it - mirroring the CSE machine's own pythonToModule fast path (its
+   * "case builtin: if 'id' in value.func" check). Without this, a closure that crosses the module
+   * boundary and back (e.g. sound's sine_sound producing a wave that play() samples 44100
+   * times/sec) pays a fresh dispatchCall/invokeValueAsync round trip on *every* sample instead of
+   * a direct closureMap lookup - a real, measured ~2.4x per-sample slowdown versus CSE for exactly
+   * that pattern, not just a theoretical inefficiency.
+   */
+  originalClosure?: TypedValue<DataType.CLOSURE>;
 }
 
 /** Type guard: narrows PVMLBoxType to the object variants. */
