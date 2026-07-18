@@ -620,9 +620,8 @@ def fib(n):
         return fib(n-1) + fib(n-2)
 fib(30)
 `;
-    await expect(compileToWasmAndRun(pythonCode, false, { disableGC: true })).rejects.toThrow(
-      new Error(ERROR_MAP.OUT_OF_MEMORY),
-    );
+    const result = await compileToWasmAndRun(pythonCode, false, { disableGC: true });
+    expect(result.errors).toEqual([new Error(ERROR_MAP.OUT_OF_MEMORY)]);
   });
 
   it("native reverse(50) with GC should work", async () => {
@@ -663,8 +662,10 @@ def reverse(xs):
 
 reverse(llist(${[...Array(50).keys()].join(", ")}))
 `;
-    await expect(
-      compileToWasmAndRun(pythonCode, false, { disableGC: true, groups: [linkedList] }),
-    ).rejects.toThrow(new Error(ERROR_MAP.OUT_OF_MEMORY));
+    const result = await compileToWasmAndRun(pythonCode, false, {
+      disableGC: true,
+      groups: [linkedList],
+    });
+    expect(result.errors).toEqual([new Error(ERROR_MAP.OUT_OF_MEMORY)]);
   });
 });

@@ -360,7 +360,7 @@ export const STRING_COMPARE_FX = wasm
       ),
     ),
 
-    wasm.return(i32.sub(local.get("$y_len"), local.get("$x_len"))),
+    wasm.return(i32.sub(local.get("$x_len"), local.get("$y_len"))),
   );
 
 export const COMPARISON_OP_FX = wasm

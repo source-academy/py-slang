@@ -62,7 +62,11 @@ export async function compileToWasmAndRun(
   }
 
   if (!interactiveMode) {
-    wasmExports.main();
+    try {
+      wasmExports.main();
+    } catch (error) {
+      errors.push(error instanceof Error ? error : new Error(String(error)));
+    }
     return {
       prints: output,
       rawOutputs,

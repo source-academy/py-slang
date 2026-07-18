@@ -288,8 +288,8 @@ export const GEN_LIST_FX = wasm
                   i32.mul(i32.wrap_i64(local.get("$val")), i32.const(12)),
                   i32.const(GC_OBJECT_HEADER_SIZE),
                 ),
-                i32.wrap_i64(local.get("$val")),
               ),
+            i32.wrap_i64(local.get("$val")),
           ),
       ),
   );
