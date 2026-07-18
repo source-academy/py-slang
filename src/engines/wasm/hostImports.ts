@@ -143,7 +143,13 @@ export function createHostImports(memory: WebAssembly.Memory, runtime: HostRunti
        * which are native WASM instructions) match CSE bit-for-bit instead of
        * a second, independently-derived implementation.
        */
-      ext: (op: number, xTag: number, xVal: bigint, yTag: number, yVal: bigint): [number, bigint] => {
+      ext: (
+        op: number,
+        xTag: number,
+        xVal: bigint,
+        yTag: number,
+        yVal: bigint,
+      ): [number, bigint] => {
         if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
         const { makeInt, makeFloat, makeComplex } = runtime.wasmExports;
 

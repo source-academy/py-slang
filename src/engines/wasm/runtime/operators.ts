@@ -171,7 +171,9 @@ export const ARITHMETIC_OP_FX = wasm
         ),
       )
       .then(
-        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.BOOL_OPERAND_NOT_SUPPORTED))),
+        wasm
+          .call("$_log_error")
+          .args(i32.const(getErrorIndex(ERROR_MAP.BOOL_OPERAND_NOT_SUPPORTED))),
         wasm.unreachable(),
       ),
 
@@ -528,10 +530,7 @@ function identityCheck(): WasmInstruction[] {
                       // pointer (no recursive structural comparison, unlike ==),
                       // closures by their packed representation (see doc comment).
                       .else(
-                        local.set(
-                          "$is_result",
-                          i64.eq(local.get("$x_val"), local.get("$y_val")),
-                        ),
+                        local.set("$is_result", i64.eq(local.get("$x_val"), local.get("$y_val"))),
                       ),
                   ),
               ),
@@ -907,14 +906,10 @@ export const LIST_STRUCT_EQ_FX = wasm
   .body(
     local.set("$len_x", i32.wrap_i64(local.get("$x_val"))),
     local.set("$len_y", i32.wrap_i64(local.get("$y_val"))),
-    wasm
-      .if(i32.ne(local.get("$len_x"), local.get("$len_y")))
-      .then(wasm.return(i32.const(0))),
+    wasm.if(i32.ne(local.get("$len_x"), local.get("$len_y"))).then(wasm.return(i32.const(0))),
 
     wasm.loop("$loop").body(
-      wasm
-        .if(i32.ge_s(local.get("$i"), local.get("$len_x")))
-        .then(wasm.return(i32.const(1))),
+      wasm.if(i32.ge_s(local.get("$i"), local.get("$len_x"))).then(wasm.return(i32.const(1))),
 
       local.set(
         "$ex_tag",
