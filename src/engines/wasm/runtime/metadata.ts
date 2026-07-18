@@ -50,8 +50,8 @@ export const ERROR_MAP = {
   GEN_LIST_NOT_INT: "Trying to generate a list of non-integer length.",
   ARITY_NOT_CLOSURE: "Trying to get arity of a non-closure value.",
   ZERO_DIVISION: "ZeroDivisionError: division by zero.",
-  BOOL_OPERAND_NOT_SUPPORTED: "Calling an operation on an unsupported operand type: bool.",
-  EXPECTED_BOOL_OPERAND: "TypeError: expected a bool operand for this operation.",
+  BOOL_OPERAND_NOT_SUPPORTED: "TypeError: unsupported operand type(s) for this operation: boolean.",
+  EXPECTED_BOOL_OPERAND: "TypeError: expected a boolean operand for this operation.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
