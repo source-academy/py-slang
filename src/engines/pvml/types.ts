@@ -11,7 +11,9 @@ export type PVMLBoxType =
   | PVMLClosure
   | PVMLPrimitive
   | PVMLArray
-  | PVMLIterator;
+  | PVMLIterator
+  | PVMLOpaque
+  | PVMLExtern;
 
 /**
  * Every member's string value is the Python-facing type name `getPVMLType()`'s
@@ -53,6 +55,15 @@ export enum PVMLType {
    * `typeTranslator`. */
   PRIMITIVE = "builtin_function_or_method",
   ITERATOR = "iterator",
+  /** A module-owned handle (PVMLOpaque) — mirrors the CSE machine's own
+   * "opaque" stash Value type name, which is likewise what its error
+   * messages/str() show for module values. */
+  OPAQUE = "opaque",
+  /** An imported module function (PVMLExtern) — from the user's point of
+   * view it's a function like any builtin, so it deliberately shares
+   * PRIMITIVE's Python-facing name. */
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
+  EXTERN = "builtin_function_or_method",
 }
 
 export interface PVMLArray {
@@ -117,10 +128,51 @@ export interface PVMLPrimitive {
   boundArgs?: PVMLBoxType[];
 }
 
+/**
+ * A handle to a value owned by an imported conductor module (e.g. a runes
+ * Rune or a sound Sound) — DataType.OPAQUE on the conductor side. PVML never
+ * looks inside it: user code can only bind it to names, pass it around, and
+ * hand it back to module functions. `value` is the conductor
+ * `TypedValue<DataType.OPAQUE>` it round-trips as, typed `unknown` here so
+ * this core-VM types module stays free of any conductor dependency (only
+ * modules.ts, the conversion layer, ever casts it back).
+ */
+export interface PVMLOpaque {
+  type: "opaque";
+  value: unknown;
+}
+
+/**
+ * Synchronously re-enters the interpreter to call a PVML closure/primitive
+ * value from host code — a bound PVMLInterpreter.invokeValue, passed to a
+ * PVMLExtern's `fn` so imported-module callbacks (e.g. a student function
+ * handed to a module's higher-order export) can call back into user code.
+ * A function type rather than a PVMLInterpreter reference to keep this
+ * module free of a circular import on the interpreter.
+ */
+export type PVMLHostCall = (func: PVMLBoxType, args: PVMLBoxType[]) => PVMLBoxType;
+
+/**
+ * A host (imported-module) function value — what a conductor module's
+ * DataType.CLOSURE export becomes in PVML (see modules.ts's moduleToPvml).
+ * Unlike PVMLPrimitive (a synchronous index into this engine's own builtin
+ * table), an extern's implementation lives outside the VM and is
+ * asynchronous, so `dispatchCall` can't just run it inline: it parks the
+ * call in `pendingExtern` for `executeAsync`'s driver loop to await (see
+ * pvml-interpreter.ts) — which is why extern calls only work under
+ * `executeAsync()`, never plain `execute()`.
+ */
+export interface PVMLExtern {
+  type: "extern";
+  /** The module export's symbol name — display only (str()/repr()/toJSValue). */
+  name: string;
+  fn: (args: PVMLBoxType[], callPvml: PVMLHostCall) => Promise<PVMLBoxType>;
+}
+
 /** Type guard: narrows PVMLBoxType to the object variants. */
 export function isPVMLObject(
   value: PVMLBoxType,
-): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator {
+): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator | PVMLOpaque | PVMLExtern {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
@@ -346,6 +398,10 @@ export function getPVMLType(value: PVMLBoxType): PVMLType {
         return PVMLType.ARRAY;
       case "iterator":
         return PVMLType.ITERATOR;
+      case "opaque":
+        return PVMLType.OPAQUE;
+      case "extern":
+        return PVMLType.EXTERN;
     }
   }
   throw new Error(`Unknown runtime type: ${typeof value}`);

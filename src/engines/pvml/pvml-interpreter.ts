@@ -17,6 +17,7 @@ import {
   PVMLBoxType,
   PVMLClosure,
   PVMLEnvironment,
+  PVMLExtern,
   PVMLIR,
   PVMLIterator,
   PVMLProgram,
@@ -149,6 +150,19 @@ export class PVMLInterpreter {
    * Defaults to 4 (unrestricted), matching the CSE machine's own default. */
   private variant: number = 4;
 
+  /** A dispatched-but-not-yet-run extern (imported-module function) call —
+   * `dispatchCall` parks it here instead of running it, because the extern's
+   * `fn` is async and `step()` is not; `executeAsync`'s driver loop consumes
+   * it (awaits `fn`, pushes the result) immediately after the step that set
+   * it. Never survives across steps — it's either consumed by the driver
+   * loop or is an error (`invokeValue`'s synchronous nested loop can't await,
+   * so an extern call reaching it throws; and plain `execute()` refuses
+   * extern calls up front via `allowExtern`). */
+  private pendingExtern?: { extern: PVMLExtern; args: PVMLBoxType[] };
+  /** True only while `executeAsync`'s driver loop is running — the only
+   * context able to await a pendingExtern. See PVMLExtern's doc comment. */
+  private allowExtern = false;
+
   constructor(
     program: PVMLProgram,
     options?: {
@@ -198,10 +212,9 @@ export class PVMLInterpreter {
     return this.globalEnv;
   }
 
-  /**
-   * Execute the program and return the result
-   */
-  execute(): PVMLBoxType {
+  /** Shared setup for execute()/executeAsync(): builds the entry frame and
+   * resets per-run counters. */
+  private prepareEntry(): void {
     const entryPointIndex = this.program.entryPoint;
     const entryFunction = this.program.functions[entryPointIndex];
 
@@ -230,8 +243,51 @@ export class PVMLInterpreter {
     this.callDepth = 1;
     this.halted = false;
     this.instructionCount = 0;
+  }
 
+  /** Result of a finished run: top of stack, or undefined. Shared by
+   * run()/executeAsync(). */
+  private finishResult(): PVMLBoxType {
+    return this.currentFrame && this.currentFrame.stack.length > 0
+      ? this.currentFrame.stack[this.currentFrame.stack.length - 1]
+      : undefined;
+  }
+
+  /**
+   * Execute the program and return the result
+   */
+  execute(): PVMLBoxType {
+    this.prepareEntry();
     return this.run();
+  }
+
+  /**
+   * Like execute(), but able to run programs that call imported-module
+   * functions (PVMLExtern values — see modules.ts): per-instruction dispatch
+   * stays the same synchronous step() as run()'s, and only an actual extern
+   * call suspends — dispatchCall parks it in `pendingExtern`, this loop
+   * awaits the module's async fn, pushes its result (exactly where CALLP
+   * would have pushed a primitive's — a tail-call extern works too, since
+   * the compiler always emits RETG after CALLT, same as the primitive path),
+   * and resumes stepping. Programs without imports pay one field check per
+   * instruction over execute(), nothing more.
+   */
+  async executeAsync(): Promise<PVMLBoxType> {
+    this.prepareEntry();
+    this.allowExtern = true;
+    try {
+      while (!this.halted && this.currentFrame) {
+        this.step();
+        if (this.pendingExtern) {
+          const { extern, args } = this.pendingExtern;
+          this.pendingExtern = undefined;
+          this.push(await extern.fn(args, (f, a) => this.invokeValue(f, a)));
+        }
+      }
+    } finally {
+      this.allowExtern = false;
+    }
+    return this.finishResult();
   }
 
   /**
@@ -242,10 +298,7 @@ export class PVMLInterpreter {
       this.step();
     }
 
-    // Return top of stack or undefined
-    return this.currentFrame && this.currentFrame.stack.length > 0
-      ? this.currentFrame.stack[this.currentFrame.stack.length - 1]
-      : undefined;
+    return this.finishResult();
   }
 
   /**
@@ -1482,6 +1535,30 @@ export class PVMLInterpreter {
 
     const numArgs = args.length;
 
+    // An imported-module function (see PVMLExtern's doc comment): its
+    // implementation is async host code, which this synchronous method can't
+    // run — park the call for executeAsync's driver loop to await. The
+    // result lands on the stack exactly where the primitive case below would
+    // have pushed it (tail calls included — the compiler's trailing RETG
+    // returns it, same as for a tail-called primitive).
+    if (isPVMLObject(func) && func.type === "extern") {
+      if (!this.allowExtern) {
+        throw new PVMLInterpreterError(
+          `RuntimeError: imported module function '${func.name}' can only be called under ` +
+            `executeAsync() (synchronous execute() cannot await module code)`,
+        );
+      }
+      if (this.pendingExtern) {
+        // Can only happen from invokeValue's nested synchronous loop — the
+        // driver loop otherwise consumes pendingExtern immediately after the
+        // step that set it. See invokeValue's own guard for the user-facing
+        // error; this is a pure internal-consistency backstop.
+        throw new Error("Internal error: extern call dispatched while another is pending");
+      }
+      this.pendingExtern = { extern: func, args };
+      return;
+    }
+
     // A primitive referenced as a value (NEWCP) rather than called directly
     // — e.g. `f = abs; f(-5)` — has no function-table entry/frame of its
     // own; dispatch it the same way CALLP/CALLTP do.
@@ -1600,6 +1677,21 @@ export class PVMLInterpreter {
 
     while (this.currentFrame && this.currentFrame !== origFrame) {
       this.step();
+      if (this.pendingExtern) {
+        // This loop is synchronous (its callers — primitives, and module
+        // callbacks re-entering via executeAsync's callPvml — expect a plain
+        // value back), so it cannot await the parked async extern call the
+        // way executeAsync's driver loop does. Nested async re-entrance
+        // (module → Python callback → another module function) is not
+        // supported — surface a clear error rather than deadlocking on a
+        // result that will never arrive.
+        const name = this.pendingExtern.extern.name;
+        this.pendingExtern = undefined;
+        throw new PVMLInterpreterError(
+          `RuntimeError: cannot call imported module function '${name}' from inside a ` +
+            `callback that was itself invoked by a module or primitive`,
+        );
+      }
     }
 
     return this.pop();
@@ -1748,6 +1840,8 @@ export class PVMLInterpreter {
       if (value.type === "primitive") return `<primitive:${value.primitiveIndex}>`;
       if (value.type === "array") return value.elements.map(e => PVMLInterpreter.toJSValue(e));
       if (value.type === "iterator") return `<iterator>`;
+      if (value.type === "opaque") return `<opaque>`;
+      if (value.type === "extern") return `<module function:${value.name}>`;
     }
     return String(value);
   }

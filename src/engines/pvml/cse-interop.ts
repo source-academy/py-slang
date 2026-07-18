@@ -89,6 +89,17 @@ export function pvmlBoxToCseValue(value: PVMLBoxType): Value {
         return builtinDisplayValue(value.primitiveIndex);
       case "iterator":
         throw new Error("TypeError: cannot convert an iterator to a string");
+      // An imported-module handle: maps onto the CSE machine's own "opaque"
+      // stash Value, so str()/print() render it the same "<opaque object>"
+      // fallback toPythonString gives CSE module values.
+      case "opaque":
+        return { type: "opaque", value: value.value };
+      // An imported-module function: renders as "<built-in function name>",
+      // same as CSE shows for a module export bound to a name. The func/
+      // minArgs fields are inert placeholders, never dereferenced — see
+      // builtinDisplayValue's doc comment.
+      case "extern":
+        return { type: "builtin", name: value.name, func: () => undefined, minArgs: 0 };
     }
   }
   throw new Error(`TypeError: cannot convert PVML value of type '${typeof value}' to a string`);
