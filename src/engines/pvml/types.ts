@@ -13,25 +13,45 @@ export type PVMLBoxType =
   | PVMLArray
   | PVMLIterator;
 
+/**
+ * Every member's string value is the Python-facing type name `getPVMLType()`'s
+ * callers interpolate directly into user-visible error messages (e.g.
+ * `UnsupportedOperandTypeError`'s "unsupported operand type(s) for +: '...'
+ * and '...'"), so each one must match the name real Python (and the CSE
+ * machine's own `typeTranslator`, src/engines/cse/types.ts) would show — not
+ * this engine's internal JS representation. UNDEFINED and ITERATOR are the
+ * only members that don't have a Python-facing name: both are PVML-internal
+ * sentinels (an unset local-variable slot, always intercepted by
+ * UnboundLocalError/FreeVariableUnboundError before it could ever reach an
+ * operator as a value; a for-loop's own iteration state, never a value a
+ * user program can bind to a name) that should never actually reach one of
+ * these error messages.
+ */
 export enum PVMLType {
   UNDEFINED = "undefined",
-  NULL = "null",
-  BOOLEAN = "boolean",
+  /** Python's `None` — `type(None).__name__` is `"NoneType"`, not `"None"`. */
+  NULL = "NoneType",
+  BOOLEAN = "bool",
   /** A Python float (JS `number`). See BIGINT below for Python `int`. */
-  NUMBER = "number",
+  NUMBER = "float",
   /** A Python int (JS `bigint`, arbitrary precision) — distinct from NUMBER
    * (float), matching the CSE machine's own int/float split. Browser-pathway
    * only (see PVMLIR's `bigints` field doc comment); native Pynter has no
    * equivalent, and isn't meant to. */
-  BIGINT = "bigint",
+  BIGINT = "int",
   /** A Python complex number (the shared, engine-agnostic `PyComplexNumber`
    * class — see cse-interop.ts and PVMLIR's `complexes` field doc comment).
    * Browser-pathway only; native Pynter has zero complex-number support. */
   COMPLEX = "complex",
-  STRING = "string",
-  ARRAY = "array",
-  CLOSURE = "closure",
-  PRIMITIVE = "primitive",
+  STRING = "str",
+  ARRAY = "list",
+  /** Matches the CSE machine's own `typeTranslator`: real Python has no
+   * user-visible distinction between a `def`/`lambda` closure and any other
+   * function value. */
+  CLOSURE = "function",
+  /** Matches CPython's `type(print).__name__`, and the CSE machine's own
+   * `typeTranslator`. */
+  PRIMITIVE = "builtin_function_or_method",
   ITERATOR = "iterator",
 }
 

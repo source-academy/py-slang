@@ -17,7 +17,7 @@ class ListBuiltins {
   ): BigIntValue {
     const list = args[0];
     if (list.type !== "list") {
-      handleRuntimeError(context, new TypeError(source, command, context, list.type, "list"));
+      handleRuntimeError(context, new TypeError(source, command, context, list.type));
     }
     return { type: "bigint", value: BigInt(list.value.length) };
   }

@@ -24,7 +24,7 @@ export class MiscBuiltins {
   static arity(args: Value[], source: string, command: ExprNS.Call, context: Context): BigIntValue {
     const func = args[0];
     if (func.type !== "builtin" && func.type !== "closure") {
-      handleRuntimeError(context, new TypeError(source, command, context, func.type, "function"));
+      handleRuntimeError(context, new TypeError(source, command, context, func.type));
     }
     if (func.type === "closure") {
       const variadicInstance = func.closure.node.parameters.findIndex(param => param.isStarred);
@@ -55,7 +55,7 @@ export class MiscBuiltins {
         val.type !== "string" &&
         val.type !== "complex"
       ) {
-        handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+        handleRuntimeError(context, new TypeError(source, command, context, val.type));
       }
       return {
         type: "complex",
@@ -70,16 +70,7 @@ export class MiscBuiltins {
         val.type !== "complex",
     );
     if (invalidType.length > 0) {
-      handleRuntimeError(
-        context,
-        new TypeError(
-          source,
-          command,
-          context,
-          invalidType[0].type,
-          "'int', 'float', 'bool' or 'complex'",
-        ),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType[0].type));
     }
     const [real, imag] = args as (BigIntValue | NumberValue | BoolValue | ComplexValue)[];
     const realPart = PyComplexNumber.fromValue(context, source, command, real.value);
@@ -91,7 +82,7 @@ export class MiscBuiltins {
   static real(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+      handleRuntimeError(context, new TypeError(source, command, context, val.type));
     }
     return { type: "number", value: val.value.real };
   }
@@ -100,7 +91,7 @@ export class MiscBuiltins {
   static imag(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+      handleRuntimeError(context, new TypeError(source, command, context, val.type));
     }
     return { type: "number", value: val.value.imag };
   }
@@ -130,10 +121,7 @@ export class MiscBuiltins {
         return { type: "number", value: modulus };
       }
       default:
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[0].type, "float', 'int' or 'complex"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -145,10 +133,7 @@ export class MiscBuiltins {
       // in the string
       return { type: "bigint", value: BigInt([...val.value].length) };
     }
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, val.type, "object with length"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, val.type));
   }
 
   static error(args: Value[], _source: string, command: ExprNS.Call, context: Context): Value {
@@ -169,18 +154,12 @@ export class MiscBuiltins {
     }
     if (isNumeric(args[0])) {
       const invalidType = args.find(arg => !isNumeric(arg))!;
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else if (args[0].type === "string") {
       const invalidType = args.find(arg => arg.type !== "string")!;
-      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -197,18 +176,12 @@ export class MiscBuiltins {
     }
     if (isNumeric(args[0])) {
       const invalidType = args.find(arg => !isNumeric(arg))!;
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else if (args[0].type === "string") {
       const invalidType = args.find(arg => arg.type !== "string")!;
-      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -232,16 +205,13 @@ export class MiscBuiltins {
   ): NumberValue | BigIntValue {
     const numArg = args[0];
     if (!isNumeric(numArg)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, numArg.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, numArg.type));
     }
 
     let ndigitsArg: BigIntValue = { type: "bigint", value: BigInt(0) };
     if (args.length === 2 && args[1].type !== "none") {
       if (args[1].type !== "bigint") {
-        handleRuntimeError(context, new TypeError(source, command, context, args[1].type, "int"));
+        handleRuntimeError(context, new TypeError(source, command, context, args[1].type));
       }
       ndigitsArg = args[1];
     } else {

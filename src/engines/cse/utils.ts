@@ -820,19 +820,13 @@ export function evaluateListAssignment(
   value: Value | undefined,
 ) {
   if (list === undefined || list.type !== "list") {
-    handleRuntimeError(
-      context,
-      new TypeError(code, assignNode, context, list?.type || "unknown", "list"),
-    );
+    handleRuntimeError(context, new TypeError(code, assignNode, context, list?.type || "unknown"));
   }
   if (index === undefined || index.type !== "bigint") {
-    handleRuntimeError(
-      context,
-      new TypeError(code, assignNode, context, index?.type || "unknown", "int"),
-    );
+    handleRuntimeError(context, new TypeError(code, assignNode, context, index?.type || "unknown"));
   }
   if (value === undefined) {
-    handleRuntimeError(context, new TypeError(code, assignNode, context, "undefined", "any"));
+    handleRuntimeError(context, new TypeError(code, assignNode, context, "undefined"));
   }
   let intIndex = Number(index.value);
   if (intIndex < 0) {
