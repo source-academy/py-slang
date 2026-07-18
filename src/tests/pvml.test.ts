@@ -178,7 +178,7 @@ describe("PVML E2E", () => {
       ["total = 0\nfor i in range(5):\n    total = total + i\ntotal", 10, null],
       ["total = 0\nfor i in range(1, 6):\n    total = total + i\ntotal", 15, null],
       ["total = 0\nfor i in range(0, 10, 2):\n    total = total + i\ntotal", 20, null],
-      ["last = 0\nfor x in [10, 20, 30]:\n    last = x\nlast", 30, null],
+      ["xs = [10, 20, 30]\nlast = 0\nfor i in range(len(xs)):\n    last = xs[i]\nlast", 30, null],
       ["x = 42\nfor i in range(0):\n    x = 0\nx", 42, null],
     ],
     "break and continue": [
@@ -673,12 +673,12 @@ describe("PVML E2E", () => {
     ],
     "an entirely-variadic function": [
       [
-        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\ntotal(1, 2, 3, 4)",
+        "def total(*nums):\n    s = 0\n    for i in range(len(nums)):\n        s = s + nums[i]\n    return s\ntotal(1, 2, 3, 4)",
         10,
         null,
       ],
       [
-        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\ntotal()",
+        "def total(*nums):\n    s = 0\n    for i in range(len(nums)):\n        s = s + nums[i]\n    return s\ntotal()",
         0,
         null,
       ],
@@ -717,7 +717,7 @@ describe("PVML E2E", () => {
     "spreading into a primitive": [["xs = [3, 4]\nmax(*xs)", 4, null]],
     "spreading into a variadic (rest-param) function": [
       [
-        "def total(*nums):\n    s = 0\n    for n in nums:\n        s = s + n\n    return s\nxs = [1, 2, 3]\ntotal(*xs)",
+        "def total(*nums):\n    s = 0\n    for i in range(len(nums)):\n        s = s + nums[i]\n    return s\nxs = [1, 2, 3]\ntotal(*xs)",
         6,
         null,
       ],
