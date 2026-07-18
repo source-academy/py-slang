@@ -49,6 +49,9 @@ export const ERROR_MAP = {
   STACK_UNDERFLOW: "Stack underflow.",
   GEN_LIST_NOT_INT: "Trying to generate a list of non-integer length.",
   ARITY_NOT_CLOSURE: "Trying to get arity of a non-closure value.",
+  ZERO_DIVISION: "ZeroDivisionError: division by zero.",
+  BOOL_OPERAND_NOT_SUPPORTED: "Calling an operation on an unsupported operand type: bool.",
+  EXPECTED_BOOL_OPERAND: "TypeError: expected a bool operand for this operation.",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
@@ -57,6 +60,8 @@ export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MA
 export const DATA_END = "$_data_end";
 export const SHADOW_STACK_BOTTOM = "$_shadow_stack_bottom_pointer";
 export const SHADOW_STACK_TOP = "$_shadow_stack_top_pointer";
+
+export const CHAPTER = "$_chapter";
 
 export const HEAP_PTR = "$_heap_pointer";
 export const FROM_SPACE_START_PTR = "$_from_space_start_pointer";

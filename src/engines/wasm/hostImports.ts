@@ -1,9 +1,46 @@
 import { parse } from "../../parser";
 import pythonLexer from "../../parser/lexer";
 import { toAstToken } from "../../parser/token-bridge";
+import { pythonMod } from "../cse/utils";
+import { PyComplexNumber } from "../../types/value-types";
 import { MetacircularGenerator } from "./metacircularGenerator";
-import { ERROR_MAP, GC_OBJECT_HEADER_SIZE } from "./runtime";
+import { ARITHMETIC_OP_TAG, ERROR_MAP, GC_OBJECT_HEADER_SIZE, TYPE_TAG } from "./runtime";
 import type { WasmExports } from "./types";
+
+/** Decodes a (tag, val) operand pair into the JS numeric representation
+ * arith.ext's host-side computation works with: an int stays a bigint, a
+ * float's bit-reinterpreted i64 is read back out as a JS number, and a
+ * complex operand's real/imag pair is read directly off the GC heap at its
+ * pointer (mirroring operators.ts's own f64.load(...)/f64.load(...+8) reads
+ * for complex operands elsewhere in the runtime). */
+function decodeArithOperand(
+  memory: WebAssembly.Memory,
+  tag: number,
+  val: bigint,
+): bigint | number | PyComplexNumber {
+  switch (tag) {
+    case TYPE_TAG.INT:
+      return val;
+    case TYPE_TAG.FLOAT: {
+      const buf = new ArrayBuffer(8);
+      new DataView(buf).setBigInt64(0, val, true);
+      return new DataView(buf).getFloat64(0, true);
+    }
+    case TYPE_TAG.COMPLEX: {
+      const dv = new DataView(memory.buffer, Number(val), 16);
+      return new PyComplexNumber(dv.getFloat64(0, true), dv.getFloat64(8, true));
+    }
+    default:
+      throw new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE);
+  }
+}
+
+function toComplex(value: bigint | number | PyComplexNumber): PyComplexNumber {
+  if (value instanceof PyComplexNumber) return value;
+  return typeof value === "bigint"
+    ? PyComplexNumber.fromBigInt(value)
+    : PyComplexNumber.fromNumber(value);
+}
 
 export type HostRuntimeState = {
   output: string[];
@@ -94,6 +131,65 @@ export function createHostImports(memory: WebAssembly.Memory, runtime: HostRunti
 
         const metacircularGenerator = new MetacircularGenerator(runtime.wasmExports, memory);
         return metacircularGenerator.visit(ast);
+      },
+    },
+    arith: {
+      /**
+       * `//`, `%`, `**` (see runtime/operators.ts's ARITHMETIC_OP_FX,
+       * whose FLOORDIV/MOD/POW branches delegate here entirely): reuses
+       * CSE's own pythonMod and PyComplexNumber.pow so WASM's floor-division
+       * (floors toward -infinity, not i64 div_s's truncation-toward-zero)
+       * and complex exponentiation (needs log/exp/atan2/cos/sin -- none of
+       * which are native WASM instructions) match CSE bit-for-bit instead of
+       * a second, independently-derived implementation.
+       */
+      ext: (op: number, xTag: number, xVal: bigint, yTag: number, yVal: bigint): [number, bigint] => {
+        if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
+        const { makeInt, makeFloat, makeComplex } = runtime.wasmExports;
+
+        const x = decodeArithOperand(memory, xTag, xVal);
+        const y = decodeArithOperand(memory, yTag, yVal);
+
+        if (x instanceof PyComplexNumber || y instanceof PyComplexNumber) {
+          if (op !== ARITHMETIC_OP_TAG.POW) throw new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE);
+          const result = toComplex(x).pow(toComplex(y));
+          return makeComplex(result.real, result.imag);
+        }
+
+        if (typeof x === "number" || typeof y === "number") {
+          const xf = Number(x);
+          const yf = Number(y);
+          switch (op) {
+            case ARITHMETIC_OP_TAG.FLOORDIV:
+              if (yf === 0) throw new Error(ERROR_MAP.ZERO_DIVISION);
+              return makeFloat(Math.floor(xf / yf));
+            case ARITHMETIC_OP_TAG.MOD:
+              if (yf === 0) throw new Error(ERROR_MAP.ZERO_DIVISION);
+              return makeFloat(pythonMod(xf, yf));
+            case ARITHMETIC_OP_TAG.POW:
+              if (xf === 0 && yf < 0) throw new Error(ERROR_MAP.ZERO_DIVISION);
+              return makeFloat(xf ** yf);
+            default:
+              throw new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE);
+          }
+        }
+
+        const xb = x;
+        const yb = y;
+        switch (op) {
+          case ARITHMETIC_OP_TAG.FLOORDIV:
+            if (yb === 0n) throw new Error(ERROR_MAP.ZERO_DIVISION);
+            return makeInt((xb - pythonMod(xb, yb)) / yb);
+          case ARITHMETIC_OP_TAG.MOD:
+            if (yb === 0n) throw new Error(ERROR_MAP.ZERO_DIVISION);
+            return makeInt(pythonMod(xb, yb));
+          case ARITHMETIC_OP_TAG.POW:
+            if (xb === 0n && yb < 0n) throw new Error(ERROR_MAP.ZERO_DIVISION);
+            if (yb < 0n) return makeFloat(Number(xb) ** Number(yb));
+            return makeInt(xb ** yb);
+          default:
+            throw new Error(ERROR_MAP.ARITH_OP_UNKNOWN_TYPE);
+        }
       },
     },
     js: { memory },
