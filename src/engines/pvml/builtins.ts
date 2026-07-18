@@ -316,15 +316,30 @@ function vectorToPvmlList(arr: PVMLBoxType[]): PVMLBoxType {
   return res;
 }
 
+/**
+ * `domainCheck`, when given, mirrors CPython's own per-function domain
+ * restriction for the handful of math_* functions that have one (e.g.
+ * `math_acos`'s [-1, 1], `math_sqrt`'s [0, inf)) -- matches CSE's own
+ * per-function ValueError checks in src/stdlib/math.ts, and CPython's own
+ * `ValueError: math domain error` wording exactly. Previously missing here
+ * entirely: every unaryMath call silently ran `fn(x)` out of domain and
+ * returned NaN instead of raising, a real behavioral gap from both CSE and
+ * real CPython (found via generatePvmlInBrowserTestCases while extending
+ * stdlib.test.ts's mathTests coverage).
+ */
 function unaryMath(
   args: PVMLBoxType[],
   name: string,
   fn: (x: number) => number,
   variant: number = 4,
+  domainCheck?: (x: number) => boolean,
 ): number {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
   const [x] = assertNumericArgs(args, name, variant);
+  if (domainCheck && !Number.isNaN(x) && !domainCheck(x)) {
+    throw new PVMLInterpreterError("ValueError: math domain error");
+  }
   return fn(x);
 }
 
@@ -921,11 +936,11 @@ export function executePrimitive(
       );
     }
     case 33: // math_acos
-      return unaryMath(args, "math_acos", Math.acos, variant);
+      return unaryMath(args, "math_acos", Math.acos, variant, x => x >= -1 && x <= 1);
     case 34: // math_acosh
-      return unaryMath(args, "math_acosh", Math.acosh, variant);
+      return unaryMath(args, "math_acosh", Math.acosh, variant, x => x >= 1);
     case 35: // math_asin
-      return unaryMath(args, "math_asin", Math.asin, variant);
+      return unaryMath(args, "math_asin", Math.asin, variant, x => x >= -1 && x <= 1);
     case 36: // math_asinh
       return unaryMath(args, "math_asinh", Math.asinh, variant);
     case 37: // math_atan
@@ -933,7 +948,7 @@ export function executePrimitive(
     case 38: // math_atan2
       return binaryMath(args, "math_atan2", Math.atan2, variant);
     case 39: // math_atanh
-      return unaryMath(args, "math_atanh", Math.atanh, variant);
+      return unaryMath(args, "math_atanh", Math.atanh, variant, x => x > -1 && x < 1);
     case 40: // math_cbrt
       return unaryMath(args, "math_cbrt", Math.cbrt, variant);
     case 41: // math_ceil — returns int (bigint), matching CSE's math_ceil; see unaryMathToInt.
@@ -948,14 +963,25 @@ export function executePrimitive(
       return unaryMath(args, "math_expm1", Math.expm1, variant);
     case 47: // math_floor — returns int (bigint); see unaryMathToInt.
       return unaryMathToInt(args, "math_floor", Math.floor, variant);
-    case 51: // math_log
-      return unaryMath(args, "math_log", Math.log, variant);
+    case 51: {
+      // math_log(x, base=None) -- the only math_* function with an optional
+      // second argument (mirrors CSE's own math_log in src/stdlib/math.ts),
+      // so it can't go through unaryMath's fixed one-argument shape.
+      if (args.length < 1 || args.length > 2)
+        throw new MissingRequiredPositionalError("math_log() takes 1 or 2 arguments");
+      const [x] = assertNumericArgs([args[0]], "math_log", variant);
+      if (x <= 0) throw new PVMLInterpreterError("ValueError: math domain error");
+      if (args.length === 1) return Math.log(x);
+      const [base] = assertNumericArgs([args[1]], "math_log", variant);
+      if (base <= 0) throw new PVMLInterpreterError("ValueError: math domain error");
+      return Math.log(x) / Math.log(base);
+    }
     case 52: // math_log1p
-      return unaryMath(args, "math_log1p", Math.log1p, variant);
+      return unaryMath(args, "math_log1p", Math.log1p, variant, x => x > -1);
     case 53: // math_log2
-      return unaryMath(args, "math_log2", Math.log2, variant);
+      return unaryMath(args, "math_log2", Math.log2, variant, x => x > 0);
     case 54: // math_log10
-      return unaryMath(args, "math_log10", Math.log10, variant);
+      return unaryMath(args, "math_log10", Math.log10, variant, x => x > 0);
 
     case 55: {
       // max
@@ -1051,7 +1077,7 @@ export function executePrimitive(
     case 62: // math_sinh
       return unaryMath(args, "math_sinh", Math.sinh, variant);
     case 63: // math_sqrt
-      return unaryMath(args, "math_sqrt", Math.sqrt, variant);
+      return unaryMath(args, "math_sqrt", Math.sqrt, variant, x => x >= 0);
     case 64: // math_tan
       return unaryMath(args, "math_tan", Math.tan, variant);
     case 65: // math_tanh
