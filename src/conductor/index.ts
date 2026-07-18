@@ -11,6 +11,11 @@ export {
   PyPvmlEvaluator3,
   PyPvmlEvaluator4,
 } from "./PyPvmlEvaluator";
-export { PyWasmEvaluator } from "./PyWasmEvaluator";
 export { PyPvmlPynterEvaluator } from "./PyPvmlPynterEvaluator";
 export { PyStepperEvaluator1, PyStepperEvaluator2 } from "./PyStepperEvaluator";
+export {
+  PyWasmEvaluator1,
+  PyWasmEvaluator2,
+  PyWasmEvaluator3,
+  PyWasmEvaluator4,
+} from "./PyWasmEvaluator";
