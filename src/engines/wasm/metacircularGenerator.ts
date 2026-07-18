@@ -1,7 +1,7 @@
-import { PARSE_TREE_STRINGS, WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
-import { GC_OBJECT_HEADER_SIZE } from "./constants";
+import { GC_OBJECT_HEADER_SIZE } from "./runtime";
+import { PARSE_TREE_STRINGS, WasmExports } from "./types";
 
 interface BuilderVisitor<S, E> extends StmtNS.Visitor<S>, ExprNS.Visitor<E> {
   visit(stmt: StmtNS.Stmt): S;
@@ -359,14 +359,36 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     return this.list(this.string("pass_statement"));
   }
 
-  // UNSUPPORTED NODES
+  visitWhileStmt(stmt: StmtNS.While): [number, bigint] {
+    return this.list(
+      this.string("while_loop"),
+      this.visit(stmt.condition),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
+    );
+  }
 
-  visitWhileStmt(_stmt: StmtNS.While): [number, bigint] {
-    throw new Error("While loops are not supported in parse tree generation");
+  visitForStmt(stmt: StmtNS.For): [number, bigint] {
+    if (
+      !(stmt.iter instanceof ExprNS.Call) ||
+      !(stmt.iter.callee instanceof ExprNS.Variable) ||
+      stmt.iter.callee.name.lexeme !== "range"
+    ) {
+      throw new Error("Only range() is supported in for loops");
+    } else if (stmt.iter.args.length === 0) {
+      throw new Error("range() requires at least one argument");
+    } else if (stmt.iter.args.length > 3) {
+      throw new Error("range() accepts at most 3 arguments");
+    }
+
+    return this.list(
+      this.string("for_loop"),
+      this.list(this.string("name"), this.dynamicString(`"${stmt.target.lexeme}"`)),
+      this.list(this.string("range_args"), ...stmt.iter.args.map(a => this.visit(a))),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
+    );
   }
-  visitForStmt(_stmt: StmtNS.For): [number, bigint] {
-    throw new Error("For loops are not supported in parse tree generation");
-  }
+
+  // UNSUPPORTED NODES
   visitFromImportStmt(_stmt: StmtNS.FromImport): [number, bigint] {
     throw new Error("Import expressions are not supported in parse tree generation");
   }
