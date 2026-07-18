@@ -1673,6 +1673,7 @@ __metadata:
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.7.0"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
+    "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
     "@types/fast-levenshtein": "npm:^0.0.4"
@@ -1708,6 +1709,15 @@ __metadata:
     "@sourceacademy/common-cse-machine": ">=0.3.0"
     "@sourceacademy/conductor": ">=0.3.0"
   checksum: 10c0/dbf3c9220bb35b2f10d46dcfd13e1c827931d9bb9fb41266eff512d5859ab7734e594cda3b0e741a9896e8f7a3598cdb4d914ef13b7ecce941f8fc1798d8965e
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-module-loader@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-module-loader@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/848d2a943cc0523ba6f6913d18ab8a1538e83998968e18b097c2bb485100cdbb701428168483a270a0451285a8d04019829f50b8321b8f1268313f7586b5a23c
   languageName: node
   linkType: hard
 

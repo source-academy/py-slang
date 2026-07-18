@@ -1,7 +1,9 @@
 import { ConductorError } from "@sourceacademy/conductor/common";
+import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { IDataHandler } from "@sourceacademy/conductor/types";
 import { StmtNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
-import { ModuleContext, NativeStorage } from "../../types";
+import { NativeStorage } from "../../types";
 import { Control } from "./control";
 import { Environment } from "./environment";
 import { BuiltinValue, Stash } from "./stash";
@@ -17,6 +19,9 @@ export class Context {
   public control: Control;
   public stash: Stash;
 
+  public conductor: IRunnerPlugin | null = null;
+  public evaluator: IDataHandler | null = null;
+
   public streams:
     | {
         initialised: false;
@@ -30,7 +35,6 @@ export class Context {
         flushStdout?: () => void;
       };
   public errors: RuntimeSourceError[] = [];
-  public moduleContexts: { [name: string]: ModuleContext };
   public prelude: string | null = null;
   /** The SICPy chapter (1-4) currently running — stamped once by evaluate()
    * (interpreter.ts). Lets error construction sites (e.g.
@@ -65,7 +69,6 @@ export class Context {
     this.control = new Control(program);
     this.stash = new Stash();
     this.runtime = this.createEmptyRuntime();
-    this.moduleContexts = {};
     //this.environment = createProgramEnvironment(context || this, false);
     if (this.runtime.environments.length === 0) {
       const globalEnvironment = this.createGlobalEnvironment();
