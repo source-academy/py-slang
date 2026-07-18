@@ -171,7 +171,19 @@ export async function runCode(
     context.control = control;
     context.stash = stash;
 
-    await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
+    try {
+      await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
+    } catch (e: unknown) {
+      // handleRuntimeError (src/engines/cse/error.ts) both records the error on
+      // context.errors *and* throws it, so a runtime error escapes right past the
+      // context.errors check below instead of being converted to a RunError by it. If
+      // handleRuntimeError already recorded it, fall through to that check, which builds a
+      // proper message from context.errors; otherwise (a genuinely unrecorded throw) wrap
+      // the escaping value directly, same as the parse()-error catch above.
+      if (context.errors.length === 0) {
+        throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+      }
+    }
 
     if (context.errors.length > 0 || errors.length > 0) {
       throw new RunError(
