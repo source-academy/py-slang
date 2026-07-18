@@ -1490,8 +1490,12 @@ export class PVMLInterpreter {
       // PVMLPrimitive's `boundArgs` doc comment (used by stream()'s
       // recursive continuation).
       const fullArgs = func.boundArgs ? [...func.boundArgs, ...args] : args;
-      const result = executePrimitive(func.primitiveIndex, fullArgs, this.onOutput, (f, a) =>
-        this.invokeValue(f, a),
+      const result = executePrimitive(
+        func.primitiveIndex,
+        fullArgs,
+        this.onOutput,
+        (f, a) => this.invokeValue(f, a),
+        this.variant,
       );
       this.push(result);
       return;
@@ -1618,8 +1622,12 @@ export class PVMLInterpreter {
         `[CALLP] Calling primitive ${primitiveIndex} with args: ${JSON.stringify(args.map(a => PVMLInterpreter.toJSValue(a)))}`,
       );
 
-    const result = executePrimitive(primitiveIndex, args, this.onOutput, (f, a) =>
-      this.invokeValue(f, a),
+    const result = executePrimitive(
+      primitiveIndex,
+      args,
+      this.onOutput,
+      (f, a) => this.invokeValue(f, a),
+      this.variant,
     );
     this.push(result);
 
