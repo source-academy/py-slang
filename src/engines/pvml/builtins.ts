@@ -1,4 +1,5 @@
 import { erf, gamma, lgamma } from "mathjs";
+import { friendlyTypeName } from "../cse/types";
 import { numericCompare } from "../cse/utils";
 import { minArgMap, toPythonString } from "../../stdlib/utils";
 import { transform } from "../../stdlib/parser";
@@ -255,9 +256,13 @@ export const PRIMITIVE_CONSTANTS: Map<string, number> = new Map([
  * their result (e.g. range()) use their own bigint-preserving arg check
  * instead — see assertIntArgs below.
  */
-function assertNumericArgs(args: PVMLBoxType[], fn: string): number[] {
-  if (!args.every(a => typeof a === "number" || typeof a === "bigint"))
-    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric arguments`);
+function assertNumericArgs(args: PVMLBoxType[], fn: string, variant: number = 4): number[] {
+  const bad = args.find(a => typeof a !== "number" && typeof a !== "bigint");
+  if (bad !== undefined) {
+    throw new PVMLInterpreterError(
+      `TypeError: unsupported argument type for ${fn}: ${friendlyTypeName(getPVMLType(bad), variant)}`,
+    );
+  }
   return args.map(a => Number(a));
 }
 
@@ -272,10 +277,14 @@ function assertNumericArgs(args: PVMLBoxType[], fn: string): number[] {
  * Pynter-targeted bytecode still run correctly if ever executed directly by
  * this TS interpreter instead of the native VM (e.g. assembler round-trip
  * tests), at the cost of not rejecting a genuine Pynter-mode float there. */
-function assertIntArgs(args: PVMLBoxType[], fn: string): bigint[] {
-  if (!args.every(a => typeof a === "bigint" || typeof a === "number"))
-    throw new PVMLInterpreterError(`TypeError: ${fn}() requires integer arguments`);
-  return args.map(a => (typeof a === "bigint" ? a : BigInt(a)));
+function assertIntArgs(args: PVMLBoxType[], fn: string, variant: number = 4): bigint[] {
+  const bad = args.find(a => typeof a !== "bigint" && typeof a !== "number");
+  if (bad !== undefined) {
+    throw new PVMLInterpreterError(
+      `TypeError: unsupported argument type for ${fn}: ${friendlyTypeName(getPVMLType(bad), variant)}`,
+    );
+  }
+  return args.map(a => (typeof a === "bigint" ? a : BigInt(a as number)));
 }
 
 /** Converts an int/float/bool/complex value to PyComplexNumber, for the
@@ -307,10 +316,15 @@ function vectorToPvmlList(arr: PVMLBoxType[]): PVMLBoxType {
   return res;
 }
 
-function unaryMath(args: PVMLBoxType[], name: string, fn: (x: number) => number): number {
+function unaryMath(
+  args: PVMLBoxType[],
+  name: string,
+  fn: (x: number) => number,
+  variant: number = 4,
+): number {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
-  const [x] = assertNumericArgs(args, name);
+  const [x] = assertNumericArgs(args, name, variant);
   return fn(x);
 }
 
@@ -318,10 +332,11 @@ function binaryMath(
   args: PVMLBoxType[],
   name: string,
   fn: (a: number, b: number) => number,
+  variant: number = 4,
 ): number {
   if (args.length !== 2)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 2 arguments`);
-  const [a, b] = assertNumericArgs(args, name);
+  const [a, b] = assertNumericArgs(args, name, variant);
   return fn(a, b);
 }
 
@@ -329,17 +344,23 @@ function ternaryMath(
   args: PVMLBoxType[],
   name: string,
   fn: (a: number, b: number, c: number) => number,
+  variant: number = 4,
 ): number {
   if (args.length !== 3)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 3 arguments`);
-  const [a, b, c] = assertNumericArgs(args, name);
+  const [a, b, c] = assertNumericArgs(args, name, variant);
   return fn(a, b, c);
 }
 
-function unaryMathBool(args: PVMLBoxType[], name: string, fn: (x: number) => boolean): boolean {
+function unaryMathBool(
+  args: PVMLBoxType[],
+  name: string,
+  fn: (x: number) => boolean,
+  variant: number = 4,
+): boolean {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
-  const [x] = assertNumericArgs(args, name);
+  const [x] = assertNumericArgs(args, name, variant);
   return fn(x);
 }
 
@@ -350,13 +371,20 @@ function unaryMathBool(args: PVMLBoxType[], name: string, fn: (x: number) => boo
  * in this file wraps via plain unaryMath. An already-int argument passes
  * through unchanged (full precision preserved, matching CSE) rather than
  * round-tripping through Number — ceil/floor/trunc of an int is a no-op. */
-function unaryMathToInt(args: PVMLBoxType[], name: string, fn: (x: number) => number): bigint {
+function unaryMathToInt(
+  args: PVMLBoxType[],
+  name: string,
+  fn: (x: number) => number,
+  variant: number = 4,
+): bigint {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
   const [x] = args;
   if (typeof x === "bigint") return x;
   if (typeof x !== "number")
-    throw new PVMLInterpreterError(`TypeError: ${name}() requires numeric arguments`);
+    throw new PVMLInterpreterError(
+      `TypeError: unsupported argument type for ${name}: ${friendlyTypeName(getPVMLType(x), variant)}`,
+    );
   return BigInt(fn(x));
 }
 
@@ -421,11 +449,28 @@ function fusedMultiplyAdd(x: number, y: number, z: number): number {
  * no such built-in NaN handling (its own doc comment requires callers to
  * check first), so this needs the explicit guard below to reproduce the same
  * behavior. */
-function pickExtremum(args: PVMLBoxType[], fn: string, wantMax: boolean): PVMLBoxType {
+function pickExtremum(
+  args: PVMLBoxType[],
+  fn: string,
+  wantMax: boolean,
+  variant: number = 4,
+): PVMLBoxType {
   const allNumeric = args.every(a => typeof a === "number" || typeof a === "bigint");
   const allString = args.every(a => typeof a === "string");
-  if (!allNumeric && !allString)
-    throw new PVMLInterpreterError(`TypeError: ${fn}() requires numeric or string arguments`);
+  if (!allNumeric && !allString) {
+    // Mirrors CSE's own max()/min() (misc.ts): the "wrong" type is whichever
+    // argument doesn't match args[0]'s own kind — there's no single
+    // universally-wrong argument here, just an inconsistent mix.
+    const bad =
+      typeof args[0] === "number" || typeof args[0] === "bigint"
+        ? args.find(a => typeof a !== "number" && typeof a !== "bigint")!
+        : typeof args[0] === "string"
+          ? args.find(a => typeof a !== "string")!
+          : args[0];
+    throw new PVMLInterpreterError(
+      `TypeError: unsupported argument type for ${fn}: ${friendlyTypeName(getPVMLType(bad), variant)}`,
+    );
+  }
   let best = args[0];
   for (let i = 1; i < args.length; i++) {
     const cur = args[i];
@@ -445,16 +490,27 @@ function pickExtremum(args: PVMLBoxType[], fn: string, wantMax: boolean): PVMLBo
 }
 
 /** A pair is represented as a 2-element PVMLArray, matching native Pynter's cons-array layout. */
-function pairArray(v: PVMLBoxType, fn: string): Extract<PVMLBoxType, { type: "array" }> {
+function pairArray(
+  v: PVMLBoxType,
+  fn: string,
+  variant: number = 4,
+): Extract<PVMLBoxType, { type: "array" }> {
   if (!isPVMLObject(v) || v.type !== "array" || v.elements.length !== 2)
-    throw new PVMLInterpreterError(`TypeError: ${fn}() requires a pair argument`);
+    throw new PVMLInterpreterError(
+      `TypeError: unsupported argument type for ${fn}: ${friendlyTypeName(getPVMLType(v), variant)}`,
+    );
   return v;
 }
 
-function pairElement(args: PVMLBoxType[], name: string, index: 0 | 1): PVMLBoxType {
+function pairElement(
+  args: PVMLBoxType[],
+  name: string,
+  index: 0 | 1,
+  variant: number = 4,
+): PVMLBoxType {
   if (args.length !== 1)
     throw new MissingRequiredPositionalError(`${name}() takes exactly 1 argument`);
-  return pairArray(args[0], name).elements[index];
+  return pairArray(args[0], name, variant).elements[index];
 }
 
 function isArrayPair(v: PVMLBoxType): v is Extract<PVMLBoxType, { type: "array" }> {
@@ -534,6 +590,11 @@ export function executePrimitive(
    * `apply_in_underlying_python` uses this; every other primitive ignores
    * it. */
   invokeValue: (func: PVMLBoxType, args: PVMLBoxType[]) => PVMLBoxType,
+  /** The SICPy chapter (1-4) the running program was compiled for — see
+   * Context.variant's doc comment (src/engines/cse/context.ts) for why
+   * argument-type error messages need it (a "pair" and a length-2 "list" are
+   * the exact same runtime value here). */
+  variant: number = 4,
 ): PVMLBoxType {
   switch (primitiveIndex) {
     case 2: {
@@ -549,7 +610,9 @@ export function executePrimitive(
       // units — matching CSE's own len() (misc.ts) and Python's str being a
       // sequence of code points (e.g. len('👋🌍') is 2, not 4).
       if (typeof v === "string") return BigInt([...v].length);
-      throw new PVMLInterpreterError(`TypeError: object of type '${getPVMLType(v)}' has no len()`);
+      throw new PVMLInterpreterError(
+        `TypeError: unsupported argument type for len: ${friendlyTypeName(getPVMLType(v), variant)}`,
+      );
     }
 
     case 5: // print/display — proper Python str() formatting per argument (see str()/repr()
@@ -563,7 +626,7 @@ export function executePrimitive(
       throw new PVMLInterpreterError(`Error: ${args.map(String).join(" ")}`);
 
     case 14: // head
-      return pairElement(args, "head", 0);
+      return pairElement(args, "head", 0, variant);
 
     case 16: // is_list
       if (args.length !== 1)
@@ -611,17 +674,17 @@ export function executePrimitive(
     case 74: // set_head
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("set_head() takes exactly 2 arguments");
-      pairArray(args[0], "set_head").elements[0] = args[1];
+      pairArray(args[0], "set_head", variant).elements[0] = args[1];
       return undefined;
 
     case 75: // set_tail
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("set_tail() takes exactly 2 arguments");
-      pairArray(args[0], "set_tail").elements[1] = args[1];
+      pairArray(args[0], "set_tail", variant).elements[1] = args[1];
       return undefined;
 
     case 89: // tail
-      return pairElement(args, "tail", 1);
+      return pairElement(args, "tail", 1, variant);
 
     case 90: // str — reuses the CSE machine's own formatting logic (see
       // cse-interop.ts's doc comment for why/how) rather than re-deriving
@@ -666,7 +729,7 @@ export function executePrimitive(
         return BigInt(PRIMITIVE_MIN_ARGS.get(func.primitiveIndex) ?? 0);
       }
       throw new PVMLInterpreterError(
-        `TypeError: arity() argument must be a function, not '${getPVMLType(func)}'`,
+        `TypeError: unsupported argument type for arity: ${friendlyTypeName(getPVMLType(func), variant)}`,
       );
     }
 
@@ -676,7 +739,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("real() takes exactly 1 argument");
       if (!(args[0] instanceof PyComplexNumber))
         throw new PVMLInterpreterError(
-          `TypeError: real() argument must be complex, not '${getPVMLType(args[0])}'`,
+          `TypeError: unsupported argument type for real: ${friendlyTypeName(getPVMLType(args[0]), variant)}`,
         );
       return args[0].real;
 
@@ -685,7 +748,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("imag() takes exactly 1 argument");
       if (!(args[0] instanceof PyComplexNumber))
         throw new PVMLInterpreterError(
-          `TypeError: imag() argument must be complex, not '${getPVMLType(args[0])}'`,
+          `TypeError: unsupported argument type for imag: ${friendlyTypeName(getPVMLType(args[0]), variant)}`,
         );
       return args[0].imag;
 
@@ -712,7 +775,7 @@ export function executePrimitive(
         const value = toPyComplexOperand(x);
         if (!value)
           throw new PVMLInterpreterError(
-            `TypeError: complex() first argument must be a string or a number, not '${getPVMLType(x)}'`,
+            `TypeError: unsupported argument type for complex: ${friendlyTypeName(getPVMLType(x), variant)}`,
           );
         return value;
       }
@@ -720,10 +783,12 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("complex() takes at most 2 arguments");
       const realPart = toPyComplexOperand(args[0]);
       const imagPart = toPyComplexOperand(args[1]);
-      if (!realPart || !imagPart)
+      if (!realPart || !imagPart) {
+        const bad = !realPart ? args[0] : args[1];
         throw new PVMLInterpreterError(
-          "TypeError: complex() arguments must be int, float, bool or complex",
+          `TypeError: unsupported argument type for complex: ${friendlyTypeName(getPVMLType(bad), variant)}`,
         );
+      }
       return realPart.add(imagPart.mul(new PyComplexNumber(0, 1)));
     }
 
@@ -749,7 +814,9 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("parse() takes exactly 1 argument");
       const [source] = args;
       if (typeof source !== "string")
-        throw new PVMLInterpreterError("TypeError: parse() argument must be a string");
+        throw new PVMLInterpreterError(
+          `TypeError: unsupported argument type for parse: ${friendlyTypeName(getPVMLType(source), variant)}`,
+        );
       const ast = parsePython(source + "\n");
       return cseValueToPvmlBox(transform(ast, new Set()));
     }
@@ -761,7 +828,9 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("tokenize() takes exactly 1 argument");
       const [source] = args;
       if (typeof source !== "string")
-        throw new PVMLInterpreterError("TypeError: tokenize() argument must be a string");
+        throw new PVMLInterpreterError(
+          `TypeError: unsupported argument type for tokenize: ${friendlyTypeName(getPVMLType(source), variant)}`,
+        );
       pythonLexer.reset(source);
       const tokens: PVMLBoxType[] = [];
       let tok;
@@ -830,7 +899,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `range() takes 1 to 3 arguments (${args.length} given)`,
         );
-      const [a, b, c] = assertIntArgs(args, "range");
+      const [a, b, c] = assertIntArgs(args, "range", variant);
       const [start, stop, step] =
         args.length === 1 ? [0n, a, 1n] : args.length === 2 ? [a, b, 1n] : [a, b, c];
       if (step === 0n) throw new PVMLInterpreterError("ValueError: range() arg 3 must not be zero");
@@ -847,44 +916,46 @@ export function executePrimitive(
       if (typeof x === "bigint") return x < 0n ? -x : x;
       if (typeof x === "number") return Math.abs(x);
       if (x instanceof PyComplexNumber) return Math.sqrt(x.real * x.real + x.imag * x.imag);
-      throw new PVMLInterpreterError("TypeError: abs() requires numeric arguments");
+      throw new PVMLInterpreterError(
+        `TypeError: unsupported argument type for abs: ${friendlyTypeName(getPVMLType(x), variant)}`,
+      );
     }
     case 33: // math_acos
-      return unaryMath(args, "math_acos", Math.acos);
+      return unaryMath(args, "math_acos", Math.acos, variant);
     case 34: // math_acosh
-      return unaryMath(args, "math_acosh", Math.acosh);
+      return unaryMath(args, "math_acosh", Math.acosh, variant);
     case 35: // math_asin
-      return unaryMath(args, "math_asin", Math.asin);
+      return unaryMath(args, "math_asin", Math.asin, variant);
     case 36: // math_asinh
-      return unaryMath(args, "math_asinh", Math.asinh);
+      return unaryMath(args, "math_asinh", Math.asinh, variant);
     case 37: // math_atan
-      return unaryMath(args, "math_atan", Math.atan);
+      return unaryMath(args, "math_atan", Math.atan, variant);
     case 38: // math_atan2
-      return binaryMath(args, "math_atan2", Math.atan2);
+      return binaryMath(args, "math_atan2", Math.atan2, variant);
     case 39: // math_atanh
-      return unaryMath(args, "math_atanh", Math.atanh);
+      return unaryMath(args, "math_atanh", Math.atanh, variant);
     case 40: // math_cbrt
-      return unaryMath(args, "math_cbrt", Math.cbrt);
+      return unaryMath(args, "math_cbrt", Math.cbrt, variant);
     case 41: // math_ceil — returns int (bigint), matching CSE's math_ceil; see unaryMathToInt.
-      return unaryMathToInt(args, "math_ceil", Math.ceil);
+      return unaryMathToInt(args, "math_ceil", Math.ceil, variant);
     case 43: // math_cos
-      return unaryMath(args, "math_cos", Math.cos);
+      return unaryMath(args, "math_cos", Math.cos, variant);
     case 44: // math_cosh
-      return unaryMath(args, "math_cosh", Math.cosh);
+      return unaryMath(args, "math_cosh", Math.cosh, variant);
     case 45: // math_exp
-      return unaryMath(args, "math_exp", Math.exp);
+      return unaryMath(args, "math_exp", Math.exp, variant);
     case 46: // math_expm1
-      return unaryMath(args, "math_expm1", Math.expm1);
+      return unaryMath(args, "math_expm1", Math.expm1, variant);
     case 47: // math_floor — returns int (bigint); see unaryMathToInt.
-      return unaryMathToInt(args, "math_floor", Math.floor);
+      return unaryMathToInt(args, "math_floor", Math.floor, variant);
     case 51: // math_log
-      return unaryMath(args, "math_log", Math.log);
+      return unaryMath(args, "math_log", Math.log, variant);
     case 52: // math_log1p
-      return unaryMath(args, "math_log1p", Math.log1p);
+      return unaryMath(args, "math_log1p", Math.log1p, variant);
     case 53: // math_log2
-      return unaryMath(args, "math_log2", Math.log2);
+      return unaryMath(args, "math_log2", Math.log2, variant);
     case 54: // math_log10
-      return unaryMath(args, "math_log10", Math.log10);
+      return unaryMath(args, "math_log10", Math.log10, variant);
 
     case 55: {
       // max
@@ -892,7 +963,7 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `max() takes at least 2 arguments (${args.length} given)`,
         );
-      return pickExtremum(args, "max", true);
+      return pickExtremum(args, "max", true, variant);
     }
 
     case 56: {
@@ -901,11 +972,11 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `min() takes at least 2 arguments (${args.length} given)`,
         );
-      return pickExtremum(args, "min", false);
+      return pickExtremum(args, "min", false, variant);
     }
 
     case 57: // math_pow
-      return binaryMath(args, "math_pow", Math.pow);
+      return binaryMath(args, "math_pow", Math.pow, variant);
 
     case 58: // random_random
       return Math.random();
@@ -921,7 +992,9 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError("round() takes 1 or 2 arguments");
       const [x, ndigits] = args;
       if (typeof x !== "number" && typeof x !== "bigint")
-        throw new PVMLInterpreterError("TypeError: round() requires numeric arguments");
+        throw new PVMLInterpreterError(
+          `TypeError: unsupported argument type for round: ${friendlyTypeName(getPVMLType(x), variant)}`,
+        );
 
       if (args.length === 1 || ndigits === null) {
         const shifted = new Intl.NumberFormat("en-US", {
@@ -942,7 +1015,7 @@ export function executePrimitive(
       // position left of the decimal point.
       if (typeof ndigits !== "bigint")
         throw new PVMLInterpreterError(
-          `TypeError: '${getPVMLType(ndigits)}' object cannot be interpreted as an integer`,
+          `TypeError: unsupported argument type for round: ${friendlyTypeName(getPVMLType(ndigits), variant)}`,
         );
 
       if (typeof x === "number") {
@@ -974,32 +1047,32 @@ export function executePrimitive(
     }
 
     case 61: // math_sin
-      return unaryMath(args, "math_sin", Math.sin);
+      return unaryMath(args, "math_sin", Math.sin, variant);
     case 62: // math_sinh
-      return unaryMath(args, "math_sinh", Math.sinh);
+      return unaryMath(args, "math_sinh", Math.sinh, variant);
     case 63: // math_sqrt
-      return unaryMath(args, "math_sqrt", Math.sqrt);
+      return unaryMath(args, "math_sqrt", Math.sqrt, variant);
     case 64: // math_tan
-      return unaryMath(args, "math_tan", Math.tan);
+      return unaryMath(args, "math_tan", Math.tan, variant);
     case 65: // math_tanh
-      return unaryMath(args, "math_tanh", Math.tanh);
+      return unaryMath(args, "math_tanh", Math.tanh, variant);
     case 66: // math_trunc — returns int (bigint); see unaryMathToInt.
-      return unaryMathToInt(args, "math_trunc", Math.trunc);
+      return unaryMathToInt(args, "math_trunc", Math.trunc, variant);
 
     case 104: // math_degrees
-      return unaryMath(args, "math_degrees", x => (x * 180) / Math.PI);
+      return unaryMath(args, "math_degrees", x => (x * 180) / Math.PI, variant);
 
     case 105: // math_erf
-      return unaryMath(args, "math_erf", x => erf(x));
+      return unaryMath(args, "math_erf", x => erf(x), variant);
 
     case 106: // math_erfc
-      return unaryMath(args, "math_erfc", x => 1 - erf(x));
+      return unaryMath(args, "math_erfc", x => 1 - erf(x), variant);
 
     case 107: {
       // math_comb(n, k) — binomial coefficient, arbitrary precision.
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("math_comb() takes exactly 2 arguments");
-      const [n, k] = assertIntArgs(args, "math_comb");
+      const [n, k] = assertIntArgs(args, "math_comb", variant);
       if (n < 0n || k < 0n)
         throw new PVMLInterpreterError("ValueError: math_comb() not defined for negative values");
       if (k > n) return 0n;
@@ -1015,7 +1088,7 @@ export function executePrimitive(
       // math_factorial(n)
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("math_factorial() takes exactly 1 argument");
-      const [n] = assertIntArgs(args, "math_factorial");
+      const [n] = assertIntArgs(args, "math_factorial", variant);
       if (n < 0n)
         throw new PVMLInterpreterError(
           "ValueError: math_factorial() not defined for negative values",
@@ -1028,7 +1101,7 @@ export function executePrimitive(
     case 109: {
       // math_gcd(*ints) — variadic.
       if (args.length === 0) return 0n;
-      const values = assertIntArgs(args, "math_gcd").map(v => (v < 0n ? -v : v));
+      const values = assertIntArgs(args, "math_gcd", variant).map(v => (v < 0n ? -v : v));
       if (values.every(v => v === 0n)) return 0n;
       let result = values[0];
       for (let i = 1; i < values.length; i++) {
@@ -1043,7 +1116,7 @@ export function executePrimitive(
       // CSE's math_isqrt exactly).
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("math_isqrt() takes exactly 1 argument");
-      const [n] = assertIntArgs(args, "math_isqrt");
+      const [n] = assertIntArgs(args, "math_isqrt", variant);
       if (n < 0n)
         throw new PVMLInterpreterError("ValueError: math_isqrt() not defined for negative values");
       if (n < 2n) return n;
@@ -1060,7 +1133,7 @@ export function executePrimitive(
     case 111: {
       // math_lcm(*ints) — variadic.
       if (args.length === 0) return 1n;
-      const values = assertIntArgs(args, "math_lcm").map(v => (v < 0n ? -v : v));
+      const values = assertIntArgs(args, "math_lcm", variant).map(v => (v < 0n ? -v : v));
       if (values.some(v => v === 0n)) return 0n;
       let result = values[0];
       for (let i = 1; i < values.length; i++) {
@@ -1077,9 +1150,11 @@ export function executePrimitive(
         throw new MissingRequiredPositionalError(
           `math_perm() takes 1 to 2 arguments (${args.length} given)`,
         );
-      const [n] = assertIntArgs([args[0]], "math_perm");
+      const [n] = assertIntArgs([args[0]], "math_perm", variant);
       const k =
-        args.length === 2 && args[1] !== null ? assertIntArgs([args[1]], "math_perm")[0] : n;
+        args.length === 2 && args[1] !== null
+          ? assertIntArgs([args[1]], "math_perm", variant)[0]
+          : n;
       if (n < 0n || k < 0n)
         throw new PVMLInterpreterError("ValueError: math_perm() not defined for negative values");
       if (k > n) return 0n;
@@ -1092,23 +1167,33 @@ export function executePrimitive(
       // math_fabs — always a float, even for an int argument (unlike abs()).
       if (args.length !== 1)
         throw new MissingRequiredPositionalError("math_fabs() takes exactly 1 argument");
-      const [x] = assertNumericArgs(args, "math_fabs");
+      const [x] = assertNumericArgs(args, "math_fabs", variant);
       return Math.abs(x);
     }
 
     case 114: // math_fma(x, y, z) — fused multiply-add.
-      return ternaryMath(args, "math_fma", (x, y, z) => {
-        if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) return NaN;
-        if (x === 0 && !Number.isFinite(y) && Number.isNaN(z)) return NaN;
-        if (y === 0 && !Number.isFinite(x) && Number.isNaN(z)) return NaN;
-        return fusedMultiplyAdd(x, y, z);
-      });
+      return ternaryMath(
+        args,
+        "math_fma",
+        (x, y, z) => {
+          if (Number.isNaN(x) || Number.isNaN(y) || Number.isNaN(z)) return NaN;
+          if (x === 0 && !Number.isFinite(y) && Number.isNaN(z)) return NaN;
+          if (y === 0 && !Number.isFinite(x) && Number.isNaN(z)) return NaN;
+          return fusedMultiplyAdd(x, y, z);
+        },
+        variant,
+      );
 
     case 115: // math_fmod
-      return binaryMath(args, "math_fmod", (x, y) => {
-        if (y === 0) throw new ZeroDivisionError("math_fmod");
-        return x % y;
-      });
+      return binaryMath(
+        args,
+        "math_fmod",
+        (x, y) => {
+          if (y === 0) throw new ZeroDivisionError("math_fmod");
+          return x % y;
+        },
+        variant,
+      );
 
     case 116: // math_remainder — IEEE 754 remainder (round-half-to-even quotient). Matches
       // real Python's math.remainder special cases (verified against CPython): y == 0 or x
@@ -1117,30 +1202,40 @@ export function executePrimitive(
       // unchanged (mod-by-infinity never reduces it), and NaN propagates like any other
       // arithmetic NaN. Only the finite/finite case falls through to the round-half-to-even
       // formula below.
-      return binaryMath(args, "math_remainder", (x, y) => {
-        if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
-        if (y === 0 || !Number.isFinite(x)) {
-          throw new PVMLInterpreterError("ValueError: math domain error");
-        }
-        if (!Number.isFinite(y)) return x;
-        const n = roundToEven(x / y);
-        return x - n * y;
-      });
+      return binaryMath(
+        args,
+        "math_remainder",
+        (x, y) => {
+          if (Number.isNaN(x) || Number.isNaN(y)) return NaN;
+          if (y === 0 || !Number.isFinite(x)) {
+            throw new PVMLInterpreterError("ValueError: math domain error");
+          }
+          if (!Number.isFinite(y)) return x;
+          const n = roundToEven(x / y);
+          return x - n * y;
+        },
+        variant,
+      );
 
     case 117: // math_copysign
-      return binaryMath(args, "math_copysign", (x, y) => {
-        const absVal = Math.abs(x);
-        return y < 0 || Object.is(y, -0) ? -absVal : absVal;
-      });
+      return binaryMath(
+        args,
+        "math_copysign",
+        (x, y) => {
+          const absVal = Math.abs(x);
+          return y < 0 || Object.is(y, -0) ? -absVal : absVal;
+        },
+        variant,
+      );
 
     case 118: // math_isfinite
-      return unaryMathBool(args, "math_isfinite", Number.isFinite);
+      return unaryMathBool(args, "math_isfinite", Number.isFinite, variant);
 
     case 119: // math_isinf
-      return unaryMathBool(args, "math_isinf", x => x === Infinity || x === -Infinity);
+      return unaryMathBool(args, "math_isinf", x => x === Infinity || x === -Infinity, variant);
 
     case 120: // math_isnan
-      return unaryMathBool(args, "math_isnan", Number.isNaN);
+      return unaryMathBool(args, "math_isnan", Number.isNaN, variant);
 
     case 121: {
       // math_ldexp(x, i) — x * 2**i; i must be an int. Verified against CPython: x === 0 is a
@@ -1150,8 +1245,8 @@ export function executePrimitive(
       // finite-x-becomes-infinite result raises OverflowError.
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("math_ldexp() takes exactly 2 arguments");
-      const [x] = assertNumericArgs([args[0]], "math_ldexp");
-      const [i] = assertIntArgs([args[1]], "math_ldexp");
+      const [x] = assertNumericArgs([args[0]], "math_ldexp", variant);
+      const [i] = assertIntArgs([args[1]], "math_ldexp", variant);
       if (x === 0) return x;
       const result = x * Math.pow(2, Number(i));
       if (!Number.isFinite(result) && Number.isFinite(x)) {
@@ -1161,16 +1256,16 @@ export function executePrimitive(
     }
 
     case 122: // math_exp2
-      return unaryMath(args, "math_exp2", x => Math.pow(2, x));
+      return unaryMath(args, "math_exp2", x => Math.pow(2, x), variant);
 
     case 123: // math_gamma
-      return unaryMath(args, "math_gamma", x => gamma(x));
+      return unaryMath(args, "math_gamma", x => gamma(x), variant);
 
     case 124: // math_lgamma
-      return unaryMath(args, "math_lgamma", x => lgamma(x));
+      return unaryMath(args, "math_lgamma", x => lgamma(x), variant);
 
     case 125: // math_radians
-      return unaryMath(args, "math_radians", x => (x * Math.PI) / 180);
+      return unaryMath(args, "math_radians", x => (x * Math.PI) / 180, variant);
 
     case 126: // time_time — always a float, matching CSE's time_time (misc.ts). Python's
       // time.time() is documented as seconds since the epoch, not milliseconds — divide

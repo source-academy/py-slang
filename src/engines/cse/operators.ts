@@ -59,6 +59,7 @@ export function evaluateUnaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           value.type,
           "",
           operatorTranslator(operator),
@@ -82,6 +83,7 @@ export function evaluateUnaryExpression(
             new UnsupportedOperandTypeError(
               code,
               command,
+              context,
               value.type,
               "",
               operatorTranslator(operator),
@@ -100,6 +102,7 @@ export function evaluateUnaryExpression(
             new UnsupportedOperandTypeError(
               code,
               command,
+              context,
               value.type,
               "",
               operatorTranslator(operator),
@@ -112,6 +115,7 @@ export function evaluateUnaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           value.type,
           "",
           operatorTranslator(operator),
@@ -190,6 +194,7 @@ function structuralEquals(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -454,6 +459,7 @@ export function evaluateBinaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           left.type,
           right.type,
           operatorTranslator(operator),
@@ -489,6 +495,7 @@ export function evaluateBinaryExpression(
           new UnsupportedOperandTypeError(
             code,
             command,
+            context,
             left.type,
             right.type,
             operatorTranslator(operator),
@@ -507,6 +514,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -522,6 +530,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -540,6 +549,7 @@ export function evaluateBinaryExpression(
           new UnsupportedOperandTypeError(
             code,
             command,
+            context,
             left.type,
             right.type,
             operatorTranslator(operator),
@@ -567,6 +577,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -580,6 +591,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -712,6 +724,7 @@ export function evaluateBinaryExpression(
     new UnsupportedOperandTypeError(
       code,
       command,
+      context,
       left.type,
       right.type,
       operatorTranslator(operator),
