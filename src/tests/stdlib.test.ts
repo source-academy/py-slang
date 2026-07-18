@@ -71,6 +71,287 @@ describe("Standard Library Tests", () => {
         ["math_cos(True)", TypeError, null],
         ['math_cos("")', TypeError, null],
       ],
+      math_acos: [
+        ["math_acos(1)", 0, null],
+        ["math_acos(0.5)", 1.0471975511965979, null],
+        ["math_acos(2)", ValueError, null],
+        ["math_acos(True)", TypeError, null],
+      ],
+      math_acosh: [
+        ["math_acosh(1)", 0, null],
+        ["math_acosh(2.0)", 1.3169578969248166, null],
+        ["math_acosh(0.5)", ValueError, null],
+        ["math_acosh(True)", TypeError, null],
+      ],
+      math_asin: [
+        ["math_asin(1)", 1.5707963267948966, null],
+        ["math_asin(0.5)", 0.5235987755982989, null],
+        ["math_asin(2)", ValueError, null],
+        ["math_asin(True)", TypeError, null],
+      ],
+      math_asinh: [
+        ["math_asinh(1)", 0.881373587019543, null],
+        ["math_asinh(0.0)", 0, null],
+        ["math_asinh(True)", TypeError, null],
+      ],
+      math_atan: [
+        ["math_atan(1)", 0.7853981633974483, null],
+        ["math_atan(0.0)", 0, null],
+        ["math_atan(True)", TypeError, null],
+      ],
+      math_atan2: [
+        ["math_atan2(1,1)", 0.7853981633974483, null],
+        ["math_atan2(0.0,-1.0)", 3.141592653589793, null],
+        ['math_atan2("", 1)', TypeError, null],
+        ['math_atan2(1, "")', TypeError, null],
+      ],
+      math_atanh: [
+        ["math_atanh(0)", 0, null],
+        ["math_atanh(0.5)", 0.5493061443340548, null],
+        ["math_atanh(1)", ValueError, null],
+        ["math_atanh(True)", TypeError, null],
+      ],
+      math_cosh: [
+        ["math_cosh(0)", 1, null],
+        ["math_cosh(1.0)", 1.5430806348152437, null],
+        ["math_cosh(True)", TypeError, null],
+      ],
+      math_degrees: [
+        ["math_degrees(math_pi)", 180, null],
+        ["math_degrees(0)", 0, null],
+        ["math_degrees(True)", TypeError, null],
+      ],
+      math_erf: [
+        ["math_erf(0)", 0, null],
+        ["math_erf(1.0)", 0.8427007929497148, null],
+        ["math_erf(True)", TypeError, null],
+      ],
+      math_erfc: [
+        ["math_erfc(0)", 1, null],
+        ["math_erfc(1.0)", 0.15729920705028522, null],
+        ["math_erfc(True)", TypeError, null],
+      ],
+      math_comb: [
+        ["math_comb(5,2)", 10n, null],
+        ["math_comb(10,3)", 120n, null],
+        ["math_comb(3,5)", 0n, null],
+        ["math_comb(-1,2)", ValueError, null],
+      ],
+      math_factorial: [
+        ["math_factorial(5)", 120n, null],
+        ["math_factorial(0)", 1n, null],
+        ["math_factorial(-1)", ValueError, null],
+      ],
+      math_gcd: [
+        ["math_gcd()", 0n, null],
+        ["math_gcd(12,18)", 6n, null],
+        ["math_gcd(0,5)", 5n, null],
+        ["math_gcd(0,0)", 0n, null],
+        ["math_gcd(-12,18)", 6n, null],
+        ["math_gcd(4,6,8)", 2n, null],
+      ],
+      math_isqrt: [
+        ["math_isqrt(0)", 0n, null],
+        ["math_isqrt(1)", 1n, null],
+        ["math_isqrt(10)", 3n, null],
+        ["math_isqrt(16)", 4n, null],
+        ["math_isqrt(-1)", ValueError, null],
+      ],
+      math_lcm: [
+        ["math_lcm()", 1n, null],
+        ["math_lcm(4,6)", 12n, null],
+        ["math_lcm(0,5)", 0n, null],
+        ["math_lcm(-4,6)", 12n, null],
+        ["math_lcm(4,6,8)", 24n, null],
+      ],
+      math_perm: [
+        ["math_perm(5)", 120n, null],
+        ["math_perm(5,2)", 20n, null],
+        ["math_perm(5,None)", 120n, null],
+        ["math_perm(3,5)", 0n, null],
+        ["math_perm(-1,2)", ValueError, null],
+      ],
+      math_ceil: [
+        ["math_ceil(5)", 5n, null],
+        ["math_ceil(3.2)", 4n, null],
+        ["math_ceil(-3.2)", -3n, null],
+        ["math_ceil(True)", TypeError, null],
+      ],
+      math_fabs: [
+        ["math_fabs(-5)", 5, null],
+        ["math_fabs(-5.5)", 5.5, null],
+        ["math_fabs(True)", TypeError, null],
+      ],
+      math_floor: [
+        ["math_floor(5)", 5n, null],
+        ["math_floor(3.7)", 3n, null],
+        ["math_floor(-3.2)", -4n, null],
+        ["math_floor(True)", TypeError, null],
+      ],
+      math_fma: [
+        ["math_fma(2,3,4.0)", 10, null],
+        ["math_fma(1.5,2,0.5)", 3.5, null],
+        ["math_fma(True,1,1)", TypeError, null],
+      ],
+      math_fmod: [
+        ["math_fmod(7,3)", 1, null],
+        ["math_fmod(-7.0,3)", -1, null],
+        ["math_fmod(5,0)", ValueError, null],
+        ["math_fmod(True,1)", TypeError, null],
+      ],
+      math_remainder: [
+        ["math_remainder(7,3)", 1, null],
+        ["math_remainder(5.0,2)", 1, null],
+        ["math_remainder(5,0)", ValueError, null],
+        ["math_remainder(True,1)", TypeError, null],
+        ["math_remainder(1,True)", TypeError, null],
+      ],
+      math_trunc: [
+        ["math_trunc(5)", 5n, null],
+        ["math_trunc(3.7)", 3n, null],
+        ["math_trunc(-3.7)", -3n, null],
+        ["math_trunc(0.0)", 0n, null],
+        ["math_trunc(True)", TypeError, null],
+      ],
+      math_copysign: [
+        ["math_copysign(3,-1)", -3, null],
+        ["math_copysign(3.0,1)", 3, null],
+        ["math_copysign(3, -0.0)", -3, null],
+        ['math_copysign("", 1)', TypeError, null],
+        ['math_copysign(1, "")', TypeError, null],
+      ],
+      math_isfinite: [
+        ["math_isfinite(1)", true, null],
+        ["math_isfinite(math_inf)", false, null],
+        ["math_isfinite(math_nan)", false, null],
+        ['math_isfinite("")', TypeError, null],
+      ],
+      math_isinf: [
+        ["math_isinf(math_inf)", true, null],
+        ["math_isinf(1)", false, null],
+        ["math_isinf(-math_inf)", true, null],
+        ['math_isinf("")', TypeError, null],
+      ],
+      math_isnan: [
+        ["math_isnan(math_nan)", true, null],
+        ["math_isnan(1)", false, null],
+        ['math_isnan("")', TypeError, null],
+      ],
+      math_ldexp: [
+        ["math_ldexp(1,3)", 8, null],
+        ["math_ldexp(3.0,-2)", 0.75, null],
+        ["math_ldexp(True,1)", TypeError, null],
+      ],
+      math_cbrt: [
+        ["math_cbrt(27)", 3, null],
+        ["math_cbrt(-8.0)", -2, null],
+        ["math_cbrt(True)", TypeError, null],
+      ],
+      math_exp: [
+        ["math_exp(0)", 1, null],
+        ["math_exp(1.0)", 2.718281828459045, null],
+        ["math_exp(True)", TypeError, null],
+      ],
+      math_exp2: [
+        ["math_exp2(3)", 8, null],
+        ["math_exp2(0.0)", 1, null],
+        ["math_exp2(True)", TypeError, null],
+      ],
+      math_expm1: [
+        ["math_expm1(0)", 0, null],
+        ["math_expm1(1.0)", 1.718281828459045, null],
+        ["math_expm1(True)", TypeError, null],
+      ],
+      math_gamma: [
+        ["math_gamma(5)", 24, null],
+        ["math_gamma(0.5)", 1.7724538509055154, null],
+        ["math_gamma(True)", TypeError, null],
+      ],
+      math_lgamma: [
+        ["math_lgamma(5)", 3.178053830347945, null],
+        ["math_lgamma(2.0)", 0, null],
+        ["math_lgamma(True)", TypeError, null],
+      ],
+      math_log: [
+        ["math_log(1)", 0, null],
+        ["math_log(8,2)", 3, null],
+        ["math_log(0)", ValueError, null],
+        ["math_log(8,0)", ValueError, null],
+        ["math_log(True)", TypeError, null],
+        ["math_log(8, True)", TypeError, null],
+      ],
+      math_log10: [
+        ["math_log10(100)", 2, null],
+        ["math_log10(1000.0)", 3, null],
+        ["math_log10(0)", ValueError, null],
+        ["math_log10(True)", TypeError, null],
+      ],
+      math_log1p: [
+        ["math_log1p(0)", 0, null],
+        ["math_log1p(1.0)", 0.6931471805599453, null],
+        ["math_log1p(-1)", ValueError, null],
+        ["math_log1p(True)", TypeError, null],
+      ],
+      math_log2: [
+        ["math_log2(8)", 3, null],
+        ["math_log2(0.5)", -1, null],
+        ["math_log2(0)", ValueError, null],
+        ["math_log2(True)", TypeError, null],
+      ],
+      math_pow: [
+        ["math_pow(2,10)", 1024, null],
+        ["math_pow(2.0,0.5)", 1.4142135623730951, null],
+        ['math_pow("",1)', TypeError, null],
+        ['math_pow(1,"")', TypeError, null],
+      ],
+      math_radians: [
+        ["math_radians(180)", 3.141592653589793, null],
+        ["math_radians(90.0)", 1.5707963267948966, null],
+        ["math_radians(True)", TypeError, null],
+      ],
+      math_sinh: [
+        ["math_sinh(0)", 0, null],
+        ["math_sinh(1.0)", 1.1752011936438014, null],
+        ["math_sinh(True)", TypeError, null],
+      ],
+      math_tan: [
+        ["math_tan(0)", 0, null],
+        ["math_tan(0.7853981633974483)", 1, null],
+        ["math_tan(True)", TypeError, null],
+      ],
+      math_tanh: [
+        ["math_tanh(0)", 0, null],
+        ["math_tanh(1.0)", 0.7615941559557649, null],
+        ["math_tanh(True)", TypeError, null],
+      ],
+      math_sqrt: [
+        ["math_sqrt(16)", 4, null],
+        ["math_sqrt(2.0)", 1.4142135623730951, null],
+        ["math_sqrt(-1)", ValueError, null],
+        ["math_sqrt(True)", TypeError, null],
+      ],
+    };
+    // PVML-in-browser's assertIntArgs deliberately treats a plain float as
+    // already-int (see its own doc comment in src/engines/pvml/builtins.ts)
+    // -- a documented, permissive design difference from CSE/native
+    // Pynter/CPython, not a gap to close. These TypeError assertions only
+    // hold for the three engines that actually distinguish int from float at
+    // this level, so -- unlike mathTests -- this table is never run through
+    // generatePvmlInBrowserTestCases.
+    const mathIntArgTypeErrorTests: TestCases = {
+      math_comb: [
+        ["math_comb(5.0,2)", TypeError, null],
+        ["math_comb(5,2.0)", TypeError, null],
+      ],
+      math_factorial: [["math_factorial(5.0)", TypeError, null]],
+      math_gcd: [["math_gcd(5.0)", TypeError, null]],
+      math_isqrt: [["math_isqrt(5.0)", TypeError, null]],
+      math_lcm: [["math_lcm(5.0)", TypeError, null]],
+      math_ldexp: [["math_ldexp(1,2.0)", TypeError, null]],
+      math_perm: [
+        ["math_perm(5.0)", TypeError, null],
+        ["math_perm(5,2.0)", TypeError, null],
+      ],
     };
     const miscTests: TestCases = {
       equality: [
@@ -968,6 +1249,7 @@ describe("Standard Library Tests", () => {
     };
 
     generateTestCases(mathTests, 1, [misc, math]);
+    generateTestCases(mathIntArgTypeErrorTests, 1, [misc, math]);
     generateTestCases(miscTests, 1, [misc, math]);
     // Pynter only supports Python §3 (see pynter/README.md). mathTests is
     // chapter-agnostic builtin behaviour (e.g. `abs(True)` is a TypeError
@@ -977,11 +1259,13 @@ describe("Standard Library Tests", () => {
     // true at §1/§2 — genuinely false at §3, not just "untested" there — so
     // it's deliberately not run through Pynter at all here.
     generateNativePynterTestCases(mathTests, 3);
+    generateNativePynterTestCases(mathIntArgTypeErrorTests, 3);
     // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
     // miscTests' §1-specific restrictions can be checked directly at §1.
     generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
     generatePvmlInBrowserTestCases(miscTests, 1, [misc, math]);
     generateCPythonTestCases(mathTests, 1);
+    generateCPythonTestCases(mathIntArgTypeErrorTests, 1);
     generateCPythonTestCases(miscTests, 1);
   });
 
