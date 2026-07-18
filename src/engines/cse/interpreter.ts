@@ -1085,7 +1085,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (condition.type !== "bool") {
       handleRuntimeError(
         context,
-        new error.TypeError(code, instr.srcNode as StmtNS.Stmt, context, condition.type, "bool"),
+        new error.TypeError(code, instr.srcNode as StmtNS.Stmt, context, condition.type),
       );
       return;
     }
@@ -1118,7 +1118,6 @@ const cmdEvaluators: CmdEvaluators = {
             node.iter,
             context,
             [start.type, end.type, step.type].filter(t => t !== "bigint")[0],
-            "int",
           ),
         );
       }
@@ -1204,13 +1203,7 @@ const cmdEvaluators: CmdEvaluators = {
             }
             handleRuntimeError(
               context,
-              new error.TypeError(
-                code,
-                instr.srcNode,
-                context,
-                val ? val.type : "NoneType",
-                "iterable",
-              ),
+              new error.TypeError(code, instr.srcNode, context, val ? val.type : "NoneType"),
             );
           });
 
@@ -1245,13 +1238,7 @@ const cmdEvaluators: CmdEvaluators = {
     } else {
       handleRuntimeError(
         context,
-        new error.TypeError(
-          code,
-          instr.srcNode,
-          context,
-          callable ? callable.type : "NoneType",
-          "callable",
-        ),
+        new error.TypeError(code, instr.srcNode, context, callable ? callable.type : "NoneType"),
       );
     }
   },
@@ -1274,20 +1261,13 @@ const cmdEvaluators: CmdEvaluators = {
           instr.srcNode as ExprNS.Expr,
           context,
           list ? list.type : "NoneType",
-          "list or string",
         ),
       );
     }
     if (!index || index.type !== "bigint") {
       handleRuntimeError(
         context,
-        new error.TypeError(
-          code,
-          instr.srcNode as ExprNS.Expr,
-          context,
-          index?.type || "NoneType",
-          "int",
-        ),
+        new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, index?.type || "NoneType"),
       );
     }
     const idx = Number(index.value);

@@ -302,7 +302,7 @@ class ParserBuiltins {
   @Validate(1, 1, "parse", false)
   static parse(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
-      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "string"));
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     const x = args[0].value;
     const program = parse(x + "\n");
@@ -337,7 +337,7 @@ class ParserBuiltins {
   @Validate(1, 1, "tokenize", false)
   static tokenize(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (args[0].type !== "string") {
-      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "string"));
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     const x = args[0].value;
     pythonLexer.reset(x);
