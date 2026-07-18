@@ -63,6 +63,9 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
   private globalEnv = new Map<string, PVMLBoxType>();
   private readonly preludeText: string;
   private readonly ensurePreludeLoaded: () => Promise<void>;
+  /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
+   * loadImports for why the static singleton is deliberately not used. */
+  private moduleLoader?: ModuleLoaderRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -82,10 +85,12 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
   /** Compiles and runs one chunk of SICPy source against the persistent
    * `globalEnv`, seeding the resolver with whatever names are already there
    * (from the prelude, earlier chunks, or imported modules) so this chunk
-   * can reference them. */
-  private async runChunk(script: string): Promise<PVMLBoxType> {
+   * can reference them. `ast` may be supplied by a caller that already
+   * parsed `script` (evaluateChunk parses once and shares the tree with
+   * loadImports); it must be the parse of `script` + trailing newline. */
+  private async runChunk(script: string, ast?: StmtNS.FileInput): Promise<PVMLBoxType> {
     const source = script.endsWith("\n") ? script : script + "\n";
-    const ast = parse(source);
+    ast ??= parse(source);
     const { errors, environments } = analyzeWithEnvironments(
       ast,
       source,
@@ -111,13 +116,12 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
   }
 
   /** Loads every module named by a `from X import a, b as c` statement in
-   * `script` and seeds the imported bindings into `globalEnv`, before the
+   * the chunk and seeds the imported bindings into `globalEnv`, before the
    * chunk runs — the PVML analogue of the CSE machine's evaluateImports.
    * A chunk with no FromImport statements never touches the module loader
    * (so evaluators on conductors without plugin support — e.g. unit-test
    * mocks — work unchanged as long as no imports appear). */
-  private async loadImports(script: string): Promise<void> {
-    const ast = parse(script.endsWith("\n") ? script : script + "\n");
+  private async loadImports(ast: StmtNS.FileInput): Promise<void> {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
@@ -134,16 +138,21 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
       return;
     }
 
-    // Lazily registered on first actual import rather than in the
-    // constructor: ModuleLoaderRunnerPlugin.instance is a static singleton,
-    // and registration is only needed (or possible) on a real conductor.
-    if (!ModuleLoaderRunnerPlugin.instance) {
-      this.conductor.registerPlugin(ModuleLoaderRunnerPlugin, this.conductor, this);
-    }
-    const loader = ModuleLoaderRunnerPlugin.instance;
-    if (!loader) {
-      throw new Error("ModuleLoaderRunnerPlugin is not initialized");
-    }
+    // Registered lazily on first actual import rather than in the
+    // constructor (registration is only needed — or possible — on a real
+    // conductor), but exactly once per *evaluator instance*, holding the
+    // returned plugin rather than reading the static
+    // ModuleLoaderRunnerPlugin.instance: the plugin permanently captures the
+    // evaluator (IDataHandler) it was registered with, so a stale singleton
+    // from an earlier evaluator would register loaded modules against that
+    // old evaluator's pair/closure/opaque stores — values this evaluator
+    // could then never resolve ("Invalid pair identifier").
+    this.moduleLoader ??= this.conductor.registerPlugin(
+      ModuleLoaderRunnerPlugin,
+      this.conductor,
+      this,
+    );
+    const loader = this.moduleLoader;
 
     await Promise.all(
       [...importsByModule].map(async ([moduleName, specs]) => {
@@ -172,8 +181,9 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     try {
       await this.ensurePreludeLoaded();
-      await this.loadImports(chunk);
-      const returnValue = await this.runChunk(chunk);
+      const ast = parse(chunk.endsWith("\n") ? chunk : chunk + "\n");
+      await this.loadImports(ast);
+      const returnValue = await this.runChunk(chunk, ast);
       this.conductor.sendResult(PVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));

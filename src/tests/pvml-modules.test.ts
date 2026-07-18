@@ -1,14 +1,16 @@
 import type { IModulePlugin } from "@sourceacademy/conductor/module";
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
-import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { PyPvmlEvaluator1, PyPvmlEvaluator4 } from "../conductor/PyPvmlEvaluator";
 
-/** Minimal IRunnerPlugin mock, mirroring PyPvmlEvaluator.test.ts's. The
- * module pathway never needs registerPlugin here because every test presets
- * ModuleLoaderRunnerPlugin.instance (see makeFakeLoader) — loadImports only
- * registers the plugin when no instance exists yet. */
-function makeMockConductor() {
+/** Minimal IRunnerPlugin mock, mirroring PyPvmlEvaluator.test.ts's, plus a
+ * registerPlugin that hands loadImports a fake module loader bound to the
+ * registering evaluator (the real ModuleLoaderRunnerPlugin likewise captures
+ * the evaluator it's constructed with — that binding is exactly what the
+ * evaluator's per-instance `moduleLoader` field exists to keep fresh).
+ * `withModuleLoader: false` omits registerPlugin entirely, for asserting
+ * that import-free chunks never touch the plugin pathway. */
+function makeMockConductor(withModuleLoader: boolean = true) {
   const results: unknown[] = [];
   const errors: unknown[] = [];
   const outputs: string[] = [];
@@ -16,6 +18,10 @@ function makeMockConductor() {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    ...(withModuleLoader && {
+      registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) =>
+        makeFakeLoader(evaluator),
+    }),
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }
@@ -81,28 +87,24 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   } as unknown as IModulePlugin;
 }
 
-/** Presets ModuleLoaderRunnerPlugin.instance with a fake that serves
- * "testmod" (built against `dh`) and rejects everything else. */
-function makeFakeLoader(dh: IDataHandler): void {
-  ModuleLoaderRunnerPlugin.instance = {
+/** A fake module loader that serves "testmod" (built against `dh`) and
+ * rejects everything else — what the mock conductor's registerPlugin hands
+ * back to loadImports. */
+function makeFakeLoader(dh: IDataHandler) {
+  return {
     requestModule: async (moduleName: string) => {
       if (moduleName !== "testmod") {
         throw new Error(`no such module: ${moduleName}`);
       }
       return makeTestModule(dh);
     },
-  } as unknown as ModuleLoaderRunnerPlugin;
+  };
 }
-
-afterEach(() => {
-  ModuleLoaderRunnerPlugin.instance = null;
-});
 
 describe("PyPvmlEvaluator module imports", () => {
   test("imports a constant", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import answer\nprint(answer)\n");
 
@@ -113,7 +115,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("imports under an alias", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import answer as a\nprint(a)\n");
 
@@ -124,7 +125,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("calls an imported module function", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import double\nprint(double(21))\n");
 
@@ -135,7 +135,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("a module function can call a Python closure back (higher-order)", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk(
       "from testmod import apply_twice\ndef inc(n):\n    return n + 1\nprint(apply_twice(inc, 1))\n",
@@ -148,7 +147,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("opaque module handles round-trip and str() as <opaque object>", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk(
       "from testmod import make_thing, read_thing\nt = make_thing()\nprint(t)\nprint(read_thing(t))\n",
@@ -161,7 +159,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("a module PAIR converts to a PVML pair (head/tail work)", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk(
       "from testmod import make_pair\np = make_pair()\nprint(head(p))\nprint(tail(p))\n",
@@ -174,7 +171,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("imported bindings persist into later chunks (REPL model)", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import double\n");
     await evaluator.evaluateChunk("print(double(5))\n");
@@ -186,7 +182,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("imports work at chapter 1 too", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator1(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import double\nprint(double(21))\n");
 
@@ -197,7 +192,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("an unknown module reports an error via sendError", async () => {
     const { conductor, errors } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from nosuchmod import whatever\n");
 
@@ -207,7 +201,6 @@ describe("PyPvmlEvaluator module imports", () => {
   test("a missing export reports an error via sendError", async () => {
     const { conductor, errors } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
-    makeFakeLoader(evaluator);
 
     await evaluator.evaluateChunk("from testmod import nonexistent\n");
 
@@ -215,14 +208,34 @@ describe("PyPvmlEvaluator module imports", () => {
   });
 
   test("chunks without imports never touch the module loader", async () => {
-    const { conductor, errors, outputs } = makeMockConductor();
+    // The mock conductor has no registerPlugin at all — an import-free chunk
+    // completing without error proves the plugin pathway was never touched.
+    const { conductor, errors, outputs } = makeMockConductor(false);
     const evaluator = new PyPvmlEvaluator4(conductor);
-    // Deliberately no fake loader, and the mock conductor has no
-    // registerPlugin — proving import-free chunks skip the pathway entirely.
 
     await evaluator.evaluateChunk("print(1 + 1)\n");
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["2"]);
+  });
+
+  test("each evaluator gets its own module-loader binding (no stale singleton)", async () => {
+    // Two evaluators on separate conductors, sharing one JS realm — the
+    // regression Gemini's review flagged: with a static-singleton guard, the
+    // second evaluator would reuse the first's loader, whose modules would
+    // build values in the *first* evaluator's IDataHandler stores, making
+    // them unresolvable ("Invalid pair identifier") for the second.
+    const first = makeMockConductor();
+    const evaluator1 = new PyPvmlEvaluator4(first.conductor);
+    await evaluator1.evaluateChunk("from testmod import make_pair\nprint(head(make_pair()))\n");
+
+    const second = makeMockConductor();
+    const evaluator2 = new PyPvmlEvaluator4(second.conductor);
+    await evaluator2.evaluateChunk("from testmod import make_pair\nprint(head(make_pair()))\n");
+
+    expect(first.errors).toEqual([]);
+    expect(second.errors).toEqual([]);
+    expect(first.outputs).toEqual(["1.0"]);
+    expect(second.outputs).toEqual(["1.0"]);
   });
 });
