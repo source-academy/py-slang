@@ -21,37 +21,46 @@ export const GC_SPECIAL_TAG = {
   ENV: -4,
 } as const;
 
+// Static, non-interpolated versions of the "wrong type" wording introduced by
+// #273 for CSE/PVML (see friendlyTypeName/UnsupportedOperandTypeError/
+// TypeError in src/errors/errors.ts and src/engines/pvml/builtins.ts): the
+// same "TypeError: unsupported operand type(s) for X" / "unsupported
+// argument type for X" phrasing and CPython-style error-class prefixes
+// (TypeError/IndexError/ZeroDivisionError/RecursionError/MemoryError/
+// UnboundLocalError), without naming the actual offending type -- unlike
+// those two engines, log_error only carries a static message index, with no
+// operand type/value threaded through to interpolate into it.
 export const ERROR_MAP = {
-  NEG_NOT_SUPPORT: "Unary minus operator used on unsupported operand.",
-  LOG_UNKNOWN_TYPE: "Calling log on an unknown runtime type.",
-  ARITH_OP_UNKNOWN_TYPE: "Calling an arithmetic operation on an unsupported runtime type.",
-  COMPLEX_COMPARISON: "Using an unsupported comparison operator on complex type.",
-  COMPARE_OP_UNKNOWN_TYPE: "Calling a comparison operation on unsupported operands.",
-  CALL_NOT_FX: "Calling a non-function value.",
-  FUNC_WRONG_ARITY: "Calling function with wrong number of arguments.",
-  UNBOUND: "Accessing an unbound value.",
-  HEAD_NOT_PAIR: "Accessing the head of a non-pair value.",
-  TAIL_NOT_PAIR: "Accessing the tail of a non-pair value.",
-  BOOL_UNKNOWN_TYPE: "Trying to convert an unknnown runtime type to a bool.",
-  GET_ELEMENT_NOT_LIST: "Accessing an element of a non-list value.",
-  SET_ELEMENT_NOT_LIST: "Setting an element of a non-list value.",
-  SET_ELEMENT_TUPLE: "Cannot assign to the rest parameter of a function.",
-  INDEX_NOT_INT: "Using a non-integer index to access a list element.",
-  LIST_OUT_OF_RANGE: "List index out of range.",
-  RANGE_ARG_NOT_INT: "Using a non-integer argument in range().",
-  GET_LENGTH_NOT_LIST: "Getting length of a non-list value.",
+  NEG_NOT_SUPPORT: "TypeError: bad operand type for unary -",
+  LOG_UNKNOWN_TYPE: "Cannot render a value of an unrecognized type",
+  ARITH_OP_UNKNOWN_TYPE: "TypeError: unsupported operand type(s) for this arithmetic operation",
+  COMPLEX_COMPARISON: "TypeError: ordering comparisons are not supported between complex numbers",
+  COMPARE_OP_UNKNOWN_TYPE: "TypeError: unsupported operand type(s) for this comparison",
+  CALL_NOT_FX: "TypeError: this value is not callable",
+  FUNC_WRONG_ARITY: "TypeError: function called with the wrong number of arguments",
+  UNBOUND: "UnboundLocalError: cannot access a local variable before it is assigned a value",
+  HEAD_NOT_PAIR: "TypeError: unsupported argument type for head",
+  TAIL_NOT_PAIR: "TypeError: unsupported argument type for tail",
+  BOOL_UNKNOWN_TYPE: "Cannot convert a value of an unrecognized type to bool",
+  GET_ELEMENT_NOT_LIST: "TypeError: unsupported argument type for subscript access",
+  SET_ELEMENT_NOT_LIST: "TypeError: unsupported argument type for subscript assignment",
+  SET_ELEMENT_TUPLE: "TypeError: cannot assign to a function's rest-parameter tuple",
+  INDEX_NOT_INT: "TypeError: list indices must be integers",
+  LIST_OUT_OF_RANGE: "IndexError: list index out of range",
+  RANGE_ARG_NOT_INT: "TypeError: unsupported argument type for range",
+  GET_LENGTH_NOT_LIST: "TypeError: unsupported argument type for len",
   MAKE_LINKED_LIST_NOT_LIST:
     "Trying to make a linked list out of a non-list value. (Internal error: llist function should only be called on lists)",
-  STARRED_NOT_LIST: "Trying to unpack a non-list value.",
-  PARSE_NOT_STRING: "Trying to parse a non-string value.",
-  OUT_OF_MEMORY: "Out of memory.",
-  STACK_OVERFLOW: "Stack overflow.",
-  STACK_UNDERFLOW: "Stack underflow.",
-  GEN_LIST_NOT_INT: "Trying to generate a list of non-integer length.",
-  ARITY_NOT_CLOSURE: "Trying to get arity of a non-closure value.",
-  ZERO_DIVISION: "ZeroDivisionError: division by zero.",
-  BOOL_OPERAND_NOT_SUPPORTED: "TypeError: unsupported operand type(s) for this operation: boolean.",
-  EXPECTED_BOOL_OPERAND: "TypeError: expected a boolean operand for this operation.",
+  STARRED_NOT_LIST: "TypeError: unsupported argument type for spread unpacking",
+  PARSE_NOT_STRING: "TypeError: unsupported argument type for parse",
+  OUT_OF_MEMORY: "MemoryError: out of memory",
+  STACK_OVERFLOW: "RecursionError: the evaluation has exceeded the maximum recursion depth",
+  STACK_UNDERFLOW: "Internal error: shadow stack underflow",
+  GEN_LIST_NOT_INT: "TypeError: the repeat count for list generation must be an integer",
+  ARITY_NOT_CLOSURE: "TypeError: unsupported argument type for arity",
+  ZERO_DIVISION: "ZeroDivisionError: division by zero",
+  BOOL_OPERAND_NOT_SUPPORTED: "TypeError: unsupported operand type(s) for this operation: boolean",
+  EXPECTED_BOOL_OPERAND: "TypeError: expected a boolean operand for this operation",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
