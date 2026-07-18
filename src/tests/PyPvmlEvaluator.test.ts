@@ -148,7 +148,7 @@ describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
     expect(errors).toHaveLength(1);
   });
 
-  test("chapter 4: closures, `is`, and for-loops over any iterable work", async () => {
+  test("chapter 4: closures and `is` work; for-loops still require range()", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
@@ -156,9 +156,20 @@ describe("PyPvmlEvaluator1..4 (chapter selection)", () => {
       "def make_adder(n):\n    def add(x):\n        return x + n\n    return add\nadd3 = make_adder(3)\nprint(add3(7))\n",
     );
     await evaluator.evaluateChunk("print(1 is 1)\n");
-    await evaluator.evaluateChunk("last = 0\nfor x in [1, 2, 3]:\n    last = x\nprint(last)\n");
+    await evaluator.evaluateChunk(
+      "xs = [1, 2, 3]\nlast = 0\nfor i in range(len(xs)):\n    last = xs[i]\nprint(last)\n",
+    );
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["10", "True", "3"]);
+  });
+
+  test("chapter 4: for-loops over a non-range iterable are rejected", async () => {
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk("for x in [1, 2, 3]:\n    x\n");
+
+    expect(errors).toHaveLength(1);
   });
 });
