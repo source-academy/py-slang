@@ -25,7 +25,9 @@ import { PARSE_FX, TOKENIZE_FX } from "./mce";
 import {
   ARITHMETIC_OP_FX,
   BOOL_NOT_FX,
+  CHECK_BOOL_FX,
   COMPARISON_OP_FX,
+  LIST_STRUCT_EQ_FX,
   NEG_FX,
   STRING_COMPARE_FX,
 } from "./operators";
@@ -142,5 +144,7 @@ export const nativeFunctions = [
   ARITHMETIC_OP_FX,
   STRING_COMPARE_FX,
   COMPARISON_OP_FX,
+  LIST_STRUCT_EQ_FX,
+  CHECK_BOOL_FX,
   BOOL_NOT_FX,
 ];

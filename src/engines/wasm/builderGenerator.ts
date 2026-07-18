@@ -23,6 +23,8 @@ import {
   ARITHMETIC_OP_TAG,
   BOOL_NOT_FX,
   BOOLISE_FX,
+  CHAPTER,
+  CHECK_BOOL_FX,
   CHECK_INT_FX,
   CLEAR_GC_HEADER_FX,
   COLLECT_FX,
@@ -108,6 +110,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   private builtIns: WasmCall[];
   private interactiveMode = false;
   private pageCount: number;
+  private chapter: number;
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
@@ -201,9 +204,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     builtInFunctions: LibFuncType[],
     interactiveMode: boolean,
     pageCount: number,
+    chapter: number,
   ) {
     this.strings = initialStrings;
     this.pageCount = pageCount;
+    this.chapter = chapter;
 
     this.builtIns = builtInFunctions.map(({ name, arity, body, isVoid, hasVarArgs }, i) => {
       this.environment[0].push({ name, tag: "local" });
@@ -298,6 +303,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .func("$_host_parse")
           .params(i32, i32)
           .results(i32, i64),
+        wasm
+          .import("arith", "ext")
+          .func("$_host_arith_ext")
+          .params(i32, i32, i64, i32, i64)
+          .results(i32, i64),
       )
       .globals(
         wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
@@ -310,6 +320,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),
         wasm.global(SHADOW_STACK_PTR, mut.i32).init(i32.const(memoryEndPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
+        wasm.global(CHAPTER, i32).init(i32.const(this.chapter)),
       )
       .datas(...strings)
       .funcs(
@@ -359,6 +370,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     else if (type === TokenType.MINUS) opTag = ARITHMETIC_OP_TAG.SUB;
     else if (type === TokenType.STAR) opTag = ARITHMETIC_OP_TAG.MUL;
     else if (type === TokenType.SLASH) opTag = ARITHMETIC_OP_TAG.DIV;
+    else if (type === TokenType.DOUBLESLASH) opTag = ARITHMETIC_OP_TAG.FLOORDIV;
+    else if (type === TokenType.PERCENT) opTag = ARITHMETIC_OP_TAG.MOD;
+    else if (type === TokenType.DOUBLESTAR) opTag = ARITHMETIC_OP_TAG.POW;
     else throw new Error(`Unsupported binary operator: ${type}`);
 
     return wasm.call(ARITHMETIC_OP_FX).args(left, right, i32.const(opTag));
@@ -376,6 +390,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     else if (type === TokenType.LESSEQUAL) opTag = COMPARISON_OP_TAG.LTE;
     else if (type === TokenType.GREATER) opTag = COMPARISON_OP_TAG.GT;
     else if (type === TokenType.GREATEREQUAL) opTag = COMPARISON_OP_TAG.GTE;
+    else if (type === TokenType.IS) opTag = COMPARISON_OP_TAG.IS;
+    else if (type === TokenType.ISNOT) opTag = COMPARISON_OP_TAG.ISNOT;
     else throw new Error(`Unsupported comparison operator: ${type}`);
 
     return wasm.call(COMPARISON_OP_FX).args(left, right, i32.const(opTag));
@@ -386,12 +402,16 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     const type = expr.operator.type;
     if (type === TokenType.MINUS) return wasm.call(NEG_FX).args(right);
-    else if (type === TokenType.NOT) return wasm.call(BOOL_NOT_FX).args(right);
+    else if (type === TokenType.NOT)
+      return wasm.call(BOOL_NOT_FX).args(wasm.call(CHECK_BOOL_FX).args(right));
     else throw new Error(`Unsupported unary operator: ${type}`);
   }
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): WasmNumeric {
-    const left = this.visit(expr.left);
+    // `and`/`or`'s *left* operand must be an actual bool (see
+    // docs/specs/python_typing_back.tex: `bool, any -> any`) -- only the
+    // right operand's short-circuit test is general BOOLISE_FX truthiness.
+    const left = wasm.call(CHECK_BOOL_FX).args(this.visit(expr.left));
     const right = this.visit(expr.right);
 
     const type = expr.operator.type;
