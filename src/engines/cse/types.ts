@@ -143,6 +143,33 @@ export type Instr =
   | ContinueInstr
   | ContinueMarkerInstr;
 
+/**
+ * Reworks a `typeTranslator`/PVML `getPVMLType()` output into the friendlier,
+ * unquoted wording used specifically by the "unsupported operand type(s)"
+ * family of TypeError messages (see `UnsupportedOperandTypeError` in both
+ * src/errors/errors.ts and src/engines/pvml/errors.ts) — spelled-out words
+ * ("integer", "boolean") over CPython's own abbreviations ("int", "bool"),
+ * and "None" over "NoneType". Deliberately separate from `typeTranslator`
+ * itself, which other consumers (the CSE Machine visualizer's stash-value
+ * labels, PyCseMachinePlugin.ts) still need in its original, more
+ * CPython-literal form — changing `typeTranslator`'s own output would have
+ * silently changed those debugger labels too.
+ */
+export function friendlyTypeName(pythonTypeName: string): string {
+  switch (pythonTypeName) {
+    case "int":
+      return "integer";
+    case "bool":
+      return "boolean";
+    case "str":
+      return "string";
+    case "NoneType":
+      return "None";
+    default:
+      return pythonTypeName;
+  }
+}
+
 export function typeTranslator(type: Value["type"] | string): string {
   switch (type) {
     case "bigint":

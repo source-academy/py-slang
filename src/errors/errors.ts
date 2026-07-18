@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { operatorTranslator, typeTranslator } from "../engines/cse/types";
+import { friendlyTypeName, operatorTranslator, typeTranslator } from "../engines/cse/types";
 import { Token } from "../tokenizer";
 import { TokenType } from "../tokenizer/tokenizer";
 export enum ErrorType {
@@ -156,34 +156,27 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
 
     const index = node.startToken.indexInSource;
     const operatorStr = operatorTranslator(operand);
-    const typeStr1 = typeTranslator(wrongType1);
+    const typeStr1 = friendlyTypeName(typeTranslator(wrongType1));
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    let hint =
-      "TypeError: unsupported operand type(s) for " +
-      operand +
-      ": '" +
-      wrongType1 +
-      "' and '" +
-      wrongType2 +
-      "'";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
+    let hint: string;
     let suggestion: string;
     if (wrongType2 === "") {
       // Format for Unary operators
-      hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`;
-      suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
+      hint = `TypeError: bad operand type for unary ${operatorStr}: ${typeStr1}`;
+      suggestion = `You are using the unary '${operatorStr}' operator on ${typeStr1}, which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
     } else {
       // Format for Binary operators
-      const typeStr2 = typeTranslator(wrongType2);
-      hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`;
-      suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`;
+      const typeStr2 = friendlyTypeName(typeTranslator(wrongType2));
+      hint = `TypeError: unsupported operand type(s) for ${operatorStr}: ${typeStr1} and ${typeStr2}`;
+      suggestion = `You are using the '${operatorStr}' operator between ${typeStr1} and ${typeStr2}, which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`;
     }
 
     // Assemble the final multi-line message
