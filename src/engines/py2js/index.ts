@@ -20,7 +20,7 @@ import misc from "../../stdlib/misc";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
-import { Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
+import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
 
 /**
@@ -86,7 +86,13 @@ function prepare(
     if (!(name in rt.builtins)) rt.builtins[name] = value;
   }
   const extra = options.extraBuiltins;
-  Object.assign(rt.builtins, typeof extra === "function" ? extra(rt) : (extra ?? {}));
+  const extraResolved = typeof extra === "function" ? extra(rt) : (extra ?? {});
+  for (const [name, value] of Object.entries(extraResolved)) {
+    // Plain JS functions from outside get the PyFunction metadata invariant
+    // established here (name, arity reporting, built-in rendering) — see
+    // annotateHostFunction; already-annotated functions pass through as-is.
+    rt.builtins[name] = annotateHostFunction(name, value);
+  }
 
   let ast;
   try {

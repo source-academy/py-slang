@@ -58,27 +58,32 @@ function toTagged(v: PyValue): Value {
       return { type: "bool", value: v };
     case "string":
       return { type: "string", value: v };
-    case "function":
-      // See file header: functions cross as inspectable, non-callable stand-ins.
+    case "function": {
+      // See file header: functions cross as inspectable, non-callable
+      // stand-ins. The fallbacks cover bare JS functions that bypassed
+      // annotateHostFunction (index.ts establishes the metadata invariant
+      // for extraBuiltins; Function#name can be "", hence || not ??).
+      const name = v.pyName ?? (v.name || "(anonymous)");
       return v.pyBuiltin
         ? {
             type: "builtin",
-            name: v.pyName,
-            minArgs: v.pyMinArgs ?? Math.max(0, v.pyArity),
+            name,
+            minArgs: v.pyMinArgs ?? Math.max(0, v.pyArity ?? v.length),
             func: () => {
               throw new Py2JsRuntimeError(
                 "SystemError",
-                `stdlib bridge: ${v.pyName} cannot be called from a bridged builtin`,
+                `stdlib bridge: ${name} cannot be called from a bridged builtin`,
               );
             },
           }
         : {
             type: "function",
-            name: v.pyName,
+            name,
             params: [],
             body: [],
             env: undefined as unknown as Environment,
           };
+    }
     default:
       if (v === null) return { type: "none" };
       return { type: "complex", value: v };

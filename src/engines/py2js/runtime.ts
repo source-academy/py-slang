@@ -525,8 +525,32 @@ export class Py2JsRuntime {
       }
       // Bridged stdlib builtins report their CSE minArgs (pyMinArgs); user
       // functions and native builtins report their parameter count, which is
-      // what the CSE machine reports for its closures.
-      return BigInt(f.pyMinArgs ?? Math.max(0, f.pyArity));
+      // what the CSE machine reports for its closures. The f.length fallback
+      // covers bare JS functions that bypassed annotateHostFunction (e.g.
+      // stuffed into rt.builtins directly).
+      return BigInt(f.pyMinArgs ?? Math.max(0, f.pyArity ?? f.length));
     }),
   };
+}
+
+/**
+ * Establish the PyFunction metadata invariant on a host-supplied function
+ * (extraBuiltins — module bindings etc.). Compiled user functions always get
+ * their metadata from def/def2; this is for plain JS functions arriving from
+ * outside. Fills only what is missing: pyName from the binding name, pyArity
+ * -1 (argument counts are not enforced for host functions — a rest-args
+ * implementation reports Function#length 0, so enforcing it would wrongly
+ * reject every call), pyMinArgs from Function#length for arity() reporting,
+ * and pyBuiltin so rendering says <built-in function name>.
+ */
+export function annotateHostFunction(name: string, fn: PyValue): PyValue {
+  if (typeof fn !== "function") return fn;
+  const f = fn as Partial<PyFunction> & ((...args: PyValue[]) => PyValue | TailCall);
+  if (f.pyArity === undefined) {
+    f.pyMinArgs ??= f.length;
+    f.pyArity = -1;
+  }
+  f.pyName ??= name;
+  f.pyBuiltin ??= true;
+  return f as PyFunction;
 }
