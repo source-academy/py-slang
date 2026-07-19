@@ -327,12 +327,28 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
  */
 function walkArgList(xs: PyValue): PyValue[] {
   const args: PyValue[] = [];
+  // Cycle guard: set_tail/set_head (chapter 3's pair mutators) can build a
+  // genuinely self-referential pair (`p = pair(1, 2); set_tail(p, p)`).
+  // Without this, a circular argument list would spin forever, growing
+  // `args` without bound until the process runs out of memory — visited
+  // tracks pair/list *nodes* by identity (not values), so only an actual
+  // cycle back to a node already on this walk trips it, not e.g. two
+  // separately-built pairs that happen to compare equal.
+  const visited = new Set<object>();
   let current = xs;
   for (;;) {
     if (current instanceof PyPair) {
+      if (visited.has(current)) {
+        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
+      }
+      visited.add(current);
       args.push(current.head);
       current = current.tail;
     } else if (Array.isArray(current) && current.length === 2) {
+      if (visited.has(current)) {
+        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
+      }
+      visited.add(current);
       args.push(current[0]);
       current = current[1];
     } else {

@@ -69,6 +69,19 @@ print(apply_in_underlying_python(f, None))
   test("a non-callable first argument is a TypeError", () => {
     expect(() => runCodePy2Js("apply_in_underlying_python(1, None)", 4)).toThrow(/TypeError/);
   });
+
+  test("a circular argument list (built via set_tail) raises rather than exhausting memory", () => {
+    // p.tail === p: walking it naively (no cycle detection) would grow the
+    // argument array without bound instead of terminating.
+    const code = `
+def f(a, b):
+    return a
+p = pair(1, 2)
+set_tail(p, p)
+print(apply_in_underlying_python(f, p))
+`;
+    expect(() => runCodePy2Js(code, 4)).toThrow(/circular/);
+  });
 });
 
 describe("__program__", () => {
