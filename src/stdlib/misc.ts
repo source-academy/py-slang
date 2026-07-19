@@ -114,10 +114,11 @@ export class MiscBuiltins {
         return { type: "number", value: Math.abs(x.value) };
       }
       case "complex": {
-        // Calculate the modulus (absolute value) of a complex number.
-        const real = x.value.real;
-        const imag = x.value.imag;
-        const modulus = Math.sqrt(real * real + imag * imag);
+        // The modulus (absolute value) of a complex number. Math.hypot
+        // scales internally, so components whose squares overflow/underflow
+        // still produce the right modulus (abs(complex(1e200, 0)) is 1e200,
+        // not inf) — the same algorithm CPython's abs(complex) uses. See #284.
+        const modulus = Math.hypot(x.value.real, x.value.imag);
         return { type: "number", value: modulus };
       }
       default:
