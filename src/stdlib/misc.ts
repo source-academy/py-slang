@@ -117,7 +117,7 @@ export class MiscBuiltins {
         // Calculate the modulus (absolute value) of a complex number.
         const real = x.value.real;
         const imag = x.value.imag;
-        const modulus = Math.sqrt(real * real + imag * imag);
+        const modulus = Math.hypot(real, imag);
         return { type: "number", value: modulus };
       }
       default:

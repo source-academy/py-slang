@@ -605,6 +605,7 @@ describe("PVML E2E", () => {
     ],
     "abs() is the modulus": [
       ["abs(3+4j)", asFloat(5), null],
+      ["abs(1e200+0j)", asFloat(1e200), null],
       ["is_float(abs(3+4j))", true, null],
     ],
     "real() / imag() / complex() constructor": [

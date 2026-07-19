@@ -181,7 +181,7 @@ export class PyComplexNumber {
     const A = other.real;
     const B = other.imag;
 
-    const r = Math.sqrt(a * a + b * b);
+    const r = Math.hypot(a, b);
     const theta = Math.atan2(b, a);
 
     if (r === 0) {
