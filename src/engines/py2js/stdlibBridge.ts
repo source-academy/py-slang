@@ -304,6 +304,69 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
 }
 
 /**
+ * apply_in_underlying_python(f, xs) (chapter 4's parser/"mce" group): calls
+ * `f` with the arguments in linked-list `xs`. CSE's own implementation
+ * (ParserBuiltins.apply_in_underlying_python in src/stdlib/parser.ts) pushes
+ * onto its own control/stash for the CSE step loop to pick up later, rather
+ * than returning a value — semantically incompatible with bridgeBuiltin's
+ * generic path, which expects a builtin to return a Value synchronously (a
+ * generic bridge attempt would silently no-op: it would run against a fresh,
+ * throwaway Context whose control/stash nothing ever steps). Reimplemented
+ * natively instead: walk the argument list exactly as permissively as CSE
+ * does (any 2-element list-shaped chain — PyPair or a native 2-element
+ * PyList, since CSE has no representational difference between the two —
+ * terminated by anything that isn't, not strictly requiring a None tail) and
+ * invoke `f` through the runtime's own synchronous call trampoline (the same
+ * one a TS module uses to call back into Python — see Py2JsRuntime.callSync).
+ *
+ * `parse`/`tokenize` need no such native treatment: both just transform a
+ * string into CSE's tagged parse tree (transform() in src/stdlib/parser.ts),
+ * built entirely out of 2-element cons cells, which the existing
+ * toTagged/fromTagged round-trip already reconstructs correctly as nested
+ * PyPairs — so they go through the ordinary generic bridge above unchanged.
+ */
+function walkArgList(xs: PyValue): PyValue[] {
+  const args: PyValue[] = [];
+  // Cycle guard: set_tail/set_head (chapter 3's pair mutators) can build a
+  // genuinely self-referential pair (`p = pair(1, 2); set_tail(p, p)`).
+  // Without this, a circular argument list would spin forever, growing
+  // `args` without bound until the process runs out of memory — visited
+  // tracks pair/list *nodes* by identity (not values), so only an actual
+  // cycle back to a node already on this walk trips it, not e.g. two
+  // separately-built pairs that happen to compare equal.
+  const visited = new Set<object>();
+  let current = xs;
+  for (;;) {
+    if (current instanceof PyPair) {
+      if (visited.has(current)) {
+        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
+      }
+      visited.add(current);
+      args.push(current.head);
+      current = current.tail;
+    } else if (Array.isArray(current) && current.length === 2) {
+      if (visited.has(current)) {
+        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
+      }
+      visited.add(current);
+      args.push(current[0]);
+      current = current[1];
+    } else {
+      return args;
+    }
+  }
+}
+
+function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
+  const f = ((...args: PyValue[]) => rt.callSync(args[0], walkArgList(args[1]))) as PyFunction;
+  f.pyName = "apply_in_underlying_python";
+  f.pyArity = 2;
+  f.pyBuiltin = true;
+  f.pyMinArgs = 2;
+  return f;
+}
+
+/**
  * Bridge every builtin (and constant) of the given stdlib groups into py2js
  * native values. `source` is the program text, used by stdlib error
  * constructors for their (currently synthetic) location info.
@@ -333,6 +396,9 @@ export function bridgeStdlibGroups(
     }
     if (group.name === GroupName.STREAMS) {
       out.stream = nativeStream(rt);
+    }
+    if (group.name === GroupName.MCE) {
+      out.apply_in_underlying_python = nativeApplyInUnderlyingPython(rt);
     }
   }
   return out;
