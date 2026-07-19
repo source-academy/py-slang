@@ -29,7 +29,10 @@ export interface Py2JsResult {
 export function runPy2Js(code: string, extraBuiltins: ExtraBuiltins = {}): Py2JsResult {
   const t0 = performance.now();
   const rt = new Py2JsRuntime();
-  Object.assign(rt.builtins, typeof extraBuiltins === "function" ? extraBuiltins(rt) : extraBuiltins);
+  Object.assign(
+    rt.builtins,
+    typeof extraBuiltins === "function" ? extraBuiltins(rt) : extraBuiltins,
+  );
   const script = code.endsWith("\n") ? code : code + "\n";
   const js = compileProgram(parse(script), Object.keys(rt.builtins), "sync");
   const runner = new Function("__py", js);
@@ -61,7 +64,10 @@ export async function runPy2JsDual(
 ): Promise<Py2JsResult> {
   const t0 = performance.now();
   const rt = new Py2JsRuntime();
-  Object.assign(rt.builtins, typeof extraBuiltins === "function" ? extraBuiltins(rt) : extraBuiltins);
+  Object.assign(
+    rt.builtins,
+    typeof extraBuiltins === "function" ? extraBuiltins(rt) : extraBuiltins,
+  );
   const script = code.endsWith("\n") ? code : code + "\n";
   const js = compileProgram(parse(script), Object.keys(rt.builtins), "dual");
   const runner = new AsyncFunction("__py", js);

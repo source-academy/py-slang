@@ -82,7 +82,12 @@ async function main() {
   for (let i = 0; i < calls; i++) acc += 0.5 * Math.sin(k * (i / SAMPLE_RATE));
   const nativeMs = performance.now() - t0;
 
-  const outputs = new Set([dualSync.output, dualAsync.output, syncSync.output, acc.toString() + "\n"]);
+  const outputs = new Set([
+    dualSync.output,
+    dualAsync.output,
+    syncSync.output,
+    acc.toString() + "\n",
+  ]);
   console.log(`${seconds}s of audio = ${calls} Python wave-function calls from the TS module`);
   console.log(`outputs ${outputs.size === 1 ? "agree" : `DIFFER: ${[...outputs].join(" ")}`}\n`);
 
@@ -94,7 +99,9 @@ async function main() {
   ];
   const best = Math.min(...rows.map(([, ms]) => ms));
   for (const [name, ms] of rows) {
-    console.log(`  ${name.padEnd(38)} ${ms.toFixed(1).padStart(9)} ms   (${(ms / best).toFixed(1)}x)`);
+    console.log(
+      `  ${name.padEnd(38)} ${ms.toFixed(1).padStart(9)} ms   (${(ms / best).toFixed(1)}x)`,
+    );
   }
   console.log(
     `  -> per-sample callback cost: sync ${((dualSync.runMs / calls) * 1e6).toFixed(0)} ns, async ${((dualAsync.runMs / calls) * 1e6).toFixed(0)} ns`,

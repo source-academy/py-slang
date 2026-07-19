@@ -82,7 +82,8 @@ async function timed(fn: () => Promise<string> | string): Promise<Timed> {
 
 function report(name: string, results: Record<string, Timed>) {
   const outputs = new Set(Object.values(results).map(r => r.output));
-  const agree = outputs.size === 1 ? "outputs agree" : `OUTPUTS DIFFER: ${[...outputs].join(" vs ")}`;
+  const agree =
+    outputs.size === 1 ? "outputs agree" : `OUTPUTS DIFFER: ${[...outputs].join(" vs ")}`;
   console.log(`\n${name}  (${agree})`);
   const fastest = Math.min(...Object.values(results).map(r => r.ms));
   for (const [engine, r] of Object.entries(results)) {

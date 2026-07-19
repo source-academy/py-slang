@@ -9,10 +9,7 @@
 import Module from "module";
 import path from "path";
 
-const distRoot = path.join(
-  __dirname,
-  "../../node_modules/@sourceacademy/conductor/dist",
-);
+const distRoot = path.join(__dirname, "../../node_modules/@sourceacademy/conductor/dist");
 
 const aliases: Record<string, string> = {
   "@sourceacademy/conductor/common": path.join(distRoot, "common/index.js"),

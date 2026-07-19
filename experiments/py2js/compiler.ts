@@ -52,7 +52,8 @@ function emitFunctionValue(
   dual: boolean,
 ): string {
   const plist = params.join(", ");
-  if (!dual) return `__py.def(${JSON.stringify(name)}, ${params.length}, (${plist}) => ${emitBody(false)})`;
+  if (!dual)
+    return `__py.def(${JSON.stringify(name)}, ${params.length}, (${plist}) => ${emitBody(false)})`;
   return (
     `__py.def2(${JSON.stringify(name)}, ${params.length}, ` +
     `(${plist}) => ${emitBody(false)}, ` +

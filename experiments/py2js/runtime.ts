@@ -102,8 +102,7 @@ export function pyStr(v: PyValue): string {
   }
 }
 
-const isNum = (v: PyValue): v is bigint | number =>
-  typeof v === "bigint" || typeof v === "number";
+const isNum = (v: PyValue): v is bigint | number => typeof v === "bigint" || typeof v === "number";
 
 /** Chapter 1/2 equality excludes bool and function operands entirely. */
 function pyEquals(l: PyValue, r: PyValue): boolean {
@@ -179,14 +178,19 @@ export class Py2JsRuntime {
           if (r === 0n) throw new PyRuntimeError("ZeroDivisionError", "division by zero");
           return Number(l) / Number(r);
         case "//":
-          if (r === 0n) throw new PyRuntimeError("ZeroDivisionError", "integer division or modulo by zero");
+          if (r === 0n)
+            throw new PyRuntimeError("ZeroDivisionError", "integer division or modulo by zero");
           return (l - pythonMod(l, r)) / r;
         case "%":
-          if (r === 0n) throw new PyRuntimeError("ZeroDivisionError", "integer division or modulo by zero");
+          if (r === 0n)
+            throw new PyRuntimeError("ZeroDivisionError", "integer division or modulo by zero");
           return pythonMod(l, r);
         case "**":
           if (l === 0n && r < 0n)
-            throw new PyRuntimeError("ZeroDivisionError", "0.0 cannot be raised to a negative power");
+            throw new PyRuntimeError(
+              "ZeroDivisionError",
+              "0.0 cannot be raised to a negative power",
+            );
           return r < 0n ? Number(l) ** Number(r) : l ** r;
       }
     }
@@ -308,11 +312,7 @@ export class Py2JsRuntime {
       );
     }
     let result = fn(...args);
-    while (
-      result !== null &&
-      typeof result === "object" &&
-      (result as TailCall).__tail === true
-    ) {
+    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
       const t = result as TailCall;
       fn = this.checkCallable(t.f, t.args.length);
       if (fn.asyncOnly) {
@@ -335,11 +335,7 @@ export class Py2JsRuntime {
   async acall(f: PyValue, args: PyValue[]): Promise<PyValue> {
     let fn = this.checkCallable(f, args.length);
     let result = await (fn.asyncBody ?? fn)(...args);
-    while (
-      result !== null &&
-      typeof result === "object" &&
-      (result as TailCall).__tail === true
-    ) {
+    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
       const t = result as TailCall;
       fn = this.checkCallable(t.f, t.args.length);
       result = await (fn.asyncBody ?? fn)(...t.args);
@@ -430,7 +426,8 @@ export class Py2JsRuntime {
 
   private numericBuiltin(name: string, fn: (x: number) => number): PyFunction {
     return this.builtin(name, 1, v => {
-      if (!isNum(v)) throw new PyRuntimeError("TypeError", `must be real number, not ${pyTypeName(v)}`);
+      if (!isNum(v))
+        throw new PyRuntimeError("TypeError", `must be real number, not ${pyTypeName(v)}`);
       return fn(Number(v));
     });
   }

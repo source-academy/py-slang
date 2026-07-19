@@ -51,21 +51,45 @@ const cases: Case[] = [
 
   // --- booleans, conditionals ---
   { name: "and or not", code: `print(True and False)\nprint(True or False)\nprint(not True)` },
-  { name: "short circuit", code: `def boom():\n    return 1 / 0\nprint(False and boom() == 1)\nprint(True or boom() == 1)` },
-  { name: "if elif else", code: `x = 7\nif x < 5:\n    print("small")\nelif x < 10:\n    print("medium")\nelse:\n    print("large")` },
+  {
+    name: "short circuit",
+    code: `def boom():\n    return 1 / 0\nprint(False and boom() == 1)\nprint(True or boom() == 1)`,
+  },
+  {
+    name: "if elif else",
+    code: `x = 7\nif x < 5:\n    print("small")\nelif x < 10:\n    print("medium")\nelse:\n    print("large")`,
+  },
   { name: "ternary", code: `print("yes" if 1 < 2 else "no")` },
 
   // --- functions ---
-  { name: "factorial", code: `def fact(n):\n    return 1 if n == 0 else n * fact(n - 1)\nprint(fact(20))` },
-  { name: "fib", code: `def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\nprint(fib(15))` },
+  {
+    name: "factorial",
+    code: `def fact(n):\n    return 1 if n == 0 else n * fact(n - 1)\nprint(fact(20))`,
+  },
+  {
+    name: "fib",
+    code: `def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\nprint(fib(15))`,
+  },
   { name: "lambda", code: `square = lambda x: x * x\nprint(square(9))` },
-  { name: "higher order", code: `def twice(f):\n    return lambda x: f(f(x))\nadd3 = twice(lambda x: x + 3)\nprint(add3(10))` },
-  { name: "closure capture", code: `def make_adder(n):\n    def add(x):\n        return x + n\n    return add\nprint(make_adder(5)(10))` },
+  {
+    name: "higher order",
+    code: `def twice(f):\n    return lambda x: f(f(x))\nadd3 = twice(lambda x: x + 3)\nprint(add3(10))`,
+  },
+  {
+    name: "closure capture",
+    code: `def make_adder(n):\n    def add(x):\n        return x + n\n    return add\nprint(make_adder(5)(10))`,
+  },
   { name: "no return is none", code: `def f():\n    pass\nprint(f())` },
   { name: "print returns none", code: `print(print(1))` },
   { name: "function repr", code: `def f():\n    return 1\nprint(f)` },
-  { name: "deep tail recursion", code: `def count(n, acc):\n    return acc if n == 0 else count(n - 1, acc + n)\nprint(count(100000, 0))` },
-  { name: "mutual tail recursion", code: `def even(n):\n    return True if n == 0 else odd(n - 1)\ndef odd(n):\n    return False if n == 0 else even(n - 1)\nprint(even(50001))` },
+  {
+    name: "deep tail recursion",
+    code: `def count(n, acc):\n    return acc if n == 0 else count(n - 1, acc + n)\nprint(count(100000, 0))`,
+  },
+  {
+    name: "mutual tail recursion",
+    code: `def even(n):\n    return True if n == 0 else odd(n - 1)\ndef odd(n):\n    return False if n == 0 else even(n - 1)\nprint(even(50001))`,
+  },
 
   // --- builtins ---
   { name: "abs", code: `print(abs(-5))\nprint(abs(2.5))` },
@@ -79,7 +103,10 @@ const cases: Case[] = [
   { name: "err bool equality", code: `print(True == 1)` },
   { name: "err bool ordering", code: `print(True < 2)` },
   { name: "truthy int condition", code: `if 1:\n    print("x")` },
-  { name: "falsy conditions", code: `print("a" if 0 else "b")\nprint("c" if "" else "d")\nprint("e" if None else "f")\nprint("g" if 0.0 else "h")` },
+  {
+    name: "falsy conditions",
+    code: `print("a" if 0 else "b")\nprint("c" if "" else "d")\nprint("e" if None else "f")\nprint("g" if 0.0 else "h")`,
+  },
   { name: "err non-bool and", code: `print(1 and True)` },
   { name: "err not on int", code: `print(not 1)` },
   { name: "err div by zero", code: `print(1 / 0)` },
@@ -125,8 +152,7 @@ async function main() {
     const cse = await runCse(c.code);
     const js = runJs(c.code);
     const dual = await runJsDual(c.code);
-    const pairAgrees = (r: Result) =>
-      cse.ok && r.ok ? cse.output === r.output : !cse.ok && !r.ok;
+    const pairAgrees = (r: Result) => (cse.ok && r.ok ? cse.output === r.output : !cse.ok && !r.ok);
     const agree = pairAgrees(js) && pairAgrees(dual);
     if (agree) {
       pass++;
@@ -135,7 +161,8 @@ async function main() {
         : `all error (cse: ${(cse as { error: string }).error.split("\n")[0]} | py2js: ${(js as { error: string }).error})`;
       console.log(`PASS ${c.name.padEnd(28)} ${detail}`);
     } else {
-      const show = (r: Result) => (r.ok ? `output ${JSON.stringify(r.output)}` : `error ${r.error.split("\n")[0]}`);
+      const show = (r: Result) =>
+        r.ok ? `output ${JSON.stringify(r.output)}` : `error ${r.error.split("\n")[0]}`;
       failures.push(c.name);
       console.log(
         `FAIL ${c.name.padEnd(28)}\n     cse:        ${show(cse)}\n     py2js:      ${show(js)}\n     py2js dual: ${show(dual)}`,
