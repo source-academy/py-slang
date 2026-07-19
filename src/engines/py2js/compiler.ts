@@ -278,6 +278,10 @@ function boundNames(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<st
       if (target.kind === "Variable") into.add(target.name.lexeme);
     } else if (s.kind === "FunctionDef") {
       into.add((s as StmtNS.FunctionDef).name.lexeme);
+    } else if (s.kind === "FromImport") {
+      for (const spec of (s as StmtNS.FromImport).names) {
+        into.add((spec.alias ?? spec.name).lexeme);
+      }
     } else if (s.kind === "If") {
       const i = s as StmtNS.If;
       boundNames(i.body, into);
@@ -340,6 +344,23 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
     }
     case "Assert":
       return `${indent}__py.assertCheck(${emitExpr((s as StmtNS.Assert).value, a, ctx)});\n`;
+    case "FromImport": {
+      // The imported values are resolved (module loaded, converted to
+      // native PyValues) in an async pre-pass before this chunk compiles —
+      // see moduleInterop.ts and Py2JsSession.runChunk in index.ts — and
+      // stashed on the runtime keyed by the bound (aliased) name. This
+      // statement's only job is the binding itself, through the same
+      // emitName(write=true) path an ordinary assignment uses, so it works
+      // identically in program mode (`let` local) and REPL mode (globals
+      // table) without a separate code path.
+      const imp = s as StmtNS.FromImport;
+      return imp.names
+        .map(spec => {
+          const bound = (spec.alias ?? spec.name).lexeme;
+          return `${indent}${emitName(bound, ctx, true)} = __py.importedValue(${JSON.stringify(bound)});\n`;
+        })
+        .join("");
+    }
     default:
       throw new Py2JsCompileError(`statement kind '${s.kind}'`);
   }

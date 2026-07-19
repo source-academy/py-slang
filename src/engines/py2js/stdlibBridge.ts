@@ -39,7 +39,7 @@ import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
 import type { BuiltinValue, Value } from "../cse/stash";
-import { Py2JsRuntime, Py2JsRuntimeError, PyFunction, PyValue } from "./runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyFunction, PyOpaque, PyValue } from "./runtime";
 
 function syntheticCallNode(name: string): ExprNS.Call {
   const token = new Token(TokenType.NAME, name, 1, 0, 0);
@@ -86,6 +86,12 @@ function toTagged(v: PyValue): Value {
     }
     default:
       if (v === null) return { type: "none" };
+      // No chapter-1 stdlib builtin accepts an opaque module value as an
+      // argument (abs/math_sqrt/etc. all type-check against "opaque" being
+      // absent from their accepted types), so this just needs to produce
+      // *some* CSE Value the builtin's own dispatch will reject cleanly —
+      // matching CSE's own opaque conversion shape (modules.ts).
+      if (v instanceof PyOpaque) return { type: "opaque", value: v.typed };
       return { type: "complex", value: v };
   }
 }
