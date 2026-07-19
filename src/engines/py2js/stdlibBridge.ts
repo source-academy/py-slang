@@ -101,9 +101,7 @@ function toTagged(v: PyValue): Value {
     }
     default:
       if (v === null) return { type: "none" };
-      if (v instanceof PyPair) {
-        return { type: "list", value: [toTagged(v.head), toTagged(v.tail)] };
-      }
+      if (v instanceof PyPair) return toTaggedPair(v);
       // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
@@ -112,6 +110,33 @@ function toTagged(v: PyValue): Value {
       if (v instanceof PyOpaque) return { type: "opaque", value: v.typed };
       return { type: "complex", value: v };
   }
+}
+
+/**
+ * Converts a PyPair chain to CSE's nested list Value, iterating along the
+ * `.tail` spine instead of recursing: a long proper list (enum_llist,
+ * reverse, map, …) has its length entirely along that spine, so a naive
+ * `{ type: "list", value: [toTagged(v.head), toTagged(v.tail)] }` would cost
+ * one JS stack frame per *element* just to convert a single argument for one
+ * bridged call — a list of a few thousand elements already overflows the
+ * stack, regardless of how tail-recursive the user's own Python is (its own
+ * tail calls go through py2js's trampoline; this bridge conversion does not).
+ * `.head` is still converted via the ordinary (recursive) toTagged, since a
+ * head is normally a scalar leaf; a list-of-lists nested arbitrarily deep
+ * through `.head` remains a (much rarer) recursion, same as before.
+ */
+function toTaggedPair(pair: PyPair): Value {
+  const heads: PyValue[] = [];
+  let current: PyValue = pair;
+  while (current instanceof PyPair) {
+    heads.push(current.head);
+    current = current.tail;
+  }
+  let tail = toTagged(current);
+  for (let i = heads.length - 1; i >= 0; i--) {
+    tail = { type: "list", value: [toTagged(heads[i]), tail] };
+  }
+  return tail;
 }
 
 function fromTagged(name: string, v: Value): PyValue {

@@ -192,6 +192,11 @@ function toDisplayValue(v: PyValue): Value {
       if (v instanceof PyPair) {
         return { type: "list", value: [toDisplayValue(v.head), toDisplayValue(v.tail)] };
       }
+      // stringify()'s convert() has no dedicated "opaque" case — it falls to
+      // the generic `<${type} object>` fallback, matching pyStr's own
+      // "<opaque object>" rendering, so this is just as accurate as a
+      // dedicated case would be.
+      if (v instanceof PyOpaque) return { type: "opaque", value: v.typed };
       return { type: "complex", value: v };
   }
 }
@@ -221,10 +226,16 @@ export function pyStr(v: PyValue): string {
 
 /** Whether `v` is a proper linked list: a chain of pairs terminated by None,
  * as opposed to an arbitrary pair — mirrors isProperList in
- * src/stdlib/linked-list.ts (the distinction print_llist uses below). */
+ * src/stdlib/linked-list.ts (the distinction print_llist uses below).
+ * Iterative rather than (tail-)recursive: JS engines don't guarantee TCO, so
+ * a long list would otherwise risk a stack overflow — the same failure mode
+ * printLlist's own outer list-walking `while` loop below already avoids. */
 function isProperList(v: PyValue): boolean {
-  if (v === null) return true;
-  return v instanceof PyPair && isProperList(v.tail);
+  let current = v;
+  while (current instanceof PyPair) {
+    current = current.tail;
+  }
+  return current === null;
 }
 
 /**
