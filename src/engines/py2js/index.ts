@@ -18,8 +18,11 @@ import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
 import linkedList from "../../stdlib/linked-list";
+import list from "../../stdlib/list";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
+import pairmutator from "../../stdlib/pairmutator";
+import stream from "../../stdlib/stream";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
@@ -27,16 +30,17 @@ import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
 
-const SUPPORTED_CHAPTERS = [1, 2];
+const SUPPORTED_CHAPTERS = [1, 2, 3];
 
 /**
  * Stdlib groups per chapter, bridged into the runtime by prepare(). Mirrors
  * runner.ts's VARIANT_GROUPS (kept separate so the engine does not pull in
- * the runner's conductor plumbing); extend as chapters 3+ land.
+ * the runner's conductor plumbing); extend as chapter 4 lands.
  */
 const PY2JS_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
   2: [misc, math, linkedList],
+  3: [misc, math, linkedList, list, pairmutator, stream],
 };
 
 export { Py2JsCompileError, Py2JsRuntime, Py2JsRuntimeError };
@@ -135,7 +139,7 @@ function prepare(
     );
   }
 
-  const rt = new Py2JsRuntime();
+  const rt = new Py2JsRuntime(variant >= 3);
   const script = code.endsWith("\n") ? code : code + "\n";
   const groups = PY2JS_GROUPS[variant] ?? [];
 
@@ -287,7 +291,7 @@ export class Py2JsSession {
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
     this.dataHandler = options.dataHandler ?? new GenericDataHandler();
-    this.rt = new Py2JsRuntime();
+    this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onOutput = options.onOutput;
 
     // Same builtin layering as prepare(): bridged stdlib under the native

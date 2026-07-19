@@ -44,6 +44,7 @@
  */
 import { ExprNS } from "../../ast-types";
 import { Token, TokenType } from "../../tokenizer";
+import { GroupName } from "../../stdlib/utils";
 import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
@@ -102,6 +103,13 @@ function toTagged(v: PyValue): Value {
     default:
       if (v === null) return { type: "none" };
       if (v instanceof PyPair) return toTaggedPair(v);
+      // Chapter 3+ native list literal: CSE has no separate representation
+      // for a pair vs. an arbitrary-length list (both are its flat
+      // `{type:"list", value: Value[]}` — see src/engines/cse/stash.ts), so
+      // converting element-wise here reproduces CSE's own is_list/
+      // list_length answers exactly, including on a 2-element literal list
+      // (which CSE cannot tell apart from a pair either).
+      if (Array.isArray(v)) return { type: "list", value: v.map(toTagged) };
       // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
@@ -151,17 +159,18 @@ function fromTagged(name: string, v: Value): PyValue {
     case "none":
       return null;
     case "list":
-      // Chapter 2 has no list-literal syntax and no list.ts group (chapter
-      // 3+), so pair()/llist() — the only way to construct one — always
-      // produce exactly a 2-element cons cell; anything else would mean
-      // list.ts got bridged ahead of chapter-3 support actually landing.
-      if (v.value.length !== 2) {
-        throw new Py2JsRuntimeError(
-          "SystemError",
-          `stdlib bridge: ${name}() returned a non-pair list value (length ${v.value.length}), not yet supported`,
-        );
+      // A length-2 list reconstructs as a pair — the shape pair()/llist()
+      // (and stream(), bridged natively rather than through this generic
+      // path — see bridgeStdlibGroups) always produce. No bridged chapter
+      // 1-3 builtin actually returns a freshly-constructed list of any other
+      // length (is_list/list_length only consume one; set_head/set_tail
+      // mutate natively, not through this round-trip — see
+      // bridgeStdlibGroups), so this fallback exists for forward
+      // compatibility rather than a case reached today.
+      if (v.value.length === 2) {
+        return new PyPair(fromTagged(name, v.value[0]), fromTagged(name, v.value[1]));
       }
-      return new PyPair(fromTagged(name, v.value[0]), fromTagged(name, v.value[1]));
+      return v.value.map(el => fromTagged(name, el));
     case "function":
     case "builtin": {
       // A function value only ever flows back out as one of THIS bridge's
@@ -219,6 +228,70 @@ function bridgeBuiltin(
 }
 
 /**
+ * set_head/set_tail (chapter 3's pair-mutators group): mutate an existing
+ * pair/2-element list *in place*. These cannot go through the generic
+ * toTagged/fromTagged round-trip like every other bridged builtin — that
+ * round-trip converts the argument into a *fresh* CSE-side value, so a
+ * mutation the CSE builtin performs on it (as pairmutator.ts does) would be
+ * silently lost rather than visible on the original PyPair/PyList the
+ * caller's Python variable still points to. CSE has no representational
+ * difference between a pair and a 2-element list (both are its flat
+ * `{type:"list", value: Value[]}`), so — matching that — this accepts either
+ * a PyPair or a native 2-element PyList.
+ */
+function nativeSetPairSlot(name: string, index: 0 | 1): PyFunction {
+  const f = ((...args: PyValue[]) => {
+    const target = args[0];
+    const value = args[1];
+    if (target instanceof PyPair) {
+      if (index === 0) target.head = value;
+      else target.tail = value;
+      return null;
+    }
+    if (Array.isArray(target) && target.length === 2) {
+      target[index] = value;
+      return null;
+    }
+    throw new Py2JsRuntimeError(
+      "TypeError",
+      `${name}() expects a pair as first argument, got '${typeof target}'`,
+    );
+  }) as PyFunction;
+  f.pyName = name;
+  f.pyArity = 2;
+  f.pyBuiltin = true;
+  f.pyMinArgs = 2;
+  return f;
+}
+
+/**
+ * stream() (chapter 3's stream group): the one native primitive the group
+ * needs — every other stream function (stream_map, stream_filter, …) is pure
+ * Python in stream.prelude.ts, already runnable once pairs/closures work, so
+ * it never touches this. Not bridged generically because CSE's own
+ * StreamBuiltins.stream fabricates a brand new closure (the lazy tail thunk)
+ * on every call — the bridge's toTagged/fromTagged round-trip only handles
+ * function values that either originated in py2js or pass through
+ * unchanged, not ones a CSE builtin invents on the spot — so it's
+ * reimplemented directly against py2js's own PyPair/PyFunction instead,
+ * mirroring StreamBuiltins.stream's recursion exactly.
+ */
+function nativeStream(rt: Py2JsRuntime): PyFunction {
+  const build = (args: PyValue[]): PyValue => {
+    if (args.length === 0) return null;
+    const tail = rt.def("anonymous stream", 0, () => build(args.slice(1)));
+    tail.pyBuiltin = true;
+    return new PyPair(args[0], tail);
+  };
+  const f = ((...args: PyValue[]) => build(args)) as PyFunction;
+  f.pyName = "stream";
+  f.pyArity = -1;
+  f.pyBuiltin = true;
+  f.pyMinArgs = 0;
+  return f;
+}
+
+/**
  * Bridge every builtin (and constant) of the given stdlib groups into py2js
  * native values. `source` is the program text, used by stdlib error
  * constructors for their (currently synthetic) location info.
@@ -238,6 +311,16 @@ export function bridgeStdlibGroups(
         value.type === "builtin"
           ? bridgeBuiltin(rt, name, value, context, source)
           : fromTagged(name, value);
+    }
+    // See nativeSetPairSlot/nativeStream's doc comments for why these two
+    // groups' primitives are reimplemented natively instead of left as the
+    // generic bridge produced above.
+    if (group.name === GroupName.PAIRMUTATORS) {
+      out.set_head = nativeSetPairSlot("set_head", 0);
+      out.set_tail = nativeSetPairSlot("set_tail", 1);
+    }
+    if (group.name === GroupName.STREAMS) {
+      out.stream = nativeStream(rt);
     }
   }
   return out;
