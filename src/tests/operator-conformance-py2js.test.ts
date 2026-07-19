@@ -19,8 +19,9 @@
  * underlying value is guaranteed to agree on text too — no float-tolerance
  * machinery needed (both sides do plain JS `number` arithmetic).
  *
- * Chapter 1 only for now: the py2js runtime implements the §1 operator
- * typing rules; extend the chapter list as the engine grows into §2+.
+ * Chapters 1-2 (identical operator typing rules at both — python_typing_*.tex
+ * doesn't distinguish them); extend the chapter list as the engine grows
+ * into §3+.
  */
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
@@ -35,7 +36,7 @@ import { makeValidatorsForChapter } from "../validator";
 import { BINARY_OPS_12, literalFor, universeForChapter } from "./operator-spec";
 import { generateMockStreams } from "./utils";
 
-const PY2JS_CHAPTERS = [1];
+const PY2JS_CHAPTERS = [1, 2];
 
 type Outcome = { kind: "value"; text: string } | { kind: "error" };
 

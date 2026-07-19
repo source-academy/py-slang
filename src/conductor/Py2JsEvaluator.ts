@@ -20,7 +20,7 @@ import { EvaluatorError } from "./errors";
  * result value; a chunk that wants to surface a value print()s it. Output
  * streams per print() line through the session's onOutput hook.
  *
- * Chapter 1 only for now (the engine rejects other variants); Py2JsEvaluator2..4
+ * Chapters 1-2 for now (the engine rejects other variants); Py2JsEvaluator3/4
  * will follow the engine's chapter coverage.
  */
 abstract class Py2JsEvaluatorBase extends BasicEvaluator {
@@ -47,5 +47,11 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
 export class Py2JsEvaluator1 extends Py2JsEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
     super(conductor, 1);
+  }
+}
+
+export class Py2JsEvaluator2 extends Py2JsEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, 2);
   }
 }

@@ -1,24 +1,33 @@
 /**
  * py2js engine — runtime library.
  *
- * Native (unboxed) JS value model for SICPy chapter 1:
+ * Native (unboxed) JS value model for SICPy chapters 1-2:
  *   int      -> bigint
  *   float    -> number
  *   bool     -> boolean
  *   str      -> string
  *   None     -> null
  *   complex  -> PyComplexNumber (src/types)
+ *   list     -> PyPair (chapter 2's "list" is always a 2-element cons cell
+ *               built by pair()/llist(); see stdlibBridge.ts for the
+ *               conversion to/from CSE's flat 2-element list Value)
  *   function -> JS function carrying pyName/pyArity metadata
  *
  * User values stay unboxed so V8 can JIT the compiled program; the Python
- * chapter-1 operator semantics live in the helpers below, which mirror
+ * operator semantics live in the helpers below, which mirror
  * evaluateBinaryExpression / evaluateUnaryExpression in
  * src/engines/cse/operators.ts (the reference implementation) — same dispatch
- * order, same §1 restrictions. The operator typing rules themselves are
- * specified in docs/specs/python_typing_front.tex, python_typing_middle_12.tex
- * and python_typing_back.tex; conformance against them is pinned by
- * src/tests/operator-conformance-py2js.test.ts, which sweeps the full
- * operator × type × type cross product against the CSE machine.
+ * order, same §1/§2 restrictions (identical at these two chapters — see
+ * docs/specs/python_typing_middle_12.tex). The operator typing rules
+ * themselves are specified in docs/specs/python_typing_front.tex,
+ * python_typing_middle_12.tex and python_typing_back.tex; conformance against
+ * them is pinned by src/tests/operator-conformance-py2js.test.ts, which
+ * sweeps the full operator × type × type cross product against the CSE
+ * machine. pyEquals's bool/function exclusion checks re-apply on every
+ * recursive call into a pair's head/tail, matching CSE's structuralEquals
+ * threading `restrictChapter12` through its own list recursion — since py2js
+ * only supports chapters 1-2 so far, that check is simply unconditional here;
+ * a chapter 3/4 PR will need to parameterize it the same way CSE does.
  *
  * Proper tail calls: compiled functions return a TailCall marker from return
  * statements in tail position; `call` runs the trampoline. In dual mode every
@@ -27,10 +36,33 @@
  * through callSync — see compiler.ts's mode documentation.
  */
 import { numericCompare, pythonMod } from "../cse/utils";
-import { toPythonFloat } from "../../stdlib/utils";
+import type { Value } from "../cse/stash";
+import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
+import { stringify } from "../../utils/stringify";
 
-export type PyValue = bigint | number | boolean | string | null | PyComplexNumber | PyFunction;
+export type PyValue =
+  | bigint
+  | number
+  | boolean
+  | string
+  | null
+  | PyComplexNumber
+  | PyPair
+  | PyFunction;
+
+/**
+ * Chapter 2's pair: a 2-element cons cell built by pair()/llist(), the same
+ * shape the CSE machine represents as a 2-element list Value. Mutable fields
+ * to match that representation exactly, though nothing at chapter 2 can
+ * actually mutate one — pairmutator (set_head/set_tail) is chapter 3+.
+ */
+export class PyPair {
+  constructor(
+    public head: PyValue,
+    public tail: PyValue,
+  ) {}
+}
 
 export interface PyFunction {
   (...args: PyValue[]): PyValue | TailCall;
@@ -97,7 +129,10 @@ export function pyTypeName(v: PyValue): string {
     case "function":
       return "function";
     case "object":
-      return v === null ? "NoneType" : "complex";
+      if (v === null) return "NoneType";
+      // Matches CPython's type(...).__name__ via typeTranslator in the CSE
+      // machine (engines/cse/types.ts): a 2-element pair is always "list".
+      return v instanceof PyPair ? "list" : "complex";
     default:
       return "NoneType";
   }
@@ -109,6 +144,39 @@ function unsupported(op: string, l: PyValue, r?: PyValue): never {
     "UnsupportedOperandTypeError",
     `unsupported operand type(s) for ${op}: '${pyTypeName(l)}'${rhs}`,
   );
+}
+
+/**
+ * Converts a PyValue into the minimal CSE Value shape src/utils/stringify.ts
+ * needs, so pyStr's pair rendering (bracket notation, and recursively for
+ * anything nested inside) is pixel-identical to the CSE machine's own
+ * structured print — by reusing the actual algorithm, not a second
+ * hand-written copy that could quietly drift. Only reached for pairs (and
+ * whatever they contain); every other pyStr case keeps its own fast path.
+ */
+function toDisplayValue(v: PyValue): Value {
+  if (v === null) return { type: "none" };
+  switch (typeof v) {
+    case "bigint":
+      return { type: "bigint", value: v };
+    case "number":
+      return { type: "number", value: v };
+    case "boolean":
+      return { type: "bool", value: v };
+    case "string":
+      return { type: "string", value: v };
+    case "function":
+      // stringify's convert() only reads `.name` for these two Value kinds —
+      // the rest of BuiltinValue/FunctionValue's shape is irrelevant here.
+      return (
+        v.pyBuiltin ? { type: "builtin", name: v.pyName } : { type: "function", name: v.pyName }
+      ) as Value;
+    default:
+      if (v instanceof PyPair) {
+        return { type: "list", value: [toDisplayValue(v.head), toDisplayValue(v.tail)] };
+      }
+      return { type: "complex", value: v };
+  }
 }
 
 export function pyStr(v: PyValue): string {
@@ -124,10 +192,43 @@ export function pyStr(v: PyValue): string {
     case "function":
       return v.pyBuiltin ? `<built-in function ${v.pyName}>` : `<function ${v.pyName}>`;
     case "object":
-      return v === null ? "None" : v.toString();
+      if (v === null) return "None";
+      if (v instanceof PyPair) return stringify(toDisplayValue(v));
+      return v.toString();
     default:
       return "None";
   }
+}
+
+/** Whether `v` is a proper linked list: a chain of pairs terminated by None,
+ * as opposed to an arbitrary pair — mirrors isProperList in
+ * src/stdlib/linked-list.ts (the distinction print_llist uses below). */
+function isProperList(v: PyValue): boolean {
+  if (v === null) return true;
+  return v instanceof PyPair && isProperList(v.tail);
+}
+
+/**
+ * print_llist's box-and-pointer rendering — ports the CSE machine's
+ * _print_llist/_is_llist (src/stdlib/linked-list.ts): a proper list renders
+ * as `llist(a, b, c)`, any other pair as bracket notation `[a, b]`
+ * (recursively), and a non-pair leaf via toPythonString's repr mode (reused
+ * directly, via toDisplayValue, rather than re-implementing string escaping)
+ * — same as CSE's `toPythonString(value, true)` leaf case.
+ */
+function printLlist(v: PyValue): string {
+  if (!isProperList(v)) {
+    if (!(v instanceof PyPair)) return toPythonString(toDisplayValue(v), true);
+    return `[${printLlist(v.head)}, ${printLlist(v.tail)}]`;
+  }
+  let s = "llist(";
+  let current: PyValue = v;
+  while (current instanceof PyPair) {
+    s += printLlist(current.head) + ", ";
+    current = current.tail;
+  }
+  if (s.endsWith(", ")) s = s.slice(0, -2);
+  return s + ")";
 }
 
 const isNum = (v: PyValue): v is bigint | number => typeof v === "bigint" || typeof v === "number";
@@ -170,7 +271,16 @@ function pyEquals(l: PyValue, r: PyValue): boolean {
   }
   if (isNum(l) && isNum(r)) return numericCompare(l, r) === 0;
   if (l === null && r === null) return true;
-  return l === r; // strings by value; mixed types are simply unequal
+  if (l instanceof PyPair && r instanceof PyPair) {
+    // Identity shortcut first (mirrors CSE's structuralEquals — also lets a
+    // self-referential pair compare equal to itself without recursing
+    // forever, though chapter 2 has no pairmutator to build a cycle with).
+    // The recursive pyEquals calls re-run this function's own bool/function
+    // exclusion checks on each element, matching CSE's restrictChapter12
+    // re-check at every level of list recursion.
+    return l === r || (pyEquals(l.head, r.head) && pyEquals(l.tail, r.tail));
+  }
+  return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }
 
 /**
@@ -434,7 +544,11 @@ export class Py2JsRuntime {
       case "function":
         return true;
       case "object":
-        return v === null ? false : v.real !== 0 || v.imag !== 0;
+        if (v === null) return false;
+        // Pairs are always truthy — Python has no "empty pair" concept
+        // (isFalsy's default in cse/operators.ts: all other objects are
+        // truthy); None is the empty *list*, already handled above.
+        return v instanceof PyPair ? true : v.real !== 0 || v.imag !== 0;
       default:
         return false;
     }
@@ -561,6 +675,14 @@ export class Py2JsRuntime {
         "RuntimeError",
         "input() is not supported by the py2js engine yet",
       );
+    }),
+    // Native rather than bridged: CSE's print_llist (stdlib/linked-list.ts)
+    // is async (writes to the output stream directly), like print/input.
+    print_llist: this.builtin("print_llist", 1, v => {
+      const line = printLlist(v);
+      this.output.push(line + "\n");
+      this.onOutput?.(line);
+      return null;
     }),
     arity: this.builtin("arity", 1, f => {
       if (typeof f !== "function") {
