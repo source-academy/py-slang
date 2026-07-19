@@ -178,3 +178,92 @@ export function compilePy2Js(code: string, variant = 1, mode: CompileMode = "syn
   const { js } = prepare(code, variant, mode, {});
   return js;
 }
+
+export interface Py2JsSessionOptions extends RunPy2JsOptions {
+  /** Streams each print() line (no trailing newline) as it happens — the
+   * conductor evaluator forwards these to the frontend. */
+  onOutput?: (line: string) => void;
+}
+
+/**
+ * A persistent py2js session: chunks share one runtime and one module-level
+ * globals table (REPL compile mode, see compiler.ts), so a later chunk sees
+ * every name an earlier chunk (or a group prelude) bound — and functions from
+ * earlier chunks see later *redefinitions*, via gref's late lookup, matching
+ * the CSE machine's global-environment semantics. This is what the conductor
+ * evaluator (src/conductor/Py2JsEvaluator.ts) drives, one runChunk() per
+ * evaluateChunk().
+ *
+ * Unlike runCodePy2Js (which wraps everything in Py2JsRunError), runChunk
+ * throws the underlying errors raw — parse errors, the first resolver error,
+ * or the runtime's Py2JsRuntimeError — so callers like the conductor
+ * evaluator keep the error's name and any source location it carries.
+ */
+export class Py2JsSession {
+  readonly rt: Py2JsRuntime;
+  private readonly variant: number;
+  private readonly groups: Group[];
+  private preludeLoaded = false;
+
+  constructor(variant: number, options: Py2JsSessionOptions = {}) {
+    if (variant !== 1) {
+      throw new Py2JsRunError("parse", `py2js currently supports chapter 1 only (got ${variant})`);
+    }
+    this.variant = variant;
+    this.groups = PY2JS_GROUPS[variant] ?? [];
+    this.rt = new Py2JsRuntime();
+    this.rt.onOutput = options.onOutput;
+
+    // Same builtin layering as prepare(): bridged stdlib under the native
+    // core, extraBuiltins over everything. The bridge's source string is
+    // empty — its synthetic error nodes never point at real chunk text.
+    const bridged = bridgeStdlibGroups(this.rt, this.groups, "", variant);
+    for (const [name, value] of Object.entries(bridged)) {
+      if (!(name in this.rt.builtins)) this.rt.builtins[name] = value;
+    }
+    const extra = options.extraBuiltins;
+    const extraResolved = typeof extra === "function" ? extra(this.rt) : (extra ?? {});
+    for (const [name, value] of Object.entries(extraResolved)) {
+      this.rt.builtins[name] = annotateHostFunction(name, value);
+    }
+  }
+
+  /** Compile and run one chunk against the persistent globals (sync mode). */
+  runChunk(code: string): void {
+    if (!this.preludeLoaded) {
+      this.preludeLoaded = true;
+      const preludeText = this.groups
+        .map(g => g.prelude ?? "")
+        .filter(p => p.trim())
+        .join("\n");
+      if (preludeText.trim()) this.runChunkInternal(preludeText);
+    }
+    this.runChunkInternal(code);
+  }
+
+  private runChunkInternal(code: string): void {
+    const script = code.endsWith("\n") ? code : code + "\n";
+    const ast = parse(script);
+
+    // Prior chunks' global names are passed as the resolver's module-level
+    // names (its REPL parameter), exactly how the PVML evaluator seeds
+    // analyzeWithEnvironments from its persistent globalEnv.
+    const priorGlobals = Object.keys(this.rt.globals);
+    const resolver = new Resolver(
+      script,
+      ast,
+      makeValidatorsForChapter(this.variant),
+      [],
+      Object.keys(this.rt.builtins),
+      priorGlobals,
+    );
+    const errors = resolver.resolve(ast);
+    if (errors.length > 0) throw errors[0];
+
+    const js = compileProgram(ast, Object.keys(this.rt.builtins), {
+      mode: "sync",
+      repl: { priorGlobals },
+    });
+    new Function("__py", js)(this.rt);
+  }
+}

@@ -243,6 +243,50 @@ function complexBinop(op: string, l: PyValue, r: PyValue): PyComplexNumber {
 export class Py2JsRuntime {
   output: string[] = [];
 
+  /**
+   * Called once per print() with the formatted line (no trailing newline) —
+   * the conductor evaluator streams these to the frontend as they happen;
+   * `output` above still accumulates regardless.
+   */
+  onOutput?: (line: string) => void;
+
+  /**
+   * Persistent module-level bindings for REPL-mode chunks (see compiler.ts's
+   * REPL-mode doc): every top-level binding of every chunk lives here, so a
+   * later chunk — and functions from earlier chunks, via gref's late lookup —
+   * see the current binding, as with the CSE machine's global environment.
+   * Object.create(null): plain dictionary, no prototype pollution concerns
+   * with student-chosen names like "constructor".
+   */
+  readonly globals: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
+
+  /** Guarded read of a module-level binding: a name whose binding statement
+   * never executed (e.g. defined only in a not-taken branch) is a NameError,
+   * as in Python — undefined is not a PyValue, so the check is exact. */
+  gref(name: string): PyValue {
+    const v = this.globals[name];
+    if (v === undefined) {
+      this.nameErr(name);
+    }
+    return v;
+  }
+
+  /** A module-level name whose binding never executed (compiled reads guard
+   * with `=== undefined`; see emitName in compiler.ts). */
+  nameErr(name: string): never {
+    throw new Py2JsRuntimeError("NameError", `name '${name}' is not defined`);
+  }
+
+  /** A function-local read before its assignment executed — CPython's
+   * UnboundLocalError (the CSE machine raises the same; compiled reads of
+   * non-parameter locals guard with `=== undefined`). */
+  unboundErr(name: string): never {
+    throw new Py2JsRuntimeError(
+      "UnboundLocalError",
+      `local variable '${name}' referenced before assignment`,
+    );
+  }
+
   /** None singleton alias so compiled code can say __py.None. */
   readonly None = null;
 
@@ -507,7 +551,9 @@ export class Py2JsRuntime {
     print: this.builtin("print", -1, (...args) => {
       // Same formatting as the stdlib's print: str() of each argument,
       // space-joined, one trailing newline (pyStr mirrors toPythonString).
-      this.output.push(args.map(pyStr).join(" ") + "\n");
+      const line = args.map(pyStr).join(" ");
+      this.output.push(line + "\n");
+      this.onOutput?.(line);
       return null;
     }),
     input: this.builtin("input", -1, () => {
