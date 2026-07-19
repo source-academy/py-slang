@@ -9,6 +9,9 @@
  *   None     -> null
  *   complex  -> PyComplexNumber (src/types)
  *   function -> JS function carrying pyName/pyArity metadata
+ *   opaque   -> PyOpaque (a module value with no py2js-native representation
+ *               — e.g. a sound or image handle — held and passed around but
+ *               not otherwise inspectable; see moduleInterop.ts)
  *
  * User values stay unboxed so V8 can JIT the compiled program; the Python
  * chapter-1 operator semantics live in the helpers below, which mirror
@@ -26,11 +29,29 @@
  * async spine (acall), while TS modules call back into Python synchronously
  * through callSync — see compiler.ts's mode documentation.
  */
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { numericCompare, pythonMod } from "../cse/utils";
 import { toPythonFloat } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 
-export type PyValue = bigint | number | boolean | string | null | PyComplexNumber | PyFunction;
+export type PyValue =
+  | bigint
+  | number
+  | boolean
+  | string
+  | null
+  | PyComplexNumber
+  | PyOpaque
+  | PyFunction;
+
+/**
+ * An imported module value with no py2js-native representation (conductor's
+ * DataType.OPAQUE) — held and passed around opaquely, matching the CSE
+ * machine's "opaque" Value type. See moduleInterop.ts's moduleToPython.
+ */
+export class PyOpaque {
+  constructor(public readonly typed: TypedValue<DataType.OPAQUE>) {}
+}
 
 export interface PyFunction {
   (...args: PyValue[]): PyValue | TailCall;
@@ -97,7 +118,11 @@ export function pyTypeName(v: PyValue): string {
     case "function":
       return "function";
     case "object":
-      return v === null ? "NoneType" : "complex";
+      if (v === null) return "NoneType";
+      // Matches CPython's type(...).__name__ via typeTranslator's "opaque"
+      // passthrough in the CSE machine (engines/cse/types.ts) — an
+      // unrecognized value from a module has no more specific Python name.
+      return v instanceof PyOpaque ? "opaque" : "complex";
     default:
       return "NoneType";
   }
@@ -124,7 +149,10 @@ export function pyStr(v: PyValue): string {
     case "function":
       return v.pyBuiltin ? `<built-in function ${v.pyName}>` : `<function ${v.pyName}>`;
     case "object":
-      return v === null ? "None" : v.toString();
+      if (v === null) return "None";
+      // Matches the CSE machine's toPythonString default case (stdlib/
+      // utils.ts) for its "opaque" Value type.
+      return v instanceof PyOpaque ? "<opaque object>" : v.toString();
     default:
       return "None";
   }
@@ -287,6 +315,32 @@ export class Py2JsRuntime {
     );
   }
 
+  /**
+   * Values resolved by an async import-loading pre-pass (module loaded,
+   * converted to native PyValues — see moduleInterop.ts), keyed by the bound
+   * (aliased) name, for the compiled FromImport statement about to run to
+   * read via importedValue. Set fresh per chunk by whatever's running it
+   * (Py2JsSession.runChunk in index.ts); a chunk with no imports never
+   * touches this.
+   */
+  private pendingImports: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
+
+  /** Called before running a chunk that contains FromImport statements. */
+  setPendingImports(bindings: Record<string, PyValue>): void {
+    this.pendingImports = bindings;
+  }
+
+  /** Reads a value the import-loading pre-pass resolved for a compiled
+   * FromImport statement (see compiler.ts). Missing here is an internal
+   * inconsistency (the loader and the compiler disagreeing on which names
+   * this chunk imports), not a user-facing error. */
+  importedValue(name: string): PyValue {
+    if (!(name in this.pendingImports)) {
+      throw new Py2JsRuntimeError("SystemError", `py2js: no pending import value for '${name}'`);
+    }
+    return this.pendingImports[name];
+  }
+
   /** None singleton alias so compiled code can say __py.None. */
   readonly None = null;
 
@@ -434,7 +488,10 @@ export class Py2JsRuntime {
       case "function":
         return true;
       case "object":
-        return v === null ? false : v.real !== 0 || v.imag !== 0;
+        if (v === null) return false;
+        // Opaque module values are always truthy, like functions (CSE's
+        // isFalsy default: "all other objects are considered truthy").
+        return v instanceof PyOpaque ? true : v.real !== 0 || v.imag !== 0;
       default:
         return false;
     }
