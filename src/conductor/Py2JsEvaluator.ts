@@ -1,5 +1,7 @@
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Py2JsSession } from "../engines/py2js";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
 
 /**
@@ -16,6 +18,15 @@ import { EvaluatorError } from "./errors";
  * environment. Group preludes (none at chapter 1) are compiled into the same
  * session by its first runChunk().
  *
+ * Module loading (`from X import y`): the session is handed a
+ * GenericDataHandler — the same engine-agnostic IDataHandler implementation
+ * PyCseEvaluatorBase uses — and this evaluator registers
+ * ModuleLoaderRunnerPlugin with that same instance, exactly mirroring
+ * PyCseEvaluatorBase's own registration. A chunk that imports something is
+ * loaded and converted (moduleInterop.ts) before it compiles, and compiles in
+ * dual mode so its imported module functions are callable via the session's
+ * async spine.
+ *
  * Exec-style, like the PVML-in-browser evaluator: every chunk reports no
  * result value; a chunk that wants to surface a value print()s it. Output
  * streams per print() line through the session's onOutput hook.
@@ -28,19 +39,25 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
+    const dataHandler = new GenericDataHandler();
+    this.conductor.registerPlugin(
+      ModuleLoaderRunnerPlugin,
+      this.conductor,
+      asInterfacableEvaluator(this, dataHandler),
+    );
     this.session = new Py2JsSession(variant, {
       onOutput: line => this.conductor.sendOutput(line),
+      dataHandler,
     });
   }
 
-  evaluateChunk(chunk: string): Promise<void> {
+  async evaluateChunk(chunk: string): Promise<void> {
     try {
-      this.session.runChunk(chunk);
+      await this.session.runChunk(chunk);
       this.conductor.sendResult(undefined);
     } catch (e) {
       this.conductor.sendError(new EvaluatorError(e));
     }
-    return Promise.resolve();
   }
 }
 

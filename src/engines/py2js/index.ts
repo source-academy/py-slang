@@ -13,6 +13,8 @@
  * python_typing_back.tex), pinned against the CSE machine by
  * src/tests/operator-conformance-py2js.test.ts.
  */
+import { IDataHandler } from "@sourceacademy/conductor/types";
+import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
 import linkedList from "../../stdlib/linked-list";
@@ -21,6 +23,7 @@ import misc from "../../stdlib/misc";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
+import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
 
@@ -234,6 +237,15 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
   /** Streams each print() line (no trailing newline) as it happens — the
    * conductor evaluator forwards these to the frontend. */
   onOutput?: (line: string) => void;
+  /**
+   * Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
+   * see conductor/GenericDataHandler.ts. Defaults to a fresh
+   * GenericDataHandler; the conductor evaluator supplies its own instance so
+   * the same handler backs both `context.evaluator`-equivalent conversions
+   * and the ModuleLoaderRunnerPlugin registration (they must be the same
+   * object — see PyCseEvaluatorBase for the identical requirement).
+   */
+  dataHandler?: IDataHandler;
 }
 
 /**
@@ -249,11 +261,20 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
  * throws the underlying errors raw — parse errors, the first resolver error,
  * or the runtime's Py2JsRuntimeError — so callers like the conductor
  * evaluator keep the error's name and any source location it carries.
+ *
+ * A chunk with `from X import y` is loaded (module requested, exports
+ * converted to native values — moduleInterop.ts's loadChunkImports) in an
+ * async pre-pass before it compiles, and that one chunk compiles in dual
+ * mode so its FromImport-bound module functions are callable via `acall`;
+ * every other chunk stays on the fast sync path (see compiler.ts's mode doc
+ * and the engine README's module-interop notes on why this crosses one
+ * unavoidable microtask per call regardless).
  */
 export class Py2JsSession {
   readonly rt: Py2JsRuntime;
   private readonly variant: number;
   private readonly groups: Group[];
+  private readonly dataHandler: IDataHandler;
   private preludeLoaded = false;
 
   constructor(variant: number, options: Py2JsSessionOptions = {}) {
@@ -265,6 +286,7 @@ export class Py2JsSession {
     }
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
+    this.dataHandler = options.dataHandler ?? new GenericDataHandler();
     this.rt = new Py2JsRuntime();
     this.rt.onOutput = options.onOutput;
 
@@ -282,20 +304,20 @@ export class Py2JsSession {
     }
   }
 
-  /** Compile and run one chunk against the persistent globals (sync mode). */
-  runChunk(code: string): void {
+  /** Compile and run one chunk against the persistent globals. */
+  async runChunk(code: string): Promise<void> {
     if (!this.preludeLoaded) {
       this.preludeLoaded = true;
       const preludeText = this.groups
         .map(g => g.prelude ?? "")
         .filter(p => p.trim())
         .join("\n");
-      if (preludeText.trim()) this.runChunkInternal(preludeText);
+      if (preludeText.trim()) await this.runChunkInternal(preludeText);
     }
-    this.runChunkInternal(code);
+    await this.runChunkInternal(code);
   }
 
-  private runChunkInternal(code: string): void {
+  private async runChunkInternal(code: string): Promise<void> {
     const script = code.endsWith("\n") ? code : code + "\n";
     const ast = parse(script);
 
@@ -313,6 +335,17 @@ export class Py2JsSession {
     );
     const errors = resolver.resolve(ast);
     if (errors.length > 0) throw errors[0];
+
+    if (hasImports(ast.statements)) {
+      const bindings = await loadChunkImports(this.rt, this.dataHandler, ast.statements);
+      this.rt.setPendingImports(bindings);
+      const js = compileProgram(ast, Object.keys(this.rt.builtins), {
+        mode: "dual",
+        repl: { priorGlobals },
+      });
+      await new AsyncFunction("__py", js)(this.rt);
+      return;
+    }
 
     const js = compileProgram(ast, Object.keys(this.rt.builtins), {
       mode: "sync",

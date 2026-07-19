@@ -12,6 +12,9 @@
  *               built by pair()/llist(); see stdlibBridge.ts for the
  *               conversion to/from CSE's flat 2-element list Value)
  *   function -> JS function carrying pyName/pyArity metadata
+ *   opaque   -> PyOpaque (a module value with no py2js-native representation
+ *               — e.g. a sound or image handle — held and passed around but
+ *               not otherwise inspectable; see moduleInterop.ts)
  *
  * User values stay unboxed so V8 can JIT the compiled program; the Python
  * operator semantics live in the helpers below, which mirror
@@ -35,6 +38,7 @@
  * async spine (acall), while TS modules call back into Python synchronously
  * through callSync — see compiler.ts's mode documentation.
  */
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { numericCompare, pythonMod } from "../cse/utils";
 import type { Value } from "../cse/stash";
 import { toPythonFloat, toPythonString } from "../../stdlib/utils";
@@ -49,6 +53,7 @@ export type PyValue =
   | null
   | PyComplexNumber
   | PyPair
+  | PyOpaque
   | PyFunction;
 
 /**
@@ -62,6 +67,15 @@ export class PyPair {
     public head: PyValue,
     public tail: PyValue,
   ) {}
+}
+
+/**
+ * An imported module value with no py2js-native representation (conductor's
+ * DataType.OPAQUE) — held and passed around opaquely, matching the CSE
+ * machine's "opaque" Value type. See moduleInterop.ts's moduleToPython.
+ */
+export class PyOpaque {
+  constructor(public readonly typed: TypedValue<DataType.OPAQUE>) {}
 }
 
 export interface PyFunction {
@@ -131,8 +145,11 @@ export function pyTypeName(v: PyValue): string {
     case "object":
       if (v === null) return "NoneType";
       // Matches CPython's type(...).__name__ via typeTranslator in the CSE
-      // machine (engines/cse/types.ts): a 2-element pair is always "list".
-      return v instanceof PyPair ? "list" : "complex";
+      // machine (engines/cse/types.ts): a 2-element pair is always "list";
+      // an unrecognized module value has no more specific name than "opaque".
+      if (v instanceof PyPair) return "list";
+      if (v instanceof PyOpaque) return "opaque";
+      return "complex";
     default:
       return "NoneType";
   }
@@ -194,7 +211,9 @@ export function pyStr(v: PyValue): string {
     case "object":
       if (v === null) return "None";
       if (v instanceof PyPair) return stringify(toDisplayValue(v));
-      return v.toString();
+      // Matches the CSE machine's toPythonString default case (stdlib/
+      // utils.ts) for its "opaque" Value type.
+      return v instanceof PyOpaque ? "<opaque object>" : v.toString();
     default:
       return "None";
   }
@@ -397,6 +416,32 @@ export class Py2JsRuntime {
     );
   }
 
+  /**
+   * Values resolved by an async import-loading pre-pass (module loaded,
+   * converted to native PyValues — see moduleInterop.ts), keyed by the bound
+   * (aliased) name, for the compiled FromImport statement about to run to
+   * read via importedValue. Set fresh per chunk by whatever's running it
+   * (Py2JsSession.runChunk in index.ts); a chunk with no imports never
+   * touches this.
+   */
+  private pendingImports: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
+
+  /** Called before running a chunk that contains FromImport statements. */
+  setPendingImports(bindings: Record<string, PyValue>): void {
+    this.pendingImports = bindings;
+  }
+
+  /** Reads a value the import-loading pre-pass resolved for a compiled
+   * FromImport statement (see compiler.ts). Missing here is an internal
+   * inconsistency (the loader and the compiler disagreeing on which names
+   * this chunk imports), not a user-facing error. */
+  importedValue(name: string): PyValue {
+    if (!(name in this.pendingImports)) {
+      throw new Py2JsRuntimeError("SystemError", `py2js: no pending import value for '${name}'`);
+    }
+    return this.pendingImports[name];
+  }
+
   /** None singleton alias so compiled code can say __py.None. */
   readonly None = null;
 
@@ -545,10 +590,12 @@ export class Py2JsRuntime {
         return true;
       case "object":
         if (v === null) return false;
-        // Pairs are always truthy — Python has no "empty pair" concept
-        // (isFalsy's default in cse/operators.ts: all other objects are
-        // truthy); None is the empty *list*, already handled above.
-        return v instanceof PyPair ? true : v.real !== 0 || v.imag !== 0;
+        // Pairs and opaque module values are always truthy — Python has no
+        // "empty pair" concept (None is the empty *list*, already handled
+        // above), and CSE's isFalsy default treats every other object as
+        // truthy too.
+        if (v instanceof PyPair || v instanceof PyOpaque) return true;
+        return v.real !== 0 || v.imag !== 0;
       default:
         return false;
     }

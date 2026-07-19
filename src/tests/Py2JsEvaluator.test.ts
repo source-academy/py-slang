@@ -10,8 +10,10 @@
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { Py2JsEvaluator1, Py2JsEvaluator2 } from "../conductor/Py2JsEvaluator";
 
-/** Minimal IRunnerPlugin mock: the evaluator only ever calls sendResult/
- * sendError/sendOutput on its `conductor`. */
+/** Minimal IRunnerPlugin mock: the evaluator calls sendResult/sendError/
+ * sendOutput on its `conductor`, plus registerPlugin once in its constructor
+ * (module-loader registration — see Py2JsEvaluator.ts); no test here imports
+ * anything, so the stub just needs to exist, not do anything real. */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: { name: string; message: string }[] = [];
@@ -20,6 +22,7 @@ function makeMockConductor() {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e as { name: string; message: string }),
     sendOutput: (m: string) => outputs.push(m),
+    registerPlugin: () => undefined,
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }
