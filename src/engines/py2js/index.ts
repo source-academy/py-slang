@@ -7,9 +7,9 @@
  * run against a fresh Py2JsRuntime, collecting print() output.
  *
  * Exec-style only, like the PVML-in-browser pathway: a program has no "final
- * value" — everything observable goes through print(). Currently chapter 1
- * only; the runtime's operator helpers implement the §1 typing rules
- * (docs/specs/python_typing_front.tex, python_typing_middle_12.tex,
+ * value" — everything observable goes through print(). Currently chapters
+ * 1-2 (identical operator typing rules at both — docs/specs/
+ * python_typing_front.tex, python_typing_middle_12.tex,
  * python_typing_back.tex), pinned against the CSE machine by
  * src/tests/operator-conformance-py2js.test.ts.
  */
@@ -17,6 +17,7 @@ import { IDataHandler } from "@sourceacademy/conductor/types";
 import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
+import linkedList from "../../stdlib/linked-list";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import type { Group } from "../../stdlib/utils";
@@ -26,13 +27,16 @@ import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
 
+const SUPPORTED_CHAPTERS = [1, 2];
+
 /**
  * Stdlib groups per chapter, bridged into the runtime by prepare(). Mirrors
- * runner.ts's VARIANT_GROUPS[1] (kept separate so the engine does not pull
- * in the runner's conductor plumbing); extend as chapters 2+ land.
+ * runner.ts's VARIANT_GROUPS (kept separate so the engine does not pull in
+ * the runner's conductor plumbing); extend as chapters 3+ land.
  */
 const PY2JS_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
+  2: [misc, math, linkedList],
 };
 
 export { Py2JsCompileError, Py2JsRuntime, Py2JsRuntimeError };
@@ -68,23 +72,77 @@ const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as
   ...args: string[]
 ) => (rt: Py2JsRuntime) => Promise<void>;
 
+/**
+ * Compiles `script` against `rt`'s current builtins/globals and returns the
+ * generated JS — REPL mode always, with `priorGlobals` as whatever
+ * module-level names already exist (empty for the prelude itself; the
+ * prelude's own names for the main script). REPL mode's globals *table* is
+ * what lets a prelude define names a separately-compiled later script can
+ * see; program mode's per-call `let` locals cannot span two compilations
+ * (see compiler.ts's mode doc) — the reason `prepare()` uses REPL mode
+ * unconditionally rather than only when a chapter actually has a prelude.
+ */
+function compileScript(
+  rt: Py2JsRuntime,
+  script: string,
+  variant: number,
+  mode: CompileMode,
+): string {
+  let ast;
+  try {
+    ast = parse(script);
+  } catch (e: unknown) {
+    throw new Py2JsRunError("parse", String((e as { message?: string })?.message ?? e));
+  }
+
+  const priorGlobals = Object.keys(rt.globals);
+  // Same static pipeline as the other engines: the Resolver checks names and
+  // enforces the chapter's feature validators. The runtime's builtin names
+  // are passed as prelude names (its own term for names resolvable without a
+  // binding statement) so they resolve without a stdlib group; priorGlobals
+  // are real module-level bindings an earlier compilation (the prelude) made.
+  const resolver = new Resolver(
+    script,
+    ast,
+    makeValidatorsForChapter(variant),
+    [],
+    Object.keys(rt.builtins),
+    priorGlobals,
+  );
+  const errors = resolver.resolve(ast);
+  if (errors.length > 0) {
+    throw new Py2JsRunError("analysis", errors.map(e => e.message).join("\n"));
+  }
+
+  try {
+    return compileProgram(ast, Object.keys(rt.builtins), { mode, repl: { priorGlobals } });
+  } catch (e: unknown) {
+    if (e instanceof Py2JsCompileError) throw new Py2JsRunError("analysis", e.message);
+    throw e;
+  }
+}
+
 function prepare(
   code: string,
   variant: number,
   mode: CompileMode,
   options: RunPy2JsOptions,
 ): { rt: Py2JsRuntime; js: string } {
-  if (variant !== 1) {
-    throw new Py2JsRunError("parse", `py2js currently supports chapter 1 only (got ${variant})`);
+  if (!SUPPORTED_CHAPTERS.includes(variant)) {
+    throw new Py2JsRunError(
+      "parse",
+      `py2js currently supports chapters ${SUPPORTED_CHAPTERS.join("-")} only (got ${variant})`,
+    );
   }
 
   const rt = new Py2JsRuntime();
   const script = code.endsWith("\n") ? code : code + "\n";
+  const groups = PY2JS_GROUPS[variant] ?? [];
 
   // The chapter's stdlib groups, bridged to native values (stdlibBridge.ts).
   // The runtime's native core (print/input/arity) wins over same-named
   // bridged entries; extraBuiltins (module bindings etc.) override anything.
-  const bridged = bridgeStdlibGroups(rt, PY2JS_GROUPS[variant] ?? [], script, variant);
+  const bridged = bridgeStdlibGroups(rt, groups, script, variant);
   for (const [name, value] of Object.entries(bridged)) {
     if (!(name in rt.builtins)) rt.builtins[name] = value;
   }
@@ -97,35 +155,28 @@ function prepare(
     rt.builtins[name] = annotateHostFunction(name, value);
   }
 
-  let ast;
-  try {
-    ast = parse(script);
-  } catch (e: unknown) {
-    throw new Py2JsRunError("parse", String((e as { message?: string })?.message ?? e));
+  // Group preludes (SICPy source defining higher-level functions in terms of
+  // the group's own primitives — e.g. linked-list.prelude.ts's map/filter/
+  // reduce) run once, always in sync mode: nothing at chapter 1-2 imports
+  // anything, so there is no reason for the prelude itself to need the async
+  // spine even when the main script below is compiled in dual mode.
+  const preludeText = groups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+  if (preludeText.trim()) {
+    const preludeJs = compileScript(rt, preludeText + "\n", variant, "sync");
+    try {
+      new Function("__py", preludeJs)(rt);
+    } catch (e: unknown) {
+      throw new Py2JsRunError(
+        "runtime",
+        e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      );
+    }
   }
 
-  // Same static pipeline as the other engines: the Resolver checks names and
-  // enforces the chapter's feature validators. The runtime's builtin names
-  // are passed as prelude names so they resolve without a stdlib group.
-  const resolver = new Resolver(
-    script,
-    ast,
-    makeValidatorsForChapter(variant),
-    [],
-    Object.keys(rt.builtins),
-  );
-  const errors = resolver.resolve(ast);
-  if (errors.length > 0) {
-    throw new Py2JsRunError("analysis", errors.map(e => e.message).join("\n"));
-  }
-
-  let js;
-  try {
-    js = compileProgram(ast, Object.keys(rt.builtins), { mode });
-  } catch (e: unknown) {
-    if (e instanceof Py2JsCompileError) throw new Py2JsRunError("analysis", e.message);
-    throw e;
-  }
+  const js = compileScript(rt, script, variant, mode);
   return { rt, js };
 }
 
@@ -227,8 +278,11 @@ export class Py2JsSession {
   private preludeLoaded = false;
 
   constructor(variant: number, options: Py2JsSessionOptions = {}) {
-    if (variant !== 1) {
-      throw new Py2JsRunError("parse", `py2js currently supports chapter 1 only (got ${variant})`);
+    if (!SUPPORTED_CHAPTERS.includes(variant)) {
+      throw new Py2JsRunError(
+        "parse",
+        `py2js currently supports chapters ${SUPPORTED_CHAPTERS.join("-")} only (got ${variant})`,
+      );
     }
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];

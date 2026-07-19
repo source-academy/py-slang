@@ -9,13 +9,22 @@
  * stdlib semantics can never drift between them. Conformance is pinned by
  * src/tests/stdlib-conformance-py2js.test.ts.
  *
- * What crosses the boundary at chapter 1: int/float/bool/str/None/complex
- * round-trip losslessly (complex is a PyComplexNumber on both sides).
- * Functions cross one way only (as arguments — no chapter-1 stdlib builtin
- * returns a function): a user function becomes a minimal FunctionValue (so
- * is_function answers True and error messages say 'function'), a py2js
- * builtin becomes a stub BuiltinValue. Neither is callable from stdlib code,
- * which no chapter-1 builtin attempts.
+ * What crosses the boundary at chapters 1-2: int/float/bool/str/None/complex
+ * round-trip losslessly (complex is a PyComplexNumber on both sides); a pair
+ * (PyPair) round-trips recursively to/from CSE's flat 2-element list Value —
+ * chapter 2 has no list-literal syntax and no list.ts group, so pair()/
+ * llist() (the only way to construct one) always produce exactly that shape.
+ * A function crosses one way *as a value a builtin inspects* (a user function
+ * becomes a minimal FunctionValue, so is_function answers True and error
+ * messages say 'function'; a py2js builtin becomes a stub BuiltinValue —
+ * neither is callable from stdlib code, which no chapter-1/2 builtin
+ * attempts) — but it can still flow back out *unchanged*, e.g.
+ * `head(pair(1, f))` or `llist(f)`, since no chapter-1/2 builtin fabricates a
+ * genuinely new function value, only passes an argument through structurally
+ * (into/out of a pair). `functionOrigin` (a WeakMap from the synthetic tagged
+ * stand-in back to the real PyFunction) is what makes that round-trip
+ * lossless without reconstructing a function from its printable stand-in,
+ * which is impossible in general.
  *
  * Error handling: stdlib builtins raise through handleRuntimeError, which
  * records on the bridge's Context and throws the error class — the throw
@@ -39,7 +48,7 @@ import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
 import type { BuiltinValue, Value } from "../cse/stash";
-import { Py2JsRuntime, Py2JsRuntimeError, PyFunction, PyOpaque, PyValue } from "./runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyFunction, PyOpaque, PyPair, PyValue } from "./runtime";
 
 function syntheticCallNode(name: string): ExprNS.Call {
   const token = new Token(TokenType.NAME, name, 1, 0, 0);
@@ -47,6 +56,10 @@ function syntheticCallNode(name: string): ExprNS.Call {
   const callee = new ExprNS.Variable(token, token, token);
   return new ExprNS.Call(token, token, callee, []);
 }
+
+/** Maps a synthetic tagged stand-in (built below) back to the real PyFunction
+ * it stands in for — see the file header's note on lossless pass-through. */
+const functionOrigin = new WeakMap<object, PyFunction>();
 
 function toTagged(v: PyValue): Value {
   switch (typeof v) {
@@ -64,7 +77,7 @@ function toTagged(v: PyValue): Value {
       // annotateHostFunction (index.ts establishes the metadata invariant
       // for extraBuiltins; Function#name can be "", hence || not ??).
       const name = v.pyName ?? (v.name || "(anonymous)");
-      return v.pyBuiltin
+      const tagged: Value = v.pyBuiltin
         ? {
             type: "builtin",
             name,
@@ -83,10 +96,13 @@ function toTagged(v: PyValue): Value {
             body: [],
             env: undefined as unknown as Environment,
           };
+      functionOrigin.set(tagged, v);
+      return tagged;
     }
     default:
       if (v === null) return { type: "none" };
-      // No chapter-1 stdlib builtin accepts an opaque module value as an
+      if (v instanceof PyPair) return toTaggedPair(v);
+      // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
       // *some* CSE Value the builtin's own dispatch will reject cleanly —
@@ -94,6 +110,33 @@ function toTagged(v: PyValue): Value {
       if (v instanceof PyOpaque) return { type: "opaque", value: v.typed };
       return { type: "complex", value: v };
   }
+}
+
+/**
+ * Converts a PyPair chain to CSE's nested list Value, iterating along the
+ * `.tail` spine instead of recursing: a long proper list (enum_llist,
+ * reverse, map, …) has its length entirely along that spine, so a naive
+ * `{ type: "list", value: [toTagged(v.head), toTagged(v.tail)] }` would cost
+ * one JS stack frame per *element* just to convert a single argument for one
+ * bridged call — a list of a few thousand elements already overflows the
+ * stack, regardless of how tail-recursive the user's own Python is (its own
+ * tail calls go through py2js's trampoline; this bridge conversion does not).
+ * `.head` is still converted via the ordinary (recursive) toTagged, since a
+ * head is normally a scalar leaf; a list-of-lists nested arbitrarily deep
+ * through `.head` remains a (much rarer) recursion, same as before.
+ */
+function toTaggedPair(pair: PyPair): Value {
+  const heads: PyValue[] = [];
+  let current: PyValue = pair;
+  while (current instanceof PyPair) {
+    heads.push(current.head);
+    current = current.tail;
+  }
+  let tail = toTagged(current);
+  for (let i = heads.length - 1; i >= 0; i--) {
+    tail = { type: "list", value: [toTagged(heads[i]), tail] };
+  }
+  return tail;
 }
 
 function fromTagged(name: string, v: Value): PyValue {
@@ -107,9 +150,36 @@ function fromTagged(name: string, v: Value): PyValue {
       return v.value;
     case "none":
       return null;
+    case "list":
+      // Chapter 2 has no list-literal syntax and no list.ts group (chapter
+      // 3+), so pair()/llist() — the only way to construct one — always
+      // produce exactly a 2-element cons cell; anything else would mean
+      // list.ts got bridged ahead of chapter-3 support actually landing.
+      if (v.value.length !== 2) {
+        throw new Py2JsRuntimeError(
+          "SystemError",
+          `stdlib bridge: ${name}() returned a non-pair list value (length ${v.value.length}), not yet supported`,
+        );
+      }
+      return new PyPair(fromTagged(name, v.value[0]), fromTagged(name, v.value[1]));
+    case "function":
+    case "builtin": {
+      // A function value only ever flows back out as one of THIS bridge's
+      // own synthetic stand-ins passed through unchanged (see file header;
+      // e.g. head(pair(1, f)) or llist(f)) — never a genuinely new closure a
+      // builtin fabricated, which no chapter-1/2 builtin does. Recover the
+      // original PyFunction rather than trying to reconstruct one.
+      const original = functionOrigin.get(v);
+      if (original !== undefined) return original;
+      throw new Py2JsRuntimeError(
+        "SystemError",
+        `stdlib bridge: ${name}() returned a function value the bridge did not itself produce`,
+      );
+    }
     default:
-      // No chapter-1 stdlib builtin returns a function/closure/list; reaching
-      // this means the bridge needs extending, not that user code is wrong.
+      // No chapter-1/2 stdlib builtin returns a closure or list-family value
+      // other than a pair; reaching this means the bridge needs extending,
+      // not that user code is wrong.
       throw new Py2JsRuntimeError(
         "SystemError",
         `stdlib bridge: ${name}() returned an unbridgeable '${v.type}' value`,

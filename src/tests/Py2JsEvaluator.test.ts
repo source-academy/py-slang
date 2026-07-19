@@ -8,7 +8,7 @@
  * whose binding never executed raises NameError.
  */
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { Py2JsEvaluator1 } from "../conductor/Py2JsEvaluator";
+import { Py2JsEvaluator1, Py2JsEvaluator2 } from "../conductor/Py2JsEvaluator";
 
 /** Minimal IRunnerPlugin mock: the evaluator calls sendResult/sendError/
  * sendOutput on its `conductor`, plus registerPlugin once in its constructor
@@ -128,5 +128,30 @@ describe("Py2JsEvaluator1", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["1", "a b", ""]);
+  });
+});
+
+describe("Py2JsEvaluator2", () => {
+  test("the linked-list prelude is available from the first chunk, and pairs persist across chunks", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new Py2JsEvaluator2(conductor);
+
+    await evaluator.evaluateChunk("xs = pair(1, pair(2, pair(3, None)))\n");
+    await evaluator.evaluateChunk("print(length(xs))\n");
+    await evaluator.evaluateChunk("print(reverse(xs))\n");
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["3", "[3, [2, [1, None]]]"]);
+  });
+
+  test("a function defined in one chunk works as a callback passed to a later chunk's map", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new Py2JsEvaluator2(conductor);
+
+    await evaluator.evaluateChunk("def double(x):\n    return x * 2\n");
+    await evaluator.evaluateChunk("print(map(double, pair(1, pair(2, None))))\n");
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["[2, [4, None]]"]);
   });
 });
