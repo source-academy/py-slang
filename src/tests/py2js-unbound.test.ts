@@ -54,6 +54,22 @@ print(f(False))`;
   expect((outcome as { error: string }).error).toContain("UnboundLocalError");
 });
 
+test("calling a function before the module-level global it reads is assigned is a NameError (CSE parity)", async () => {
+  // Pure temporal ordering, no branch involved: f() runs before `x = 5` has
+  // ever executed. Python resolves a function's global reads dynamically at
+  // call time (not at def time), so this is a runtime NameError, not a
+  // static one — the resolver already knows `x` is a module-level name (it
+  // is bound later in this same chunk), it just hasn't been written yet.
+  const code = `def f():
+    return x
+print(f())
+x = 5`;
+  expect(await cseErrors(code)).toBe(true);
+  const outcome = py2jsOutcome(code);
+  expect(outcome).toHaveProperty("error");
+  expect((outcome as { error: string }).error).toContain("NameError");
+});
+
 test("module-level name bound only in a not-taken branch is a NameError (CSE parity)", async () => {
   const code = `if 1 > 2:
     y = 1
