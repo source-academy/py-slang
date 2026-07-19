@@ -504,7 +504,10 @@ export class Py2JsRuntime {
     abs: this.builtin("abs", 1, v => {
       if (typeof v === "bigint") return v < 0n ? -v : v;
       if (typeof v === "number") return Math.abs(v);
-      if (isComplex(v)) return Math.sqrt(v.real * v.real + v.imag * v.imag);
+      // Math.hypot scales internally, so |z| survives components whose
+      // squares overflow/underflow (abs(complex(1e200, 0)) is 1e200, not
+      // inf) — same algorithm CPython's abs(complex) uses.
+      if (isComplex(v)) return Math.hypot(v.real, v.imag);
       throw new Py2JsRuntimeError("TypeError", `bad operand type for abs(): '${pyTypeName(v)}'`);
     }),
     max: this.builtin("max", 2, (a, b) => (pyOrder(">=", a, b) ? a! : b!)),
@@ -516,7 +519,15 @@ export class Py2JsRuntime {
     math_cos: this.numericBuiltin("math_cos", Math.cos),
     math_floor: this.builtin("math_floor", 1, v => {
       if (typeof v === "bigint") return v;
-      if (typeof v === "number") return BigInt(Math.floor(v));
+      if (typeof v === "number") {
+        // BigInt() throws RangeError on non-finite floats; raise the same
+        // errors CPython's math.floor does instead.
+        if (Number.isNaN(v))
+          throw new Py2JsRuntimeError("ValueError", "cannot convert float NaN to integer");
+        if (!Number.isFinite(v))
+          throw new Py2JsRuntimeError("OverflowError", "cannot convert float infinity to integer");
+        return BigInt(Math.floor(v));
+      }
       throw new Py2JsRuntimeError("TypeError", `must be real number, not ${pyTypeName(v)}`);
     }),
     math_pi: Math.PI,

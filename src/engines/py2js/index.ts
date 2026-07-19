@@ -112,7 +112,12 @@ export function runCodePy2Js(
   try {
     new Function("__py", js)(rt);
   } catch (e: unknown) {
-    throw new Py2JsRunError("runtime", String((e as { message?: string })?.message ?? e));
+    throw new Py2JsRunError(
+      "runtime",
+      // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
+      // callers can still tell ZeroDivisionError from TypeError etc.
+      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    );
   }
   return { output: rt.output.join("") };
 }
@@ -131,7 +136,12 @@ export async function runCodePy2JsDual(
   try {
     await new AsyncFunction("__py", js)(rt);
   } catch (e: unknown) {
-    throw new Py2JsRunError("runtime", String((e as { message?: string })?.message ?? e));
+    throw new Py2JsRunError(
+      "runtime",
+      // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
+      // callers can still tell ZeroDivisionError from TypeError etc.
+      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    );
   }
   return { output: rt.output.join("") };
 }
