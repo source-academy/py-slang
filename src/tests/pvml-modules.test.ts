@@ -159,7 +159,10 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     { returnType: DataType.NUMBER, args: [DataType.LIST] },
     async function* (list: TypedValue<DataType.LIST>) {
       const elements = await dh.list_to_vec(list);
-      const sum = elements.reduce((acc, each) => acc + (each as TypedValue<DataType.NUMBER>).value, 0);
+      const sum = elements.reduce(
+        (acc, each) => acc + (each as TypedValue<DataType.NUMBER>).value,
+        0,
+      );
       return num(sum);
     },
   );
