@@ -73,6 +73,17 @@ export interface PVMLArray {
   elements: PVMLBoxType[];
 }
 
+/**
+ * Marks a PVMLArray as a genuine Python list literal (`[a, b]`) or rest-param collection
+ * (`def f(*rest)`), as opposed to a value that happens to also be a 2-element array (a dotted
+ * pair built via pair()/llist(), or one round-tripped from a module's DataType.PAIR) - mirrors
+ * the CSE machine's listLiteralValues (src/engines/cse/modules.ts) exactly, for the same reason:
+ * pvmlToModule's "array" case can't tell a 2-element list literal apart from a dotted pair by
+ * shape alone (see its own doc comment). A side-tag rather than a shape change so nothing else
+ * that already treats these as flat arrays (indexing, len(), iteration, etc.) needs to change.
+ */
+export const pvmlListLiteralArrays = new WeakSet<PVMLArray>();
+
 export interface PVMLIterator {
   type: "iterator";
   kind: "range" | "list";
@@ -250,6 +261,10 @@ export interface Instruction {
 
 import OpCodes from "./opcodes";
 
+/** Shared default for PVMLIR's listLiteralOffsets — avoids allocating a fresh empty Set for
+ * every function that doesn't need it (the vast majority). */
+const EMPTY_OFFSET_SET: ReadonlySet<number> = new Set();
+
 /**
  * IR representation of a single compiled function.
  *
@@ -299,6 +314,14 @@ export class PVMLIR {
    * `true` — see PVMLCompiler's visitStarredExpr). */
   readonly hasRestParam: boolean;
   /**
+   * Instruction offsets of the LDLG that pushes a just-built list literal's completed array (see
+   * PVMLCompiler's visitListExpr and PVMLIRBuilder's markListLiteral) — checked by step()'s LDLG
+   * case to tag the loaded value into pvmlListLiteralArrays. In-memory-only metadata, like
+   * `functionName`/`hasRestParam` — not encoded in the serialised binary format (native Pynter has
+   * no module-interop concept to disambiguate for in the first place, so it never needs this).
+   */
+  readonly listLiteralOffsets: ReadonlySet<number>;
+  /**
    * The function table of the PVMLProgram this function was compiled into —
    * stamped by PVMLProgram's constructor once every sibling PVMLIR exists,
    * so left empty here and populated after construction (the one
@@ -330,6 +353,7 @@ export class PVMLIR {
     functionName: string = "(anonymous)",
     complexes: PyComplexNumber[] = [],
     hasRestParam: boolean = false,
+    listLiteralOffsets: ReadonlySet<number> = EMPTY_OFFSET_SET,
   ) {
     this.opcodes = opcodes;
     this.arg1s = arg1s;
@@ -343,6 +367,7 @@ export class PVMLIR {
     this.numArgs = numArgs;
     this.functionName = functionName;
     this.hasRestParam = hasRestParam;
+    this.listLiteralOffsets = listLiteralOffsets;
   }
 
   /** Compatibility: reconstruct Instruction[] for assembler/debug (not hot path). */

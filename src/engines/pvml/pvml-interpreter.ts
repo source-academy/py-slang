@@ -22,6 +22,7 @@ import {
   PVMLIterator,
   PVMLProgram,
   PVMLType,
+  pvmlListLiteralArrays,
 } from "./types";
 
 /** Whether a value is excluded from §1/§2's `==`/`!=` entirely: bool (avoiding
@@ -658,6 +659,18 @@ export class PVMLInterpreter {
 
       // Variable operations
       case OpCodes.LDLG:
+        this.loadLocal(a1);
+        // A list literal's compiled shape ends with exactly this instruction pushing its
+        // completed array (see PVMLCompiler's visitListExpr) - tag it here so pvmlToModule can
+        // tell an exactly-2-element list literal apart from a dotted pair (see
+        // pvmlListLiteralArrays' doc comment in types.ts).
+        if (ir.listLiteralOffsets.has(pc)) {
+          const loaded = this.peek();
+          if (isPVMLObject(loaded) && loaded.type === "array") {
+            pvmlListLiteralArrays.add(loaded);
+          }
+        }
+        break;
       case OpCodes.LDLF:
       case OpCodes.LDLB:
         this.loadLocal(a1);
@@ -1623,6 +1636,11 @@ export class PVMLInterpreter {
     }
     if (funcDef.hasRestParam) {
       const restArgs: PVMLArray = { type: "array", elements: args.slice(numFixedParams) };
+      // A flat, arbitrary-length collection - the same category as a list literal, not a
+      // pair()/llist() chain - so module interop needs the same tag to reconstruct it as a proper
+      // list rather than misreading an exactly-2-arg case as a dotted pair. See
+      // pvmlListLiteralArrays' doc comment in types.ts.
+      pvmlListLiteralArrays.add(restArgs);
       newEnv.set(numFixedParams, restArgs);
       if (__DEBUG__)
         debug(

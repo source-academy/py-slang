@@ -1,5 +1,12 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
-import { PVMLBoxType, PVMLExtern, PVMLHostCall, getPVMLType, isPVMLObject } from "./types";
+import {
+  PVMLBoxType,
+  PVMLExtern,
+  PVMLHostCall,
+  getPVMLType,
+  isPVMLObject,
+  pvmlListLiteralArrays,
+} from "./types";
 
 /**
  * Conversion layer between PVML runtime values and the conductor module
@@ -120,17 +127,15 @@ export async function pvmlToModule(
         // PVMLOpaque's doc comment for why `value` is typed unknown.
         return value.value as TypedValue<DataType.OPAQUE>;
       case "array": {
-        // A 2-element array is PVML's pair (see moduleToPvml's PAIR case),
-        // reconstructed as a single pair_make(head, tail) — the chain need
-        // not terminate in None (e.g. sound's Sound is a dotted pair). Any
-        // other length is unambiguously a flat Python list — fold it into a
-        // proper PAIR/EMPTY_LIST chain. Caveat, shared with the CSE
-        // converter's pre-listLiteralValues behavior: a *literal* 2-element
-        // Python list [a, b] is indistinguishable from a pair here and
-        // converts as a dotted pair; PVML has no construction-site tag to
-        // disambiguate (CSE grew one — see listLiteralValues in
-        // src/engines/cse/modules.ts).
-        if (value.elements.length === 2) {
+        // A list literal (tagged at construction — see pvmlListLiteralArrays' doc comment in
+        // types.ts) is unambiguously a Source list, of any length including 2 — fold it into a
+        // proper PAIR/EMPTY_LIST chain, or list-typed module parameters (e.g. sound's
+        // consecutively/simultaneously/stacking_adsr envelopes) would silently see zero (or the
+        // wrong) elements instead of the list the student actually wrote. Otherwise, a 2-element
+        // array is PVML's pair (see moduleToPvml's PAIR case), reconstructed as a single
+        // pair_make(head, tail) — the chain need not terminate in None (e.g. sound's Sound is a
+        // dotted pair). Any other length is unambiguously a flat Python list either way.
+        if (!pvmlListLiteralArrays.has(value) && value.elements.length === 2) {
           const [head, tail] = value.elements;
           return dh.pair_make(
             await pvmlToModule(dh, head, callPvml),
