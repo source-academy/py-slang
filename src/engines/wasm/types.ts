@@ -1,5 +1,6 @@
 import type { WasmInstruction } from "@sourceacademy/wasm-util";
 import { Group } from "../../stdlib/utils";
+import type { PreparedModuleBindings } from "./moduleInterop";
 
 export type WasmExports = {
   main: () => [number, bigint];
@@ -26,6 +27,11 @@ export type CompileOptions = {
 
   chapter?: number;
   groups?: Group[];
+  /** Pre-loaded imported-module bindings for the chunk's `from X import ...`
+   * statements — see moduleInterop.ts and PyWasmEvaluator's loadImports.
+   * Absent for import-free chunks (and for callers with no module loader,
+   * where a FromImport statement then fails compilation). */
+  moduleBindings?: PreparedModuleBindings;
 };
 
 export const PARSE_TREE_STRINGS = [

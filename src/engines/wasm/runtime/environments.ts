@@ -97,12 +97,12 @@ export const PRE_APPLY_FX = wasm
     // the wrong entry. ALLOC_ENV's parent-reload only matches a CLOSURE
     // shadow-stack entry, so the env's parent stays 0 — correct, a module
     // function has no lexical parent here.
-    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.HOSTREF))).then(
-      wasm
-        .call(SILENT_PUSH_SHADOW_STACK_FX)
-        .args(i32.const(TYPE_TAG.HOSTREF), local.get("$val")),
-      wasm.return(wasm.call(ALLOC_ENV_FX).args(local.get("$arg_len"))),
-    ),
+    wasm
+      .if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.HOSTREF)))
+      .then(
+        wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(i32.const(TYPE_TAG.HOSTREF), local.get("$val")),
+        wasm.return(wasm.call(ALLOC_ENV_FX).args(local.get("$arg_len"))),
+      ),
 
     wasm
       .if(i32.ne(local.get("$tag"), i32.const(TYPE_TAG.CLOSURE)))
@@ -213,35 +213,43 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
       // return. Arity/starred handling is host-side, except the starred bit
       // itself, which must be rejected here: the unpacking machinery below
       // is closure-specific.
-      wasm.if(i32.eq(local.get("$callee_tag"), i32.const(TYPE_TAG.HOSTREF))).then(
-        local.set("$i", i32.const(0)),
-        wasm.loop("$hostref_star_check").body(
-          wasm.if(i32.lt_s(local.get("$i"), local.get("$arg_len"))).then(
-            wasm
-              .if(
-                i32.shr_u(
-                  i32.load(
-                    i32.add(
-                      i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))),
-                      i32.const(ENV_HEAD_SIZE),
+      wasm
+        .if(i32.eq(local.get("$callee_tag"), i32.const(TYPE_TAG.HOSTREF)))
+        .then(
+          local.set("$i", i32.const(0)),
+          wasm
+            .loop("$hostref_star_check")
+            .body(
+              wasm
+                .if(i32.lt_s(local.get("$i"), local.get("$arg_len")))
+                .then(
+                  wasm
+                    .if(
+                      i32.shr_u(
+                        i32.load(
+                          i32.add(
+                            i32.add(global.get(CURR_ENV), i32.mul(local.get("$i"), i32.const(12))),
+                            i32.const(ENV_HEAD_SIZE),
+                          ),
+                        ),
+                        i32.const(31),
+                      ),
+                    )
+                    .then(
+                      wasm
+                        .call("$_log_error")
+                        .args(i32.const(getErrorIndex(ERROR_MAP.HOSTREF_STARRED))),
+                      wasm.unreachable(),
                     ),
-                  ),
-                  i32.const(31),
+                  local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+                  wasm.br("$hostref_star_check"),
                 ),
-              )
-              .then(
-                wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.HOSTREF_STARRED))),
-                wasm.unreachable(),
-              ),
-            local.set("$i", i32.add(local.get("$i"), i32.const(1))),
-            wasm.br("$hostref_star_check"),
-          ),
+            ),
+          wasm
+            .call("$_host_module_call")
+            .args(i32.wrap_i64(local.get("$val")), global.get(CURR_ENV), local.get("$arg_len")),
+          wasm.return(...RETURN_NONVOID_SUFFIX),
         ),
-        wasm
-          .call("$_host_module_call")
-          .args(i32.wrap_i64(local.get("$val")), global.get(CURR_ENV), local.get("$arg_len")),
-        wasm.return(...RETURN_NONVOID_SUFFIX),
-      ),
 
       local.set(
         "$arity",
