@@ -121,4 +121,13 @@ print(head(tail(tail(s)())()))
     const code = "print(stream_to_llist(stream(1, 2, 3)))";
     expect(runCodePy2Js(code, 3).output).toBe("[1, [2, [3, None]]]\n");
   });
+
+  test("a longer stream still yields elements in order (regression: nativeStream is index-based, not args.slice(1))", () => {
+    const code = `s = stream(10, 20, 30, 40, 50)
+print(stream_length(s))
+print(stream_ref(s, 0))
+print(stream_ref(s, 4))
+`;
+    expect(runCodePy2Js(code, 3).output).toBe("5\n10\n50\n");
+  });
 });

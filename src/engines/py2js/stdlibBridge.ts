@@ -49,7 +49,15 @@ import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
 import type { BuiltinValue, Value } from "../cse/stash";
-import { Py2JsRuntime, Py2JsRuntimeError, PyFunction, PyOpaque, PyPair, PyValue } from "./runtime";
+import {
+  Py2JsRuntime,
+  Py2JsRuntimeError,
+  PyFunction,
+  PyOpaque,
+  PyPair,
+  pyTypeName,
+  PyValue,
+} from "./runtime";
 
 function syntheticCallNode(name: string): ExprNS.Call {
   const token = new Token(TokenType.NAME, name, 1, 0, 0);
@@ -254,7 +262,7 @@ function nativeSetPairSlot(name: string, index: 0 | 1): PyFunction {
     }
     throw new Py2JsRuntimeError(
       "TypeError",
-      `${name}() expects a pair as first argument, got '${typeof target}'`,
+      `${name}() expects a pair as first argument, got '${pyTypeName(target)}'`,
     );
   }) as PyFunction;
   f.pyName = name;
@@ -275,15 +283,19 @@ function nativeSetPairSlot(name: string, index: 0 | 1): PyFunction {
  * unchanged, not ones a CSE builtin invents on the spot — so it's
  * reimplemented directly against py2js's own PyPair/PyFunction instead,
  * mirroring StreamBuiltins.stream's recursion exactly.
+ *
+ * `build` takes an index rather than re-slicing `args` on every lazy step:
+ * `args.slice(1)` would copy the remaining N-1 elements at each of N steps,
+ * O(N^2) time and space for an N-element stream.
  */
 function nativeStream(rt: Py2JsRuntime): PyFunction {
-  const build = (args: PyValue[]): PyValue => {
-    if (args.length === 0) return null;
-    const tail = rt.def("anonymous stream", 0, () => build(args.slice(1)));
+  const build = (args: PyValue[], index: number): PyValue => {
+    if (index >= args.length) return null;
+    const tail = rt.def("anonymous stream", 0, () => build(args, index + 1));
     tail.pyBuiltin = true;
-    return new PyPair(args[0], tail);
+    return new PyPair(args[index], tail);
   };
-  const f = ((...args: PyValue[]) => build(args)) as PyFunction;
+  const f = ((...args: PyValue[]) => build(args, 0)) as PyFunction;
   f.pyName = "stream";
   f.pyArity = -1;
   f.pyBuiltin = true;
