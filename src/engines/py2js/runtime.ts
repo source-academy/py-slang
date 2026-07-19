@@ -39,6 +39,13 @@ export interface PyFunction {
   pyArity: number;
   pyBuiltin?: boolean;
   /**
+   * For bridged stdlib builtins: the CSE-side minArgs, reported by the
+   * native arity() builtin so both engines answer arity questions
+   * identically (bridged functions run with pyArity -1, leaving argument
+   * count validation to the stdlib's own @Validate wrappers).
+   */
+  pyMinArgs?: number;
+  /**
    * Dual compilation: the async twin of this (sync) body, sharing the same
    * closure environment. Present on every user function compiled in dual
    * mode; absent on builtins (which are plain sync JS, or return a Promise
@@ -491,54 +498,59 @@ export class Py2JsRuntime {
   }
 
   /**
-   * Minimal native builtin set — placeholder until the stdlib bridge lands
-   * (src/stdlib's misc/math groups are written against the CSE machine's
-   * tagged Value union and cannot be loaded directly; see the engine README).
+   * The native builtin core: the few builtins that cannot go through the
+   * stdlib bridge (see stdlibBridge.ts, which supplies everything else from
+   * the real src/stdlib groups). print and input are async/stream-based in
+   * the stdlib; arity inspects CSE closures, which py2js functions are not.
    */
   readonly builtins: Record<string, PyValue> = {
     print: this.builtin("print", -1, (...args) => {
+      // Same formatting as the stdlib's print: str() of each argument,
+      // space-joined, one trailing newline (pyStr mirrors toPythonString).
       this.output.push(args.map(pyStr).join(" ") + "\n");
       return null;
     }),
-    str: this.builtin("str", 1, v => pyStr(v)),
-    abs: this.builtin("abs", 1, v => {
-      if (typeof v === "bigint") return v < 0n ? -v : v;
-      if (typeof v === "number") return Math.abs(v);
-      // Math.hypot scales internally, so |z| survives components whose
-      // squares overflow/underflow (abs(complex(1e200, 0)) is 1e200, not
-      // inf) — same algorithm CPython's abs(complex) uses.
-      if (isComplex(v)) return Math.hypot(v.real, v.imag);
-      throw new Py2JsRuntimeError("TypeError", `bad operand type for abs(): '${pyTypeName(v)}'`);
+    input: this.builtin("input", -1, () => {
+      throw new Py2JsRuntimeError(
+        "RuntimeError",
+        "input() is not supported by the py2js engine yet",
+      );
     }),
-    max: this.builtin("max", 2, (a, b) => (pyOrder(">=", a, b) ? a! : b!)),
-    min: this.builtin("min", 2, (a, b) => (pyOrder("<=", a, b) ? a! : b!)),
-    math_sqrt: this.numericBuiltin("math_sqrt", Math.sqrt),
-    math_exp: this.numericBuiltin("math_exp", Math.exp),
-    math_log: this.numericBuiltin("math_log", Math.log),
-    math_sin: this.numericBuiltin("math_sin", Math.sin),
-    math_cos: this.numericBuiltin("math_cos", Math.cos),
-    math_floor: this.builtin("math_floor", 1, v => {
-      if (typeof v === "bigint") return v;
-      if (typeof v === "number") {
-        // BigInt() throws RangeError on non-finite floats; raise the same
-        // errors CPython's math.floor does instead.
-        if (Number.isNaN(v))
-          throw new Py2JsRuntimeError("ValueError", "cannot convert float NaN to integer");
-        if (!Number.isFinite(v))
-          throw new Py2JsRuntimeError("OverflowError", "cannot convert float infinity to integer");
-        return BigInt(Math.floor(v));
+    arity: this.builtin("arity", 1, f => {
+      if (typeof f !== "function") {
+        throw new Py2JsRuntimeError(
+          "TypeError",
+          `unsupported argument type for arity: '${pyTypeName(f)}'`,
+        );
       }
-      throw new Py2JsRuntimeError("TypeError", `must be real number, not ${pyTypeName(v)}`);
+      // Bridged stdlib builtins report their CSE minArgs (pyMinArgs); user
+      // functions and native builtins report their parameter count, which is
+      // what the CSE machine reports for its closures. The f.length fallback
+      // covers bare JS functions that bypassed annotateHostFunction (e.g.
+      // stuffed into rt.builtins directly).
+      return BigInt(f.pyMinArgs ?? Math.max(0, f.pyArity ?? f.length));
     }),
-    math_pi: Math.PI,
-    math_e: Math.E,
   };
+}
 
-  private numericBuiltin(name: string, fn: (x: number) => number): PyFunction {
-    return this.builtin(name, 1, v => {
-      if (!isNum(v))
-        throw new Py2JsRuntimeError("TypeError", `must be real number, not ${pyTypeName(v)}`);
-      return fn(Number(v));
-    });
+/**
+ * Establish the PyFunction metadata invariant on a host-supplied function
+ * (extraBuiltins — module bindings etc.). Compiled user functions always get
+ * their metadata from def/def2; this is for plain JS functions arriving from
+ * outside. Fills only what is missing: pyName from the binding name, pyArity
+ * -1 (argument counts are not enforced for host functions — a rest-args
+ * implementation reports Function#length 0, so enforcing it would wrongly
+ * reject every call), pyMinArgs from Function#length for arity() reporting,
+ * and pyBuiltin so rendering says <built-in function name>.
+ */
+export function annotateHostFunction(name: string, fn: PyValue): PyValue {
+  if (typeof fn !== "function") return fn;
+  const f = fn as Partial<PyFunction> & ((...args: PyValue[]) => PyValue | TailCall);
+  if (f.pyArity === undefined) {
+    f.pyMinArgs ??= f.length;
+    f.pyArity = -1;
   }
+  f.pyName ??= name;
+  f.pyBuiltin ??= true;
+  return f as PyFunction;
 }

@@ -129,8 +129,10 @@ function emitExpr(e: ExprNS.Expr, a: boolean, dual: boolean): string {
     case "Lambda": {
       const l = e as ExprNS.Lambda;
       // A lambda body is in tail position: evaluating it *is* the return.
+      // "(anonymous)" matches the CSE machine's rendering of lambda values
+      // (toPythonString on a nameless closure), pinned by the stdlib sweep.
       return emitFunctionValue(
-        "<lambda>",
+        "(anonymous)",
         l.parameters.map(p => mangle(p.lexeme)),
         bodyAsync => emitTailPosition(l.body, bodyAsync, dual),
         dual,

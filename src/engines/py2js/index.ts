@@ -15,9 +15,22 @@
  */
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
+import math from "../../stdlib/math";
+import misc from "../../stdlib/misc";
+import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
-import { Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
+import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
+import { bridgeStdlibGroups } from "./stdlibBridge";
+
+/**
+ * Stdlib groups per chapter, bridged into the runtime by prepare(). Mirrors
+ * runner.ts's VARIANT_GROUPS[1] (kept separate so the engine does not pull
+ * in the runner's conductor plumbing); extend as chapters 2+ land.
+ */
+const PY2JS_GROUPS: Record<number, Group[]> = {
+  1: [misc, math],
+};
 
 export { Py2JsCompileError, Py2JsRuntime, Py2JsRuntimeError };
 export type { CompileMode, PyValue };
@@ -63,10 +76,24 @@ function prepare(
   }
 
   const rt = new Py2JsRuntime();
-  const extra = options.extraBuiltins;
-  Object.assign(rt.builtins, typeof extra === "function" ? extra(rt) : (extra ?? {}));
-
   const script = code.endsWith("\n") ? code : code + "\n";
+
+  // The chapter's stdlib groups, bridged to native values (stdlibBridge.ts).
+  // The runtime's native core (print/input/arity) wins over same-named
+  // bridged entries; extraBuiltins (module bindings etc.) override anything.
+  const bridged = bridgeStdlibGroups(rt, PY2JS_GROUPS[variant] ?? [], script, variant);
+  for (const [name, value] of Object.entries(bridged)) {
+    if (!(name in rt.builtins)) rt.builtins[name] = value;
+  }
+  const extra = options.extraBuiltins;
+  const extraResolved = typeof extra === "function" ? extra(rt) : (extra ?? {});
+  for (const [name, value] of Object.entries(extraResolved)) {
+    // Plain JS functions from outside get the PyFunction metadata invariant
+    // established here (name, arity reporting, built-in rendering) — see
+    // annotateHostFunction; already-annotated functions pass through as-is.
+    rt.builtins[name] = annotateHostFunction(name, value);
+  }
+
   let ast;
   try {
     ast = parse(script);
