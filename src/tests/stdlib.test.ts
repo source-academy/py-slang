@@ -33,6 +33,7 @@ describe("Standard Library Tests", () => {
         ["abs(0)", 0n, null],
         ["abs(-2147483648)", 2147483648n, null],
         ["abs(2147483647)", 2147483647n, null],
+        ["abs(1e200+0j)", 1e200, null],
         ['abs("")', TypeError, null],
         ["abs(True)", TypeError, null],
       ],

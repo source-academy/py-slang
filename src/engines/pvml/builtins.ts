@@ -930,7 +930,7 @@ export function executePrimitive(
       const [x] = args;
       if (typeof x === "bigint") return x < 0n ? -x : x;
       if (typeof x === "number") return Math.abs(x);
-      if (x instanceof PyComplexNumber) return Math.sqrt(x.real * x.real + x.imag * x.imag);
+      if (x instanceof PyComplexNumber) return Math.hypot(x.real, x.imag);
       throw new PVMLInterpreterError(
         `TypeError: unsupported argument type for abs: ${friendlyTypeName(getPVMLType(x), variant)}`,
       );
