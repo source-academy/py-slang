@@ -208,25 +208,27 @@ export async function loadChunkImports(
     ),
   );
 
+  // Modules are already pre-loaded above concurrently; binding itself runs
+  // sequentially in source order so that two imports binding the same name
+  // (e.g. `from a import x` then `from b import x`) resolve deterministically
+  // — last one in source order wins, matching plain reassignment — rather
+  // than racing on whichever moduleToPython() conversion happens to finish
+  // last under concurrent Promise.all.
   const bindings: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
-  await Promise.all(
-    imports.map(async node => {
-      const moduleName = node.module.lexeme;
-      const exports = new Map(plugins.get(moduleName)!.exports.map(e => [e.symbol, e.value]));
-      await Promise.all(
-        node.names.map(async spec => {
-          const exportValue = exports.get(spec.name.lexeme);
-          if (exportValue === undefined) {
-            throw new Py2JsRuntimeError(
-              "ImportError",
-              `cannot import name '${spec.name.lexeme}' from '${moduleName}'`,
-            );
-          }
-          const bound = (spec.alias ?? spec.name).lexeme;
-          bindings[bound] = await moduleToPython(rt, dh, exportValue, spec.name.lexeme);
-        }),
-      );
-    }),
-  );
+  for (const node of imports) {
+    const moduleName = node.module.lexeme;
+    const exports = new Map(plugins.get(moduleName)!.exports.map(e => [e.symbol, e.value]));
+    for (const spec of node.names) {
+      const exportValue = exports.get(spec.name.lexeme);
+      if (exportValue === undefined) {
+        throw new Py2JsRuntimeError(
+          "ImportError",
+          `cannot import name '${spec.name.lexeme}' from '${moduleName}'`,
+        );
+      }
+      const bound = (spec.alias ?? spec.name).lexeme;
+      bindings[bound] = await moduleToPython(rt, dh, exportValue, spec.name.lexeme);
+    }
+  }
   return bindings;
 }

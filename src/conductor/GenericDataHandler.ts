@@ -392,9 +392,15 @@ export function asInterfacableEvaluator(
 ): IInterfacableEvaluator {
   return new Proxy(evaluator, {
     get(target, prop, receiver) {
-      return prop in dataHandler
-        ? Reflect.get(dataHandler, prop, dataHandler)
-        : Reflect.get(target, prop, receiver);
+      if (prop in dataHandler) {
+        // Bind so stateful methods (this.uniqueId++ in pair_make etc.) read
+        // and write dataHandler, not the proxy — a plain Reflect.get returns
+        // the method unbound, so calling it here would set `this` to the
+        // proxy and (absent a `set` trap) silently write to `evaluator`.
+        const value = Reflect.get(dataHandler, prop, dataHandler);
+        return typeof value === "function" ? value.bind(dataHandler) : value;
+      }
+      return Reflect.get(target, prop, receiver);
     },
   }) as unknown as IInterfacableEvaluator;
 }

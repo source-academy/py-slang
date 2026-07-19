@@ -73,6 +73,34 @@ test("imports a scalar constant and a simple function", async () => {
   expect(outputs).toEqual(["9.8", "5.0"]);
 });
 
+test("two imports binding the same name resolve in source order, last one wins", async () => {
+  // moduleToPython's CLOSURE branch awaits dh.closure_arity() before it can
+  // build the bound function — one more microtask hop than the NUMBER branch
+  // (a synchronous value, no internal await). That timing difference is real
+  // (not an artificial delay), so under the old concurrent-Promise.all
+  // binding this is a deterministic repro, not a flaky race: `slow`'s CLOSURE
+  // binding always resolves after `fast`'s NUMBER binding regardless of which
+  // import statement comes first in source, so the *first* import (being the
+  // slower one) would always win — backwards from Python's last-assignment-
+  // wins semantics. Binding sequentially in source order fixes that: `fast`
+  // (the textually-last import) must win here.
+  const dh = new GenericDataHandler();
+  async function* neverCalled(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    await Promise.resolve();
+    throw new Error("should never be invoked by this test");
+  }
+  const slowClosure = await dh.closure_make({ returnType: DataType.NUMBER, args: [] }, neverCalled);
+  installFakeModule({
+    slowmod: [{ symbol: "x", value: slowClosure }],
+    fastmod: [{ symbol: "x", value: { type: DataType.NUMBER, value: 42 } }],
+  });
+
+  const { session, outputs } = makeSession(dh);
+  await session.runChunk("from slowmod import x\nfrom fastmod import x\nprint(x)\n");
+
+  expect(outputs).toEqual(["42.0"]);
+});
+
 test("import with an alias binds under the aliased name", async () => {
   const dh = new GenericDataHandler();
   installFakeModule({
