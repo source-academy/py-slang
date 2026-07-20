@@ -20,6 +20,8 @@ const allTargets = [
   "PyPvmlPynterEvaluator",
   "Py2JsEvaluator1",
   "Py2JsEvaluator2",
+  "Py2JsEvaluator3",
+  "Py2JsEvaluator4",
   "PyStepperEvaluator1",
   "PyStepperEvaluator2",
 ] as const;
