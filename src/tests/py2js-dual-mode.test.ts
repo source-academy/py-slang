@@ -7,7 +7,13 @@
  * runCodePy2JsDual nor the def2/acall/callSync machinery it relies on had any
  * test before this file.
  */
-import { PyValue, Py2JsRuntime, runCodePy2Js, runCodePy2JsDual } from "../engines/py2js";
+import {
+  PyValue,
+  Py2JsRunError,
+  Py2JsRuntime,
+  runCodePy2Js,
+  runCodePy2JsDual,
+} from "../engines/py2js";
 
 test("dual mode produces the same output as sync mode for a plain program", async () => {
   const code = `def square(x):
@@ -17,6 +23,23 @@ print(square(6))`;
   const dual = (await runCodePy2JsDual(code, 1)).output;
   expect(dual).toBe("36\n");
   expect(dual).toBe(sync);
+});
+
+test("an error raised while the program runs is wrapped as Py2JsRunError with kind 'runtime', same as sync mode", async () => {
+  // py2js-control-flow.test.ts covers this for runCodePy2Js's catch (index.ts);
+  // runCodePy2JsDual has the identical catch around the async spine, which had
+  // no test of its own before this.
+  await expect(runCodePy2JsDual("print(1 / 0)\n", 1)).rejects.toMatchObject({
+    name: "Py2JsRunError",
+    kind: "runtime",
+  });
+  try {
+    await runCodePy2JsDual("print(1 / 0)\n", 1);
+    throw new Error("expected runCodePy2JsDual to throw");
+  } catch (e) {
+    expect(e).toBeInstanceOf(Py2JsRunError);
+    expect((e as Py2JsRunError).message).toContain("ZeroDivisionError");
+  }
 });
 
 test("deep tail recursion on the async spine does not grow the JS call stack", async () => {
