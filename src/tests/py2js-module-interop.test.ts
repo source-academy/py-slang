@@ -65,6 +65,51 @@ describe("pythonToModule", () => {
     while (!step.done) step = await gen.next();
     expect(step.value).toEqual({ type: DataType.NUMBER, value: 42 });
   });
+
+  test("a scalar-in/scalar-out Python function also gets a working closure_call_sync fast path", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const double = rt.def("double", 1, (x: unknown) => (x as number) * 2);
+    const typed = await pythonToModule(rt, dh, double);
+    if (typed.type !== DataType.CLOSURE) throw new Error("unreachable");
+
+    // No await anywhere in this call - if it needed one, this wouldn't compile
+    // as a synchronous expression the way the rest of the test does.
+    const result = dh.closure_call_sync(typed, [{ type: DataType.NUMBER, value: 21 }]);
+    expect(result).toEqual({ type: DataType.NUMBER, value: 42 });
+  });
+
+  test("closure_call_sync returns undefined (no sync path) for a closure with no .sync", async () => {
+    const dh = new GenericDataHandler();
+    async function* noSync(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: 1 };
+    }
+    const typed = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [] },
+      noSync,
+    );
+    expect(dh.closure_call_sync(typed, [])).toBeUndefined();
+  });
+
+  test("closure_call_sync calls the underlying Python function exactly once, even when it throws on a non-scalar result", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    let callCount = 0;
+    // Returns a PyPair - not representable by the sync fast path's restricted
+    // converter. Once rt.callSync has actually run (incrementing callCount),
+    // falling back to "no sync path" would silently call this a second time -
+    // the fix must throw instead, and must never invoke the function twice.
+    const makesAPair = rt.def("makesAPair", 0, () => {
+      callCount += 1;
+      return new PyPair(1, 2);
+    });
+    const typed = await pythonToModule(rt, dh, makesAPair);
+    if (typed.type !== DataType.CLOSURE) throw new Error("unreachable");
+
+    expect(() => dh.closure_call_sync(typed, [])).toThrow(Py2JsRuntimeError);
+    expect(callCount).toBe(1);
+  });
 });
 
 describe("moduleToPython", () => {

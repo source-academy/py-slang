@@ -249,6 +249,36 @@ export class GenericDataHandler implements IDataHandler {
       undefined
     >;
   }
+  /**
+   * Fast path for a closure that provably never needs to leave the current
+   * synchronous call - e.g. a scalar-in/scalar-out wave function sampled
+   * 44100x/sec by the sound module. `func` (an `ExternCallable`, normally
+   * only callable as an AsyncGenerator per conductor's own contract) may
+   * additionally carry a `.sync` escape hatch: a plain function computing
+   * the exact same result with no Promise/generator indirection at all. An
+   * engine's module-interop layer sets `.sync` only when it can prove the
+   * closure never needs a real host round-trip (see py2js's moduleInterop.ts
+   * pyClosureFunc); a closure with no such proof (every CSE-machine closure
+   * today, or a py2js closure that touches something asyncOnly) simply never
+   * gets one.
+   *
+   * Returns `undefined` when the closure has no sync form - the signal for
+   * "fall back to closure_call_unchecked" - which is unambiguous because a
+   * TypedValue always wraps a real `{ type, value }` pair, even for
+   * DataType.VOID; the bare JS value `undefined` is never a legitimate
+   * closure result.
+   */
+  closure_call_sync<T extends DataType>(
+    c: TypedValue<DataType.CLOSURE, T>,
+    args: TypedValue<DataType>[],
+  ): TypedValue<NoInfer<T>> | undefined {
+    const func = this.closureMap.get(c.value)?.func as
+      | (ExternCallable<DataType[], T> & {
+          sync?: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
+        })
+      | undefined;
+    return func?.sync?.(...args) as TypedValue<NoInfer<T>> | undefined;
+  }
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
     const closure = this.closureMap.get(c.value);
     if (!closure) {
