@@ -257,3 +257,125 @@ test("a synchronously-sampled Python callback cannot itself call an import needi
     ),
   ).rejects.toThrow(/needs a frontend round-trip/);
 });
+
+test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play", async () => {
+  const dh = new GenericDataHandler();
+
+  // sine_sound(freq, duration) returns a Sound: a dotted (frequency,
+  // duration) pair - a real module value crossing the boundary as
+  // DataType.PAIR, not a proper list. This is the exact shape that used to
+  // hit the "module values of type PAIR are not supported" rejection: a
+  // Python-side PyPair round-tripping back into a second module call.
+  async function* sineSoundFunc(
+    freqArg: TypedValue<DataType>,
+    durationArg: TypedValue<DataType>,
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    await Promise.resolve();
+    return dh.pair_make(freqArg, durationArg);
+  }
+  const sineSound = await dh.closure_make(
+    { returnType: DataType.PAIR, args: [DataType.NUMBER, DataType.NUMBER] },
+    sineSoundFunc,
+  );
+
+  // play(sound) unpacks the (frequency, duration) pair it's handed and
+  // returns frequency * duration, so the test can assert both halves of the
+  // pair it received round-tripped correctly through Python and back.
+  async function* playFunc(
+    soundArg: TypedValue<DataType>,
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    await Promise.resolve();
+    const sound = soundArg as TypedValue<DataType.PAIR>;
+    const freq = (await dh.pair_head(sound)) as TypedValue<DataType.NUMBER>;
+    const duration = (await dh.pair_tail(sound)) as TypedValue<DataType.NUMBER>;
+    return { type: DataType.NUMBER, value: freq.value * duration.value };
+  }
+  const play = await dh.closure_make({ returnType: DataType.NUMBER, args: [DataType.PAIR] }, playFunc);
+
+  installFakeModule({
+    sound: [
+      { symbol: "sine_sound", value: sineSound },
+      { symbol: "play", value: play },
+    ],
+  });
+
+  const { session, outputs } = makeSession(dh);
+  await session.runChunk(
+    "from sound import sine_sound, play\n" + "print(play(sine_sound(440, 2)))\n",
+  );
+
+  expect(outputs).toEqual(["880.0"]);
+});
+
+test("a module closure round-trips through a pair back into a second module call (the real sine_sound/play shape)", async () => {
+  const dh = new GenericDataHandler();
+
+  // sine_sound(freq, duration) returns a Sound: (wave closure, duration),
+  // where wave is a closure *created by the module itself* (never a Python
+  // function) - the real sound module's actual shape. This used to throw
+  // "needs a frontend round-trip and cannot be called from a synchronous
+  // module callback" the moment play() tried to sample it: moduleToPython
+  // wrapped the incoming CLOSURE as an asyncOnly PyFunction with no memory
+  // of its origin, so pythonToModule (handing it back to play()) assumed it
+  // was a genuine Python function and wrapped it in a *new* closure whose
+  // body did a synchronous rt.callSync - which throws for anything
+  // asyncOnly. The fix: moduleToPython tags the PyFunction with the
+  // original closure identifier (PyFunction.moduleClosure), and
+  // pythonToModule returns that identifier unchanged instead of re-wrapping.
+  async function* sineSoundFunc(
+    freqArg: TypedValue<DataType>,
+    durationArg: TypedValue<DataType>,
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    const freq = (freqArg as TypedValue<DataType.NUMBER>).value;
+    async function* waveFunc(
+      tArg: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      const t = (tArg as TypedValue<DataType.NUMBER>).value;
+      return { type: DataType.NUMBER, value: freq * t };
+    }
+    const wave = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      waveFunc,
+    );
+    return dh.pair_make(wave, durationArg);
+  }
+  const sineSound = await dh.closure_make(
+    { returnType: DataType.PAIR, args: [DataType.NUMBER, DataType.NUMBER] },
+    sineSoundFunc,
+  );
+
+  // play(sound) samples wave at t = 0, 1, 2 (via the module's own generic
+  // closure_call_unchecked - the same protocol any real module uses, never
+  // touching rt.callSync directly) and sums the results.
+  async function* playFunc(
+    soundArg: TypedValue<DataType>,
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    const sound = soundArg as TypedValue<DataType.PAIR>;
+    const wave = (await dh.pair_head(sound)) as TypedValue<DataType.CLOSURE>;
+    let total = 0;
+    for (let t = 0; t < 3; t++) {
+      const gen = dh.closure_call_unchecked(wave, [{ type: DataType.NUMBER, value: t }]);
+      let step = await gen.next();
+      while (!step.done) step = await gen.next();
+      total += (step.value as TypedValue<DataType.NUMBER>).value;
+    }
+    return { type: DataType.NUMBER, value: total };
+  }
+  const play = await dh.closure_make({ returnType: DataType.NUMBER, args: [DataType.PAIR] }, playFunc);
+
+  installFakeModule({
+    sound: [
+      { symbol: "sine_sound", value: sineSound },
+      { symbol: "play", value: play },
+    ],
+  });
+
+  const { session, outputs } = makeSession(dh);
+  // wave(t) = 440 * t, sampled at t = 0, 1, 2 -> 0 + 440 + 880 = 1320
+  await session.runChunk(
+    "from sound import sine_sound, play\n" + "print(play(sine_sound(440, 2)))\n",
+  );
+
+  expect(outputs).toEqual(["1320.0"]);
+});

@@ -120,6 +120,19 @@ export interface PyFunction {
    * loudly instead of receiving an unawaited Promise.
    */
   asyncOnly?: boolean;
+  /**
+   * Set on a PyFunction created by moduleToPython's DataType.CLOSURE case:
+   * the original module closure this function stands in for. Lets
+   * pythonToModule hand a module closure back to a module (the same one or
+   * a different one, e.g. a Sound's wave function created by sine_sound and
+   * later passed to play) by returning this identifier unchanged, instead of
+   * wrapping it in a *new* closure whose body assumes a genuine Python
+   * function it can rt.callSync — which this isn't, and would throw
+   * "needs a frontend round-trip" the moment the module tried to sample it.
+   * Mirrors the CSE converter's identical `.id` pass-through in
+   * src/engines/cse/modules.ts.
+   */
+  moduleClosure?: TypedValue<DataType.CLOSURE>;
 }
 
 export interface TailCall {

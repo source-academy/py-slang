@@ -9,7 +9,7 @@
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { moduleToPython, pythonToModule } from "../engines/py2js/moduleInterop";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque } from "../engines/py2js/runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyPair } from "../engines/py2js/runtime";
 
 function makeRt() {
   return new Py2JsRuntime();
@@ -87,14 +87,28 @@ describe("moduleToPython", () => {
     expect((result as PyOpaque).typed).toBe(typed);
   });
 
-  test("PAIR/ARRAY are rejected at chapter 1", async () => {
+  test("PAIR round-trips through PyPair; ARRAY is still rejected", async () => {
     const dh = new GenericDataHandler();
     const rt = makeRt();
     const pair = await dh.pair_make(
       { type: DataType.NUMBER, value: 1 },
       { type: DataType.NUMBER, value: 2 },
     );
-    await expect(moduleToPython(rt, dh, pair)).rejects.toThrow(Py2JsRuntimeError);
+    const native = await moduleToPython(rt, dh, pair);
+    expect(native).toBeInstanceOf(PyPair);
+    expect((native as PyPair).head).toBe(1);
+    expect((native as PyPair).tail).toBe(2);
+
+    const roundTripped = await pythonToModule(rt, dh, native);
+    expect(roundTripped.type).toBe(DataType.PAIR);
+    expect(await dh.pair_head(roundTripped as TypedValue<DataType.PAIR>)).toEqual({
+      type: DataType.NUMBER,
+      value: 1,
+    });
+    expect(await dh.pair_tail(roundTripped as TypedValue<DataType.PAIR>)).toEqual({
+      type: DataType.NUMBER,
+      value: 2,
+    });
 
     const arr = await dh.array_make(DataType.NUMBER, 2);
     await expect(moduleToPython(rt, dh, arr)).rejects.toThrow(Py2JsRuntimeError);
