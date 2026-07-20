@@ -177,6 +177,29 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // BOOLEAN and CONST_STRING round-trip: every other export above is a NUMBER, CLOSURE, OPAQUE,
+  // PAIR, or LIST, so moduleToPvml/pvmlToModule's bool/string cases (modules.ts) had no coverage
+  // at all - the same class of risk as the list-vs-pair bug this PR already found and fixed (a
+  // silent boundary misconversion nothing would catch).
+  const negateFlag = await dh.closure_make(
+    { returnType: DataType.BOOLEAN, args: [DataType.BOOLEAN] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (b: TypedValue<DataType.BOOLEAN>) {
+      return { type: DataType.BOOLEAN, value: !b.value } as TypedValue<DataType.BOOLEAN>;
+    },
+  );
+
+  const shout = await dh.closure_make(
+    { returnType: DataType.CONST_STRING, args: [DataType.CONST_STRING] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (s: TypedValue<DataType.CONST_STRING>) {
+      return {
+        type: DataType.CONST_STRING,
+        value: s.value.toUpperCase(),
+      } as TypedValue<DataType.CONST_STRING>;
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -190,6 +213,10 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "combine_waves", value: combineWaves },
       { symbol: "schedule_later", value: scheduleLater },
       { symbol: "sum_list", value: sumList },
+      { symbol: "flag", value: { type: DataType.BOOLEAN, value: true } },
+      { symbol: "negate_flag", value: negateFlag },
+      { symbol: "greeting", value: { type: DataType.CONST_STRING, value: "hello" } },
+      { symbol: "shout", value: shout },
     ],
   } as unknown as IModulePlugin;
 }
@@ -237,6 +264,73 @@ describe("PyPvmlEvaluator module imports", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["42.0"]);
+  });
+
+  test("imports a boolean constant and round-trips it through a function", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import flag, negate_flag\n" +
+        "print(flag)\n" +
+        "print(negate_flag(flag))\n" +
+        "print(negate_flag(False))\n",
+    );
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["True", "False", "True"]);
+  });
+
+  test("imports a string constant and round-trips it through a function", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import greeting, shout\n" +
+        "print(greeting)\n" +
+        "print(shout(greeting))\n" +
+        "print(shout('bye'))\n",
+    );
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["hello", "HELLO", "BYE"]);
+  });
+
+  test("a bare builtin (not a user closure) works as a module callback argument", async () => {
+    // apply_twice only ever received a user-defined closure (inc) in the existing "higher-order"
+    // test - a plain reference to a builtin (compiled via NEWCP, see dispatchCall's own comment)
+    // exercises pvmlToModule's "primitive" branch instead of its "closure" branch, which otherwise
+    // had zero coverage.
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk("from testmod import apply_twice\nprint(apply_twice(abs, -5))\n");
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["5.0"]);
+  });
+
+  test("a callback invoked via apply_in_underlying_python cannot itself call a module function", async () => {
+    // apply_in_underlying_python (PVML primitive 103, builtins.ts) drives its callback through
+    // PVMLInterpreter.invokeValue synchronously, not invokeValueAsync - so a module call attempted
+    // from inside it hits invokeValue's own nested-pendingExtern guard and must be rejected with a
+    // clear RuntimeError instead of deadlocking or silently misbehaving. This is real, user-reachable
+    // behavior (unlike the now-fixed "Stack underflow" bug for a related scenario), but had no test
+    // proving it actually fires.
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk(
+      "from testmod import double\n" +
+        "def cb():\n" +
+        "    return double(21)\n" +
+        "apply_in_underlying_python(cb, llist())\n",
+    );
+
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as Error).message).toMatch(
+      /cannot call imported module function 'double' from inside a callback/,
+    );
   });
 
   test("a closure created by one module call can be invoked by another, repeatedly", async () => {

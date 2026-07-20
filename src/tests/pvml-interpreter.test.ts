@@ -3,7 +3,7 @@ import { analyzeWithEnvironments } from "../resolver";
 import { executePrimitive } from "../engines/pvml/builtins";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
-import type { PVMLBoxType } from "../engines/pvml/types";
+import type { PVMLBoxType, PVMLExtern } from "../engines/pvml/types";
 import {
   MissingRequiredPositionalError,
   UnsupportedOperandTypeError,
@@ -1094,6 +1094,33 @@ loop()
       const result = Number(outputs[0]);
       expect(result).toBeGreaterThanOrEqual(before - 1);
       expect(result).toBeLessThanOrEqual(after + 1);
+    });
+  });
+
+  describe("Module imports (execute vs executeAsync)", () => {
+    test("execute() (synchronous) rejects a call to an imported module function", () => {
+      // An imported name resolves via LDGG against globalEnv only in useGlobalMap mode (see
+      // fromProgram's 4th param) - matching how PyPvmlEvaluator actually compiles a chunk with
+      // FromImport statements. A PVMLExtern manually seeded into globalEnv (standing in for what
+      // loadImports would have populated) lets this be a self-contained interpreter unit test,
+      // with no module-loader/conductor mocking needed.
+      const code = "from testmod import double\ndouble(21)\n";
+      const ast = parse(code);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, undefined, true);
+      const program = compiler.compileProgram(ast);
+
+      const externDouble: PVMLExtern = {
+        type: "extern",
+        name: "double",
+        fn: () =>
+          Promise.reject(
+            new Error("should never actually run — execute() must reject before calling fn"),
+          ),
+      };
+      const globalEnv = new Map<string, PVMLBoxType>([["double", externDouble]]);
+      const interpreter = new PVMLInterpreter(program, { globalEnv, variant: 4 });
+
+      expect(() => interpreter.execute()).toThrow(/can only be called under executeAsync/);
     });
   });
 });
