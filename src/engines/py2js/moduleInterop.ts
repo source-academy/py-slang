@@ -34,15 +34,18 @@
  *    measured cost.
  *
  * Chapter 1 has no list/pair type (NoListsValidator) and no way to construct
- * or consume one, so DataType.PAIR/ARRAY module values are rejected with a
- * clear error rather than represented — there is nothing chapter-1 code
- * could do with one anyway. Complex numbers are likewise not supported
- * crossing the boundary (matching the CSE converter's identical restriction).
+ * or consume one, so DataType.PAIR round-trips through PyPair (chapter 2+
+ * only — see pythonToModule/moduleToPython's PyPair/DataType.PAIR cases,
+ * mirroring the CSE converter's "list" case) while DataType.ARRAY module
+ * values are rejected with a clear error, since no py-slang Python chapter
+ * has a native fixed-length array/list-literal type the way js-slang's
+ * Source does. Complex numbers are likewise not supported crossing the
+ * boundary (matching the CSE converter's identical restriction).
  */
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyPair, PyValue } from "./runtime";
 
 /** Converts a py2js native value into a conductor TypedValue, for passing
  * INTO a module — as a call argument, or the value a module holds after
@@ -66,6 +69,15 @@ export async function pythonToModule(
       return { type: DataType.CONST_STRING, value };
     case "function": {
       const fn = value;
+      // A pass-through of a module closure moduleToPython previously handed
+      // into Python (e.g. a Sound's wave function created by sine_sound,
+      // now being passed to play): return the original identifier unchanged
+      // rather than wrapping a *new* closure whose body assumes fn is a
+      // genuine Python function it can rt.callSync. fn isn't callable that
+      // way — it's still ultimately the module's own closure — and the
+      // module receiving it back can now sample it directly, no different
+      // from CSE's identical `.id` pass-through in modules.ts.
+      if (fn.moduleClosure) return fn.moduleClosure;
       async function* pyClosureFunc(
         ...args: TypedValue<DataType>[]
       ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
@@ -82,6 +94,12 @@ export async function pythonToModule(
     case "object":
       if (value === null) return { type: DataType.EMPTY_LIST, value: null };
       if (value instanceof PyOpaque) return value.typed;
+      if (value instanceof PyPair) {
+        return dh.pair_make(
+          await pythonToModule(rt, dh, value.head),
+          await pythonToModule(rt, dh, value.tail),
+        );
+      }
       throw new Py2JsRuntimeError(
         "TypeError",
         "complex values are not supported in module interop",
@@ -144,20 +162,33 @@ export async function moduleToPython(
         while (!step.done) step = await gen.next();
         return moduleToPython(rt, dh, step.value);
       };
+      // Pass-through identifier: see PyFunction.moduleClosure's doc comment
+      // in runtime.ts. Lets pythonToModule hand this straight back to a
+      // module unchanged instead of wrapping a new (incorrectly assumed
+      // synchronous) closure around it.
+      f.moduleClosure = value;
       return f;
     }
     case DataType.PAIR:
+      // A module PAIR (e.g. sound's Sound, a (wave, duration) dotted pair)
+      // round-trips as a PyPair, chapter 2's native cons cell — mirroring
+      // the CSE converter's "list" case for DataType.PAIR. Not a proper
+      // list: the tail need not be another pair or None, same as CSE's.
+      return new PyPair(
+        await moduleToPython(rt, dh, await dh.pair_head(value)),
+        await moduleToPython(rt, dh, await dh.pair_tail(value)),
+      );
     case DataType.ARRAY:
-      // See file header: chapter 1 has no list/pair type to represent this
-      // as, and no way to consume one anyway. Extend when py2js grows list
-      // support (chapter 3+), mirroring the CSE/WASM converters. (DataType
+      // See file header: no py-slang Python chapter has a native
+      // fixed-length array/list-literal type to represent this as, and no
+      // way to consume one anyway, unlike DataType.PAIR above. (DataType
       // also has a LIST member, but it's a type-level PAIR-or-EMPTY_LIST
       // marker, not a tag any concrete TypedValue ever actually carries —
       // TypeScript's own TypedValue<DataType> union excludes it, so there
       // is no runtime case for it here.)
       throw new Py2JsRuntimeError(
         "TypeError",
-        `module values of type "${DataType[value.type]}" are not supported by py2js at chapter 1`,
+        `module values of type "${DataType[value.type]}" are not supported by py2js`,
       );
   }
 }
