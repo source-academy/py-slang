@@ -290,7 +290,10 @@ test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play",
     const duration = (await dh.pair_tail(sound)) as TypedValue<DataType.NUMBER>;
     return { type: DataType.NUMBER, value: freq.value * duration.value };
   }
-  const play = await dh.closure_make({ returnType: DataType.NUMBER, args: [DataType.PAIR] }, playFunc);
+  const play = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.PAIR] },
+    playFunc,
+  );
 
   installFakeModule({
     sound: [
@@ -362,7 +365,10 @@ test("a module closure round-trips through a pair back into a second module call
     }
     return { type: DataType.NUMBER, value: total };
   }
-  const play = await dh.closure_make({ returnType: DataType.NUMBER, args: [DataType.PAIR] }, playFunc);
+  const play = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.PAIR] },
+    playFunc,
+  );
 
   installFakeModule({
     sound: [
