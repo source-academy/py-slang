@@ -614,6 +614,24 @@ export class Py2JsRuntime {
         return (op === "is not") !== pyIdentical(l, r);
     }
 
+    // List repetition: `list * int` / `int * list` (chapter 3+) — Source has
+    // no array constructor, so this doubles as the idiomatic way to build a
+    // list of a given size (see python-spec issue #299). Only `*` with
+    // exactly one list operand participates; anything else involving a list
+    // (including list * list) falls through to unsupported() below.
+    if (op === "*" && Array.isArray(l) !== Array.isArray(r)) {
+      const list = (Array.isArray(l) ? l : r) as PyList;
+      const factor = Array.isArray(l) ? r : l;
+      if (typeof factor !== "bigint") {
+        throw new Py2JsRuntimeError("TypeError", "can't multiply list by non-integer");
+      }
+      const n = Number(factor);
+      if (n <= 0) return [];
+      const result: PyList = [];
+      for (let i = 0; i < n; i++) result.push(...list);
+      return result;
+    }
+
     if (isComplex(l) || isComplex(r)) {
       return complexBinop(op, l, r);
     }
@@ -678,10 +696,10 @@ export class Py2JsRuntime {
   }
 
   /**
-   * `expr[index]` (chapter 3+): mirrors the CSE machine's LIST_ACCESS
-   * instruction — a list or string subject, an int index, bounds-checked;
-   * negative indices are not supported (CSE's own LIST_ACCESS has no
-   * negative-index handling either, unlike list-assignment below).
+   * `expr[index]` (chapter 3+): a list or string subject, an int index,
+   * bounds-checked. Negative indices wrap around per Python semantics
+   * (-len(list) to -1 map to 0 to len(list)-1); an index still out of range
+   * after wrapping raises IndexError.
    */
   listAccess(list: PyValue, index: PyValue): PyValue {
     if (typeof list !== "string" && !Array.isArray(list)) {
@@ -698,19 +716,21 @@ export class Py2JsRuntime {
       // Spread rather than raw .length/[idx]: matches CSE's code-point-based
       // indexing (correct for astral characters), not UTF-16 code units.
       const chars = [...list];
-      if (idx >= chars.length) throw new Py2JsRuntimeError("IndexError", "string index out of range");
+      if (idx >= chars.length)
+        throw new Py2JsRuntimeError("IndexError", "string index out of range");
       return chars.at(idx) ?? "";
     }
-    if (idx >= list.length) throw new Py2JsRuntimeError("IndexError", "list index out of range");
-    return list[idx];
+    const i = idx < 0 ? idx + list.length : idx;
+    if (i < 0 || i >= list.length)
+      throw new Py2JsRuntimeError("IndexError", "list index out of range");
+    return list[i];
   }
 
   /**
-   * `expr[index] = value` (chapter 3+): mirrors evaluateListAssignment in
-   * src/engines/cse/utils.ts, including its negative-index handling (a
-   * modulo, not a true Python wraparound — kept bug-compatible with CSE
-   * rather than "fixed", since conformance with the reference engine is the
-   * goal here).
+   * `expr[index] = value` (chapter 3+): bounds-checked in-place assignment.
+   * Negative indices wrap around per Python semantics; out-of-range indices
+   * (before or after wrapping) raise IndexError rather than auto-extending
+   * the array the way raw JS array assignment would.
    */
   listAssign(list: PyValue, index: PyValue, value: PyValue): void {
     if (!Array.isArray(list)) {
@@ -725,12 +745,12 @@ export class Py2JsRuntime {
         `list indices must be integers, not '${pyTypeName(index)}'`,
       );
     }
-    let idx = Number(index);
-    if (idx < 0) idx = idx % list.length;
-    if (idx >= list.length) {
+    const idx = Number(index);
+    const i = idx < 0 ? idx + list.length : idx;
+    if (i < 0 || i >= list.length) {
       throw new Py2JsRuntimeError("IndexError", "list assignment index out of range");
     }
-    list[idx] = value;
+    list[i] = value;
   }
 
   /**
@@ -778,7 +798,10 @@ export class Py2JsRuntime {
    */
   whileCond(v: PyValue): boolean {
     if (typeof v !== "boolean") {
-      throw new Py2JsRuntimeError("TypeError", `while condition must be bool, not '${pyTypeName(v)}'`);
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `while condition must be bool, not '${pyTypeName(v)}'`,
+      );
     }
     return v;
   }

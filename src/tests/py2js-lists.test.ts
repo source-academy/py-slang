@@ -40,10 +40,7 @@ test.each([
   ["print([1, 2, 3] == [1, 2])", "False\n"],
   ["print([1, [2, 3]] == [1, [2, 4]])", "False\n"],
   ["xs = [10, 20, 30]\nys = [10, 20, 30]\nprint(xs == ys)", "True\n"],
-  [
-    "xs = [[0, 1], [1, 2], [2, 3]]\nys = [[0, 1], [1, 2], [2, 3]]\nprint(xs == ys)",
-    "True\n",
-  ],
+  ["xs = [[0, 1], [1, 2], [2, 3]]\nys = [[0, 1], [1, 2], [2, 3]]\nprint(xs == ys)", "True\n"],
   ["xs = [0, 1, 2, 3]\nys = [1, 2, 3, 4]\nprint(xs == ys)", "False\n"],
 ])("structural == on lists: %s", (code, expected) => {
   expect(runCodePy2Js(code, 3).output).toBe(expected);
@@ -65,6 +62,45 @@ test("list subscript out of range is an IndexError (CSE parity)", async () => {
   const code = "xs = [1, 2, 3]\nxs[5]";
   await expect(runCode(code, 3)).rejects.toThrow();
   expect(() => runCodePy2Js(`${code}\nprint(1)`, 3)).toThrow(/IndexError/);
+});
+
+test.each([
+  ["xs = [10, 20, 30]\nprint(xs[-1])", "30\n"],
+  ["xs = [10, 20, 30]\nprint(xs[-3])", "10\n"],
+  ["xs = [10, 20, 30]\nxs[-1] = 99\nprint(xs)", "[10, 20, 99]\n"],
+  ["xs = [10, 20, 30]\nxs[-3] = 99\nprint(xs)", "[99, 20, 30]\n"],
+])("negative index wraparound: %s", (code, expected) => {
+  expect(runCodePy2Js(code, 3).output).toBe(expected);
+});
+
+test.each(["xs = [10, 20, 30]\nprint(xs[-4])", "xs = [10, 20, 30]\nxs[-4] = 1"])(
+  "negative index past the start of the list is still an IndexError: %s",
+  code => {
+    expect(() => runCodePy2Js(`${code}\nprint(1)`, 3)).toThrow(/IndexError/);
+  },
+);
+
+test.each([
+  ["print([1, 2] * 3)", "[1, 2, 1, 2, 1, 2]\n"],
+  ["print(3 * [1, 2])", "[1, 2, 1, 2, 1, 2]\n"],
+  ["print([1, 2] * 0)", "[]\n"],
+  ["print([1, 2] * -1)", "[]\n"],
+])("list multiplication: %s", (code, expected) => {
+  expect(runCodePy2Js(code, 3).output).toBe(expected);
+});
+
+test.each([
+  "print([1, 2] * 0.0)",
+  "print(0.0 * [1, 2])",
+  "print(True * [1, 2])",
+  "print([1, 2] * True)",
+])("list multiplication by a non-integer is a TypeError: %s", code => {
+  expect(() => runCodePy2Js(code, 3)).toThrow(/TypeError: can't multiply list by non-integer/);
+});
+
+test("list multiplication makes shallow copies (same nested-list identity)", () => {
+  const code = "x = [[1, 2]] * 4\nprint(x[0] is x[1])";
+  expect(runCodePy2Js(code, 3).output).toBe("True\n");
 });
 
 test("list assignment aliases: mutating through one reference is visible through another", () => {

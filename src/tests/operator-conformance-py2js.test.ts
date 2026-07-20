@@ -115,6 +115,26 @@ for (const chapter of PY2JS_CHAPTERS) {
           for (const right of universe) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
             test(code, async () => {
+              // py2js implements list * int / int * list repetition per spec
+              // issue #299; the CSE reference doesn't yet (a separate,
+              // already-planned fix), so this one combination is expected to
+              // diverge from CSE-parity until CSE catches up. Assert py2js's
+              // own spec-correct result directly instead of against CSE.
+              // chapter === 2's "list" literal is pair(1, 2), not a native
+              // array — py2js's list-repetition only handles native arrays
+              // (chapter 3+), so pair * int correctly still falls through to
+              // CSE-parity (both engines error on it) and must not match here.
+              const isListRepeat =
+                chapter >= 3 &&
+                op === "*" &&
+                ((left === "list" && right === "int") || (left === "int" && right === "list"));
+              if (isListRepeat) {
+                expect(py2jsOutcome(code, chapter)).toStrictEqual({
+                  kind: "value",
+                  text: "[1, 2, 1, 2]",
+                });
+                return;
+              }
               const wanted = await cseOutcome(code, chapter, groups);
               const actual = py2jsOutcome(code, chapter);
               expect(actual).toStrictEqual(wanted);
