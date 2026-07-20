@@ -72,11 +72,8 @@ function formatValue(v: Value): string {
       return `[${items.join(", ")}${suffix}]`;
     }
     case "builtin":
-      // Just the name, matching how "closure" above shows funcName rather than
-      // Python's full repr() — this is a compact stash chip, not repr() output.
-      // The "this is a builtin" fact is carried separately via `label`
-      // (see serializeValue / typeTranslator), same pattern as closures.
-      return v.name;
+      // Matches CPython's repr() of a builtin, and what print(print) shows in the REPL.
+      return `<built-in function ${v.name}>`;
     case "opaque":
       return `<opaque value>`;
     default:
