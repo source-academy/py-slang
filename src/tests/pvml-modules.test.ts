@@ -9,21 +9,31 @@ import { PyPvmlEvaluator1, PyPvmlEvaluator4 } from "../conductor/PyPvmlEvaluator
  * the evaluator it's constructed with — that binding is exactly what the
  * evaluator's per-instance `moduleLoader` field exists to keep fresh).
  * `withModuleLoader: false` omits registerPlugin entirely, for asserting
- * that import-free chunks never touch the plugin pathway. */
+ * that import-free chunks never touch the plugin pathway.
+ *
+ * The `evaluator` argument registerPlugin receives is PyPvmlEvaluatorBase's
+ * asInterfacableEvaluator(this, dataHandler) proxy, not the evaluator
+ * instance itself (which no longer implements IDataHandler directly — see
+ * PyPvmlEvaluator.ts). Stashed in `dataHandler` so a test that needs to
+ * drive the IDataHandler protocol directly (e.g. manually firing a
+ * scheduled callback) has something to call it on. */
 function makeMockConductor(withModuleLoader: boolean = true) {
   const results: unknown[] = [];
   const errors: unknown[] = [];
   const outputs: string[] = [];
+  let dataHandler: IDataHandler | undefined;
   const conductor = {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
     ...(withModuleLoader && {
-      registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) =>
-        makeFakeLoader(evaluator),
+      registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
+        dataHandler = evaluator;
+        return makeFakeLoader(evaluator);
+      },
     }),
   } as unknown as IRunnerPlugin;
-  return { conductor, results, errors, outputs };
+  return { conductor, results, errors, outputs, getDataHandler: () => dataHandler! };
 }
 
 /** Captures closures handed to "schedule_later" (see makeTestModule) instead of actually
@@ -389,7 +399,7 @@ describe("PyPvmlEvaluator module imports", () => {
     // (double), matching sequence()'s own recursive set_timeout(...) / play(...) calls in the
     // real Tone Matrix script.
     scheduledCallbacks = [];
-    const { conductor, errors, outputs } = makeMockConductor();
+    const { conductor, errors, outputs, getDataHandler } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
     await evaluator.evaluateChunk(
@@ -402,7 +412,7 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(errors).toEqual([]);
     expect(scheduledCallbacks).toHaveLength(1);
 
-    const dh = evaluator as unknown as IDataHandler;
+    const dh = getDataHandler();
     const gen = dh.closure_call_unchecked(scheduledCallbacks[0], []);
     let step = await gen.next();
     while (!step.done) {
@@ -420,7 +430,7 @@ describe("PyPvmlEvaluator module imports", () => {
     // that silently died before the fix (invokeValueAsync threw "No current frame", swallowed by
     // sound_matrix's fire-and-forget drainGenerator call).
     scheduledCallbacks = [];
-    const { conductor, errors, outputs } = makeMockConductor();
+    const { conductor, errors, outputs, getDataHandler } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
     await evaluator.evaluateChunk(
@@ -435,7 +445,7 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(errors).toEqual([]);
     expect(scheduledCallbacks).toHaveLength(1);
 
-    const dh = evaluator as unknown as IDataHandler;
+    const dh = getDataHandler();
     // Drain each scheduled callback in turn — invoking one may itself schedule the next, exactly
     // like a real setTimeout chain firing one after another.
     while (scheduledCallbacks.length > 0) {
@@ -458,7 +468,7 @@ describe("PyPvmlEvaluator module imports", () => {
     // few laps around 16 columns), with no accumulating slowdown/state corruption and every step
     // still landing in the right order.
     scheduledCallbacks = [];
-    const { conductor, errors, outputs } = makeMockConductor();
+    const { conductor, errors, outputs, getDataHandler } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
     const STEPS = 60;
@@ -473,7 +483,7 @@ describe("PyPvmlEvaluator module imports", () => {
 
     expect(errors).toEqual([]);
 
-    const dh = evaluator as unknown as IDataHandler;
+    const dh = getDataHandler();
     let drained = 0;
     while (scheduledCallbacks.length > 0) {
       const cb = scheduledCallbacks.shift()!;

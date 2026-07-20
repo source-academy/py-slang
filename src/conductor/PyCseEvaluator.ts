@@ -1,5 +1,5 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Context } from "../engines/cse/context";
@@ -23,8 +23,8 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
-import { PyDataHandlerEvaluator } from "./PyDataHandlerEvaluator";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -34,17 +34,19 @@ function once<T>(fn: () => Promise<T>): () => Promise<T> {
 /**
  * The abstract class PyCseEvaluatorBase implements the common logic for all variants of
  * the CSE evaluator, which includes setting up the context, loading preludes, and evaluating chunks of code.
- * The IDataHandler side of the conductor module protocol comes from
- * PyDataHandlerEvaluator (it originally lived inline here — moved out
- * unchanged so PyPvmlEvaluator can share it).
  */
-abstract class PyCseEvaluatorBase extends PyDataHandlerEvaluator {
+abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private context = new Context();
   private readonly variant: number;
   private readonly groups: Group[];
   private readonly preludeText: string;
   private readonly ensurePreludesLoaded: () => Promise<void>;
   private readonly csePlugin: CseMachinePlugin;
+  /** Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
+   * see GenericDataHandler.ts. Engine-agnostic, so this is the same instance
+   * type py2js's evaluator uses; only the pythonToModule/moduleToPython
+   * conversion layer (modules.ts) is CSE-specific. */
+  private readonly dataHandler = new GenericDataHandler();
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -64,7 +66,11 @@ abstract class PyCseEvaluatorBase extends PyDataHandlerEvaluator {
         this.context.nativeStorage.builtins.set(name, value);
       }
     }
-    this.conductor.registerPlugin(ModuleLoaderRunnerPlugin, this.conductor, this);
+    this.conductor.registerPlugin(
+      ModuleLoaderRunnerPlugin,
+      this.conductor,
+      asInterfacableEvaluator(this, this.dataHandler),
+    );
 
     this.ensurePreludesLoaded = once(async () => {
       if (this.preludeText.trim()) {
@@ -92,7 +98,7 @@ abstract class PyCseEvaluatorBase extends PyDataHandlerEvaluator {
         flushStdout: () => flushOutput(this.conductor),
       };
       this.context.conductor = this.conductor;
-      this.context.evaluator = this;
+      this.context.evaluator = this.dataHandler;
       await this.ensurePreludesLoaded();
 
       const script = chunk + "\n";

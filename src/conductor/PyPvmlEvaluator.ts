@@ -1,4 +1,4 @@
-import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { moduleToPvml } from "../engines/pvml/modules";
@@ -16,7 +16,7 @@ import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
-import { PyDataHandlerEvaluator } from "./PyDataHandlerEvaluator";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 
 function once(fn: () => Promise<void>): () => Promise<void> {
   let promise: Promise<void> | undefined;
@@ -53,16 +53,23 @@ function once(fn: () => Promise<void>): () => Promise<void> {
  * FromImport statement itself compiles to nothing — see the compiler's
  * visitFromImportStmt). Execution then uses the interpreter's executeAsync
  * so calls *to* the imported (async, conductor-side) functions can be
- * awaited mid-run. Extending PyDataHandlerEvaluator (rather than
- * BasicEvaluator directly) supplies the IDataHandler half of
- * IInterfacableEvaluator that ModuleLoaderRunnerPlugin requires.
+ * awaited mid-run. `dataHandler` is a GenericDataHandler — the same
+ * engine-agnostic IDataHandler implementation PyCseEvaluatorBase and
+ * Py2JsEvaluatorBase use — handed to ModuleLoaderRunnerPlugin via
+ * asInterfacableEvaluator(this, dataHandler) rather than this evaluator
+ * implementing IDataHandler itself.
  */
-abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
+abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
   private readonly variant: number;
   private readonly groups: Group[];
   private globalEnv = new Map<string, PVMLBoxType>();
   private readonly preludeText: string;
   private readonly ensurePreludeLoaded: () => Promise<void>;
+  /** Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
+   * see GenericDataHandler.ts. Passed to moduleToPvml as the IDataHandler
+   * a module's exports are read against, and wrapped via
+   * asInterfacableEvaluator when registering ModuleLoaderRunnerPlugin. */
+  private readonly dataHandler = new GenericDataHandler();
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
@@ -150,7 +157,7 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
     this.moduleLoader ??= this.conductor.registerPlugin(
       ModuleLoaderRunnerPlugin,
       this.conductor,
-      this,
+      asInterfacableEvaluator(this, this.dataHandler),
     );
     const loader = this.moduleLoader;
 
@@ -171,7 +178,7 @@ abstract class PyPvmlEvaluatorBase extends PyDataHandlerEvaluator {
           }
           this.globalEnv.set(
             spec.alias ?? spec.name,
-            await moduleToPvml(this, entry.value, spec.name),
+            await moduleToPvml(this.dataHandler, entry.value, spec.name),
           );
         }
       }),

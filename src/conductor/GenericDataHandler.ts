@@ -1,4 +1,4 @@
-import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import type { IEvaluator, IInterfacableEvaluator } from "@sourceacademy/conductor/runner";
 import {
   ArrayIdentifier,
   ClosureIdentifier,
@@ -12,20 +12,24 @@ import {
 } from "@sourceacademy/conductor/types";
 
 /**
- * BasicEvaluator plus a complete, engine-agnostic IDataHandler
- * implementation: plain Map-backed stores for the pair/array/closure/opaque
- * identifiers the conductor module protocol traffics in. Nothing here touches
- * any engine's own value representation — values cross the boundary already
- * converted to conductor TypedValues (see src/engines/cse/modules.ts and
- * src/engines/pvml/modules.ts for the per-engine converters) — which is what
- * makes this base class shareable between PyCseEvaluator and PyPvmlEvaluator.
- * Extracted verbatim from PyCseEvaluator (where it originally lived inline)
- * when PyPvmlEvaluator gained module-import support and needed the identical
- * ~340 lines: ModuleLoaderRunnerPlugin requires an IInterfacableEvaluator
- * (IEvaluator & IDataHandler), so each evaluator class must carry this
- * interface itself rather than delegating to a separate handler object.
+ * A conductor `IDataHandler` implementation with no engine-specific logic:
+ * pairs, arrays, closures and opaques are all just bookkeeping over plain
+ * Maps keyed by an incrementing id, and the list helpers (`list`/`is_list`/
+ * `list_to_vec`/`accumulate`/`length`) walk that pair structure generically.
+ * The only place an engine's own semantics enter the picture is the
+ * `ExternCallable` passed to `closure_make` (authored by that engine's own
+ * module-interop layer) and the arguments/results flowing through
+ * `closure_call`/`closure_call_unchecked` — this class never inspects them.
+ *
+ * Originally written inline in PyCseEvaluatorBase (see PyCseEvaluator.ts);
+ * extracted so every evaluator that talks to conductor modules (CSE, py2js,
+ * and eventually WASM/PVML) shares one implementation instead of
+ * re-deriving the same identifier-table bookkeeping per engine. An evaluator
+ * holds one instance (`private dataHandler = new GenericDataHandler()`) and
+ * hands it to both `context.evaluator` (or the engine's equivalent) and
+ * `conductor.registerPlugin(ModuleLoaderRunnerPlugin, conductor, dataHandler)`.
  */
-export abstract class PyDataHandlerEvaluator extends BasicEvaluator implements IDataHandler {
+export class GenericDataHandler implements IDataHandler {
   hasDataInterface = true as const;
   private pairMap = new Map<
     PairIdentifier,
@@ -245,6 +249,36 @@ export abstract class PyDataHandlerEvaluator extends BasicEvaluator implements I
       undefined
     >;
   }
+  /**
+   * Fast path for a closure that provably never needs to leave the current
+   * synchronous call - e.g. a scalar-in/scalar-out wave function sampled
+   * 44100x/sec by the sound module. `func` (an `ExternCallable`, normally
+   * only callable as an AsyncGenerator per conductor's own contract) may
+   * additionally carry a `.sync` escape hatch: a plain function computing
+   * the exact same result with no Promise/generator indirection at all. An
+   * engine's module-interop layer sets `.sync` only when it can prove the
+   * closure never needs a real host round-trip (see py2js's moduleInterop.ts
+   * pyClosureFunc); a closure with no such proof (every CSE-machine closure
+   * today, or a py2js closure that touches something asyncOnly) simply never
+   * gets one.
+   *
+   * Returns `undefined` when the closure has no sync form - the signal for
+   * "fall back to closure_call_unchecked" - which is unambiguous because a
+   * TypedValue always wraps a real `{ type, value }` pair, even for
+   * DataType.VOID; the bare JS value `undefined` is never a legitimate
+   * closure result.
+   */
+  closure_call_sync<T extends DataType>(
+    c: TypedValue<DataType.CLOSURE, T>,
+    args: TypedValue<DataType>[],
+  ): TypedValue<NoInfer<T>> | undefined {
+    const func = this.closureMap.get(c.value)?.func as
+      | (ExternCallable<DataType[], T> & {
+          sync?: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
+        })
+      | undefined;
+    return func?.sync?.(...args) as TypedValue<NoInfer<T>> | undefined;
+  }
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
     const closure = this.closureMap.get(c.value);
     if (!closure) {
@@ -369,4 +403,34 @@ export abstract class PyDataHandlerEvaluator extends BasicEvaluator implements I
     }
     return Promise.resolve(length);
   }
+}
+
+/**
+ * `ModuleLoaderRunnerPlugin`'s constructor requires a single object
+ * satisfying `IInterfacableEvaluator` (`IEvaluator & IDataHandler`) — but an
+ * evaluator built around `GenericDataHandler` has those two halves on two
+ * different objects (the evaluator itself, extending `BasicEvaluator`, is
+ * the `IEvaluator`; its `dataHandler` field is the `IDataHandler`). A Proxy
+ * combines them into the one object the registration call needs, so
+ * combining stays a one-line call at each registration site instead of ~20
+ * lines of per-evaluator forwarding methods duplicated alongside the
+ * bookkeeping this class already centralizes.
+ */
+export function asInterfacableEvaluator(
+  evaluator: IEvaluator,
+  dataHandler: GenericDataHandler,
+): IInterfacableEvaluator {
+  return new Proxy(evaluator, {
+    get(target, prop, receiver) {
+      if (prop in dataHandler) {
+        // Bind so stateful methods (this.uniqueId++ in pair_make etc.) read
+        // and write dataHandler, not the proxy — a plain Reflect.get returns
+        // the method unbound, so calling it here would set `this` to the
+        // proxy and (absent a `set` trap) silently write to `evaluator`.
+        const value = Reflect.get(dataHandler, prop, dataHandler);
+        return typeof value === "function" ? value.bind(dataHandler) : value;
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  }) as unknown as IInterfacableEvaluator;
 }
