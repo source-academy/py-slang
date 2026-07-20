@@ -19,9 +19,11 @@
  * underlying value is guaranteed to agree on text too — no float-tolerance
  * machinery needed (both sides do plain JS `number` arithmetic).
  *
- * Chapters 1-2 (identical operator typing rules at both — python_typing_*.tex
- * doesn't distinguish them); extend the chapter list as the engine grows
- * into §3+.
+ * Chapters 1-2 share identical operator typing rules (python_typing_*.tex
+ * doesn't distinguish them); chapter 3 adds universal `==`/`!=` (any x any,
+ * not just bool/function-excluded), `is`/`is not`, and bool participating in
+ * ordering as the int it is — see BINARY_OPS_34 and universeForChapter.
+ * Extend the chapter list further as the engine grows into §4.
  */
 import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
@@ -33,10 +35,10 @@ import { Resolver } from "../resolver";
 import { VARIANT_GROUPS } from "../runner";
 import { Group, toPythonString } from "../stdlib/utils";
 import { makeValidatorsForChapter } from "../validator";
-import { BINARY_OPS_12, literalFor, universeForChapter } from "./operator-spec";
+import { BINARY_OPS_12, BINARY_OPS_34, literalFor, universeForChapter } from "./operator-spec";
 import { generateMockStreams } from "./utils";
 
-const PY2JS_CHAPTERS = [1, 2];
+const PY2JS_CHAPTERS = [1, 2, 3];
 
 type Outcome = { kind: "value"; text: string } | { kind: "error" };
 
@@ -100,7 +102,7 @@ function py2jsOutcome(code: string, chapter: number): Outcome {
 
 for (const chapter of PY2JS_CHAPTERS) {
   describe(`[py2js] Operator conformance at Python §${chapter}`, () => {
-    const ops = BINARY_OPS_12;
+    const ops = chapter <= 2 ? BINARY_OPS_12 : BINARY_OPS_34;
     const universe = universeForChapter(chapter);
     // The canonical per-chapter group list for the CSE reference side (so
     // e.g. `print` itself resolves there); the py2js side uses its own

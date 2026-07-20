@@ -18,8 +18,12 @@ import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
 import linkedList from "../../stdlib/linked-list";
+import list from "../../stdlib/list";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
+import pairmutator from "../../stdlib/pairmutator";
+import parser from "../../stdlib/parser";
+import stream from "../../stdlib/stream";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
@@ -27,16 +31,18 @@ import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
 
-const SUPPORTED_CHAPTERS = [1, 2];
+const SUPPORTED_CHAPTERS = [1, 2, 3, 4];
 
 /**
  * Stdlib groups per chapter, bridged into the runtime by prepare(). Mirrors
  * runner.ts's VARIANT_GROUPS (kept separate so the engine does not pull in
- * the runner's conductor plumbing); extend as chapters 3+ land.
+ * the runner's conductor plumbing).
  */
 const PY2JS_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
   2: [misc, math, linkedList],
+  3: [misc, math, linkedList, list, pairmutator, stream],
+  4: [misc, math, linkedList, list, pairmutator, stream, parser],
 };
 
 export { Py2JsCompileError, Py2JsRuntime, Py2JsRuntimeError };
@@ -135,9 +141,17 @@ function prepare(
     );
   }
 
-  const rt = new Py2JsRuntime();
+  const rt = new Py2JsRuntime(variant >= 3);
   const script = code.endsWith("\n") ? code : code + "\n";
   const groups = PY2JS_GROUPS[variant] ?? [];
+
+  // Predeclared at every chapter, not just 4 — the CSE machine defines it
+  // unconditionally (interpreter.ts's pyDefineVariable("__program__", ...)),
+  // matching the spec's "the Source Academy frontend predeclares the name
+  // __program__ in all Python languages" (docs/specs/python_interpreter.tex).
+  // It's documented under chapter 4 only because that's where tokenize/parse
+  // are introduced, not because availability itself is chapter-gated.
+  rt.builtins.__program__ = code;
 
   // The chapter's stdlib groups, bridged to native values (stdlibBridge.ts).
   // The runtime's native core (print/input/arity) wins over same-named
@@ -246,6 +260,15 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * object — see PyCseEvaluatorBase for the identical requirement).
    */
   dataHandler?: IDataHandler;
+  /**
+   * `__program__`'s value for this session — "the string representation of
+   * the editor content at the time when 'Run' was last pressed" per
+   * docs/specs/python_interpreter.tex, for the REPL case. Mirrors
+   * PVMLInterpreter's own `programText` option (pvml-interpreter.ts). Left
+   * unset (rather than defaulting to e.g. an empty string) if the caller
+   * never supplies one, matching PVML's own conditional-set behavior.
+   */
+  programText?: string;
 }
 
 /**
@@ -287,8 +310,11 @@ export class Py2JsSession {
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
     this.dataHandler = options.dataHandler ?? new GenericDataHandler();
-    this.rt = new Py2JsRuntime();
+    this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onOutput = options.onOutput;
+    if (options.programText !== undefined) {
+      this.rt.builtins.__program__ = options.programText;
+    }
 
     // Same builtin layering as prepare(): bridged stdlib under the native
     // core, extraBuiltins over everything. The bridge's source string is

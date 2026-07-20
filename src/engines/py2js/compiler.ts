@@ -37,8 +37,20 @@
  * binding: a function defined in chunk 1 that calls helper g sees chunk 3's
  * *redefinition* of g, exactly like the CSE machine's global environment
  * frame. Function-local scopes are unaffected — locals stay `let`-compiled.
- * Chapter 1 has no `global` keyword, so a name is module-level iff it is
- * bound at the top level of some chunk; no other scope analysis is needed.
+ *
+ * Chapter 3+ adds `global`/`nonlocal`, which is where JS's TDZ would
+ * otherwise clash with Python's dynamically-growing environments: a function
+ * can do `global x; x = 5` for an `x` no top-level statement ever assigns
+ * directly (module.globalPreScan below folds every such function-introduced
+ * global into the module's name set, mirroring the Resolver's
+ * visitFunctionDefStmt pre-registration), and a name declared `global`/
+ * `nonlocal` inside a function must be *excluded* from that function's own
+ * hoisted locals (functionScopeNames below) so emitName's scope-chain walk
+ * falls through to the outer binding — module globals table or an enclosing
+ * function's own hoisted `let` — instead of shadowing it. Every other
+ * mechanism (hoist-all-locals-as-`let`-up-front, guarded `=== undefined`
+ * reads) is unchanged from chapter 1/2 and needs no special-casing for loops
+ * or global/nonlocal beyond boundNames recursing into their bodies.
  *
  * Inside the emitters, `a` says whether the code being emitted right now is
  * the async body (await calls) or the sync one; `ctx` carries the fixed
@@ -53,7 +65,7 @@ import { ExprNS, StmtNS } from "../../ast-types";
 
 export class Py2JsCompileError extends Error {
   constructor(feature: string) {
-    super(`py2js: ${feature} is not supported (chapter 1 subset)`);
+    super(`py2js: ${feature} is not supported`);
     this.name = "Py2JsCompileError";
   }
 }
@@ -92,6 +104,10 @@ interface EmitCtx {
   programGlobals?: Set<string>;
   /** Enclosing function scopes, outermost first. */
   scopes: Scope[];
+  /** Mutable counter for unique hidden for-loop temp names (nested for-loops
+   * each need their own `_loop_i`/`_end`/`_step`, never user-visible so they
+   * need no emitName/boundNames treatment at all). */
+  forId: { next: number };
 }
 
 const mangle = (name: string) => "$" + name;
@@ -217,6 +233,14 @@ function emitExpr(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
     }
     case "Call":
       return emitCall(e as ExprNS.Call, a, ctx);
+    case "List": {
+      const l = e as ExprNS.List;
+      return `[${l.elements.map(el => emitExpr(el, a, ctx)).join(", ")}]`;
+    }
+    case "Subscript": {
+      const s = e as ExprNS.Subscript;
+      return `__py.listAccess(${emitExpr(s.value, a, ctx)}, ${emitExpr(s.index, a, ctx)})`;
+    }
     case "Lambda": {
       const l = e as ExprNS.Lambda;
       const params = l.parameters.map(p => p.lexeme);
@@ -265,11 +289,11 @@ function emitTailPosition(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
 }
 
 /**
- * Names bound in a scope: assignment targets and def names, including inside
- * if/else arms, but NOT inside nested function bodies (those are their own
- * scopes). The resolver leaves FunctionDef/FileInput varDecls unpopulated, so
- * the compiler scans for itself. Chapter 1 has no loops or global/nonlocal,
- * which keeps this exact.
+ * Names bound in a scope: assignment targets, def names, and for-loop
+ * targets, including inside if/else arms and while/for bodies, but NOT
+ * inside nested function bodies (those are their own scopes). The resolver
+ * leaves FunctionDef/FileInput varDecls unpopulated, so the compiler scans
+ * for itself.
  */
 function boundNames(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<string> {
   for (const s of stmts) {
@@ -286,6 +310,73 @@ function boundNames(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<st
       const i = s as StmtNS.If;
       boundNames(i.body, into);
       if (i.elseBlock !== null) boundNames(i.elseBlock, into);
+    } else if (s.kind === "While") {
+      boundNames((s as StmtNS.While).body, into);
+    } else if (s.kind === "For") {
+      const f = s as StmtNS.For;
+      into.add(f.target.lexeme);
+      boundNames(f.body, into);
+    }
+  }
+  return into;
+}
+
+/**
+ * Names declared `global` or `nonlocal` directly in this function's own
+ * body — recurses into if/while/for but stops at nested FunctionDefs (a
+ * nested function's own global/nonlocal declarations are its own scope's
+ * concern, resolved when *that* function is compiled). Mirrors
+ * scanGlobalDeclarations/scanNonlocalDeclarations in resolver.ts, which
+ * already do this same scan for the Resolver's own scope analysis.
+ */
+function scanScopeDeclarations(stmts: StmtNS.Stmt[], kind: "Global" | "NonLocal"): Set<string> {
+  const names = new Set<string>();
+  const visit = (body: StmtNS.Stmt[]): void => {
+    for (const s of body) {
+      if (s.kind === kind) {
+        names.add((s as StmtNS.Global | StmtNS.NonLocal).name.lexeme);
+      } else if (s.kind === "If") {
+        visit((s as StmtNS.If).body);
+        const elseBlock = (s as StmtNS.If).elseBlock;
+        if (elseBlock !== null) visit(elseBlock);
+      } else if (s.kind === "While") {
+        visit((s as StmtNS.While).body);
+      } else if (s.kind === "For") {
+        visit((s as StmtNS.For).body);
+      }
+    }
+  };
+  visit(stmts);
+  return names;
+}
+
+/**
+ * Every name declared `global` anywhere in the program, at any nesting depth
+ * (unlike scanScopeDeclarations, this *does* descend into nested
+ * FunctionDefs — a `global x` ten functions deep still refers to the one
+ * module scope). Folded into the module's name set so a function that
+ * introduces a global with no top-level assignment anywhere (`def f():
+ * global x; x = 5`, no `x = ...` at module level) still resolves through the
+ * globals table/hoisted module `let` instead of falling through to an
+ * undeclared bare identifier — Python's environments grow dynamically;
+ * nothing here needs the whole name to be visible textually at module level
+ * first. Mirrors visitFunctionDefStmt's pre-registration of such names into
+ * the module environment in resolver.ts.
+ */
+function collectAllGlobalDecls(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<string> {
+  for (const s of stmts) {
+    if (s.kind === "Global") {
+      into.add((s as StmtNS.Global).name.lexeme);
+    } else if (s.kind === "If") {
+      collectAllGlobalDecls((s as StmtNS.If).body, into);
+      const elseBlock = (s as StmtNS.If).elseBlock;
+      if (elseBlock !== null) collectAllGlobalDecls(elseBlock, into);
+    } else if (s.kind === "While") {
+      collectAllGlobalDecls((s as StmtNS.While).body, into);
+    } else if (s.kind === "For") {
+      collectAllGlobalDecls((s as StmtNS.For).body, into);
+    } else if (s.kind === "FunctionDef") {
+      collectAllGlobalDecls((s as StmtNS.FunctionDef).body, into);
     }
   }
   return into;
@@ -308,19 +399,32 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
       return `${indent}${emitExpr((s as StmtNS.SimpleExpr).expression, a, ctx)};\n`;
     case "Assign": {
       const asg = s as StmtNS.Assign;
-      if (asg.target.kind !== "Variable") throw new Py2JsCompileError("subscript assignment");
+      if (asg.target.kind === "Subscript") {
+        const t = asg.target;
+        // Evaluation order (list, index, value) matches CSE's LIST_ASSIGNMENT
+        // instruction (evaluateListAssignment in cse/utils.ts) — JS argument
+        // evaluation order reproduces it directly.
+        return `${indent}__py.listAssign(${emitExpr(t.value, a, ctx)}, ${emitExpr(t.index, a, ctx)}, ${emitExpr(asg.value, a, ctx)});\n`;
+      }
       return `${indent}${emitName(asg.target.name.lexeme, ctx, true)} = ${emitExpr(asg.value, a, ctx)};\n`;
     }
     case "FunctionDef": {
       const f = s as StmtNS.FunctionDef;
       if (f.parameters.some(p => p.isStarred)) throw new Py2JsCompileError("rest parameters");
       const params = f.parameters.map(p => p.lexeme);
-      const locals = boundNames(f.body);
       const paramSet = new Set(params);
-      const scope: Scope = {
-        params: paramSet,
-        locals: new Set([...locals].filter(n => !paramSet.has(n))),
-      };
+      // Names this function declares `global`/`nonlocal` are excluded from its
+      // own hoisted locals — see the file header and scanScopeDeclarations —
+      // so emitName's scope-chain walk falls through to the outer binding
+      // instead of shadowing it with a fresh local `let`.
+      const globalDecls = scanScopeDeclarations(f.body, "Global");
+      const nonlocalDecls = scanScopeDeclarations(f.body, "NonLocal");
+      const locals = new Set(
+        [...boundNames(f.body)].filter(
+          n => !paramSet.has(n) && !globalDecls.has(n) && !nonlocalDecls.has(n),
+        ),
+      );
+      const scope: Scope = { params: paramSet, locals };
       const inner = indent + "  ";
       const emitBody = (bodyAsync: boolean) =>
         `{\n` +
@@ -342,6 +446,94 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
       if (i.elseBlock === null) return head + "\n";
       return `${head} else {\n${emitStmts(i.elseBlock, indent + "  ", a, ctx)}${indent}}\n`;
     }
+    case "While": {
+      const w = s as StmtNS.While;
+      // whileCond, unlike the truth() used by if/ternary, demands a literal
+      // bool — mirrors the CSE machine's WHILE instruction, which is
+      // deliberately stricter than Python's usual any-type truthiness here
+      // (see src/tests/loops.test.ts's "while 1:"/"while y + 1:" TypeError
+      // cases; truth()'s own doc comment already flags this asymmetry).
+      return `${indent}while (__py.whileCond(${emitExpr(w.condition, a, ctx)})) {\n${emitStmts(w.body, indent + "  ", a, ctx)}${indent}}\n`;
+    }
+    case "For": {
+      const f = s as StmtNS.For;
+      // ForRangeOnlyValidator (the resolver) already guarantees this shape —
+      // for x in range(<=3 args) — before the compiler ever sees it; the
+      // instanceof/arity check below is just a backstop.
+      if (
+        f.iter.kind !== "Call" ||
+        (f.iter as ExprNS.Call).callee.kind !== "Variable" ||
+        ((f.iter as ExprNS.Call).callee as ExprNS.Variable).name.lexeme !== "range" ||
+        (f.iter as ExprNS.Call).args.length < 1 ||
+        (f.iter as ExprNS.Call).args.length > 3
+      ) {
+        throw new Py2JsCompileError("for-loops other than 'for x in range(...)'");
+      }
+      const iter = f.iter as ExprNS.Call;
+      const rangeArgs = iter.args;
+      const zero = "0n";
+      const one = "1n";
+      let startSrc: string;
+      let endSrc: string;
+      let stepSrc: string;
+      if (rangeArgs.length === 1) {
+        startSrc = zero;
+        endSrc = emitExpr(rangeArgs[0], a, ctx);
+        stepSrc = one;
+      } else if (rangeArgs.length === 2) {
+        startSrc = emitExpr(rangeArgs[0], a, ctx);
+        endSrc = emitExpr(rangeArgs[1], a, ctx);
+        stepSrc = one;
+      } else {
+        startSrc = emitExpr(rangeArgs[0], a, ctx);
+        endSrc = emitExpr(rangeArgs[1], a, ctx);
+        stepSrc = emitExpr(rangeArgs[2], a, ctx);
+      }
+      // Desugars exactly per docs/specs/python_loops.tex: a hidden counter
+      // distinct from the user-visible loop target, so the loop body may
+      // freely reassign the target without perturbing the iteration (see
+      // src/tests/loops.test.ts's "for i in range(5): i = 0" case, whose
+      // final `i` is 0, not 4). Range args are evaluated once, up front.
+      //
+      // The counter's advance is a JS `for(...)` update clause, not a
+      // trailing statement in a `while` body: a `continue` in the loop body
+      // must still advance the (implicit, user-invisible) counter before
+      // re-checking the condition — exactly matching CSE's CONTINUE_MARKER
+      // placement, which sits after the body but before the "compute next
+      // start" step (see evaluateForIterator/the FOR instruction handler in
+      // src/engines/cse/interpreter.ts). A trailing increment after a plain
+      // `while` body would be skipped by `continue`, hanging the loop
+      // forever the first time the body actually continues.
+      const id = ctx.forId.next++;
+      const iVar = `$__for${id}_i`;
+      const endVar = `$__for${id}_end`;
+      const stepVar = `$__for${id}_step`;
+      const targetAssign = `${emitName(f.target.lexeme, ctx, true)} = ${iVar};\n`;
+      const inner = indent + "    ";
+      const body = emitStmts(f.body, inner, a, ctx);
+      return (
+        `${indent}let ${iVar} = ${startSrc}, ${endVar} = ${endSrc}, ${stepVar} = ${stepSrc};\n` +
+        `${indent}__py.forRangeCheck(${iVar}, ${endVar}, ${stepVar});\n` +
+        `${indent}if (${stepVar} > 0n) {\n` +
+        `${indent}  for (; ${iVar} < ${endVar}; ${iVar} = ${iVar} + ${stepVar}) {\n` +
+        `${indent}    ${targetAssign}${body}${indent}  }\n` +
+        `${indent}} else {\n` +
+        `${indent}  for (; ${iVar} > ${endVar}; ${iVar} = ${iVar} + ${stepVar}) {\n` +
+        `${indent}    ${targetAssign}${body}${indent}  }\n` +
+        `${indent}}\n`
+      );
+    }
+    case "Break":
+      return `${indent}break;\n`;
+    case "Continue":
+      return `${indent}continue;\n`;
+    case "Global":
+    case "NonLocal":
+      // No codegen: entirely handled by excluding the name from this
+      // function's hoisted locals (see the FunctionDef case and the file
+      // header) so emitName's scope-chain walk resolves it to the outer
+      // binding on its own.
+      return "";
     case "Assert":
       return `${indent}__py.assertCheck(${emitExpr((s as StmtNS.Assert).value, a, ctx)});\n`;
     case "FromImport": {
@@ -380,12 +572,22 @@ export function compileProgram(
   const file = ast as StmtNS.FileInput;
   const dual = options.mode === "dual";
 
-  const topLevelNames = boundNames(file.statements);
+  // Module-level names: this chunk's top-level bindings, plus every name any
+  // (possibly nested) function in the chunk declares `global` for — even one
+  // with no top-level assignment anywhere (see collectAllGlobalDecls's doc
+  // comment) — so such a name resolves through the globals table/hoisted
+  // module `let` instead of falling through emitName to an undeclared bare
+  // identifier.
+  const topLevelNames = new Set([
+    ...boundNames(file.statements),
+    ...collectAllGlobalDecls(file.statements),
+  ]);
   const ctx: EmitCtx = {
     dual,
     scopes: [],
     globals: options.repl ? new Set([...options.repl.priorGlobals, ...topLevelNames]) : undefined,
     programGlobals: options.repl ? undefined : topLevelNames,
+    forId: { next: 0 },
   };
 
   // A builtin resolves as a preamble const unless some chunk-level binding

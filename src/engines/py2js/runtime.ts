@@ -53,8 +53,23 @@ export type PyValue =
   | null
   | PyComplexNumber
   | PyPair
+  | PyList
   | PyOpaque
   | PyFunction;
+
+/**
+ * Chapter 3's native list literal (`[1, 2, 3]`): a plain mutable JS array of
+ * PyValues. Deliberately a distinct type from PyPair (chapter 2's cons cell)
+ * rather than unifying the two representations the way CSE does internally
+ * (src/engines/cse/stash.ts's ListValue backs both) — PyPair already works
+ * and is tested at chapter 2, and Array.isArray is a free, zero-cost
+ * discriminant since nothing else in PyValue is a JS array. The stdlib
+ * bridge (stdlibBridge.ts) converts both PyPair and PyList to the same CSE
+ * tagged list shape, which is what actually needs to match for conformance
+ * (is_list/list_length can't tell a pair from a 2-element list either, on
+ * either engine).
+ */
+export type PyList = PyValue[];
 
 /**
  * Chapter 2's pair: a 2-element cons cell built by pair()/llist(), the same
@@ -205,6 +220,9 @@ function toDisplayValue(v: PyValue): Value {
       if (v instanceof PyPair) {
         return { type: "list", value: [toDisplayValue(v.head), toDisplayValue(v.tail)] };
       }
+      if (Array.isArray(v)) {
+        return { type: "list", value: v.map(toDisplayValue) };
+      }
       // stringify()'s convert() has no dedicated "opaque" case — it falls to
       // the generic `<${type} object>` fallback, matching pyStr's own
       // "<opaque object>" rendering, so this is just as accurate as a
@@ -228,7 +246,7 @@ export function pyStr(v: PyValue): string {
       return v.pyBuiltin ? `<built-in function ${v.pyName}>` : `<function ${v.pyName}>`;
     case "object":
       if (v === null) return "None";
-      if (v instanceof PyPair) return stringify(toDisplayValue(v));
+      if (v instanceof PyPair || Array.isArray(v)) return stringify(toDisplayValue(v));
       // Matches the CSE machine's toPythonString default case (stdlib/
       // utils.ts) for its "opaque" Value type.
       return v instanceof PyOpaque ? "<opaque object>" : v.toString();
@@ -304,9 +322,25 @@ function isNaNValue(v: PyValue): boolean {
  * int/float/complex; None == None; strings by value; remaining different
  * types are simply unequal.
  */
-function pyEquals(l: PyValue, r: PyValue): boolean {
-  if (typeof l === "boolean" || typeof l === "function") unsupported("==", l, r);
-  if (typeof r === "boolean" || typeof r === "function") unsupported("==", l, r);
+/**
+ * `==`/`!=`. `restrict` is true at chapters 1-2 (bool/function excluded
+ * entirely — docs/specs/python_typing_middle_12.tex) and false at chapter 3+,
+ * where equality is total over any operand pair — mirrors
+ * evaluateBinaryExpression/handleExpandedEquality's `restrictChapter12`
+ * threading in src/engines/cse/operators.ts, re-checked at every level of
+ * list/pair recursion, not just the top level.
+ */
+function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
+  if (restrict && (typeof l === "boolean" || typeof l === "function")) unsupported("==", l, r);
+  if (restrict && (typeof r === "boolean" || typeof r === "function")) unsupported("==", l, r);
+  // At chapter 3+, booleans compare as the ints they are (True == 1, False ==
+  // 0.0) — mirrors asIntIfBool's use in CSE's structuralEquals. At chapter
+  // 1-2 this is unreachable: the exclusion above already rejected any bool
+  // operand.
+  if (!restrict) {
+    if (typeof l === "boolean") l = l ? 1n : 0n;
+    if (typeof r === "boolean") r = r ? 1n : 0n;
+  }
   if (isNaNValue(l) || isNaNValue(r)) return false;
   if (isComplex(l) || isComplex(r)) {
     if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r)) return false;
@@ -317,21 +351,53 @@ function pyEquals(l: PyValue, r: PyValue): boolean {
   if (l instanceof PyPair && r instanceof PyPair) {
     // Identity shortcut first (mirrors CSE's structuralEquals — also lets a
     // self-referential pair compare equal to itself without recursing
-    // forever, though chapter 2 has no pairmutator to build a cycle with).
-    // The recursive pyEquals calls re-run this function's own bool/function
-    // exclusion checks on each element, matching CSE's restrictChapter12
-    // re-check at every level of list recursion.
-    return l === r || (pyEquals(l.head, r.head) && pyEquals(l.tail, r.tail));
+    // forever, and chapter 3's pair mutators can build exactly such a cycle).
+    return l === r || (pyEquals(l.head, r.head, restrict) && pyEquals(l.tail, r.tail, restrict));
+  }
+  if (Array.isArray(l) && Array.isArray(r)) {
+    // Same identity shortcut, for the same reason (a native list can be
+    // self-referential too, once assigned into its own slot via list-assign).
+    if (l === r) return true;
+    if (l.length !== r.length) return false;
+    return l.every((el, i) => pyEquals(el, r[i], restrict));
   }
   return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }
 
 /**
- * Ordering comparisons: int/float × int/float and str × str only at chapter 1
- * (bool and complex operands are errors — python_typing_middle_12.tex,
- * python_typing_back.tex). NaN is unordered: every comparison is False.
+ * `is`/`is not` (chapter 3+ only — chapter 1-2 reject the operator entirely
+ * at resolve time via NoIsOperatorValidator; this is an independent runtime
+ * backstop, mirroring the CSE machine's own variant gate on top of its own
+ * validator). Mirrors pyIdentical in src/engines/cse/operators.ts, which
+ * exists mostly to compare CSE's *boxed* Values by their underlying
+ * primitive; py2js's values are already unboxed, so plain `===` already *is*
+ * that comparison for every case except complex numbers (each occurrence is
+ * a freshly-allocated PyComplexNumber object, so `===` would never consider
+ * two equal-valued complex numbers identical — CSE's pyIdentical special-
+ * cases this the same way).
  */
-function pyOrder(op: string, l: PyValue, r: PyValue): boolean {
+function pyIdentical(l: PyValue, r: PyValue): boolean {
+  if (isComplex(l) && isComplex(r)) return l.equals(r);
+  return l === r;
+}
+
+/**
+ * Ordering comparisons: int/float × int/float and str × str at chapter 1-2
+ * (bool and complex operands are errors — python_typing_middle_12.tex,
+ * python_typing_back.tex); at chapter 3+, bool also participates as the int
+ * it is (`True < 2` is `True` — python_typing_middle_34.tex, mirroring
+ * asIntIfBool's use in evaluateBinaryExpression). NaN is unordered: every
+ * comparison is False.
+ */
+function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolean {
+  // Gated on both operands already being bool-or-numeric — as in CSE — so an
+  // unsupported comparison against some other type (e.g. `True < 'abc'`)
+  // still reports 'bool', not 'int', in its error message below.
+  const isOrderable = (v: PyValue): boolean => typeof v === "boolean" || isNum(v);
+  if (universal && isOrderable(l) && isOrderable(r)) {
+    if (typeof l === "boolean") l = l ? 1n : 0n;
+    if (typeof r === "boolean") r = r ? 1n : 0n;
+  }
   if (typeof l === "string" && typeof r === "string") {
     switch (op) {
       case "<":
@@ -394,6 +460,15 @@ function complexBinop(op: string, l: PyValue, r: PyValue): PyComplexNumber {
 }
 
 export class Py2JsRuntime {
+  /**
+   * True at chapter 3+: `==`/`!=` are total over any operand pair (instead of
+   * excluding bool/function entirely), `is`/`is not` are legal, and bool
+   * participates in ordering comparisons as the int it is. Defaults to the
+   * chapter 1-2 (restricted) behavior so existing no-argument construction
+   * sites are unaffected; index.ts passes `variant >= 3` explicitly.
+   */
+  constructor(public readonly universalEquality: boolean = false) {}
+
   output: string[] = [];
 
   /**
@@ -522,14 +597,21 @@ export class Py2JsRuntime {
     // ordering, then the complex branch, then None/string, then numerics.
     switch (op) {
       case "==":
-        return pyEquals(l, r);
+        return pyEquals(l, r, !this.universalEquality);
       case "!=":
-        return !pyEquals(l, r);
+        return !pyEquals(l, r, !this.universalEquality);
       case "<":
       case "<=":
       case ">":
       case ">=":
-        return pyOrder(op, l, r);
+        return pyOrder(op, l, r, this.universalEquality);
+      case "is":
+      case "is not":
+        // NoIsOperatorValidator (the resolver) already rejects this operator
+        // at chapter 1-2; universalEquality false here is an independent
+        // runtime backstop, matching the CSE machine's own variant gate.
+        if (!this.universalEquality) unsupported(op, l, r);
+        return (op === "is not") !== pyIdentical(l, r);
     }
 
     if (isComplex(l) || isComplex(r)) {
@@ -596,6 +678,62 @@ export class Py2JsRuntime {
   }
 
   /**
+   * `expr[index]` (chapter 3+): mirrors the CSE machine's LIST_ACCESS
+   * instruction — a list or string subject, an int index, bounds-checked;
+   * negative indices are not supported (CSE's own LIST_ACCESS has no
+   * negative-index handling either, unlike list-assignment below).
+   */
+  listAccess(list: PyValue, index: PyValue): PyValue {
+    if (typeof list !== "string" && !Array.isArray(list)) {
+      throw new Py2JsRuntimeError("TypeError", `'${pyTypeName(list)}' object is not subscriptable`);
+    }
+    if (typeof index !== "bigint") {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `list indices must be integers, not '${pyTypeName(index)}'`,
+      );
+    }
+    const idx = Number(index);
+    if (typeof list === "string") {
+      // Spread rather than raw .length/[idx]: matches CSE's code-point-based
+      // indexing (correct for astral characters), not UTF-16 code units.
+      const chars = [...list];
+      if (idx >= chars.length) throw new Py2JsRuntimeError("IndexError", "string index out of range");
+      return chars.at(idx) ?? "";
+    }
+    if (idx >= list.length) throw new Py2JsRuntimeError("IndexError", "list index out of range");
+    return list[idx];
+  }
+
+  /**
+   * `expr[index] = value` (chapter 3+): mirrors evaluateListAssignment in
+   * src/engines/cse/utils.ts, including its negative-index handling (a
+   * modulo, not a true Python wraparound — kept bug-compatible with CSE
+   * rather than "fixed", since conformance with the reference engine is the
+   * goal here).
+   */
+  listAssign(list: PyValue, index: PyValue, value: PyValue): void {
+    if (!Array.isArray(list)) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `'${pyTypeName(list)}' object does not support item assignment`,
+      );
+    }
+    if (typeof index !== "bigint") {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `list indices must be integers, not '${pyTypeName(index)}'`,
+      );
+    }
+    let idx = Number(index);
+    if (idx < 0) idx = idx % list.length;
+    if (idx >= list.length) {
+      throw new Py2JsRuntimeError("IndexError", "list assignment index out of range");
+    }
+    list[idx] = value;
+  }
+
+  /**
    * Python truthiness, as the CSE machine's BRANCH instruction applies it to
    * `if` and ternary conditions (its WHILE instruction demands bool, but
    * chapter 1 has no loops). Mirrors isFalsy in cse/operators.ts.
@@ -614,11 +752,12 @@ export class Py2JsRuntime {
         return true;
       case "object":
         if (v === null) return false;
-        // Pairs and opaque module values are always truthy — Python has no
-        // "empty pair" concept (None is the empty *list*, already handled
-        // above), and CSE's isFalsy default treats every other object as
-        // truthy too.
-        if (v instanceof PyPair || v instanceof PyOpaque) return true;
+        // Pairs, native lists (even empty ones — CSE's isFalsy has no
+        // length-based case for its "list" type, unlike real Python's
+        // `bool([])`) and opaque module values are all always truthy —
+        // CSE's isFalsy default treats every object other than the cases
+        // above as truthy.
+        if (v instanceof PyPair || v instanceof PyOpaque || Array.isArray(v)) return true;
         return v.real !== 0 || v.imag !== 0;
       default:
         return false;
@@ -629,6 +768,39 @@ export class Py2JsRuntime {
   boolLeft(v: PyValue, op: string): boolean {
     if (typeof v !== "boolean") unsupported(op, v);
     return v;
+  }
+
+  /**
+   * `while` condition (chapter 3+): unlike `truth()`, a bare bool is
+   * required — mirrors the CSE machine's WHILE instruction, which is
+   * deliberately stricter here than Python's usual any-type truthiness (see
+   * src/tests/loops.test.ts's "while 1:"/"while y + 1:" TypeError cases).
+   */
+  whileCond(v: PyValue): boolean {
+    if (typeof v !== "boolean") {
+      throw new Py2JsRuntimeError("TypeError", `while condition must be bool, not '${pyTypeName(v)}'`);
+    }
+    return v;
+  }
+
+  /**
+   * `for x in range(...)` bounds check (chapter 3+): mirrors the CSE
+   * machine's FOR instruction — all three of start/end/step must be int,
+   * and a zero step is a ValueError, before the desugared while-loop
+   * (compiler.ts's For codegen) ever runs.
+   */
+  forRangeCheck(start: PyValue, end: PyValue, step: PyValue): void {
+    for (const v of [start, end, step]) {
+      if (typeof v !== "bigint") {
+        throw new Py2JsRuntimeError(
+          "TypeError",
+          `'${pyTypeName(v)}' object cannot be interpreted as an integer`,
+        );
+      }
+    }
+    if (step === 0n) {
+      throw new Py2JsRuntimeError("ValueError", "range() arg 3 must not be zero");
+    }
   }
 
   private checkCallable(f: PyValue, nArgs: number, sync: boolean): PyFunction {
