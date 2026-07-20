@@ -714,7 +714,8 @@ export class Py2JsRuntime {
       // Spread rather than raw .length/[idx]: matches CSE's code-point-based
       // indexing (correct for astral characters), not UTF-16 code units.
       const chars = [...list];
-      if (idx >= chars.length) throw new Py2JsRuntimeError("IndexError", "string index out of range");
+      if (idx >= chars.length)
+        throw new Py2JsRuntimeError("IndexError", "string index out of range");
       return chars.at(idx) ?? "";
     }
     if (idx >= list.length) throw new Py2JsRuntimeError("IndexError", "list index out of range");

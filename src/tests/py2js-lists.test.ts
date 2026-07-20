@@ -38,10 +38,7 @@ test.each([
   ["print([1, 2, 3] == [1, 2])", "False\n"],
   ["print([1, [2, 3]] == [1, [2, 4]])", "False\n"],
   ["xs = [10, 20, 30]\nys = [10, 20, 30]\nprint(xs == ys)", "True\n"],
-  [
-    "xs = [[0, 1], [1, 2], [2, 3]]\nys = [[0, 1], [1, 2], [2, 3]]\nprint(xs == ys)",
-    "True\n",
-  ],
+  ["xs = [[0, 1], [1, 2], [2, 3]]\nys = [[0, 1], [1, 2], [2, 3]]\nprint(xs == ys)", "True\n"],
   ["xs = [0, 1, 2, 3]\nys = [1, 2, 3, 4]\nprint(xs == ys)", "False\n"],
 ])("structural == on lists: %s", (code, expected) => {
   expect(runCodePy2Js(code, 3).output).toBe(expected);
@@ -165,7 +162,8 @@ describe("pair() and a list literal are one representation (no separate PyPair t
   test("a pair still fails is_list/list_length's normal cousins the same way a list would if malformed — sanity check both directions work through the exact same code path", () => {
     // xs[0] on a literal list and p[0] on a pair go through the identical
     // listAccess call — this just confirms neither direction regressed.
-    const code = "xs = [10, 20]\np = pair(30, 40)\nprint(xs[0])\nprint(p[0])\nxs[0] = 1\np[0] = 2\nprint(xs)\nprint(p)";
+    const code =
+      "xs = [10, 20]\np = pair(30, 40)\nprint(xs[0])\nprint(p[0])\nxs[0] = 1\np[0] = 2\nprint(xs)\nprint(p)";
     expect(runCodePy2Js(code, 3).output).toBe("10\n30\n[1, 20]\n[2, 40]\n");
   });
 });
