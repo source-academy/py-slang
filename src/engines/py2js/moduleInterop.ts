@@ -47,6 +47,50 @@ import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
 import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyPair, PyValue } from "./runtime";
 
+/**
+ * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
+ * used only by the `.sync` fast path a Python closure crossing into a module
+ * gets below (see GenericDataHandler.closure_call_sync's doc for the overall
+ * design). Cover exactly the value shapes a scalar-in/scalar-out closure (a
+ * wave function, sampled 44100x/sec by the sound module) needs: numbers,
+ * booleans, strings, None. Return `undefined` for anything else (pairs,
+ * closures, opaques, complex) - the "no sync path" signal, safe to use for
+ * *arguments* (nothing has run yet) but not for the *result* once the real
+ * call has already happened - see pyClosureFunc.sync below.
+ */
+function moduleToPythonSync(value: TypedValue<DataType>): PyValue | undefined {
+  switch (value.type) {
+    case DataType.NUMBER:
+      return value.value;
+    case DataType.BOOLEAN:
+      return value.value;
+    case DataType.CONST_STRING:
+      return value.value;
+    case DataType.VOID:
+    case DataType.EMPTY_LIST:
+      return null;
+    default:
+      return undefined;
+  }
+}
+
+function pythonToModuleSync(value: PyValue): TypedValue<DataType> | undefined {
+  switch (typeof value) {
+    case "bigint":
+      return { type: DataType.NUMBER, value: Number(value) };
+    case "number":
+      return { type: DataType.NUMBER, value };
+    case "boolean":
+      return { type: DataType.BOOLEAN, value };
+    case "string":
+      return { type: DataType.CONST_STRING, value };
+    case "object":
+      return value === null ? { type: DataType.EMPTY_LIST, value: null } : undefined;
+    default:
+      return undefined;
+  }
+}
+
 /** Converts a py2js native value into a conductor TypedValue, for passing
  * INTO a module — as a call argument, or the value a module holds after
  * receiving it. Mirrors pythonToModule in src/engines/cse/modules.ts. */
@@ -85,6 +129,40 @@ export async function pythonToModule(
         const result = rt.callSync(fn, nativeArgs);
         return pythonToModule(rt, dh, result);
       }
+      // The fast path: rt.callSync(fn, ...) is already synchronous (py2js's
+      // whole point) - the only async part of the body above is argument/
+      // result conversion, and that's only async because moduleToPython/
+      // pythonToModule are written uniformly with the closure case (which
+      // genuinely needs `await dh.closure_make(...)`). For a scalar-in/
+      // scalar-out closure (the wave-sampling shape), conversion never
+      // actually needs to await anything, so this restricted synchronous
+      // twin removes the last microtask too. Bailing to `undefined` for an
+      // unsupported *argument* is safe (fn hasn't run yet); once fn has
+      // actually run, a result that doesn't fit is a hard error, not a
+      // fallback signal - falling back to the async path at that point would
+      // call fn a second time, double-running any side effects (print(),
+      // mutation) it has.
+      (
+        pyClosureFunc as typeof pyClosureFunc & {
+          sync?: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
+        }
+      ).sync = (...args: TypedValue<DataType>[]): TypedValue<DataType> | undefined => {
+        const nativeArgs: PyValue[] = [];
+        for (const a of args) {
+          const converted = moduleToPythonSync(a);
+          if (converted === undefined) return undefined;
+          nativeArgs.push(converted);
+        }
+        const result = rt.callSync(fn, nativeArgs);
+        const converted = pythonToModuleSync(result);
+        if (converted === undefined) {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            `${fn.pyName}() returned a value that cannot be produced by a synchronous module callback`,
+          );
+        }
+        return converted;
+      };
       const arity = Math.max(0, fn.pyArity);
       return dh.closure_make(
         { returnType: DataType.VOID, args: Array(arity).fill(DataType.VOID) },
