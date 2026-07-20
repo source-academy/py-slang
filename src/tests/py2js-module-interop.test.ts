@@ -85,10 +85,7 @@ describe("pythonToModule", () => {
       await Promise.resolve();
       return { type: DataType.NUMBER, value: 1 };
     }
-    const typed = await dh.closure_make(
-      { returnType: DataType.NUMBER, args: [] },
-      noSync,
-    );
+    const typed = await dh.closure_make({ returnType: DataType.NUMBER, args: [] }, noSync);
     expect(dh.closure_call_sync(typed, [])).toBeUndefined();
   });
 
