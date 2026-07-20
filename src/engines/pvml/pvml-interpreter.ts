@@ -17,10 +17,12 @@ import {
   PVMLBoxType,
   PVMLClosure,
   PVMLEnvironment,
+  PVMLExtern,
   PVMLIR,
   PVMLIterator,
   PVMLProgram,
   PVMLType,
+  pvmlListLiteralArrays,
 } from "./types";
 
 /** Whether a value is excluded from §1/§2's `==`/`!=` entirely: bool (avoiding
@@ -149,6 +151,19 @@ export class PVMLInterpreter {
    * Defaults to 4 (unrestricted), matching the CSE machine's own default. */
   private variant: number = 4;
 
+  /** A dispatched-but-not-yet-run extern (imported-module function) call —
+   * `dispatchCall` parks it here instead of running it, because the extern's
+   * `fn` is async and `step()` is not; `executeAsync`'s driver loop consumes
+   * it (awaits `fn`, pushes the result) immediately after the step that set
+   * it. Never survives across steps — it's either consumed by the driver
+   * loop or is an error (`invokeValue`'s synchronous nested loop can't await,
+   * so an extern call reaching it throws; and plain `execute()` refuses
+   * extern calls up front via `allowExtern`). */
+  private pendingExtern?: { extern: PVMLExtern; args: PVMLBoxType[] };
+  /** True only while `executeAsync`'s driver loop is running — the only
+   * context able to await a pendingExtern. See PVMLExtern's doc comment. */
+  private allowExtern = false;
+
   constructor(
     program: PVMLProgram,
     options?: {
@@ -198,10 +213,9 @@ export class PVMLInterpreter {
     return this.globalEnv;
   }
 
-  /**
-   * Execute the program and return the result
-   */
-  execute(): PVMLBoxType {
+  /** Shared setup for execute()/executeAsync(): builds the entry frame and
+   * resets per-run counters. */
+  private prepareEntry(): void {
     const entryPointIndex = this.program.entryPoint;
     const entryFunction = this.program.functions[entryPointIndex];
 
@@ -230,8 +244,51 @@ export class PVMLInterpreter {
     this.callDepth = 1;
     this.halted = false;
     this.instructionCount = 0;
+  }
 
+  /** Result of a finished run: top of stack, or undefined. Shared by
+   * run()/executeAsync(). */
+  private finishResult(): PVMLBoxType {
+    return this.currentFrame && this.currentFrame.stack.length > 0
+      ? this.currentFrame.stack[this.currentFrame.stack.length - 1]
+      : undefined;
+  }
+
+  /**
+   * Execute the program and return the result
+   */
+  execute(): PVMLBoxType {
+    this.prepareEntry();
     return this.run();
+  }
+
+  /**
+   * Like execute(), but able to run programs that call imported-module
+   * functions (PVMLExtern values — see modules.ts): per-instruction dispatch
+   * stays the same synchronous step() as run()'s, and only an actual extern
+   * call suspends — dispatchCall parks it in `pendingExtern`, this loop
+   * awaits the module's async fn, pushes its result (exactly where CALLP
+   * would have pushed a primitive's — a tail-call extern works too, since
+   * the compiler always emits RETG after CALLT, same as the primitive path),
+   * and resumes stepping. Programs without imports pay one field check per
+   * instruction over execute(), nothing more.
+   */
+  async executeAsync(): Promise<PVMLBoxType> {
+    this.prepareEntry();
+    this.allowExtern = true;
+    try {
+      while (!this.halted && this.currentFrame) {
+        this.step();
+        if (this.pendingExtern) {
+          const { extern, args } = this.pendingExtern;
+          this.pendingExtern = undefined;
+          this.push(await extern.fn(args, (f, a) => this.invokeValueAsync(f, a)));
+        }
+      }
+    } finally {
+      this.allowExtern = false;
+    }
+    return this.finishResult();
   }
 
   /**
@@ -242,10 +299,7 @@ export class PVMLInterpreter {
       this.step();
     }
 
-    // Return top of stack or undefined
-    return this.currentFrame && this.currentFrame.stack.length > 0
-      ? this.currentFrame.stack[this.currentFrame.stack.length - 1]
-      : undefined;
+    return this.finishResult();
   }
 
   /**
@@ -605,6 +659,18 @@ export class PVMLInterpreter {
 
       // Variable operations
       case OpCodes.LDLG:
+        this.loadLocal(a1);
+        // A list literal's compiled shape ends with exactly this instruction pushing its
+        // completed array (see PVMLCompiler's visitListExpr) - tag it here so pvmlToModule can
+        // tell an exactly-2-element list literal apart from a dotted pair (see
+        // pvmlListLiteralArrays' doc comment in types.ts).
+        if (ir.listLiteralOffsets.has(pc)) {
+          const loaded = this.peek();
+          if (isPVMLObject(loaded) && loaded.type === "array") {
+            pvmlListLiteralArrays.add(loaded);
+          }
+        }
+        break;
       case OpCodes.LDLF:
       case OpCodes.LDLB:
         this.loadLocal(a1);
@@ -1472,7 +1538,14 @@ export class PVMLInterpreter {
    * `args` got collected.
    */
   private dispatchCall(func: PVMLBoxType, args: PVMLBoxType[], isTailCall: boolean): void {
-    if (!this.currentFrame) {
+    // A tail call mutates the existing frame in place, so it genuinely needs one to already
+    // exist. A non-tail call doesn't - the closure branch below always builds a brand new frame
+    // (callerFrame: this.currentFrame, which may itself be null), and the extern branch never
+    // touches currentFrame at all. This lets invokeValueAsync re-enter with no current frame at
+    // all (a scheduled callback firing after executeAsync() has already returned and unwound) -
+    // see its own doc comment. The primitive branch still implicitly requires a frame (via
+    // push()), which throws its own clear error if that's ever not the case.
+    if (!this.currentFrame && isTailCall) {
       throw new Error("No current frame");
     }
 
@@ -1481,6 +1554,30 @@ export class PVMLInterpreter {
     }
 
     const numArgs = args.length;
+
+    // An imported-module function (see PVMLExtern's doc comment): its
+    // implementation is async host code, which this synchronous method can't
+    // run — park the call for executeAsync's driver loop to await. The
+    // result lands on the stack exactly where the primitive case below would
+    // have pushed it (tail calls included — the compiler's trailing RETG
+    // returns it, same as for a tail-called primitive).
+    if (isPVMLObject(func) && func.type === "extern") {
+      if (!this.allowExtern) {
+        throw new PVMLInterpreterError(
+          `RuntimeError: imported module function '${func.name}' can only be called under ` +
+            `executeAsync() (synchronous execute() cannot await module code)`,
+        );
+      }
+      if (this.pendingExtern) {
+        // Can only happen from invokeValue's nested synchronous loop — the
+        // driver loop otherwise consumes pendingExtern immediately after the
+        // step that set it. See invokeValue's own guard for the user-facing
+        // error; this is a pure internal-consistency backstop.
+        throw new Error("Internal error: extern call dispatched while another is pending");
+      }
+      this.pendingExtern = { extern: func, args };
+      return;
+    }
 
     // A primitive referenced as a value (NEWCP) rather than called directly
     // — e.g. `f = abs; f(-5)` — has no function-table entry/frame of its
@@ -1539,6 +1636,11 @@ export class PVMLInterpreter {
     }
     if (funcDef.hasRestParam) {
       const restArgs: PVMLArray = { type: "array", elements: args.slice(numFixedParams) };
+      // A flat, arbitrary-length collection - the same category as a list literal, not a
+      // pair()/llist() chain - so module interop needs the same tag to reconstruct it as a proper
+      // list rather than misreading an exactly-2-arg case as a dotted pair. See
+      // pvmlListLiteralArrays' doc comment in types.ts.
+      pvmlListLiteralArrays.add(restArgs);
       newEnv.set(numFixedParams, restArgs);
       if (__DEBUG__)
         debug(
@@ -1552,6 +1654,12 @@ export class PVMLInterpreter {
       );
 
     if (isTailCall) {
+      // Reachable only when currentFrame is non-null - the guard at the top of this method
+      // already throws otherwise - but written out again here so TS can narrow it (that guard's
+      // null check is conditional on isTailCall, so it doesn't narrow this far on its own).
+      if (!this.currentFrame) {
+        throw new Error("No current frame");
+      }
       this.currentFrame.closure = closure;
       this.currentFrame.ir = funcDef;
       this.currentFrame.pc = 0;
@@ -1575,20 +1683,31 @@ export class PVMLInterpreter {
    * Synchronously invokes an arbitrary callee value with a given argument
    * list, from *outside* the normal bytecode dispatch loop — used by
    * primitives that need to call back into user code (e.g.
-   * `apply_in_underlying_python`, see builtins.ts). For a `PVMLPrimitive`
-   * callee, `dispatchCall` resolves this immediately, no frame involved at
-   * all. For a `PVMLClosure` callee, `dispatchCall` (called with
-   * `isTailCall: false`, so it always pushes a *new* frame rather than
-   * reusing the current one) sets `this.currentFrame` to that new frame,
-   * whose `callerFrame` is the frame that was executing when `invokeValue`
-   * was called (`origFrame`) — `return()` already unwinds `currentFrame`
-   * back to `callerFrame` when the nested call's RETG/etc. executes, so
-   * driving `step()` in a loop until `currentFrame` is back to `origFrame`
-   * runs the nested call to completion synchronously. This works because
-   * `run()`/`step()` are already just a flat loop over single-instruction
-   * steps driven by `currentFrame`/`callerFrame` links (unlike the CSE
-   * machine's control/stash architecture), so recursing into it from a
-   * primitive needs no special resumable-step-machine support.
+   * `apply_in_underlying_python`, see builtins.ts), which are themselves
+   * dispatched synchronously from `step()` and so cannot await anything.
+   * For a `PVMLPrimitive` callee, `dispatchCall` resolves this immediately,
+   * no frame involved at all. For a `PVMLClosure` callee, `dispatchCall`
+   * (called with `isTailCall: false`, so it always pushes a *new* frame
+   * rather than reusing the current one) sets `this.currentFrame` to that
+   * new frame, whose `callerFrame` is the frame that was executing when
+   * `invokeValue` was called (`origFrame`) — `return()` already unwinds
+   * `currentFrame` back to `callerFrame` when the nested call's RETG/etc.
+   * executes, so driving `step()` in a loop until `currentFrame` is back to
+   * `origFrame` runs the nested call to completion synchronously. This
+   * works because `run()`/`step()` are already just a flat loop over
+   * single-instruction steps driven by `currentFrame`/`callerFrame` links
+   * (unlike the CSE machine's control/stash architecture), so recursing
+   * into it from a primitive needs no special resumable-step-machine
+   * support.
+   *
+   * If `func`'s own execution needs to call an imported module function
+   * (an extern) — including if `func` itself turns out to be one, e.g. a
+   * closure created by one module and later invoked by another (sound's
+   * sine_sound producing a wave that play() later samples) — this throws a
+   * clear error rather than deadlocking, since a primitive's synchronous
+   * caller has no way to await the pending call. See `invokeValueAsync` for
+   * the counterpart used by callers that *can* await (every module-callback
+   * re-entry point - PVMLHostCall's doc comment).
    */
   private invokeValue(func: PVMLBoxType, args: PVMLBoxType[]): PVMLBoxType {
     const origFrame = this.currentFrame;
@@ -1598,11 +1717,82 @@ export class PVMLInterpreter {
 
     this.dispatchCall(func, args, false);
 
-    while (this.currentFrame && this.currentFrame !== origFrame) {
+    // dispatchCall's extern branch (see its own doc comment) never touches currentFrame at all -
+    // it just parks pendingExtern and returns, whether func itself is the extern (this call sets
+    // pendingExtern with currentFrame still === origFrame, so the loop below would never run even
+    // once) or func's own body makes a nested extern call partway through stepping (pendingExtern
+    // appears while currentFrame !== origFrame, mid-loop). The condition checks pendingExtern
+    // first specifically to catch the former case - previously only the latter was handled, so a
+    // func that was itself an extern silently fell through to `this.pop()` on a stack nothing had
+    // been pushed to ("Stack underflow"), instead of the clear error below.
+    while (this.pendingExtern || (this.currentFrame && this.currentFrame !== origFrame)) {
+      if (this.pendingExtern) {
+        // This loop is synchronous - it cannot await the parked async extern call the way
+        // executeAsync's driver loop (or invokeValueAsync, below) does, so there is no way to
+        // honour this nested call from here. Surface a clear error rather than deadlocking on a
+        // result that will never arrive.
+        const name = this.pendingExtern.extern.name;
+        this.pendingExtern = undefined;
+        throw new PVMLInterpreterError(
+          `RuntimeError: cannot call imported module function '${name}' from inside a ` +
+            `callback that was itself invoked by a module or primitive`,
+        );
+      }
       this.step();
     }
 
     return this.pop();
+  }
+
+  /**
+   * The async counterpart to `invokeValue`, for the one class of caller that
+   * genuinely can await a pending nested extern call instead of having to
+   * reject it: every module-callback re-entry point (PVMLHostCall, passed to
+   * a PVMLExtern's `fn`) is already an async function, all the way through
+   * modules.ts's conversion helpers - there is no synchronous context here
+   * that needs protecting the way `invokeValue`'s primitive-dispatch callers
+   * do. Otherwise identical to `invokeValue`: same frame-based nested-call
+   * mechanism, just awaiting `extern.fn` (mirroring `executeAsync`'s own
+   * driver loop) instead of throwing when `pendingExtern` appears.
+   *
+   * Unlike `invokeValue`, `origFrame` here may legitimately be `null`: a
+   * scheduled callback (e.g. sound_matrix's `set_timeout`) fires from a real
+   * JS timer that can run well after the top-level chunk's own
+   * `executeAsync()` has already returned and unwound `currentFrame` back to
+   * null (and reset `allowExtern` to false in its `finally`). That isn't a
+   * broken state to reject - it just means this call is now the top-level
+   * driver instead of a nested one. `dispatchCall` builds a fresh frame with
+   * `callerFrame: null` in that case (see its own doc comment), and the loop
+   * below already terminates correctly either way: "until currentFrame is
+   * back to origFrame" reads as "until currentFrame is null again" when
+   * `origFrame` is null, exactly matching a self-contained sub-run. Without
+   * this, any module call made from inside a `set_timeout` callback that
+   * fires after the chunk finished (i.e. the second scheduled call onward)
+   * threw "No current frame" inside the callback's async generator, silently
+   * discarded by sound_matrix's fire-and-forget `void drainGenerator(...)` -
+   * the recursion just stopped with no visible error.
+   */
+  private async invokeValueAsync(func: PVMLBoxType, args: PVMLBoxType[]): Promise<PVMLBoxType> {
+    const origFrame = this.currentFrame;
+    const wasAllowExtern = this.allowExtern;
+    this.allowExtern = true;
+    try {
+      this.dispatchCall(func, args, false);
+
+      while (this.pendingExtern || (this.currentFrame && this.currentFrame !== origFrame)) {
+        if (this.pendingExtern) {
+          const { extern, args: externArgs } = this.pendingExtern;
+          this.pendingExtern = undefined;
+          this.push(await extern.fn(externArgs, (f, a) => this.invokeValueAsync(f, a)));
+          continue;
+        }
+        this.step();
+      }
+
+      return this.pop();
+    } finally {
+      this.allowExtern = wasAllowExtern;
+    }
   }
 
   private callPrimitive(primitiveIndex: number, numArgs: number): void {
@@ -1748,6 +1938,8 @@ export class PVMLInterpreter {
       if (value.type === "primitive") return `<primitive:${value.primitiveIndex}>`;
       if (value.type === "array") return value.elements.map(e => PVMLInterpreter.toJSValue(e));
       if (value.type === "iterator") return `<iterator>`;
+      if (value.type === "opaque") return `<opaque>`;
+      if (value.type === "extern") return `<module function:${value.name}>`;
     }
     return String(value);
   }

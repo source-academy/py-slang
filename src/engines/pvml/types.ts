@@ -1,3 +1,5 @@
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
+
 import { PyComplexNumber } from "../../types";
 
 export type PVMLBoxType =
@@ -11,7 +13,9 @@ export type PVMLBoxType =
   | PVMLClosure
   | PVMLPrimitive
   | PVMLArray
-  | PVMLIterator;
+  | PVMLIterator
+  | PVMLOpaque
+  | PVMLExtern;
 
 /**
  * Every member's string value is the Python-facing type name `getPVMLType()`'s
@@ -53,12 +57,32 @@ export enum PVMLType {
    * `typeTranslator`. */
   PRIMITIVE = "builtin_function_or_method",
   ITERATOR = "iterator",
+  /** A module-owned handle (PVMLOpaque) — mirrors the CSE machine's own
+   * "opaque" stash Value type name, which is likewise what its error
+   * messages/str() show for module values. */
+  OPAQUE = "opaque",
+  /** An imported module function (PVMLExtern) — from the user's point of
+   * view it's a function like any builtin, so it deliberately shares
+   * PRIMITIVE's Python-facing name. */
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-enum-values
+  EXTERN = "builtin_function_or_method",
 }
 
 export interface PVMLArray {
   type: "array";
   elements: PVMLBoxType[];
 }
+
+/**
+ * Marks a PVMLArray as a genuine Python list literal (`[a, b]`) or rest-param collection
+ * (`def f(*rest)`), as opposed to a value that happens to also be a 2-element array (a dotted
+ * pair built via pair()/llist(), or one round-tripped from a module's DataType.PAIR) - mirrors
+ * the CSE machine's listLiteralValues (src/engines/cse/modules.ts) exactly, for the same reason:
+ * pvmlToModule's "array" case can't tell a 2-element list literal apart from a dotted pair by
+ * shape alone (see its own doc comment). A side-tag rather than a shape change so nothing else
+ * that already treats these as flat arrays (indexing, len(), iteration, etc.) needs to change.
+ */
+export const pvmlListLiteralArrays = new WeakSet<PVMLArray>();
 
 export interface PVMLIterator {
   type: "iterator";
@@ -117,10 +141,70 @@ export interface PVMLPrimitive {
   boundArgs?: PVMLBoxType[];
 }
 
+/**
+ * A handle to a value owned by an imported conductor module (e.g. a runes
+ * Rune or a sound Sound) — DataType.OPAQUE on the conductor side. PVML never
+ * looks inside it: user code can only bind it to names, pass it around, and
+ * hand it back to module functions. `value` is the conductor
+ * `TypedValue<DataType.OPAQUE>` it round-trips as, typed `unknown` here so
+ * this core-VM types module stays free of any conductor dependency (only
+ * modules.ts, the conversion layer, ever casts it back).
+ */
+export interface PVMLOpaque {
+  type: "opaque";
+  value: unknown;
+}
+
+/**
+ * Re-enters the interpreter to call a PVML closure/primitive value from host
+ * code — a bound PVMLInterpreter.invokeValueAsync, passed to a PVMLExtern's
+ * `fn` so imported-module callbacks (e.g. a student function handed to a
+ * module's higher-order export, or a closure created by one module and
+ * later invoked by another - see sound's sine_sound producing a wave that
+ * play() later samples) can call back into user code. Async, unlike
+ * primitive dispatch's own separate, still-synchronous re-entry point
+ * (builtins.ts's own inline `invokeValue` type) - every caller of this hook
+ * (PVMLExtern.fn itself, and modules.ts's pvmlToModule conversions) is
+ * already an async function, so there's no synchronous context here that a
+ * pending nested extern call would need to avoid awaiting. A function type
+ * rather than a PVMLInterpreter reference to keep this module free of a
+ * circular import on the interpreter.
+ */
+export type PVMLHostCall = (func: PVMLBoxType, args: PVMLBoxType[]) => Promise<PVMLBoxType>;
+
+/**
+ * A host (imported-module) function value — what a conductor module's
+ * DataType.CLOSURE export becomes in PVML (see modules.ts's moduleToPvml).
+ * Unlike PVMLPrimitive (a synchronous index into this engine's own builtin
+ * table), an extern's implementation lives outside the VM and is
+ * asynchronous, so `dispatchCall` can't just run it inline: it parks the
+ * call in `pendingExtern` for `executeAsync`'s driver loop to await (see
+ * pvml-interpreter.ts) — which is why extern calls only work under
+ * `executeAsync()`, never plain `execute()`.
+ */
+export interface PVMLExtern {
+  type: "extern";
+  /** The module export's symbol name — display only (str()/repr()/toJSValue). */
+  name: string;
+  fn: (args: PVMLBoxType[], callPvml: PVMLHostCall) => Promise<PVMLBoxType>;
+  /**
+   * Set only by moduleToPvml's DataType.CLOSURE case, to the exact conductor closure this extern
+   * wraps. Lets pvmlToModule's reverse conversion recognise "this PVML value already has a stable
+   * conductor closure identity" and hand that closure straight back rather than minting a new
+   * wrapper closure around it - mirroring the CSE machine's own pythonToModule fast path (its
+   * "case builtin: if 'id' in value.func" check). Without this, a closure that crosses the module
+   * boundary and back (e.g. sound's sine_sound producing a wave that play() samples 44100
+   * times/sec) pays a fresh dispatchCall/invokeValueAsync round trip on *every* sample instead of
+   * a direct closureMap lookup - a real, measured ~2.4x per-sample slowdown versus CSE for exactly
+   * that pattern, not just a theoretical inefficiency.
+   */
+  originalClosure?: TypedValue<DataType.CLOSURE>;
+}
+
 /** Type guard: narrows PVMLBoxType to the object variants. */
 export function isPVMLObject(
   value: PVMLBoxType,
-): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator {
+): value is PVMLClosure | PVMLPrimitive | PVMLArray | PVMLIterator | PVMLOpaque | PVMLExtern {
   return typeof value === "object" && value !== null && "type" in value;
 }
 
@@ -177,6 +261,10 @@ export interface Instruction {
 
 import OpCodes from "./opcodes";
 
+/** Shared default for PVMLIR's listLiteralOffsets — avoids allocating a fresh empty Set for
+ * every function that doesn't need it (the vast majority). */
+const EMPTY_OFFSET_SET: ReadonlySet<number> = new Set();
+
 /**
  * IR representation of a single compiled function.
  *
@@ -226,6 +314,14 @@ export class PVMLIR {
    * `true` — see PVMLCompiler's visitStarredExpr). */
   readonly hasRestParam: boolean;
   /**
+   * Instruction offsets of the LDLG that pushes a just-built list literal's completed array (see
+   * PVMLCompiler's visitListExpr and PVMLIRBuilder's markListLiteral) — checked by step()'s LDLG
+   * case to tag the loaded value into pvmlListLiteralArrays. In-memory-only metadata, like
+   * `functionName`/`hasRestParam` — not encoded in the serialised binary format (native Pynter has
+   * no module-interop concept to disambiguate for in the first place, so it never needs this).
+   */
+  readonly listLiteralOffsets: ReadonlySet<number>;
+  /**
    * The function table of the PVMLProgram this function was compiled into —
    * stamped by PVMLProgram's constructor once every sibling PVMLIR exists,
    * so left empty here and populated after construction (the one
@@ -257,6 +353,7 @@ export class PVMLIR {
     functionName: string = "(anonymous)",
     complexes: PyComplexNumber[] = [],
     hasRestParam: boolean = false,
+    listLiteralOffsets: ReadonlySet<number> = EMPTY_OFFSET_SET,
   ) {
     this.opcodes = opcodes;
     this.arg1s = arg1s;
@@ -270,6 +367,7 @@ export class PVMLIR {
     this.numArgs = numArgs;
     this.functionName = functionName;
     this.hasRestParam = hasRestParam;
+    this.listLiteralOffsets = listLiteralOffsets;
   }
 
   /** Compatibility: reconstruct Instruction[] for assembler/debug (not hot path). */
@@ -346,6 +444,10 @@ export function getPVMLType(value: PVMLBoxType): PVMLType {
         return PVMLType.ARRAY;
       case "iterator":
         return PVMLType.ITERATOR;
+      case "opaque":
+        return PVMLType.OPAQUE;
+      case "extern":
+        return PVMLType.EXTERN;
     }
   }
   throw new Error(`Unknown runtime type: ${typeof value}`);
