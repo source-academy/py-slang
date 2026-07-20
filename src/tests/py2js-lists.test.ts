@@ -50,6 +50,20 @@ test.each([
 });
 
 test.each([
+  // A pair and a 2-element native list have no representational difference
+  // on the CSE machine (both are its flat {type:"list", value: Value[]}),
+  // so they must compare equal here too, despite py2js keeping PyPair and
+  // native lists as two distinct JS types (Gemini review on #282).
+  ["print(pair(1, 2) == [1, 2])", "True\n"],
+  ["print([1, 2] == pair(1, 2))", "True\n"],
+  ["print(pair(1, 2) == [1, 3])", "False\n"],
+  ["print(pair(1, 2) == [1, 2, 3])", "False\n"],
+  ["print(pair([1, 2], 3) == [[1, 2], 3])", "True\n"],
+])("structural == between a pair and a 2-element list: %s", (code, expected) => {
+  expect(runCodePy2Js(code, 3).output).toBe(expected);
+});
+
+test.each([
   ["xs = [10, 20, 30]\nprint(xs[1])", "20\n"],
   ["xs = [10, 20, 30]\nxs[1] = 99\nprint(xs)", "[10, 99, 30]\n"],
   ["xs = [1, 2, 3]\nprint(list_length(xs))", "3\n"],

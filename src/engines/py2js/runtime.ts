@@ -361,6 +361,18 @@ function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
     if (l.length !== r.length) return false;
     return l.every((el, i) => pyEquals(el, r[i], restrict));
   }
+  // A PyPair vs. a 2-element native list: CSE has no representational
+  // difference between a pair and a list at all (both are its flat
+  // `{type:"list", value: Value[]}` — src/engines/cse/stash.ts), so
+  // `pair(1, 2) == [1, 2]` is True there. py2js keeps them as two distinct
+  // JS types (see runtime.ts's PyList doc comment) but must still agree
+  // with the reference engine on this cross-type comparison.
+  if (l instanceof PyPair && Array.isArray(r) && r.length === 2) {
+    return pyEquals(l.head, r[0], restrict) && pyEquals(l.tail, r[1], restrict);
+  }
+  if (Array.isArray(l) && l.length === 2 && r instanceof PyPair) {
+    return pyEquals(l[0], r.head, restrict) && pyEquals(l[1], r.tail, restrict);
+  }
   return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }
 
