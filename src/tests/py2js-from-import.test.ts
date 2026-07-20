@@ -265,7 +265,8 @@ test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play",
   // duration) pair - a real module value crossing the boundary as
   // DataType.PAIR, not a proper list. This is the exact shape that used to
   // hit the "module values of type PAIR are not supported" rejection: a
-  // Python-side PyPair round-tripping back into a second module call.
+  // Python-side pair (a 2-element PyList) round-tripping back into a second
+  // module call.
   async function* sineSoundFunc(
     freqArg: TypedValue<DataType>,
     durationArg: TypedValue<DataType>,

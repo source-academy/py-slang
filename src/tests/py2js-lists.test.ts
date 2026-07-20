@@ -8,13 +8,11 @@
  * each is wrapped in print() here instead — same adaptation
  * operator-conformance-py2js.test.ts already makes.
  *
- * Lists are a *distinct* runtime type from chapter 2's pairs in py2js (a
- * bare mutable PyValue[] vs. PyPair — see runtime.ts's PyList doc comment),
- * unlike the CSE machine, which represents both as the same flat
- * `{type:"list", value: Value[]}`. is_list/list_length are bridged through
- * the same stdlib builtins either way (stdlibBridge.ts's toTagged converts
- * both PyPair and a native array to that one CSE shape), so the two
- * representations answer identically despite being different JS types.
+ * A chapter-2 pair and a chapter-3+ list literal are the same runtime type
+ * in py2js — a plain mutable PyValue[] (PyList; see runtime.ts's doc
+ * comment) — matching the CSE machine, which represents both as the same
+ * flat `{type:"list", value: Value[]}`. "Is this a pair" is a structural
+ * question (length === 2), not a type-level one.
  */
 import { runCodePy2Js } from "../engines/py2js";
 import { runCode } from "../runner";
@@ -50,10 +48,10 @@ test.each([
 });
 
 test.each([
-  // A pair and a 2-element native list have no representational difference
-  // on the CSE machine (both are its flat {type:"list", value: Value[]}),
-  // so they must compare equal here too, despite py2js keeping PyPair and
-  // native lists as two distinct JS types (Gemini review on #282).
+  // pair(1, 2) and [1, 2] are the exact same runtime value in py2js (a
+  // 2-element PyList) as they are on the CSE machine — originally a
+  // dedicated cross-type case (Gemini review on #282) before py2js unified
+  // pair/list into one representation; kept as a regression test.
   ["print(pair(1, 2) == [1, 2])", "True\n"],
   ["print([1, 2] == pair(1, 2))", "True\n"],
   ["print(pair(1, 2) == [1, 3])", "False\n"],
@@ -143,5 +141,78 @@ print(stream_ref(s, 0))
 print(stream_ref(s, 4))
 `;
     expect(runCodePy2Js(code, 3).output).toBe("5\n10\n50\n");
+  });
+});
+
+describe("pair() and a list literal are one representation (no separate PyPair type)", () => {
+  // The motivating case: before py2js unified pairs and lists into one
+  // PyList representation, subscripting a pair()-built value threw (only
+  // Array.isArray was ever taught to listAccess/listAssign) even though CSE
+  // allows it — pairs and lists share its one representation there too.
+  test.each([
+    ["p = pair(1, 2)\nprint(p[0])", "1\n"],
+    ["p = pair(1, 2)\nprint(p[1])", "2\n"],
+  ])("subscript read on a pair matches CSE: %s", async (code, expected) => {
+    expect(await runCode(code, 3)).toBe(expected);
+    expect(runCodePy2Js(code, 3).output).toBe(expected);
+  });
+
+  test("subscript write on a pair matches CSE (mutates in place, same as set_head/set_tail)", () => {
+    const code = "p = pair(1, 2)\np[0] = 99\nprint(p)";
+    expect(runCodePy2Js(code, 3).output).toBe("[99, 2]\n");
+  });
+
+  test("a pair still fails is_list/list_length's normal cousins the same way a list would if malformed — sanity check both directions work through the exact same code path", () => {
+    // xs[0] on a literal list and p[0] on a pair go through the identical
+    // listAccess call — this just confirms neither direction regressed.
+    const code = "xs = [10, 20]\np = pair(30, 40)\nprint(xs[0])\nprint(p[0])\nxs[0] = 1\np[0] = 2\nprint(xs)\nprint(p)";
+    expect(runCodePy2Js(code, 3).output).toBe("10\n30\n[1, 20]\n[2, 40]\n");
+  });
+});
+
+describe("print_llist boundary cases (isProperList/printLlist walk 2-element-array chains, not a PyPair type)", () => {
+  test.each([
+    // A genuine pair chain (llist()): proper list notation.
+    ["print_llist(llist(1, 2, 3))", "llist(1, 2, 3)\n"],
+    // An improper pair (tail isn't None or another pair): bracket notation.
+    ["print_llist(pair(1, 2))", "[1, 2]\n"],
+    // A coincidentally-2-element *literal* list: structurally identical to a
+    // pair (py2js and CSE can't tell them apart either), so it renders as a
+    // pair would — bracket notation, not a leaf repr.
+    ["print_llist([1, 2])", "[1, 2]\n"],
+    // A genuine N-element (N != 2) literal list: never chain-shaped at any
+    // step, so it falls straight to the general repr, not bracket-nesting.
+    ["print_llist([1, 2, 3])", "[1, 2, 3]\n"],
+    ["print_llist([1])", "[1]\n"],
+    ["print_llist([])", "[]\n"],
+  ])("%s", async (code, expected) => {
+    expect(await runCode(code, 3)).toBe(expected);
+    expect(runCodePy2Js(code, 3).output).toBe(expected);
+  });
+});
+
+describe('error messages say "pair" at chapter 2, "list" at chapter 3+ (matching CSE\'s friendlyTypeName)', () => {
+  test("chapter 2: unsupported operand type(s) says 'pair'", async () => {
+    const code = "1 + pair(1, 2)";
+    await expect(runCode(code, 2)).rejects.toThrow(/integer and pair/);
+    expect(() => runCodePy2Js(code, 2)).toThrow(/'int' and 'pair'/);
+  });
+
+  test("chapter 3: the exact same construction says 'list'", async () => {
+    const code = "1 + pair(1, 2)";
+    await expect(runCode(code, 3)).rejects.toThrow(/integer and list/);
+    expect(() => runCodePy2Js(code, 3)).toThrow(/'int' and 'list'/);
+  });
+
+  test("chapter 3: a genuine list literal also says 'list' (not 'pair')", () => {
+    expect(() => runCodePy2Js("1 + [1, 2]", 3)).toThrow(/'int' and 'list'/);
+  });
+
+  test("set_head's error message (nativeSetPairSlot) also follows the chapter, not just binop's unsupported()", () => {
+    expect(() => runCodePy2Js("set_head(1, 2)", 3)).toThrow(/got 'int'/);
+    // The wrong-argument-type is an int either way; the pair-vs-list wording
+    // only differs when the *value itself* is list-shaped, which isn't the
+    // case here — this just confirms nativeSetPairSlot's threaded sayPair
+    // parameter didn't break the ordinary (non-list) error path.
   });
 });

@@ -11,10 +11,10 @@
  *
  * What crosses the boundary at chapters 1-2: int/float/bool/str/None/complex
  * round-trip losslessly (complex is a PyComplexNumber on both sides); a pair
- * (PyPair) round-trips recursively to/from CSE's flat 2-element list Value —
- * chapter 2 has no list-literal syntax and no list.ts group, so pair()/
- * llist() (the only way to construct one) always produce exactly that shape.
- * A function crosses one way *as a value a builtin inspects* (a user function
+ * (a 2-element PyList) round-trips to/from CSE's identically-shaped 2-element
+ * list Value — chapter 2 has no list-literal syntax and no list.ts group, so
+ * pair()/llist() (the only way to construct one) always produce exactly that
+ * shape. A function crosses one way *as a value a builtin inspects* (a user function
  * becomes a minimal FunctionValue, so is_function answers True and error
  * messages say 'function'; a py2js builtin becomes a stub BuiltinValue —
  * neither is callable from stdlib code, which no chapter-1/2 builtin
@@ -50,11 +50,12 @@ import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
 import type { BuiltinValue, Value } from "../cse/stash";
 import {
+  isPairShaped,
   Py2JsRuntime,
   Py2JsRuntimeError,
   PyFunction,
+  PyList,
   PyOpaque,
-  PyPair,
   pyTypeName,
   PyValue,
 } from "./runtime";
@@ -110,14 +111,13 @@ function toTagged(v: PyValue): Value {
     }
     default:
       if (v === null) return { type: "none" };
-      if (v instanceof PyPair) return toTaggedPair(v);
-      // Chapter 3+ native list literal: CSE has no separate representation
-      // for a pair vs. an arbitrary-length list (both are its flat
-      // `{type:"list", value: Value[]}` — see src/engines/cse/stash.ts), so
-      // converting element-wise here reproduces CSE's own is_list/
-      // list_length answers exactly, including on a 2-element literal list
-      // (which CSE cannot tell apart from a pair either).
-      if (Array.isArray(v)) return { type: "list", value: v.map(toTagged) };
+      // CSE has no separate representation for a pair vs. an arbitrary-
+      // length list (both are its flat `{type:"list", value: Value[]}` —
+      // see src/engines/cse/stash.ts), so converting element-wise here
+      // reproduces CSE's own is_list/list_length answers exactly, including
+      // on a 2-element list (which CSE cannot tell apart from a pair
+      // either — see runtime.ts's PyList doc comment).
+      if (Array.isArray(v)) return toTaggedList(v);
       // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
@@ -129,24 +129,32 @@ function toTagged(v: PyValue): Value {
 }
 
 /**
- * Converts a PyPair chain to CSE's nested list Value, iterating along the
- * `.tail` spine instead of recursing: a long proper list (enum_llist,
- * reverse, map, …) has its length entirely along that spine, so a naive
- * `{ type: "list", value: [toTagged(v.head), toTagged(v.tail)] }` would cost
- * one JS stack frame per *element* just to convert a single argument for one
- * bridged call — a list of a few thousand elements already overflows the
- * stack, regardless of how tail-recursive the user's own Python is (its own
- * tail calls go through py2js's trampoline; this bridge conversion does not).
- * `.head` is still converted via the ordinary (recursive) toTagged, since a
+ * Converts a PyList to CSE's nested list Value. A long proper list built via
+ * pair()/llist() (or one built via chapter-3+ mutation into the same shape)
+ * has its entire length along the "spine" (chained tail positions), so this
+ * walks that spine iteratively rather than recursing — a naive
+ * `{ type: "list", value: [toTagged(v[0]), toTagged(v[1])] }` applied
+ * per-element via plain recursion would cost one JS stack frame per element
+ * just to convert a single argument for one bridged call, and a list of a
+ * few thousand elements already overflows the stack, regardless of how
+ * tail-recursive the user's own Python is (its own tail calls go through
+ * py2js's trampoline; this bridge conversion does not). The walk continues
+ * exactly as long as the current node is itself a 2-element list (a chain
+ * link); it stops — falling through to a plain `.map()` — the moment that
+ * shape breaks, which correctly covers a flat N-element (N≠2) literal list
+ * (zero iterations) and a pair whose tail isn't itself a pair (one
+ * iteration) with no separate case needed for either. `heads[i]`/the final
+ * tail are still converted via the ordinary (recursive) toTagged, since each
  * head is normally a scalar leaf; a list-of-lists nested arbitrarily deep
- * through `.head` remains a (much rarer) recursion, same as before.
+ * through a head position remains a (much rarer) recursion, same as before.
  */
-function toTaggedPair(pair: PyPair): Value {
+function toTaggedList(v: PyList): Value {
+  if (!isPairShaped(v)) return { type: "list", value: v.map(toTagged) };
   const heads: PyValue[] = [];
-  let current: PyValue = pair;
-  while (current instanceof PyPair) {
-    heads.push(current.head);
-    current = current.tail;
+  let current: PyValue = v;
+  while (isPairShaped(current)) {
+    heads.push(current[0]);
+    current = current[1];
   }
   let tail = toTagged(current);
   for (let i = heads.length - 1; i >= 0; i--) {
@@ -166,19 +174,27 @@ function fromTagged(name: string, v: Value): PyValue {
       return v.value;
     case "none":
       return null;
-    case "list":
-      // A length-2 list reconstructs as a pair — the shape pair()/llist()
-      // (and stream(), bridged natively rather than through this generic
-      // path — see bridgeStdlibGroups) always produce. No bridged chapter
-      // 1-3 builtin actually returns a freshly-constructed list of any other
-      // length (is_list/list_length only consume one; set_head/set_tail
-      // mutate natively, not through this round-trip — see
-      // bridgeStdlibGroups), so this fallback exists for forward
-      // compatibility rather than a case reached today.
-      if (v.value.length === 2) {
-        return new PyPair(fromTagged(name, v.value[0]), fromTagged(name, v.value[1]));
+    case "list": {
+      // Mirrors toTaggedList's iterative spine-walk, in the opposite
+      // direction: a long proper list/pair chain a bridged builtin returns
+      // (enum_llist, reverse, map, …) is nested 2-element CSE list Values
+      // all the way down, so reconstructing it via plain per-element
+      // recursion (fromTagged on each tail) would cost one JS stack frame
+      // per element — the same failure mode toTaggedList's own doc comment
+      // describes, just crossing the boundary in the other direction.
+      if (v.value.length !== 2) return v.value.map(el => fromTagged(name, el));
+      const heads: PyValue[] = [];
+      let current: Value = v;
+      while (current.type === "list" && current.value.length === 2) {
+        heads.push(fromTagged(name, current.value[0]));
+        current = current.value[1];
       }
-      return v.value.map(el => fromTagged(name, el));
+      let tail = fromTagged(name, current);
+      for (let i = heads.length - 1; i >= 0; i--) {
+        tail = [heads[i], tail];
+      }
+      return tail;
+    }
     case "function":
     case "builtin": {
       // A function value only ever flows back out as one of THIS bridge's
@@ -237,32 +253,24 @@ function bridgeBuiltin(
 
 /**
  * set_head/set_tail (chapter 3's pair-mutators group): mutate an existing
- * pair/2-element list *in place*. These cannot go through the generic
- * toTagged/fromTagged round-trip like every other bridged builtin — that
- * round-trip converts the argument into a *fresh* CSE-side value, so a
- * mutation the CSE builtin performs on it (as pairmutator.ts does) would be
- * silently lost rather than visible on the original PyPair/PyList the
- * caller's Python variable still points to. CSE has no representational
- * difference between a pair and a 2-element list (both are its flat
- * `{type:"list", value: Value[]}`), so — matching that — this accepts either
- * a PyPair or a native 2-element PyList.
+ * 2-element list *in place*. This cannot go through the generic toTagged/
+ * fromTagged round-trip like every other bridged builtin — that round-trip
+ * converts the argument into a *fresh* CSE-side value, so a mutation the CSE
+ * builtin performs on it (as pairmutator.ts does) would be silently lost
+ * rather than visible on the original PyList the caller's Python variable
+ * still points to.
  */
-function nativeSetPairSlot(name: string, index: 0 | 1): PyFunction {
+function nativeSetPairSlot(name: string, index: 0 | 1, sayPair: boolean): PyFunction {
   const f = ((...args: PyValue[]) => {
     const target = args[0];
     const value = args[1];
-    if (target instanceof PyPair) {
-      if (index === 0) target.head = value;
-      else target.tail = value;
-      return null;
-    }
-    if (Array.isArray(target) && target.length === 2) {
+    if (isPairShaped(target)) {
       target[index] = value;
       return null;
     }
     throw new Py2JsRuntimeError(
       "TypeError",
-      `${name}() expects a pair as first argument, got '${pyTypeName(target)}'`,
+      `${name}() expects a pair as first argument, got '${pyTypeName(target, sayPair)}'`,
     );
   }) as PyFunction;
   f.pyName = name;
@@ -281,7 +289,7 @@ function nativeSetPairSlot(name: string, index: 0 | 1): PyFunction {
  * on every call — the bridge's toTagged/fromTagged round-trip only handles
  * function values that either originated in py2js or pass through
  * unchanged, not ones a CSE builtin invents on the spot — so it's
- * reimplemented directly against py2js's own PyPair/PyFunction instead,
+ * reimplemented directly against py2js's own PyList/PyFunction instead,
  * mirroring StreamBuiltins.stream's recursion exactly.
  *
  * `build` takes an index rather than re-slicing `args` on every lazy step:
@@ -293,7 +301,7 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
     if (index >= args.length) return null;
     const tail = rt.def("anonymous stream", 0, () => build(args, index + 1));
     tail.pyBuiltin = true;
-    return new PyPair(args[index], tail);
+    return [args[index], tail];
   };
   const f = ((...args: PyValue[]) => build(args, 0)) as PyFunction;
   f.pyName = "stream";
@@ -313,17 +321,16 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
  * generic bridge attempt would silently no-op: it would run against a fresh,
  * throwaway Context whose control/stash nothing ever steps). Reimplemented
  * natively instead: walk the argument list exactly as permissively as CSE
- * does (any 2-element list-shaped chain — PyPair or a native 2-element
- * PyList, since CSE has no representational difference between the two —
- * terminated by anything that isn't, not strictly requiring a None tail) and
- * invoke `f` through the runtime's own synchronous call trampoline (the same
+ * does (any 2-element-list-shaped chain, terminated by anything that isn't,
+ * not strictly requiring a None tail) and invoke `f` through the runtime's
+ * own synchronous call trampoline (the same
  * one a TS module uses to call back into Python — see Py2JsRuntime.callSync).
  *
  * `parse`/`tokenize` need no such native treatment: both just transform a
  * string into CSE's tagged parse tree (transform() in src/stdlib/parser.ts),
  * built entirely out of 2-element cons cells, which the existing
  * toTagged/fromTagged round-trip already reconstructs correctly as nested
- * PyPairs — so they go through the ordinary generic bridge above unchanged.
+ * PyLists — so they go through the ordinary generic bridge above unchanged.
  */
 function walkArgList(xs: PyValue): PyValue[] {
   const args: PyValue[] = [];
@@ -331,30 +338,20 @@ function walkArgList(xs: PyValue): PyValue[] {
   // genuinely self-referential pair (`p = pair(1, 2); set_tail(p, p)`).
   // Without this, a circular argument list would spin forever, growing
   // `args` without bound until the process runs out of memory — visited
-  // tracks pair/list *nodes* by identity (not values), so only an actual
-  // cycle back to a node already on this walk trips it, not e.g. two
+  // tracks list *nodes* by identity (not values), so only an actual cycle
+  // back to a node already on this walk trips it, not e.g. two
   // separately-built pairs that happen to compare equal.
   const visited = new Set<object>();
   let current = xs;
-  for (;;) {
-    if (current instanceof PyPair) {
-      if (visited.has(current)) {
-        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
-      }
-      visited.add(current);
-      args.push(current.head);
-      current = current.tail;
-    } else if (Array.isArray(current) && current.length === 2) {
-      if (visited.has(current)) {
-        throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
-      }
-      visited.add(current);
-      args.push(current[0]);
-      current = current[1];
-    } else {
-      return args;
+  while (isPairShaped(current)) {
+    if (visited.has(current)) {
+      throw new Py2JsRuntimeError("RuntimeError", "circular list structure in arguments");
     }
+    visited.add(current);
+    args.push(current[0]);
+    current = current[1];
   }
+  return args;
 }
 
 function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
@@ -391,8 +388,8 @@ export function bridgeStdlibGroups(
     // groups' primitives are reimplemented natively instead of left as the
     // generic bridge produced above.
     if (group.name === GroupName.PAIRMUTATORS) {
-      out.set_head = nativeSetPairSlot("set_head", 0);
-      out.set_tail = nativeSetPairSlot("set_tail", 1);
+      out.set_head = nativeSetPairSlot("set_head", 0, variant <= 2);
+      out.set_tail = nativeSetPairSlot("set_tail", 1, variant <= 2);
     }
     if (group.name === GroupName.STREAMS) {
       out.stream = nativeStream(rt);

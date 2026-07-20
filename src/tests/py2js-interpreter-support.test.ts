@@ -9,7 +9,7 @@
  * parser.ts, reused directly by both `parse` and PVML's own parser support)
  * builds the entire tagged parse tree out of 2-element cons cells, which the
  * bridge's existing toTagged/fromTagged round-trip already reconstructs
- * correctly as nested PyPairs. `apply_in_underlying_python` needed a native
+ * correctly as nested PyLists. `apply_in_underlying_python` needed a native
  * implementation instead (see stdlibBridge.ts's doc comment on
  * nativeApplyInUnderlyingPython): CSE's own version pushes onto its own
  * control/stash for the CSE step loop to process, which has no equivalent in

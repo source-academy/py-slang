@@ -33,19 +33,22 @@
  *    JS function call — see the engine README's module-interop notes for the
  *    measured cost.
  *
- * Chapter 1 has no list/pair type (NoListsValidator) and no way to construct
- * or consume one, so DataType.PAIR round-trips through PyPair (chapter 2+
- * only — see pythonToModule/moduleToPython's PyPair/DataType.PAIR cases,
- * mirroring the CSE converter's "list" case) while DataType.ARRAY module
- * values are rejected with a clear error, since no py-slang Python chapter
- * has a native fixed-length array/list-literal type the way js-slang's
- * Source does. Complex numbers are likewise not supported crossing the
- * boundary (matching the CSE converter's identical restriction).
+ * Chapter 1 has no list type (NoListsValidator) and no way to construct or
+ * consume one, so DataType.PAIR round-trips through PyList — a pair and a
+ * 2-element list are the same runtime value here (see runtime.ts's PyList
+ * doc comment), so pythonToModule's array check below handles a chapter-2
+ * pair() and a chapter-3+ literal list identically, mirroring the CSE
+ * converter's "list" case, which makes exactly the same non-distinction —
+ * while DataType.ARRAY module values are rejected with a clear error, since
+ * no py-slang Python chapter has a native fixed-length array type the way
+ * js-slang's Source does. Complex numbers are likewise not supported
+ * crossing the boundary (matching the CSE converter's identical
+ * restriction).
  */
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyPair, PyValue } from "./runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
 
 /**
  * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
@@ -172,10 +175,22 @@ export async function pythonToModule(
     case "object":
       if (value === null) return { type: DataType.EMPTY_LIST, value: null };
       if (value instanceof PyOpaque) return value.typed;
-      if (value instanceof PyPair) {
+      if (Array.isArray(value)) {
+        // A 2-element PyList — chapter 2's pair()/llist() and chapter 3+'s
+        // `[a, b]` literal alike, no representational difference (see the
+        // file header) — round-trips as a module pair via dh.pair_make. Any
+        // other length has no module-side representation any more than a
+        // DataType.ARRAY does (see moduleToPython's DataType.ARRAY case);
+        // dh.pair_make itself is the arity check.
+        if (value.length !== 2) {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            "only a 2-element list (a pair) can cross into a module, not an arbitrary-length list",
+          );
+        }
         return dh.pair_make(
-          await pythonToModule(rt, dh, value.head),
-          await pythonToModule(rt, dh, value.tail),
+          await pythonToModule(rt, dh, value[0]),
+          await pythonToModule(rt, dh, value[1]),
         );
       }
       throw new Py2JsRuntimeError(
@@ -249,13 +264,14 @@ export async function moduleToPython(
     }
     case DataType.PAIR:
       // A module PAIR (e.g. sound's Sound, a (wave, duration) dotted pair)
-      // round-trips as a PyPair, chapter 2's native cons cell — mirroring
-      // the CSE converter's "list" case for DataType.PAIR. Not a proper
-      // list: the tail need not be another pair or None, same as CSE's.
-      return new PyPair(
+      // round-trips as a 2-element PyList — mirroring the CSE converter's
+      // "list" case for DataType.PAIR, which makes the same non-distinction
+      // (see the file header). Not necessarily a *proper* list: the second
+      // element need not itself be a pair or None, same as CSE's.
+      return [
         await moduleToPython(rt, dh, await dh.pair_head(value)),
         await moduleToPython(rt, dh, await dh.pair_tail(value)),
-      );
+      ];
     case DataType.ARRAY:
       // See file header: no py-slang Python chapter has a native
       // fixed-length array/list-literal type to represent this as, and no

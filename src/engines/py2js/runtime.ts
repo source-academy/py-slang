@@ -1,16 +1,23 @@
 /**
  * py2js engine — runtime library.
  *
- * Native (unboxed) JS value model for SICPy chapters 1-2:
+ * Native (unboxed) JS value model:
  *   int      -> bigint
  *   float    -> number
  *   bool     -> boolean
  *   str      -> string
  *   None     -> null
  *   complex  -> PyComplexNumber (src/types)
- *   list     -> PyPair (chapter 2's "list" is always a 2-element cons cell
- *               built by pair()/llist(); see stdlibBridge.ts for the
- *               conversion to/from CSE's flat 2-element list Value)
+ *   list     -> PyList, a plain mutable JS array of PyValues. A chapter-2
+ *               pair (built by pair()/llist()) is just a 2-element PyList —
+ *               there is no separate pair type, matching the CSE machine,
+ *               which represents both a pair and an arbitrary-length list as
+ *               the same flat `{type:"list", value: Value[]}`
+ *               (src/engines/cse/stash.ts). "Is this a pair" is therefore a
+ *               structural question (length === 2), not a type-level one —
+ *               is_list/list_length/subscripting/pyTypeName can't tell a
+ *               pair from a 2-element list either, on either engine, which
+ *               is the correct, CSE-matching answer, not a gap.
  *   function -> JS function carrying pyName/pyArity metadata
  *   opaque   -> PyOpaque (a module value with no py2js-native representation
  *               — e.g. a sound or image handle — held and passed around but
@@ -20,17 +27,22 @@
  * operator semantics live in the helpers below, which mirror
  * evaluateBinaryExpression / evaluateUnaryExpression in
  * src/engines/cse/operators.ts (the reference implementation) — same dispatch
- * order, same §1/§2 restrictions (identical at these two chapters — see
- * docs/specs/python_typing_middle_12.tex). The operator typing rules
- * themselves are specified in docs/specs/python_typing_front.tex,
- * python_typing_middle_12.tex and python_typing_back.tex; conformance against
- * them is pinned by src/tests/operator-conformance-py2js.test.ts, which
- * sweeps the full operator × type × type cross product against the CSE
- * machine. pyEquals's bool/function exclusion checks re-apply on every
- * recursive call into a pair's head/tail, matching CSE's structuralEquals
- * threading `restrictChapter12` through its own list recursion — since py2js
- * only supports chapters 1-2 so far, that check is simply unconditional here;
- * a chapter 3/4 PR will need to parameterize it the same way CSE does.
+ * order, same per-chapter typing rules. The operator typing rules themselves
+ * are specified in docs/specs/python_typing_front.tex, python_typing_middle_
+ * {12,34}.tex and python_typing_back.tex; conformance against them is pinned
+ * by src/tests/operator-conformance-py2js.test.ts, which sweeps the full
+ * operator × type × type cross product against the CSE machine.
+ *
+ * Error-message type names: CSE's friendlyTypeName (engines/cse/types.ts)
+ * reports a list-shaped value as "pair" at chapters 1-2 and "list" at
+ * chapter 3+ — the chapter, not the value, decides the word, since chapters
+ * 1-2 have no list-literal syntax at all (so any array-shaped value there
+ * can only have come from pair()/linked-list construction, unambiguously),
+ * while at chapter 3+ both syntaxes coexist and "list" is the reasonable
+ * default. pyTypeName mirrors this via an explicit `sayPair` parameter
+ * threaded from whichever `restrict`/`universalEquality`-style chapter
+ * signal is already in scope at each call site — chapter 1 never actually
+ * reaches an array-shaped value, so the parameter is simply inert there.
  *
  * Proper tail calls: compiled functions return a TailCall marker from return
  * statements in tail position; `call` runs the trampoline. In dual mode every
@@ -52,37 +64,22 @@ export type PyValue =
   | string
   | null
   | PyComplexNumber
-  | PyPair
   | PyList
   | PyOpaque
   | PyFunction;
 
 /**
- * Chapter 3's native list literal (`[1, 2, 3]`): a plain mutable JS array of
- * PyValues. Deliberately a distinct type from PyPair (chapter 2's cons cell)
- * rather than unifying the two representations the way CSE does internally
- * (src/engines/cse/stash.ts's ListValue backs both) — PyPair already works
- * and is tested at chapter 2, and Array.isArray is a free, zero-cost
- * discriminant since nothing else in PyValue is a JS array. The stdlib
- * bridge (stdlibBridge.ts) converts both PyPair and PyList to the same CSE
- * tagged list shape, which is what actually needs to match for conformance
- * (is_list/list_length can't tell a pair from a 2-element list either, on
- * either engine).
+ * A Python list — chapter 2's pair (built by pair()/llist()) and chapter 3's
+ * arbitrary-length list literal alike: a plain mutable JS array of PyValues.
+ * One representation for both, matching the CSE machine's own internal
+ * `{type:"list", value: Value[]}` (src/engines/cse/stash.ts), which has no
+ * separate pair type either. Array.isArray is a free, zero-cost discriminant
+ * since nothing else in PyValue is a JS array. A 2-element PyList is what
+ * pair()/llist()/set_head/set_tail/subscripting treat as a cons cell; that's
+ * a structural fact about its length, not a tag on the value — the same
+ * duality CSE itself has (see the file header).
  */
 export type PyList = PyValue[];
-
-/**
- * Chapter 2's pair: a 2-element cons cell built by pair()/llist(), the same
- * shape the CSE machine represents as a 2-element list Value. Mutable fields
- * to match that representation exactly, though nothing at chapter 2 can
- * actually mutate one — pairmutator (set_head/set_tail) is chapter 3+.
- */
-export class PyPair {
-  constructor(
-    public head: PyValue,
-    public tail: PyValue,
-  ) {}
-}
 
 /**
  * An imported module value with no py2js-native representation (conductor's
@@ -158,7 +155,13 @@ export class Py2JsRuntimeError extends Error {
   }
 }
 
-export function pyTypeName(v: PyValue): string {
+/**
+ * `sayPair` mirrors CSE's friendlyTypeName(name, variant): true at chapters
+ * 1-2 renders a list-shaped value as "pair" instead of "list" — see the file
+ * header. Every call site threads through whichever `restrict`/
+ * `universalEquality`-style chapter signal it already has in scope.
+ */
+export function pyTypeName(v: PyValue, sayPair = false): string {
   switch (typeof v) {
     case "bigint":
       return "int";
@@ -172,10 +175,7 @@ export function pyTypeName(v: PyValue): string {
       return "function";
     case "object":
       if (v === null) return "NoneType";
-      // Matches CPython's type(...).__name__ via typeTranslator in the CSE
-      // machine (engines/cse/types.ts): a 2-element pair is always "list";
-      // an unrecognized module value has no more specific name than "opaque".
-      if (v instanceof PyPair) return "list";
+      if (Array.isArray(v)) return sayPair ? "pair" : "list";
       if (v instanceof PyOpaque) return "opaque";
       return "complex";
     default:
@@ -183,11 +183,11 @@ export function pyTypeName(v: PyValue): string {
   }
 }
 
-function unsupported(op: string, l: PyValue, r?: PyValue): never {
-  const rhs = r === undefined ? "" : ` and '${pyTypeName(r)}'`;
+function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): never {
+  const rhs = r === undefined ? "" : ` and '${pyTypeName(r, sayPair)}'`;
   throw new Py2JsRuntimeError(
     "UnsupportedOperandTypeError",
-    `unsupported operand type(s) for ${op}: '${pyTypeName(l)}'${rhs}`,
+    `unsupported operand type(s) for ${op}: '${pyTypeName(l, sayPair)}'${rhs}`,
   );
 }
 
@@ -217,9 +217,6 @@ function toDisplayValue(v: PyValue): Value {
         v.pyBuiltin ? { type: "builtin", name: v.pyName } : { type: "function", name: v.pyName }
       ) as Value;
     default:
-      if (v instanceof PyPair) {
-        return { type: "list", value: [toDisplayValue(v.head), toDisplayValue(v.tail)] };
-      }
       if (Array.isArray(v)) {
         return { type: "list", value: v.map(toDisplayValue) };
       }
@@ -246,7 +243,7 @@ export function pyStr(v: PyValue): string {
       return v.pyBuiltin ? `<built-in function ${v.pyName}>` : `<function ${v.pyName}>`;
     case "object":
       if (v === null) return "None";
-      if (v instanceof PyPair || Array.isArray(v)) return stringify(toDisplayValue(v));
+      if (Array.isArray(v)) return stringify(toDisplayValue(v));
       // Matches the CSE machine's toPythonString default case (stdlib/
       // utils.ts) for its "opaque" Value type.
       return v instanceof PyOpaque ? "<opaque object>" : v.toString();
@@ -255,16 +252,26 @@ export function pyStr(v: PyValue): string {
   }
 }
 
-/** Whether `v` is a proper linked list: a chain of pairs terminated by None,
- * as opposed to an arbitrary pair — mirrors isProperList in
- * src/stdlib/linked-list.ts (the distinction print_llist uses below).
- * Iterative rather than (tail-)recursive: JS engines don't guarantee TCO, so
- * a long list would otherwise risk a stack overflow — the same failure mode
- * printLlist's own outer list-walking `while` loop below already avoids. */
+/** A 2-element PyList — the shape pair()/llist()/set_head/set_tail treat as
+ * a cons cell. Structural, not a type tag (see the file header): a genuine
+ * N-element (N≠2) literal list is never mistaken for one, and neither is a
+ * coincidentally-2-element literal list mistaken for anything other than
+ * what it structurally is — matching CSE's own isPair (src/stdlib/
+ * linked-list.ts), which makes exactly the same length check. */
+export const isPairShaped = (v: PyValue): v is [PyValue, PyValue] =>
+  Array.isArray(v) && v.length === 2;
+
+/** Whether `v` is a proper linked list: a chain of 2-element cons cells
+ * terminated by None, as opposed to an arbitrary pair or an N-element (N≠2)
+ * literal list — mirrors isProperList in src/stdlib/linked-list.ts (the
+ * distinction print_llist uses below). Iterative rather than (tail-)
+ * recursive: JS engines don't guarantee TCO, so a long list would otherwise
+ * risk a stack overflow — the same failure mode printLlist's own outer
+ * list-walking `while` loop below already avoids. */
 function isProperList(v: PyValue): boolean {
   let current = v;
-  while (current instanceof PyPair) {
-    current = current.tail;
+  while (isPairShaped(current)) {
+    current = current[1];
   }
   return current === null;
 }
@@ -272,21 +279,22 @@ function isProperList(v: PyValue): boolean {
 /**
  * print_llist's box-and-pointer rendering — ports the CSE machine's
  * _print_llist/_is_llist (src/stdlib/linked-list.ts): a proper list renders
- * as `llist(a, b, c)`, any other pair as bracket notation `[a, b]`
- * (recursively), and a non-pair leaf via toPythonString's repr mode (reused
- * directly, via toDisplayValue, rather than re-implementing string escaping)
- * — same as CSE's `toPythonString(value, true)` leaf case.
+ * as `llist(a, b, c)`, any other 2-element cons cell as bracket notation
+ * `[a, b]` (recursively), and anything else (including an N-element, N≠2,
+ * literal list) via toPythonString's repr mode (reused directly, via
+ * toDisplayValue, rather than re-implementing string escaping) — same as
+ * CSE's `toPythonString(value, true)` leaf case.
  */
 function printLlist(v: PyValue): string {
   if (!isProperList(v)) {
-    if (!(v instanceof PyPair)) return toPythonString(toDisplayValue(v), true);
-    return `[${printLlist(v.head)}, ${printLlist(v.tail)}]`;
+    if (!isPairShaped(v)) return toPythonString(toDisplayValue(v), true);
+    return `[${printLlist(v[0])}, ${printLlist(v[1])}]`;
   }
   let s = "llist(";
   let current: PyValue = v;
-  while (current instanceof PyPair) {
-    s += printLlist(current.head) + ", ";
-    current = current.tail;
+  while (isPairShaped(current)) {
+    s += printLlist(current[0]) + ", ";
+    current = current[1];
   }
   if (s.endsWith(", ")) s = s.slice(0, -2);
   return s + ")";
@@ -331,8 +339,12 @@ function isNaNValue(v: PyValue): boolean {
  * list/pair recursion, not just the top level.
  */
 function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
-  if (restrict && (typeof l === "boolean" || typeof l === "function")) unsupported("==", l, r);
-  if (restrict && (typeof r === "boolean" || typeof r === "function")) unsupported("==", l, r);
+  if (restrict && (typeof l === "boolean" || typeof l === "function")) {
+    unsupported("==", l, r, restrict);
+  }
+  if (restrict && (typeof r === "boolean" || typeof r === "function")) {
+    unsupported("==", l, r, restrict);
+  }
   // At chapter 3+, booleans compare as the ints they are (True == 1, False ==
   // 0.0) — mirrors asIntIfBool's use in CSE's structuralEquals. At chapter
   // 1-2 this is unreachable: the exclusion above already rejected any bool
@@ -348,30 +360,17 @@ function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
   }
   if (isNum(l) && isNum(r)) return numericCompare(l, r) === 0;
   if (l === null && r === null) return true;
-  if (l instanceof PyPair && r instanceof PyPair) {
-    // Identity shortcut first (mirrors CSE's structuralEquals — also lets a
-    // self-referential pair compare equal to itself without recursing
-    // forever, and chapter 3's pair mutators can build exactly such a cycle).
-    return l === r || (pyEquals(l.head, r.head, restrict) && pyEquals(l.tail, r.tail, restrict));
-  }
   if (Array.isArray(l) && Array.isArray(r)) {
-    // Same identity shortcut, for the same reason (a native list can be
-    // self-referential too, once assigned into its own slot via list-assign).
+    // Identity shortcut first (mirrors CSE's structuralEquals — also lets a
+    // self-referential pair/list compare equal to itself without recursing
+    // forever, and chapter 3's pair mutators/list-assign can build exactly
+    // such a cycle). One representation for pairs and lists alike (see the
+    // file header), so this single branch is also what makes
+    // `pair(1, 2) == [1, 2]` compare True, matching CSE — there's no
+    // separate cross-type case to write, because there's no separate type.
     if (l === r) return true;
     if (l.length !== r.length) return false;
     return l.every((el, i) => pyEquals(el, r[i], restrict));
-  }
-  // A PyPair vs. a 2-element native list: CSE has no representational
-  // difference between a pair and a list at all (both are its flat
-  // `{type:"list", value: Value[]}` — src/engines/cse/stash.ts), so
-  // `pair(1, 2) == [1, 2]` is True there. py2js keeps them as two distinct
-  // JS types (see runtime.ts's PyList doc comment) but must still agree
-  // with the reference engine on this cross-type comparison.
-  if (l instanceof PyPair && Array.isArray(r) && r.length === 2) {
-    return pyEquals(l.head, r[0], restrict) && pyEquals(l.tail, r[1], restrict);
-  }
-  if (Array.isArray(l) && l.length === 2 && r instanceof PyPair) {
-    return pyEquals(l[0], r.head, restrict) && pyEquals(l[1], r.tail, restrict);
   }
   return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }
@@ -422,7 +421,7 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
         return l >= r;
     }
   }
-  if (!isNum(l) || !isNum(r)) unsupported(op, l, r);
+  if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal);
   if ((typeof l === "number" && Number.isNaN(l)) || (typeof r === "number" && Number.isNaN(r))) {
     return false;
   }
@@ -439,8 +438,8 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
   }
 }
 
-function complexBinop(op: string, l: PyValue, r: PyValue): PyComplexNumber {
-  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r)) unsupported(op, l, r);
+function complexBinop(op: string, l: PyValue, r: PyValue, sayPair: boolean): PyComplexNumber {
+  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r)) unsupported(op, l, r, sayPair);
   const a = toComplex(l);
   const b = toComplex(r);
   switch (op) {
@@ -467,7 +466,7 @@ function complexBinop(op: string, l: PyValue, r: PyValue): PyComplexNumber {
       }
     default:
       // %, // and every ordering operator are unsupported on complex operands
-      unsupported(op, l, r);
+      unsupported(op, l, r, sayPair);
   }
 }
 
@@ -622,21 +621,21 @@ export class Py2JsRuntime {
         // NoIsOperatorValidator (the resolver) already rejects this operator
         // at chapter 1-2; universalEquality false here is an independent
         // runtime backstop, matching the CSE machine's own variant gate.
-        if (!this.universalEquality) unsupported(op, l, r);
+        if (!this.universalEquality) unsupported(op, l, r, !this.universalEquality);
         return (op === "is not") !== pyIdentical(l, r);
     }
 
     if (isComplex(l) || isComplex(r)) {
-      return complexBinop(op, l, r);
+      return complexBinop(op, l, r, !this.universalEquality);
     }
 
     // String concatenation: str + str only.
     if (typeof l === "string" || typeof r === "string") {
       if (op === "+" && typeof l === "string" && typeof r === "string") return l + r;
-      unsupported(op, l, r);
+      unsupported(op, l, r, !this.universalEquality);
     }
 
-    if (!isNum(l) || !isNum(r)) unsupported(op, l, r);
+    if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !this.universalEquality);
 
     // Mixed int/float (or float/float) arithmetic: coerce to float, as the CSE
     // machine does (with the same potential precision loss on huge ints).
@@ -667,24 +666,25 @@ export class Py2JsRuntime {
           );
         return a ** b;
       default:
-        unsupported(op, l, r);
+        unsupported(op, l, r, !this.universalEquality);
     }
   }
 
   unop(op: string, v: PyValue): PyValue {
+    const sayPair = !this.universalEquality;
     switch (op) {
       case "not":
-        if (typeof v !== "boolean") unsupported("not", v);
+        if (typeof v !== "boolean") unsupported("not", v, undefined, sayPair);
         return !v;
       case "-":
         if (typeof v === "bigint") return -v;
         if (typeof v === "number") return -v;
         if (isComplex(v)) return new PyComplexNumber(-v.real, -v.imag);
-        unsupported("-", v);
+        unsupported("-", v, undefined, sayPair);
         break;
       case "+":
         if (isNum(v) || isComplex(v)) return v;
-        unsupported("+", v);
+        unsupported("+", v, undefined, sayPair);
     }
     throw new Py2JsRuntimeError("UnsupportedOperandTypeError", `bad unary operator ${op}`);
   }
@@ -696,13 +696,17 @@ export class Py2JsRuntime {
    * negative-index handling either, unlike list-assignment below).
    */
   listAccess(list: PyValue, index: PyValue): PyValue {
+    const sayPair = !this.universalEquality;
     if (typeof list !== "string" && !Array.isArray(list)) {
-      throw new Py2JsRuntimeError("TypeError", `'${pyTypeName(list)}' object is not subscriptable`);
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `'${pyTypeName(list, sayPair)}' object is not subscriptable`,
+      );
     }
     if (typeof index !== "bigint") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `list indices must be integers, not '${pyTypeName(index)}'`,
+        `list indices must be integers, not '${pyTypeName(index, sayPair)}'`,
       );
     }
     const idx = Number(index);
@@ -725,16 +729,17 @@ export class Py2JsRuntime {
    * goal here).
    */
   listAssign(list: PyValue, index: PyValue, value: PyValue): void {
+    const sayPair = !this.universalEquality;
     if (!Array.isArray(list)) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `'${pyTypeName(list)}' object does not support item assignment`,
+        `'${pyTypeName(list, sayPair)}' object does not support item assignment`,
       );
     }
     if (typeof index !== "bigint") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `list indices must be integers, not '${pyTypeName(index)}'`,
+        `list indices must be integers, not '${pyTypeName(index, sayPair)}'`,
       );
     }
     let idx = Number(index);
@@ -764,12 +769,11 @@ export class Py2JsRuntime {
         return true;
       case "object":
         if (v === null) return false;
-        // Pairs, native lists (even empty ones — CSE's isFalsy has no
-        // length-based case for its "list" type, unlike real Python's
-        // `bool([])`) and opaque module values are all always truthy —
-        // CSE's isFalsy default treats every object other than the cases
-        // above as truthy.
-        if (v instanceof PyPair || v instanceof PyOpaque || Array.isArray(v)) return true;
+        // Lists (even empty ones — CSE's isFalsy has no length-based case
+        // for its "list" type, unlike real Python's `bool([])`) and opaque
+        // module values are all always truthy — CSE's isFalsy default
+        // treats every object other than the cases above as truthy.
+        if (v instanceof PyOpaque || Array.isArray(v)) return true;
         return v.real !== 0 || v.imag !== 0;
       default:
         return false;
@@ -778,7 +782,7 @@ export class Py2JsRuntime {
 
   /** Left operand of and/or must be bool (mirrors the CSE BOOL_OP instruction). */
   boolLeft(v: PyValue, op: string): boolean {
-    if (typeof v !== "boolean") unsupported(op, v);
+    if (typeof v !== "boolean") unsupported(op, v, undefined, !this.universalEquality);
     return v;
   }
 
@@ -790,7 +794,10 @@ export class Py2JsRuntime {
    */
   whileCond(v: PyValue): boolean {
     if (typeof v !== "boolean") {
-      throw new Py2JsRuntimeError("TypeError", `while condition must be bool, not '${pyTypeName(v)}'`);
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `while condition must be bool, not '${pyTypeName(v, !this.universalEquality)}'`,
+      );
     }
     return v;
   }
@@ -806,7 +813,7 @@ export class Py2JsRuntime {
       if (typeof v !== "bigint") {
         throw new Py2JsRuntimeError(
           "TypeError",
-          `'${pyTypeName(v)}' object cannot be interpreted as an integer`,
+          `'${pyTypeName(v, !this.universalEquality)}' object cannot be interpreted as an integer`,
         );
       }
     }
@@ -817,7 +824,10 @@ export class Py2JsRuntime {
 
   private checkCallable(f: PyValue, nArgs: number, sync: boolean): PyFunction {
     if (typeof f !== "function") {
-      throw new Py2JsRuntimeError("TypeError", `'${pyTypeName(f)}' object is not callable`);
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+      );
     }
     if (f.pyArity >= 0 && f.pyArity !== nArgs) {
       throw new Py2JsRuntimeError(
@@ -943,7 +953,7 @@ export class Py2JsRuntime {
       if (typeof f !== "function") {
         throw new Py2JsRuntimeError(
           "TypeError",
-          `unsupported argument type for arity: '${pyTypeName(f)}'`,
+          `unsupported argument type for arity: '${pyTypeName(f, !this.universalEquality)}'`,
         );
       }
       // Bridged stdlib builtins report their CSE minArgs (pyMinArgs); user
