@@ -2,6 +2,7 @@
 import { select } from "@inquirer/prompts";
 import { spawn } from "child_process";
 import { Command } from "commander";
+import { cpus } from "os";
 
 // Keep in sync with src/conductor/index.ts exports.
 const allTargets = [
@@ -40,6 +41,34 @@ function buildTarget(target: EvaluatorName, extraArgs: string[] = []): Promise<v
       else reject(new Error(`Build failed for ${target} (exit ${code})`));
     });
   });
+}
+
+/**
+ * Runs `tasks` with at most `limit` running at once, rather than spawning
+ * every one of them simultaneously. `--all` builds 19 targets, each its own
+ * `rollup` child process; on a GitHub Actions runner (2 vCPUs) firing all 19
+ * at once oversubscribes the CPU/memory badly enough that individual builds
+ * — which normally take well under a second — occasionally ballooned to
+ * 5+ minutes, and the whole job would eventually die with "The operation
+ * was canceled" (the runner itself losing its heartbeat under memory
+ * pressure, not an actual external cancellation). Capping concurrency to
+ * the host's own core count keeps every worker actually running instead of
+ * fighting over the same handful of cores, and scales up for free on a
+ * developer's own, usually much larger, machine.
+ */
+async function runWithConcurrencyLimit<T>(
+  limit: number,
+  tasks: readonly (() => Promise<T>)[],
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    for (let i = next++; i < tasks.length; i = next++) {
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
 }
 
 function watchTarget(target: EvaluatorName) {
@@ -98,7 +127,10 @@ async function main() {
       process.exit(0);
     });
   } else {
-    await Promise.all(targets.map(target => buildTarget(target, extraArgs)));
+    await runWithConcurrencyLimit(
+      cpus().length,
+      targets.map(target => () => buildTarget(target, extraArgs)),
+    );
   }
 }
 
