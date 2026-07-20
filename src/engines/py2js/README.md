@@ -25,20 +25,27 @@ REPL/stepper purposes).
 
 **Unboxed value model** (`runtime.ts`'s `PyValue`): `int → bigint`,
 `float → number`, `bool → boolean`, `str → string`, `None → null`,
-`complex → PyComplexNumber`, `list (chapter 2 pair) → PyPair`,
-`list (chapter 3+ literal) → PyValue[]`, `function → JS closure with pyName
-/pyArity metadata`, opaque module values → `PyOpaque`. Values stay unboxed
-so V8 can JIT the compiled program; the operator/stdlib semantics
-(`binop`/`unop`/`pyEquals`/`pyOrder`/`pyIdentical` in `runtime.ts`) are
-written to mirror `evaluateBinaryExpression`/`evaluateUnaryExpression` in
+`complex → PyComplexNumber`, `list → PyList` (a plain `PyValue[]`),
+`function → JS closure with pyName/pyArity metadata`, opaque module values →
+`PyOpaque`. Values stay unboxed so V8 can JIT the compiled program; the
+operator/stdlib semantics (`binop`/`unop`/`pyEquals`/`pyOrder`/`pyIdentical`
+in `runtime.ts`) are written to mirror
+`evaluateBinaryExpression`/`evaluateUnaryExpression` in
 `src/engines/cse/operators.ts` — same dispatch order, same per-chapter
 typing rules — so the two engines agree by construction rather than by
-coincidence. `PyPair` (chapter 2's cons cell) and the chapter-3+ list
-literal are deliberately two different JS types here, unlike the CSE
-machine, which represents both as the same flat `{type:"list", value:
-Value[]}` (`src/engines/cse/stash.ts`) — `is_list`/`list_length` still
-answer identically on both engines because the stdlib bridge (below)
-converts either py2js type to that one CSE shape at the boundary.
+coincidence. A chapter-2 pair and a chapter-3+ list literal are the _same_
+`PyList`, one representation for both, matching the CSE machine exactly
+(which represents both as the same flat `{type:"list", value: Value[]}` —
+`src/engines/cse/stash.ts`) — there is no separate pair type here either.
+"Is this a pair" is therefore a structural question (length === 2), not a
+type-level one, on both engines; `is_list`/`list_length`/subscripting can't
+tell a pair from a 2-element list apart because there is nothing to tell
+apart. Error messages still say "pair" at chapters 1-2 and "list" at
+chapter 3+ for a list-shaped value (`pyTypeName`'s `sayPair` parameter,
+matching CSE's `friendlyTypeName(name, variant)`) — the chapter decides the
+word, not the value, since chapters 1-2 have no list-literal syntax at all
+(so any array-shaped value there can only have come from pair()
+construction, unambiguously).
 
 **Compile pipeline** (`index.ts`): parse (the shared py-slang parser) →
 resolve with the chapter's validators (the same `Resolver` every other
@@ -133,7 +140,7 @@ bridge's tagged round-trip is structurally the wrong shape for them:
 - `set_head`/`set_tail` (chapter 3) — the generic bridge converts an
   argument into a _fresh_ CSE-side value, so a mutation the CSE builtin
   performs on it would be silently lost rather than visible on the
-  caller's original `PyPair`/list.
+  caller's original `PyList`.
 - `stream()` (chapter 3) — CSE's own implementation fabricates a brand-new
   closure (the lazy tail thunk) on every call; the bridge's function-value
   handling only passes through a function that either originated in py2js
@@ -146,9 +153,8 @@ bridge's tagged round-trip is structurally the wrong shape for them:
   pushes onto its own control/stash for the CSE step loop to process
   later, rather than returning a value synchronously; incompatible with a
   bridge that expects a builtin to return synchronously. Walks its
-  argument list exactly as permissively as CSE does (any 2-element
-  list-shaped chain, `PyPair` or a native 2-element list) and calls
-  through the runtime's own `callSync` trampoline.
+  argument list exactly as permissively as CSE does (any 2-element-list-
+  shaped chain) and calls through the runtime's own `callSync` trampoline.
 
 List-processing primitives (`map`/`filter`/`reduce`/`is_list`/`length`/
 etc., wherever they live — the stdlib groups above, or
@@ -249,19 +255,22 @@ inspectable); `CLOSURE` becomes an `asyncOnly` `PyFunction` (tagged with
 back into a module — e.g. a `Sound`'s wave function created by
 `sine_sound` and later sampled by `play` — hands the identifier back
 unchanged instead of wrapping a _new_, incorrectly-assumed-synchronous
-closure around it); `PAIR` round-trips through `PyPair` (chapter 2's
-native cons cell — not necessarily a proper list, same as the CSE
-converter's identical case); `ARRAY` and complex numbers are rejected —
-no py-slang Python chapter has a native fixed-length array or supports
-complex numbers crossing the module boundary (matching the CSE
-converter's identical restrictions).
+closure around it); `PAIR` round-trips through a 2-element `PyList` — not
+necessarily a proper list, same as the CSE converter's identical case, and
+a genuine chapter-3+ `[a, b]` literal crosses exactly the same way, since
+there's no representational difference for this conversion to even
+distinguish them by (an N-element, N≠2, list has no module representation
+and throws clearly rather than silently truncating); `ARRAY` and complex
+numbers are rejected — no py-slang Python chapter has a native
+fixed-length array or supports complex numbers crossing the module
+boundary (matching the CSE converter's identical restrictions).
 
 ## Chapter coverage
 
 | Chapter | Adds                                                                                                                                                                                                                                                             |
 | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1       | straight-line arithmetic, conditionals, function application/recursion, lambdas, `misc`/`math`                                                                                                                                                                   |
-| 2       | pairs (`PyPair`), linked-list stdlib, `from X import y` module loading                                                                                                                                                                                           |
+| 2       | pairs (a 2-element `PyList`), linked-list stdlib, `from X import y` module loading                                                                                                                                                                               |
 | 3       | reassignment, `while`/`for`/`break`/`continue`, native list literals + subscript access/assignment, `global`/`nonlocal`, universal `==`/`!=`/`is`/`is not`, `list`/`pairmutator`/`stream` groups                                                                 |
 | 4       | `tokenize`/`parse`/`apply_in_underlying_python`, predeclared `__program__` (available at every chapter in py2js, matching the CSE reference and the spec's "predeclared in all Python languages" wording, not gated to chapter 4 despite being documented there) |
 
