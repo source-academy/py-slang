@@ -9,6 +9,14 @@ export const TYPE_TAG = {
   UNBOUND: 7,
   LIST: 9,
   TUPLE: 10,
+  /** A handle to a value owned by an imported conductor module (an opaque
+   * like a runes Rune, or a module function) — see moduleInterop.ts. The
+   * payload is an index into the JS-side handle table, *not* a heap
+   * pointer, so this tag is deliberately absent from IS_TAG_GCABLE (gc.ts):
+   * the GC treats a hostref like INT/BOOL, an immediate it never traces or
+   * moves. Calling a hostref dispatches to the `modules.call` host import —
+   * see PRE_APPLY_FX/APPLY_FX (environments.ts). */
+  HOSTREF: 11,
 } as const;
 
 export const SHADOW_STACK_TAG = {
@@ -63,6 +71,8 @@ export const ERROR_MAP = {
   ZERO_DIVISION: "ZeroDivisionError: division by zero",
   BOOL_OPERAND_NOT_SUPPORTED: "TypeError: unsupported operand type(s) for this operation: boolean",
   EXPECTED_BOOL_OPERAND: "TypeError: expected a boolean operand for this operation",
+  HOSTREF_STARRED:
+    "TypeError: argument unpacking is not supported when calling an imported module function",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>

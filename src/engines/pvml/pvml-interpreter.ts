@@ -146,7 +146,12 @@ export class PVMLInterpreter {
   private callDepth: number = 0;
 
   private instructionCount: number = 0;
-  private maxInstructionLimit: number = 1000000;
+  /** No default cap — PVML runs in a webworker, so runaway code is stopped
+   * by terminating the worker from the frontend rather than by an internal
+   * step limit (unlike the transpiler/py2js path, which has no worker
+   * boundary to rely on). Callers that still want a cap can pass
+   * `maxInstructions` explicitly (e.g. tests). */
+  private maxInstructionLimit: number = Infinity;
 
   /** The SICPy chapter (1-4) `program` was compiled for — see Context.variant's
    * doc comment (src/engines/cse/context.ts) for why error construction needs

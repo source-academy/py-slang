@@ -1,5 +1,6 @@
 import type { WasmInstruction } from "@sourceacademy/wasm-util";
 import { Group } from "../../stdlib/utils";
+import type { PreparedModuleBindings } from "./moduleInterop";
 
 export type WasmExports = {
   main: () => [number, bigint];
@@ -15,6 +16,18 @@ export type WasmExports = {
   malloc: (amount: number) => number;
   peekShadowStack: (index: number) => [number, bigint];
   getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
+  /**
+   * Invokes an arbitrary closure value from outside any compiled call site
+   * — see runtime/environments.ts's APPLY_HOST_CLOSURE_BEGIN_FX doc
+   * comment. Call applyClosureBegin once, then applyClosureSetArg once per
+   * argument in order (converting/materialising each argument between
+   * calls, not all up front — see the doc comment for why), then
+   * applyClosureFinish once to actually dispatch the call and get the
+   * result.
+   */
+  applyClosureBegin: (closureTag: number, closureValue: bigint, argCount: number) => void;
+  applyClosureSetArg: (index: number, argTag: number, argValue: bigint) => void;
+  applyClosureFinish: (argCount: number) => [number, bigint];
 };
 
 export type IrPass = (ir: WasmInstruction) => WasmInstruction;
@@ -26,6 +39,11 @@ export type CompileOptions = {
 
   chapter?: number;
   groups?: Group[];
+  /** Pre-loaded imported-module bindings for the chunk's `from X import ...`
+   * statements — see moduleInterop.ts and PyWasmEvaluator's loadImports.
+   * Absent for import-free chunks (and for callers with no module loader,
+   * where a FromImport statement then fails compilation). */
+  moduleBindings?: PreparedModuleBindings;
 };
 
 export const PARSE_TREE_STRINGS = [

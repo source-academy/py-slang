@@ -10,7 +10,7 @@ import { makeLibraryFunctions } from "./library";
 import { PARSE_TREE_STRINGS, type CompileOptions, type IrPass } from "./types";
 
 export type CompileToBinaryResult =
-  | { ok: true; wasm: BufferSource }
+  | { ok: true; wasm: BufferSource; dataEnd: number }
   | { ok: false; errors: Error[] };
 
 export async function compileScriptToWasmBinary(
@@ -32,6 +32,7 @@ export async function compileScriptToWasmBinary(
     interactiveMode,
     options.pageCount ?? 1,
     options.chapter ?? 4,
+    options.moduleBindings?.names ?? [],
   );
   const passes: IrPass[] = [
     ...(options.irPasses ?? []),
@@ -45,5 +46,5 @@ export async function compileScriptToWasmBinary(
   const w = await wabt();
   const wasm = w.parseWat("a", wat).toBinary({}).buffer as BufferSource;
 
-  return { ok: true, wasm };
+  return { ok: true, wasm, dataEnd: builderGenerator.getDataEnd() };
 }
