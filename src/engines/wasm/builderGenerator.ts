@@ -18,6 +18,9 @@ import { LibFuncType } from "./library";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
+  APPLY_HOST_CLOSURE_BEGIN_FX,
+  APPLY_HOST_CLOSURE_FINISH_FX,
+  APPLY_HOST_CLOSURE_SET_ARG_FX,
   applyFuncFactory,
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
@@ -311,6 +314,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
       peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
       getListElement: wasm.export("getListElement").func(DEBUG_GET_LIST_ELEMENT_FX.name),
+      applyClosureBegin: wasm.export("applyClosureBegin").func(APPLY_HOST_CLOSURE_BEGIN_FX.name),
+      applyClosureSetArg: wasm
+        .export("applyClosureSetArg")
+        .func(APPLY_HOST_CLOSURE_SET_ARG_FX.name),
+      applyClosureFinish: wasm.export("applyClosureFinish").func(APPLY_HOST_CLOSURE_FINISH_FX.name),
     };
 
     const memoryEndPointer = this.pageCount * 64 * 1024;

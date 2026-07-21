@@ -14,6 +14,7 @@ import {
   ERROR_MAP,
   GC_OBJECT_HEADER_SIZE,
   SHADOW_STACK_PTR,
+  SHADOW_STACK_TAG,
   SHADOW_STACK_TOP,
   TYPE_TAG,
   getErrorIndex,
@@ -616,6 +617,93 @@ export const SET_CONTIGUOUS_BLOCK_FX = wasm
       local.get("$value"),
     ),
   );
+
+/**
+ * Invokes an arbitrary closure value from outside any compiled call site —
+ * the host-callable counterpart to visitCallExpr's compiled CALL sequence
+ * (builderGenerator.ts), for a module function that received one of the
+ * student's closures as an argument and calls it back (see
+ * moduleInterop.ts's readWasmValue TYPE_TAG.CLOSURE case).
+ *
+ * Split into three exports — begin/setArg/finish — rather than one
+ * combined call, so the JS caller can convert each argument (via
+ * moduleInterop.ts's typedToHostValue/materialize, which may themselves
+ * allocate and trigger GC) *between* wasm calls, with the callee's new
+ * environment already rooted via the shadow stack the whole time (see
+ * ApplyHostClosureBeginFX below) — exactly as safe as a compiled call site,
+ * where each argument sub-expression's own evaluation (and possible
+ * allocation) likewise happens between the PRE_APPLY_FX env allocation and
+ * each SET_CONTIGUOUS_BLOCK_FX write (see visitCallExpr). Materialising
+ * every argument into a plain scratch buffer *before* any of these calls
+ * would not be safe: an untracked buffer's raw (tag, val) bytes are never
+ * updated by a moving GC, so an earlier argument's pointer could go stale
+ * the moment materialising a *later* one triggers a collection.
+ */
+export const APPLY_HOST_CLOSURE_BEGIN_FX = wasm
+  .func("$_apply_host_closure_begin")
+  .params({ $tag: i32, $val: i64, $arg_count: i32 })
+  .body(
+    // Mirrors visitCallExpr's first three steps: push the return address,
+    // push the callee itself (PRE_APPLY_FX's closure branch expects it
+    // already on the shadow stack — normally left there by the callee
+    // sub-expression's own compiled evaluation), then allocate the new env
+    // via PRE_APPLY_FX and push its CALL_NEW_ENV shadow-stack entry (which
+    // is what keeps this env's slots correctly relocated by the GC while
+    // setArgFx below fills them one at a time).
+    wasm
+      .call(SILENT_PUSH_SHADOW_STACK_FX)
+      .args(i32.const(SHADOW_STACK_TAG.CALL_RETURN_ADDR), i64.extend_i32_u(global.get(CURR_ENV))),
+
+    wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$val")),
+
+    wasm
+      .call(SILENT_PUSH_SHADOW_STACK_FX)
+      .args(
+        i32.const(SHADOW_STACK_TAG.CALL_NEW_ENV),
+        i64.shl(
+          i64.extend_i32_u(
+            wasm
+              .call(PRE_APPLY_FX)
+              .args(local.get("$tag"), local.get("$val"), local.get("$arg_count")),
+          ),
+          i64.const(32),
+        ),
+      ),
+  );
+
+/** Fills one argument slot in the env APPLY_HOST_CLOSURE_BEGIN_FX allocated
+ * — call once per argument, in order, after BEGIN and before FINISH.
+ * Argument unpacking (starred/varargs) never applies here: a module
+ * callback always calls with a fixed, already-flat argument list. */
+export const APPLY_HOST_CLOSURE_SET_ARG_FX = wasm
+  .func("$_apply_host_closure_set_arg")
+  .params({ $index: i32, $tag: i32, $val: i64 })
+  .body(
+    // SET_CONTIGUOUS_BLOCK_FX expects a GCable argument freshly pushed on
+    // top of the shadow stack, popping it right back off to do the write —
+    // the same push-then-immediately-consume choreography visitCallExpr
+    // uses inline for each compiled argument.
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+      .then(wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$tag"), local.get("$val"))),
+    wasm
+      .call(SET_CONTIGUOUS_BLOCK_FX)
+      .args(
+        local.get("$index"),
+        local.get("$tag"),
+        local.get("$val"),
+        i32.const(ENV_HEAD_SIZE),
+        i32.const(0),
+      ),
+  );
+
+/** Dispatches the call BEGIN set up and every SET_ARG call filled — call
+ * once, last, after every argument has been set. */
+export const APPLY_HOST_CLOSURE_FINISH_FX = wasm
+  .func("$_apply_host_closure_finish")
+  .params({ $arg_count: i32 })
+  .results(i32, i64)
+  .body(wasm.call(APPLY_FX_NAME).args(local.get("$arg_count")));
 
 // Helper function for interactive mode: takes (tag, value) and returns either
 // the shadow stack value (if tag is gcable) or the original (tag, value)

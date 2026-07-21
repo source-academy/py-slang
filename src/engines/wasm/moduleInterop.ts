@@ -194,11 +194,13 @@ function materialize(
 }
 
 /**
- * Reads one tagged wasm value into a conductor TypedValue. Pure reads (no
- * wasm calls, no allocation — see the module doc comment's GC note);
- * `dataEnd` is the boundary below which STRING payload pointers are static
- * data-section strings with no GC header (mirrors LOG_FX's identical
- * offset select in runtime/stdlib.ts).
+ * Reads one tagged wasm value into a conductor TypedValue. No wasm calls,
+ * no allocation while actually reading (see the module doc comment's GC
+ * note) — except that the CLOSURE case below closes over `exports` for its
+ * *returned* callback's own later use, not during this function's own
+ * execution. `dataEnd` is the boundary below which STRING payload pointers
+ * are static data-section strings with no GC header (mirrors LOG_FX's
+ * identical offset select in runtime/stdlib.ts).
  */
 async function readWasmValue(
   tag: number,
@@ -206,6 +208,7 @@ async function readWasmValue(
   memory: WebAssembly.Memory,
   dataEnd: number,
   prepared: PreparedModuleBindings,
+  exports: WasmExports,
 ): Promise<TypedValue<DataType>> {
   const { dh } = prepared;
   switch (tag) {
@@ -244,14 +247,14 @@ async function readWasmValue(
       // ambiguity caveat) as the PVML converter.
       if (len === 2) {
         return dh.pair_make(
-          await readWasmValue(elements[0][0], elements[0][1], memory, dataEnd, prepared),
-          await readWasmValue(elements[1][0], elements[1][1], memory, dataEnd, prepared),
+          await readWasmValue(elements[0][0], elements[0][1], memory, dataEnd, prepared, exports),
+          await readWasmValue(elements[1][0], elements[1][1], memory, dataEnd, prepared, exports),
         );
       }
       let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
       for (let i = len - 1; i >= 0; i--) {
         chain = await dh.pair_make(
-          await readWasmValue(elements[i][0], elements[i][1], memory, dataEnd, prepared),
+          await readWasmValue(elements[i][0], elements[i][1], memory, dataEnd, prepared, exports),
           chain,
         );
       }
@@ -259,10 +262,38 @@ async function readWasmValue(
     }
     case TYPE_TAG.HOSTREF:
       return prepared.handles[Number(val)].value;
-    case TYPE_TAG.CLOSURE:
-      throw new Error(
-        "Passing a function to an imported module function is not supported by the WASM evaluator yet",
+    case TYPE_TAG.CLOSURE: {
+      // A student-defined closure passed *into* a module call (e.g.
+      // apply_twice(add_one, 5)) becomes a conductor closure that re-enters
+      // this wasm instance when the module calls it back — the WASM
+      // analogue of PVML's pvmlToModule "closure" case (pvml/modules.ts),
+      // which does the same thing via its own callPvml re-entry hook. The
+      // placeholder signature (no declared args/return type) is fine for
+      // the same reason it is there: dh.closure_call_unchecked never
+      // checks it, and module signatures carry no Python-side arity info
+      // to reproduce here anyway.
+      const closureTag = tag;
+      const closureVal = val;
+      return dh.closure_make(
+        { returnType: DataType.VOID, args: [] },
+        async function* (...callArgs: TypedValue<DataType>[]) {
+          exports.applyClosureBegin(closureTag, closureVal, callArgs.length);
+          // Each argument is converted/materialised *between* wasm calls
+          // (see APPLY_HOST_CLOSURE_BEGIN_FX's doc comment for why this
+          // can't be done all up front into a plain buffer) — the callee's
+          // new environment is already shadow-stack-rooted by
+          // applyClosureBegin, so a GC triggered while converting argument N
+          // correctly relocates every slot filled by argument < N so far.
+          for (let i = 0; i < callArgs.length; i++) {
+            const hostValue = await typedToHostValue(dh, callArgs[i], "callback", prepared.handles);
+            const [argTag, argVal] = materialize(hostValue, exports, memory);
+            exports.applyClosureSetArg(i, argTag, argVal);
+          }
+          const [resultTag, resultVal] = exports.applyClosureFinish(callArgs.length);
+          return readWasmValue(resultTag, resultVal, memory, dataEnd, prepared, exports);
+        },
       );
+    }
     default:
       throw new Error(`Cannot pass a value of runtime tag ${tag} to an imported module function`);
   }
@@ -300,7 +331,7 @@ export function createModuleCall(
     }
     const args: TypedValue<DataType>[] = [];
     for (const [tag, val] of rawArgs) {
-      args.push(await readWasmValue(tag, val, memory, dataEnd, prepared));
+      args.push(await readWasmValue(tag, val, memory, dataEnd, prepared, exports));
     }
 
     const gen = prepared.dh.closure_call_unchecked(handle.value, args);

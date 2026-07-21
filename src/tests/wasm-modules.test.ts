@@ -68,6 +68,16 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Calls its closure argument with 3 plain arguments at once (rather than
+  // apply_twice's 1-argument-at-a-time calls) — checks argument-index
+  // bookkeeping across more than a single slot.
+  const callWithThree = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.CLOSURE] },
+    async function* (f: TypedValue<DataType.CLOSURE>) {
+      return yield* dh.closure_call_unchecked(f, [num(1), num(2), num(3)]);
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -77,6 +87,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "apply_twice", value: applyTwice },
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
+      { symbol: "call_with_three", value: callWithThree },
     ],
   } as unknown as IModulePlugin;
 }
@@ -198,6 +209,20 @@ describe("PyWasmEvaluator module imports", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["7", "None"]);
+    });
+
+    test("a closure argument called with more than one argument at once", async () => {
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyWasmEvaluator3(conductor);
+
+      await evaluator.evaluateChunk(
+        "from testmod import call_with_three\n" +
+          "def sum3(a, b, c):\n    return a + b + c\n" +
+          "print(call_with_three(sum3))\n",
+      );
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["6", "None"]);
     });
   } else {
     test("calling an imported module function without JSPI fails loudly", async () => {

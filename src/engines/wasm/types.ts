@@ -16,6 +16,18 @@ export type WasmExports = {
   malloc: (amount: number) => number;
   peekShadowStack: (index: number) => [number, bigint];
   getListElement: (listTag: number, listValue: bigint, index: number) => [number, bigint];
+  /**
+   * Invokes an arbitrary closure value from outside any compiled call site
+   * — see runtime/environments.ts's APPLY_HOST_CLOSURE_BEGIN_FX doc
+   * comment. Call applyClosureBegin once, then applyClosureSetArg once per
+   * argument in order (converting/materialising each argument between
+   * calls, not all up front — see the doc comment for why), then
+   * applyClosureFinish once to actually dispatch the call and get the
+   * result.
+   */
+  applyClosureBegin: (closureTag: number, closureValue: bigint, argCount: number) => void;
+  applyClosureSetArg: (index: number, argTag: number, argValue: bigint) => void;
+  applyClosureFinish: (argCount: number) => [number, bigint];
 };
 
 export type IrPass = (ir: WasmInstruction) => WasmInstruction;
