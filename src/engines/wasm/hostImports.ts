@@ -48,7 +48,14 @@ export type HostRuntimeState = {
   wasmExports: WasmExports | null;
 };
 
-export function createHostImports(memory: WebAssembly.Memory, runtime: HostRuntimeState) {
+export function createHostImports(
+  memory: WebAssembly.Memory,
+  runtime: HostRuntimeState,
+  /** Renders a HOSTREF (imported-module value — see moduleInterop.ts) for
+   * print(). Defaults cover the no-modules case, where log_hostref can
+   * never actually fire but the import must still exist. */
+  hostrefDisplay: (index: bigint) => string = () => "<module value>",
+) {
   const capture = (value: string) => {
     runtime.output.push(value);
   };
@@ -93,6 +100,7 @@ export function createHostImports(memory: WebAssembly.Memory, runtime: HostRunti
         capture(`[${renderedItems.join(", ")}]`);
       },
       log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
+      log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
     },
     metacircular: {
       tokenize: (offset: number, length: number) => {

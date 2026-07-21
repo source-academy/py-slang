@@ -29,9 +29,15 @@ import {
  * display/error messages. */
 export async function moduleToPvml(
   dh: IDataHandler,
-  value: TypedValue<DataType>,
+  value: TypedValue<DataType> | undefined | null,
   name: string,
 ): Promise<PVMLBoxType> {
+  // A void-returning module function's generator settles with its final
+  // step.value left undefined -- matches DataType.VOID's own null-mapping
+  // below (both mean Python's None), not a malformed module response.
+  if (value === undefined || value === null) {
+    return null;
+  }
   switch (value.type) {
     case DataType.NUMBER:
       return value.value;
