@@ -341,12 +341,16 @@ export const LIST_REPEAT_FX = wasm
       ),
 
     local.set("$src_len", i32.wrap_i64(local.get("$val"))),
+    // Check the sign on the full 64-bit value before truncating to i32 --
+    // wrapping first (as this used to) turns any large positive count whose
+    // low 32 bits have the sign bit set (e.g. 3_000_000_000n) into a
+    // spuriously "negative" i32, silently clamping a valid huge count to [].
     local.set(
       "$count",
       wasm.select(
         i32.const(0),
         i32.wrap_i64(local.get("$count_val")),
-        i32.lt_s(i32.wrap_i64(local.get("$count_val")), i32.const(0)),
+        i64.lt_s(local.get("$count_val"), i64.const(0)),
       ),
     ),
     local.set("$new_len", i32.mul(local.get("$src_len"), local.get("$count"))),

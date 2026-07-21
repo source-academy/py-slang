@@ -641,7 +641,9 @@ export class Py2JsRuntime {
       const count = Number(other);
       const repeated: PyValue[] = [];
       for (let i = 0; i < count; i++) {
-        repeated.push(...list);
+        for (const val of list) {
+          repeated.push(val);
+        }
       }
       return repeated;
     }

@@ -548,7 +548,9 @@ export function evaluateBinaryExpression(
     const count = Number(other.value);
     const repeated: Value[] = [];
     for (let i = 0; i < count; i++) {
-      repeated.push(...list.value);
+      for (const val of list.value) {
+        repeated.push(val);
+      }
     }
     return { type: "list", value: repeated };
   }

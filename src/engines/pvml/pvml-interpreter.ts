@@ -2023,7 +2023,9 @@ export class PVMLInterpreter {
   private repeatArray(arr: PVMLArray, count: bigint): PVMLArray {
     const elements: PVMLBoxType[] = [];
     for (let i = 0n; i < count; i++) {
-      elements.push(...arr.elements);
+      for (const el of arr.elements) {
+        elements.push(el);
+      }
     }
     const repeated: PVMLArray = { type: "array", elements };
     // A `[a, b]`-shaped result must still round-trip through a module
