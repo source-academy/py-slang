@@ -1222,6 +1222,37 @@ function isStringRepetition(code: string, expected: TestExpectedValue): boolean 
   return typeof expected === "function" && STRING_REPETITION_RE.test(code.trim());
 }
 
+/**
+ * Whether `code`'s last line is `<list literal> * <True|False>` or `<True|False> * <list literal>`:
+ * real Python's `*` between a list and a bool (an int subclass) is ordinary list repetition
+ * (`[1, 2] * True == [1, 2]`), unlike this dialect's deliberate exclusion of bool as a list-repeat
+ * count (docs/specs/python_typing_middle_34.tex) -- same class of divergence as
+ * `isBoolNumericOperator` above, just for list operands instead of numeric ones.
+ */
+const LIST_BOOL_MULTIPLY_RE = /^\[[^\]]*\]\s*\*\s*(True|False)$|^(True|False)\s*\*\s*\[[^\]]*\]$/;
+
+function isListBoolMultiply(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return LIST_BOOL_MULTIPLY_RE.test(last);
+}
+
+/**
+ * Whether `code`'s last line subscripts (reads or assigns) with a bare `True`/`False` index
+ * (`xs[True]`, `xs[True] = 5`): real Python allows bool as a list index (bool being an int
+ * subclass, so `xs[True]` is just `xs[1]`), unlike this dialect's deliberate exclusion of bool as
+ * a list index (docs/specs/python_typing_middle_34.tex).
+ */
+const LIST_BOOL_SUBSCRIPT_RE = /\[(True|False)\](?:\s*=\s*.+)?$/;
+
+function isListBoolSubscript(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return LIST_BOOL_SUBSCRIPT_RE.test(last);
+}
+
 /** Whether `code` is `-True` or `-False`: unary-minus form of the same bool/int-subclass
  * divergence as `isBoolRejection`/`isBoolNumericOperator` above. */
 function isUnaryMinusBool(code: string, expected: TestExpectedValue): boolean {
@@ -1335,6 +1366,14 @@ const CPYTHON_SKIP_REASONS: {
   {
     matches: isStringRepetition,
     reason: "CPython supports string*int repetition, which this dialect doesn't implement",
+  },
+  {
+    matches: isListBoolMultiply,
+    reason: "bool is an int subclass in CPython, unlike this dialect's list-repeat operand rule",
+  },
+  {
+    matches: isListBoolSubscript,
+    reason: "bool is an int subclass in CPython, unlike this dialect's list-index rule",
   },
   {
     matches: isUnaryMinusBool,

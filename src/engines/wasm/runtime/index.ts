@@ -17,6 +17,7 @@ import {
   GET_LIST_ELEMENT_FX,
   IS_LIST_FX,
   LIST_LENGTH_FX,
+  LIST_REPEAT_FX,
   LIST_SLOT_STORE_FX,
   LIST_SLOT_TAG_LOAD_FX,
   LIST_SLOT_VAL_LOAD_FX,
@@ -135,6 +136,7 @@ export const nativeFunctions = [
   LIST_LENGTH_FX,
   IS_LIST_FX,
   GEN_LIST_FX,
+  LIST_REPEAT_FX,
 
   // linkedList
   MAKE_PAIR_FX,

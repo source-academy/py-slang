@@ -1,10 +1,14 @@
 import { ExprNS } from "../../ast-types";
-import { UnsupportedOperandTypeError, ZeroDivisionError } from "../../errors/errors";
+import {
+  ListMultiplyTypeError,
+  UnsupportedOperandTypeError,
+  ZeroDivisionError,
+} from "../../errors/errors";
 import { TokenType } from "../../tokenizer";
 import { PyComplexNumber } from "../../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
-import { BigIntValue, NumberValue, Value } from "./stash";
+import { BigIntValue, ListValue, NumberValue, Value } from "./stash";
 import { operatorTranslator } from "./types";
 import { isCoercedComplex, isNumeric, numericCompare, pythonMod } from "./utils";
 
@@ -520,6 +524,35 @@ export function evaluateBinaryExpression(
         operatorTranslator(operator),
       ),
     );
+  }
+
+  // `list * int` / `int * list`: a generic list constructor (see
+  // docs/specs/python_typing_middle_34.tex) -- the list's elements repeated
+  // as shallow copies (the same Value references, not deep clones) `n`
+  // times, or `[]` for `n <= 0`. `bool` is explicitly not a valid count
+  // (unlike real Python, where True/False are ints) -- checked as its own
+  // "list" type, not "bigint", so it falls into the dedicated error below
+  // rather than silently being coerced. §3/§4 only -- at §1/§2 a "list" stash
+  // value is actually a cons pair (see docs/specs/python_typing_middle_34.tex
+  // vs _middle_12.tex), which has no `*` row at any chapter before §3.
+  if (
+    variant >= 3 &&
+    operator === TokenType.STAR &&
+    (left.type === "list" || right.type === "list")
+  ) {
+    const list = left.type === "list" ? left : (right as ListValue);
+    const other = left.type === "list" ? right : left;
+    if (other.type !== "bigint") {
+      handleRuntimeError(context, new ListMultiplyTypeError(code, command, context));
+    }
+    const count = Number(other.value);
+    const repeated: Value[] = [];
+    for (let i = 0; i < count; i++) {
+      for (const val of list.value) {
+        repeated.push(val);
+      }
+    }
+    return { type: "list", value: repeated };
   }
 
   // Handle list operations (`is`, `is not`, and `==`/`!=` at every chapter are

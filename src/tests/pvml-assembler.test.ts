@@ -20,7 +20,13 @@ function roundTrip(code: string): string[] {
   const binary = compileAndAssemble(code);
   const program = disassemble(binary);
   const outputs: string[] = [];
-  const interpreter = new PVMLInterpreter(program, { sendOutput: msg => outputs.push(msg) });
+  // This suite's programs are always compiled with targetsPynter: true (see
+  // compileAndAssemble above) — see PVMLInterpreter's legacyArraySemantics
+  // doc comment for why that dialect needs this.
+  const interpreter = new PVMLInterpreter(program, {
+    sendOutput: msg => outputs.push(msg),
+    legacyArraySemantics: true,
+  });
   interpreter.execute();
   return outputs;
 }

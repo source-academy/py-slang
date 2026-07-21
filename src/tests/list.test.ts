@@ -1,4 +1,10 @@
-import { MissingRequiredPositionalError, TooManyPositionalArgumentsError } from "../errors";
+import {
+  IndexError,
+  ListIndexTypeError,
+  ListMultiplyTypeError,
+  MissingRequiredPositionalError,
+  TooManyPositionalArgumentsError,
+} from "../errors";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -49,6 +55,32 @@ describe("List Tests", () => {
       ["xs = [1, 2, 3, 4]\nxs", [1n, 2n, 3n, 4n], null],
       ["xs = [1, 2, 3, 4]\nxs[2]", 3n, null],
       ["xs = [1, 2, 3, 4]\nxs[2] = 42\nxs", [1n, 2n, 42n, 4n], null],
+    ],
+    "list index range, negative wraparound, and bad-index errors": [
+      ["xs = [10, 20, 30]\nxs[-1]", 30n, null],
+      ["xs = [10, 20, 30]\nxs[-3]", 10n, null],
+      ["xs = [10, 20, 30]\nxs[-1] = 99\nxs", [10n, 20n, 99n], null],
+      ["xs = [10, 20, 30]\nxs[-3] = 99\nxs", [99n, 20n, 30n], null],
+      ["[1, 2][2]", IndexError, null],
+      ["[1, 2][-3]", IndexError, null],
+      ["xs = [0, 0]\nxs[2] = 5", IndexError, null],
+      ["xs = [0, 0]\nxs[-3] = 5", IndexError, null],
+      ["[1, 2][0.0]", ListIndexTypeError, null],
+      ["[1, 2][True]", ListIndexTypeError, null],
+      ["xs = [1, 2]\nxs[0.0] = 5", ListIndexTypeError, null],
+      ["xs = [1, 2]\nxs[True] = 5", ListIndexTypeError, null],
+    ],
+    "list multiplication (list * int / int * list)": [
+      ["[1, 2] * 3", [1n, 2n, 1n, 2n, 1n, 2n], null],
+      ["3 * [1, 2]", [1n, 2n, 1n, 2n, 1n, 2n], null],
+      ["[1, 2] * 0", [], null],
+      ["[1, 2] * -1", [], null],
+      ["[1, 2] * True", ListMultiplyTypeError, null],
+      ["True * [1, 2]", ListMultiplyTypeError, null],
+      ["[1, 2] * 2.0", ListMultiplyTypeError, null],
+      ["[1, 2] * [1, 2]", ListMultiplyTypeError, null],
+      // Shallow copy: repeated elements are the same object, not deep clones.
+      ["x = [[1, 2]] * 4\nx[0] is x[1]", true, null],
     ],
   };
 

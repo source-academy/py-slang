@@ -508,22 +508,48 @@ export class PVMLCompiler
       `__list_tmp_${this.tmpCounter++}`,
     );
 
-    // NEWA takes no size operand: native Pynter's op_new_a always creates an
-    // empty, auto-growing array (siarray_new(8) with count=0) and ignores
-    // whatever's on the stack — it never pops a size. Pushing one here (as
-    // this used to) left it stranded on the stack after NEWA, permanently
-    // corrupting stack balance for the rest of the program (every list
-    // literal leaked one value, eventually manifesting as a native stack
-    // overflow). STAG (via siarray_put) grows the array to fit as elements
-    // are stored below.
-    this.builder.emitNullary(OpCodes.NEWA);
-    this.builder.emitUnary(OpCodes.STLG, tmpSlot);
+    if (this.targetsPynter) {
+      // NEWA takes no size operand: native Pynter's op_new_a always creates
+      // an empty, auto-growing array (siarray_new(8) with count=0) and
+      // ignores whatever's on the stack — it never pops a size. Pushing one
+      // here (as this used to) left it stranded on the stack after NEWA,
+      // permanently corrupting stack balance for the rest of the program
+      // (every list literal leaked one value, eventually manifesting as a
+      // native stack overflow). STAG (via siarray_put) grows the array to
+      // fit as elements are stored below. This exact byte-for-byte sequence
+      // must stay unchanged for this target: it's also executed by the real
+      // native Pynter binary, which has its own separate NEWA/STAG
+      // implementation this compiler has no say over.
+      this.builder.emitNullary(OpCodes.NEWA);
+      this.builder.emitUnary(OpCodes.STLG, tmpSlot);
 
-    for (let i = 0; i < n; i++) {
-      this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
-      this.builder.emitUnary(OpCodes.LGCI, i);
-      this.compile(expr.elements[i]);
-      this.builder.emitNullary(OpCodes.STAG);
+      for (let i = 0; i < n; i++) {
+        this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+        this.builder.emitUnary(OpCodes.LGCI, i);
+        this.compile(expr.elements[i]);
+        this.builder.emitNullary(OpCodes.STAG);
+      }
+    } else {
+      // Browser-pathway (non-Pynter) compilation: this bytecode only ever
+      // runs on PVMLInterpreter, never the real native binary or the
+      // assembler (LGCBI below already makes a targetsPynter=false program
+      // unassemblable), so it's free to pre-size the array up front instead
+      // of relying on storeArrayElement's old auto-grow-by-one-slot
+      // behavior, which issue #294 removed (student assignment past the end
+      // must raise, not grow). PVMLInterpreter's createArray reads the size
+      // straight back from this NEWA's own operand. The loop index must be a
+      // genuine bigint (LGCBI), not LGCI's plain number, to satisfy
+      // storeArrayElement's "list indices must be integers" check like any
+      // other Python int index would.
+      this.builder.emitUnary(OpCodes.NEWA, n);
+      this.builder.emitUnary(OpCodes.STLG, tmpSlot);
+
+      for (let i = 0; i < n; i++) {
+        this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
+        this.builder.emitUnary(OpCodes.LGCBI, BigInt(i));
+        this.compile(expr.elements[i]);
+        this.builder.emitNullary(OpCodes.STAG);
+      }
     }
 
     this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
@@ -814,18 +840,21 @@ export class PVMLCompiler
   }
 
   /** Wraps a single compiled value in a fresh 1-element array — builds one
-   * "piece" for compileSpreadCall's argument flattening. Same NEWA/STAG
-   * pattern as visitListExpr, specialized to exactly one element. */
+   * "piece" for compileSpreadCall's argument flattening. Same pre-sized-NEWA
+   * pattern as visitListExpr's non-Pynter branch, specialized to exactly one
+   * element -- this is unconditionally browser-pathway-only code:
+   * compileSpreadCall (this method's only caller) already throws for
+   * targetsPynter above. */
   private compileSingleElementArray(expr: ExprNS.Expr): ExpressionResult {
     const tmpSlot = this.getOrAssignSlot(
       this.currentEnvironment,
       `__spread_piece_${this.tmpCounter++}`,
     );
-    this.builder.emitNullary(OpCodes.NEWA);
+    this.builder.emitUnary(OpCodes.NEWA, 1);
     this.builder.emitUnary(OpCodes.STLG, tmpSlot);
 
     this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
-    this.builder.emitUnary(OpCodes.LGCI, 0);
+    this.builder.emitUnary(OpCodes.LGCBI, 0n);
     const elemResult = this.compile(expr);
     this.builder.emitNullary(OpCodes.STAG);
 

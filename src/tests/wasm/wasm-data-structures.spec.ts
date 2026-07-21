@@ -400,4 +400,108 @@ f(1, 2, 3)
       new Error(ERROR_MAP.GET_LENGTH_NOT_LIST),
     );
   });
+
+  it("negative index wraps around on read", async () => {
+    const pythonCode = `
+x = [10, 20, 30]
+x[-1]
+`;
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe("30");
+  });
+
+  it("negative index wraps around on write", async () => {
+    const pythonCode = `
+x = [10, 20, 30]
+x[-1] = 99
+x
+`;
+    const { renderedResult } = await compileWithList(pythonCode);
+    expect(renderedResult).toBe("[10, 20, 99]");
+  });
+
+  it("a too-negative index still errors on read", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[-4]
+`;
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
+      new Error(ERROR_MAP.LIST_OUT_OF_RANGE),
+    );
+  });
+
+  it("a too-negative index still errors on write", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[-4] = 5
+`;
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
+      new Error(ERROR_MAP.SET_OUT_OF_RANGE),
+    );
+  });
+
+  it("list assignment out of range reports the assignment-specific message", async () => {
+    const pythonCode = `
+x = [0, 0]
+x[2] = 5
+`;
+    await expect(compileWithList(pythonCode)).rejects.toThrow(
+      new Error(ERROR_MAP.SET_OUT_OF_RANGE),
+    );
+  });
+
+  it("a bool index is rejected, same as a non-integer index", async () => {
+    const pythonCode = `
+x = [1, 2, 3]
+x[True]
+`;
+    await expect(compileWithList(pythonCode)).rejects.toThrow(new Error(ERROR_MAP.INDEX_NOT_INT));
+  });
+
+  it("list * int repeats the list's elements", async () => {
+    const pythonCode = `[1, 2] * 3`;
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
+    expect(rawResult[0]).toBe(TYPE_TAG.LIST);
+    expect(renderedResult).toBe("[1, 2, 1, 2, 1, 2]");
+  });
+
+  it("int * list (commuted operand order)", async () => {
+    const pythonCode = `3 * [1, 2]`;
+    const { renderedResult } = await compileWithList(pythonCode);
+    expect(renderedResult).toBe("[1, 2, 1, 2, 1, 2]");
+  });
+
+  it("list * 0 and list * a negative int both give []", async () => {
+    expect((await compileWithList(`[1, 2] * 0`)).renderedResult).toBe("[]");
+    expect((await compileWithList(`[1, 2] * -1`)).renderedResult).toBe("[]");
+  });
+
+  it("list * bool errors", async () => {
+    await expect(compileWithList(`[1, 2] * True`)).rejects.toThrow(
+      new Error(ERROR_MAP.BOOL_OPERAND_NOT_SUPPORTED),
+    );
+  });
+
+  it("list * float errors with the dedicated multiply-by-non-integer message", async () => {
+    await expect(compileWithList(`[1, 2] * 2.0`)).rejects.toThrow(
+      new Error(ERROR_MAP.MULTIPLY_LIST_NOT_INT),
+    );
+  });
+
+  it("list * list errors with the dedicated multiply-by-non-integer message", async () => {
+    await expect(compileWithList(`[1, 2] * [1, 2]`)).rejects.toThrow(
+      new Error(ERROR_MAP.MULTIPLY_LIST_NOT_INT),
+    );
+  });
+
+  it("list multiplication makes shallow copies", async () => {
+    const pythonCode = `
+x = [[1, 2]] * 4
+x[0] is x[1]
+`;
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
+    expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
+    expect(renderedResult).toBe("True");
+  });
 });

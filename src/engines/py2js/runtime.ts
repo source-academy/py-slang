@@ -625,6 +625,29 @@ export class Py2JsRuntime {
         return (op === "is not") !== pyIdentical(l, r);
     }
 
+    // `list * int` / `int * list` (chapter 3+ only, like CSE): a generic
+    // list constructor repeating the list's elements as shallow copies (the
+    // same PyValue references, not deep clones) `n` times, or `[]` for
+    // `n <= 0` — see docs/specs/python_typing_middle_34.tex. `bool` is
+    // deliberately not a valid count (unlike real Python) -- checked as its
+    // own JS `boolean`, not `bigint`, so it falls into the dedicated error
+    // below rather than being silently coerced.
+    if (this.universalEquality && op === "*" && (Array.isArray(l) || Array.isArray(r))) {
+      const list = Array.isArray(l) ? l : (r as PyValue[]);
+      const other = Array.isArray(l) ? r : l;
+      if (typeof other !== "bigint") {
+        throw new Py2JsRuntimeError("TypeError", "can't multiply list by non-integer");
+      }
+      const count = Number(other);
+      const repeated: PyValue[] = [];
+      for (let i = 0; i < count; i++) {
+        for (const val of list) {
+          repeated.push(val);
+        }
+      }
+      return repeated;
+    }
+
     if (isComplex(l) || isComplex(r)) {
       return complexBinop(op, l, r, !this.universalEquality);
     }
@@ -691,9 +714,9 @@ export class Py2JsRuntime {
 
   /**
    * `expr[index]` (chapter 3+): mirrors the CSE machine's LIST_ACCESS
-   * instruction — a list or string subject, an int index, bounds-checked;
-   * negative indices are not supported (CSE's own LIST_ACCESS has no
-   * negative-index handling either, unlike list-assignment below).
+   * instruction — a list or string subject, an int index, bounds-checked
+   * against the full `-length..length-1` range, with negative indices
+   * wrapping (docs/specs/python_typing_middle_34.tex).
    */
   listAccess(list: PyValue, index: PyValue): PyValue {
     const sayPair = !this.universalEquality;
@@ -714,20 +737,26 @@ export class Py2JsRuntime {
       // Spread rather than raw .length/[idx]: matches CSE's code-point-based
       // indexing (correct for astral characters), not UTF-16 code units.
       const chars = [...list];
-      if (idx >= chars.length)
-        throw new Py2JsRuntimeError("IndexError", "string index out of range");
-      return chars.at(idx) ?? "";
+      const length = chars.length;
+      // Mirrors the CSE machine's LIST_ACCESS, which likewise has no
+      // separate "string index out of range" wording.
+      if (idx < -length || idx >= length) {
+        throw new Py2JsRuntimeError("IndexError", "list index out of range");
+      }
+      return chars[idx < 0 ? idx + length : idx];
     }
-    if (idx >= list.length) throw new Py2JsRuntimeError("IndexError", "list index out of range");
-    return list[idx];
+    const length = list.length;
+    if (idx < -length || idx >= length) {
+      throw new Py2JsRuntimeError("IndexError", "list index out of range");
+    }
+    return list[idx < 0 ? idx + length : idx];
   }
 
   /**
    * `expr[index] = value` (chapter 3+): mirrors evaluateListAssignment in
-   * src/engines/cse/utils.ts, including its negative-index handling (a
-   * modulo, not a true Python wraparound — kept bug-compatible with CSE
-   * rather than "fixed", since conformance with the reference engine is the
-   * goal here).
+   * src/engines/cse/utils.ts — bounds-checked against `-length..length-1`
+   * with real modulo wraparound for negative indices, and never auto-extends
+   * (docs/specs/python_typing_middle_34.tex).
    */
   listAssign(list: PyValue, index: PyValue, value: PyValue): void {
     const sayPair = !this.universalEquality;
@@ -743,12 +772,12 @@ export class Py2JsRuntime {
         `list indices must be integers, not '${pyTypeName(index, sayPair)}'`,
       );
     }
-    let idx = Number(index);
-    if (idx < 0) idx = idx % list.length;
-    if (idx >= list.length) {
+    const idx = Number(index);
+    const length = list.length;
+    if (idx < -length || idx >= length) {
       throw new Py2JsRuntimeError("IndexError", "list assignment index out of range");
     }
-    list[idx] = value;
+    list[idx < 0 ? idx + length : idx] = value;
   }
 
   /**

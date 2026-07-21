@@ -61,6 +61,7 @@ export const STASH_TYPE: Record<string, string> = {
   complex: "complex",
   bool: "bool",
   str: "string",
+  list: "list",
 };
 
 /** List literals are rejected by the chapter 1 validators, so the §1 universe excludes them. */
@@ -81,7 +82,7 @@ export function groupsForChapter(chapter: number): Group[] {
 // The spec tables
 // ---------------------------------------------------------------------------
 
-export type ResultType = "int" | "float" | "complex" | "bool" | "str";
+export type ResultType = "int" | "float" | "complex" | "bool" | "str" | "list";
 
 interface Row {
   ops: string[];
@@ -159,6 +160,8 @@ const MIDDLE_34: Row[] = [
     right: ["int", "float", "bool"],
     result: "bool",
   },
+  { ops: ["*"], left: ["list"], right: ["int"], result: "list" },
+  { ops: ["*"], left: ["int"], right: ["list"], result: "list" },
 ];
 
 const TABLE_12: Row[] = [...FRONT, ...MIDDLE_12, ...BACK];

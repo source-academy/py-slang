@@ -22,6 +22,25 @@ export class UnsupportedOperandTypeError extends PVMLInterpreterError {
   }
 }
 
+export class IndexError extends PVMLInterpreterError {
+  constructor(isAssignment = false) {
+    const subject = isAssignment ? "list assignment index" : "list index";
+    super(`IndexError: ${subject} out of range`);
+  }
+}
+
+export class ListIndexTypeError extends PVMLInterpreterError {
+  constructor() {
+    super("TypeError: list indices must be integers");
+  }
+}
+
+export class ListMultiplyTypeError extends PVMLInterpreterError {
+  constructor() {
+    super("TypeError: can't multiply list by non-integer");
+  }
+}
+
 export class MissingRequiredPositionalError extends PVMLInterpreterError {}
 export class TooManyPositionalArgumentsError extends PVMLInterpreterError {}
 export class ZeroDivisionError extends PVMLInterpreterError {}

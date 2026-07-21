@@ -131,15 +131,55 @@ export class IndexError extends RuntimeSourceError {
     context: Context,
     index: number,
     length: number,
+    isAssignment = false,
   ) {
     super(node);
     this.type = ErrorType.RUNTIME;
     this.message =
-      "IndexError: list index out of range. You tried to access index " +
+      (isAssignment
+        ? "IndexError: list assignment index out of range. You tried to assign to index "
+        : "IndexError: list index out of range. You tried to access index ") +
       index +
       " but the list only has " +
       length +
       " elements.";
+  }
+}
+
+export class ListIndexTypeError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, _context: Context) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const indicator = createErrorIndicator(snippet, 0);
+    const hint = "TypeError: list indices must be integers";
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
+  }
+}
+
+export class ListMultiplyTypeError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Binary, _context: Context) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
+    const indicator = createErrorIndicator(snippet, errorPos);
+    const hint = "TypeError: can't multiply list by non-integer";
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
   }
 }
 
