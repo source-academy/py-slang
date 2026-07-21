@@ -10,6 +10,30 @@ import {
   createCompileFailureResult,
 } from "./types";
 
+/** Matches one `from <dotted-name> import ...` line (the grammar's
+ * import-stmt production is always exactly one line — see
+ * docs/specs/python_3_bnf.tex's `import-stmt`). */
+const IMPORT_LINE_RE = /^\s*from\s+\S+\s+import\s+.+$/;
+
+/**
+ * Splits `code`'s *leading* run of import statements (and any blank lines
+ * among them) from the rest, so callers can place them before a prepended
+ * prelude. The grammar requires every import statement to appear before any
+ * other statement in the whole compiled program (`program ::= import-stmt...
+ * block` — docs/specs/python_3_bnf.tex), so a chunk that compiles at all on
+ * its own can only ever have its imports at the very top; this is a
+ * line-based scan rather than a real parse, but it's checking for exactly
+ * that same leading-only shape, not a looser heuristic.
+ */
+function splitLeadingImports(code: string): { imports: string; rest: string } {
+  const lines = code.split("\n");
+  let i = 0;
+  while (i < lines.length && (lines[i].trim() === "" || IMPORT_LINE_RE.test(lines[i]))) {
+    i++;
+  }
+  return { imports: lines.slice(0, i).join("\n"), rest: lines.slice(i).join("\n") };
+}
+
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode?: false,
@@ -28,7 +52,12 @@ export async function compileToWasmAndRun(
   const groups = [...(options.groups ?? []), misc];
   const prelude = groups.map(group => group.prelude).join("\n");
 
-  const script = prelude + "\n" + code + "\n";
+  // A chunk's own `from X import y` must compile as one of the program's
+  // leading import statements (see splitLeadingImports' doc comment), which
+  // means it has to precede the prepended prelude here, not follow the
+  // student's code the way `code` alone would put it.
+  const { imports, rest } = splitLeadingImports(code);
+  const script = imports + "\n" + prelude + "\n" + rest + "\n";
 
   const errors: Error[] = [];
   let wasmExports: WasmExports | null = null;

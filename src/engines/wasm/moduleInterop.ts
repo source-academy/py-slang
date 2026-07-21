@@ -82,10 +82,17 @@ export type PreparedModuleBindings = {
  * HostModuleValue form, registering opaques/closures in `handles`. */
 async function typedToHostValue(
   dh: IDataHandler,
-  value: TypedValue<DataType>,
+  value: TypedValue<DataType> | undefined | null,
   name: string,
   handles: ModuleHandle[],
 ): Promise<HostModuleValue> {
+  // A void-returning module function's generator settles with `step.value`
+  // left undefined (its `next()` never received an explicit return value) --
+  // treat that the same as Python's None, matching every other DataType.VOID
+  // case below.
+  if (value === undefined || value === null) {
+    return { kind: "none" };
+  }
   switch (value.type) {
     case DataType.NUMBER:
       return { kind: "float", value: value.value };
