@@ -3,6 +3,9 @@ import { PyComplexNumber } from "../../types";
 import { executePrimitive } from "./builtins";
 import {
   FreeVariableUnboundError,
+  IndexError,
+  ListIndexTypeError,
+  ListMultiplyTypeError,
   NameError,
   PVMLInterpreterError,
   UnboundLocalError,
@@ -163,6 +166,8 @@ export class PVMLInterpreter {
   /** True only while `executeAsync`'s driver loop is running — the only
    * context able to await a pendingExtern. See PVMLExtern's doc comment. */
   private allowExtern = false;
+  /** See the constructor option of the same name. */
+  private legacyArraySemantics: boolean;
 
   constructor(
     program: PVMLProgram,
@@ -187,6 +192,25 @@ export class PVMLInterpreter {
       programText?: string;
       /** The chapter `program` was compiled for — see `variant` above. */
       variant?: number;
+      /**
+       * Set only when `program` was compiled with `targetsPynter: true` (see
+       * PVMLCompiler's `targetsPynter` field doc) — e.g. via the assembler's
+       * disassemble(assemble(...)) round trip (pvml-assembler.test.ts), the
+       * only place this TS interpreter ever actually executes that dialect.
+       * That compilation mode collapses Python's int/float distinction (both
+       * become a plain JS `number` — see visitBigIntLiteralExpr's targetsPynter
+       * branch) to match native Pynter's own NaN-boxed numeric model, so the
+       * spec-compliant index-type/bounds checks list access/assignment
+       * normally enforce (see loadArrayElement/storeArrayElement) can't be
+       * applied — there's no way to tell a genuine int index apart from a
+       * float one once both are the same JS `number`. Falls back to the
+       * pre-#294/#299 behavior instead: an out-of-bounds read yields
+       * `undefined`, and an out-of-bounds write grows the array, exactly
+       * matching native Pynter's own siarray_get/siarray_put — appropriate
+       * here since that's the real semantics this bytecode dialect was
+       * compiled to match in the first place.
+       */
+      legacyArraySemantics?: boolean;
     },
   ) {
     this.program = program;
@@ -197,6 +221,7 @@ export class PVMLInterpreter {
     }
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
+    this.legacyArraySemantics = options?.legacyArraySemantics ?? false;
 
     if (options) {
       if (options.maxStackSize) this.maxStackSize = options.maxStackSize;
@@ -470,8 +495,35 @@ export class PVMLInterpreter {
         const leftType = getPVMLType(left);
         const rightType = getPVMLType(right);
 
+        // `list * int` is §3/§4 only: at §2, an array value is a cons pair
+        // (see visitCallExpr's pair() builtin), which has no `*` row at any
+        // chapter (docs/specs/python_typing_middle_34.tex vs _middle_12.tex).
+        const isListOperand =
+          this.variant >= 3 &&
+          ((isPVMLObject(left) && left.type === "array") ||
+            (isPVMLObject(right) && right.type === "array"));
+
         if (isArithmeticValue(left) && isArithmeticValue(right)) {
           this.push(PVMLInterpreter.numericArith("*", left, right));
+        } else if (
+          isListOperand &&
+          isPVMLObject(left) &&
+          left.type === "array" &&
+          typeof right === "bigint"
+        ) {
+          this.push(this.repeatArray(left, right));
+        } else if (
+          isListOperand &&
+          isPVMLObject(right) &&
+          right.type === "array" &&
+          typeof left === "bigint"
+        ) {
+          this.push(this.repeatArray(right, left));
+        } else if (isListOperand) {
+          // `list * bool`/`list * float`/`list * list`: bool is deliberately
+          // not accepted as a count even though it's numeric-ish (see
+          // docs/specs/python_typing_middle_34.tex).
+          throw new ListMultiplyTypeError();
         } else {
           throw new UnsupportedOperandTypeError(this.variant, "*", leftType, rightType);
         }
@@ -755,7 +807,7 @@ export class PVMLInterpreter {
 
       // Array operations
       case OpCodes.NEWA:
-        this.createArray();
+        this.createArray(a1);
         break;
 
       case OpCodes.LDAG:
@@ -1858,19 +1910,42 @@ export class PVMLInterpreter {
   // Array Operations
   // ========================================================================
 
-  private createArray(): void {
-    // No size operand: native Pynter's NEWA (op_new_a) always creates an
-    // empty, auto-growing array and never pops one — see visitListExpr.
+  private createArray(size: number): void {
+    // Native-Pynter-targeted bytecode always emits NEWA with no operand
+    // (encoded as 0) and grows it element-by-element via STAG afterwards, to
+    // exactly match native Pynter's own op_new_a/siarray_put -- see
+    // visitListExpr's targetsPynter branch. Browser-pathway (non-Pynter)
+    // compilation instead pre-sizes the array here, since storeArrayElement
+    // no longer auto-grows (issue #294) and the resulting slots are always
+    // overwritten by the STAG loop that immediately follows, in range.
     const arr: PVMLArray = {
       type: "array",
-      elements: [],
+      elements: new Array<PVMLBoxType>(size).fill(undefined),
     };
     this.push(arr);
   }
 
   private loadArrayElement(): void {
-    const index = this.pop() as number;
+    const indexValue = this.pop();
     const arr = this.pop();
+
+    if (this.legacyArraySemantics) {
+      const idx = Number(indexValue);
+      const elements = typeof arr === "string" ? [...arr] : (arr as PVMLArray).elements;
+      // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
+      // fault, it yields undefined. See legacyArraySemantics' doc comment.
+      this.push(idx >= 0 && idx < elements.length ? elements[idx] : undefined);
+      return;
+    }
+
+    // `bool` is deliberately rejected as an index, unlike real Python (see
+    // docs/specs/python_typing_middle_34.tex) -- a Python `int` is always a
+    // JS `bigint` on this pathway (PVMLType.BIGINT), so this also catches
+    // float/str/list/etc. indices, not just bool.
+    if (typeof indexValue !== "bigint") {
+      throw new ListIndexTypeError();
+    }
+    const idx = Number(indexValue);
 
     if (typeof arr === "string") {
       // Python's str is a sequence of Unicode code points, not UTF-16 code
@@ -1879,7 +1954,13 @@ export class PVMLInterpreter {
       // case 2) so e.g. '👨‍👩‍👧‍👦'[1] is the lone ZWJ code point between the
       // first two family-emoji members, not half a surrogate pair.
       const codePoints = [...arr];
-      this.push(index >= 0 && index < codePoints.length ? codePoints[index] : undefined);
+      const length = codePoints.length;
+      // Mirrors the CSE machine's LIST_ACCESS, which likewise has no
+      // separate "string index out of range" wording.
+      if (idx < -length || idx >= length) {
+        throw new IndexError();
+      }
+      this.push(codePoints[idx < 0 ? idx + length : idx]);
       return;
     }
 
@@ -1887,27 +1968,69 @@ export class PVMLInterpreter {
       throw new Error("Cannot index non-array value");
     }
 
-    // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
-    // fault, it yields undefined.
-    this.push(index >= 0 && index < arr.elements.length ? arr.elements[index] : undefined);
+    const length = arr.elements.length;
+    // Valid range is -length..length-1, with negative indices wrapping
+    // (docs/specs/python_typing_middle_34.tex) -- no longer "an out-of-bounds
+    // read isn't a fault, it yields undefined" as native Pynter's siarray_get
+    // does; that diverged from the Python §3/§4 spec.
+    if (idx < -length || idx >= length) {
+      throw new IndexError();
+    }
+    this.push(arr.elements[idx < 0 ? idx + length : idx]);
   }
 
   private storeArrayElement(): void {
     const value = this.pop();
-    const index = this.pop() as number;
+    const indexValue = this.pop();
     const arr = this.pop();
 
     if (!isPVMLObject(arr) || arr.type !== "array") {
       throw new Error("Cannot index non-array value");
     }
 
-    if (index < 0) {
-      throw new Error(`Array index ${index} out of bounds`);
+    if (this.legacyArraySemantics) {
+      const idx = Number(indexValue);
+      if (idx < 0) {
+        throw new Error(`Array index ${idx} out of bounds`);
+      }
+      // Mirrors native Pynter's siarray_put: writing past the end grows the
+      // array (leaving a gap of `undefined`s) rather than faulting. See
+      // legacyArraySemantics' doc comment.
+      arr.elements[idx] = value;
+      return;
     }
 
-    // Mirrors native Pynter's siarray_put: writing past the end grows the
-    // array (leaving a gap of `undefined`s) rather than faulting.
-    arr.elements[index] = value;
+    if (typeof indexValue !== "bigint") {
+      throw new ListIndexTypeError();
+    }
+    const idx = Number(indexValue);
+    const length = arr.elements.length;
+
+    // No auto-grow (issue #294): unlike native Pynter's siarray_put, writing
+    // past the end always raises rather than growing the array, matching the
+    // CSE machine and docs/specs/python_typing_middle_34.tex.
+    if (idx < -length || idx >= length) {
+      throw new IndexError(true);
+    }
+    arr.elements[idx < 0 ? idx + length : idx] = value;
+  }
+
+  /**
+   * `list * int` / `int * list`: repeats `arr`'s elements `count` times as
+   * shallow copies (the same `PVMLBoxType` references, not deep clones), or
+   * `[]` for `count <= 0` — see docs/specs/python_typing_middle_34.tex.
+   */
+  private repeatArray(arr: PVMLArray, count: bigint): PVMLArray {
+    const elements: PVMLBoxType[] = [];
+    for (let i = 0n; i < count; i++) {
+      elements.push(...arr.elements);
+    }
+    const repeated: PVMLArray = { type: "array", elements };
+    // A `[a, b]`-shaped result must still round-trip through a module
+    // boundary as a genuine list, not be misidentified as a dotted pair —
+    // see pvmlListLiteralArrays' doc comment in types.ts.
+    pvmlListLiteralArrays.add(repeated);
+    return repeated;
   }
 
   // ========================================================================

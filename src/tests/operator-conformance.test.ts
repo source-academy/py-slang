@@ -26,7 +26,7 @@ import { StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { evaluate } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
-import { UnsupportedOperandTypeError } from "../errors";
+import { ListMultiplyTypeError, UnsupportedOperandTypeError } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
 import linkedList from "../stdlib/linked-list";
@@ -125,7 +125,16 @@ async function sweepBinaryOperator(op: string, chapter: number): Promise<string[
           );
         }
       } else {
-        if (outcome.kind !== "runtime-error" || outcome.name !== UnsupportedOperandTypeError.name) {
+        // `*` on a list with a non-int (or two lists) is the one operator that
+        // reports a dedicated ListMultiplyTypeError ("can't multiply list by
+        // non-integer") rather than the generic UnsupportedOperandTypeError,
+        // since real Python's own wording for this specific case differs from
+        // its generic "unsupported operand type(s)" phrasing.
+        const allowedErrorNames =
+          op === "*" && (left === "list" || right === "list")
+            ? [UnsupportedOperandTypeError.name, ListMultiplyTypeError.name]
+            : [UnsupportedOperandTypeError.name];
+        if (outcome.kind !== "runtime-error" || !allowedErrorNames.includes(outcome.name)) {
           mismatches.push(
             `${code} @ chapter ${chapter}: spec says error, got ${describeOutcome(outcome)}`,
           );

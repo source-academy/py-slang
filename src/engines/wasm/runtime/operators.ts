@@ -9,7 +9,7 @@ import {
   type WasmInstruction,
 } from "@sourceacademy/wasm-util";
 import { MALLOC_FX } from "./gc";
-import { LIST_SLOT_TAG_LOAD_FX, LIST_SLOT_VAL_LOAD_FX } from "./list";
+import { LIST_REPEAT_FX, LIST_SLOT_TAG_LOAD_FX, LIST_SLOT_VAL_LOAD_FX } from "./list";
 import {
   CHAPTER,
   DATA_END,
@@ -175,6 +175,57 @@ export const ARITHMETIC_OP_FX = wasm
           .call("$_log_error")
           .args(i32.const(getErrorIndex(ERROR_MAP.BOOL_OPERAND_NOT_SUPPORTED))),
         wasm.unreachable(),
+      ),
+
+    // `list * int` / `int * list` (docs/specs/python_typing_middle_34.tex):
+    // a generic list constructor, delegated to LIST_REPEAT_FX (which itself
+    // rejects a non-int count, e.g. `list * float`/`list * list`, with
+    // MULTIPLY_LIST_NOT_INT). `list * bool` is instead caught by the
+    // BOOL_OPERAND_NOT_SUPPORTED check just above, since bool is rejected
+    // for every arithmetic operator here, not just `*`. §3/§4 only -- at §2 a
+    // LIST-tagged value is actually a cons pair (see GET_LIST_ELEMENT_FX's
+    // "allow tuples to be accessed also" comment), which has no `*` row at
+    // any chapter (docs/specs/python_typing_middle_34.tex vs _middle_12.tex).
+    wasm
+      .if(
+        i32.and(
+          i32.ge_s(global.get(CHAPTER), i32.const(3)),
+          i32.and(
+            i32.eq(local.get("$op"), i32.const(ARITHMETIC_OP_TAG.MUL)),
+            i32.or(
+              i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.LIST)),
+              i32.eq(local.get("$y_tag"), i32.const(TYPE_TAG.LIST)),
+            ),
+          ),
+        ),
+      )
+      .then(
+        wasm
+          .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.LIST)))
+          .then(
+            wasm.return(
+              wasm
+                .call(LIST_REPEAT_FX)
+                .args(
+                  local.get("$x_tag"),
+                  local.get("$x_val"),
+                  local.get("$y_tag"),
+                  local.get("$y_val"),
+                ),
+            ),
+          )
+          .else(
+            wasm.return(
+              wasm
+                .call(LIST_REPEAT_FX)
+                .args(
+                  local.get("$y_tag"),
+                  local.get("$y_val"),
+                  local.get("$x_tag"),
+                  local.get("$x_val"),
+                ),
+            ),
+          ),
       ),
 
     // //, %, ** are delegated to a host import that mirrors CSE's exact

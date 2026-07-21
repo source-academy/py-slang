@@ -2,6 +2,7 @@ import { ExprNS, StmtNS } from "../../ast-types";
 import {
   FreeVariableUnboundError,
   IndexError,
+  ListIndexTypeError,
   MissingRequiredPositionalError,
   NameError,
   RecursionError,
@@ -823,22 +824,17 @@ export function evaluateListAssignment(
     handleRuntimeError(context, new TypeError(code, assignNode, context, list?.type || "unknown"));
   }
   if (index === undefined || index.type !== "bigint") {
-    handleRuntimeError(context, new TypeError(code, assignNode, context, index?.type || "unknown"));
+    handleRuntimeError(context, new ListIndexTypeError(code, assignNode, context));
   }
   if (value === undefined) {
     handleRuntimeError(context, new TypeError(code, assignNode, context, "undefined"));
   }
-  let intIndex = Number(index.value);
-  if (intIndex < 0) {
-    intIndex = intIndex % list.value.length;
+  const intIndex = Number(index.value);
+  const length = list.value.length;
+  if (intIndex < -length || intIndex >= length) {
+    handleRuntimeError(context, new IndexError(code, assignNode, context, intIndex, length, true));
   }
-  if (intIndex >= list.value.length) {
-    handleRuntimeError(
-      context,
-      new IndexError(code, assignNode, context, intIndex, list.value.length),
-    );
-  }
-  list.value[intIndex] = value;
+  list.value[intIndex < 0 ? intIndex + length : intIndex] = value;
 }
 
 export function evaluateForIterator(

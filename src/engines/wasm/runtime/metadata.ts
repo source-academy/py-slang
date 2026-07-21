@@ -47,6 +47,8 @@ export const ERROR_MAP = {
   SET_ELEMENT_TUPLE: "TypeError: cannot assign to a function's rest-parameter tuple",
   INDEX_NOT_INT: "TypeError: list indices must be integers",
   LIST_OUT_OF_RANGE: "IndexError: list index out of range",
+  SET_OUT_OF_RANGE: "IndexError: list assignment index out of range",
+  MULTIPLY_LIST_NOT_INT: "TypeError: can't multiply list by non-integer",
   RANGE_ARG_NOT_INT: "TypeError: unsupported argument type for range",
   GET_LENGTH_NOT_LIST: "TypeError: unsupported argument type for len",
   MAKE_LINKED_LIST_NOT_LIST:

@@ -1306,21 +1306,24 @@ const cmdEvaluators: CmdEvaluators = {
     if (!index || index.type !== "bigint") {
       handleRuntimeError(
         context,
-        new error.TypeError(code, instr.srcNode as ExprNS.Expr, context, index?.type || "NoneType"),
+        new error.ListIndexTypeError(code, instr.srcNode as ExprNS.Expr, context),
       );
     }
     const idx = Number(index.value);
     // TODO: make this O(1)
-    if (idx >= [...list.value].length) {
+    const codePoints = list.type === "string" ? [...list.value] : undefined;
+    const length = codePoints ? codePoints.length : list.value.length;
+    if (idx < -length || idx >= length) {
       handleRuntimeError(
         context,
-        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length),
+        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, length, false),
       );
     }
+    const wrappedIdx = idx < 0 ? idx + length : idx;
     if (list.type === "string") {
-      stash.push({ type: "string", value: [...list.value].at(idx) ?? "" });
+      stash.push({ type: "string", value: codePoints![wrappedIdx] });
     } else {
-      stash.push(list.value[idx]);
+      stash.push(list.value[wrappedIdx]);
     }
   },
 

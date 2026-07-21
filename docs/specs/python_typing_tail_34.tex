@@ -18,3 +18,22 @@ The operators
     and \texttt{\textbf{False}} system-wide, and that all lists and functions have their
     own identity once created.
 
+    List access \texttt{\textit{list}\texttt{\textbf{[}}\textit{index}\texttt{\textbf{]}}}
+    and list assignment
+    \texttt{\textit{list}\texttt{\textbf{[}}\textit{index}\texttt{\textbf{]} = }\textit{value}}
+    require \textit{index} to evaluate to an \texttt{int}; as opposed to Python,
+    \texttt{\textbf{True}} and \texttt{\textbf{False}} are not allowed as indices.
+    The valid range of \textit{index} is \texttt{-len(}\textit{list}\texttt{)} to
+    \texttt{len(}\textit{list}\texttt{)} \texttt{- 1}, inclusive, with negative
+    indices wrapping around as in Python: if \textit{list}\texttt{[}$i$\texttt{]}
+    is defined, then \textit{list}\texttt{[}$i$~\texttt{\%}~\texttt{len(}\textit{list}\texttt{)]}
+    gives the same value.
+
+    The operator \texttt{\textbf{*}} between a \texttt{list} and an \texttt{int}
+    constructs a new list by repeating the elements of the given list the given
+    number of times, with 0 or a negative number of times yielding
+    \texttt{\textbf{[]}}; as opposed to Python, \texttt{\textbf{True}} and
+    \texttt{\textbf{False}} are not allowed as the \texttt{int} operand. As in
+    Python, the repetition makes shallow copies: \texttt{x = [[1,2]] * 4} makes
+    \texttt{x[0] is x[1]} evaluate to \texttt{\textbf{True}}.
+
