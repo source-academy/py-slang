@@ -40,7 +40,12 @@ async function ensureLocalPyodideAssets(baseUrl: string): Promise<string> {
       asset.mode === "text"
         ? Buffer.from(await res.text(), "utf8")
         : Buffer.from(await res.arrayBuffer());
-    await fs.writeFile(dest, data);
+    // Write next to the final path, then rename into place — an interrupted
+    // fetch/write leaves only the .tmp file behind, never a truncated `dest`
+    // that a later run's fs.access check would mistake for a valid cache hit.
+    const tmpDest = `${dest}.tmp`;
+    await fs.writeFile(tmpDest, data);
+    await fs.rename(tmpDest, dest);
   }
 
   return dir + path.sep;

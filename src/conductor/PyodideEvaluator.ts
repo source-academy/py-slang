@@ -103,7 +103,7 @@ _sa_missing = []
 for _sa_mod in ${JSON.stringify(candidates)}:
     try:
         importlib.import_module(_sa_mod)
-    except Exception:
+    except ModuleNotFoundError:
         _sa_missing.append(_sa_mod)
 if _sa_missing:
     await micropip.install(_sa_missing)
@@ -112,14 +112,17 @@ if _sa_missing:
     candidates.forEach(root => this.resolvedRoots.add(root));
   }
 
-  /** Every non-dunder name currently bound in the user's global namespace —
-   * `__import__('json')` (an expression, not an `import` statement) is used
-   * so the query itself never binds a `json` name into that namespace. */
+  /** Every non-dunder name currently bound in the user's global namespace.
+   * Reads `pyodide.globals` from the JS side (rather than running Python
+   * code that calls `globals()`) so a chunk that shadows the builtin — e.g.
+   * `globals = 1` — can't break this: `toJs()` reflects the same underlying
+   * dict object regardless of what name(s) point to it inside Python. */
   private currentGlobalNames(pyodide: PyodideInterface): string[] {
-    const json = pyodide.runPython(
-      "__import__('json').dumps([k for k in globals() if not (k.startswith('__') and k.endswith('__'))])",
-    ) as string;
-    return JSON.parse(json) as string[];
+    const names = pyodide.globals.toJs({ dict_converter: Object.fromEntries }) as Record<
+      string,
+      unknown
+    >;
+    return Object.keys(names).filter(k => !(k.startsWith("__") && k.endsWith("__")));
   }
 
   async evaluateChunk(chunk: string): Promise<void> {

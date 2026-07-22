@@ -114,4 +114,39 @@ describe("PyodideEvaluatorFull", () => {
     },
     PYODIDE_TIMEOUT,
   );
+
+  test(
+    "a chunk that shadows the builtin `globals` name does not crash cross-chunk tracking",
+    async () => {
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyodideEvaluatorFull(conductor);
+
+      await evaluator.evaluateChunk("globals = 1\nx = 5\n");
+      await evaluator.evaluateChunk("print(x)\n");
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["5"]);
+    },
+    PYODIDE_TIMEOUT,
+  );
+
+  test(
+    "an import nested inside a never-called function is not eagerly installed",
+    async () => {
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyodideEvaluatorFull(conductor);
+
+      // If this were eagerly micropip-installed (pre-fix behavior: ast.walk
+      // finds imports nested in function bodies too), the install would fail
+      // loudly since the package doesn't exist — even though f() is never
+      // called and the import never actually runs.
+      await evaluator.evaluateChunk(
+        "def f():\n    import this_package_definitely_does_not_exist_xyz\n    return 1\nprint('ok')\n",
+      );
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["ok"]);
+    },
+    PYODIDE_TIMEOUT,
+  );
 });

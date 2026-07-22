@@ -20,19 +20,31 @@ import type { PyProxy } from "pyodide/ffi";
 const ANALYZE_IMPORTS_PY = `
 import ast as _ast, json as _json
 
+_SA_SCOPE_BOUNDARY = (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef, _ast.Lambda)
+
+def _sa_collect_module_scope_imports(node, roots):
+    """Like ast.walk, but doesn't descend into function/class bodies — a
+    module can be imported at module scope (including inside a top-level
+    if/try/for/with) without ever running, while an import nested in a def
+    only runs if that function is actually called. Only the former should
+    be eagerly micropip-installed before the chunk runs."""
+    for child in _ast.iter_child_nodes(node):
+        if isinstance(child, _ast.ImportFrom) and child.module:
+            roots.add(child.module.split(".")[0])
+        elif isinstance(child, _ast.Import):
+            for alias in child.names:
+                roots.add(alias.name.split(".")[0])
+        if not isinstance(child, _SA_SCOPE_BOUNDARY):
+            _sa_collect_module_scope_imports(child, roots)
+
 def _sa_import_roots(source):
-    """Parse source and return a JSON array of top-level module names imported."""
+    """Parse source and return a JSON array of module-scope module names imported."""
     try:
         tree = _ast.parse(source)
     except SyntaxError:
         return "[]"
     roots = set()
-    for node in _ast.walk(tree):
-        if isinstance(node, _ast.ImportFrom) and node.module:
-            roots.add(node.module.split(".")[0])
-        elif isinstance(node, _ast.Import):
-            for alias in node.names:
-                roots.add(alias.name.split(".")[0])
+    _sa_collect_module_scope_imports(tree, roots)
     return _json.dumps(sorted(roots))
 `;
 
