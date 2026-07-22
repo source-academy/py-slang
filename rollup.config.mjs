@@ -45,6 +45,9 @@ const config = [
       format: "iife",
       name: "PySlangWorker",
       sourcemap: true,
+      // pyodide's own loader uses a dynamic import() for a Node-only path;
+      // a single-file iife bundle can't code-split it out, so inline it.
+      inlineDynamicImports: true,
     },
     plugins: plugins(),
   },
@@ -58,6 +61,7 @@ const config = [
       format: "cjs",
       exports: "default",
       sourcemap: true,
+      inlineDynamicImports: true,
     },
     plugins: plugins(),
   },
