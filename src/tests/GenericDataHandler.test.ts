@@ -207,3 +207,73 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
     await expect(gen.next()).rejects.toThrow(/Expected a list, got type/);
   });
 });
+
+/**
+ * Per Martin: a pair is just a 2-element array, not a distinct concept. These pin down the two
+ * bridges that make that true without requiring any module to change: pair_head/pair_tail (etc.)
+ * work on an ARRAY-tagged value the same as a genuine PAIR, and the generic list helpers
+ * (is_list/list_to_vec/length/accumulate) accept ARRAY directly instead of only recognizing a
+ * PAIR/EMPTY_LIST chain.
+ */
+describe("PAIR and ARRAY are interchangeable, per Martin's 'pair is just a 2-element array'", () => {
+  test("pair_head/pair_tail read an ARRAY-tagged value's first two elements", async () => {
+    const dh = new GenericDataHandler();
+    const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, num(1));
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, num(2));
+    const asPair = arr as unknown as TypedValue<DataType.PAIR>;
+
+    expect(await dh.pair_head(asPair)).toEqual(num(1));
+    expect(await dh.pair_tail(asPair)).toEqual(num(2));
+  });
+
+  test("pair_sethead/pair_settail write back into the underlying array", async () => {
+    const dh = new GenericDataHandler();
+    const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
+    const asPair = arr as unknown as TypedValue<DataType.PAIR>;
+
+    await dh.pair_sethead(asPair, num(9));
+    await dh.pair_settail(asPair, num(8));
+
+    expect(await dh.array_get(arr, 0)).toEqual(num(9));
+    expect(await dh.array_get(arr, 1)).toEqual(num(8));
+  });
+
+  test("pair_assert checks an ARRAY-tagged value's element types the same as a genuine PAIR", async () => {
+    const dh = new GenericDataHandler();
+    const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
+    const asPair = arr as unknown as TypedValue<DataType.PAIR>;
+
+    await expect(dh.pair_assert(asPair, DataType.NUMBER, DataType.NUMBER)).resolves.toBeUndefined();
+    expect(() => dh.pair_assert(asPair, DataType.CONST_STRING)).toThrow(/Expected head of type/);
+  });
+
+  test("pair_head throws on a too-short array (fewer than 2 elements), same as a dangling pair", async () => {
+    const dh = new GenericDataHandler();
+    const arr = await dh.array_make(DataType.NUMBER, 1, num(0));
+    expect(() => dh.pair_head(arr as unknown as TypedValue<DataType.PAIR>)).toThrow(
+      /Invalid pair identifier/,
+    );
+  });
+
+  test("is_list/list_to_vec/length/accumulate accept a DataType.ARRAY directly", async () => {
+    const dh = new GenericDataHandler();
+    const arr = await dh.array_make(DataType.NUMBER, 3, num(0));
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, num(1));
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, num(2));
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 2, num(3));
+    const asList = arr as unknown as TypedValue<DataType.LIST>;
+
+    expect(await dh.is_list(asList)).toBe(true);
+    expect(await dh.list_to_vec(asList)).toEqual([num(1), num(2), num(3)]);
+    expect(await dh.length(asList)).toBe(3);
+
+    const add = makeAddClosure();
+    const op = await dh.closure_make(
+      { args: [DataType.NUMBER, DataType.NUMBER], returnType: DataType.NUMBER },
+      add,
+    );
+    const result = await drain(dh.accumulate(op, num(0), asList, DataType.NUMBER));
+    expect(result).toEqual(num(6));
+  });
+});

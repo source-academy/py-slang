@@ -10,17 +10,8 @@ import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
-import { BuiltinValue, ListValue, Value } from "./stash";
+import { BuiltinValue, Value } from "./stash";
 import { ModuleFunctionGenerator } from "./types";
-
-/**
- * Marks a freshly-built list Value as a genuine Python list literal (as opposed to a value built by
- * pair()/llist(), or one round-tripped from a module's DataType.PAIR) - see the "list" case in
- * pythonToModule for why this distinction can't be made from shape alone. A side-tag rather than a
- * shape change so nothing else that already treats list literals as a flat array (indexing, len(),
- * iteration, etc.) needs to change.
- */
-export const listLiteralValues = new WeakSet<ListValue>();
 
 export class ModuleNotFoundError extends RuntimeSourceError {
   constructor(public readonly moduleName: string) {
@@ -66,33 +57,34 @@ export async function pythonToModule(
     case "none":
       return { type: DataType.EMPTY_LIST, value: null };
     case "list": {
-      // A list literal (tagged at construction in the InstrType.LIST microcode) is unambiguously a
-      // Source list, of any length including 2 - fold it into a proper PAIR/EMPTY_LIST chain, or
-      // list-typed module parameters (e.g. sound's consecutively/simultaneously/stacking_adsr
-      // envelopes) would silently see zero (or the wrong) elements instead of the list the student
-      // actually wrote. The length !== 2 check is a defensive fallback only - pair()/llist()/module
-      // round-trips always produce exactly 2-element links, so an untagged value should never
-      // actually hit it, but building a chain is still the safer default if one somehow did.
-      if (listLiteralValues.has(value) || value.value.length !== 2) {
-        let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
-        for (let i = value.value.length - 1; i >= 0; i--) {
-          chain = await context.evaluator.pair_make(
-            await pythonToModule(context, code, command, value.value[i]),
-            chain,
-          );
-        }
-        return chain;
-      }
-      // Otherwise this came from pair()/llist(), or a module PAIR round-tripped through
-      // moduleToPython - both always produce exactly 2-element links, reconstructed here as a single
-      // pair_make(head, tail) without requiring the chain to terminate in None, since a module PAIR
-      // need not be a proper list (e.g. sound's Sound is (wavesPair, duration), a dotted pair whose
-      // second element is a number, not another list link).
-      const [head, tail] = value.value;
-      return context.evaluator.pair_make(
-        await pythonToModule(context, code, command, head),
-        await pythonToModule(context, code, command, tail),
+      // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+      // concept - build every Python list (of any length, 2 included, whether it's a fresh
+      // literal, a pair()/llist() result, or a module PAIR round-tripped back through Python) the
+      // same way, as a flat DataType.ARRAY, recursively converting each element. No more
+      // origin-tagging or length-based branching needed - list_to_vec/pair_head/pair_tail (see
+      // GenericDataHandler) already read an ARRAY the same as a PAIR/EMPTY_LIST chain, so a module
+      // declaring LIST or PAIR still works unchanged.
+      //
+      // No empty-list special case: EMPTY_LIST is also what Python's None maps to (see
+      // moduleToPython's own EMPTY_LIST case), so returning it here for [] would make [] and None
+      // collide on the way back out - exactly the kind of ambiguity this whole redesign exists to
+      // remove. A genuine 0-length ARRAY round-trips back through moduleToPython's ARRAY case as a
+      // real [], not None.
+      const elements = await Promise.all(
+        value.value.map(el => pythonToModule(context, code, command, el)),
       );
+      const array = await context.evaluator.array_make(DataType.ANY, elements.length, {
+        type: DataType.VOID,
+        value: undefined,
+      });
+      for (let i = 0; i < elements.length; i++) {
+        await context.evaluator.array_set(
+          array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+          i,
+          elements[i],
+        );
+      }
+      return array;
     }
     case "opaque":
       return { type: DataType.OPAQUE, value: value.value as OpaqueIdentifier };
@@ -151,6 +143,25 @@ export async function pythonToModule(
   }
 }
 
+/**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  evaluator: NonNullable<Context["evaluator"]>,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await evaluator.pair_head(value), await evaluator.pair_tail(value)];
+  }
+  const length = await evaluator.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => evaluator.array_get(value, i)));
+}
+
 export async function moduleToPython(
   context: Context,
   code: string,
@@ -163,6 +174,12 @@ export async function moduleToPython(
   switch (value.type) {
     case DataType.NUMBER:
       return { type: "number", value: value.value }; // TODO: handle bigint
+    case DataType.INTEGER:
+      // py-slang never produces DataType.INTEGER itself (see pythonToModule's "bigint" case
+      // above) - per Martin, integers stay out of the module interface entirely, numbers crossing
+      // a module boundary are always floats. Only here for switch exhaustiveness over conductor's
+      // DataType enum.
+      return { type: "number", value: Number(value.value) };
     case DataType.BOOLEAN:
       return { type: "bool", value: value.value };
     case DataType.CONST_STRING:
@@ -170,26 +187,18 @@ export async function moduleToPython(
     case DataType.VOID:
     case DataType.EMPTY_LIST:
       return { type: "none" };
-    case DataType.ARRAY:
-      const length = await context.evaluator.array_length(value);
-      return {
-        type: "list",
-        value: await Promise.all(
-          Array.from({ length }, async (_, i) =>
-            moduleToPython(context, code, command, await context.evaluator!.array_get(value, i)),
-          ),
-        ),
-      };
     case DataType.OPAQUE:
       return { type: "opaque", value: value.value };
-    case DataType.PAIR:
+    case DataType.ARRAY:
+    case DataType.PAIR: {
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType.
+      const elements = await readCompoundElements(context.evaluator, value);
       return {
         type: "list",
-        value: [
-          await moduleToPython(context, code, command, await context.evaluator.pair_head(value)),
-          await moduleToPython(context, code, command, await context.evaluator.pair_tail(value)),
-        ],
+        value: await Promise.all(elements.map(el => moduleToPython(context, code, command, el))),
       };
+    }
     case DataType.CLOSURE:
       async function* builtinGenerator(
         args: Value[],

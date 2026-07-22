@@ -1,12 +1,5 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
-import {
-  PVMLBoxType,
-  PVMLExtern,
-  PVMLHostCall,
-  getPVMLType,
-  isPVMLObject,
-  pvmlListLiteralArrays,
-} from "./types";
+import { PVMLBoxType, PVMLExtern, PVMLHostCall, getPVMLType, isPVMLObject } from "./types";
 
 /**
  * Conversion layer between PVML runtime values and the conductor module
@@ -23,6 +16,25 @@ import {
  * interpreter passes to every extern call (see PVMLHostCall's doc comment in
  * types.ts) — so conversion needs no access to the interpreter itself.
  */
+
+/**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  dh: IDataHandler,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await dh.pair_head(value), await dh.pair_tail(value)];
+  }
+  const length = await dh.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => dh.array_get(value, i)));
+}
 
 /** Converts a conductor module value into a PVML runtime value. `name` is
  * the module export's symbol, used only to label the resulting extern for
@@ -41,6 +53,11 @@ export async function moduleToPvml(
   switch (value.type) {
     case DataType.NUMBER:
       return value.value;
+    case DataType.INTEGER:
+      // py-slang never produces DataType.INTEGER itself (see pvmlToModule's bigint case below) -
+      // per Martin, integers stay out of the module interface entirely, numbers crossing a module
+      // boundary are always floats. Only here for switch exhaustiveness over conductor's DataType.
+      return Number(value.value);
     case DataType.BOOLEAN:
       return value.value;
     case DataType.CONST_STRING:
@@ -50,25 +67,18 @@ export async function moduleToPvml(
       // Matches CSE's moduleToPython: both a module function's void return
       // and the empty list map onto Python's None (SICPy's empty list).
       return null;
-    case DataType.PAIR:
-      // PVML represents a pair as a 2-element array — the same shape
-      // pair()/vectorToPvmlList build (see builtins.ts).
+    case DataType.ARRAY:
+    case DataType.PAIR: {
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType. PVML
+      // represents both the same way anyway (the shape pair()/vectorToPvmlList already build, see
+      // builtins.ts). Deliberately NOT list_to_vec: that expects a chain terminating in
+      // EMPTY_LIST (a *proper list*), which a raw dotted pair (e.g. Sound's (wave, duration))
+      // doesn't satisfy - this reads exactly the compound value's own elements, nothing more.
+      const elements = await readCompoundElements(dh, value);
       return {
         type: "array",
-        elements: [
-          await moduleToPvml(dh, await dh.pair_head(value), name),
-          await moduleToPvml(dh, await dh.pair_tail(value), name),
-        ],
-      };
-    case DataType.ARRAY: {
-      const length = await dh.array_length(value);
-      return {
-        type: "array",
-        elements: await Promise.all(
-          Array.from({ length }, async (_, i) =>
-            moduleToPvml(dh, await dh.array_get(value, i), name),
-          ),
-        ),
+        elements: await Promise.all(elements.map(el => moduleToPvml(dh, el, name))),
       };
     }
     case DataType.OPAQUE:
@@ -133,26 +143,34 @@ export async function pvmlToModule(
         // PVMLOpaque's doc comment for why `value` is typed unknown.
         return value.value as TypedValue<DataType.OPAQUE>;
       case "array": {
-        // A list literal (tagged at construction — see pvmlListLiteralArrays' doc comment in
-        // types.ts) is unambiguously a Source list, of any length including 2 — fold it into a
-        // proper PAIR/EMPTY_LIST chain, or list-typed module parameters (e.g. sound's
-        // consecutively/simultaneously/stacking_adsr envelopes) would silently see zero (or the
-        // wrong) elements instead of the list the student actually wrote. Otherwise, a 2-element
-        // array is PVML's pair (see moduleToPvml's PAIR case), reconstructed as a single
-        // pair_make(head, tail) — the chain need not terminate in None (e.g. sound's Sound is a
-        // dotted pair). Any other length is unambiguously a flat Python list either way.
-        if (!pvmlListLiteralArrays.has(value) && value.elements.length === 2) {
-          const [head, tail] = value.elements;
-          return dh.pair_make(
-            await pvmlToModule(dh, head, callPvml),
-            await pvmlToModule(dh, tail, callPvml),
+        // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+        // concept - build every PVML array (of any length, 2 included, whether it's a fresh list
+        // literal, a pair()/vectorToPvmlList result, or a module PAIR round-tripped back through
+        // PVML) the same way, as a flat DataType.ARRAY, recursively converting each element. No
+        // more origin-tagging or length-based branching needed - list_to_vec/pair_head/pair_tail
+        // (see GenericDataHandler) already read an ARRAY the same as a PAIR/EMPTY_LIST chain, so a
+        // module declaring LIST or PAIR still works unchanged.
+        //
+        // No empty-list special case: EMPTY_LIST is also what Python's None maps to (see
+        // moduleToPvml's own EMPTY_LIST case), so returning it here for [] would make [] and None
+        // collide on the way back out - exactly the kind of ambiguity this whole redesign exists
+        // to remove. A genuine 0-length ARRAY round-trips back through moduleToPvml's ARRAY case
+        // as a real [], not None.
+        const elements = await Promise.all(
+          value.elements.map(el => pvmlToModule(dh, el, callPvml)),
+        );
+        const array = await dh.array_make(DataType.ANY, elements.length, {
+          type: DataType.VOID,
+          value: undefined,
+        });
+        for (let i = 0; i < elements.length; i++) {
+          await dh.array_set(
+            array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+            i,
+            elements[i],
           );
         }
-        let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
-        for (let i = value.elements.length - 1; i >= 0; i--) {
-          chain = await dh.pair_make(await pvmlToModule(dh, value.elements[i], callPvml), chain);
-        }
-        return chain;
+        return array;
       }
       case "extern":
         // This extern already carries the exact conductor closure it was minted from (see
