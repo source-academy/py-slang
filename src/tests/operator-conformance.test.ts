@@ -312,13 +312,20 @@ describe("Operator conformance: directed cases", () => {
   // immutable values (which have no real object identity in this interpreter)
   // compare by their underlying value instead — the sweep above pins the
   // stash *type* (always bool); this pins the actual boolean value.
+  //
+  // Deliberately excludes string identity (`'ab' is 'ab'`): Python's language
+  // spec makes no promise about it at all -- CPython's small-string/literal
+  // interning is its own implementation detail, not something a conforming
+  // implementation must reproduce, so pinning a specific True/False value
+  // here would be asserting behavior the spec doesn't actually require. The
+  // sweep above still confirms the *result type* is bool for every operand
+  // pair, string included -- that much genuinely is guaranteed.
   test.each([[3], [4]])("`is` / `is not` identity semantics at Python §%d", async chapter => {
     const cases: [string, boolean][] = [
       ["None is None", true],
       ["1 is 1", true],
       ["1 is 1.0", false],
       ["1.5 is 1.5", true],
-      ["'ab' is 'ab'", true],
       ["True is True", true],
       ["True is 1", false],
       ["x = [1, 2]\ny = x\nx is y", true],

@@ -137,13 +137,18 @@ export enum OpCodes {
   // to: its NaN-boxed ints are a deliberately narrow 20-bit range (embedded/
   // microcontroller target), nowhere near needing arbitrary precision.
   LGCBI = 99,
-  // Loads a complex literal from the complex constant pool (PVMLIR's
-  // `complexes`, indexed by this opcode's arg1 — mirrors LGCBI's bigint-
-  // constant-pool encoding exactly, needed because arg1s (Float64Array)
-  // can't carry a real+imaginary pair). Browser-pathway only, matching the
-  // CSE machine's own complex-number support (full-power desktop browser
-  // use case — see PVMLCompiler's visitComplexExpr). Native Pynter has zero
-  // complex-number support and isn't meant to gain any.
+  // Loads a complex literal. In-memory (browser pathway, PVMLIRBuilder), this
+  // indexes PVMLIR's `complexes` constant pool (arg1) — mirrors LGCBI's
+  // bigint-constant-pool encoding, needed because arg1s (Float64Array) can't
+  // carry a real+imaginary pair directly. On the wire (native Pynter target,
+  // pvml-assembler.ts), it serialises differently: both float32 components
+  // inlined directly in the instruction (mirrors LGCF64's "constant lives
+  // right in the instruction stream" pattern instead) — native Pynter's own
+  // op_lgc_c (0x64, matching this opcode's own numeric value exactly, see
+  // pynter/vm/include/pynter/opcode.h) decodes it that way, not via a pool
+  // index. See pynter/vm/include/pynter/heap_obj.h's siheap_complex_t for the
+  // native heap representation (single-precision, unlike the double-
+  // precision PyComplexNumber the browser pathway uses).
   LGCC = 100,
   // Generic exponentiation (`**`), all numeric types (int/float/complex) —
   // added alongside complex numbers since raising to a complex power, or a
@@ -173,22 +178,56 @@ export enum OpCodes {
 export const OPCODE_MAX = 103;
 
 /**
- * Pynter's maximum supported opcode (op_neq_p = 0x56). Opcodes above this
- * value (FLOORDIVG/FLOORDIVF/NEWITER/FOR_ITER, and the EQG12/NEQG12/LTG12/
- * GTG12/LEG12/GEG12 §1/§2-restricted comparisons) are py-slang extensions not
- * implemented natively by Pynter (nor by the WASM Sinter/Pynter port). The
- * §1/§2 comparison opcodes in particular will never need to be, since the
- * native Pynter pathway is permanently gated to Python §3 only (see
- * pvml-runner.ts) — only py-slang's own PVMLInterpreter ever executes them.
- * EQP/NEQP (is/is not) are below this threshold — Pynter implements them.
+ * Pynter's original/base maximum supported opcode (op_neq_p = 0x56).
+ * Opcodes above this value are py-slang extensions not implemented by that
+ * base opcode set — some (the EQG12/NEQG12/LTG12/GTG12/LEG12/GEG12 §1/§2-
+ * restricted comparisons) still aren't implemented natively at all and
+ * never will be; others (NEWITER/FOR_ITER, FLOORDIVG/FLOORDIVF, POWG, LGCC)
+ * have since landed — see PYNTER_ADDITIONAL_SUPPORTED_OPCODES below, the
+ * actual gate `assemble()` checks against. The §1/§2 comparison opcodes in
+ * particular will never need a native opcode, since the native Pynter
+ * pathway is permanently gated to Python §3 only (see pvml-runner.ts) —
+ * only py-slang's own PVMLInterpreter ever executes them. EQP/NEQP (is/is
+ * not) are below this threshold — Pynter has always implemented them.
  */
 export const PYNTER_OPCODE_MAX = 0x56; // 86
 
+/**
+ * Opcodes native Pynter implements beyond the base 0..PYNTER_OPCODE_MAX
+ * range, as they land in the native VM (github.com/source-academy/pynter) —
+ * additions here must be matched by an actual `case` in that repo's vm.c
+ * dispatch switch, verified against a real build, before being added.
+ *
+ * This exists (rather than just raising PYNTER_OPCODE_MAX) because native
+ * support doesn't land in opcode-number order: e.g. NEWITER/FOR_ITER (89/90)
+ * landed before FLOORDIVG/FLOORDIVF (87/88), and LGCC/0x64 gained a real
+ * native encoding before opcodes numerically below it like LGCBI/0x63 ever
+ * will — a single "opcode ≤ max" threshold can't express either gap, only
+ * a set can.
+ */
+export const PYNTER_ADDITIONAL_SUPPORTED_OPCODES: ReadonlySet<number> = new Set([
+  // op_new_iter/op_for_iter (0x59/0x5A), plus the range() native primitive
+  // at its own (non-sequential — see builtins.ts's PRIMITIVE_FUNCTIONS
+  // comment) index, landed in pynter's for-loop-support branch.
+  OpCodes.NEWITER,
+  OpCodes.FOR_ITER,
+  // op_floordiv_g/op_floordiv_f (0x57/0x58) and op_pow_g (0x65, matching
+  // OpCodes.POWG's own value directly — see pynter's opcode.h) landed
+  // together in source-academy/pynter#17, alongside the op_mod_g/op_mod_f
+  // int-typing + floored-modulo-semantics fix in #16.
+  OpCodes.FLOORDIVG,
+  OpCodes.FLOORDIVF,
+  OpCodes.POWG,
+  // op_lgc_c (0x64) — see this opcode's own doc comment above.
+  OpCodes.LGCC,
+]);
+
+/** Whether native Pynter implements `opcode` today — see PYNTER_OPCODE_MAX and PYNTER_ADDITIONAL_SUPPORTED_OPCODES' doc comments. */
+export function isSupportedByNativePynter(opcode: number): boolean {
+  return opcode <= PYNTER_OPCODE_MAX || PYNTER_ADDITIONAL_SUPPORTED_OPCODES.has(opcode);
+}
+
 const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
-  [OpCodes.FLOORDIVG]: "floor division (//)",
-  [OpCodes.FLOORDIVF]: "floor division (//)",
-  [OpCodes.NEWITER]: "for loops",
-  [OpCodes.FOR_ITER]: "for loops",
   [OpCodes.EQG12]: "§1/§2 comparison semantics",
   [OpCodes.NEQG12]: "§1/§2 comparison semantics",
   [OpCodes.LTG12]: "§1/§2 comparison semantics",
@@ -198,8 +237,6 @@ const UNSUPPORTED_OPCODE_FEATURES: Record<number, string> = {
   [OpCodes.LDGG]: "incremental/persistent global variables",
   [OpCodes.STGG]: "incremental/persistent global variables",
   [OpCodes.LGCBI]: "arbitrary-precision integers",
-  [OpCodes.LGCC]: "complex numbers",
-  [OpCodes.POWG]: "exponentiation (**)",
   [OpCodes.CALLA]: "call-site argument spreading (*args)",
   [OpCodes.CALLTA]: "call-site argument spreading (*args)",
 };
@@ -230,6 +267,7 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.NEWENV:
     case OpCodes.NEWCP:
     case OpCodes.NEWCV:
+    case OpCodes.NEWA:
       return 2;
 
     case OpCodes.LDPG:
@@ -258,11 +296,19 @@ export function getInstructionSize(opcode: OpCodes): number {
     case OpCodes.LDGG:
     case OpCodes.STGG:
     case OpCodes.LGCBI:
-    case OpCodes.LGCC:
       return 5;
 
     case OpCodes.LDCF64:
     case OpCodes.LGCF64:
+    // LGCC's wire size (9: opcode + 4-byte real + 4-byte imag, inlined
+    // directly) only applies to native-Pynter serialisation — this
+    // function's only caller is pvml-assembler.ts, which never runs for the
+    // browser pathway (PVMLInterpreter executes PVMLIR/Instruction objects
+    // directly, in-memory, never serialised) — so there's no competing
+    // "browser-path size" to reconcile here despite LGCC's in-memory
+    // representation there being a small pool-index instead (see this
+    // opcode's own doc comment above).
+    case OpCodes.LGCC:
       return 9;
 
     default:

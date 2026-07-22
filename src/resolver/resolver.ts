@@ -89,6 +89,24 @@ export class Environment {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let curr: Environment | null = this;
     while (curr !== null) {
+      if (curr.globalNames.has(name)) {
+        // A `global` declaration anywhere between here and the module scope
+        // redirects straight to module scope, bypassing every scope's own
+        // `names` in between -- mirrors lookupNameEnv's own identical
+        // redirect (see globalNames' doc comment for the full rationale).
+        // Without this, an enclosing *function's* own local of the same
+        // name would wrongly win by being nearer (e.g. `def outer(): x = 1;
+        // def inner(): global x` -- `inner`'s `global x` must resolve
+        // straight to module scope, never to outer's local `x`). Matches
+        // getModuleEnvironment()'s own walk, just counting hops instead of
+        // returning the Environment object.
+        let moduleEnv = curr;
+        while (moduleEnv.enclosing !== null && moduleEnv.enclosing.enclosing !== null) {
+          moduleEnv = moduleEnv.enclosing;
+          distance += 1;
+        }
+        return distance;
+      }
       if (curr.names.has(name)) {
         break;
       }

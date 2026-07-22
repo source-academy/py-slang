@@ -320,7 +320,7 @@ const STACK_EFFECTS = new Int16Array(OPCODE_MAX + 1);
   STACK_EFFECTS[OpCodes.STPB] = -1;
 
   // Array operations
-  STACK_EFFECTS[OpCodes.NEWA] = 1; // Takes no operand, produces an empty array (see visitListExpr)
+  STACK_EFFECTS[OpCodes.NEWA] = 1; // Operand is the array's pre-sized element count (see visitListExpr)
   STACK_EFFECTS[OpCodes.LDAG] = -1;
   STACK_EFFECTS[OpCodes.LDAB] = -1;
   STACK_EFFECTS[OpCodes.LDAF] = -1;

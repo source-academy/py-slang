@@ -1916,12 +1916,11 @@ export class PVMLInterpreter {
   // ========================================================================
 
   private createArray(size: number): void {
-    // Native-Pynter-targeted bytecode always emits NEWA with no operand
-    // (encoded as 0) and grows it element-by-element via STAG afterwards, to
-    // exactly match native Pynter's own op_new_a/siarray_put -- see
-    // visitListExpr's targetsPynter branch. Browser-pathway (non-Pynter)
-    // compilation instead pre-sizes the array here, since storeArrayElement
-    // no longer auto-grows (issue #294) and the resulting slots are always
+    // Both targetsPynter and browser-pathway compilation now pre-size NEWA
+    // to the list literal's final element count (see visitListExpr) — this
+    // exactly matches native Pynter's own op_new_a/siarray_new, which does
+    // the same pre-sizing (see pynter/vm/src/vm.c). storeArrayElement no
+    // longer auto-grows (issue #294), and the resulting slots are always
     // overwritten by the STAG loop that immediately follows, in range.
     const arr: PVMLArray = {
       type: "array",
