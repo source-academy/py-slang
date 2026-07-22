@@ -1916,12 +1916,11 @@ export class PVMLInterpreter {
   // ========================================================================
 
   private createArray(size: number): void {
-    // Native-Pynter-targeted bytecode always emits NEWA with no operand
-    // (encoded as 0) and grows it element-by-element via STAG afterwards, to
-    // exactly match native Pynter's own op_new_a/siarray_put -- see
-    // visitListExpr's targetsPynter branch. Browser-pathway (non-Pynter)
-    // compilation instead pre-sizes the array here, since storeArrayElement
-    // no longer auto-grows (issue #294) and the resulting slots are always
+    // Both targetsPynter and browser-pathway compilation now pre-size NEWA
+    // to the list literal's final element count (see visitListExpr) — this
+    // exactly matches native Pynter's own op_new_a/siarray_new, which does
+    // the same pre-sizing (see pynter/vm/src/vm.c). storeArrayElement no
+    // longer auto-grows (issue #294), and the resulting slots are always
     // overwritten by the STAG loop that immediately follows, in range.
     const arr: PVMLArray = {
       type: "array",
@@ -1935,8 +1934,11 @@ export class PVMLInterpreter {
     const arr = this.pop();
 
     if (this.legacyArraySemantics) {
+      if (typeof arr !== "string" && (!isPVMLObject(arr) || arr.type !== "array")) {
+        throw new Error("Cannot index non-array value");
+      }
       const idx = Number(indexValue);
-      const elements = typeof arr === "string" ? [...arr] : (arr as PVMLArray).elements;
+      const elements = typeof arr === "string" ? [...arr] : arr.elements;
       // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
       // fault, it yields undefined. See legacyArraySemantics' doc comment.
       this.push(idx >= 0 && idx < elements.length ? elements[idx] : undefined);

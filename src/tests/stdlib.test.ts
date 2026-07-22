@@ -1357,6 +1357,19 @@ describe("Standard Library Tests", () => {
       arity: [
         ["arity((lambda *args: args))", 0n, null],
         ["arity((lambda x, *args: args))", 1n, null],
+        // These last two pin arity()'s *actual* behavior for a parameter
+        // after a rest param (`z` in `def f(x, *args, z): ...`) — not real
+        // keyword-only-parameter support. This shape isn't spec'd for any
+        // Source Academy Python chapter (docs/specs/python_3_bnf.tex's own
+        // `rest-names` grammar disallows anything after the `*name`), and
+        // `z` is never actually bound to anything (environment.ts's
+        // createEnvironment skips it once the rest param is consumed, and
+        // this dialect has no keyword-argument call syntax for anything to
+        // supply it through regardless) — arity() (misc.ts) just returns
+        // the index of the *first* starred parameter regardless of what
+        // follows it, which is where 2 and 0 come from. See the PVML
+        // exclusion of these same two entries below for the fuller
+        // rationale on why neither PVML pathway can meaningfully test this.
         ["def f(x, y, *args, z):\n    pass\narity(f)", 2n, null],
         ["def f(*args, x, y, z):\n    pass\narity(f)", 0n, null],
         ["arity([1, 2, 3])", TypeError, null],
@@ -1384,17 +1397,30 @@ describe("Standard Library Tests", () => {
       ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
-    generateNativePynterTestCases(miscTests, 3);
-    // PVML has no keyword-only parameters at all, by design (a rest
-    // parameter must be the closure's last one — see PVMLIR's
-    // `hasRestParam` doc comment and PVMLCompiler's fromFunctionNode, which
-    // rejects `def f(x, *args, z): ...` at compile time). The two
-    // `*args`-then-keyword-only arity() entries in miscTests.arity assert
-    // CSE's real-Python keyword-only arity (2/0) — correct for CSE (tested
-    // above), meaningless for this pathway, so they're dropped from the
-    // table passed here entirely rather than run and skipped: this isn't a
-    // gap PVML-in-browser could ever close, not even in principle.
-    const miscTestsForPvmlInBrowser: TestCases = {
+    // `def f(x, *args, z): ...` (`z` keyword-only in real CPython, per PEP
+    // 3102) isn't spec'd for any Source Academy Python chapter at all —
+    // docs/specs/python_3_bnf.tex's own `rest-names` grammar disallows
+    // anything after the `*name` — and CSE doesn't give it working
+    // semantics either: environment.ts's createEnvironment never binds `z`
+    // once the rest param is consumed (it's simply skipped), and this
+    // dialect has no keyword-argument call syntax anywhere for `z` to ever
+    // receive a value through regardless. So this isn't "a real Python
+    // feature PVML is missing" — CSE's parser/resolver just don't reject
+    // the shape, and arity() (misc.ts) happens to return a number for it
+    // anyway (the index of the *first* starred parameter, with no special
+    // handling for what follows it — hence 2 and 0 below, not some
+    // deliberate "keyword-only arity" concept). PVMLCompiler's
+    // fromFunctionNode rejects this shape outright at compile time (see
+    // PVMLIR's `hasRestParam` doc comment) — arguably more consistent with
+    // the spec than CSE's silent-parse-into-an-unbound-parameter behavior,
+    // not a gap relative to it. The two entries below exercising this shape
+    // are dropped from the table passed to either PVML pathway entirely
+    // rather than run and skipped: neither could ever meaningfully support
+    // it without this dialect gaining keyword-argument call syntax in
+    // general, which is a much bigger, unrelated undertaking. The
+    // plain-`*args` entries just above them (no trailing params after the
+    // rest param) are unaffected and run normally on both.
+    const miscTestsForPvml: TestCases = {
       ...miscTests,
       arity: miscTests.arity.filter(
         ([code]) =>
@@ -1402,7 +1428,8 @@ describe("Standard Library Tests", () => {
           code !== "def f(*args, x, y, z):\n    pass\narity(f)",
       ),
     };
-    generatePvmlInBrowserTestCases(miscTestsForPvmlInBrowser, 3, [
+    generateNativePynterTestCases(miscTestsForPvml, 3);
+    generatePvmlInBrowserTestCases(miscTestsForPvml, 3, [
       misc,
       math,
       linkedList,

@@ -47,24 +47,24 @@ import {
  * range() called outside a for-loop, and only for this file's own TS-side
  * PVMLInterpreter — native Pynter has no primitive for it at all.
  *
- * `str`/`repr` point at two of native Pynter's unimplemented stubs (index 90
- * `stringify`, index 91 `prompt`; both `sivmfn_prim_unimpl`) rather than
- * being left out entirely: SICPy preludes (e.g. linked-list.prelude.ts's
- * `llist_to_string`) reference `repr()`, and PVMLCompiler compiles a whole
- * file eagerly — leaving the name out would block every function in the
- * prelude from compiling, not just the one that calls it. Pointing them at
- * unimplemented-but-real stub slots lets compilation succeed for both
- * targets; a `targetsPynter`-compiled program calling either one still
- * faults cleanly if it ever reaches real Pynter, exactly as before. They
- * need genuinely different indices (not both 90, as before this file's own
- * TS-side str()/repr() implementation existed) because this file's
- * `executePrimitive` dispatches on primitive index alone, and str()/repr()
- * differ in one respect a shared index can't distinguish: a *bare* string
- * argument is quoted by repr() but not str() (e.g. `str("a")` -> `a`,
- * `repr("a")` -> `'a'`) — see cse-interop.ts/src/stdlib/utils.ts's
- * toPythonString. `prompt` (index 91, i.e. Python's `input()`) has no
- * PRIMITIVE_FUNCTIONS entry of its own, so borrowing its stub slot for
- * `repr` doesn't take anything away from a real feature.
+ * `str`/`repr` point at what were originally two of native Pynter's
+ * unimplemented stubs (index 90 `stringify`, index 91 `prompt`) — both now
+ * have a real, deliberately minimal implementation there (leaf values only:
+ * None/bool/int/float/complex/string/function fallback — no recursion into
+ * lists at the primitive level, though a prelude that recurses itself, e.g.
+ * linked-list.prelude.ts's `llist_to_string`, gets that for free via its own
+ * recursion + string concatenation). Neither str()/repr() nor this fact is
+ * covered by any native-Pynter test today — see py-slang#308 for the
+ * tracking issue on closing that gap. They need genuinely different indices
+ * (not both 90, as before this file's own TS-side str()/repr()
+ * implementation existed) because this file's `executePrimitive` dispatches
+ * on primitive index alone, and str()/repr() differ in one respect a shared
+ * index can't distinguish: a *bare* string argument is quoted by repr() but
+ * not str() (e.g. `str("a")` -> `a`, `repr("a")` -> `'a'`) — see
+ * cse-interop.ts/src/stdlib/utils.ts's toPythonString. `prompt` (index 91,
+ * i.e. Python's `input()`) has no PRIMITIVE_FUNCTIONS entry of its own, so
+ * borrowing its slot for `repr` doesn't take anything away from a real
+ * feature.
  *
  * `is_integer`/`is_float`/`is_complex` have no Source-standard-library
  * equivalent (Source's is_number() doesn't distinguish int/float, and Source
@@ -117,12 +117,20 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["len", 2],
   ["list_length", 2], // Same concept as len() for list.ts; see note above.
   ["llist", 27], // Native `list(...)` builds an identical null-terminated cons chain.
-  ["range", 30],
+  // 131, not the alphabetically-natural-looking 30: native Pynter's own
+  // sivmfn_primitives[] array (a plain C array indexed positionally) never
+  // had a "range" slot at all until pynter's for-loop-support work added
+  // one — and 30 is already `list_to_string` there. Every other primitive
+  // index in this table happens to already match native's real array
+  // position (a long-established, if undocumented, convention), so range()
+  // needs a genuinely free number instead of reusing 30 — see native's
+  // primitives.c for the corresponding padded array slot.
+  ["range", 131],
   ["set_head", 74],
   ["set_tail", 75],
   ["stream", 76], // Variadic lazy-stream constructor; identical semantics to native's.
-  ["str", 90], // Unimplemented native "stringify" stub; see comment above.
-  ["repr", 91], // Unimplemented native "prompt" stub, borrowed; see comment above.
+  ["str", 90], // Native "stringify" slot, now implemented (leaf values only); see comment above.
+  ["repr", 91], // Native "prompt" slot, borrowed and now implemented (leaf values only); see comment above.
   ["tail", 89],
   ["pair", 68],
   ["is_integer", 92],
@@ -195,9 +203,9 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_lgamma", 124],
   ["math_radians", 125],
   ["time_time", 126],
-  // real/imag/complex/parse/tokenize/the math_* additions above were, as a new primitive appended
-  // past native's own table, so this only backs py-slang's own local TS PVMLInterpreter until a
-  // matching entry lands in the pynter repo.
+  // print_llist now has a matching native primitive in the pynter repo (see pynter#5) — every other
+  // name in this stretch (parse/tokenize/the math_* additions above) is still browser/CSE-only, this
+  // only backs py-slang's own local TS PVMLInterpreter.
   ["print_llist", 127],
   // `math_nextafter`/`math_ulp` are themselves unimplemented stubs on the CSE
   // side too (misc.ts/math.ts: both throw "not implemented" if actually
@@ -687,16 +695,23 @@ export function executePrimitive(
       return { type: "array", elements: [args[0], args[1]] };
 
     case 74: // set_head
+      // Returns None (Python's print()-like void-function convention), not
+      // bare JS `undefined` -- PVMLBoxType's `undefined` is a TDZ-only
+      // internal sentinel (see UnboundLocalError/FreeVariableUnboundError
+      // above), never a genuine Python-visible value; returning it here was
+      // a Sinter remnant (Source's own void-function convention), not a
+      // deliberate choice -- see pynter's equivalent fix for the same bug.
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("set_head() takes exactly 2 arguments");
       pairArray(args[0], "set_head", variant).elements[0] = args[1];
-      return undefined;
+      return null;
 
     case 75: // set_tail
+      // See case 74's comment just above -- same fix, same rationale.
       if (args.length !== 2)
         throw new MissingRequiredPositionalError("set_tail() takes exactly 2 arguments");
       pairArray(args[0], "set_tail", variant).elements[1] = args[1];
-      return undefined;
+      return null;
 
     case 89: // tail
       return pairElement(args, "tail", 1, variant);
@@ -908,7 +923,7 @@ export function executePrimitive(
       };
     }
 
-    case 30: {
+    case 131: {
       // range
       if (args.length < 1 || args.length > 3)
         throw new MissingRequiredPositionalError(

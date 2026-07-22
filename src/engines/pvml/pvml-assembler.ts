@@ -1,5 +1,11 @@
 import Buffer from "../../utils/buffer";
-import OpCodes, { getInstructionSize, OPCODE_MAX, unsupportedOpcodeMessage } from "./opcodes";
+import { PyComplexNumber } from "../../types";
+import OpCodes, {
+  getInstructionSize,
+  OPCODE_MAX,
+  PYNTER_ADDITIONAL_SUPPORTED_OPCODES,
+  unsupportedOpcodeMessage,
+} from "./opcodes";
 import { Instruction, PVMLProgram, PVMLIR } from "./types";
 
 const SVM_MAGIC = 0x5005acad;
@@ -57,7 +63,12 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
   b.putU(8, stackSize);
   b.putU(8, envSize);
   b.putU(8, numArgs);
-  b.putU(8, 0); // padding
+  // Former padding byte, now has_rest_param (pynter's pvm_function_t): tells
+  // native Pynter's op_call/op_call_t to bind only numArgs - 1 fixed params
+  // and collect the rest of the caller's arguments into a fresh array bound
+  // to the last slot — see PVMLIR's hasRestParam doc comment and pynter's
+  // vm.c for the matching read side.
+  b.putU(8, f.hasRestParam ? 1 : 0);
 
   const instrOffsets = code
     .map(i => getInstructionSize(i.opcode))
@@ -67,7 +78,11 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
     if (instr.opcode < 0 || instr.opcode > OPCODE_MAX) {
       throw new Error(`Invalid opcode ${instr.opcode.toString()}`);
     }
-    if (targetMaxOpcode !== undefined && instr.opcode > targetMaxOpcode) {
+    if (
+      targetMaxOpcode !== undefined &&
+      instr.opcode > targetMaxOpcode &&
+      !PYNTER_ADDITIONAL_SUPPORTED_OPCODES.has(instr.opcode)
+    ) {
       throw new Error(unsupportedOpcodeMessage(instr.opcode));
     }
     const opcode: OpCodes = instr.opcode;
@@ -115,6 +130,7 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
       case OpCodes.NEWENV:
       case OpCodes.NEWCP:
       case OpCodes.NEWCV:
+      case OpCodes.NEWA:
         b.putU(8, instr.arg1 as number);
         break;
       case OpCodes.LDPG:
@@ -145,12 +161,23 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
             "PVML binary format; this opcode is browser-pathway-only (PVMLInterpreter's " +
             "in-memory PVMLIR) and should never reach the assembler",
         );
-      case OpCodes.LGCC:
-        throw new Error(
-          "LGCC (complex literal) cannot be serialised to the fixed-width PVML binary format; " +
-            "this opcode is browser-pathway-only (PVMLInterpreter's in-memory PVMLIR) and " +
-            "should never reach the assembler",
-        );
+      case OpCodes.LGCC: {
+        // Unlike LGCBI, this now serialises for real — native Pynter has an
+        // actual complex-number representation (see opcodes.ts's LGCC doc
+        // comment). `instr.arg1` is already the resolved PyComplexNumber
+        // here (PVMLIR.toInstructions() resolves the in-memory pool-index
+        // encoding back to the real object before this function ever sees
+        // it — same as LGCS's string constants), so no pool lookup is
+        // needed; just write both components as inline float32s, matching
+        // getInstructionSize(LGCC)'s 9-byte size. Precision loss from
+        // double (PyComplexNumber) to float32 here is deliberate — native
+        // Pynter's own complex type is single-precision throughout, to
+        // match its existing scalar float width.
+        const complex = instr.arg1 as PyComplexNumber;
+        b.putF(32, complex.real);
+        b.putF(32, complex.imag);
+        break;
+      }
       case OpCodes.CALLA:
       case OpCodes.CALLTA:
         // Structurally these are nullary and *could* be encoded (no operand
@@ -354,6 +381,7 @@ export function disassemble(p: Uint8Array): PVMLProgram {
     stackSize: number;
     envSize: number;
     numArgs: number;
+    hasRestParam: boolean;
     instructions: Instruction[];
   }
 
@@ -375,11 +403,14 @@ export function disassemble(p: Uint8Array): PVMLProgram {
     const stackSize = view.getUint8(fnStart);
     const envSize = view.getUint8(fnStart + 1);
     const numArgs = view.getUint8(fnStart + 2);
-    const padding = view.getUint8(fnStart + 3);
+    // Former padding byte, now has_rest_param — see serialiseFunction's own
+    // comment on the write side.
+    const hasRestParamByte = view.getUint8(fnStart + 3);
 
-    if (padding !== 0) {
-      throw new Error(`Invalid function padding at offset 0x${fnStart.toString(16)}`);
+    if (hasRestParamByte !== 0 && hasRestParamByte !== 1) {
+      throw new Error(`Invalid function has_rest_param byte at offset 0x${fnStart.toString(16)}`);
     }
+    const hasRestParam = hasRestParamByte === 1;
 
     cursor = fnStart + 4;
 
@@ -399,7 +430,7 @@ export function disassemble(p: Uint8Array): PVMLProgram {
 
       cursor += 1;
 
-      let arg1: number | string | undefined;
+      let arg1: number | string | PyComplexNumber | undefined;
       let arg2: number | undefined;
 
       switch (opcode) {
@@ -461,6 +492,7 @@ export function disassemble(p: Uint8Array): PVMLProgram {
         case OpCodes.NEWENV:
         case OpCodes.NEWCP:
         case OpCodes.NEWCV:
+        case OpCodes.NEWA:
           if (cursor + 1 > p.byteLength) {
             throw new Error("Truncated instruction");
           }
@@ -504,11 +536,22 @@ export function disassemble(p: Uint8Array): PVMLProgram {
             "LGCBI (arbitrary-precision integer) cannot appear in a serialised PVML binary; " +
               "this opcode is browser-pathway-only and assemble() refuses to encode it",
           );
-        case OpCodes.LGCC:
-          throw new Error(
-            "LGCC (complex literal) cannot appear in a serialised PVML binary; this opcode is " +
-              "browser-pathway-only and assemble() refuses to encode it",
-          );
+        case OpCodes.LGCC: {
+          // Two inline float32s (real, imag), matching how serialiseFunction
+          // writes them above — reconstructs a PyComplexNumber directly
+          // rather than a pool index, since the disassembled Instruction
+          // shape carries the resolved value either way (see LGCS's string
+          // case just above, which similarly reconstructs the string
+          // itself, not an offset).
+          if (cursor + 8 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          const real = view.getFloat32(cursor, true);
+          const imag = view.getFloat32(cursor + 4, true);
+          cursor += 8;
+          arg1 = new PyComplexNumber(real, imag);
+          break;
+        }
         case OpCodes.CALLA:
         case OpCodes.CALLTA:
           throw new Error(
@@ -546,7 +589,7 @@ export function disassemble(p: Uint8Array): PVMLProgram {
       instructions[index].arg1 = targetIndex - index;
     }
 
-    rawFunctions.push({ stackSize, envSize, numArgs, instructions });
+    rawFunctions.push({ stackSize, envSize, numArgs, hasRestParam, instructions });
 
     for (const fixup of newcFixups) {
       closureFixups.push({
@@ -600,7 +643,19 @@ export function disassemble(p: Uint8Array): PVMLProgram {
     // LGCBI never survives serialisation (see the throw above), so a disassembled
     // function's bigint pool is always empty.
     const bigints: bigint[] = [];
-    return new PVMLIR(opcodes, arg1s, arg2s, strings, bigints, f.stackSize, symbolCount, f.numArgs);
+    return new PVMLIR(
+      opcodes,
+      arg1s,
+      arg2s,
+      strings,
+      bigints,
+      f.stackSize,
+      symbolCount,
+      f.numArgs,
+      undefined,
+      undefined,
+      f.hasRestParam,
+    );
   });
 
   return new PVMLProgram(entrypointIndex, functions);

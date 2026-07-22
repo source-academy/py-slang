@@ -193,13 +193,20 @@ export class PVMLCompiler
     // A rest param (`def f(a, *rest)`) must be the closure's *last*
     // parameter — see PVMLIR's `hasRestParam` doc comment, whose whole
     // encoding (numArgs - 1 fixed params, the last slot absorbing every
-    // remaining argument) assumes this. Unlike real Python, PVML has no
-    // notion of a keyword-only parameter at all (there's no keyword-argument
-    // call syntax to bind one), so `def f(x, *args, z): ...` — legal Python,
-    // making `z` keyword-only — isn't a smaller PVML feature gap to close;
-    // it's simply not expressible here. Reject it at compile time rather
-    // than silently mis-splitting parameters (`hasRestParam` used to key
-    // only off "is *any* parameter starred", which for a case like this
+    // remaining argument) assumes this. `def f(x, *args, z): ...` (`z`
+    // keyword-only in real CPython) isn't spec'd for any Source Academy
+    // Python chapter at all — docs/specs/python_3_bnf.tex's own
+    // `rest-names` grammar disallows anything after the `*name`, and CSE
+    // doesn't give it working semantics either (environment.ts's
+    // createEnvironment simply never binds `z` once the rest param is
+    // consumed, and this dialect has no keyword-argument call syntax for
+    // anything to ever supply it through) — so there's no keyword-only
+    // *feature* here for PVML to be missing; rejecting the shape outright
+    // is, if anything, more consistent with the spec than silently parsing
+    // it into a permanently-unbound parameter the way CSE does. Reject it
+    // at compile time rather than silently mis-splitting parameters
+    // (`hasRestParam` used to key only off "is *any* parameter starred",
+    // which for a case like this
     // treated the trailing `z` as the rest param instead of `args`).
     const starredIndex = node.parameters.findIndex(p => p.isStarred);
     const hasRestParam = starredIndex !== -1;
@@ -208,9 +215,12 @@ export class PVMLCompiler
         "A rest parameter (*args) must be the last parameter — PVML has no keyword-only parameters",
       );
     }
-    if (hasRestParam && this.targetsPynter) {
-      throw new Error("Rest parameters (*args) are not supported when compiling for native Pynter");
-    }
+    // Native Pynter now has real rest-parameter support: `has_rest_param`
+    // (pvm_function_t's former `padding` byte, see pvml-assembler.ts's
+    // serialiseFunction) tells the native VM's op_call/op_call_t handler to
+    // bind only `numArgs - 1` fixed params and collect every remaining
+    // caller-supplied argument into a fresh array bound to the last slot —
+    // see pynter's vm.c for the matching implementation.
     const builder = this.builder.createChildBuilder(numArgs, functionName, hasRestParam);
 
     const compiler = new PVMLCompiler(
@@ -488,14 +498,12 @@ export class PVMLCompiler
   }
 
   visitComplexExpr(expr: ExprNS.Complex): ExpressionResult {
-    if (this.targetsPynter) {
-      // Native Pynter has zero complex-number support (no NaN-boxing tag, no
-      // arithmetic) and never will — see opcodes.ts's LGCC doc comment. Fail
-      // at compile time with a clear message rather than emitting an opcode
-      // that would only be caught later, opaquely, by assemble()'s
-      // targetMaxOpcode check.
-      throw new Error("Complex number literals are not supported when compiling for native Pynter");
-    }
+    // Native Pynter now has a real complex-number representation (a
+    // heap-allocated {real, imag} pair, single-precision to match this VM's
+    // existing scalar float width — see pynter/vm/include/pynter/heap_obj.h's
+    // siheap_complex_t) — LGCC is emitted for both targets identically; the
+    // difference is purely in how the assembler serialises it (see
+    // pvml-assembler.ts).
     this.builder.emitUnary(OpCodes.LGCC, expr.value);
     return { maxStackSize: 1 };
   }
@@ -509,18 +517,33 @@ export class PVMLCompiler
     );
 
     if (this.targetsPynter) {
-      // NEWA takes no size operand: native Pynter's op_new_a always creates
-      // an empty, auto-growing array (siarray_new(8) with count=0) and
-      // ignores whatever's on the stack — it never pops a size. Pushing one
-      // here (as this used to) left it stranded on the stack after NEWA,
-      // permanently corrupting stack balance for the rest of the program
-      // (every list literal leaked one value, eventually manifesting as a
-      // native stack overflow). STAG (via siarray_put) grows the array to
-      // fit as elements are stored below. This exact byte-for-byte sequence
-      // must stay unchanged for this target: it's also executed by the real
-      // native Pynter binary, which has its own separate NEWA/STAG
-      // implementation this compiler has no say over.
-      this.builder.emitNullary(OpCodes.NEWA);
+      // NEWA's operand is a genuine wire-format uint8 for native Pynter
+      // (pynter/opcode.h's `oneindex` struct, shared with LDLG/STLG/CALL/
+      // etc. — see pvml-assembler.ts's putU(8, ...) for this opcode) — not
+      // just an assembler convenience width. A literal beyond this silently
+      // truncates (e.g. 256 elements assembles as operand 0), pre-sizing
+      // the array far smaller than the STAG stores that follow will write
+      // into. Rejecting at compile time, same as CALLA/CALLTA spreading
+      // below, is the appropriate fix rather than a wire-format change; the
+      // browser-only pathway below has no such fixed-width constraint, so
+      // the check is scoped to this branch.
+      if (n > 255) {
+        throw new Error(`List literal exceeds maximum supported size of 255 elements (got ${n})`);
+      }
+      // NEWA's operand is the list literal's final element count: native
+      // Pynter's op_new_a pre-sizes the array to it up front (siarray_new(n)
+      // with count set to n immediately, all slots initially undef), rather
+      // than starting empty and growing it one slot at a time as elements
+      // are stored. This matters beyond just this literal: native's STAG
+      // (siarray_put, via op_sta_g) does a strict, non-growing Python
+      // subscript-assignment bounds check for every store, including a
+      // user's own `xs[i] = v` (issue #294/#299 — no silent auto-extend) —
+      // that check is only correct if `count` already reflects the list's
+      // true length by the time any STAG runs, which pre-sizing here
+      // guarantees even mid-construction (each store below lands on an
+      // already-in-range slot, not a one-past-the-end append). See
+      // pynter/vm/src/vm.c's op_new_a and pop_array_args.
+      this.builder.emitUnary(OpCodes.NEWA, n);
       this.builder.emitUnary(OpCodes.STLG, tmpSlot);
 
       for (let i = 0; i < n; i++) {

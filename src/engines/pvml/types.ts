@@ -307,11 +307,12 @@ export class PVMLIR {
   readonly functionName: string;
   /** Whether the last parameter (slot `numArgs - 1`) is a rest param
    * (`def f(a, *rest): ...`) collecting every extra positional argument into
-   * a PVMLArray, rather than a plain fixed parameter. In-memory-only
-   * metadata, like `functionName` — not encoded in the serialised binary
-   * format (native Pynter's `targetsPynter` compile mode rejects `*args`
-   * outright at compile time, so a Pynter-targeted PVMLIR never has this
-   * `true` — see PVMLCompiler's visitStarredExpr). */
+   * a PVMLArray, rather than a plain fixed parameter. Encoded in the
+   * serialised binary format too (pvm_function_t's former `padding` byte,
+   * now `has_rest_param` — see pvml-assembler.ts's serialiseFunction): native
+   * Pynter's own op_call/op_call_t reads it the same way, binding only
+   * `numArgs - 1` fixed params and collecting the rest into a fresh array —
+   * see pynter's vm.c. */
   readonly hasRestParam: boolean;
   /**
    * Instruction offsets of the LDLG that pushes a just-built list literal's completed array (see

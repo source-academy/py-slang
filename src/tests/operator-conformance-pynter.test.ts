@@ -16,12 +16,6 @@
  * operator-conformance.test.ts (which sweeps all four chapters against the
  * CSE machine), this file only ever exercises §3.
  *
- * One PVML-specific carve-out: `complex` is dropped from the type universe
- * entirely. PVMLCompiler.visitComplexExpr rejects complex literals outright
- * at compile time — there is no PVML complex-number representation to be
- * conformant *about* — so every complex-adjacent spec row is untestable here
- * by construction, not a gap worth enumerating.
- *
  * Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary, same as every
  * other native Pynter suite. Skipped entirely otherwise.
  */
@@ -34,6 +28,7 @@ import { runCodePvmlDetailed } from "../pvml-runner";
 import { Resolver } from "../resolver";
 import { RunError, VARIANT_GROUPS } from "../runner";
 import { Group } from "../stdlib/utils";
+import { PyComplexNumber } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import {
   BINARY_OPS_12,
@@ -43,11 +38,6 @@ import {
   universeForChapter,
 } from "./operator-spec";
 import { generateMockStreams, isCloseToFloat32 } from "./utils";
-
-/** PVML has no complex-number support at all; see file header. */
-function pvmlUniverseForChapter(chapter: number): PyType[] {
-  return universeForChapter(chapter).filter(type => type !== "complex");
-}
 
 type CseOutcome = { kind: "value"; stashType: string; value: unknown } | { kind: "error" };
 
@@ -97,37 +87,50 @@ async function cseOutcome(code: string, chapter: number, groups: Group[]): Promi
   };
 }
 
-/** Maps a CSE stash type to native Pynter's resultType tag. */
-const PVML_RESULT_TYPE: Partial<Record<string, string>> = {
-  bigint: "integer",
-  number: "float",
-  bool: "boolean",
-  string: "string",
-};
+/** CSE stash types this sweep can produce a value for (see universeForChapter/literalFor). */
+const PVML_SUPPORTED_STASH_TYPES = new Set(["bigint", "number", "bool", "string", "complex"]);
 
-function pvmlValueMatches(
-  wantType: string,
-  wantValue: unknown,
-  pvmlResultType: string,
-  pvmlResultValue: string,
-): boolean {
-  const expectedTag = PVML_RESULT_TYPE[wantType];
-  if (expectedTag === undefined || pvmlResultType !== expectedTag) return false;
-  switch (expectedTag) {
-    case "integer":
-      return Number(pvmlResultValue) === Number(wantValue);
-    case "float":
-      return isCloseToFloat32(Number(pvmlResultValue), Number(wantValue));
-    case "boolean":
-      return (pvmlResultValue === "true") === wantValue;
+/**
+ * Compares a CSE stash value against the text native Pynter's own print()
+ * produced for the same expression (via captureLastExpression — see
+ * runCodePvmlDetailed). There's no reliable machine-readable result-type
+ * trailer on `main` (see pvml-runner.ts's captureLastExpression doc comment),
+ * so the only signal available is the printed text itself, matching the
+ * approach generateNativePynterTestCases (utils.ts) also uses.
+ */
+function pvmlValueMatches(wantType: string, wantValue: unknown, capturedResult: string): boolean {
+  if (!PVML_SUPPORTED_STASH_TYPES.has(wantType)) return false;
+  switch (wantType) {
+    case "bigint":
+      return Number(capturedResult) === Number(wantValue);
+    case "number":
+      return isCloseToFloat32(Number(capturedResult), Number(wantValue));
+    case "bool":
+      // Pynter's printer emits Python's "True"/"False" (see display.h).
+      return (capturedResult === "True") === wantValue;
     case "string":
-      return pvmlResultValue === wantValue;
+      return capturedResult === wantValue;
+    case "complex": {
+      // Native Pynter's complex components are float32 (unlike
+      // PyComplexNumber's own double precision) and its printer doesn't
+      // attempt CPython's exact scientific-notation formatting, only
+      // enough to round-trip through PyComplexNumber.fromString() — compare
+      // componentwise with tolerance, not exact text (mirrors the "float"
+      // case above). NaN still needs an exact match (never "close to"
+      // anything, including itself).
+      const want = wantValue as PyComplexNumber;
+      if (Number.isNaN(want.real) || Number.isNaN(want.imag)) {
+        return capturedResult === want.toString();
+      }
+      const actual = PyComplexNumber.fromString(capturedResult);
+      return isCloseToFloat32(actual.real, want.real) && isCloseToFloat32(actual.imag, want.imag);
+    }
     default:
       return false;
   }
 }
 
-type PvmlOutcome = { kind: "value"; resultType: string; resultValue: string } | { kind: "error" };
+type PvmlOutcome = { kind: "value"; capturedResult: string } | { kind: "error" };
 
 async function runPvml(
   code: string,
@@ -136,8 +139,12 @@ async function runPvml(
   pynterPath: string,
 ): Promise<PvmlOutcome> {
   try {
-    const result = await runCodePvmlDetailed(code, chapter, { pynterPath, groups });
-    return { kind: "value", resultType: result.resultType, resultValue: result.resultValue };
+    const result = await runCodePvmlDetailed(code, chapter, {
+      pynterPath,
+      groups,
+      captureLastExpression: true,
+    });
+    return { kind: "value", capturedResult: result.capturedResult ?? "" };
   } catch (e) {
     if (e instanceof RunError) return { kind: "error" };
     throw e;
@@ -149,22 +156,63 @@ function expectMatch(wanted: CseOutcome, actual: PvmlOutcome): void {
   if (wanted.kind === "value") {
     expect(actual.kind).toBe("value");
     if (actual.kind === "value") {
-      expect(
-        pvmlValueMatches(wanted.stashType, wanted.value, actual.resultType, actual.resultValue),
-      ).toBe(true);
+      expect(pvmlValueMatches(wanted.stashType, wanted.value, actual.capturedResult)).toBe(true);
     }
   } else {
     expect(actual.kind).toBe("error");
   }
 }
 
+/**
+ * Asserts `actual` is a genuine boolean result (either "True" or "False"),
+ * without pinning which one — used for `is`/`is not` between two strings,
+ * where the result *type* is guaranteed (every `is`/`is not` pair returns
+ * bool — see MIDDLE_34 in operator-spec.ts), but the specific value isn't:
+ * Python's language spec makes no promise about string identity at all
+ * (CPython's small-string/literal interning is its own implementation
+ * detail), so pinning a specific True/False here — the way expectMatch's
+ * exact-value comparison would — would assert behavior the spec doesn't
+ * actually require. Mirrors the "and"/"or"/"not" sweeps below, which
+ * likewise check success/type without pinning "any"'s specific value.
+ */
+function expectBooleanResult(wanted: CseOutcome, actual: PvmlOutcome): void {
+  expect(wanted.kind).toBe("value");
+  expect(actual.kind).toBe("value");
+  if (actual.kind === "value") {
+    expect(["True", "False"]).toContain(actual.capturedResult);
+  }
+}
+
 const pynterPath = process.env.PYNTER_RUNNER_PATH;
 const describeBlock = pynterPath ? describe : describe.skip;
+
+/**
+ * Reasons a native-Pynter operator-conformance case is skipped, mirroring
+ * NATIVE_PYNTER_SKIP_REASONS in utils.ts — same rationale, different file
+ * since this suite computes its own `code` strings from the operator/type
+ * cross product rather than a shared TestCases table.
+ */
+function nativePynterSkipReason(op: string, left: PyType, right: PyType): string | undefined {
+  if (op === "*" && (left === "list" || right === "list")) {
+    // Native Pynter's own VM supports list*int (see vm.c's op_mul_g), but
+    // pvmlValueMatches() below has no case for a list-typed CSE stash value
+    // yet — a comparison-mechanism gap in this file, not a runtime bug. See
+    // py-slang#309 for the tracking issue.
+    return "list-typed results aren't decoded by this file's comparison logic yet";
+  }
+  return undefined;
+}
+
+/** `is`/`is not` between two strings: the *type* (bool) is spec-guaranteed and worth checking
+ * (see MIDDLE_34), but the specific value isn't — see expectBooleanResult's own doc comment. */
+function isUnspecifiedStringIdentity(op: string, left: PyType, right: PyType): boolean {
+  return (op === "is" || op === "is not") && left === "str" && right === "str";
+}
 
 for (const chapter of [3]) {
   describeBlock(`[pvml/pynter] Operator conformance at Python §${chapter}`, () => {
     const ops = chapter <= 2 ? BINARY_OPS_12 : BINARY_OPS_34;
-    const universe = pvmlUniverseForChapter(chapter);
+    const universe = universeForChapter(chapter);
     // The *canonical* per-chapter group list (VARIANT_GROUPS), not
     // operator-spec.ts's own groupsForChapter(): that one only adds
     // whatever single extra group a given test needs on top of what the CSE
@@ -181,10 +229,17 @@ for (const chapter of [3]) {
         for (const left of universe) {
           for (const right of universe) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
-            test(code, async () => {
+            const skipReason = nativePynterSkipReason(op, left, right);
+            const t = skipReason ? test.skip : test;
+            const checkTypeOnly = isUnspecifiedStringIdentity(op, left, right);
+            t(skipReason ? `${code} (${skipReason})` : code, async () => {
               const wanted = await cseOutcome(code, chapter, groups);
               const actual = await runPvml(code, chapter, groups, pynterPath!);
-              expectMatch(wanted, actual);
+              if (checkTypeOnly) {
+                expectBooleanResult(wanted, actual);
+              } else {
+                expectMatch(wanted, actual);
+              }
             });
           }
         }

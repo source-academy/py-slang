@@ -10,9 +10,10 @@ import {
   UnsupportedOperandTypeError,
   ZeroDivisionError,
 } from "../engines/pvml/errors";
+import { assemble } from "../engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
-import OpCodes from "../engines/pvml/opcodes";
+import OpCodes, { PYNTER_OPCODE_MAX } from "../engines/pvml/opcodes";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
 import misc from "../stdlib/misc";
@@ -619,13 +620,17 @@ describe("PVML E2E", () => {
 
   describe("Complex numbers", () => generatePVMLTestCases(complexTests));
 
-  describe("Complex numbers: rejected for native Pynter", () => {
-    test("a complex literal fails to compile in targetsPynter mode", () => {
+  describe("Complex numbers: supported for native Pynter", () => {
+    test("a complex literal compiles and assembles in targetsPynter mode", () => {
+      // Native Pynter gained a real complex-number representation (a
+      // heap-allocated {real, imag} pair — see pynter's siheap_complex_t)
+      // once issue #299's parity work landed LGCC for this target; this
+      // used to assert the opposite (a compile-time rejection).
       const ast = parse("1j\n");
-      expect(() => PVMLCompiler.fromProgram(ast, 4, undefined, false, true)).not.toThrow();
-      expect(() =>
-        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
-      ).toThrow(/Pynter/);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, undefined, false, true);
+      expect(() => compiler.compileProgram(ast)).not.toThrow();
+      const program = compiler.compileProgram(ast);
+      expect(() => assemble(program, PYNTER_OPCODE_MAX)).not.toThrow();
     });
   });
 
@@ -736,15 +741,25 @@ describe("PVML E2E", () => {
 
   describe("Call-site argument spreading (f(*xs))", () => generatePVMLTestCases(spreadCallTests));
 
-  describe("Spread/rest parameters: rejected for native Pynter", () => {
-    test("a rest parameter fails to compile in targetsPynter mode", () => {
+  describe("Rest parameters: supported for native Pynter, call-site spreading still isn't", () => {
+    test("a rest parameter compiles and assembles in targetsPynter mode", () => {
+      // Native Pynter gained real rest-parameter support (pvm_function_t's
+      // former padding byte repurposed as has_rest_param, read by
+      // op_call/op_call_t to collect extra caller arguments into a fresh
+      // array) — this used to assert the opposite (a compile-time
+      // rejection).
       const ast = parse("def f(a, *rest):\n    return rest\nf(1, 2)\n");
-      expect(() =>
-        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
-      ).toThrow(/Pynter/);
+      const compiler = PVMLCompiler.fromProgram(ast, 4, undefined, false, true);
+      expect(() => compiler.compileProgram(ast)).not.toThrow();
+      const program = compiler.compileProgram(ast);
+      expect(() => assemble(program, PYNTER_OPCODE_MAX)).not.toThrow();
     });
 
-    test("a spread call argument fails to compile in targetsPynter mode", () => {
+    test("a spread call argument still fails to compile in targetsPynter mode", () => {
+      // Unlike a rest *parameter*, call-site spreading (f(*xs)) is a
+      // separate feature (CALLA/CALLTA — a runtime-variable-arity call) that
+      // native Pynter still has no representation for at all; this
+      // remains browser-pathway-only.
       const ast = parse("def f(a, b):\n    return a + b\nxs = [1, 2]\nf(*xs)\n");
       expect(() =>
         PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),

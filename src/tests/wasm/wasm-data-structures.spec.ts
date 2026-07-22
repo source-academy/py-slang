@@ -504,4 +504,15 @@ x[0] is x[1]
     expect(rawResult[0]).toBe(TYPE_TAG.BOOL);
     expect(renderedResult).toBe("True");
   });
+
+  it("list * a huge int whose byte-size overflows i32 is rejected, not silently truncated", async () => {
+    // 3 * 1431655766 = 4294967298, two past 2^32 -- wraps to a small,
+    // plausible-looking (but wrong) new_len instead of trapping, unless the
+    // overflow guard in LIST_REPEAT_FX catches it (src_len is tiny here
+    // specifically so the source list itself never needs a large
+    // allocation -- only the *result* size overflows).
+    await expect(compileWithList(`[1, 2, 3] * 1431655766`)).rejects.toThrow(
+      new Error(ERROR_MAP.OUT_OF_MEMORY),
+    );
+  });
 });
