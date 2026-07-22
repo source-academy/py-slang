@@ -608,12 +608,12 @@ describe("PyPvmlEvaluator module imports", () => {
   });
 
   test("a literal 2-element Python list argument converts as a genuine list, not a dotted pair", async () => {
-    // The actual bug: [a, b] and pair(a, b) produce the identical runtime shape (a 2-element
-    // array) once compiled - pvmlToModule's "array" case used to have no way to tell them apart,
-    // so a *literal* 2-element list (e.g. simultaneously([sine_sound(...), rest]), the natural
-    // thing a student writes) got misread as a dotted pair instead of a list, corrupting whatever
-    // it was passed to. Fixed by tagging a list literal's completed array at its LDLG load site
-    // (see pvmlListLiteralArrays in types.ts) instead of guessing from shape alone.
+    // The original bug: [a, b] and pair(a, b) produced the identical runtime shape (a 2-element
+    // array) once compiled, so a *literal* 2-element list (e.g. simultaneously([sine_sound(...),
+    // rest]), the natural thing a student writes) got misread as a dotted pair instead of a list,
+    // corrupting whatever it was passed to. Now pvmlToModule always builds a flat DataType.ARRAY
+    // for any Python list regardless of length, so there's no length-2 special case left to
+    // misread in the first place.
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 
@@ -640,7 +640,7 @@ describe("PyPvmlEvaluator module imports", () => {
 
   test("a 2-element rest-param collection also converts as a genuine list", async () => {
     // def f(*rest) collects exactly 2 positional args into the same flat-array shape a 2-element
-    // list literal has - needs the identical tag (see pvmlListLiteralArrays' doc comment).
+    // list literal has - converts identically now, no special-casing needed.
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
 

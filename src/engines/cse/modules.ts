@@ -10,17 +10,8 @@ import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
-import { BuiltinValue, ListValue, Value } from "./stash";
+import { BuiltinValue, Value } from "./stash";
 import { ModuleFunctionGenerator } from "./types";
-
-/**
- * Marks a freshly-built list Value as a genuine Python list literal (as opposed to a value built by
- * pair()/llist(), or one round-tripped from a module's DataType.PAIR) - see the "list" case in
- * pythonToModule for why this distinction can't be made from shape alone. A side-tag rather than a
- * shape change so nothing else that already treats list literals as a flat array (indexing, len(),
- * iteration, etc.) needs to change.
- */
-export const listLiteralValues = new WeakSet<ListValue>();
 
 export class ModuleNotFoundError extends RuntimeSourceError {
   constructor(public readonly moduleName: string) {

@@ -8,7 +8,7 @@ import {
 import { ExprNS, StmtNS } from "../ast-types";
 import { Closure } from "../engines/cse/closure";
 import { Context } from "../engines/cse/context";
-import { listLiteralValues, moduleToPython, pythonToModule } from "../engines/cse/modules";
+import { moduleToPython, pythonToModule } from "../engines/cse/modules";
 import { BuiltinValue, ListValue, Value } from "../engines/cse/stash";
 import { toPythonAst } from "./utils";
 
@@ -276,7 +276,7 @@ describe("module interop conversions", () => {
       ).resolves.toEqual({ type: DataType.EMPTY_LIST, value: null });
     });
 
-    test("a 2-element list becomes a flat ARRAY too - no more special-casing by length or listLiteralValues tagging", async () => {
+    test("a 2-element list becomes a flat ARRAY too - no more special-casing by length", async () => {
       const { context, evaluator } = makeContext();
       const literal: ListValue = {
         type: "list",
@@ -285,9 +285,6 @@ describe("module interop conversions", () => {
           { type: "number", value: 2 },
         ],
       };
-      // Tagging listLiteralValues (or not) no longer changes anything - kept here only to show
-      // that explicitly, since older code paths still tag literals at construction time.
-      listLiteralValues.add(literal);
 
       const moduleList = await pythonToModule(context, "", undefined, literal);
 

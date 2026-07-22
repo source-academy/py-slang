@@ -576,11 +576,6 @@ export class PVMLCompiler
     }
 
     this.builder.emitUnary(OpCodes.LDLG, tmpSlot);
-    // Tags this specific load as a list-literal completion site (see PVMLIR's
-    // `listLiteralOffsets` doc comment) - a JS-side-only annotation, never encoded in the
-    // serialised binary format, so this is safe regardless of whether this compile targets native
-    // Pynter.
-    this.builder.markListLiteral();
 
     return { maxStackSize: 3 + 1 };
   }
