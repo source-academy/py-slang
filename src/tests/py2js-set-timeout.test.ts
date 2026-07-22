@@ -112,9 +112,7 @@ test("set_timeout requires a callable first argument", () => {
 });
 
 test("set_timeout requires a numeric second argument", () => {
-  expect(() =>
-    runCodePy2Js(`def f():\n    pass\nset_timeout(f, 'soon')`, 1),
-  ).toThrow(/TypeError/);
+  expect(() => runCodePy2Js(`def f():\n    pass\nset_timeout(f, 'soon')`, 1)).toThrow(/TypeError/);
 });
 
 test("clear_all_timeout takes no arguments", () => {
@@ -136,7 +134,10 @@ test("a scheduled callback can itself call an imported module function needing a
     await Promise.resolve(); // conductor's ExternCallable contract requires an async generator
     return { type: DataType.NUMBER, value: (x as TypedValue<DataType.NUMBER>).value * 2 };
   }
-  const double = await dh.closure_make({ returnType: DataType.NUMBER, args: [DataType.NUMBER] }, doubleFunc);
+  const double = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+    doubleFunc,
+  );
   installFakeModule({ physics: [{ symbol: "double", value: double }] });
 
   const { session, outputs } = makeSession(2, dh);
