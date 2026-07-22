@@ -7,12 +7,19 @@
  */
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import {
+  chapterExpectedNames,
   PyodideEvaluator1,
+  PyodideEvaluator2,
   PyodideEvaluator3,
+  PyodideEvaluator4,
   PyodideEvaluatorFull,
 } from "../conductor/PyodideEvaluator";
 
 const PYODIDE_TIMEOUT = 60_000;
+/** python/sicp/mce.py doesn't implement parse()/tokenize() yet (only
+ * apply_in_underlying_python) — see issue #318 for why this isn't a quick
+ * fix. Remove once that lands and bumps SICP_VERSION. */
+const KNOWN_SICP_GAPS = new Set<string>(["parse", "tokenize"]);
 
 /** Minimal IRunnerPlugin mock — see Py2JsEvaluator.test.ts's identical stub
  * for why this is enough: the evaluator only calls sendResult/sendError/
@@ -63,6 +70,28 @@ describe("PyodideEvaluator1", () => {
   );
 });
 
+describe("PyodideEvaluator2", () => {
+  test(
+    "SICPy vocabulary (pair/head/tail, plus a prelude-only name) actually runs, not just validates",
+    async () => {
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyodideEvaluator2(conductor);
+
+      // pair/head/tail/llist are native names; length is prelude-only (see
+      // linked-list.prelude.ts) — neither is real CPython, so this only
+      // works if sourceacademy-sicp was actually bridged in, not just
+      // accepted by the Resolver.
+      await evaluator.evaluateChunk(
+        "xs = llist(1, 2, 3)\nprint(head(xs))\nprint(length(xs))\n",
+      );
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["1", "3"]);
+    },
+    PYODIDE_TIMEOUT,
+  );
+});
+
 describe("PyodideEvaluator3", () => {
   test(
     "accepts a chunk using lists, valid from §3 onward",
@@ -74,6 +103,36 @@ describe("PyodideEvaluator3", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["3"]);
+    },
+    PYODIDE_TIMEOUT,
+  );
+});
+
+describe("sourceacademy-sicp bridging — name parity", () => {
+  // The bug this guards against: a name the Resolver accepts for a chapter
+  // (native builtin or prelude-defined) that isn't actually bound in pyodide
+  // after bridging — passes validation, NameErrors at runtime. Each expected
+  // name gets its own evaluateChunk call (same evaluator instance, so the
+  // bridging setup cost is paid once) — a bare expression statement resolves
+  // a name without needing to know its arity/signature or exercising
+  // anything beyond plain lookup, and one call per name means a NameError on
+  // one name can't hide a second one further down, the way a single
+  // newline-joined chunk would (that's what surfaced the mce gap below).
+  test.each([1, 2, 3, 4])(
+    "every name §%i's Resolver accepts is actually bound in pyodide after bridging",
+    async chapter => {
+      const { conductor, errors } = makeMockConductor();
+      const Evaluator = [PyodideEvaluator1, PyodideEvaluator2, PyodideEvaluator3, PyodideEvaluator4][
+        chapter - 1
+      ];
+      const evaluator = new Evaluator(conductor);
+      const names = chapterExpectedNames(chapter).filter(name => !KNOWN_SICP_GAPS.has(name));
+
+      for (const name of names) {
+        await evaluator.evaluateChunk(`${name}\n`);
+      }
+
+      expect(errors).toEqual([]);
     },
     PYODIDE_TIMEOUT,
   );

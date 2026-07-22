@@ -1,6 +1,7 @@
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import type { PyodideInterface } from "pyodide";
 import type { PyProxy } from "pyodide/ffi";
+import { StmtNS } from "../ast-types";
 import { getImportRoots } from "../engines/pyodide/importAnalyzer";
 import { loadPyodideGeneric } from "../engines/pyodide/loadPyodide";
 import { parse } from "../parser/parser-adapter";
@@ -16,15 +17,79 @@ import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 
 /** Same per-chapter stdlib surface as every other engine (PyCseEvaluator.ts,
- * py2js's PY2JS_GROUPS) — used here only so the Resolver recognizes names
- * like `print`/`len` as valid for the chapter; pyodide runs on real CPython,
- * so these groups' actual implementations are never bridged in or executed. */
+ * py2js's PY2JS_GROUPS) — used here so the Resolver recognizes names like
+ * `print`/`pair`/`length` as valid for the chapter. Doubles as the source
+ * for which `sourceacademy-sicp` submodules get bridged into pyodide (see
+ * SICP_MODULE_BY_GROUP below) — one table drives both, so the names the
+ * Resolver accepts and the names actually bound in pyodide can't drift
+ * apart from each other. */
 const CHAPTER_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
   2: [misc, math, linkedList],
   3: [misc, math, linkedList, list, pairmutator, stream],
   4: [misc, math, linkedList, list, pairmutator, stream, parserGroup],
 };
+
+/** The `sourceacademy-sicp` (python/) submodule backing each stdlib group —
+ * see that package's own `__init__.py` docstring, which documents this same
+ * correspondence, and scripts/jsdoc.sh, which independently encodes it a
+ * third time for the generated docs site. */
+const SICP_MODULE_BY_GROUP = new Map<Group, string>([
+  [misc, "misc"],
+  [math, "math"],
+  [linkedList, "linked_list"],
+  [pairmutator, "pair_mutators"],
+  [list, "list"],
+  [stream, "stream"],
+  [parserGroup, "mce"],
+]);
+
+/** Hard-pinned, not floating: the evaluator should never silently pick up a
+ * newer sourceacademy-sicp release than whatever py-slang's own tests (the
+ * name-parity check in PyodideEvaluator.test.ts, and this file's
+ * CHAPTER_GROUPS) were actually written against. Bump deliberately. */
+const SICP_VERSION = "0.1.0";
+
+/** A stdlib group's `prelude` (SICPy source defining higher-level functions
+ * in terms of the group's own primitives, e.g. linked-list.prelude.ts's
+ * map/filter/reduce) is never executed here — real CPython + the bridged
+ * sourceacademy-sicp package already provide working implementations. But
+ * the Resolver still needs to know these names exist, the same way CSE/py2js
+ * pass their prelude's *executed* environment as preludeNames; since nothing
+ * here executes the prelude, this parses it (with py-slang's own parser —
+ * prelude source is by construction valid SICPy) and collects its top-level
+ * def names statically instead. Internal helpers (leading `_`, e.g.
+ * linked-list.prelude.ts's `_length`) are excluded, matching every native
+ * builtins list's own `!name.startsWith("_")` filter. */
+function preludeTopLevelNames(preludeSource: string): string[] {
+  if (!preludeSource.trim()) return [];
+  const script = preludeSource.endsWith("\n") ? preludeSource : preludeSource + "\n";
+  const ast = parse(script);
+  return ast.statements
+    .filter((s): s is StmtNS.FunctionDef => s instanceof StmtNS.FunctionDef)
+    .map(s => s.name.lexeme)
+    .filter(name => !name.startsWith("_"));
+}
+
+/** Precomputed once (prelude parsing has a real, if small, cost) rather than
+ * per evaluateChunk call — every chapter's group list is static. */
+const CHAPTER_PRELUDE_NAMES: Record<number, string[]> = Object.fromEntries(
+  Object.entries(CHAPTER_GROUPS).map(([chapter, groups]) => [
+    chapter,
+    groups.flatMap(g => preludeTopLevelNames(g.prelude)),
+  ]),
+);
+
+/** Every name the Resolver accepts for `chapter` (native builtins + prelude
+ * top-level defs) — exported for PyodideEvaluator.test.ts's name-parity
+ * check: every one of these should also resolve to a real, bound name in
+ * pyodide once this chapter's sourceacademy-sicp modules are bridged in.
+ * A name passing validation but not actually being bound (or vice versa) is
+ * exactly the class of bug this exists to catch — see class doc below. */
+export function chapterExpectedNames(chapter: number): string[] {
+  const groups = CHAPTER_GROUPS[chapter] ?? [];
+  return [...groups.flatMap(g => [...g.builtins.keys()]), ...(CHAPTER_PRELUDE_NAMES[chapter] ?? [])];
+}
 
 /**
  * Runs Python on real CPython via pyodide (CPython compiled to WebAssembly),
@@ -38,9 +103,22 @@ const CHAPTER_GROUPS: Record<number, Group[]> = {
  * (resolver/analysis.ts's `analyze`) every other engine uses, with that
  * chapter's feature validators — so "Python §N" still means the restricted
  * SICPy subset even though CPython itself would happily run more. Only a
- * chunk that passes that check actually runs, on pyodide, unmodified.
- * PyodideEvaluatorFull skips the check entirely: full, unrestricted Python
- * ("Python Full" in the language directory, not one of the four chapters).
+ * chunk that passes that check actually runs, on pyodide.
+ *
+ * SICPy-specific names (`pair`, `head`, `length`, ...) aren't real CPython —
+ * validation accepting them isn't enough to make them work. Each evaluator
+ * bridges the `sourceacademy-sicp` PyPI package (source at python/, see its
+ * own README) into pyodide's global namespace once, at startup: the exact
+ * submodules `SICP_MODULE_BY_GROUP` says this chapter's groups map to (or,
+ * for PyodideEvaluatorFull, the whole package). It's a real, independently
+ * tested CPython implementation of the same stdlib — not reimplemented here,
+ * just wired in — so this is the one place chapters 2-4 depend on it having
+ * stayed in sync with py-slang's own stdlib groups (see PyodideEvaluator.test.ts's
+ * name-parity check).
+ *
+ * PyodideEvaluatorFull skips the chapter feature gate entirely: full,
+ * unrestricted Python ("Python Full" in the language directory, not one of
+ * the four chapters).
  *
  * REPL persistence: unlike the other engines, there is no py-slang-side
  * runtime object holding prior chunks' globals — that state lives inside
@@ -63,16 +141,31 @@ abstract class PyodideEvaluatorBase extends BasicEvaluator {
   private readonly resolvedRoots = new Set<string>();
   /** Top-level names bound so far, across every prior chunk — see class doc. */
   private readonly definedNames = new Set<string>();
-  /** Private namespace the install-helper snippet runs in, so its own
-   * `importlib`/`micropip`/loop-variable names never show up in — or risk
-   * colliding with a name in — the user's own global namespace. Created
-   * lazily since it needs a live pyodide instance. */
+  /** Private namespace the install-helper snippet (and the one-time sicp
+   * install below) run in, so their own `importlib`/`micropip`/loop-variable
+   * names never show up in — or risk colliding with a name in — the user's
+   * own global namespace. Created lazily since it needs a live pyodide
+   * instance. */
   private internalNamespace?: PyProxy;
 
-  constructor(conductor: IRunnerPlugin) {
+  /** @param sicpModules Which `sourceacademy-sicp` submodules to bridge into
+   * the user's global namespace at startup — a chapter's own module list
+   * (see SICP_MODULE_BY_GROUP), or `"*"` for the whole package
+   * (PyodideEvaluatorFull). */
+  constructor(conductor: IRunnerPlugin, sicpModules: readonly string[] | "*") {
     super(conductor);
     this.pyodide = loadPyodideGeneric().then(async pyodide => {
       await pyodide.loadPackage("micropip");
+      const ns = this.getInternalNamespace(pyodide);
+      await pyodide.runPythonAsync(
+        `import micropip\nawait micropip.install(${JSON.stringify(`sourceacademy-sicp==${SICP_VERSION}`)})\n`,
+        { globals: ns },
+      );
+      const bridgeCode =
+        sicpModules === "*"
+          ? "from sicp import *\n"
+          : sicpModules.map(m => `from sicp.${m} import *\n`).join("");
+      await pyodide.runPythonAsync(bridgeCode);
       await pyodide.setStdout({
         batched: (output: string) => this.conductor.sendOutput(output),
       });
@@ -151,15 +244,24 @@ abstract class ChapterPyodideEvaluator extends PyodideEvaluatorBase {
   private readonly groups: Group[];
 
   protected constructor(conductor: IRunnerPlugin, chapter: number) {
-    super(conductor);
+    const groups = CHAPTER_GROUPS[chapter] ?? [];
+    super(
+      conductor,
+      groups.map(g => {
+        const sicpModule = SICP_MODULE_BY_GROUP.get(g);
+        if (!sicpModule) throw new Error(`No sourceacademy-sicp module registered for group`);
+        return sicpModule;
+      }),
+    );
     this.chapter = chapter;
-    this.groups = CHAPTER_GROUPS[chapter] ?? [];
+    this.groups = groups;
   }
 
   protected validateChunk(chunk: string, moduleNames: string[]): void {
     const script = chunk.endsWith("\n") ? chunk : chunk + "\n";
     const ast = parse(script);
-    const errors = analyze(ast, script, this.chapter, this.groups, [], moduleNames);
+    const preludeNames = CHAPTER_PRELUDE_NAMES[this.chapter] ?? [];
+    const errors = analyze(ast, script, this.chapter, this.groups, preludeNames, moduleNames);
     if (errors.length > 0) throw errors[0];
   }
 }
@@ -189,8 +291,13 @@ export class PyodideEvaluator4 extends ChapterPyodideEvaluator {
 }
 
 /** Full, unrestricted Python — no chapter feature gate (see class doc on
- * PyodideEvaluatorBase). */
+ * PyodideEvaluatorBase), and the whole sourceacademy-sicp package bridged in
+ * rather than a chapter's subset. */
 export class PyodideEvaluatorFull extends PyodideEvaluatorBase {
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor, "*");
+  }
+
   protected validateChunk(): void {
     // No-op: Python Full accepts anything CPython itself accepts.
   }
