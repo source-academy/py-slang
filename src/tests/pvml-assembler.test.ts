@@ -176,5 +176,35 @@ print(total)
       const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       expect(() => assemble(program)).toThrow();
     });
+
+    test("a list literal over 255 elements is rejected for native Pynter, not silently truncated", () => {
+      // NEWA's operand is a genuine wire-format uint8 (see pvml-compiler.ts's
+      // visitListExpr) — a 256-element literal would otherwise assemble
+      // with a pre-sized-array count of 0, a real (formerly undetected)
+      // heap-corruption risk on the native VM.
+      const code = `[${Array.from({ length: 256 }, (_, i) => i).join(", ")}]\n`;
+      const ast = parse(code);
+      expect(() =>
+        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
+      ).toThrow(/255/);
+    });
+
+    test("a 255-element list literal compiles fine for native Pynter (boundary check)", () => {
+      const code = `[${Array.from({ length: 255 }, (_, i) => i).join(", ")}]\n`;
+      const ast = parse(code);
+      expect(() =>
+        PVMLCompiler.fromProgram(ast, 4, undefined, false, true).compileProgram(ast),
+      ).not.toThrow();
+    });
+  });
+
+  describe("legacyArraySemantics indexing", () => {
+    test("indexing a non-array value raises a clean error, not a raw JS TypeError", () => {
+      // Previously, loadArrayElement's legacyArraySemantics branch accessed
+      // `arr.elements` before checking `arr` was actually an array, so
+      // indexing e.g. a bool crashed with "Cannot read properties of
+      // undefined" instead of a proper interpreter error.
+      expect(() => roundTrip("print(True[0])\n")).toThrow("Cannot index non-array value");
+    });
   });
 });

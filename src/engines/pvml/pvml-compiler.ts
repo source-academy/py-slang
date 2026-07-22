@@ -517,6 +517,19 @@ export class PVMLCompiler
     );
 
     if (this.targetsPynter) {
+      // NEWA's operand is a genuine wire-format uint8 for native Pynter
+      // (pynter/opcode.h's `oneindex` struct, shared with LDLG/STLG/CALL/
+      // etc. — see pvml-assembler.ts's putU(8, ...) for this opcode) — not
+      // just an assembler convenience width. A literal beyond this silently
+      // truncates (e.g. 256 elements assembles as operand 0), pre-sizing
+      // the array far smaller than the STAG stores that follow will write
+      // into. Rejecting at compile time, same as CALLA/CALLTA spreading
+      // below, is the appropriate fix rather than a wire-format change; the
+      // browser-only pathway below has no such fixed-width constraint, so
+      // the check is scoped to this branch.
+      if (n > 255) {
+        throw new Error(`List literal exceeds maximum supported size of 255 elements (got ${n})`);
+      }
       // NEWA's operand is the list literal's final element count: native
       // Pynter's op_new_a pre-sizes the array to it up front (siarray_new(n)
       // with count set to n immediately, all slots initially undef), rather

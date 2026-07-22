@@ -355,6 +355,41 @@ export const LIST_REPEAT_FX = wasm
     ),
     local.set("$new_len", i32.mul(local.get("$src_len"), local.get("$count"))),
 
+    // i32.mul wraps silently on overflow (no trap) -- both multiplications
+    // above (src_len * count) and below (new_len * 12, the per-element byte
+    // size) can overflow for a large-enough list/count. Unchecked, that
+    // wraps $new_len (or its byte size) down to something small, MALLOC_FX
+    // under-allocates, and the copy loop below -- which still runs $count
+    // times over $src_len real elements -- writes past the allocation: a
+    // heap buffer overflow. Guard both: recompute src_len from new_len/count
+    // (recovers the pre-wrap value only if no overflow occurred -- guarded
+    // by $count != 0 since i32.and/or don't short-circuit in Wasm, unlike
+    // JS, so an unconditional div_u here would itself trap for `list * 0`),
+    // and bound new_len so its own *12+header can't overflow either.
+    wasm
+      .if(i32.ne(local.get("$count"), i32.const(0)))
+      .then(
+        wasm
+          .if(
+            i32.ne(i32.div_u(local.get("$new_len"), local.get("$count")), local.get("$src_len")),
+          )
+          .then(
+            wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.OUT_OF_MEMORY))),
+            wasm.unreachable(),
+          ),
+      ),
+    wasm
+      .if(
+        i32.gt_u(
+          local.get("$new_len"),
+          i32.const(Math.floor((0xffffffff - GC_OBJECT_HEADER_SIZE) / 12)),
+        ),
+      )
+      .then(
+        wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.OUT_OF_MEMORY))),
+        wasm.unreachable(),
+      ),
+
     local.set(
       "$new_ptr",
       wasm

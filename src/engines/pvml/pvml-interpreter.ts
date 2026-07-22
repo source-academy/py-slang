@@ -1934,8 +1934,11 @@ export class PVMLInterpreter {
     const arr = this.pop();
 
     if (this.legacyArraySemantics) {
+      if (typeof arr !== "string" && (!isPVMLObject(arr) || arr.type !== "array")) {
+        throw new Error("Cannot index non-array value");
+      }
       const idx = Number(indexValue);
-      const elements = typeof arr === "string" ? [...arr] : (arr as PVMLArray).elements;
+      const elements = typeof arr === "string" ? [...arr] : arr.elements;
       // Mirrors native Pynter's siarray_get: an out-of-bounds read isn't a
       // fault, it yields undefined. See legacyArraySemantics' doc comment.
       this.push(idx >= 0 && idx < elements.length ? elements[idx] : undefined);
