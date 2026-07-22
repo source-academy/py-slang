@@ -53,7 +53,7 @@ export default async function init(props: Record<string, unknown> = {}): Promise
   alloc_heap(0x10000);
 
   const readReturnValue = (resPtr: number): PynterValue => {
-    const u8 = module.HEAPU8 as Uint8Array;
+    const u8 = module.HEAPU8;
     const dv = new DataView(u8.buffer);
     const type = dv.getUint32(resPtr, true);
     const raw32 = dv.getUint32(resPtr + 4, true);
