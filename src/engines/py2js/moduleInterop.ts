@@ -104,9 +104,6 @@ export async function pythonToModule(
 ): Promise<TypedValue<DataType>> {
   switch (typeof value) {
     case "bigint":
-      // Module signatures only know NUMBER; crosses as a float, same as
-      // every other engine's converter (CSE's modules.ts, WASM's
-      // moduleInterop.ts).
       return { type: DataType.NUMBER, value: Number(value) };
     case "number":
       return { type: DataType.NUMBER, value };
@@ -220,6 +217,12 @@ export async function moduleToPython(
   switch (value.type) {
     case DataType.NUMBER:
       return value.value;
+    case DataType.INTEGER:
+      // py-slang never produces DataType.INTEGER itself (see pythonToModule's "bigint" case
+      // above) - per Martin, integers stay out of the module interface entirely, numbers crossing
+      // a module boundary are always floats. Only here for switch exhaustiveness over conductor's
+      // DataType enum.
+      return Number(value.value);
     case DataType.BOOLEAN:
       return value.value;
     case DataType.CONST_STRING:

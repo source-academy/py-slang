@@ -41,6 +41,11 @@ export async function moduleToPvml(
   switch (value.type) {
     case DataType.NUMBER:
       return value.value;
+    case DataType.INTEGER:
+      // py-slang never produces DataType.INTEGER itself (see pvmlToModule's bigint case below) -
+      // per Martin, integers stay out of the module interface entirely, numbers crossing a module
+      // boundary are always floats. Only here for switch exhaustiveness over conductor's DataType.
+      return Number(value.value);
     case DataType.BOOLEAN:
       return value.value;
     case DataType.CONST_STRING:

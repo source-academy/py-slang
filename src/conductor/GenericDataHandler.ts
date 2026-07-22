@@ -243,11 +243,11 @@ export class GenericDataHandler implements IDataHandler {
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
-    return this.closureMap.get(c.value)?.func(...args) as AsyncGenerator<
-      void,
-      TypedValue<NoInfer<T>>,
-      undefined
-    >;
+    const closure = this.closureMap.get(c.value);
+    if (closure === undefined) {
+      throw new Error(`Invalid closure identifier: ${c.value}`);
+    }
+    return closure.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
   }
   /**
    * Fast path for a closure that provably never needs to leave the current
