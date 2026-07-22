@@ -61,34 +61,55 @@ export class GenericDataHandler implements IDataHandler {
     this.pairMap.set(this.uniqueId++ as PairIdentifier, { head, tail });
     return Promise.resolve({ type: DataType.PAIR, value: (this.uniqueId - 1) as PairIdentifier });
   }
-  pair_head(p: TypedValue<DataType.PAIR>): Promise<TypedValue<DataType>> {
+  /**
+   * Bridges pair_head/pair_tail/pair_sethead/pair_settail/pair_assert onto a DataType.ARRAY value
+   * too, not just a genuine PAIR: per Martin, a pair is just a 2-element array, and module code is
+   * free to keep calling pair_head/pair_tail for clarity even once the underlying value it's
+   * handed is array-backed (e.g. a value pythonToModule built directly as an ARRAY). Reads/writes
+   * index 0/1 directly; throws the same "Invalid pair identifier" a genuine dangling PAIR would,
+   * for a dangling/too-short array.
+   */
+  private resolvePairView(
+    p: TypedValue<DataType.PAIR>,
+  ): { head: TypedValue<DataType>; tail: TypedValue<DataType> } & (
+    | { kind: "pair"; pair: { head: TypedValue<DataType>; tail: TypedValue<DataType> } }
+    | { kind: "array"; array: { type: DataType; elements: TypedValue<DataType>[] } }
+  ) {
+    if ((p.type as DataType) === DataType.ARRAY) {
+      const array = this.arrayMap.get(p.value as unknown as ArrayIdentifier<DataType>);
+      if (!array || array.elements.length < 2) {
+        throw new Error(`Invalid pair identifier: ${p.value}`);
+      }
+      return { kind: "array", array, head: array.elements[0], tail: array.elements[1] };
+    }
     const pair = this.pairMap.get(p.value);
     if (!pair) {
       throw new Error(`Invalid pair identifier: ${p.value}`);
     }
-    return Promise.resolve(pair.head);
+    return { kind: "pair", pair, head: pair.head, tail: pair.tail };
+  }
+  pair_head(p: TypedValue<DataType.PAIR>): Promise<TypedValue<DataType>> {
+    return Promise.resolve(this.resolvePairView(p).head);
   }
   pair_sethead(p: TypedValue<DataType.PAIR>, tv: TypedValue<DataType>): Promise<void> {
-    const pair = this.pairMap.get(p.value);
-    if (!pair) {
-      throw new Error(`Invalid pair identifier: ${p.value}`);
+    const view = this.resolvePairView(p);
+    if (view.kind === "array") {
+      view.array.elements[0] = tv;
+    } else {
+      view.pair.head = tv;
     }
-    pair.head = tv;
     return Promise.resolve();
   }
   pair_tail(p: TypedValue<DataType.PAIR>): Promise<TypedValue<DataType>> {
-    const pair = this.pairMap.get(p.value);
-    if (!pair) {
-      throw new Error(`Invalid pair identifier: ${p.value}`);
-    }
-    return Promise.resolve(pair.tail);
+    return Promise.resolve(this.resolvePairView(p).tail);
   }
   pair_settail(p: TypedValue<DataType.PAIR>, tv: TypedValue<DataType>): Promise<void> {
-    const pair = this.pairMap.get(p.value);
-    if (!pair) {
-      throw new Error(`Invalid pair identifier: ${p.value}`);
+    const view = this.resolvePairView(p);
+    if (view.kind === "array") {
+      view.array.elements[1] = tv;
+    } else {
+      view.pair.tail = tv;
     }
-    pair.tail = tv;
     return Promise.resolve();
   }
   pair_assert(
@@ -96,15 +117,12 @@ export class GenericDataHandler implements IDataHandler {
     headType?: DataType,
     tailType?: DataType,
   ): Promise<void> {
-    const pair = this.pairMap.get(p.value);
-    if (!pair) {
-      throw new Error(`Invalid pair identifier: ${p.value}`);
+    const { head, tail } = this.resolvePairView(p);
+    if (headType && head.type !== headType) {
+      throw new Error(`Expected head of type ${headType}, got ${head.type}`);
     }
-    if (headType && pair.head.type !== headType) {
-      throw new Error(`Expected head of type ${headType}, got ${pair.head.type}`);
-    }
-    if (tailType && pair.tail.type !== tailType) {
-      throw new Error(`Expected tail of type ${tailType}, got ${pair.tail.type}`);
+    if (tailType && tail.type !== tailType) {
+      throw new Error(`Expected tail of type ${tailType}, got ${tail.type}`);
     }
     return Promise.resolve();
   }
@@ -243,11 +261,11 @@ export class GenericDataHandler implements IDataHandler {
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
-    return this.closureMap.get(c.value)?.func(...args) as AsyncGenerator<
-      void,
-      TypedValue<NoInfer<T>>,
-      undefined
-    >;
+    const closure = this.closureMap.get(c.value);
+    if (closure === undefined) {
+      throw new Error(`Invalid closure identifier: ${c.value}`);
+    }
+    return closure.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
   }
   /**
    * Fast path for a closure that provably never needs to leave the current
@@ -332,39 +350,53 @@ export class GenericDataHandler implements IDataHandler {
     );
     return list;
   }
-  is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
+  /**
+   * Reads every generic list helper's elements uniformly: an ARRAY is already flat (its elements
+   * read straight off array_get, no walking needed), while a PAIR/EMPTY_LIST chain is walked node
+   * by node the old way. Per Martin: a pair is just a 2-element array, not a distinct concept, so
+   * these helpers treat both shapes as equally valid "list" inputs rather than only recognizing
+   * the PAIR/EMPTY_LIST chain - this is what lets pythonToModule (CSE/PVML/py2js) freely encode a
+   * Python list as DataType.ARRAY without breaking a module that calls list_to_vec/is_list/length/
+   * accumulate on it (sound, midi, ...), with zero changes needed on the module's side. Throws the
+   * same "Expected a list, got type X" a caller relying on that message already handles.
+   */
+  private readListElements(xs: TypedValue<DataType>): TypedValue<DataType>[] {
+    if (xs.type === DataType.ARRAY) {
+      const array = this.arrayMap.get(xs.value);
+      if (!array) {
+        throw new Error(`Invalid array identifier: ${xs.value}`);
+      }
+      return array.elements;
+    }
+    const result: TypedValue<DataType>[] = [];
     let current: TypedValue<DataType> = xs;
     while (current.type !== DataType.EMPTY_LIST) {
       if (current.type !== DataType.PAIR) {
-        return Promise.resolve(false);
+        throw new Error(`Expected a list, got type ${current.type}`);
       }
       const pair = this.pairMap.get(current.value);
-      if (pair === undefined) {
-        return Promise.resolve(false);
+      if (!pair) {
+        throw new Error(`Invalid pair identifier: ${current.value}`);
       }
+      result.push(pair.head);
       current = pair.tail;
     }
-    return Promise.resolve(true);
+    return result;
+  }
+  is_list(xs: TypedValue<DataType.LIST>): Promise<boolean> {
+    try {
+      this.readListElements(xs);
+      return Promise.resolve(true);
+    } catch {
+      return Promise.resolve(false);
+    }
   }
   list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
-    return new Promise((resolve, reject) => {
-      const result: TypedValue<DataType>[] = [];
-      let current: TypedValue<DataType> = xs;
-      while (current.type !== DataType.EMPTY_LIST) {
-        if (current.type !== DataType.PAIR) {
-          reject(new Error(`Expected a list, got type ${current.type}`));
-          return;
-        }
-        const pair = this.pairMap.get(current.value);
-        if (!pair) {
-          reject(new Error(`Invalid pair identifier: ${current.value}`));
-          return;
-        }
-        result.push(pair.head);
-        current = pair.tail;
-      }
-      resolve(result);
-    });
+    try {
+      return Promise.resolve(this.readListElements(xs));
+    } catch (e) {
+      return Promise.reject(e);
+    }
   }
   async *accumulate<T extends Exclude<DataType, DataType.VOID>>(
     op: TypedValue<DataType.CLOSURE, T>,
@@ -373,35 +405,13 @@ export class GenericDataHandler implements IDataHandler {
     _resultType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     let acc = initial;
-    let current: TypedValue<DataType> = sequence;
-    while (current.type !== DataType.EMPTY_LIST) {
-      if (current.type !== DataType.PAIR) {
-        throw new Error(`Expected a list, got type ${current.type}`);
-      }
-      const pair = this.pairMap.get(current.value);
-      if (!pair) {
-        throw new Error(`Invalid pair identifier: ${current.value}`);
-      }
-      acc = yield* this.closure_call_unchecked(op, [acc, pair.head]);
-      current = pair.tail;
+    for (const element of this.readListElements(sequence)) {
+      acc = yield* this.closure_call_unchecked(op, [acc, element]);
     }
     return acc;
   }
   length(xs: TypedValue<DataType.LIST>): Promise<number> {
-    let length = 0;
-    let current: TypedValue<DataType> = xs;
-    while (current.type !== DataType.EMPTY_LIST) {
-      if (current.type !== DataType.PAIR) {
-        throw new Error(`Expected a list, got type ${current.type}`);
-      }
-      const pair = this.pairMap.get(current.value);
-      if (!pair) {
-        throw new Error(`Invalid pair identifier: ${current.value}`);
-      }
-      length++;
-      current = pair.tail;
-    }
-    return Promise.resolve(length);
+    return Promise.resolve(this.readListElements(xs).length);
   }
 }
 

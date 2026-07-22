@@ -38,12 +38,14 @@
  * 2-element list are the same runtime value here (see runtime.ts's PyList
  * doc comment), so pythonToModule's array check below handles a chapter-2
  * pair() and a chapter-3+ literal list identically, mirroring the CSE
- * converter's "list" case, which makes exactly the same non-distinction —
- * while DataType.ARRAY module values are rejected with a clear error, since
- * no py-slang Python chapter has a native fixed-length array type the way
- * js-slang's Source does. Complex numbers are likewise not supported
- * crossing the boundary (matching the CSE converter's identical
- * restriction).
+ * converter's "list" case, which makes exactly the same non-distinction.
+ * DataType.ARRAY (an untyped, recursively-converted module array — e.g.
+ * scrabble's word lists) round-trips as a genuine PyValue[] on the way out,
+ * mirroring CSE's/PVML's identical DataType.ARRAY handling; there's no
+ * ARRAY-consuming direction yet (pythonToModule never constructs one - no
+ * module currently takes a Python list as an ARRAY-typed argument). Complex
+ * numbers are likewise not supported crossing the boundary (matching the CSE
+ * converter's identical restriction).
  */
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
@@ -104,9 +106,6 @@ export async function pythonToModule(
 ): Promise<TypedValue<DataType>> {
   switch (typeof value) {
     case "bigint":
-      // Module signatures only know NUMBER; crosses as a float, same as
-      // every other engine's converter (CSE's modules.ts, WASM's
-      // moduleInterop.ts).
       return { type: DataType.NUMBER, value: Number(value) };
     case "number":
       return { type: DataType.NUMBER, value };
@@ -176,22 +175,32 @@ export async function pythonToModule(
       if (value === null) return { type: DataType.EMPTY_LIST, value: null };
       if (value instanceof PyOpaque) return value.typed;
       if (Array.isArray(value)) {
-        // A 2-element PyList — chapter 2's pair()/llist() and chapter 3+'s
-        // `[a, b]` literal alike, no representational difference (see the
-        // file header) — round-trips as a module pair via dh.pair_make. Any
-        // other length has no module-side representation any more than a
-        // DataType.ARRAY does (see moduleToPython's DataType.ARRAY case);
-        // dh.pair_make itself is the arity check.
-        if (value.length !== 2) {
-          throw new Py2JsRuntimeError(
-            "TypeError",
-            "only a 2-element list (a pair) can cross into a module, not an arbitrary-length list",
+        // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+        // concept - build every PyList (of any length, 2 included, whether it's a fresh literal, a
+        // pair()/llist() result, or a module PAIR round-tripped back through Python) the same way,
+        // as a flat DataType.ARRAY, recursively converting each element. No more length-based
+        // rejection needed - list_to_vec/pair_head/pair_tail (see GenericDataHandler) already read
+        // an ARRAY the same as a PAIR/EMPTY_LIST chain, so a module declaring LIST or PAIR still
+        // works unchanged.
+        //
+        // No empty-list special case: EMPTY_LIST is also what Python's None maps to (see
+        // moduleToPython's own EMPTY_LIST case), so returning it here for [] would make [] and
+        // None collide on the way back out - exactly the kind of ambiguity this whole redesign
+        // exists to remove. A genuine 0-length ARRAY round-trips back through moduleToPython's
+        // ARRAY case as a real [], not None.
+        const elements = await Promise.all(value.map(el => pythonToModule(rt, dh, el)));
+        const array = await dh.array_make(DataType.ANY, elements.length, {
+          type: DataType.VOID,
+          value: undefined,
+        });
+        for (let i = 0; i < elements.length; i++) {
+          await dh.array_set(
+            array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+            i,
+            elements[i],
           );
         }
-        return dh.pair_make(
-          await pythonToModule(rt, dh, value[0]),
-          await pythonToModule(rt, dh, value[1]),
-        );
+        return array;
       }
       throw new Py2JsRuntimeError(
         "TypeError",
@@ -200,6 +209,25 @@ export async function pythonToModule(
     default:
       throw new Py2JsRuntimeError("TypeError", "unsupported value in module interop");
   }
+}
+
+/**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  dh: IDataHandler,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await dh.pair_head(value), await dh.pair_tail(value)];
+  }
+  const length = await dh.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => dh.array_get(value, i)));
 }
 
 /**
@@ -220,6 +248,12 @@ export async function moduleToPython(
   switch (value.type) {
     case DataType.NUMBER:
       return value.value;
+    case DataType.INTEGER:
+      // py-slang never produces DataType.INTEGER itself (see pythonToModule's "bigint" case
+      // above) - per Martin, integers stay out of the module interface entirely, numbers crossing
+      // a module boundary are always floats. Only here for switch exhaustiveness over conductor's
+      // DataType enum.
+      return Number(value.value);
     case DataType.BOOLEAN:
       return value.value;
     case DataType.CONST_STRING:
@@ -263,27 +297,20 @@ export async function moduleToPython(
       return f;
     }
     case DataType.PAIR:
-      // A module PAIR (e.g. sound's Sound, a (wave, duration) dotted pair)
-      // round-trips as a 2-element PyList — mirroring the CSE converter's
-      // "list" case for DataType.PAIR, which makes the same non-distinction
-      // (see the file header). Not necessarily a *proper* list: the second
-      // element need not itself be a pair or None, same as CSE's.
-      return [
-        await moduleToPython(rt, dh, await dh.pair_head(value)),
-        await moduleToPython(rt, dh, await dh.pair_tail(value)),
-      ];
-    case DataType.ARRAY:
-      // See file header: no py-slang Python chapter has a native
-      // fixed-length array/list-literal type to represent this as, and no
-      // way to consume one anyway, unlike DataType.PAIR above. (DataType
-      // also has a LIST member, but it's a type-level PAIR-or-EMPTY_LIST
-      // marker, not a tag any concrete TypedValue ever actually carries —
-      // TypeScript's own TypedValue<DataType> union excludes it, so there
-      // is no runtime case for it here.)
-      throw new Py2JsRuntimeError(
-        "TypeError",
-        `module values of type "${DataType[value.type]}" are not supported by py2js`,
-      );
+    case DataType.ARRAY: {
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType. A
+      // Python list here is just a plain PyValue[] (see runtime.ts's PyList doc comment).
+      // Deliberately NOT list_to_vec: that expects a chain terminating in EMPTY_LIST (a *proper
+      // list*), which a raw dotted pair (e.g. sound's Sound, a (wave, duration) pair) doesn't
+      // satisfy - this reads exactly the compound value's own elements, nothing more.
+      const elements = await readCompoundElements(dh, value);
+      const result: PyValue[] = [];
+      for (const el of elements) {
+        result.push(await moduleToPython(rt, dh, el, name));
+      }
+      return result;
+    }
   }
 }
 

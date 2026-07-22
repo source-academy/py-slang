@@ -131,7 +131,12 @@ describe("moduleToPython", () => {
     expect((result as PyOpaque).typed).toBe(typed);
   });
 
-  test("PAIR round-trips through a 2-element PyList; ARRAY is still rejected", async () => {
+  test("PAIR round-trips through a 2-element PyList, back into an ARRAY", async () => {
+    // Per Martin: a pair is just an array of length 2 - a module PAIR (e.g. sound's Sound, a
+    // dotted (wave, duration) pair) round-trips out as a 2-element PyList, and passing it back in
+    // now builds a flat ARRAY (uniformly, like any other list) rather than reconstructing a PAIR.
+    // pair_head/pair_tail still read the same two elements off it either way (GenericDataHandler's
+    // ARRAY bridge, covered in GenericDataHandler.test.ts).
     const dh = new GenericDataHandler();
     const rt = makeRt();
     const pair = await dh.pair_make(
@@ -143,7 +148,7 @@ describe("moduleToPython", () => {
     expect(native).toEqual([1, 2]);
 
     const roundTripped = await pythonToModule(rt, dh, native);
-    expect(roundTripped.type).toBe(DataType.PAIR);
+    expect(roundTripped.type).toBe(DataType.ARRAY);
     expect(await dh.pair_head(roundTripped as TypedValue<DataType.PAIR>)).toEqual({
       type: DataType.NUMBER,
       value: 1,
@@ -152,24 +157,45 @@ describe("moduleToPython", () => {
       type: DataType.NUMBER,
       value: 2,
     });
-
-    const arr = await dh.array_make(DataType.NUMBER, 2);
-    await expect(moduleToPython(rt, dh, arr)).rejects.toThrow(Py2JsRuntimeError);
   });
 
-  test("a chapter-3 native list literal (not built via pair()) now crosses into a module too", async () => {
-    // Before pairs and lists were unified into one PyList representation,
-    // pythonToModule's "object" case only recognized PyPair — a genuine
-    // [1, 2] literal (typeof "object", but not instanceof PyPair) fell
-    // through to the generic "complex values are not supported" error, a
-    // misleading message for what was actually just an unhandled list. Once
-    // the type check became Array.isArray, a 2-element literal list crosses
-    // exactly like a pair() result does — there's no representational
-    // difference for pythonToModule to even distinguish them by.
+  test("ARRAY converts to a genuine flat PyList, recursively (e.g. scrabble's word lists)", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const arr = await dh.array_make(DataType.CONST_STRING, 2);
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
+      type: DataType.CONST_STRING,
+      value: "cat",
+    });
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, {
+      type: DataType.CONST_STRING,
+      value: "dog",
+    });
+
+    expect(await moduleToPython(rt, dh, arr)).toEqual(["cat", "dog"]);
+  });
+
+  test("a nested ARRAY (array of arrays) converts to a nested PyList", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const inner = await dh.array_make(DataType.CONST_STRING, 1);
+    await dh.array_set(inner as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
+      type: DataType.CONST_STRING,
+      value: "a",
+    });
+    const outer = await dh.array_make(DataType.ARRAY, 1, inner);
+
+    expect(await moduleToPython(rt, dh, outer)).toEqual([["a"]]);
+  });
+
+  test("a chapter-3 native list literal converts to a flat ARRAY, same as any other length", async () => {
+    // Per Martin: a pair is just an array of length 2, not a distinct concept - a genuine [10, 20]
+    // literal (typeof "object", an Array) converts exactly like any other Python list now, as a
+    // flat ARRAY, with no special-casing by length.
     const dh = new GenericDataHandler();
     const rt = makeRt();
     const typed = await pythonToModule(rt, dh, [10n, 20n]);
-    expect(typed.type).toBe(DataType.PAIR);
+    expect(typed.type).toBe(DataType.ARRAY);
     expect(await dh.pair_head(typed as TypedValue<DataType.PAIR>)).toEqual({
       type: DataType.NUMBER,
       value: 10,
@@ -180,10 +206,29 @@ describe("moduleToPython", () => {
     });
   });
 
-  test("an N-element (N != 2) list has no module representation and throws clearly, not silently truncating", async () => {
+  test("an N-element (N != 2) list now converts to a flat ARRAY too, instead of throwing", async () => {
     const dh = new GenericDataHandler();
     const rt = makeRt();
-    await expect(pythonToModule(rt, dh, [1n, 2n, 3n])).rejects.toThrow(/2-element list/);
+    const typed = await pythonToModule(rt, dh, [1n, 2n, 3n]);
+    expect(typed.type).toBe(DataType.ARRAY);
+    await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+      { type: DataType.NUMBER, value: 1 },
+      { type: DataType.NUMBER, value: 2 },
+      { type: DataType.NUMBER, value: 3 },
+    ]);
+  });
+
+  test("an empty list literal converts to a 0-length ARRAY, not EMPTY_LIST, and round-trips back to []", async () => {
+    // Regression test: EMPTY_LIST is also what Python's None maps to (see moduleToPython's own
+    // EMPTY_LIST case) - if [] built EMPTY_LIST here, moduleToPython(pythonToModule([])) would
+    // round-trip back as None instead of [], exactly the ambiguity this redesign removes
+    // elsewhere.
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const typed = await pythonToModule(rt, dh, []);
+    expect(typed.type).toBe(DataType.ARRAY);
+    await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([]);
+    await expect(moduleToPython(rt, dh, typed)).resolves.toEqual([]);
   });
 
   test("CLOSURE becomes an asyncOnly PyFunction", async () => {
