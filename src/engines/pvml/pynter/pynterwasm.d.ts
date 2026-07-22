@@ -12,7 +12,7 @@ declare namespace RuntimeExports {
     returnType?: (string | null) | undefined,
     argTypes?: any[] | undefined,
     args?: any[] | undefined,
-    opts?: any | undefined,
+    opts?: Object | undefined,
   ): any;
   /**
    * @param {string=} returnType
@@ -23,10 +23,9 @@ declare namespace RuntimeExports {
     ident: any,
     returnType?: string | undefined,
     argTypes?: any[] | undefined,
-    opts?: any | undefined,
+    opts?: Object | undefined,
   ): any;
-  let HEAP8: any;
-  let HEAPU8: any;
+  let HEAPU8: Uint8Array;
 }
 interface WasmModule {
   _siwasm_alloc_heap(_0: number): void;

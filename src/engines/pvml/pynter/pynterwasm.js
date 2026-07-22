@@ -1,14 +1,13 @@
 /* eslint-disable */
-var sinterwasm = (() => {
+var pynterwasm = (() => {
   var _scriptName = globalThis.document?.currentScript?.src;
   return async function (moduleArg = {}) {
-    var moduleRtn;
     var Module = moduleArg;
     var ENVIRONMENT_IS_WEB = !!globalThis.window;
     var ENVIRONMENT_IS_WORKER = !!globalThis.WorkerGlobalScope;
     var ENVIRONMENT_IS_NODE =
       globalThis.process?.versions?.node && globalThis.process?.type != "renderer";
-    var arguments_ = [];
+    var programArgs = [];
     var thisProgram = "./this.program";
     var quit_ = (status, toThrow) => {
       throw toThrow;
@@ -42,7 +41,7 @@ var sinterwasm = (() => {
       if (process.argv.length > 1) {
         thisProgram = process.argv[1].replace(/\\/g, "/");
       }
-      arguments_ = process.argv.slice(2);
+      programArgs = process.argv.slice(2);
       quit_ = (status, toThrow) => {
         process.exitCode = status;
         throw toThrow;
@@ -94,10 +93,17 @@ var sinterwasm = (() => {
     var isFileURI = filename => filename.startsWith("file://");
     class EmscriptenEH {}
     class EmscriptenSjLj extends EmscriptenEH {}
-    var readyPromiseResolve, readyPromiseReject;
     var runtimeInitialized = false;
+    function getMemoryBuffer() {
+      try {
+        var b = wasmMemory.toResizableBuffer();
+        return b;
+      } catch {}
+      return wasmMemory.buffer;
+    }
     function updateMemoryViews() {
-      var b = wasmMemory.buffer;
+      if (HEAP8?.buffer?.resizable) return;
+      var b = getMemoryBuffer();
       HEAP8 = new Int8Array(b);
       HEAP16 = new Int16Array(b);
       Module["HEAPU8"] = HEAPU8 = new Uint8Array(b);
@@ -110,24 +116,22 @@ var sinterwasm = (() => {
       HEAPU64 = new BigUint64Array(b);
     }
     function preRun() {
-      if (Module["preRun"]) {
-        if (typeof Module["preRun"] == "function") Module["preRun"] = [Module["preRun"]];
-        while (Module["preRun"].length) {
-          addOnPreRun(Module["preRun"].shift());
-        }
+      var preRun = Module["preRun"];
+      if (preRun) {
+        if (typeof preRun == "function") preRun = [preRun];
+        onPreRuns.push(...preRun);
       }
       callRuntimeCallbacks(onPreRuns);
     }
     function initRuntime() {
       runtimeInitialized = true;
-      wasmExports["j"]();
+      wasmExports["m"]();
     }
     function postRun() {
-      if (Module["postRun"]) {
-        if (typeof Module["postRun"] == "function") Module["postRun"] = [Module["postRun"]];
-        while (Module["postRun"].length) {
-          addOnPostRun(Module["postRun"].shift());
-        }
+      var postRun = Module["postRun"];
+      if (postRun) {
+        if (typeof postRun == "function") postRun = [postRun];
+        onPostRuns.push(...postRun);
       }
       callRuntimeCallbacks(onPostRuns);
     }
@@ -138,17 +142,13 @@ var sinterwasm = (() => {
       ABORT = true;
       what += ". Build with -sASSERTIONS for more info.";
       var e = new WebAssembly.RuntimeError(what);
-      readyPromiseReject?.(e);
       throw e;
     }
     var wasmBinaryFile;
     function findWasmBinary() {
-      return locateFile("sinterwasm.wasm");
+      return locateFile("pynterwasm.wasm");
     }
     function getBinarySync(file) {
-      if (file == wasmBinaryFile && wasmBinary) {
-        return new Uint8Array(wasmBinary);
-      }
       if (readBinary) {
         return readBinary(file);
       }
@@ -191,7 +191,7 @@ var sinterwasm = (() => {
       return imports;
     }
     async function createWasm() {
-      function receiveInstance(instance, module) {
+      function receiveInstance(instance) {
         wasmExports = instance.exports;
         assignWasmExports(wasmExports);
         updateMemoryViews();
@@ -201,11 +201,10 @@ var sinterwasm = (() => {
         return receiveInstance(result["instance"]);
       }
       var info = getWasmImports();
-      if (Module["instantiateWasm"]) {
-        return new Promise((resolve, reject) => {
-          Module["instantiateWasm"](info, (inst, mod) => {
-            resolve(receiveInstance(inst, mod));
-          });
+      var instantiateWasm = Module["instantiateWasm"];
+      if (instantiateWasm) {
+        return new Promise(resolve => {
+          instantiateWasm(info, inst => resolve(receiveInstance(inst)));
         });
       }
       wasmBinaryFile ??= findWasmBinary();
@@ -236,12 +235,60 @@ var sinterwasm = (() => {
       }
     };
     var onPostRuns = [];
-    var addOnPostRun = cb => onPostRuns.push(cb);
     var onPreRuns = [];
-    var addOnPreRun = cb => onPreRuns.push(cb);
     var noExitRuntime = true;
     var stackRestore = val => __emscripten_stack_restore(val);
     var stackSave = () => _emscripten_stack_get_current();
+    var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
+    var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
+      var maxIdx = idx + maxBytesToRead;
+      if (ignoreNul) return maxIdx;
+      while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
+      return idx;
+    };
+    var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
+      var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
+      if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
+        return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
+      }
+      var str = "";
+      while (idx < endPtr) {
+        var u0 = heapOrArray[idx++];
+        if (!(u0 & 128)) {
+          str += String.fromCharCode(u0);
+          continue;
+        }
+        var u1 = heapOrArray[idx++] & 63;
+        if ((u0 & 224) == 192) {
+          str += String.fromCharCode(((u0 & 31) << 6) | u1);
+          continue;
+        }
+        var u2 = heapOrArray[idx++] & 63;
+        if ((u0 & 240) == 224) {
+          u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
+        } else {
+          u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
+        }
+        if (u0 < 65536) {
+          str += String.fromCharCode(u0);
+        } else {
+          var ch = u0 - 65536;
+          str += String.fromCharCode(55296 | (ch >> 10), 56320 | (ch & 1023));
+        }
+      }
+      return str;
+    };
+    var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) =>
+      ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
+    var ___assert_fail = (condition, filename, line, func) =>
+      abort(
+        `Assertion failed: ${UTF8ToString(condition)}, at: ` +
+          [
+            filename ? UTF8ToString(filename) : "unknown filename",
+            line,
+            func ? UTF8ToString(func) : "unknown function",
+          ],
+      );
     var __emscripten_throw_longjmp = () => {
       throw new EmscriptenSjLj();
     };
@@ -286,45 +333,6 @@ var sinterwasm = (() => {
       return 70;
     }
     var printCharBuffers = [null, [], []];
-    var UTF8Decoder = globalThis.TextDecoder && new TextDecoder();
-    var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
-      var maxIdx = idx + maxBytesToRead;
-      if (ignoreNul) return maxIdx;
-      while (heapOrArray[idx] && !(idx >= maxIdx)) ++idx;
-      return idx;
-    };
-    var UTF8ArrayToString = (heapOrArray, idx = 0, maxBytesToRead, ignoreNul) => {
-      var endPtr = findStringEnd(heapOrArray, idx, maxBytesToRead, ignoreNul);
-      if (endPtr - idx > 16 && heapOrArray.buffer && UTF8Decoder) {
-        return UTF8Decoder.decode(heapOrArray.subarray(idx, endPtr));
-      }
-      var str = "";
-      while (idx < endPtr) {
-        var u0 = heapOrArray[idx++];
-        if (!(u0 & 128)) {
-          str += String.fromCharCode(u0);
-          continue;
-        }
-        var u1 = heapOrArray[idx++] & 63;
-        if ((u0 & 224) == 192) {
-          str += String.fromCharCode(((u0 & 31) << 6) | u1);
-          continue;
-        }
-        var u2 = heapOrArray[idx++] & 63;
-        if ((u0 & 240) == 224) {
-          u0 = ((u0 & 15) << 12) | (u1 << 6) | u2;
-        } else {
-          u0 = ((u0 & 7) << 18) | (u1 << 12) | (u2 << 6) | (heapOrArray[idx++] & 63);
-        }
-        if (u0 < 65536) {
-          str += String.fromCharCode(u0);
-        } else {
-          var ch = u0 - 65536;
-          str += String.fromCharCode(55296 | (ch >> 10), 56320 | (ch & 1023));
-        }
-      }
-      return str;
-    };
     var printChar = (stream, curr) => {
       var buffer = printCharBuffers[stream];
       if (curr === 0 || curr === 10) {
@@ -334,8 +342,6 @@ var sinterwasm = (() => {
         buffer.push(curr);
       }
     };
-    var UTF8ToString = (ptr, maxBytesToRead, ignoreNul) =>
-      ptr ? UTF8ArrayToString(HEAPU8, ptr, maxBytesToRead, ignoreNul) : "";
     var _fd_write = (fd, iov, iovcnt, pnum) => {
       var num = 0;
       for (var i = 0; i < iovcnt; i++) {
@@ -478,13 +484,13 @@ var sinterwasm = (() => {
       if (Module["noExitRuntime"]) noExitRuntime = Module["noExitRuntime"];
       if (Module["print"]) out = Module["print"];
       if (Module["printErr"]) err = Module["printErr"];
-      if (Module["wasmBinary"]) wasmBinary = Module["wasmBinary"];
-      if (Module["arguments"]) arguments_ = Module["arguments"];
+      if (Module["arguments"]) programArgs = Module["arguments"];
       if (Module["thisProgram"]) thisProgram = Module["thisProgram"];
-      if (Module["preInit"]) {
-        if (typeof Module["preInit"] == "function") Module["preInit"] = [Module["preInit"]];
-        while (Module["preInit"].length > 0) {
-          Module["preInit"].shift()();
+      var preInit = Module["preInit"];
+      if (preInit) {
+        if (typeof preInit == "function") Module["preInit"] = preInit = [preInit];
+        while (preInit.length > 0) {
+          preInit.shift()();
         }
       }
     }
@@ -503,27 +509,50 @@ var sinterwasm = (() => {
       wasmMemory,
       wasmTable;
     function assignWasmExports(wasmExports) {
-      _siwasm_alloc_heap = Module["_siwasm_alloc_heap"] = wasmExports["k"];
-      _siwasm_alloc = Module["_siwasm_alloc"] = wasmExports["l"];
-      _siwasm_free = Module["_siwasm_free"] = wasmExports["m"];
-      _siwasm_run = Module["_siwasm_run"] = wasmExports["n"];
-      _setThrew = wasmExports["p"];
-      __emscripten_stack_restore = wasmExports["q"];
-      __emscripten_stack_alloc = wasmExports["r"];
-      _emscripten_stack_get_current = wasmExports["s"];
-      memory = wasmMemory = wasmExports["i"];
-      __indirect_function_table = wasmTable = wasmExports["o"];
+      _siwasm_alloc_heap = Module["_siwasm_alloc_heap"] = wasmExports["n"];
+      _siwasm_alloc = Module["_siwasm_alloc"] = wasmExports["o"];
+      _siwasm_free = Module["_siwasm_free"] = wasmExports["p"];
+      _siwasm_run = Module["_siwasm_run"] = wasmExports["q"];
+      _setThrew = wasmExports["s"];
+      __emscripten_stack_restore = wasmExports["t"];
+      __emscripten_stack_alloc = wasmExports["u"];
+      _emscripten_stack_get_current = wasmExports["v"];
+      memory = wasmMemory = wasmExports["l"];
+      __indirect_function_table = wasmTable = wasmExports["r"];
     }
     var wasmImports = {
-      b: __emscripten_throw_longjmp,
+      a: ___assert_fail,
+      j: __emscripten_throw_longjmp,
       c: _emscripten_resize_heap,
       e: _fd_close,
       d: _fd_seek,
-      a: _fd_write,
-      f: invoke_ii,
+      b: _fd_write,
+      i: invoke_iiii,
+      k: invoke_iiiii,
       h: invoke_vi,
+      f: invoke_vii,
       g: invoke_viiiii,
     };
+    function invoke_iiiii(index, a1, a2, a3, a4) {
+      var sp = stackSave();
+      try {
+        return getWasmTableEntry(index)(a1, a2, a3, a4);
+      } catch (e) {
+        stackRestore(sp);
+        if (!(e instanceof EmscriptenEH)) throw e;
+        _setThrew(1, 0);
+      }
+    }
+    function invoke_iiii(index, a1, a2, a3) {
+      var sp = stackSave();
+      try {
+        return getWasmTableEntry(index)(a1, a2, a3);
+      } catch (e) {
+        stackRestore(sp);
+        if (!(e instanceof EmscriptenEH)) throw e;
+        _setThrew(1, 0);
+      }
+    }
     function invoke_vi(index, a1) {
       var sp = stackSave();
       try {
@@ -544,51 +573,36 @@ var sinterwasm = (() => {
         _setThrew(1, 0);
       }
     }
-    function invoke_ii(index, a1) {
+    function invoke_vii(index, a1, a2) {
       var sp = stackSave();
       try {
-        return getWasmTableEntry(index)(a1);
+        getWasmTableEntry(index)(a1, a2);
       } catch (e) {
         stackRestore(sp);
         if (!(e instanceof EmscriptenEH)) throw e;
         _setThrew(1, 0);
       }
     }
-    function run() {
+    async function run() {
       preRun();
-      function doRun() {
-        Module["calledRun"] = true;
-        if (ABORT) return;
-        initRuntime();
-        readyPromiseResolve?.(Module);
-        Module["onRuntimeInitialized"]?.();
-        postRun();
+      var setStatus = Module["setStatus"];
+      if (setStatus) {
+        setStatus("Running...");
+        await new Promise(resolve => setTimeout(resolve, 1));
+        setTimeout(setStatus, 1, "");
       }
-      if (Module["setStatus"]) {
-        Module["setStatus"]("Running...");
-        setTimeout(() => {
-          setTimeout(() => Module["setStatus"](""), 1);
-          doRun();
-        }, 1);
-      } else {
-        doRun();
-      }
+      if (ABORT) return;
+      initRuntime();
+      Module["onRuntimeInitialized"]?.();
+      postRun();
     }
     var wasmExports;
     wasmExports = await createWasm();
-    run();
-    if (runtimeInitialized) {
-      moduleRtn = Module;
-    } else {
-      moduleRtn = new Promise((resolve, reject) => {
-        readyPromiseResolve = resolve;
-        readyPromiseReject = reject;
-      });
-    }
-    return moduleRtn;
+    await run();
+    return Module;
   };
 })();
 if (typeof exports === "object" && typeof module === "object") {
-  module.exports = sinterwasm;
-  module.exports.default = sinterwasm;
-} else if (typeof define === "function" && define["amd"]) define([], () => sinterwasm);
+  module.exports = pynterwasm;
+  module.exports.default = pynterwasm;
+} else if (typeof define === "function" && define["amd"]) define([], () => pynterwasm);
