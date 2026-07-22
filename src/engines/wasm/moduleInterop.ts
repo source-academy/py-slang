@@ -96,6 +96,13 @@ async function typedToHostValue(
   switch (value.type) {
     case DataType.NUMBER:
       return { kind: "float", value: value.value };
+    case DataType.INTEGER:
+      // TODO: WASM's HostModuleValue has no integer kind yet (only
+      // "float"/"bool"/"string"/"none"/"pair"/"handle") - out of scope for
+      // this pass (CSE/py2js/PVML only), kept lossy like the other three
+      // engines were before their fix, just to stay exhaustive over DataType
+      // and keep this engine compiling against the new DataType.INTEGER.
+      return { kind: "float", value: Number(value.value) };
     case DataType.BOOLEAN:
       return { kind: "bool", value: value.value };
     case DataType.CONST_STRING:
