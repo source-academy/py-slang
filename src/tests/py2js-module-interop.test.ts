@@ -131,7 +131,7 @@ describe("moduleToPython", () => {
     expect((result as PyOpaque).typed).toBe(typed);
   });
 
-  test("PAIR round-trips through a 2-element PyList; ARRAY is still rejected", async () => {
+  test("PAIR round-trips through a 2-element PyList", async () => {
     const dh = new GenericDataHandler();
     const rt = makeRt();
     const pair = await dh.pair_make(
@@ -152,9 +152,35 @@ describe("moduleToPython", () => {
       type: DataType.NUMBER,
       value: 2,
     });
+  });
 
-    const arr = await dh.array_make(DataType.NUMBER, 2);
-    await expect(moduleToPython(rt, dh, arr)).rejects.toThrow(Py2JsRuntimeError);
+  test("ARRAY converts to a genuine flat PyList, recursively (e.g. scrabble's word lists)", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const arr = await dh.array_make(DataType.CONST_STRING, 2);
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
+      type: DataType.CONST_STRING,
+      value: "cat",
+    });
+    await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, {
+      type: DataType.CONST_STRING,
+      value: "dog",
+    });
+
+    expect(await moduleToPython(rt, dh, arr)).toEqual(["cat", "dog"]);
+  });
+
+  test("a nested ARRAY (array of arrays) converts to a nested PyList", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    const inner = await dh.array_make(DataType.CONST_STRING, 1);
+    await dh.array_set(inner as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
+      type: DataType.CONST_STRING,
+      value: "a",
+    });
+    const outer = await dh.array_make(DataType.ARRAY, 1, inner);
+
+    expect(await moduleToPython(rt, dh, outer)).toEqual([["a"]]);
   });
 
   test("a chapter-3 native list literal (not built via pair()) now crosses into a module too", async () => {

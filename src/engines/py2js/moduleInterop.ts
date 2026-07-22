@@ -38,12 +38,14 @@
  * 2-element list are the same runtime value here (see runtime.ts's PyList
  * doc comment), so pythonToModule's array check below handles a chapter-2
  * pair() and a chapter-3+ literal list identically, mirroring the CSE
- * converter's "list" case, which makes exactly the same non-distinction —
- * while DataType.ARRAY module values are rejected with a clear error, since
- * no py-slang Python chapter has a native fixed-length array type the way
- * js-slang's Source does. Complex numbers are likewise not supported
- * crossing the boundary (matching the CSE converter's identical
- * restriction).
+ * converter's "list" case, which makes exactly the same non-distinction.
+ * DataType.ARRAY (an untyped, recursively-converted module array — e.g.
+ * scrabble's word lists) round-trips as a genuine PyValue[] on the way out,
+ * mirroring CSE's/PVML's identical DataType.ARRAY handling; there's no
+ * ARRAY-consuming direction yet (pythonToModule never constructs one - no
+ * module currently takes a Python list as an ARRAY-typed argument). Complex
+ * numbers are likewise not supported crossing the boundary (matching the CSE
+ * converter's identical restriction).
  */
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
@@ -275,18 +277,17 @@ export async function moduleToPython(
         await moduleToPython(rt, dh, await dh.pair_head(value)),
         await moduleToPython(rt, dh, await dh.pair_tail(value)),
       ];
-    case DataType.ARRAY:
-      // See file header: no py-slang Python chapter has a native
-      // fixed-length array/list-literal type to represent this as, and no
-      // way to consume one anyway, unlike DataType.PAIR above. (DataType
-      // also has a LIST member, but it's a type-level PAIR-or-EMPTY_LIST
-      // marker, not a tag any concrete TypedValue ever actually carries —
-      // TypeScript's own TypedValue<DataType> union excludes it, so there
-      // is no runtime case for it here.)
-      throw new Py2JsRuntimeError(
-        "TypeError",
-        `module values of type "${DataType[value.type]}" are not supported by py2js`,
-      );
+    case DataType.ARRAY: {
+      // Untyped and recursive - see this file's header and CSE's/PVML's identical
+      // DataType.ARRAY handling. A Python list here is just a plain PyValue[] (see runtime.ts's
+      // PyList doc comment), so this is a direct element-by-element conversion, no wrapper needed.
+      const length = await dh.array_length(value);
+      const elements: PyValue[] = [];
+      for (let i = 0; i < length; i++) {
+        elements.push(await moduleToPython(rt, dh, await dh.array_get(value, i), name));
+      }
+      return elements;
+    }
   }
 }
 
