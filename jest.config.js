@@ -55,6 +55,11 @@ module.exports = {
   // file as real ESM (no __dirname; see src/tests/utils.ts's CPYTHON_BATCH_RUNNER),
   // incompatible with how the rest of the suite compiles. Run those two
   // files only via `yarn test:pyodide`, which overrides this ignore list.
-  testPathIgnorePatterns: ["/node_modules/", "/dist/", "PyodideEvaluator\\.test\\.ts", "pyodide-import-analyzer\\.test\\.ts"],
+  testPathIgnorePatterns: [
+    "/node_modules/",
+    "/dist/",
+    "PyodideEvaluator\\.test\\.ts",
+    "pyodide-import-analyzer\\.test\\.ts",
+  ],
   coverageReporters: ["lcov"],
 };
