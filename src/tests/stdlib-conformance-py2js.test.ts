@@ -21,6 +21,10 @@
  * Exclusions:
  *  - input: stream-based; py2js deliberately raises "not supported yet"
  *    while the CSE runner blocks on (closed) stdin — no comparable outcome.
+ *  - set_timeout / clear_all_timeout: implemented only by py2js so far
+ *    (source-academy/py-slang#311) — the CSE reference always raises "not
+ *    yet supported by the CSE machine" (src/stdlib/misc.ts), a permanent,
+ *    expected mismatch rather than a bridge bug.
  *  - random_random / time_time: nondeterministic values; success-vs-error
  *    only (KIND_ONLY).
  *  - print_llist on a *proper* list (llist(...) rendering, as opposed to the
@@ -43,7 +47,11 @@ const LITERALS = ["2", "2.5", "(1+2j)", "True", "'ab'", "None", "(lambda x: x)"]
 /** Chapter 2 adds "list" — always a pair, per operator-spec.ts's literalFor. */
 const CH2_LITERALS = [...LITERALS, "pair(1, 2)"];
 
-const SKIP = new Set(["input"]);
+// input: see below. set_timeout/clear_all_timeout: implemented only by
+// py2js so far (source-academy/py-slang#311) — the CSE reference always
+// throws "not yet supported", a permanent, expected mismatch, not a bridge
+// bug to catch.
+const SKIP = new Set(["input", "set_timeout", "clear_all_timeout"]);
 const KIND_ONLY = new Set(["random_random", "time_time"]);
 
 type Outcome = { kind: "value"; text: string } | { kind: "error" };
