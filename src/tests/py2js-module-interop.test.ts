@@ -218,13 +218,17 @@ describe("moduleToPython", () => {
     ]);
   });
 
-  test("an empty list literal converts to EMPTY_LIST, not an empty ARRAY", async () => {
+  test("an empty list literal converts to a 0-length ARRAY, not EMPTY_LIST, and round-trips back to []", async () => {
+    // Regression test: EMPTY_LIST is also what Python's None maps to (see moduleToPython's own
+    // EMPTY_LIST case) - if [] built EMPTY_LIST here, moduleToPython(pythonToModule([])) would
+    // round-trip back as None instead of [], exactly the ambiguity this redesign removes
+    // elsewhere.
     const dh = new GenericDataHandler();
     const rt = makeRt();
-    await expect(pythonToModule(rt, dh, [])).resolves.toEqual({
-      type: DataType.EMPTY_LIST,
-      value: null,
-    });
+    const typed = await pythonToModule(rt, dh, []);
+    expect(typed.type).toBe(DataType.ARRAY);
+    await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([]);
+    await expect(moduleToPython(rt, dh, typed)).resolves.toEqual([]);
   });
 
   test("CLOSURE becomes an asyncOnly PyFunction", async () => {

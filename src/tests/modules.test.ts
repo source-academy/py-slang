@@ -269,11 +269,17 @@ describe("module interop conversions", () => {
       ]);
     });
 
-    test("converts an empty Python list literal into EMPTY_LIST, not an empty ARRAY", async () => {
-      const { context } = makeContext();
-      await expect(
-        pythonToModule(context, "", undefined, { type: "list", value: [] }),
-      ).resolves.toEqual({ type: DataType.EMPTY_LIST, value: null });
+    test("converts an empty Python list literal into a 0-length ARRAY, not EMPTY_LIST", async () => {
+      // Regression test: EMPTY_LIST is also what Python's None maps to (see moduleToPython's own
+      // EMPTY_LIST case) - if [] built EMPTY_LIST here, moduleToPython(pythonToModule([])) would
+      // round-trip back as None instead of [], exactly the ambiguity this redesign removes
+      // elsewhere. A real module round-trip test lives in pvml-modules.test.ts (identity([])).
+      const { context, evaluator } = makeContext();
+      const moduleList = await pythonToModule(context, "", undefined, { type: "list", value: [] });
+      expect(moduleList.type).toBe(DataType.ARRAY);
+      await expect(readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>)).resolves.toEqual(
+        [],
+      );
     });
 
     test("a 2-element list becomes a flat ARRAY too - no more special-casing by length", async () => {

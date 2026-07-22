@@ -671,6 +671,20 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(outputs).toEqual(["[0.0]"]);
   });
 
+  test("an empty list through the same VOID-signature passthrough round-trips to [], not None", async () => {
+    // Regression test: an earlier version of this fix special-cased an empty Python list to build
+    // EMPTY_LIST directly (matching pre-existing behavior) - but EMPTY_LIST is also what Python's
+    // None maps to, so identity([]) printed "None" instead of "[]". A genuine 0-length ARRAY (no
+    // special case at all) round-trips correctly.
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk("from testmod import identity\nprint(identity([]))\n");
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["[]"]);
+  });
+
   test("lists of length other than 2 already worked and still do", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);

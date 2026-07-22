@@ -183,11 +183,11 @@ export async function pythonToModule(
         // an ARRAY the same as a PAIR/EMPTY_LIST chain, so a module declaring LIST or PAIR still
         // works unchanged.
         //
-        // An empty list is the one exception: it becomes EMPTY_LIST directly, matching what an
-        // empty ARRAY would mean anyway and what every other engine already does.
-        if (value.length === 0) {
-          return { type: DataType.EMPTY_LIST, value: null };
-        }
+        // No empty-list special case: EMPTY_LIST is also what Python's None maps to (see
+        // moduleToPython's own EMPTY_LIST case), so returning it here for [] would make [] and
+        // None collide on the way back out - exactly the kind of ambiguity this whole redesign
+        // exists to remove. A genuine 0-length ARRAY round-trips back through moduleToPython's
+        // ARRAY case as a real [], not None.
         const elements = await Promise.all(value.map(el => pythonToModule(rt, dh, el)));
         const array = await dh.array_make(DataType.ANY, elements.length, {
           type: DataType.VOID,
