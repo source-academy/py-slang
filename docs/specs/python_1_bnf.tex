@@ -24,8 +24,8 @@ as follows:
                          & |   & \term{(}\ \textit{import-as-names}\ \term{)}                                            & \text{wildcard or name list}            \\[1mm]
 \textit{import-as-names} & ::= & \textit{import-as-name}\ (\ \term{,}\ \textit{import-as-name}\ )...                     & \text{clause name list}                 \\[1mm]
 \textit{import-as-name}  & ::= & \textit{name}\ [\ \term{as}\ \textit{name}\ ]                                           & \text{clause name and alias}            \\[1mm]
-\textit{statement}       & ::= & \textit{name}\ \term{=}\ \textit{expression}                                            & \text{variable declaration}             \\
-                         & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block} & \text{function declaration}             \\
+\textit{statement}       & ::= & \textit{name}\ \term{=}\ \textit{expression}                                            & \text{assignment}             \\
+                         & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block} & \text{function definition}             \\
                          & |   & \term{return}\ \textit{expression}                                                      & \text{return statement}                 \\
                          & |   & \textit{if-statement}                                                                   & \text{conditional statement}            \\
                          & |   & \textit{expression}                                                                     & \text{expression statement}             \\[1mm]

@@ -24,8 +24,8 @@ as follows:
                             & |   & \term{(}\ \textit{import-as-names}\ \term{)}                                             & \text{wildcard or name list}            \\[1mm]
 \textit{import-as-names}    & ::= & \textit{import-as-name}\ (\ \term{,}\ \textit{import-as-name}\ )...                      & \text{clause name list}                 \\[1mm]
 \textit{import-as-name}     & ::= & \textit{name}\ [\ \term{as}\ \textit{name}\ ]                                            & \text{clause name and alias}            \\[1mm]
-\textit{statement}          & ::= & \textit{name}\ \term{=}\ \textit{expression}                                             & \text{variable declaration}             \\
-                            & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block}  & \text{function declaration}             \\
+\textit{statement}          & ::= & \textit{name}\ \term{=}\ \textit{expression}                                             & \text{assignment}             \\
+                            & |   & \term{def}\ \textit{name}\ \term{(}\ \textit{names}\ \term{)}\ \term{:}\ \textit{block}  & \text{function definition}             \\
                             & |   & \term{return}\ \textit{expression}                                                       & \text{return statement}                 \\
                             & |   & \textit{if-statement}                                                                    & \text{conditional statement}            \\
                             & |   & \term{while}\ \textit{expression}\ \term{:}\ \textit{block}                              & \text{while loop}                       \\
@@ -35,11 +35,12 @@ as follows:
                             & |   & \term{continue}                                                                          & \text{continue statement}               \\
                             & |   & \term{global}\ \textit{name}                                                           & \text{global statement}                   \\
                             & |   & \term{nonlocal}\ \textit{name}                                                           & \text{nonlocal statement}               \\
+                            & |   & \term{pass}                                                                              & \text{pass statement}               \\
                             & |   & \textit{expression}                                                                      & \text{expression statement}             \\[1mm]
 \textit{range-args}         & ::= & \textit{expression}\ [\ \term{,}\ \textit{expression}\ ]
                                     \ [\ \term{,}\ \textit{expression}\ ]                                                    & \text{for loop range arguments}         \\[1mm]
-\textit{names}              & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...                             & \text{name list}                        \\[1mm]
-\textit{rest-names}         & ::= & \epsilon\ |\ \term{*}\textit{name}
+\textit{names}              & ::= & \epsilon\ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...\ [\ \term{,}\ \textit{rest-name}\ ]   & \text{name list}                        \\[1mm]
+\textit{rest-name}          & ::= & \epsilon\ |\ \term{*}\textit{name}
                                     \ |\ \textit{name}\ (\ \term{,}\ \textit{name}\ )...\ [\ \term{,\ *}\textit{name}\ ]     & \text{name list (rest)}                 \\[1mm]
 \textit{if-statement}       & ::= & \term{if}\ \textit{expression}\ \term{:}\ \textit{block}                                 &                                         \\
                             &     & (\ \term{elif}\ \textit{expression}\ \term{:}\ \textit{block}\ )...                      &                                         \\
@@ -56,7 +57,7 @@ as follows:
                             & |   & \textit{unary-operator}\ \textit{expression}                                             & \text{unary operator combination}       \\
                             & |   & \textit{expression}\ \textit{binary-logical}\ \textit{expression}                        & \text{logical composition}              \\
                             & |   & \textit{expression}\ \term{(}\ \textit{spread-expressions}\ \term{)}                     & \text{function application}             \\
-                            & |   & \term{lambda}\ (\textit{name}\ |\ \textit{names})\ \term{:}\ \textit{expression}         & \text{lambda expression}                \\
+                            & |   & \term{lambda}\ \textit{names}\ \term{:}\ \textit{expression}         & \text{lambda expression}                \\
                             & |   & \textit{expression}\ \term{if}\ \textit{expression}\ \term{else}\ \textit{expression}    & \text{conditional expression}           \\
                             & |   & \textit{expression}\term{[}\textit{expression}\term{] =}\ \textit{expression}            & \text{list assignment}                  \\
                             & |   & \textit{expression}\term{[}\textit{expression}\term{]}                                   & \text{list access}                      \\
