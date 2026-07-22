@@ -370,9 +370,7 @@ export const LIST_REPEAT_FX = wasm
       .if(i32.ne(local.get("$count"), i32.const(0)))
       .then(
         wasm
-          .if(
-            i32.ne(i32.div_u(local.get("$new_len"), local.get("$count")), local.get("$src_len")),
-          )
+          .if(i32.ne(i32.div_u(local.get("$new_len"), local.get("$count")), local.get("$src_len")))
           .then(
             wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.OUT_OF_MEMORY))),
             wasm.unreachable(),
