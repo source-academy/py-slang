@@ -202,6 +202,25 @@ export async function pythonToModule(
 }
 
 /**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  dh: IDataHandler,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await dh.pair_head(value), await dh.pair_tail(value)];
+  }
+  const length = await dh.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => dh.array_get(value, i)));
+}
+
+/**
  * Converts a conductor TypedValue into a py2js native value, for a module
  * export flowing into Python (FromImport bindings) or an argument a module
  * passes to a Python closure it calls back. `name` is used to render an
@@ -268,25 +287,19 @@ export async function moduleToPython(
       return f;
     }
     case DataType.PAIR:
-      // A module PAIR (e.g. sound's Sound, a (wave, duration) dotted pair)
-      // round-trips as a 2-element PyList — mirroring the CSE converter's
-      // "list" case for DataType.PAIR, which makes the same non-distinction
-      // (see the file header). Not necessarily a *proper* list: the second
-      // element need not itself be a pair or None, same as CSE's.
-      return [
-        await moduleToPython(rt, dh, await dh.pair_head(value)),
-        await moduleToPython(rt, dh, await dh.pair_tail(value)),
-      ];
     case DataType.ARRAY: {
-      // Untyped and recursive - see this file's header and CSE's/PVML's identical
-      // DataType.ARRAY handling. A Python list here is just a plain PyValue[] (see runtime.ts's
-      // PyList doc comment), so this is a direct element-by-element conversion, no wrapper needed.
-      const length = await dh.array_length(value);
-      const elements: PyValue[] = [];
-      for (let i = 0; i < length; i++) {
-        elements.push(await moduleToPython(rt, dh, await dh.array_get(value, i), name));
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType. A
+      // Python list here is just a plain PyValue[] (see runtime.ts's PyList doc comment).
+      // Deliberately NOT list_to_vec: that expects a chain terminating in EMPTY_LIST (a *proper
+      // list*), which a raw dotted pair (e.g. sound's Sound, a (wave, duration) pair) doesn't
+      // satisfy - this reads exactly the compound value's own elements, nothing more.
+      const elements = await readCompoundElements(dh, value);
+      const result: PyValue[] = [];
+      for (const el of elements) {
+        result.push(await moduleToPython(rt, dh, el, name));
       }
-      return elements;
+      return result;
     }
   }
 }

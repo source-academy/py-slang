@@ -24,6 +24,25 @@ import {
  * types.ts) — so conversion needs no access to the interpreter itself.
  */
 
+/**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  dh: IDataHandler,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await dh.pair_head(value), await dh.pair_tail(value)];
+  }
+  const length = await dh.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => dh.array_get(value, i)));
+}
+
 /** Converts a conductor module value into a PVML runtime value. `name` is
  * the module export's symbol, used only to label the resulting extern for
  * display/error messages. */
@@ -55,25 +74,18 @@ export async function moduleToPvml(
       // Matches CSE's moduleToPython: both a module function's void return
       // and the empty list map onto Python's None (SICPy's empty list).
       return null;
-    case DataType.PAIR:
-      // PVML represents a pair as a 2-element array — the same shape
-      // pair()/vectorToPvmlList build (see builtins.ts).
+    case DataType.ARRAY:
+    case DataType.PAIR: {
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType. PVML
+      // represents both the same way anyway (the shape pair()/vectorToPvmlList already build, see
+      // builtins.ts). Deliberately NOT list_to_vec: that expects a chain terminating in
+      // EMPTY_LIST (a *proper list*), which a raw dotted pair (e.g. Sound's (wave, duration))
+      // doesn't satisfy - this reads exactly the compound value's own elements, nothing more.
+      const elements = await readCompoundElements(dh, value);
       return {
         type: "array",
-        elements: [
-          await moduleToPvml(dh, await dh.pair_head(value), name),
-          await moduleToPvml(dh, await dh.pair_tail(value), name),
-        ],
-      };
-    case DataType.ARRAY: {
-      const length = await dh.array_length(value);
-      return {
-        type: "array",
-        elements: await Promise.all(
-          Array.from({ length }, async (_, i) =>
-            moduleToPvml(dh, await dh.array_get(value, i), name),
-          ),
-        ),
+        elements: await Promise.all(elements.map(el => moduleToPvml(dh, el, name))),
       };
     }
     case DataType.OPAQUE:

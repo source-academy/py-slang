@@ -151,6 +151,25 @@ export async function pythonToModule(
   }
 }
 
+/**
+ * Reads a PAIR or ARRAY's elements uniformly: a PAIR is always exactly 2 (head, tail - whatever
+ * they are, not necessarily a proper list continuation - e.g. sound's Sound is (wave, duration),
+ * a dotted pair whose second element is a plain NUMBER), an ARRAY is however many array_length
+ * reports. Deliberately NOT list_to_vec: that walks a chain expecting it to terminate in
+ * EMPTY_LIST (a *proper list* invariant), which a raw dotted pair doesn't satisfy - this is a
+ * flat "give me this compound value's N elements" read, nothing more.
+ */
+async function readCompoundElements(
+  evaluator: NonNullable<Context["evaluator"]>,
+  value: TypedValue<DataType.ARRAY> | TypedValue<DataType.PAIR>,
+): Promise<TypedValue<DataType>[]> {
+  if (value.type === DataType.PAIR) {
+    return [await evaluator.pair_head(value), await evaluator.pair_tail(value)];
+  }
+  const length = await evaluator.array_length(value);
+  return Promise.all(Array.from({ length }, (_, i) => evaluator.array_get(value, i)));
+}
+
 export async function moduleToPython(
   context: Context,
   code: string,
@@ -176,26 +195,18 @@ export async function moduleToPython(
     case DataType.VOID:
     case DataType.EMPTY_LIST:
       return { type: "none" };
-    case DataType.ARRAY:
-      const length = await context.evaluator.array_length(value);
-      return {
-        type: "list",
-        value: await Promise.all(
-          Array.from({ length }, async (_, i) =>
-            moduleToPython(context, code, command, await context.evaluator!.array_get(value, i)),
-          ),
-        ),
-      };
     case DataType.OPAQUE:
       return { type: "opaque", value: value.value };
-    case DataType.PAIR:
+    case DataType.ARRAY:
+    case DataType.PAIR: {
+      // Untyped and recursive, uniformly for both: per Martin, a PAIR is just a 2-element array,
+      // not a distinct concept - one shared conversion, not a separate case per DataType.
+      const elements = await readCompoundElements(context.evaluator, value);
       return {
         type: "list",
-        value: [
-          await moduleToPython(context, code, command, await context.evaluator.pair_head(value)),
-          await moduleToPython(context, code, command, await context.evaluator.pair_tail(value)),
-        ],
+        value: await Promise.all(elements.map(el => moduleToPython(context, code, command, el))),
       };
+    }
     case DataType.CLOSURE:
       async function* builtinGenerator(
         args: Value[],
