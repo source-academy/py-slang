@@ -66,33 +66,35 @@ export async function pythonToModule(
     case "none":
       return { type: DataType.EMPTY_LIST, value: null };
     case "list": {
-      // A list literal (tagged at construction in the InstrType.LIST microcode) is unambiguously a
-      // Source list, of any length including 2 - fold it into a proper PAIR/EMPTY_LIST chain, or
-      // list-typed module parameters (e.g. sound's consecutively/simultaneously/stacking_adsr
-      // envelopes) would silently see zero (or the wrong) elements instead of the list the student
-      // actually wrote. The length !== 2 check is a defensive fallback only - pair()/llist()/module
-      // round-trips always produce exactly 2-element links, so an untagged value should never
-      // actually hit it, but building a chain is still the safer default if one somehow did.
-      if (listLiteralValues.has(value) || value.value.length !== 2) {
-        let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
-        for (let i = value.value.length - 1; i >= 0; i--) {
-          chain = await context.evaluator.pair_make(
-            await pythonToModule(context, code, command, value.value[i]),
-            chain,
-          );
-        }
-        return chain;
+      // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+      // concept - build every Python list (of any length, 2 included, whether it's a fresh
+      // literal, a pair()/llist() result, or a module PAIR round-tripped back through Python) the
+      // same way, as a flat DataType.ARRAY, recursively converting each element. No more
+      // origin-tagging or length-based branching needed - list_to_vec/pair_head/pair_tail (see
+      // GenericDataHandler) already read an ARRAY the same as a PAIR/EMPTY_LIST chain, so a module
+      // declaring LIST or PAIR still works unchanged.
+      //
+      // An empty list is the one exception: it becomes EMPTY_LIST directly, matching what an
+      // empty ARRAY would mean anyway (module signatures never distinguish "empty array" from
+      // "empty list"/None) and what every other engine already does.
+      if (value.value.length === 0) {
+        return { type: DataType.EMPTY_LIST, value: null };
       }
-      // Otherwise this came from pair()/llist(), or a module PAIR round-tripped through
-      // moduleToPython - both always produce exactly 2-element links, reconstructed here as a single
-      // pair_make(head, tail) without requiring the chain to terminate in None, since a module PAIR
-      // need not be a proper list (e.g. sound's Sound is (wavesPair, duration), a dotted pair whose
-      // second element is a number, not another list link).
-      const [head, tail] = value.value;
-      return context.evaluator.pair_make(
-        await pythonToModule(context, code, command, head),
-        await pythonToModule(context, code, command, tail),
+      const elements = await Promise.all(
+        value.value.map(el => pythonToModule(context, code, command, el)),
       );
+      const array = await context.evaluator.array_make(DataType.ANY, elements.length, {
+        type: DataType.VOID,
+        value: undefined,
+      });
+      for (let i = 0; i < elements.length; i++) {
+        await context.evaluator.array_set(
+          array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+          i,
+          elements[i],
+        );
+      }
+      return array;
     }
     case "opaque":
       return { type: DataType.OPAQUE, value: value.value as OpaqueIdentifier };

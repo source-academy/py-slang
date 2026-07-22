@@ -175,22 +175,32 @@ export async function pythonToModule(
       if (value === null) return { type: DataType.EMPTY_LIST, value: null };
       if (value instanceof PyOpaque) return value.typed;
       if (Array.isArray(value)) {
-        // A 2-element PyList — chapter 2's pair()/llist() and chapter 3+'s
-        // `[a, b]` literal alike, no representational difference (see the
-        // file header) — round-trips as a module pair via dh.pair_make. Any
-        // other length has no module-side representation any more than a
-        // DataType.ARRAY does (see moduleToPython's DataType.ARRAY case);
-        // dh.pair_make itself is the arity check.
-        if (value.length !== 2) {
-          throw new Py2JsRuntimeError(
-            "TypeError",
-            "only a 2-element list (a pair) can cross into a module, not an arbitrary-length list",
+        // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+        // concept - build every PyList (of any length, 2 included, whether it's a fresh literal, a
+        // pair()/llist() result, or a module PAIR round-tripped back through Python) the same way,
+        // as a flat DataType.ARRAY, recursively converting each element. No more length-based
+        // rejection needed - list_to_vec/pair_head/pair_tail (see GenericDataHandler) already read
+        // an ARRAY the same as a PAIR/EMPTY_LIST chain, so a module declaring LIST or PAIR still
+        // works unchanged.
+        //
+        // An empty list is the one exception: it becomes EMPTY_LIST directly, matching what an
+        // empty ARRAY would mean anyway and what every other engine already does.
+        if (value.length === 0) {
+          return { type: DataType.EMPTY_LIST, value: null };
+        }
+        const elements = await Promise.all(value.map(el => pythonToModule(rt, dh, el)));
+        const array = await dh.array_make(DataType.ANY, elements.length, {
+          type: DataType.VOID,
+          value: undefined,
+        });
+        for (let i = 0; i < elements.length; i++) {
+          await dh.array_set(
+            array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+            i,
+            elements[i],
           );
         }
-        return dh.pair_make(
-          await pythonToModule(rt, dh, value[0]),
-          await pythonToModule(rt, dh, value[1]),
-        );
+        return array;
       }
       throw new Py2JsRuntimeError(
         "TypeError",

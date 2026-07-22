@@ -200,6 +200,17 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Matches repeat's own identity/composition closures exactly: an all-VOID placeholder
+  // signature (see GenericDataHandler's coerceArgsToSignature-era doc history), relaying
+  // whatever TypedValue it's handed straight back through, untouched, no matter what it is.
+  const identity = await dh.closure_make(
+    { returnType: DataType.VOID, args: [DataType.VOID] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (x: TypedValue<DataType>) {
+      return x;
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -217,6 +228,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "negate_flag", value: negateFlag },
       { symbol: "greeting", value: { type: DataType.CONST_STRING, value: "hello" } },
       { symbol: "shout", value: shout },
+      { symbol: "identity", value: identity },
     ],
   } as unknown as IModulePlugin;
 }
@@ -641,6 +653,22 @@ describe("PyPvmlEvaluator module imports", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["30.0"]);
+  });
+
+  test("a VOID-signature passthrough closure (repeat's identity/composition shape) round-trips a list correctly - was [0.0, None], now [0.0]", async () => {
+    // The actual repeat bug: identity has no declared LIST/ARRAY type to guide encoding (it's
+    // generic over any T, declared DataType.VOID), so [0] used to cross in as a PAIR/EMPTY_LIST
+    // chain and come back out through moduleToPvml's old shallow PAIR case as a 2-element
+    // [head, tail] with EMPTY_LIST misread as an extra None element, instead of a flat 1-element
+    // list. Now that pvmlToModule always builds a flat ARRAY for any Python list, this round-trips
+    // correctly with no declared-type awareness needed at all.
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk("from testmod import identity\nprint(identity([0]))\n");
+
+    expect(errors).toEqual([]);
+    expect(outputs).toEqual(["[0.0]"]);
   });
 
   test("lists of length other than 2 already worked and still do", async () => {

@@ -1,12 +1,5 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
-import {
-  PVMLBoxType,
-  PVMLExtern,
-  PVMLHostCall,
-  getPVMLType,
-  isPVMLObject,
-  pvmlListLiteralArrays,
-} from "./types";
+import { PVMLBoxType, PVMLExtern, PVMLHostCall, getPVMLType, isPVMLObject } from "./types";
 
 /**
  * Conversion layer between PVML runtime values and the conductor module
@@ -150,26 +143,34 @@ export async function pvmlToModule(
         // PVMLOpaque's doc comment for why `value` is typed unknown.
         return value.value as TypedValue<DataType.OPAQUE>;
       case "array": {
-        // A list literal (tagged at construction — see pvmlListLiteralArrays' doc comment in
-        // types.ts) is unambiguously a Source list, of any length including 2 — fold it into a
-        // proper PAIR/EMPTY_LIST chain, or list-typed module parameters (e.g. sound's
-        // consecutively/simultaneously/stacking_adsr envelopes) would silently see zero (or the
-        // wrong) elements instead of the list the student actually wrote. Otherwise, a 2-element
-        // array is PVML's pair (see moduleToPvml's PAIR case), reconstructed as a single
-        // pair_make(head, tail) — the chain need not terminate in None (e.g. sound's Sound is a
-        // dotted pair). Any other length is unambiguously a flat Python list either way.
-        if (!pvmlListLiteralArrays.has(value) && value.elements.length === 2) {
-          const [head, tail] = value.elements;
-          return dh.pair_make(
-            await pvmlToModule(dh, head, callPvml),
-            await pvmlToModule(dh, tail, callPvml),
+        // Untyped and recursive: per Martin, a pair is just an array of length 2, not a distinct
+        // concept - build every PVML array (of any length, 2 included, whether it's a fresh list
+        // literal, a pair()/vectorToPvmlList result, or a module PAIR round-tripped back through
+        // PVML) the same way, as a flat DataType.ARRAY, recursively converting each element. No
+        // more origin-tagging or length-based branching needed - list_to_vec/pair_head/pair_tail
+        // (see GenericDataHandler) already read an ARRAY the same as a PAIR/EMPTY_LIST chain, so a
+        // module declaring LIST or PAIR still works unchanged.
+        //
+        // An empty array is the one exception: it becomes EMPTY_LIST directly, matching what an
+        // empty ARRAY would mean anyway and what every other engine already does.
+        if (value.elements.length === 0) {
+          return { type: DataType.EMPTY_LIST, value: null };
+        }
+        const elements = await Promise.all(
+          value.elements.map(el => pvmlToModule(dh, el, callPvml)),
+        );
+        const array = await dh.array_make(DataType.ANY, elements.length, {
+          type: DataType.VOID,
+          value: undefined,
+        });
+        for (let i = 0; i < elements.length; i++) {
+          await dh.array_set(
+            array as unknown as TypedValue<DataType.ARRAY, DataType.VOID>,
+            i,
+            elements[i],
           );
         }
-        let chain: TypedValue<DataType> = { type: DataType.EMPTY_LIST, value: null };
-        for (let i = value.elements.length - 1; i >= 0; i--) {
-          chain = await dh.pair_make(await pvmlToModule(dh, value.elements[i], callPvml), chain);
-        }
-        return chain;
+        return array;
       }
       case "extern":
         // This extern already carries the exact conductor closure it was minted from (see
