@@ -34,8 +34,6 @@ export class PVMLIRBuilder {
   /** Whether the last parameter is a rest param (`def f(a, *rest)`) — see
    * PVMLIR's `hasRestParam` doc comment. */
   private hasRestParam: boolean;
-  /** See PVMLIR's `listLiteralOffsets` doc comment. */
-  private listLiteralOffsets: Set<number> = new Set();
 
   private lastLabelId: number = 0;
 
@@ -164,13 +162,6 @@ export class PVMLIRBuilder {
     this.symbolCount++;
   }
 
-  /** Marks the most recently emitted instruction (the LDLG that pushes a just-built list
-   * literal's completed array — see PVMLCompiler's visitListExpr) as a list-literal completion
-   * site. See PVMLIR's `listLiteralOffsets` doc comment for why. */
-  markListLiteral(): void {
-    this.listLiteralOffsets.add(this.ops.length - 1);
-  }
-
   /**
    * Resolve labels, patch jump offsets, and produce an immutable PVMLIR.
    * Non-destructive: works on a copy of data, so the builder can be reused.
@@ -223,7 +214,6 @@ export class PVMLIRBuilder {
       this.functionName,
       this.complexes.slice(), // copy for builder reuse
       this.hasRestParam,
-      new Set(this.listLiteralOffsets), // copy for builder reuse, matching strings/bigints/complexes above
     );
   }
 }
