@@ -81,9 +81,7 @@ describe("PyodideEvaluator2", () => {
       // linked-list.prelude.ts) — neither is real CPython, so this only
       // works if sourceacademy-sicp was actually bridged in, not just
       // accepted by the Resolver.
-      await evaluator.evaluateChunk(
-        "xs = llist(1, 2, 3)\nprint(head(xs))\nprint(length(xs))\n",
-      );
+      await evaluator.evaluateChunk("xs = llist(1, 2, 3)\nprint(head(xs))\nprint(length(xs))\n");
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["1", "3"]);
@@ -122,9 +120,12 @@ describe("sourceacademy-sicp bridging — name parity", () => {
     "every name §%i's Resolver accepts is actually bound in pyodide after bridging",
     async chapter => {
       const { conductor, errors } = makeMockConductor();
-      const Evaluator = [PyodideEvaluator1, PyodideEvaluator2, PyodideEvaluator3, PyodideEvaluator4][
-        chapter - 1
-      ];
+      const Evaluator = [
+        PyodideEvaluator1,
+        PyodideEvaluator2,
+        PyodideEvaluator3,
+        PyodideEvaluator4,
+      ][chapter - 1];
       const evaluator = new Evaluator(conductor);
       const names = chapterExpectedNames(chapter).filter(name => !KNOWN_SICP_GAPS.has(name));
 

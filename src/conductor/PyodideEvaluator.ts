@@ -88,7 +88,10 @@ const CHAPTER_PRELUDE_NAMES: Record<number, string[]> = Object.fromEntries(
  * exactly the class of bug this exists to catch — see class doc below. */
 export function chapterExpectedNames(chapter: number): string[] {
   const groups = CHAPTER_GROUPS[chapter] ?? [];
-  return [...groups.flatMap(g => [...g.builtins.keys()]), ...(CHAPTER_PRELUDE_NAMES[chapter] ?? [])];
+  return [
+    ...groups.flatMap(g => [...g.builtins.keys()]),
+    ...(CHAPTER_PRELUDE_NAMES[chapter] ?? []),
+  ];
 }
 
 /**
