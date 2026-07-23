@@ -134,9 +134,13 @@ to `PY2JS_GROUPS[4]`.
 A few builtins are **native** (bypass the generic bridge) because the
 bridge's tagged round-trip is structurally the wrong shape for them:
 
-- `print`/`input`/`arity` — chapter-1 native core. `print`/`input` are
-  stream-based (async) in the CSE machine but plain synchronous code here;
-  `arity` is native because py2js functions aren't CSE closures.
+- `print`/`input`/`arity` — chapter-1 native core. `print` is stream-based
+  (async) in the CSE machine but plain synchronous code here; `input` is
+  dual-bodied (`def2`) and `asyncOnly`, exactly like an imported module
+  function, round-tripping through the conductor evaluator's `requestInput`
+  hook — a REPL chunk that calls it, at any nesting depth, compiles in dual
+  mode even with no imports of its own (`Resolver.referencedNames`); `arity`
+  is native because py2js functions aren't CSE closures.
 - `set_head`/`set_tail` (chapter 3) — the generic bridge converts an
   argument into a _fresh_ CSE-side value, so a mutation the CSE builtin
   performs on it would be silently lost rather than visible on the
@@ -310,7 +314,9 @@ boundary (matching the CSE converter's identical restrictions).
   `RuntimeSourceError` doesn't extend JS `Error`, so it fails the
   `instanceof Error` check in `index.ts`'s catch blocks. Pre-existing since
   chapter 2, not py2js-chapter-specific.
-- `input()` is not implemented.
+- `input()` round-trips through the conductor evaluator's `requestInput` hook
+  (`Py2JsEvaluator.ts`); `runCodePy2Js`/`runCodePy2JsDual` (no conductor) have
+  no such hook wired, so `input()` there raises `RuntimeError`.
 - `DataType.ARRAY` and complex numbers do not cross the module boundary in
   either direction (see Module interop above).
 - No chapter 5 — SICPy has four chapters.
