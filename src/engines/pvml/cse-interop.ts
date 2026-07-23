@@ -19,15 +19,25 @@ function functionDisplayValue(name: string): FunctionValue {
 
 /** Reverse of PRIMITIVE_FUNCTIONS (builtins.ts): primitive index -> a name to
  * display when a bare reference to it (e.g. `f = abs`) is str()'d/repr()'d.
- * A few indices have more than one name (e.g. print/display both -> 5); any
- * one of them is a fine display name, so ties just take last-write-wins.
- * Built lazily (not at module load) because builtins.ts and this module
- * import each other — computing this eagerly at top level would run before
- * builtins.ts has finished populating PRIMITIVE_FUNCTIONS. */
+ * A few indices have more than one name (e.g. print/display both -> 5,
+ * len/list_length both -> 2) — not interchangeable for display purposes
+ * (py-slang#278: print(print) rendered as "<built-in function display>",
+ * surprising for code that never mentioned display). PRIMITIVE_FUNCTIONS
+ * always lists the canonical name first and the alias second (each
+ * commented as such), so keep whichever name claims an index first rather
+ * than letting naive last-write-wins Map construction hand it to whatever
+ * alias happens to be listed later. Built lazily (not at module load)
+ * because builtins.ts and this module import each other — computing this
+ * eagerly at top level would run before builtins.ts has finished populating
+ * PRIMITIVE_FUNCTIONS. */
 let primitiveNames: ReadonlyMap<number, string> | undefined;
 function primitiveNameOf(primitiveIndex: number): string | undefined {
   if (!primitiveNames) {
-    primitiveNames = new Map(Array.from(PRIMITIVE_FUNCTIONS, ([name, index]) => [index, name]));
+    const names = new Map<number, string>();
+    for (const [name, index] of PRIMITIVE_FUNCTIONS) {
+      if (!names.has(index)) names.set(index, name);
+    }
+    primitiveNames = names;
   }
   return primitiveNames.get(primitiveIndex);
 }
