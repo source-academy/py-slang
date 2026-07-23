@@ -24,6 +24,18 @@ function pynterValueToNative(value: PynterValue): unknown {
   }
 }
 
+/**
+ * Compiles Python to PVML bytecode and runs it on Pynter, Source Academy's
+ * native C bytecode VM, compiled to WebAssembly (see
+ * src/engines/pvml/pynter/pynter-wasm.ts) — no CPython runtime, no
+ * TypeScript interpreter loop.
+ *
+ * Unlike PyPvmlEvaluator/PyCseEvaluator, this evaluator does not persist a
+ * global environment across evaluateChunk() calls: each chunk is compiled
+ * and run as its own self-contained program, so a name bound in one chunk is
+ * not visible in the next. REPL-style incremental development is not
+ * supported yet — only single-shot "run this whole program" usage.
+ */
 export class PyPvmlPynterEvaluator extends BasicEvaluator {
   private pynter: Awaited<ReturnType<typeof initPynter>> | null = null;
 

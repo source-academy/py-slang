@@ -23,7 +23,21 @@ interface PynterModule {
 
 // Initialize the Pynter WASM module
 export default async function init(props: Record<string, unknown> = {}): Promise<PynterModule> {
-  const module = await pynterwasm({
+  // Emscripten's generated createWasm() (pynterwasm.js) only resolves via the
+  // success callback passed to Module.instantiateWasm — it never observes
+  // the promise instantiateWasm itself returns. So if `wasm(imports)` below
+  // rejects (WASM unsupported, a fetch/network failure, a malformed binary,
+  // ...), the success callback never fires and this whole pynterwasm(...)
+  // call — and thus init() — hangs forever instead of ever resolving or
+  // rejecting. Race it against a promise we control so a genuine
+  // instantiation failure still rejects init(), rather than leaving a caller
+  // (e.g. PyPvmlPynterEvaluator.evaluateChunk) awaiting it indefinitely.
+  let onInstantiateFailure: (err: unknown) => void = () => {};
+  const instantiateFailure = new Promise<never>((_resolve, reject) => {
+    onInstantiateFailure = reject;
+  });
+
+  const modulePromise = pynterwasm({
     instantiateWasm(
       imports: WebAssembly.Imports,
       callback: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
@@ -31,10 +45,12 @@ export default async function init(props: Record<string, unknown> = {}): Promise
       return wasm(imports).then((result: WebAssembly.WebAssemblyInstantiatedSource) => {
         callback(result.instance, result.module);
         return result.instance.exports;
-      });
+      }, onInstantiateFailure);
     },
     ...props,
   });
+
+  const module = await Promise.race([modulePromise, instantiateFailure]);
 
   if (!module.cwrap) {
     console.error("module has no cwrap", module);
