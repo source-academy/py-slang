@@ -54,6 +54,7 @@ const mooLexer = moo.compile({
   newline: { match: /\r?\n/, lineBreaks: true },
   ws: /[ \t]+/,
   comment: /#[^\r\n]*/,
+  continuation: { match: /\\\r?\n/, lineBreaks: true },
 
   number_complex: /(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[jJ]/,
   number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+/,
@@ -141,6 +142,14 @@ function processTokens(raw: moo.Token[]): moo.Token[] {
 
     // Always skip whitespace and comments
     if (tok.type === "ws" || tok.type === "comment") {
+      i++;
+      continue;
+    }
+
+    // Explicit line continuation ("\" immediately followed by a newline):
+    // joins the two physical lines, so it's skipped like whitespace and
+    // never produces a newline/indent token.
+    if (tok.type === "continuation") {
       i++;
       continue;
     }
@@ -256,10 +265,6 @@ function processTokens(raw: moo.Token[]): moo.Token[] {
 }
 
 // ── PythonLexer (Nearley-compatible wrapper) ───────────────────────────────
-
-interface PythonLexerState extends moo.LexerState {
-  pos: number;
-}
 
 export class PythonLexer implements moo.Lexer {
   tokens: moo.Token[] = [];

@@ -25,6 +25,7 @@
     "jsdoc:clean": "./scripts/jsdoc.sh clean",
     "test": "jest",
     "test-coverage": "jest --coverage",
+    "test:pyodide": "node --experimental-vm-modules node_modules/.bin/jest --testPathIgnorePatterns=\"/node_modules/|/dist/\" --testPathPattern=\"[Pp]yodide\"",
     "pynter:report": "tsx scripts/pynter-parity-report.ts",
     "lint": "eslint --concurrency=auto src",
     "format": "prettier --write \"**/*.{ts,tsx,json,js,mjs}\"",
@@ -73,6 +74,7 @@
     "@sourceacademy/common-cse-machine": "^0.3.0",
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "^0.7.2",
+    "@sourceacademy/pynter-wasm": "^0.1.0",
     "@sourceacademy/runner-cse-machine": "^3.0.0",
     "@sourceacademy/runner-module-loader": "^0.0.1",
     "@sourceacademy/runner-stepper": "^0.0.1",
@@ -82,6 +84,7 @@
     "mathjs": "^15.2.0",
     "moo": "^0.5.2",
     "nearley": "^2.20.1",
+    "pyodide": "^0.29.3",
     "wabt": "^1.0.37"
   }
 }
