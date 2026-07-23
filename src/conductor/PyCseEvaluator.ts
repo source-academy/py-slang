@@ -145,7 +145,6 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           this.context,
           control,
           stash,
-          100000,
           -1,
           this.variant,
           script,
@@ -154,7 +153,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         flushOutput(this.conductor);
         this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
       } else {
-        await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+        await collectSnapshots(this.context, control, stash, -1, this.variant, script, 0);
         flushOutput(this.conductor);
       }
     } catch (e) {

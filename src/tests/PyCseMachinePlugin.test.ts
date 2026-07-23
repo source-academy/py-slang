@@ -55,7 +55,7 @@ async function runAndCollectWithBreakpoints(code: string, variant = 3) {
   const ast = parse(script);
   const control = new Control(ast);
   const stash = new Stash();
-  return collectSnapshots(ctx, control, stash, 100000, -1, variant, script);
+  return collectSnapshots(ctx, control, stash, -1, variant, script);
 }
 
 // ── formatValue ───────────────────────────────────────────────────────────────
@@ -542,7 +542,6 @@ describe("collectSnapshots", () => {
       ctx,
       new Control(ast),
       new Stash(),
-      100000,
       -1,
       3,
       "x = 1\n",
@@ -581,7 +580,6 @@ describe("collectSnapshots", () => {
       ctx,
       new Control(ast),
       new Stash(),
-      100000,
       -1,
       3,
       script,
@@ -702,7 +700,7 @@ f()`,
     const run = async (code: string) => {
       const script = code + "\n";
       const ast = parse(script);
-      return collectSnapshots(ctx, new Control(ast), new Stash(), 100000, -1, 3, script);
+      return collectSnapshots(ctx, new Control(ast), new Stash(), -1, 3, script);
     };
 
     const first = await run("breakpoint()");
