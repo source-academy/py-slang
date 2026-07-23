@@ -430,6 +430,50 @@ export class MiscBuiltins {
   ): NoneValue {
     return { type: "none" };
   }
+
+  // set_timeout(f, t): schedules f to be called with no arguments after t
+  // milliseconds, without blocking the calling code (source-academy/py-slang#311).
+  // Mirrors the sound_matrix module's existing JS set_timeout(f, t) (same
+  // signature and units), moved into the language itself rather than staying
+  // module-gated, since it's a capability of the evaluator, not of any one
+  // module.
+  //
+  // Not yet implemented on the CSE machine: f must still be callable when the
+  // real timer fires, which may be well after this evaluate() run has
+  // finished and context.control/context.stash have been torn down — the CSE
+  // machine has no way to resume a closure call from cold today (unlike
+  // PVML's invokeValueAsync, built for sound_matrix's own set_timeout, or
+  // py2js, where a compiled Python function already is a plain JS closure and
+  // needs no re-entry machinery at all — see
+  // src/engines/py2js/runtime.ts). Implemented only by py2js for now; this
+  // entry exists so the name resolves consistently across engines.
+  @Validate(2, 2, "set_timeout", true)
+  static set_timeout(
+    _args: Value[],
+    _source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NoneValue {
+    handleRuntimeError(
+      context,
+      new UserError("set_timeout is not yet supported by the CSE machine", command),
+    );
+  }
+
+  // clear_all_timeout(): cancels every pending set_timeout callback scheduled
+  // so far. See set_timeout above for why this is CSE-unsupported for now.
+  @Validate(0, 0, "clear_all_timeout", true)
+  static clear_all_timeout(
+    _args: Value[],
+    _source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NoneValue {
+    handleRuntimeError(
+      context,
+      new UserError("clear_all_timeout is not yet supported by the CSE machine", command),
+    );
+  }
 }
 for (const builtin of Object.getOwnPropertyNames(MiscBuiltins)) {
   if (

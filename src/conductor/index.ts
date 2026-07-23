@@ -13,6 +13,13 @@ export {
 } from "./PyPvmlEvaluator";
 export { PyPvmlPynterEvaluator } from "./PyPvmlPynterEvaluator";
 export {
+  PyodideEvaluator1,
+  PyodideEvaluator2,
+  PyodideEvaluator3,
+  PyodideEvaluator4,
+  PyodideEvaluatorFull,
+} from "./PyodideEvaluator";
+export {
   Py2JsEvaluator1,
   Py2JsEvaluator2,
   Py2JsEvaluator3,
