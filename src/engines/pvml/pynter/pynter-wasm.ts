@@ -1,5 +1,5 @@
-import pynterwasm from "./pynterwasm.js";
-import wasm from "./pynterwasm.wasm";
+import pynterwasm from "@sourceacademy/pynter-wasm";
+import wasm from "@sourceacademy/pynter-wasm/pynterwasm.wasm";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type EmscriptenModule = any;
@@ -23,7 +23,21 @@ interface PynterModule {
 
 // Initialize the Pynter WASM module
 export default async function init(props: Record<string, unknown> = {}): Promise<PynterModule> {
-  const module = await pynterwasm({
+  // Emscripten's generated createWasm() (pynterwasm.js) only resolves via the
+  // success callback passed to Module.instantiateWasm — it never observes
+  // the promise instantiateWasm itself returns. So if `wasm(imports)` below
+  // rejects (WASM unsupported, a fetch/network failure, a malformed binary,
+  // ...), the success callback never fires and this whole pynterwasm(...)
+  // call — and thus init() — hangs forever instead of ever resolving or
+  // rejecting. Race it against a promise we control so a genuine
+  // instantiation failure still rejects init(), rather than leaving a caller
+  // (e.g. PyPvmlPynterEvaluator.evaluateChunk) awaiting it indefinitely.
+  let onInstantiateFailure: (err: unknown) => void = () => {};
+  const instantiateFailure = new Promise<never>((_resolve, reject) => {
+    onInstantiateFailure = reject;
+  });
+
+  const modulePromise = pynterwasm({
     instantiateWasm(
       imports: WebAssembly.Imports,
       callback: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
@@ -31,10 +45,12 @@ export default async function init(props: Record<string, unknown> = {}): Promise
       return wasm(imports).then((result: WebAssembly.WebAssemblyInstantiatedSource) => {
         callback(result.instance, result.module);
         return result.instance.exports;
-      });
+      }, onInstantiateFailure);
     },
     ...props,
   });
+
+  const module = await Promise.race([modulePromise, instantiateFailure]);
 
   if (!module.cwrap) {
     console.error("module has no cwrap", module);
@@ -44,6 +60,16 @@ export default async function init(props: Record<string, unknown> = {}): Promise
   // These are the WASM-exported symbol names actually compiled into
   // pynterwasm.wasm (see Pynter's devices/wasm/wasm/lib.c); they keep
   // Pynter's internal "si"-prefix convention, which this rename didn't touch.
+  //
+  // `undefined` (not `null`) for a void return type: Emscripten's own
+  // upstream cwrap JSDoc types returnType as `{string=}`, narrower than
+  // ccall's `{string|null=}` — an asymmetry that carries through to the
+  // --emit-tsd output @sourceacademy/pynter-wasm actually ships (verified
+  // directly against its published .d.ts), so `null` doesn't type-check
+  // here even though it's the more common Emscripten convention elsewhere
+  // (see the equivalent README example in source-academy/pynter#18, which
+  // isn't bound to this package's real, narrower shipped types the way
+  // this call site is).
   const alloc_heap = module.cwrap("siwasm_alloc_heap", undefined, ["number"]);
   const alloc = module.cwrap("siwasm_alloc", "number", ["number"]);
   const free = module.cwrap("siwasm_free", undefined, ["number"]);
@@ -53,7 +79,7 @@ export default async function init(props: Record<string, unknown> = {}): Promise
   alloc_heap(0x10000);
 
   const readReturnValue = (resPtr: number): PynterValue => {
-    const u8 = module.HEAPU8 as Uint8Array;
+    const u8 = module.HEAPU8;
     const dv = new DataView(u8.buffer);
     const type = dv.getUint32(resPtr, true);
     const raw32 = dv.getUint32(resPtr + 4, true);
