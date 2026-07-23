@@ -71,9 +71,7 @@ describe("Py2JsEvaluator: input()", () => {
     const { conductor, errors, outputs, prompts } = makeMockConductor(["world"]);
     const evaluator = new Py2JsEvaluator1(conductor);
 
-    await evaluator.evaluateChunk(
-      "def ask():\n    return input('N: ')\nprint(ask() + '!')\n",
-    );
+    await evaluator.evaluateChunk("def ask():\n    return input('N: ')\nprint(ask() + '!')\n");
 
     expect(errors).toEqual([]);
     expect(prompts).toEqual(["N: "]);
