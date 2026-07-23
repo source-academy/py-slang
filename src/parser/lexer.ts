@@ -257,10 +257,6 @@ function processTokens(raw: moo.Token[]): moo.Token[] {
 
 // ── PythonLexer (Nearley-compatible wrapper) ───────────────────────────────
 
-interface PythonLexerState extends moo.LexerState {
-  pos: number;
-}
-
 export class PythonLexer implements moo.Lexer {
   tokens: moo.Token[] = [];
   pos = 0;
