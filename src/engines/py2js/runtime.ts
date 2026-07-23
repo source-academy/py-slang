@@ -490,6 +490,17 @@ export class Py2JsRuntime {
   onOutput?: (line: string) => void;
 
   /**
+   * Reports a scheduled set_timeout callback beginning (+1) or ending/being
+   * cancelled (-1) — the conductor evaluator forwards these to
+   * BasicEvaluator's beginPendingWork()/endPendingWork() (source-academy/
+   * conductor), which keeps the host from tearing down this runtime (and any
+   * real setTimeout still pending in it) the instant the top-level chunk's
+   * own evaluateChunk() call resolves. See set_timeout's own doc comment for
+   * why that race exists at all.
+   */
+  onPendingWorkChange?: (delta: 1 | -1) => void;
+
+  /**
    * Persistent module-level bindings for REPL-mode chunks (see compiler.ts's
    * REPL-mode doc): every top-level binding of every chunk lives here, so a
    * later chunk — and functions from earlier chunks, via gref's late lookup —
@@ -1038,6 +1049,13 @@ export class Py2JsRuntime {
      * evaluateChunk has already resolved/sent its result) — reported through
      * onOutput instead of being silently lost, matching how a real browser
      * reports an uncaught async error to the console rather than nowhere.
+     *
+     * onPendingWorkChange(+1) here and (-1) once f's call settles (or, below,
+     * once clear_all_timeout cancels it first) tells the conductor evaluator
+     * this callback may still run after evaluateChunk() itself has resolved —
+     * see that hook's own doc comment for why, without it, the host can (and
+     * did — this is source-academy/py-slang#329) tear the whole runtime down
+     * out from under a timer that hasn't fired yet.
      */
     set_timeout: this.builtin("set_timeout", 2, (f, delay) => {
       const sayPair = !this.universalEquality;
@@ -1055,24 +1073,33 @@ export class Py2JsRuntime {
       }
       const id = setTimeout(() => {
         this.pendingTimeouts.delete(id);
-        this.acall(f, []).catch((e: unknown) => {
-          const line =
-            e instanceof Py2JsRuntimeError
-              ? `${e.pyKind}: ${e.message}`
-              : e instanceof Error
-                ? `${e.name}: ${e.message}`
-                : String(e);
-          this.output.push(line + "\n");
-          this.onOutput?.(line);
-        });
+        this.acall(f, [])
+          .catch((e: unknown) => {
+            const line =
+              e instanceof Py2JsRuntimeError
+                ? `${e.pyKind}: ${e.message}`
+                : e instanceof Error
+                  ? `${e.name}: ${e.message}`
+                  : String(e);
+            this.output.push(line + "\n");
+            this.onOutput?.(line);
+          })
+          .finally(() => this.onPendingWorkChange?.(-1));
       }, Number(delay));
       this.pendingTimeouts.add(id);
+      this.onPendingWorkChange?.(1);
       return null;
     }),
     /** Cancels every set_timeout callback scheduled so far (on this runtime)
-     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). */
+     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). Each
+     * cancelled timer matches the +1 its own set_timeout call reported, same
+     * as if it had fired — it never will now, so the pending count must still
+     * settle back to what's actually still outstanding (nothing, typically). */
     clear_all_timeout: this.builtin("clear_all_timeout", 0, () => {
-      for (const id of this.pendingTimeouts) clearTimeout(id);
+      for (const id of this.pendingTimeouts) {
+        clearTimeout(id);
+        this.onPendingWorkChange?.(-1);
+      }
       this.pendingTimeouts.clear();
       return null;
     }),
