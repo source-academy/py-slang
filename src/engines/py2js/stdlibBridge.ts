@@ -43,6 +43,7 @@
  * machine does.
  */
 import { ExprNS } from "../../ast-types";
+import { RuntimeSourceError } from "../../errors";
 import { Token, TokenType } from "../../tokenizer";
 import { GroupName } from "../../stdlib/utils";
 import type { Group } from "../../stdlib/utils";
@@ -237,7 +238,29 @@ function bridgeBuiltin(
   // pyArity -1: argument-count validation is the builtin's own @Validate
   // wrapper, so arity errors carry the CSE machine's exact messages.
   const f = rt.def(name, -1, (...args: PyValue[]) => {
-    const result = call(args.map(toTagged), source, command, context);
+    let result: Value | undefined | Promise<Value | undefined>;
+    try {
+      result = call(args.map(toTagged), source, command, context);
+    } catch (e) {
+      // handleRuntimeError (src/engines/cse/error.ts) throws a
+      // RuntimeSourceError — a plain object implementing SourceError, not
+      // `extends Error` (see errors.ts) — so it fails `instanceof Error`
+      // everywhere up the call chain (including index.ts's own catch
+      // blocks), collapsing to the useless "[object Object]" (py-slang#295)
+      // instead of surfacing whatever real message .message holds. Convert
+      // it into a proper Py2JsRuntimeError here, at the boundary where the
+      // CSE-shaped error actually originates, the same way every other
+      // py2js-native error already carries its kind as `.name`.
+      // error.constructor.name is the exact class name (TypeError,
+      // IndexError, ZeroDivisionError, ...) for every RuntimeSourceError
+      // subclass — none of them set `.name` themselves (CSE's own
+      // displayError falls back to a generic "Error" name for the same
+      // reason), so the constructor is the only reliable source for it.
+      if (e instanceof RuntimeSourceError) {
+        throw new Py2JsRuntimeError(e.constructor.name, e.message);
+      }
+      throw e;
+    }
     if (result instanceof Promise) {
       throw new Py2JsRuntimeError(
         "RuntimeError",
