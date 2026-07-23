@@ -951,10 +951,23 @@ export class Py2JsRuntime {
   }
 
   /**
+   * Real (non-DOM, non-Node-specific) timer handles scheduled by set_timeout
+   * and not yet fired or cleared — tracked per runtime instance (so a fresh
+   * Py2JsRuntime, i.e. a fresh top-level run, never sees a prior run's
+   * timers) so clear_all_timeout can cancel exactly this run's pending
+   * callbacks, mirroring sound_matrix's own timeout_objects bookkeeping.
+   */
+  private readonly pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
+
+  /**
    * The native builtin core: the few builtins that cannot go through the
    * stdlib bridge (see stdlibBridge.ts, which supplies everything else from
    * the real src/stdlib groups). print and input are async/stream-based in
-   * the stdlib; arity inspects CSE closures, which py2js functions are not.
+   * the stdlib; arity inspects CSE closures, which py2js functions are not;
+   * set_timeout/clear_all_timeout (source-academy/py-slang#311) need a live
+   * reference to this runtime to call back into Python later — see the doc
+   * comment on set_timeout below for why py2js, uniquely among the engines,
+   * needs no special re-entry support to do this.
    */
   readonly builtins: Record<string, PyValue> = {
     print: this.builtin("print", -1, (...args) => {
@@ -992,6 +1005,76 @@ export class Py2JsRuntime {
       // covers bare JS functions that bypassed annotateHostFunction (e.g.
       // stuffed into rt.builtins directly).
       return BigInt(f.pyMinArgs ?? Math.max(0, f.pyArity ?? f.length));
+    }),
+    /**
+     * set_timeout(f, t): calls f() with no arguments after t milliseconds,
+     * without blocking the calling code — moved into the language itself
+     * (misc.ts's stdlib stub documents why) rather than staying gated behind
+     * importing the sound_matrix module, whose own set_timeout(f, t) this
+     * matches exactly (same signature, same units).
+     *
+     * Unlike the CSE machine or PVML, this needs no cold-re-entry machinery
+     * at all: a compiled Python function already *is* a plain JS closure
+     * (see the file header), so a real `setTimeout` callback can call it
+     * directly, on the real JS event loop, exactly as any other JS code
+     * would — there is no interpreter loop to resume. Any print() inside f
+     * still streams correctly through `onOutput`, even though the chunk
+     * that scheduled it has long since finished running.
+     *
+     * Invoked via `acall` (the async trampoline), not the sync `call`: f (or
+     * something f calls) may itself need a frontend round-trip — e.g. f was
+     * defined in a chunk that imports a module, so it carries a dual-mode
+     * `asyncBody`, or f *is* an imported module closure passed straight to
+     * set_timeout. `call`'s sync trampoline would reject either case
+     * outright (`asyncOnly` functions are refused there by design — the same
+     * guard a module's synchronous callback path relies on). By the time a
+     * real timer fires, nothing is waiting on a synchronous return anymore,
+     * so there's no reason not to await the async path unconditionally —
+     * `acall` already degrades to a plain call for an ordinary sync-only
+     * function (see acall's own doc comment), so this is strictly more
+     * capable than `call` here, never less.
+     *
+     * An error f raises can no longer reach the chunk that scheduled it (its
+     * evaluateChunk has already resolved/sent its result) — reported through
+     * onOutput instead of being silently lost, matching how a real browser
+     * reports an uncaught async error to the console rather than nowhere.
+     */
+    set_timeout: this.builtin("set_timeout", 2, (f, delay) => {
+      const sayPair = !this.universalEquality;
+      if (typeof f !== "function") {
+        throw new Py2JsRuntimeError(
+          "TypeError",
+          `set_timeout() expects a function as its first argument, got '${pyTypeName(f, sayPair)}'`,
+        );
+      }
+      if (typeof delay !== "bigint" && typeof delay !== "number") {
+        throw new Py2JsRuntimeError(
+          "TypeError",
+          `set_timeout() expects a number as its second argument, got '${pyTypeName(delay, sayPair)}'`,
+        );
+      }
+      const id = setTimeout(() => {
+        this.pendingTimeouts.delete(id);
+        this.acall(f, []).catch((e: unknown) => {
+          const line =
+            e instanceof Py2JsRuntimeError
+              ? `${e.pyKind}: ${e.message}`
+              : e instanceof Error
+                ? `${e.name}: ${e.message}`
+                : String(e);
+          this.output.push(line + "\n");
+          this.onOutput?.(line);
+        });
+      }, Number(delay));
+      this.pendingTimeouts.add(id);
+      return null;
+    }),
+    /** Cancels every set_timeout callback scheduled so far (on this runtime)
+     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). */
+    clear_all_timeout: this.builtin("clear_all_timeout", 0, () => {
+      for (const id of this.pendingTimeouts) clearTimeout(id);
+      this.pendingTimeouts.clear();
+      return null;
     }),
   };
 }

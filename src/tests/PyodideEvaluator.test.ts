@@ -18,8 +18,14 @@ import {
 const PYODIDE_TIMEOUT = 60_000;
 /** python/sicp/mce.py doesn't implement parse()/tokenize() yet (only
  * apply_in_underlying_python) — see issue #318 for why this isn't a quick
- * fix. Remove once that lands and bumps SICP_VERSION. */
-const KNOWN_SICP_GAPS = new Set<string>(["parse", "tokenize"]);
+ * fix. Remove once that lands and bumps SICP_VERSION.
+ *
+ * set_timeout/clear_all_timeout: implemented only by py2js so far
+ * (source-academy/py-slang#311, same permanent gap stdlib-conformance-
+ * py2js.test.ts's SKIP set already documents for the CPython/CSE
+ * cross-check) — python/sicp/misc.py has no equivalent, so pyodide
+ * NameErrors on these same as CSE/PVML/WASM currently do. */
+const KNOWN_SICP_GAPS = new Set<string>(["parse", "tokenize", "set_timeout", "clear_all_timeout"]);
 
 /** Minimal IRunnerPlugin mock — see Py2JsEvaluator.test.ts's identical stub
  * for why this is enough: the evaluator only calls sendResult/sendError/
