@@ -451,10 +451,13 @@ export class MiscBuiltins {
   static set_timeout(
     _args: Value[],
     _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    command: ExprNS.Call,
+    context: Context,
   ): NoneValue {
-    throw new Error("set_timeout is not yet supported by the CSE machine");
+    handleRuntimeError(
+      context,
+      new UserError("set_timeout is not yet supported by the CSE machine", command),
+    );
   }
 
   // clear_all_timeout(): cancels every pending set_timeout callback scheduled
@@ -463,10 +466,13 @@ export class MiscBuiltins {
   static clear_all_timeout(
     _args: Value[],
     _source: string,
-    _command: ExprNS.Call,
-    _context: Context,
+    command: ExprNS.Call,
+    context: Context,
   ): NoneValue {
-    throw new Error("clear_all_timeout is not yet supported by the CSE machine");
+    handleRuntimeError(
+      context,
+      new UserError("clear_all_timeout is not yet supported by the CSE machine", command),
+    );
   }
 }
 for (const builtin of Object.getOwnPropertyNames(MiscBuiltins)) {
