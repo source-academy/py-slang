@@ -42,8 +42,6 @@ export class RunError extends Error {
 }
 
 export interface RunOptions {
-  /** Maximum number of environment steps before stopping. Default: 100000. */
-  envSteps?: number;
   /** Hard step limit (-1 = unlimited). Default: -1. */
   stepLimit?: number;
 }
@@ -89,7 +87,7 @@ export async function runCode(
   variant: number,
   options: RunOptions = {},
 ): Promise<string> {
-  const { envSteps = 100000, stepLimit = -1 } = options;
+  const { stepLimit = -1 } = options;
 
   const groups = VARIANT_GROUPS[variant];
   if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
@@ -117,7 +115,6 @@ export async function runCode(
         context,
         new Control(preludeAst),
         new Stash(),
-        envSteps,
         stepLimit,
         variant,
         preludeText + "\n",
@@ -172,7 +169,7 @@ export async function runCode(
     context.stash = stash;
 
     try {
-      await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
+      await collectSnapshots(context, control, stash, stepLimit, variant, script, 0);
     } catch (e: unknown) {
       // handleRuntimeError (src/engines/cse/error.ts) both records the error on
       // context.errors *and* throws it, so a runtime error escapes right past the
