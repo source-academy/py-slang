@@ -235,6 +235,17 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   functionScope: Environment | null;
   errors: Error[];
   functionEnvironments: FunctionEnvironments;
+  /**
+   * Every identifier referenced as a Variable expression anywhere in the
+   * resolved AST — at any nesting depth, since visitVariableExpr fires from
+   * inside nested function/lambda bodies too (visitFunctionDefStmt/
+   * visitLambdaExpr both recurse via `this.resolve(body)`). py2js's index.ts
+   * uses this to decide whether a REPL chunk must compile on the async spine
+   * (see compiler.ts's dual-mode doc) because it calls `input()` somewhere —
+   * reusing this pass instead of a second AST walk, since the resolver
+   * already visits every such reference while checking declarations.
+   */
+  readonly referencedNames: Set<string> = new Set();
   private validators: FeatureValidator[];
   // Names declared `global` in the current function body (reset on function entry/exit).
   private globalNamesInCurrentFunction: Set<string> = new Set();
@@ -906,6 +917,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   //// EXPRESSIONS
   visitVariableExpr(expr: ExprNS.Variable): void {
+    this.referencedNames.add(expr.name.lexeme);
     try {
       this.environment?.lookupNameCurrentEnvWithError(expr.name);
     } catch (e) {

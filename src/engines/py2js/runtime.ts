@@ -490,6 +490,16 @@ export class Py2JsRuntime {
   onOutput?: (line: string) => void;
 
   /**
+   * Requests one line of input, resolving with what the user typed —
+   * the conductor evaluator wires this to conductor.requestInput, the same
+   * contract the CSE machine's createInputStream/receiveInput use (see
+   * src/engines/cse/streams.ts). Absent when running standalone
+   * (runCodePy2Js/runCodePy2JsDual with no conductor), in which case
+   * input() raises RuntimeError instead of hanging forever.
+   */
+  requestInput?: (prompt?: string) => Promise<string>;
+
+  /**
    * Persistent module-level bindings for REPL-mode chunks (see compiler.ts's
    * REPL-mode doc): every top-level binding of every chunk lives here, so a
    * later chunk — and functions from earlier chunks, via gref's late lookup —
@@ -962,12 +972,20 @@ export class Py2JsRuntime {
   /**
    * The native builtin core: the few builtins that cannot go through the
    * stdlib bridge (see stdlibBridge.ts, which supplies everything else from
-   * the real src/stdlib groups). print and input are async/stream-based in
-   * the stdlib; arity inspects CSE closures, which py2js functions are not;
-   * set_timeout/clear_all_timeout (source-academy/py-slang#311) need a live
-   * reference to this runtime to call back into Python later — see the doc
-   * comment on set_timeout below for why py2js, uniquely among the engines,
-   * needs no special re-entry support to do this.
+   * the real src/stdlib groups). print is fire-and-forget sync; input needs
+   * the async spine (like an imported module function — see moduleInterop.ts)
+   * to await a real frontend round-trip, so it is dual-bodied (def2) and
+   * marked asyncOnly, exactly like an asyncOnly module closure: the sync body
+   * only exists as a defensive backstop (checkCallable's asyncOnly guard
+   * already rejects a sync call before it would run), the real logic lives in
+   * asyncBody. index.ts's Py2JsSession forces dual-mode compilation for any
+   * REPL chunk that references `input` (Resolver.referencedNames), the same
+   * way it already does for a chunk with an import. arity inspects CSE
+   * closures, which py2js functions are not; set_timeout/clear_all_timeout
+   * (source-academy/py-slang#311) need a live reference to this runtime to
+   * call back into Python later — see the doc comment on set_timeout below
+   * for why py2js, uniquely among the engines, needs no special re-entry
+   * support to do this.
    */
   readonly builtins: Record<string, PyValue> = {
     print: this.builtin("print", -1, (...args) => {
@@ -978,12 +996,47 @@ export class Py2JsRuntime {
       this.onOutput?.(line);
       return null;
     }),
-    input: this.builtin("input", -1, () => {
-      throw new Py2JsRuntimeError(
-        "RuntimeError",
-        "input() is not supported by the py2js engine yet",
+    input: (() => {
+      const f = this.def2(
+        "input",
+        -1,
+        () => {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            "input() needs a frontend round-trip and cannot be called from a synchronous module callback",
+          );
+        },
+        async (...args: PyValue[]) => {
+          // Same 0-or-1-argument gate as the stdlib's @Validate(0, 1, "input",
+          // true) (src/stdlib/misc.ts) — reproduced by hand rather than
+          // bridged, since bridgeBuiltin's generic path rejects any builtin
+          // that returns a Promise (stdlibBridge.ts).
+          if (args.length > 1) {
+            throw new Py2JsRuntimeError(
+              "TypeError",
+              `input() takes at most 1 argument (${args.length} given)`,
+            );
+          }
+          // Matches CPython: input(prompt) writes the prompt to stdout (no
+          // trailing newline) before blocking on stdin.
+          const prompt = args.length > 0 ? pyStr(args[0]) : undefined;
+          if (prompt !== undefined) {
+            this.output.push(prompt);
+            this.onOutput?.(prompt);
+          }
+          if (!this.requestInput) {
+            throw new Py2JsRuntimeError(
+              "RuntimeError",
+              "input() is not supported in this context (no input source configured)",
+            );
+          }
+          return this.requestInput(prompt);
+        },
       );
-    }),
+      f.pyBuiltin = true;
+      f.asyncOnly = true;
+      return f;
+    })(),
     // Native rather than bridged: CSE's print_llist (stdlib/linked-list.ts)
     // is async (writes to the output stream directly), like print/input.
     print_llist: this.builtin("print_llist", 1, v => {
