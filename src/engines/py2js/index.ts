@@ -251,6 +251,10 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
   /** Streams each print() line (no trailing newline) as it happens — the
    * conductor evaluator forwards these to the frontend. */
   onOutput?: (line: string) => void;
+  /** Forwarded to the runtime's onPendingWorkChange (see its own doc comment
+   * on Py2JsRuntime) — the conductor evaluator wires this to
+   * BasicEvaluator's beginPendingWork()/endPendingWork(). */
+  onPendingWorkChange?: (delta: 1 | -1) => void;
   /**
    * Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
    * see conductor/GenericDataHandler.ts. Defaults to a fresh
@@ -312,6 +316,7 @@ export class Py2JsSession {
     this.dataHandler = options.dataHandler ?? new GenericDataHandler();
     this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onOutput = options.onOutput;
+    this.rt.onPendingWorkChange = options.onPendingWorkChange;
     if (options.programText !== undefined) {
       this.rt.builtins.__program__ = options.programText;
     }
