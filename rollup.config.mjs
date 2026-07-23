@@ -19,7 +19,7 @@ function plugins() {
       preventAssignment: true,
       values: { __EVALUATOR__: EVALUATOR },
     }),
-    commonjs({ include: ["node_modules/**", "src/engines/pvml/pynter/pynterwasm.js"] }),
+    commonjs({ include: ["node_modules/**"] }),
     json(),
     wasm({ maxFileSize: 100 * 1024 }),
     typescript(),

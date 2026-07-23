@@ -1672,6 +1672,7 @@ __metadata:
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.7.2"
+    "@sourceacademy/pynter-wasm": "npm:^0.1.0"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
@@ -1702,6 +1703,13 @@ __metadata:
     wabt: "npm:^1.0.37"
   languageName: unknown
   linkType: soft
+
+"@sourceacademy/pynter-wasm@npm:^0.1.0":
+  version: 0.1.0
+  resolution: "@sourceacademy/pynter-wasm@npm:0.1.0"
+  checksum: 10c0/21e1acb65ea6a2de4ffff48811606acbc84b76a6503ae8f86bc884c9b0f0ad288b3bdec3ad1df1156b5b16967ced8243d3f3bb8727c728e902bce18345b564ae
+  languageName: node
+  linkType: hard
 
 "@sourceacademy/runner-cse-machine@npm:^3.0.0":
   version: 3.0.0
