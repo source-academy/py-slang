@@ -3,17 +3,25 @@ pathway.
 
 https://github.com/source-academy/pynter
 
-`pynterwasm.js`/`pynterwasm.wasm` are vendored, precompiled artifacts — currently still built from
-Sinter's real source (Pynter is presently an unmodified fork), not from a Pynter-specific rebuild.
+`pynterwasm.js`/`pynterwasm.wasm`/`pynterwasm.d.ts` are vendored, precompiled artifacts, built from
+the `devices/wasm/wasm` CMake target in the `pynter` repo (not from Sinter — that was true early on
+when Pynter was still an unmodified Sinter fork, no longer accurate now that Pynter has its own
+Python-specific VM changes: `range()`/for-loops, floor division, complex numbers, etc. — see that
+repo's own README). Rebuild whenever pynter's VM changes need to reach this pathway (nothing does so
+automatically — a stale vendored binary silently missing a VM-side fix is exactly what caused
+py-slang#268):
 
-However, note that its implementation is tuned for Javascript semantics.
-
-Therefore, Python code like
-
-```python
-a = 3
-b = 5
-
-print(min(a,b)) # works like Python, returns 3
-print(min(a))   # Javascript quirk, returns False instead of reporting error
+```sh
+# from the pynter repo
+mkdir -p devices/wasm/build && cd devices/wasm/build
+emcmake cmake ../wasm
+make -j4
+# then copy pynterwasm.js/.wasm/.d.ts into py-slang's src/engines/pvml/pynter/,
+# run `npx prettier --write` on the .js/.d.ts (emscripten's own formatting doesn't
+# match this repo's), and add back the `/* eslint-disable */` line each starts with.
 ```
+
+Its implementation may still carry some behavior tuned for Source/JS semantics rather than Python's
+own, inherited from the Sinter fork and not yet audited here — treat a mismatch against this
+dialect's Python semantics as worth checking against `pynter`'s own issue tracker rather than
+assumed-correct.
