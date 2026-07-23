@@ -186,8 +186,17 @@ export const ARITY_FX = wasm
   );
 
 export const importedLogs = [
-  wasm.import("console", "log").func("$_log_int").params(i64),
-  wasm.import("console", "log").func("$_log_float").params(f64),
+  // Deliberately distinct import fields (not both "log"): the WASM host-
+  // import binding key is (module, field) only — the local function alias
+  // ($_log_int vs $_log_float) plays no part in it — so two imports
+  // sharing "console"/"log" would silently resolve to the very same JS
+  // function regardless of which one a given call site references. That
+  // was this file's actual bug until fixed: $_log_float was bound to
+  // hostImports.ts's int-formatting log_int (`value.toString()` on a JS
+  // number, not Python float formatting), so e.g. `print(5.0)` rendered
+  // "5" instead of "5.0" and large floats never got exponential notation.
+  wasm.import("console", "log_int").func("$_log_int").params(i64),
+  wasm.import("console", "log_float").func("$_log_float").params(f64),
   wasm.import("console", "log_complex").func("$_log_complex").params(f64, f64),
   wasm.import("console", "log_bool").func("$_log_bool").params(i64),
   wasm.import("console", "log_string").func("$_log_string").params(i32, i32),
@@ -285,4 +294,49 @@ export const LOG_FX = wasm
 
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.LOG_UNKNOWN_TYPE))),
     wasm.unreachable(),
+  );
+
+/**
+ * str()/repr(): the tag/value pass through to a host import that reuses
+ * LOG_FX's own formatting (by calling back into the exported `log`, same
+ * trick log_list already relies on for its element rendering — see
+ * hostImports.ts) and allocates the result as a real WASM string.
+ *
+ * Unlike LOG_FX (void — its argument is simply read and discarded), this
+ * function's argument may itself be a GC'able value that GET_LEX_ADDR_FX
+ * already pushed onto the shadow stack when fetching it (see that
+ * function's own SILENT_PUSH_SHADOW_STACK_FX call) -- and the string this
+ * function allocates for its result pushes a second entry (MAKE_STRING_FX's
+ * own side effect, via the host import's allocateWasmString). Left
+ * unpopped, that first entry leaks: it sits under the result entry and
+ * throws off whatever GC'able-operand accounting the *surrounding*
+ * expression does next (e.g. ARITHMETIC_OP_FX's string-concat branch, which
+ * unconditionally pops exactly two entries for its two string operands).
+ * So — mirroring IS_INT_FX/IS_PAIR_FX/MAKE_PAIR_FX's own per-argument
+ * convention — pop the input's entry first (only if it's actually GC'able;
+ * an int/bool/etc. argument was never pushed) and use the freshly-popped
+ * tag/value, since a GC could in principle have moved it between the push
+ * and here.
+ */
+const popGcableArgPreamble = () =>
+  wasm
+    .if(wasm.call(IS_TAG_GCABLE).args(local.get("$tag")))
+    .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $value) (local.set $tag)`);
+
+export const TO_STR_FX = wasm
+  .func("$_to_str")
+  .params({ $tag: i32, $value: i64 })
+  .results(i32, i64)
+  .body(
+    popGcableArgPreamble(),
+    wasm.call("$_host_to_str").args(local.get("$tag"), local.get("$value")),
+  );
+
+export const TO_REPR_FX = wasm
+  .func("$_to_repr")
+  .params({ $tag: i32, $value: i64 })
+  .results(i32, i64)
+  .body(
+    popGcableArgPreamble(),
+    wasm.call("$_host_to_repr").args(local.get("$tag"), local.get("$value")),
   );

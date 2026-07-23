@@ -122,7 +122,7 @@ export function toPythonFloat(num: number): string {
   }
   return num.toString();
 }
-function escape(str: string): string {
+export function escape(str: string): string {
   let escaped = JSON.stringify(str);
   if (!(str.includes("'") && !str.includes('"'))) {
     escaped = `'${escaped.slice(1, -1).replace(/'/g, "\\'").replace(/\\"/g, '"')}'`;
