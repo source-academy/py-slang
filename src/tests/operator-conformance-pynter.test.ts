@@ -211,11 +211,7 @@ const describeBlock = pynterPath ? describe : describe.skip;
  * decodes list-typed results) — kept as the extension point for whatever
  * genuine skip the next audit finds, rather than removed and re-added.
  */
-function nativePynterSkipReason(
-  _op: string,
-  _left: PyType,
-  _right: PyType,
-): string | undefined {
+function nativePynterSkipReason(_op: string, _left: PyType, _right: PyType): string | undefined {
   return undefined;
 }
 
