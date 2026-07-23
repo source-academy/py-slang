@@ -117,7 +117,7 @@ describe("PyWasmEvaluator module imports", () => {
     // evaluateChunk runs in interactive mode, so the chunk's own final
     // expression value (print()'s own None return) is rendered too, after
     // whatever print() itself already sent to output.
-    expect(outputs).toEqual(["42", "None"]);
+    expect(outputs).toEqual(["42.0", "None"]);
   });
 
   test("imports a bool and a string constant", async () => {
@@ -139,7 +139,7 @@ describe("PyWasmEvaluator module imports", () => {
     await evaluator.evaluateChunk("from testmod import answer as a\nprint(a)\n");
 
     expect(errors).toEqual([]);
-    expect(outputs).toEqual(["42", "None"]);
+    expect(outputs).toEqual(["42.0", "None"]);
   });
 
   test("a chunk with no imports never touches the module loader", async () => {
@@ -182,7 +182,7 @@ describe("PyWasmEvaluator module imports", () => {
       await evaluator.evaluateChunk("from testmod import double\nprint(double(21))\n");
 
       expect(errors).toEqual([]);
-      expect(outputs).toEqual(["42", "None"]);
+      expect(outputs).toEqual(["42.0", "None"]);
     });
 
     test("a higher-order module function calls back into a Python closure", async () => {

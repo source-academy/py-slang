@@ -345,6 +345,16 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .func("$_host_arith_ext")
           .params(i32, i32, i64, i32, i64)
           .results(i32, i64),
+        wasm
+          .import("stringify", "to_str")
+          .func("$_host_to_str")
+          .params(i32, i64)
+          .results(i32, i64),
+        wasm
+          .import("stringify", "to_repr")
+          .func("$_host_to_repr")
+          .params(i32, i64)
+          .results(i32, i64),
         // Imported-module support (see moduleInterop.ts): `get` materialises
         // a pre-loaded imported value (sync); `call` runs an imported module
         // function (async on the JS side — only callable under JSPI, see
