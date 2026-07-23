@@ -10,17 +10,7 @@ This section lists some exceptions where we think a Python \S $x$
 implementation should be allowed to deviate from the native Python 
 specification, for the sake of internal consistency and esthetics.
 
-\begin{description}
-\item[{Undeclared names:}]
-  Python allows you to run programs that contain undeclared names. For example:
-  \begin{lstlisting}
->>> print(1 if True else x)
-1
-  \end{lstlisting}
-
-  py-slang does not run programs with undeclared names, regardless of whether
-  the name would get evaluated during program execution or not.
-  
+\begin{description}  
 \item[{Output Behavior Differences Between py-slang and Standard Python REPL:}]
   Python provides an interactive mode, where users can type and immediately 
   evaluate Python expressions line by line. This mode is entered when you 
