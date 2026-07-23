@@ -345,11 +345,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .func("$_host_arith_ext")
           .params(i32, i32, i64, i32, i64)
           .results(i32, i64),
-        wasm
-          .import("stringify", "to_str")
-          .func("$_host_to_str")
-          .params(i32, i64)
-          .results(i32, i64),
+        wasm.import("stringify", "to_str").func("$_host_to_str").params(i32, i64).results(i32, i64),
         wasm
           .import("stringify", "to_repr")
           .func("$_host_to_repr")
