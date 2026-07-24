@@ -261,6 +261,14 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    */
   dataHandler?: IDataHandler;
   /**
+   * Resolves one input() call with what the user typed — forwarded to
+   * Py2JsRuntime.requestInput (see runtime.ts's doc comment on the field).
+   * The conductor evaluator (Py2JsEvaluator.ts) supplies
+   * `prompt => this.conductor.requestInput(prompt)`; left unset for
+   * standalone/test use, in which case input() raises RuntimeError.
+   */
+  requestInput?: (prompt?: string) => Promise<string>;
+  /**
    * `__program__`'s value for this session — "the string representation of
    * the editor content at the time when 'Run' was last pressed" per
    * docs/specs/python_interpreter.tex, for the REPL case. Mirrors
@@ -312,6 +320,7 @@ export class Py2JsSession {
     this.dataHandler = options.dataHandler ?? new GenericDataHandler();
     this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onOutput = options.onOutput;
+    this.rt.requestInput = options.requestInput;
     if (options.programText !== undefined) {
       this.rt.builtins.__program__ = options.programText;
     }
@@ -362,9 +371,19 @@ export class Py2JsSession {
     const errors = resolver.resolve(ast);
     if (errors.length > 0) throw errors[0];
 
-    if (hasImports(ast.statements)) {
+    const imports = hasImports(ast.statements);
+    if (imports) {
       const bindings = await loadChunkImports(this.rt, this.dataHandler, ast.statements);
       this.rt.setPendingImports(bindings);
+    }
+
+    // input() is asyncOnly, exactly like an imported module function
+    // (runtime.ts's doc comment on the native builtin core) — a chunk that
+    // calls it anywhere, at any nesting depth, must compile on the async
+    // spine even with no imports of its own. referencedNames already saw
+    // every such reference during the resolve() call above (including
+    // inside nested function bodies), so this needs no second AST walk.
+    if (imports || resolver.referencedNames.has("input")) {
       const js = compileProgram(ast, Object.keys(this.rt.builtins), {
         mode: "dual",
         repl: { priorGlobals },
