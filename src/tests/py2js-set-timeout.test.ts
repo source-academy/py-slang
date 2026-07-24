@@ -127,7 +127,7 @@ test("a scheduled callback can itself call an imported module function needing a
   // `double`, so the whole chunk (and later's own compiled body) is in dual
   // mode, exactly as a real sound_matrix-calling-back-into-Python program
   // would be.
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   async function* doubleFunc(
     x: TypedValue<DataType>,
   ): AsyncGenerator<void, TypedValue<DataType>, undefined> {

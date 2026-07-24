@@ -1,11 +1,11 @@
 import {
   DataType,
   type ExternCallable,
-  type IDataHandler,
   type IFunctionSignature,
-  type TypedValue,
+  type TypedValue
 } from "@sourceacademy/conductor/types";
 import { ExprNS, StmtNS } from "../ast-types";
+import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { Closure } from "../engines/cse/closure";
 import { Context } from "../engines/cse/context";
 import { moduleToPython, pythonToModule } from "../engines/cse/modules";
@@ -32,6 +32,10 @@ class TestDataHandler {
   private closures = new Map<TypedValue<DataType.CLOSURE>, StoredClosure>();
   private opaques = new Map<TypedValue<DataType.OPAQUE>, { value: unknown; immutable: boolean }>();
 
+  private currentCall?: ExprNS.Call;
+  setCurrentCall(call: ExprNS.Call | undefined): void {
+    this.currentCall = call;
+  }
   pair_make(
     head: TypedValue<DataType>,
     tail: TypedValue<DataType>,
@@ -119,9 +123,10 @@ class TestDataHandler {
     return Promise.resolve(this.getClosure(closure).sig.args.length);
   }
 
-  closure_call_unchecked<T extends DataType>(
+  closure_call<T extends DataType>(
     closure: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
+    _returnType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     return this.getClosure(closure).func(...args) as AsyncGenerator<
       void,
@@ -188,7 +193,7 @@ class TestDataHandler {
 function makeContext(): { context: Context; evaluator: TestDataHandler } {
   const context = new Context();
   const evaluator = new TestDataHandler();
-  context.evaluator = evaluator as unknown as IDataHandler;
+  context.evaluator = evaluator as unknown as GenericDataHandler;
   return { context, evaluator };
 }
 
@@ -346,10 +351,10 @@ describe("module interop conversions", () => {
 
       const closure = await pythonToModule(context, "", undefined, add);
       const result = await drainGenerator(
-        evaluator.closure_call_unchecked(closure as TypedValue<DataType.CLOSURE>, [
+        evaluator.closure_call(closure as TypedValue<DataType.CLOSURE>, [
           { type: DataType.NUMBER, value: 2 },
           { type: DataType.NUMBER, value: 3 },
-        ]),
+        ], DataType.NUMBER),
       );
 
       expect(await evaluator.closure_arity(closure as TypedValue<DataType.CLOSURE>)).toBe(2);
@@ -421,8 +426,8 @@ describe("module interop conversions", () => {
       const { context, evaluator } = makeContext();
       const closure = await evaluator.closure_make(
         { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+        // eslint-disable-next-line @typescript-eslint/require-await
         async function* (arg) {
-          await Promise.resolve();
           return { type: DataType.NUMBER, value: arg.value * 2 };
         },
       );

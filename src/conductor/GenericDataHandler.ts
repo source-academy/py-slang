@@ -12,8 +12,7 @@ import {
 } from "@sourceacademy/conductor/types";
 import { isSameType } from "@sourceacademy/conductor/util";
 import { ExprNS } from "../ast-types";
-import { IndexError } from "../errors";
-import { InvalidArityError, InvalidArrayCreationError, InvalidIdentifierError, InvalidLengthError, InvalidOpaqueUpdateError, InvalidTypeError } from "./errors";
+import { InvalidArityError, InvalidArrayCreationError, InvalidIdentifierError, InvalidIndexError, InvalidLengthError, InvalidOpaqueUpdateError, InvalidTypeError } from "./errors";
 const DEFAULT_VALUES = {
   [DataType.NUMBER]: { type: DataType.NUMBER, value: 0 },
   [DataType.CONST_STRING]: { type: DataType.CONST_STRING, value: "" },
@@ -37,7 +36,7 @@ const DEFAULT_VALUES = {
  * extracted so every evaluator that talks to conductor modules (CSE, py2js,
  * and eventually WASM/PVML) shares one implementation instead of
  * re-deriving the same identifier-table bookkeeping per engine. An evaluator
- * holds one instance (`private dataHandler = new GenericDataHandler()`) and
+ * holds one instance (`private dataHandler = new GenericDataHandler(variant)`) and
  * hands it to both `context.evaluator` (or the engine's equivalent) and
  * `conductor.registerPlugin(ModuleLoaderRunnerPlugin, conductor, dataHandler)`.
  */
@@ -225,7 +224,7 @@ export class GenericDataHandler implements IDataHandler {
     len: number,
     init?: TypedValue<NoInfer<T>>,
   ): Promise<TypedValue<DataType.ARRAY, NoInfer<T>>> {
-    if (!(t in DEFAULT_VALUES)) {
+    if (init === undefined && !(t in DEFAULT_VALUES)) {
       throw new InvalidArrayCreationError(
         this.currentCall,
         this.currentSource,
@@ -272,7 +271,7 @@ export class GenericDataHandler implements IDataHandler {
     }
 
     if (idx < 0 || idx >= array.elements.length) {
-      throw new IndexError(this.currentSource ?? "", this.currentCall as ExprNS.Call, idx, array.elements.length, false);
+      throw new InvalidIndexError(this.currentCall, this.currentSource, idx, array.elements.length);
     }
 
     const value = array.elements[idx];
@@ -314,7 +313,13 @@ export class GenericDataHandler implements IDataHandler {
     }
 
     if (idx < 0 || idx >= array.elements.length) {
-      throw new IndexError(this.currentSource ?? "", this.currentCall as ExprNS.Call, idx, array.elements.length, true);
+      throw new InvalidIndexError(
+        this.currentCall,
+        this.currentSource,
+        idx,
+        array.elements.length,
+        true,
+      );
     }
 
     if (tv.type !== array.type && array.type !== DataType.ANY) {
@@ -369,12 +374,13 @@ export class GenericDataHandler implements IDataHandler {
     sig: IFunctionSignature<Arg, Ret>,
     func: ExternCallable<Arg, Ret>,
     dependsOn?: (TypedValue<DataType> | null)[],
+    isVararg?: boolean,
   ): Promise<TypedValue<DataType.CLOSURE, Ret>> {
     const closureValue: TypedValue<DataType.CLOSURE, Ret> = {
       type: DataType.CLOSURE,
       value: this.uniqueId++ as ClosureIdentifier<Ret>,
     };
-    this.closureMap.set(closureValue.value, { sig, func, dependsOn });
+    this.closureMap.set(closureValue.value, { sig, func, dependsOn, isVararg });
     return Promise.resolve(closureValue);
   }
   closure_is_vararg(c: TypedValue<DataType.CLOSURE>): Promise<boolean> {
@@ -406,7 +412,13 @@ export class GenericDataHandler implements IDataHandler {
       );
     }
     for (const [i, arg] of args.entries()) {
+      if (i >= closure.sig.args.length) {
+        break;
+      }
       if (closure.sig.args[i] === DataType.ANY) {
+        continue;
+      }
+      if (closure.sig.args[i] === DataType.PAIR && arg.type === DataType.ARRAY) {
         continue;
       }
       if (!isSameType(arg.type, closure.sig.args[i])) {
@@ -585,8 +597,8 @@ export class GenericDataHandler implements IDataHandler {
           this.currentCall,
           this.currentSource,
 
-          "element of",
-          "list",
+          "a list",
+          this.getTypeName(DataType.LIST),
           this.getTypeName(current.type, current)
         );
       }
@@ -615,6 +627,7 @@ export class GenericDataHandler implements IDataHandler {
   }
   list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
     try {
+      console.log(this.readListElements(xs));
       return Promise.resolve(this.readListElements(xs));
     } catch (e) {
       return Promise.reject(e);

@@ -61,8 +61,8 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   const applyTwice = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE, DataType.NUMBER] },
     async function* (f: TypedValue<DataType.CLOSURE>, x: TypedValue<DataType>) {
-      const once = yield* dh.closure_call_unchecked(f, [x]);
-      const twice = yield* dh.closure_call_unchecked(f, [once]);
+      const once = yield* dh.closure_call(f, [x], DataType.ANY);
+      const twice = yield* dh.closure_call(f, [once], DataType.ANY);
       return twice;
     },
   );
@@ -92,7 +92,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
 
   // Mirrors sound's actual sine_sound -> play shape precisely: sine_sound's own body wraps a
   // plain JS wave as a *new* closure (waveToConductorClosure -> closure_make), and play's own
-  // body later calls that closure many times via closure_call_unchecked (sampleWave's loop) -
+  // body later calls that closure many times via closure_call (sampleWave's loop) -
   // not just one call each, an extern creating a closure that a *different* extern then
   // repeatedly invokes.
   const makeWave = await dh.closure_make(
@@ -113,9 +113,10 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     async function* (wave: TypedValue<DataType.CLOSURE>) {
       let sum = num(0);
       for (let i = 0; i < 5; i += 1) {
-        sum = yield* dh.closure_call_unchecked(
+        sum = yield* dh.closure_call(
           wave as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
           [num(i)],
+          DataType.NUMBER
         );
       }
       return sum;
@@ -134,13 +135,15 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       return dh.closure_make(
         { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
         async function* (t: TypedValue<DataType.NUMBER>) {
-          const a = yield* dh.closure_call_unchecked(
+          const a = yield* dh.closure_call(
             waveA as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
             [t],
+            DataType.NUMBER
           );
-          const b = yield* dh.closure_call_unchecked(
+          const b = yield* dh.closure_call(
             waveB as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
             [t],
+            DataType.NUMBER
           );
           return num(a.value + b.value);
         },
@@ -157,7 +160,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     // eslint-disable-next-line @typescript-eslint/require-await
     async function* (f: TypedValue<DataType.CLOSURE>) {
       scheduledCallbacks.push(f);
-      return { type: DataType.VOID, value: undefined } as TypedValue<DataType.VOID>;
+      return { type: DataType.VOID, value: undefined };
     },
   );
 
@@ -204,7 +207,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   // signature (see GenericDataHandler's coerceArgsToSignature-era doc history), relaying
   // whatever TypedValue it's handed straight back through, untouched, no matter what it is.
   const identity = await dh.closure_make(
-    { returnType: DataType.VOID, args: [DataType.VOID] },
+    { returnType: DataType.ANY, args: [DataType.ANY] },
     // eslint-disable-next-line @typescript-eslint/require-await
     async function* (x: TypedValue<DataType>) {
       return x;
@@ -519,7 +522,7 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(scheduledCallbacks).toHaveLength(1);
 
     const dh = getDataHandler();
-    const gen = dh.closure_call_unchecked(scheduledCallbacks[0], []);
+    const gen = dh.closure_call(scheduledCallbacks[0], [], DataType.VOID);
     let step = await gen.next();
     while (!step.done) {
       step = await gen.next();
@@ -556,7 +559,7 @@ describe("PyPvmlEvaluator module imports", () => {
     // like a real setTimeout chain firing one after another.
     while (scheduledCallbacks.length > 0) {
       const cb = scheduledCallbacks.shift()!;
-      const gen = dh.closure_call_unchecked(cb, []);
+      const gen = dh.closure_call(cb, [], DataType.VOID);
       let step = await gen.next();
       while (!step.done) {
         step = await gen.next();
@@ -593,7 +596,7 @@ describe("PyPvmlEvaluator module imports", () => {
     let drained = 0;
     while (scheduledCallbacks.length > 0) {
       const cb = scheduledCallbacks.shift()!;
-      const gen = dh.closure_call_unchecked(cb, []);
+      const gen = dh.closure_call(cb, [], DataType.VOID);
       let step = await gen.next();
       while (!step.done) {
         step = await gen.next();

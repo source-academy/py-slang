@@ -12,8 +12,12 @@ export class EvaluatorError extends ConductorError {
   column?: number;
 
   constructor(e: unknown) {
-    super(e instanceof Error ? e.message : String(e));
-    this.name = e instanceof Error ? e.name : "Error";
+    const errorLike =
+      typeof e === "object" && e !== null
+        ? (e as { name?: unknown; message?: unknown })
+        : undefined;
+    super(typeof errorLike?.message === "string" ? errorLike.message : String(e));
+    this.name = typeof errorLike?.name === "string" ? errorLike.name : "Error";
     const se = e as { location?: { start?: { line: number; column: number } } };
     if (se.location?.start) {
       this.line = se.location.start.line;
@@ -23,6 +27,10 @@ export class EvaluatorError extends ConductorError {
 }
 
 export abstract class ModuleInterfaceError extends RuntimeSourceError {
+  /**
+   * The name of the error, e.g., "TypeError", "ValueError", etc.
+   */
+  public readonly name: string;
   /**
    * Indicates whether the error message is user-friendly. If true, it will be displayed to the user.
    * If false, it will prompt the user to report the error to the developers.
@@ -37,12 +45,13 @@ export abstract class ModuleInterfaceError extends RuntimeSourceError {
     expectedBehavior: boolean,
   ) {
     super(node);
+    this.name = name;
     this.expectedBehavior = expectedBehavior;
     const hint =
       `${name}: ${message}` +
       (this.expectedBehavior
         ? ""
-        : "Please report this error (along with the code sample) on EdStem");
+        : "\nPlease report this error (along with the code sample) on EdStem.");
     if (!node || !source) {
       this.message = hint;
       return;
@@ -91,7 +100,13 @@ export class InvalidTypeError extends ModuleInterfaceError {
     public readonly expected: string,
     public readonly actual: string,
   ) {
-    super("TypeError", node, source, `Expected ${noun} type of ${expected}, got ${actual}`, true);
+    const message =
+      noun === "a list"
+        ? `Expected a list, got type ${actual}`
+        : noun.endsWith(" of")
+          ? `Expected ${noun} type ${expected}, got ${actual}`
+          : `Expected ${noun} to have type ${expected}, got ${actual}`;
+    super("TypeError", node, source, message, true);
   }
 }
 
@@ -104,6 +119,24 @@ export class InvalidLengthError extends ModuleInterfaceError {
     public readonly actual: number,
   ) {
     super("ValueError", node, source, `Expected ${noun} length of ${expected}, got ${actual}`, true);
+  }
+}
+
+export class InvalidIndexError extends ModuleInterfaceError {
+  constructor(
+    node: ExprNS.Call | undefined,
+    source: string | undefined,
+    public readonly index: number,
+    public readonly length: number,
+    public readonly isAssignment = false,
+  ) {
+    super(
+      "IndexError",
+      node,
+      source,
+      `${isAssignment ? "list assignment index out of range" : "list index out of range"}. You tried to ${isAssignment ? "assign to" : "access"} index ${index} but the list only has ${length} elements.`,
+      true,
+    );
   }
 }
 

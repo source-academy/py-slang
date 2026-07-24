@@ -111,6 +111,8 @@ export async function pythonToModule(
       return context.evaluator.closure_make<DataType[], DataType>(
         { returnType: DataType.ANY, args: Array(value.minArgs).fill(DataType.ANY) },
         builtinFunc,
+        undefined, 
+        true
       );
     case "bigint":
       return { type: DataType.NUMBER, value: Number(value.value) };

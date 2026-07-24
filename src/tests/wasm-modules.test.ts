@@ -48,8 +48,8 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   const applyTwice = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE, DataType.NUMBER] },
     async function* (f: TypedValue<DataType.CLOSURE>, x: TypedValue<DataType>) {
-      const once = yield* dh.closure_call_unchecked(f, [x]);
-      const twice = yield* dh.closure_call_unchecked(f, [once]);
+      const once = yield* dh.closure_call(f, [x], DataType.NUMBER);
+      const twice = yield* dh.closure_call(f, [once], DataType.NUMBER);
       return twice;
     },
   );
@@ -74,7 +74,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   const callWithThree = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE] },
     async function* (f: TypedValue<DataType.CLOSURE>) {
-      return yield* dh.closure_call_unchecked(f, [num(1), num(2), num(3)]);
+      return yield* dh.closure_call(f, [num(1), num(2), num(3)], DataType.NUMBER);
     },
   );
 

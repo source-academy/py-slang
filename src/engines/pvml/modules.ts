@@ -94,7 +94,7 @@ export async function moduleToPvml(
           // yields exist so a machine-pumping evaluator (the CSE machine)
           // can interleave steps; PVML callbacks re-enter synchronously via
           // callPvml instead, so the yields are simply awaited past.
-          const gen = dh.closure_call_unchecked(closureValue, converted);
+          const gen = dh.closure_call(closureValue, converted, DataType.ANY);
           let step = await gen.next();
           while (!step.done) {
             step = await gen.next();

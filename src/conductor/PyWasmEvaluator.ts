@@ -7,7 +7,7 @@ import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { compileToWasmAndRun } from "../engines/wasm";
-import { prepareModuleBindings, PreparedModuleBindings } from "../engines/wasm/moduleInterop";
+import { PreparedModuleBindings, prepareModuleBindings } from "../engines/wasm/moduleInterop";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
@@ -43,7 +43,7 @@ class PyWasmEvaluator extends BasicEvaluator {
   private readonly chapter: number;
   private readonly groups: Group[];
   /** See PyPvmlEvaluatorBase's identical field doc comment. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
@@ -52,6 +52,7 @@ class PyWasmEvaluator extends BasicEvaluator {
     super(conductor);
     this.chapter = chapter;
     this.groups = groups;
+    this.dataHandler = new GenericDataHandler(chapter);
   }
 
   /** Finds every `from X import a, b as c` statement in `ast` and resolves

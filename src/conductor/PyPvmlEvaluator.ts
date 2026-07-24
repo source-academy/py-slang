@@ -2,9 +2,9 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { moduleToPvml } from "../engines/pvml/modules";
-import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import linkedList from "../stdlib/linked-list";
@@ -69,7 +69,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * see GenericDataHandler.ts. Passed to moduleToPvml as the IDataHandler
    * a module's exports are read against, and wrapped via
    * asInterfacableEvaluator when registering ModuleLoaderRunnerPlugin. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
@@ -82,6 +82,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       .map(g => g.prelude ?? "")
       .filter(p => p.trim())
       .join("\n");
+    this.dataHandler = new GenericDataHandler(this.variant)
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);
