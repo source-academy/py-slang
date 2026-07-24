@@ -212,7 +212,7 @@ test("the sound-module scenario: a module samples a Python-defined function via 
   expect(outputs).toEqual(["6.0"]);
 });
 
-test("a synchronously-sampled Python callback cannot itself call an import needing a round-trip", async () => {
+test("a Python callback invoked by a module can itself call another import needing a round-trip (source-academy/py-slang#348)", async () => {
   const dh = new GenericDataHandler();
 
   async function* playFunc(
@@ -247,15 +247,23 @@ test("a synchronously-sampled Python callback cannot itself call an import needi
     ],
   });
 
-  const { session } = makeSession(dh);
-  await expect(
-    session.runChunk(
-      "from audio import play, slow_helper\n" +
-        "def wave(t):\n" +
-        "    return slow_helper(t)\n" +
-        "print(play(wave))\n",
-    ),
-  ).rejects.toThrow(/needs a frontend round-trip/);
+  const { session, outputs } = makeSession(dh);
+  // play calls back into wave(0) via closure_call_unchecked (never
+  // closure_call_sync - wave isn't scalar-in/scalar-out-provable here), and
+  // wave's own body calls slow_helper, an asyncOnly import in its own right.
+  // Regression test for #348: this used to throw "needs a frontend
+  // round-trip" because the callback wrapper ran wave's *sync* body
+  // (rt.callSync) regardless of how the module invoked it, so a nested
+  // asyncOnly call inside wave could never await. It now runs wave's async
+  // body instead, so the nested round-trip actually completes.
+  await session.runChunk(
+    "from audio import play, slow_helper\n" +
+      "def wave(t):\n" +
+      "    return slow_helper(t)\n" +
+      "print(play(wave))\n",
+  );
+
+  expect(outputs).toEqual(["0.0"]);
 });
 
 test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play", async () => {
