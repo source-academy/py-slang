@@ -96,13 +96,12 @@ describe("matchPynterWasmFaultTrailer", () => {
     expect(matchPynterWasmFaultTrailer(text)).toBe(expected);
   });
 
-  test.each([
-    "42",
-    "Program exited early",
-    "Program exited with result type undefined: undefined",
-  ])("does not match %j", text => {
-    expect(matchPynterWasmFaultTrailer(text)).toBeUndefined();
-  });
+  test.each(["42", "Program exited early", "Program exited with result type undefined: undefined"])(
+    "does not match %j",
+    text => {
+      expect(matchPynterWasmFaultTrailer(text)).toBeUndefined();
+    },
+  );
 });
 
 describe("PyPvmlPynterEvaluator fault handling", () => {
