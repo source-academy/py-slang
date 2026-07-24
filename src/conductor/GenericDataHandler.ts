@@ -66,46 +66,45 @@ export class GenericDataHandler implements IDataHandler {
   private opaqueMap = new Map<OpaqueIdentifier, { value: unknown; immutable: boolean }>();
   private uniqueId = 0;
   
-  private currentModuleName: string | undefined = undefined;
   private currentCall: ExprNS.Call | undefined = undefined;
   private currentSource: string | undefined = undefined;
 
   private getTypeName<T extends DataType>(type: T, value?: TypedValue<T>): string {
     switch (type) {
       case DataType.NUMBER:
-        return "float";
+        return "'int' or 'float'";
       case DataType.CONST_STRING:
-        return "str";
+        return "'str'";
       case DataType.BOOLEAN:
-        return "bool";
+        return "'bool'";
       case DataType.VOID:
       case DataType.EMPTY_LIST:
-        return "None";
+        return "'NoneType'";
       case DataType.INTEGER:
-        return "int";
+        return "'int'";
       case DataType.ARRAY:
-        return this.variant >= 3 ? "list" : "pair";
+        return this.variant >= 3 ? "'list'" : "'pair'";
       case DataType.LIST:
-        return "llist";
+        return "'llist'";
       case DataType.PAIR:
-        return "pair";
+        return "'pair'";
       case DataType.CLOSURE:
-        return "function";
+        return "'function'";
       case DataType.ANY:
-        return "any";
+        return "'any'";
       case DataType.OPAQUE:
         if (value === undefined) {
-          return "opaque";
+          return "'opaque'";
         }
         const opaque = this.opaqueMap.get(value.value as OpaqueIdentifier);
         if (!opaque) {
-          return "opaque";
+          return "'opaque'";
         }
         const name = opaque.value;
         if (typeof name === "object" && name !== null && name.constructor.name !== "Object") {
           return name.constructor.name;
         }
-        return "opaque";
+        return "'opaque'";
     }
   }
 
@@ -113,8 +112,9 @@ export class GenericDataHandler implements IDataHandler {
     public readonly variant: number,
   ) {}
 
-  setCurrentModuleName(moduleName: string | undefined): void {
-    this.currentModuleName = moduleName;
+
+  getCurrentModuleName(): string | undefined {
+    return undefined;
   }
 
   setCurrentCall(call: ExprNS.Call | undefined): void {
@@ -152,7 +152,7 @@ export class GenericDataHandler implements IDataHandler {
         throw new InvalidIdentifierError(
           this.currentCall,
           this.currentSource,
-          this.currentModuleName,
+
           p.value,
           "pair",
         );
@@ -164,7 +164,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         p.value,
         "pair",
       );
@@ -205,7 +204,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         "head of",
         this.getTypeName(headType),
         this.getTypeName(head.type, head),
@@ -215,7 +213,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         "tail of",
         this.getTypeName(tailType),
         this.getTypeName(tail.type, tail),
@@ -232,7 +229,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidArrayCreationError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         this.getTypeName(t)
       );
     }
@@ -250,7 +246,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         a.value,
         "array",
       );
@@ -271,7 +266,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         a.value,
         "array",
       );
@@ -292,7 +286,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         a.value,
         "array",
       );
@@ -315,7 +308,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         a.value,
         "array",
       );
@@ -329,8 +321,7 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
-        `element at index ${idx} of`,
+        `element at index ${idx}'s`,
         this.getTypeName(array.type),
         this.getTypeName(tv.type, tv),
       );
@@ -350,7 +341,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         a.value,
         "array",
       );
@@ -359,17 +349,15 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
-        `array of type ${type}`,
-        this.getTypeName(array.type),
+        `array`,
         this.getTypeName(type),
+        this.getTypeName(array.type),
       );
     }
     if (length !== undefined && array.elements.length !== length) {
       throw new InvalidLengthError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         "array",
         length,
         array.elements.length
@@ -405,7 +393,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         c.value,
         "closure",
       );
@@ -414,7 +401,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidArityError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         closure.sig.args.length,
         args.length,
       );
@@ -427,8 +413,7 @@ export class GenericDataHandler implements IDataHandler {
         throw new InvalidTypeError(
           this.currentCall,
           this.currentSource,
-          this.currentModuleName,
-          `argument ${i} of`,
+          `argument ${i}`,
           this.getTypeName(closure.sig.args[i]),
           this.getTypeName(arg.type, arg),
         );
@@ -439,7 +424,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         "return",
         this.getTypeName(returnType),
         this.getTypeName(result.type, result),
@@ -456,7 +440,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         c.value,
         "closure",
       );
@@ -499,7 +482,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         c.value,
         "closure",
       );
@@ -508,7 +490,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidArityError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         arity,
         closure.sig.args.length,
       );
@@ -529,7 +510,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         o.value,
         "opaque",
       );
@@ -542,7 +522,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidIdentifierError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         o.value,
         "opaque",
       );
@@ -551,7 +530,6 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidOpaqueUpdateError(
         this.currentCall,
         this.currentSource,
-        this.currentModuleName,
         o.value
       );
     }
@@ -592,7 +570,7 @@ export class GenericDataHandler implements IDataHandler {
         throw new InvalidIdentifierError(
           this.currentCall,
           this.currentSource,
-          this.currentModuleName,
+
           xs.value,
           "array",
         );
@@ -606,7 +584,7 @@ export class GenericDataHandler implements IDataHandler {
         throw new InvalidTypeError(
           this.currentCall,
           this.currentSource,
-          this.currentModuleName,
+
           "element of",
           "list",
           this.getTypeName(current.type, current)
@@ -617,7 +595,7 @@ export class GenericDataHandler implements IDataHandler {
         throw new InvalidIdentifierError(
           this.currentCall,
           this.currentSource,
-          this.currentModuleName,
+
           current.value,
           "pair",
         );

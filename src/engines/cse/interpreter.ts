@@ -649,7 +649,7 @@ const cmdEvaluators: CmdEvaluators = {
   Call: function (
     _code: string,
     callNode: ExprNS.Call,
-    _context: Context,
+    context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
@@ -667,6 +667,7 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(arg instanceof ExprNS.Starred ? arg.value : arg);
     }
     control.push(callNode.callee);
+    context.evaluator?.setCurrentCall(callNode);
   },
 
   FunctionDef: function (

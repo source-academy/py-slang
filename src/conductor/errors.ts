@@ -24,30 +24,22 @@ export class EvaluatorError extends ConductorError {
 
 export abstract class ModuleInterfaceError extends RuntimeSourceError {
   /**
-   * Stores the module which called the interface error. This is used to provide more context in the error message.
-   * If the module name is not available (called by the evaluator), it will be undefined.
-   */
-  public readonly moduleName: string | undefined;
-
-  /**
    * Indicates whether the error message is user-friendly. If true, it will be displayed to the user.
    * If false, it will prompt the user to report the error to the developers.
    */
   public readonly expectedBehavior: boolean;
 
   constructor(
+    name: string,
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     message: string,
     expectedBehavior: boolean,
   ) {
     super(node);
-    this.moduleName = moduleName;
     this.expectedBehavior = expectedBehavior;
     const hint =
-      `${this.constructor.name}: ${message}` +
-      (this.moduleName ? `Called from ${this.moduleName}` : "") +
+      `${name}: ${message}` +
       (this.expectedBehavior
         ? ""
         : "Please report this error (along with the code sample) on EdStem");
@@ -67,7 +59,7 @@ export abstract class ModuleInterfaceError extends RuntimeSourceError {
     const indicator = createErrorIndicator(snippet, errorPos);
 
     this.message =
-      this.constructor.name +
+      name +
       " at line " +
       lineIndex +
       "\n\n    " +
@@ -84,11 +76,10 @@ export class InvalidIdentifierError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     public readonly identifier: Identifier,
     public readonly identifierType: "array" | "pair" | "closure" | "opaque",
   ) {
-    super(node, source, moduleName, `Invalid ${identifierType} identifier: ${identifier}`, false);
+    super("InternalModuleError", node, source, `Invalid ${identifierType} identifier: ${identifier}`, false);
   }
 }
 
@@ -96,12 +87,11 @@ export class InvalidTypeError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     public readonly noun: string,
     public readonly expected: string,
     public readonly actual: string,
   ) {
-    super(node, source, moduleName, `Expected ${noun} type of ${expected}, got ${actual}`, true);
+    super("TypeError", node, source, `Expected ${noun} type of ${expected}, got ${actual}`, true);
   }
 }
 
@@ -109,12 +99,11 @@ export class InvalidLengthError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     public readonly noun: string,
     public readonly expected: number,
     public readonly actual: number,
   ) {
-    super(node, source, moduleName, `Expected ${noun} length of ${expected}, got ${actual}`, true);
+    super("ValueError", node, source, `Expected ${noun} length of ${expected}, got ${actual}`, true);
   }
 }
 
@@ -122,11 +111,10 @@ export class InvalidArityError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     public readonly expected: number,
     public readonly actual: number,
   ) {
-    super(node, source, moduleName, `Expected ${expected} arguments, got ${actual}`, true);
+    super("TypeError", node, source, `Expected ${expected} arguments, got ${actual}`, true);
   }
 }
 
@@ -134,10 +122,9 @@ export class InvalidOpaqueUpdateError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     public readonly identifier: Identifier,
   ) {
-    super(node, source, moduleName, `Immutable opaque value: ${identifier}`, false);
+    super("InternalModuleError", node, source, `Immutable opaque value: ${identifier}`, false);
   }
 }
 
@@ -145,9 +132,8 @@ export class InvalidArrayCreationError extends ModuleInterfaceError {
   constructor(
     node: ExprNS.Call | undefined,
     source: string | undefined,
-    moduleName: string | undefined,
     type: string,
   ) {
-    super(node, source, moduleName, `Cannot create an array of ${type} without specifying a default value`, false);
+    super("InternalModuleError", node, source, `Cannot create an array of ${type} without specifying a default value`, false);
   }
 }

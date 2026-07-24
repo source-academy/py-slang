@@ -109,7 +109,7 @@ export async function pythonToModule(
       }
 
       return context.evaluator.closure_make<DataType[], DataType>(
-        { returnType: DataType.VOID, args: Array(value.minArgs).fill(DataType.VOID) },
+        { returnType: DataType.ANY, args: Array(value.minArgs).fill(DataType.ANY) },
         builtinFunc,
       );
     case "bigint":
@@ -130,8 +130,8 @@ export async function pythonToModule(
           value.closure.node.parameters.length + 1) - 1;
       return context.evaluator.closure_make<DataType[], DataType>(
         {
-          returnType: DataType.VOID,
-          args: Array(arity).fill(DataType.VOID),
+          returnType: DataType.ANY,
+          args: Array(arity).fill(DataType.ANY),
         },
         closureFunc,
       );
@@ -206,11 +206,12 @@ export async function moduleToPython(
         command: ExprNS.Call,
         context: Context,
       ): ModuleFunctionGenerator {
-        const result = await context.evaluator!.closure_call_unchecked(
+        const result = yield* context.evaluator!.closure_call(
           value as TypedValue<DataType.CLOSURE>,
           await Promise.all(args.map(arg => pythonToModule(context, code, command, arg))),
+          DataType.ANY
         );
-        return yield* result;
+        return result;
       }
       builtinGenerator.id = value.value;
       return {
