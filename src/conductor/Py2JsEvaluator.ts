@@ -42,7 +42,7 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
-    const dataHandler = new GenericDataHandler();
+    const dataHandler = new GenericDataHandler(variant);
     this.conductor.registerPlugin(
       ModuleLoaderRunnerPlugin,
       this.conductor,

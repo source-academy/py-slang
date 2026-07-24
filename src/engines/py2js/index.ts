@@ -13,7 +13,6 @@
  * python_typing_back.tex), pinned against the CSE machine by
  * src/tests/operator-conformance-py2js.test.ts.
  */
-import { IDataHandler } from "@sourceacademy/conductor/types";
 import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
@@ -259,7 +258,7 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * and the ModuleLoaderRunnerPlugin registration (they must be the same
    * object — see PyCseEvaluatorBase for the identical requirement).
    */
-  dataHandler?: IDataHandler;
+  dataHandler?: GenericDataHandler;
   /**
    * Resolves one input() call with what the user typed — forwarded to
    * Py2JsRuntime.requestInput (see runtime.ts's doc comment on the field).
@@ -305,7 +304,7 @@ export class Py2JsSession {
   readonly rt: Py2JsRuntime;
   private readonly variant: number;
   private readonly groups: Group[];
-  private readonly dataHandler: IDataHandler;
+  private readonly dataHandler: GenericDataHandler;
   private preludeLoaded = false;
 
   constructor(variant: number, options: Py2JsSessionOptions = {}) {
@@ -317,7 +316,7 @@ export class Py2JsSession {
     }
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
-    this.dataHandler = options.dataHandler ?? new GenericDataHandler();
+    this.dataHandler = options.dataHandler ?? new GenericDataHandler(variant);
     this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onOutput = options.onOutput;
     this.rt.requestInput = options.requestInput;
@@ -349,6 +348,7 @@ export class Py2JsSession {
         .join("\n");
       if (preludeText.trim()) await this.runChunkInternal(preludeText);
     }
+    this.dataHandler.setCurrentSource(code);
     await this.runChunkInternal(code);
   }
 

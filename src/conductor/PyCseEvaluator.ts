@@ -46,14 +46,14 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
    * see GenericDataHandler.ts. Engine-agnostic, so this is the same instance
    * type py2js's evaluator uses; only the pythonToModule/moduleToPython
    * conversion layer (modules.ts) is CSE-specific. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
-
+    this.dataHandler = new GenericDataHandler(variant, );
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.
@@ -90,6 +90,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
     try {
+      this.dataHandler.setCurrentSource(chunk);
       this.context.streams = {
         initialised: true,
         stdout,

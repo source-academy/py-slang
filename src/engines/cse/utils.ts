@@ -832,7 +832,7 @@ export function evaluateListAssignment(
   const intIndex = Number(index.value);
   const length = list.value.length;
   if (intIndex < -length || intIndex >= length) {
-    handleRuntimeError(context, new IndexError(code, assignNode, context, intIndex, length, true));
+    handleRuntimeError(context, new IndexError(code, assignNode, intIndex, length, true));
   }
   list.value[intIndex < 0 ? intIndex + length : intIndex] = value;
 }

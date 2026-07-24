@@ -1298,7 +1298,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (idx < -length || idx >= length) {
       handleRuntimeError(
         context,
-        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, length, false),
+        new error.IndexError(code, instr.srcNode as ExprNS.Expr, idx, length, false),
       );
     }
     const wrappedIdx = idx < 0 ? idx + length : idx;
