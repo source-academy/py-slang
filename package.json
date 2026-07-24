@@ -74,7 +74,7 @@
     "@sourceacademy/common-cse-machine": "^0.3.0",
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "^0.7.2",
-    "@sourceacademy/pynter-wasm": "^0.1.0",
+    "@sourceacademy/pynter-wasm": "^0.2.0",
     "@sourceacademy/runner-cse-machine": "^3.0.0",
     "@sourceacademy/runner-module-loader": "^0.0.1",
     "@sourceacademy/runner-stepper": "^0.0.1",
