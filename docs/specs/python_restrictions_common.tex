@@ -1,6 +1,10 @@
-\subsection*{Restrictions}
+\item All names that are referenced in a program need to be declared
+  regardless of whether the reference gets evaluated or not.
+\begin{lstlisting}
+print(1 if True else x)
+\end{lstlisting}
+Leads to an error \texttt{name not found in the current or enclosing environment(s).}
 
-\begin{itemize}
 \item In Python, a logical line is the smallest unit of code that the 
 interpreter can execute, typically corresponding to a complete statement. 
 A physical line, by contrast, is a single line in the source file, 
@@ -38,7 +42,5 @@ Therefore, when breaking a statement across lines, you must either use a backsla
 For details on logical lines, see the official Python documentation:
 \href{https://docs.python.org/3/reference/lexical_analysis.html#logical-lines}{Python Lexical Analysis – Logical Lines}.
 
-
 \item Return statements are only allowed in bodies of functions. Each return statement must appear on a single logical line.
 \item Lambda expressions are limited to a single logical line.
-\end{itemize}

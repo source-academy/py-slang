@@ -19,8 +19,11 @@
  * outcomes compare that both engines raised.
  *
  * Exclusions:
- *  - input: stream-based; py2js deliberately raises "not supported yet"
- *    while the CSE runner blocks on (closed) stdin — no comparable outcome.
+ *  - input: needs a real requestInput round-trip (see runtime.ts/
+ *    Py2JsEvaluator.ts), which only the conductor evaluator wires up —
+ *    runCodePy2Js here has none, so it raises RuntimeError, while the CSE
+ *    reference (via runCode, also conductor-less) blocks on (closed) stdin
+ *    and returns "" — no comparable outcome either way.
  *  - set_timeout / clear_all_timeout: implemented only by py2js so far
  *    (source-academy/py-slang#311) — the CSE reference always raises "not
  *    yet supported by the CSE machine" (src/stdlib/misc.ts), a permanent,
@@ -47,7 +50,7 @@ const LITERALS = ["2", "2.5", "(1+2j)", "True", "'ab'", "None", "(lambda x: x)"]
 /** Chapter 2 adds "list" — always a pair, per operator-spec.ts's literalFor. */
 const CH2_LITERALS = [...LITERALS, "pair(1, 2)"];
 
-// input: see below. set_timeout/clear_all_timeout: implemented only by
+// input: see above. set_timeout/clear_all_timeout: implemented only by
 // py2js so far (source-academy/py-slang#311) — the CSE reference always
 // throws "not yet supported", a permanent, expected mismatch, not a bridge
 // bug to catch.

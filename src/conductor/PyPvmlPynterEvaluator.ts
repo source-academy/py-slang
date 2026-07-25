@@ -9,6 +9,31 @@ import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
 
+// siwasm_run (Pynter's devices/wasm/wasm/lib.c) printf's one of these two
+// trailers to stdout on every run, as a debugging aid for the WASM demo,
+// which has no other way to surface the return value:
+//
+//   - success: "Program exited with result type <type>: <value>" — pure
+//     noise for us, since evaluateChunk already reads that value directly
+//     off siwasm_run's return pointer (readReturnValue in pynter-wasm.ts).
+//   - fault: "Program exited unsuccessfully: <fault name>" (e.g. "divide by
+//     zero", "program called error()") — the ONLY place the fault name
+//     appears. On a fault, wasm_result is left zeroed (type 0), so
+//     readReturnValue's switch falls into its `default` case and throws a
+//     generic "Unknown return type: 0" — the fault name would otherwise be
+//     lost entirely rather than merely mislabeled as program output.
+const RESULT_TRAILER_RE = /^Program exited with result type /;
+const FAULT_TRAILER_RE = /^Program exited unsuccessfully: (.+)$/;
+
+/** Fault name captured out of a matching FAULT_TRAILER_RE line, e.g. "divide by zero". */
+export function matchPynterWasmFaultTrailer(text: string): string | undefined {
+  return FAULT_TRAILER_RE.exec(text)?.[1];
+}
+
+export function isPynterWasmResultTrailer(text: string): boolean {
+  return RESULT_TRAILER_RE.test(text);
+}
+
 function pynterValueToNative(value: PynterValue): unknown {
   switch (value.type) {
     case "int":
@@ -38,6 +63,9 @@ function pynterValueToNative(value: PynterValue): unknown {
  */
 export class PyPvmlPynterEvaluator extends BasicEvaluator {
   private pynter: Awaited<ReturnType<typeof initPynter>> | null = null;
+  // Set by the print callback below when the current run's fault trailer
+  // goes by; read (and reset) by the catch block once runBinary rejects.
+  private lastFault: string | undefined;
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
@@ -54,13 +82,23 @@ export class PyPvmlPynterEvaluator extends BasicEvaluator {
 
       if (!this.pynter) {
         this.pynter = await initPynter({
-          print: (text: string) => this.conductor.sendOutput(text),
+          print: (text: string) => {
+            const fault = matchPynterWasmFaultTrailer(text);
+            if (fault !== undefined) {
+              this.lastFault = fault;
+              return;
+            }
+            if (isPynterWasmResultTrailer(text)) return;
+            this.conductor.sendOutput(text);
+          },
         });
       }
+      this.lastFault = undefined;
       const result = this.pynter.runBinary(binary);
       this.conductor.sendResult(pynterValueToNative(result));
     } catch (e) {
-      this.conductor.sendError(new EvaluatorError(e));
+      const error = this.lastFault !== undefined ? new Error(`Pynter fault: ${this.lastFault}`) : e;
+      this.conductor.sendError(new EvaluatorError(error));
     }
   }
 }

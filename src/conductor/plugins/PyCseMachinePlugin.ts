@@ -330,7 +330,16 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       nodeMeta.bodyNodeTypes = bodyArray.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
 
-    return Object.keys(nodeMeta).length > 0 ? { displayText, metadata: nodeMeta } : { displayText };
+    // Expression statements ("1 + 2" as a bare statement) are indistinguishable from a
+    // plain sub-expression once pushed — the machine only reveals it was a statement
+    // later, when the "pop" instruction that discards its value appears (issue #270).
+    // Tag it so the visualizer can mark it distinctly (e.g. a different color) up front.
+    const tag = item.kind === "SimpleExpr" ? "expressionStatement" : undefined;
+
+    const result: SerializedInstruction = { displayText };
+    if (Object.keys(nodeMeta).length > 0) result.metadata = nodeMeta;
+    if (tag) result.tag = tag;
+    return result;
   }
 
   return { displayText: "<unknown>" };
@@ -414,7 +423,6 @@ export async function collectSnapshots(
   context: Context,
   control: Control,
   stash: Stash,
-  envSteps: number,
   stepLimit: number,
   variant: number,
   code: string,
@@ -434,7 +442,6 @@ export async function collectSnapshots(
     context,
     control,
     stash,
-    envSteps,
     stepLimit,
     1024,
     variant,

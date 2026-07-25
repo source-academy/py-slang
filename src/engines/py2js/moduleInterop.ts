@@ -25,13 +25,14 @@
  *    `play(wave, duration)` samples `wave` many times): the Python closure is
  *    wrapped via `dh.closure_make(sig, func, ...)`, where conductor requires
  *    `func` itself to be an async generator. Its *body*, though, is authored
- *    here, and does a single direct, synchronous `rt.callSync` — no
- *    interpreter re-entry (unlike the CSE machine's `modules.ts`, whose
+ *    here, and (outside the `.sync` fast path below) runs fn via `rt.acall` —
+ *    no interpreter re-entry (unlike the CSE machine's `modules.ts`, whose
  *    equivalent closure wrapper pushes onto `control`/`stash` and resumes the
- *    whole step loop per call). One microtask per call is unavoidable
- *    (conductor's contract, not py2js's), but the work inside it is a plain
- *    JS function call — see the engine README's module-interop notes for the
- *    measured cost.
+ *    whole step loop per call), but still able to await a nested asyncOnly
+ *    module call fn itself makes (source-academy/py-slang#348). One microtask
+ *    per call is unavoidable (conductor's contract, not py2js's), but the
+ *    work inside it is a plain JS function call — see the engine README's
+ *    module-interop notes for the measured cost.
  *
  * Chapter 1 has no list type (NoListsValidator) and no way to construct or
  * consume one, so DataType.PAIR round-trips through PyList — a pair and a
@@ -128,22 +129,40 @@ export async function pythonToModule(
         ...args: TypedValue<DataType>[]
       ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
         const nativeArgs = await Promise.all(args.map(a => moduleToPython(rt, dh, a)));
-        const result = rt.callSync(fn, nativeArgs);
+        // rt.acall, not rt.callSync: this generator body only ever runs when
+        // dh.closure_call_sync's `.sync` fast path below has already failed
+        // (see closure_call_sync's doc) or was never attempted, so a microtask
+        // per call is already being paid here regardless. Running fn's *async*
+        // body means a call fn makes to another module closure - e.g. the
+        // student's own callback calling an unrelated asyncOnly module
+        // function, like `adsr` from inside a `stacking_adsr` envelope lambda
+        // (source-academy/py-slang#348) - can actually await that round-trip
+        // instead of hitting asyncOnly's synchronous-call guard. For an
+        // ordinary fn with no such nested call, acall degrades to essentially
+        // the same cost as callSync (see acall's own doc comment), so this
+        // costs nothing in the common case and fixes the compound one.
+        const result = await rt.acall(fn, nativeArgs);
         return pythonToModule(rt, dh, result);
       }
-      // The fast path: rt.callSync(fn, ...) is already synchronous (py2js's
-      // whole point) - the only async part of the body above is argument/
+      // The fast path: rt.callSync(fn, ...) is synchronous (py2js's whole
+      // point) - the only async part of the body above is argument/
       // result conversion, and that's only async because moduleToPython/
       // pythonToModule are written uniformly with the closure case (which
       // genuinely needs `await dh.closure_make(...)`). For a scalar-in/
       // scalar-out closure (the wave-sampling shape), conversion never
       // actually needs to await anything, so this restricted synchronous
-      // twin removes the last microtask too. Bailing to `undefined` for an
-      // unsupported *argument* is safe (fn hasn't run yet); once fn has
-      // actually run, a result that doesn't fit is a hard error, not a
-      // fallback signal - falling back to the async path at that point would
-      // call fn a second time, double-running any side effects (print(),
-      // mutation) it has.
+      // twin removes the last microtask too. Unlike pyClosureFunc above, this
+      // fast path deliberately keeps rt.callSync rather than rt.acall - it
+      // exists only for provably scalar-only closures (moduleToPythonSync/
+      // pythonToModuleSync below bail to `undefined` the moment an argument or
+      // result isn't a plain scalar), so fn can never reach a nested asyncOnly
+      // call through this path in the first place; going through the sync
+      // body here is what makes the hot, 44100Hz-sampling case actually fast.
+      // Bailing to `undefined` for an unsupported *argument* is safe (fn
+      // hasn't run yet); once fn has actually run, a result that doesn't fit
+      // is a hard error, not a fallback signal - falling back to the async
+      // path at that point would call fn a second time, double-running any
+      // side effects (print(), mutation) it has.
       (
         pyClosureFunc as typeof pyClosureFunc & {
           sync?: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;

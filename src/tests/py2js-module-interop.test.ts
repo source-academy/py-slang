@@ -258,4 +258,49 @@ describe("moduleToPython", () => {
     // Async call goes through and produces the right value.
     expect(await rt.acall(fn as never, [4n])).toBe(5);
   });
+
+  test("a Python closure invoked by a module can itself call another asyncOnly module closure (source-academy/py-slang#348)", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+
+    // A module-exported function needing a real frontend round-trip -
+    // moduleToPython's CLOSURE case marks every module closure this way,
+    // regardless of whether it's provably pure (e.g. sound's `adsr`).
+    async function* bump(
+      x: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: (x as TypedValue<DataType.NUMBER>).value + 1 };
+    }
+    const bumpClosure = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      bump,
+    );
+    const bumpFn = await moduleToPython(rt, dh, bumpClosure, "bump");
+
+    // The student's own closure (e.g. stacking_adsr's envelope lambda),
+    // dual-compiled: its sync body calls bumpFn synchronously (as any
+    // compiled call does in sync mode, and would throw since bumpFn is
+    // asyncOnly) and its async body awaits it via rt.acall - exactly what
+    // py2js's compiler emits for `lambda x: bump(x)`.
+    const envelope = rt.def2(
+      "envelope",
+      1,
+      (x: unknown) => rt.call(bumpFn as never, [x as number]),
+      async (x: unknown) => rt.acall(bumpFn as never, [x as number]),
+    );
+
+    const typed = await pythonToModule(rt, dh, envelope);
+    if (typed.type !== DataType.CLOSURE) throw new Error("unreachable");
+
+    // The module's-eye view: invoke the student closure the same way
+    // stacking_adsr invokes its envelope callbacks - through
+    // closure_call_unchecked, never closure_call_sync (bumpFn isn't a plain
+    // scalar-only closure candidate here, but even if it were, unchecked is
+    // the path a module takes once it needs the real async round-trip).
+    const gen = dh.closure_call_unchecked(typed, [{ type: DataType.NUMBER, value: 4 }]);
+    let step = await gen.next();
+    while (!step.done) step = await gen.next();
+    expect(step.value).toEqual({ type: DataType.NUMBER, value: 5 });
+  });
 });
