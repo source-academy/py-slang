@@ -197,10 +197,17 @@ module-interop layer gets to make:
 - A module calling a Python-defined closure (the sound-module scenario:
   `play(wave, duration)` samples `wave` many times): wrapped via
   `dh.closure_make(sig, func)`, where conductor requires `func` itself to
-  be an async generator (`pyClosureFunc`). Its _body_, though, does a
-  single direct, synchronous `rt.callSync` — no interpreter re-entry
-  (unlike the CSE machine's own closure wrapper in `modules.ts`, which
-  pushes onto `control`/`stash` and resumes the whole step loop per call).
+  be an async generator (`pyClosureFunc`). Its _body_, though (outside the
+  `.sync` fast path below), runs `fn` via `rt.acall` — no interpreter
+  re-entry (unlike the CSE machine's own closure wrapper in `modules.ts`,
+  which pushes onto `control`/`stash` and resumes the whole step loop per
+  call), but still able to await a nested `asyncOnly` module call `fn`
+  itself makes — e.g. a `stacking_adsr` envelope lambda calling `adsr`
+  (source-academy/py-slang#348). Using `rt.acall` here costs nothing extra
+  over the old `rt.callSync`: this generator body already only runs when the
+  `.sync` fast path below has failed or wasn't attempted, so a microtask per
+  call is already being paid, and `acall` degrades to essentially the same
+  cost as a plain call when `fn` makes no nested async-needing call.
 
 **The synchronous fast path** (`GenericDataHandler.closure_call_sync`,
 `pyClosureFunc.sync` in `moduleInterop.ts`): the `AsyncGenerator` shell
