@@ -231,7 +231,7 @@ describe("moduleToPython", () => {
     await expect(moduleToPython(rt, dh, typed)).resolves.toEqual([]);
   });
 
-  test("CLOSURE becomes an asyncOnly PyFunction", async () => {
+  test("CLOSURE without a .sync twin still requires a frontend round-trip", async () => {
     const dh = new GenericDataHandler();
     const rt = makeRt();
     async function* addOne(
@@ -246,16 +246,50 @@ describe("moduleToPython", () => {
     );
     const fn = await moduleToPython(rt, dh, closure, "add_one");
     expect(typeof fn).toBe("function");
-    const f = fn as unknown as { pyName: string; asyncOnly?: boolean };
+    const f = fn as unknown as { pyName: string };
     expect(f.pyName).toBe("add_one");
-    expect(f.asyncOnly).toBe(true);
 
-    // Sync call rejects: this is the guard that makes a hot, synchronously
-    // sampled module callback fail loudly instead of misbehaving if it tries
-    // to call an imported function that needs a real round-trip.
+    // Sync call rejects: addOne carries no `.sync` twin, so the sync body's
+    // own closure_call_sync attempt comes back undefined and it raises the
+    // same "needs a frontend round-trip" error a hardcoded asyncOnly guard
+    // used to raise unconditionally - this is now a per-call outcome, not a
+    // fixed property of the PyFunction (see the next test).
     expect(() => rt.callSync(fn as never, [4n])).toThrow(/frontend round-trip/);
 
     // Async call goes through and produces the right value.
+    expect(await rt.acall(fn as never, [4n])).toBe(5);
+  });
+
+  test("CLOSURE with a .sync twin is callable synchronously, no frontend round-trip needed", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    // The pix_n_flix shape: a module accessor (e.g. get_pixel_value) that can
+    // prove it never needs a real host round-trip - a plain, synchronous read
+    // against an in-memory buffer - attaches `.sync` alongside its mandatory
+    // async-generator body, mirroring closureToWave's identical pattern for
+    // sound's wave sampling (src/bundles/sound/src/index.ts).
+    async function* addOne(
+      x: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: (x as TypedValue<DataType.NUMBER>).value + 1 };
+    }
+    Object.assign(addOne, {
+      sync: (x: TypedValue<DataType>): TypedValue<DataType> => ({
+        type: DataType.NUMBER,
+        value: (x as TypedValue<DataType.NUMBER>).value + 1,
+      }),
+    });
+    const closure = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      addOne,
+    );
+    const fn = await moduleToPython(rt, dh, closure, "add_one");
+
+    // No throw, no await needed - the sync body's own closure_call_sync
+    // attempt succeeds and returns the plain value directly.
+    expect(rt.callSync(fn as never, [4n])).toBe(5);
+    // The async path still works too, unconditionally.
     expect(await rt.acall(fn as never, [4n])).toBe(5);
   });
 
