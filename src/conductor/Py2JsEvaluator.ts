@@ -29,7 +29,20 @@ import { EvaluatorError } from "./errors";
  *
  * Exec-style, like the PVML-in-browser evaluator: every chunk reports no
  * result value; a chunk that wants to surface a value print()s it. Output
- * streams per print() line through the session's onOutput hook.
+ * streams per print() line through the session's onOutput hook. input()
+ * round-trips through the session's requestInput hook (conductor.requestInput)
+ * — a chunk that calls it, at any nesting depth, compiles in dual mode even
+ * with no imports of its own (see Py2JsSession.runChunk's use of
+ * Resolver.referencedNames).
+ *
+ * set_timeout(f, t) (source-academy/py-slang#311) schedules a real callback
+ * that can fire well after evaluateChunk() itself has resolved — the
+ * session's onPendingWorkChange hook is wired straight to BasicEvaluator's
+ * own beginPendingWork()/endPendingWork(), so the host (e.g. Source
+ * Academy's frontend) doesn't tear this evaluator's environment down while
+ * one is still pending (source-academy/py-slang#329 is what happens without
+ * this: the callback is silently killed mid-flight, unreliably, past
+ * whatever grace window the host happens to allow after a chunk resolves).
  *
  * Chapters 1-4 (the engine rejects other variants).
  */
@@ -46,6 +59,8 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
     );
     this.session = new Py2JsSession(variant, {
       onOutput: line => this.conductor.sendOutput(line),
+      onPendingWorkChange: delta => (delta > 0 ? this.beginPendingWork() : this.endPendingWork()),
+      requestInput: prompt => this.conductor.requestInput(prompt),
       dataHandler,
     });
   }

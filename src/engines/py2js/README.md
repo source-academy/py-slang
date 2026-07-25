@@ -134,9 +134,13 @@ to `PY2JS_GROUPS[4]`.
 A few builtins are **native** (bypass the generic bridge) because the
 bridge's tagged round-trip is structurally the wrong shape for them:
 
-- `print`/`input`/`arity` — chapter-1 native core. `print`/`input` are
-  stream-based (async) in the CSE machine but plain synchronous code here;
-  `arity` is native because py2js functions aren't CSE closures.
+- `print`/`input`/`arity` — chapter-1 native core. `print` is stream-based
+  (async) in the CSE machine but plain synchronous code here; `input` is
+  dual-bodied (`def2`) and `asyncOnly`, exactly like an imported module
+  function, round-tripping through the conductor evaluator's `requestInput`
+  hook — a REPL chunk that calls it, at any nesting depth, compiles in dual
+  mode even with no imports of its own (`Resolver.referencedNames`); `arity`
+  is native because py2js functions aren't CSE closures.
 - `set_head`/`set_tail` (chapter 3) — the generic bridge converts an
   argument into a _fresh_ CSE-side value, so a mutation the CSE builtin
   performs on it would be silently lost rather than visible on the
@@ -193,10 +197,17 @@ module-interop layer gets to make:
 - A module calling a Python-defined closure (the sound-module scenario:
   `play(wave, duration)` samples `wave` many times): wrapped via
   `dh.closure_make(sig, func)`, where conductor requires `func` itself to
-  be an async generator (`pyClosureFunc`). Its _body_, though, does a
-  single direct, synchronous `rt.callSync` — no interpreter re-entry
-  (unlike the CSE machine's own closure wrapper in `modules.ts`, which
-  pushes onto `control`/`stash` and resumes the whole step loop per call).
+  be an async generator (`pyClosureFunc`). Its _body_, though (outside the
+  `.sync` fast path below), runs `fn` via `rt.acall` — no interpreter
+  re-entry (unlike the CSE machine's own closure wrapper in `modules.ts`,
+  which pushes onto `control`/`stash` and resumes the whole step loop per
+  call), but still able to await a nested `asyncOnly` module call `fn`
+  itself makes — e.g. a `stacking_adsr` envelope lambda calling `adsr`
+  (source-academy/py-slang#348). Using `rt.acall` here costs nothing extra
+  over the old `rt.callSync`: this generator body already only runs when the
+  `.sync` fast path below has failed or wasn't attempted, so a microtask per
+  call is already being paid, and `acall` degrades to essentially the same
+  cost as a plain call when `fn` makes no nested async-needing call.
 
 **The synchronous fast path** (`GenericDataHandler.closure_call_sync`,
 `pyClosureFunc.sync` in `moduleInterop.ts`): the `AsyncGenerator` shell
@@ -310,7 +321,9 @@ boundary (matching the CSE converter's identical restrictions).
   `RuntimeSourceError` doesn't extend JS `Error`, so it fails the
   `instanceof Error` check in `index.ts`'s catch blocks. Pre-existing since
   chapter 2, not py2js-chapter-specific.
-- `input()` is not implemented.
+- `input()` round-trips through the conductor evaluator's `requestInput` hook
+  (`Py2JsEvaluator.ts`); `runCodePy2Js`/`runCodePy2JsDual` (no conductor) have
+  no such hook wired, so `input()` there raises `RuntimeError`.
 - `DataType.ARRAY` and complex numbers do not cross the module boundary in
   either direction (see Module interop above).
 - No chapter 5 — SICPy has four chapters.

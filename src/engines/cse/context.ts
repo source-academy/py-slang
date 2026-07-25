@@ -100,7 +100,6 @@ export class Context {
     control: null,
     stash: null,
     objectCount: 0,
-    envSteps: -1,
     envStepsTotal: 0,
     breakpointSteps: [],
     changepointSteps: [],

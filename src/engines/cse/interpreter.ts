@@ -73,7 +73,6 @@ import {
 export interface IOptions {
   isPrelude: boolean;
   groups: Group[];
-  envSteps: number;
   stepLimit: number;
   variant: number;
   recursionLimit: number;
@@ -128,7 +127,6 @@ export async function evaluate(
   const opts: IOptions = {
     isPrelude: false,
     groups: [],
-    envSteps: 100000,
     stepLimit: -1,
     recursionLimit: 1024,
     variant: 4,
@@ -157,7 +155,6 @@ export async function evaluate(
       context,
       context.control,
       context.stash,
-      opts.envSteps,
       opts.stepLimit,
       opts.recursionLimit,
       opts.variant,
@@ -232,7 +229,6 @@ async function evaluateImports(
  * @param context The context to evaluate the program in.
  * @param control Points to the current Control stack.
  * @param stash Points to the current Stash.
- * @param envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -244,7 +240,6 @@ export async function runCSEMachine(
   context: Context,
   control: Control,
   stash: Stash,
-  envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
@@ -255,7 +250,6 @@ export async function runCSEMachine(
     context,
     control,
     stash,
-    envSteps,
     stepLimit,
     recursionLimit,
     variant,
@@ -278,7 +272,6 @@ export async function runCSEMachine(
  * @param context The context of the program.
  * @param control The control stack.
  * @param stash The stash storage.
- * @param _envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -290,7 +283,6 @@ export async function* generateCSEMachineStateStream(
   context: Context,
   control: Control,
   stash: Stash,
-  _envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
@@ -322,12 +314,6 @@ export async function* generateCSEMachineStateStream(
     pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
   }
   while (command) {
-    // Return to capture a snapshot of the control and stash after the target step count is reached
-    // if (!isPrelude && steps === envSteps) {
-    //   yield { stash, control, steps }
-    //   return
-    // }
-
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
       const node = isNode(command) ? command : command.srcNode;

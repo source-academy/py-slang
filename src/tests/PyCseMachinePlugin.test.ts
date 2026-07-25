@@ -55,7 +55,7 @@ async function runAndCollectWithBreakpoints(code: string, variant = 3) {
   const ast = parse(script);
   const control = new Control(ast);
   const stash = new Stash();
-  return collectSnapshots(ctx, control, stash, 100000, -1, variant, script);
+  return collectSnapshots(ctx, control, stash, -1, variant, script);
 }
 
 // ── formatValue ───────────────────────────────────────────────────────────────
@@ -348,6 +348,24 @@ describe("serializeControlItem", () => {
     expect(result.displayText).toBe("my-while");
   });
 
+  // Regression test for https://github.com/source-academy/py-slang/issues/270.
+  it("SimpleExpr node is tagged as an expression statement", () => {
+    const result = serializeControlItem(
+      {
+        kind: "SimpleExpr",
+        startToken: { indexInSource: 0, line: 1 },
+        endToken: { indexInSource: 5, line: 1, lexeme: "" },
+      },
+      "1 + 2",
+    );
+    expect(result.tag).toBe("expressionStatement");
+  });
+
+  it("non-SimpleExpr node has no tag", () => {
+    const result = serializeControlItem({ kind: "While" }, code);
+    expect(result.tag).toBeUndefined();
+  });
+
   it("synthetic BigIntLiteral shows its value", () => {
     const result = serializeControlItem({ kind: "BigIntLiteral", value: 99n }, code);
     expect(result.displayText).toBe("99");
@@ -542,7 +560,6 @@ describe("collectSnapshots", () => {
       ctx,
       new Control(ast),
       new Stash(),
-      100000,
       -1,
       3,
       "x = 1\n",
@@ -581,7 +598,6 @@ describe("collectSnapshots", () => {
       ctx,
       new Control(ast),
       new Stash(),
-      100000,
       -1,
       3,
       script,
@@ -626,6 +642,14 @@ describe("collectSnapshots", () => {
     // whichever line last had a "real" (non-synthetic) node.
     expect(transitions.filter(l => l === 1).length).toBeGreaterThan(1);
     expect(transitions.filter(l => l === 2).length).toBeGreaterThan(1);
+  });
+
+  // Regression test for https://github.com/source-academy/py-slang/issues/293.
+  it("for-loop increment control item shows 'x = <value>', not the generic 'assign'", async () => {
+    const snapshots = await runAndCollect(`for x in range(3):\n    print(x)`);
+    const controlTexts = snapshots.flatMap(s => s.control.map(c => c.displayText));
+    expect(controlTexts).toContain("x = 0");
+    expect(controlTexts).not.toContain("assign");
   });
 
   it("frame transition on return happens at the ENVIRONMENT instruction", async () => {
@@ -702,7 +726,7 @@ f()`,
     const run = async (code: string) => {
       const script = code + "\n";
       const ast = parse(script);
-      return collectSnapshots(ctx, new Control(ast), new Stash(), 100000, -1, 3, script);
+      return collectSnapshots(ctx, new Control(ast), new Stash(), -1, 3, script);
     };
 
     const first = await run("breakpoint()");

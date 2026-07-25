@@ -26,8 +26,17 @@ import json
 import math
 import os
 import sys
+import warnings
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "python"))
+
+# Some test cases compile to code CPython's constant-folder recognizes as a likely typo -- e.g.
+# `[1, 2][0.0]` (list.test.ts's "list index range ... bad-index errors" case, deliberately
+# indexing a list literal with a float to check ListIndexTypeError) triggers "SyntaxWarning: list
+# indices must be integers or slices, not float; perhaps you missed a comma?" at compile() time.
+# This harness only ever checks a case's actual output/error/result, never compiler warnings, so
+# there's nothing to lose by silencing them here -- letting them through just pollutes CI output.
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 try:
     import sicp
