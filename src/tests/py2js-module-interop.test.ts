@@ -293,6 +293,42 @@ describe("moduleToPython", () => {
     expect(await rt.acall(fn as never, [4n])).toBe(5);
   });
 
+  test("CLOSURE with a .sync twin taking/returning an OPAQUE handle is callable synchronously (pix_n_flix's get_pixel_value shape)", async () => {
+    const dh = new GenericDataHandler();
+    const rt = makeRt();
+    // get_pixel_value(source, x, y, p): source is an opaque image handle, not
+    // a scalar - this only works synchronously if moduleToPythonSync/
+    // pythonToModuleSync pass OPAQUE straight through like the async
+    // converters already do, rather than treating it as "no sync path". The
+    // closure body itself doesn't need real buffer semantics to prove this -
+    // just that the OPAQUE argument survives the sync round-trip and comes
+    // back out as the identical PyOpaque, unconverted.
+    async function* identity(
+      handle: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return handle;
+    }
+    Object.assign(identity, {
+      sync: (handle: TypedValue<DataType>): TypedValue<DataType> => handle,
+    });
+    const closure = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [DataType.OPAQUE] },
+      identity,
+    );
+    const fn = await moduleToPython(rt, dh, closure, "get_pixel_value");
+
+    const typedHandle = await dh.opaque_make([10, 20, 30, 255]);
+    const opaqueHandle = new PyOpaque(typedHandle);
+
+    // No throw, no await needed - the sync body's own closure_call_sync
+    // attempt succeeds because the OPAQUE handle argument now converts
+    // through pythonToModuleSync instead of bailing to "no sync path", and
+    // the same handle (by reference) comes back out via moduleToPythonSync.
+    expect(rt.callSync(fn as never, [opaqueHandle]) as PyOpaque).toEqual(opaqueHandle);
+    expect((await rt.acall(fn as never, [opaqueHandle])) as PyOpaque).toEqual(opaqueHandle);
+  });
+
   test("a Python closure invoked by a module can itself call another asyncOnly module closure (source-academy/py-slang#348)", async () => {
     const dh = new GenericDataHandler();
     const rt = makeRt();

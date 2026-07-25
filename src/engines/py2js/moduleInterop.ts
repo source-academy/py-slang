@@ -66,12 +66,18 @@ import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
  * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
  * used only by the `.sync` fast path a Python closure crossing into a module
  * gets below (see GenericDataHandler.closure_call_sync's doc for the overall
- * design). Cover exactly the value shapes a scalar-in/scalar-out closure (a
- * wave function, sampled 44100x/sec by the sound module) needs: numbers,
- * booleans, strings, None. Return `undefined` for anything else (pairs,
- * closures, opaques, complex) - the "no sync path" signal, safe to use for
- * *arguments* (nothing has run yet) but not for the *result* once the real
- * call has already happened - see pyClosureFunc.sync below.
+ * design). Cover the value shapes a scalar-in/scalar-out closure (a wave
+ * function, sampled 44100x/sec by the sound module) needs - numbers,
+ * booleans, strings, None - plus OPAQUE, needed for an opaque-handle
+ * accessor (pix_n_flix's get_pixel_value/set_pixel_value, taking an opaque
+ * image handle as `source`/`dest`, sampled up to width*height*8x/frame).
+ * OPAQUE needs no real conversion work either way - same as the async
+ * moduleToPython/pythonToModule cases below, it's a zero-cost passthrough
+ * (`new PyOpaque(value)` / `value.typed`), not a scalar decode, so it costs
+ * nothing to add here. Return `undefined` for anything else (pairs, closures,
+ * complex) - the "no sync path" signal, safe to use for *arguments* (nothing
+ * has run yet) but not for the *result* once the real call has already
+ * happened - see pyClosureFunc.sync below.
  */
 function moduleToPythonSync(value: TypedValue<DataType>): PyValue | undefined {
   switch (value.type) {
@@ -84,12 +90,15 @@ function moduleToPythonSync(value: TypedValue<DataType>): PyValue | undefined {
     case DataType.VOID:
     case DataType.EMPTY_LIST:
       return null;
+    case DataType.OPAQUE:
+      return new PyOpaque(value);
     default:
       return undefined;
   }
 }
 
 function pythonToModuleSync(value: PyValue): TypedValue<DataType> | undefined {
+  if (value instanceof PyOpaque) return value.typed;
   switch (typeof value) {
     case "bigint":
       return { type: DataType.NUMBER, value: Number(value) };
