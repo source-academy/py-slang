@@ -82,6 +82,47 @@ set_timeout(b, 50)
   expect(outputs).toEqual(["b", "a"]);
 });
 
+test("a callback that reschedules itself keeps pending work nonzero until the chain actually ends", async () => {
+  // Directly exercises onPendingWorkChange (source-academy/conductor's BasicEvaluator
+  // beginPendingWork/endPendingWork hooks, wired through Py2JsEvaluator.ts) rather than just
+  // output, since the property under test — the running pending-work count never touching 0
+  // mid-chain — isn't observable from output alone. Mirrors a real sound_matrix-style recursive
+  // set_timeout: each tick reschedules itself from inside its own fired callback before the
+  // previous invocation's own -1 has been reported (see BasicEvaluator.beginPendingWork's doc
+  // comment on why the re-checking loop in startEvaluator makes this ordering safe).
+  const outputs: string[] = [];
+  const pendingWorkLog: number[] = [];
+  let pendingWork = 0;
+  const session = new Py2JsSession(1, {
+    onOutput: line => outputs.push(line),
+    onPendingWorkChange: delta => {
+      pendingWork += delta;
+      pendingWorkLog.push(pendingWork);
+    },
+  });
+  await session.runChunk(`
+def tick3():
+    print("tick3")
+
+def tick2():
+    print("tick2")
+    set_timeout(tick3, 50)
+
+def tick1():
+    print("tick1")
+    set_timeout(tick2, 50)
+
+set_timeout(tick1, 50)
+`);
+  await jest.advanceTimersByTimeAsync(200);
+  expect(outputs).toEqual(["tick1", "tick2", "tick3"]);
+  // The running total dips to 0 only once, at the very end (the chain's last -1) — never in the
+  // middle, which is exactly what would let BasicEvaluator send STOPPED (and the host tear the
+  // runner down) prematurely, mid-chain.
+  expect(pendingWorkLog.indexOf(0)).toBe(pendingWorkLog.length - 1);
+  expect(pendingWorkLog.filter(n => n === 0)).toHaveLength(1);
+});
+
 test("clear_all_timeout cancels every pending callback", async () => {
   const { session, outputs } = makeSession();
   await session.runChunk(`
