@@ -263,3 +263,20 @@ function str(object = "") { }
  */
 function time_time() { }
 
+/**
+ * Schedules <CODE>f</CODE> to be called with no arguments after <CODE>t</CODE> milliseconds have
+ * elapsed, without blocking the calling code. <CODE>f</CODE> is invoked once, the next time the
+ * scheduled delay elapses.
+ *
+ * @param {function} <CODE>f</CODE> - the function to call once <CODE>t</CODE> milliseconds have elapsed
+ * @param {int | float} <CODE>t</CODE> - the delay, in milliseconds, before <CODE>f</CODE> is called
+ * @returns {None} None
+ */
+function set_timeout(f, t) { }
+
+/**
+ * Cancels every <CODE>set_timeout</CODE> callback that has been scheduled but has not yet fired.
+ *
+ * @returns {None} None
+ */
+function clear_all_timeout() { }
