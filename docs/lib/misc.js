@@ -74,17 +74,6 @@ defaults to <CODE>0</CODE>.
 function complex(v = 0, i = 0) { }
 
 /**
- * Prints the provided <CODE>*object</CODE> arguments to the standard output (similar to a simplified
- * <CODE>print</CODE>) and then raises an exception. This function accepts a variable number of arguments,
- * converts them to their <CODE>string</CODE> representations using <CODE>str()</CODE>, outputs them (with a
- * newline) just like what <CODE>print</CODE> does, and immediately halts execution by raising an exception.
- *
- * @param {any} <CODE>*object</CODE> - Objects to be printed to the standard output
- * @returns {NoneType} the <CODE>None</CODE> value
- */
-function error(...object) { }
-
-/**
  * Return the imaginary part of a complex number <CODE>x</CODE>.
  * 
  * @param {complex} <CODE>x</CODE> - a complex number
@@ -199,18 +188,6 @@ function max(arg1, arg2, ...args) { }
 function min(arg1, arg2, ...args) { }
 
 /**
- * A simplified version of the Python built-in <CODE>print</CODE> function.
- * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
- * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
- * output (<CODE>sys.stdout</CODE>), followed by a newline character. See the official Python
- * documentation for <CODE>print</CODE>.
- *
- * @param {any} <CODE>*object</CODE> - object(s) to be printed to the standard output
- * @returns {NoneType} the <CODE>None</CODE> value
- */
-function print(...object) { }
-
-/**
  * Return the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>.
  *
  * @returns {float} the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>
@@ -255,13 +232,6 @@ function round(number, ndigits) { }
  * @returns {string} the informal <CODE>string</CODE> representation of <CODE>object</CODE>
  */
 function str(object = "") { }
-
-/**
- * Return the number of milliseconds elapsed since <CODE>January 1, 1970 00:00:00 UTC</CODE>.
- *
- * @returns {float} current time in milliseconds
- */
-function time_time() { }
 
 /**
  * Schedules <CODE>f</CODE> to be called with no arguments after <CODE>t</CODE> milliseconds have
