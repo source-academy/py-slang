@@ -72,10 +72,12 @@
   },
   "dependencies": {
     "@sourceacademy/common-cse-machine": "^0.3.0",
+    "@sourceacademy/common-data-visualizer": "^0.0.1",
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "^0.8.0",
     "@sourceacademy/pynter-wasm": "^0.2.0",
     "@sourceacademy/runner-cse-machine": "^3.0.0",
+    "@sourceacademy/runner-data-visualizer": "^0.0.1",
     "@sourceacademy/runner-module-loader": "^0.0.1",
     "@sourceacademy/runner-stepper": "^0.0.1",
     "@sourceacademy/wasm-util": "^1.0.6",
