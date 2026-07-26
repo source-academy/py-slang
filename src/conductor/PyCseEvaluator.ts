@@ -16,6 +16,7 @@ import {
 } from "../engines/cse/streams";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
+import dataVisualizer from "../stdlib/dataVisualizer";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -193,18 +194,18 @@ export class PyCseEvaluator1 extends PyCseEvaluatorBase {
 
 export class PyCseEvaluator2 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList]);
+    super(conductor, 2, [misc, math, linkedList, dataVisualizer]);
   }
 }
 
 export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream, dataVisualizer]);
   }
 }
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser, dataVisualizer]);
   }
 }
