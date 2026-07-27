@@ -129,6 +129,124 @@ x
     });
   });
 
+  describe("unary/comparison operator shadow stack discipline", () => {
+    it("negating a complex number does not leave a stale operand on the stack", async () => {
+      await expectShadowStackToEqual(`-(2j)`, [TYPE_TAG.COMPLEX]);
+    });
+
+    it("`is` on two complex numbers does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`2j is 2j`, []);
+    });
+
+    it("`is not` on two complex numbers does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`2j is not 3j`, []);
+    });
+
+    it("`is` on two strings does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`"foo" is "foo"`, []);
+    });
+
+    it("`==` on two strings does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`"foo" == "foo"`, []);
+    });
+
+    it("`<` on two strings does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`"foo" < "bar"`, []);
+    });
+
+    it("`==` on two complex numbers does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`2j == 3j`, []);
+    });
+
+    it("`!=` on two complex numbers does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`2j != 3j`, []);
+    });
+
+    it("`==` comparing a float against a complex does not leave a stale complex operand on the stack", async () => {
+      await expectShadowStackToEqual(`3.0 == 2j`, []);
+    });
+
+    it("`==` on two lists does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`[1, 2] == [1, 2]`, []);
+    });
+
+    it("`!=` on two lists does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`[1, 2] != [1, 3]`, []);
+    });
+
+    it("`==` on nested lists does not leave stale operands on the stack", async () => {
+      await expectShadowStackToEqual(`[[1, 2], [3, 4]] == [[1, 2], [3, 4]]`, []);
+    });
+  });
+
+  // ==, !=, is, is not are the only operators typed any,any -> bool (per the
+  // operand-typing table): every other operator restricts at least one side
+  // to a specific type, so those never need to worry about the *other* side
+  // being non-GCable. For these four, left and right are independently
+  // allowed to be GCable or not, so the shadow-stack discipline has to hold
+  // in every combination: both non-GCable (stack should be completely
+  // untouched, not just clean), one side GCable, or both GCable but of
+  // different underlying types (a tag mismatch, which mustn't skip popping
+  // either operand just because it short-circuits to "not equal"/"not
+  // identical" without ever dereferencing).
+  describe("==, !=, is, is not: across any/any operand-typing table", () => {
+    const GCABLE = [
+      { label: "string", literal: `"hello"` },
+      { label: "complex", literal: `2j` },
+      { label: "list", literal: `[1, 2]` },
+      { label: "closure", literal: `(lambda x: x)` },
+    ];
+
+    // Representative non-GCable partners
+    const NON_GCABLE = [
+      { label: "int", literal: `5` },
+      { label: "None", literal: `None` },
+    ];
+
+    const OPS = ["==", "!=", "is", "is not"];
+
+    describe("both non-GCable: shadow stack untouched", () => {
+      for (const op of OPS)
+        for (const left of NON_GCABLE)
+          for (const right of NON_GCABLE)
+            it(`\`${left.literal} ${op} ${right.literal}\` touches nothing`, async () => {
+              await expectShadowStackToEqual(`${left.literal} ${op} ${right.literal}`, []);
+            });
+    });
+
+    describe("left GCable, right non-GCable", () => {
+      for (const op of OPS)
+        for (const left of GCABLE)
+          for (const right of NON_GCABLE)
+            it(`\`${left.literal} ${op} ${right.literal}\` does not leak`, async () => {
+              await expectShadowStackToEqual(`${left.literal} ${op} ${right.literal}`, []);
+            });
+    });
+
+    describe("left non-GCable, right GCable", () => {
+      for (const op of OPS)
+        for (const left of NON_GCABLE)
+          for (const right of GCABLE)
+            it(`\`${left.literal} ${op} ${right.literal}\` does not leak`, async () => {
+              await expectShadowStackToEqual(`${left.literal} ${op} ${right.literal}`, []);
+            });
+    });
+
+    describe("both GCable but different types", () => {
+      const MISMATCHED_PAIRS = [
+        [GCABLE[0], GCABLE[2]], // string vs list
+        [GCABLE[1], GCABLE[3]], // complex vs closure
+        [GCABLE[0], GCABLE[3]], // string vs closure
+      ];
+
+      for (const op of OPS)
+        for (const [left, right] of MISMATCHED_PAIRS)
+          it(`\`${left.literal} ${op} ${right.literal}\` (${left.label} vs ${right.label}) does not leak`, async () => {
+            await expectShadowStackToEqual(`${left.literal} ${op} ${right.literal}`, []);
+          });
+    });
+  });
+
   describe("GET/SET_LEX_ADDRESS", () => {
     it("setting variable to GCable object should pop GCable object off stack", async () => {
       const pythonCode = `x = [1, 2, 3]`;

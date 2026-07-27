@@ -8,7 +8,7 @@ import {
   wasm,
   type WasmInstruction,
 } from "@sourceacademy/wasm-util";
-import { MALLOC_FX } from "./gc";
+import { IS_TAG_GCABLE, MALLOC_FX } from "./gc";
 import { LIST_REPEAT_FX, LIST_SLOT_TAG_LOAD_FX, LIST_SLOT_VAL_LOAD_FX } from "./list";
 import {
   CHAPTER,
@@ -18,7 +18,7 @@ import {
   TYPE_TAG,
   getErrorIndex,
 } from "./metadata";
-import { POP_SHADOW_STACK_FX } from "./shadowStack";
+import { POP_SHADOW_STACK_FX, SILENT_PUSH_SHADOW_STACK_FX } from "./shadowStack";
 import { BOOLISE_FX } from "./stdlib";
 import {
   MAKE_BOOL_FX,
@@ -56,6 +56,8 @@ export const NEG_FX = wasm
       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)))
       .then(
         wasm.return(
+          wasm.call(POP_SHADOW_STACK_FX).args(),
+          wasm.raw`(local.set $x_val) (local.set $x_tag)`,
           wasm
             .call(MAKE_COMPLEX_FX)
             .args(
@@ -524,6 +526,11 @@ function identityCheck(): WasmInstruction[] {
                 wasm
                   .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)))
                   .then(
+                    // wasm.call(POP_SHADOW_STACK_FX),
+                    // wasm.raw`(local.set $y_val) (local.set $y_tag)`,
+                    // wasm.call(POP_SHADOW_STACK_FX),
+                    // wasm.raw`(local.set $x_val) (local.set $x_tag)`,
+
                     local.set(
                       "$is_result",
                       i32.and(
@@ -542,6 +549,11 @@ function identityCheck(): WasmInstruction[] {
                     wasm
                       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.STRING)))
                       .then(
+                        // wasm.call(POP_SHADOW_STACK_FX),
+                        // wasm.raw`(local.set $y_val) (local.set $y_tag)`,
+                        // wasm.call(POP_SHADOW_STACK_FX),
+                        // wasm.raw`(local.set $x_val) (local.set $x_tag)`,
+
                         local.set(
                           "$is_result",
                           i32.eqz(
@@ -607,6 +619,14 @@ export const COMPARISON_OP_FX = wasm
   .results(i32, i64)
   .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $is_result: i32, $eq_result: i32 })
   .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$y_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $y_val) (local.set $y_tag)`),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$x_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $x_val) (local.set $x_tag)`),
+
     wasm
       .if(
         i32.or(
@@ -978,6 +998,17 @@ export const LIST_STRUCT_EQ_FX = wasm
         "$ey_val",
         wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$y_val"), local.get("$i")),
       ),
+
+      wasm
+        .if(wasm.call(IS_TAG_GCABLE).args(local.get("$ex_tag")))
+        .then(
+          wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$ex_tag"), local.get("$ex_val")),
+        ),
+      wasm
+        .if(wasm.call(IS_TAG_GCABLE).args(local.get("$ey_tag")))
+        .then(
+          wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$ey_tag"), local.get("$ey_val")),
+        ),
 
       wasm
         .call(COMPARISON_OP_FX)
