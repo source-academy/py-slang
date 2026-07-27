@@ -15,6 +15,7 @@ import parserGroup from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /** Same per-chapter stdlib surface as every other engine (PyCseEvaluator.ts,
  * py2js's PY2JS_GROUPS) — used here so the Resolver recognizes names like
@@ -155,8 +156,13 @@ abstract class PyodideEvaluatorBase extends BasicEvaluator {
    * the user's global namespace at startup — a chapter's own module list
    * (see SICP_MODULE_BY_GROUP), or `"*"` for the whole package
    * (PyodideEvaluatorFull). */
-  constructor(conductor: IRunnerPlugin, sicpModules: readonly string[] | "*") {
+  constructor(
+    conductor: IRunnerPlugin,
+    sicpModules: readonly string[] | "*",
+    autocompleteVariant: number,
+  ) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, autocompleteVariant);
     this.pyodide = loadPyodideGeneric().then(async pyodide => {
       await pyodide.loadPackage("micropip");
       const ns = this.getInternalNamespace(pyodide);
@@ -255,6 +261,7 @@ abstract class ChapterPyodideEvaluator extends PyodideEvaluatorBase {
         if (!sicpModule) throw new Error(`No sourceacademy-sicp module registered for group`);
         return sicpModule;
       }),
+      chapter,
     );
     this.chapter = chapter;
     this.groups = groups;
@@ -298,7 +305,7 @@ export class PyodideEvaluator4 extends ChapterPyodideEvaluator {
  * rather than a chapter's subset. */
 export class PyodideEvaluatorFull extends PyodideEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, "*");
+    super(conductor, "*", 4);
   }
 
   protected validateChunk(): void {

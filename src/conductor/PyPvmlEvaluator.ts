@@ -17,6 +17,7 @@ import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 function once(fn: () => Promise<void>): () => Promise<void> {
   let promise: Promise<void> | undefined;
@@ -76,6 +77,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, variant);
     this.variant = variant;
     this.groups = groups;
     this.preludeText = groups

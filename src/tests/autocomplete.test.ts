@@ -2,14 +2,46 @@ import { parser } from "@lezer/python";
 import { CompletionItemKind, WEB_PLUGIN_ID } from "@sourceacademy/common-autocomplete";
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import {
+  Py2JsEvaluator1,
+  Py2JsEvaluator2,
+  Py2JsEvaluator3,
+  Py2JsEvaluator4,
+} from "../../src/conductor/Py2JsEvaluator";
+import {
   PyCseEvaluator1,
   PyCseEvaluator2,
   PyCseEvaluator3,
   PyCseEvaluator4,
 } from "../../src/conductor/PyCseEvaluator";
+import {
+  PyPvmlEvaluator,
+  PyPvmlEvaluator1,
+  PyPvmlEvaluator2,
+  PyPvmlEvaluator3,
+  PyPvmlEvaluator4,
+} from "../../src/conductor/PyPvmlEvaluator";
+import { PyPvmlPynterEvaluator } from "../../src/conductor/PyPvmlPynterEvaluator";
+import { PyStepperEvaluator1, PyStepperEvaluator2 } from "../../src/conductor/PyStepperEvaluator";
+import {
+  PyWasmEvaluator1,
+  PyWasmEvaluator2,
+  PyWasmEvaluator3,
+  PyWasmEvaluator4,
+} from "../../src/conductor/PyWasmEvaluator";
+import {
+  PyodideEvaluator1,
+  PyodideEvaluator2,
+  PyodideEvaluator3,
+  PyodideEvaluator4,
+  PyodideEvaluatorFull,
+} from "../../src/conductor/PyodideEvaluator";
 import AutoCompletePlugin from "../../src/conductor/plugins/autocomplete";
 import pythonMode from "../../src/conductor/plugins/autocomplete/mode";
 import { getNames } from "../../src/conductor/plugins/autocomplete/resolver";
+
+jest.mock("../../src/engines/pyodide/loadPyodide", () => ({
+  loadPyodideGeneric: jest.fn(() => new Promise(() => undefined)),
+}));
 
 describe("Python autocomplete plugin registration", () => {
   test.each([
@@ -17,6 +49,27 @@ describe("Python autocomplete plugin registration", () => {
     [PyCseEvaluator2, 2],
     [PyCseEvaluator3, 3],
     [PyCseEvaluator4, 4],
+    [PyPvmlEvaluator1, 1],
+    [PyPvmlEvaluator2, 2],
+    [PyPvmlEvaluator3, 3],
+    [PyPvmlEvaluator4, 4],
+    [PyPvmlEvaluator, 4],
+    [PyPvmlPynterEvaluator, 3],
+    [Py2JsEvaluator1, 1],
+    [Py2JsEvaluator2, 2],
+    [Py2JsEvaluator3, 3],
+    [Py2JsEvaluator4, 4],
+    [PyWasmEvaluator1, 1],
+    [PyWasmEvaluator2, 2],
+    [PyWasmEvaluator3, 3],
+    [PyWasmEvaluator4, 4],
+    [PyodideEvaluator1, 1],
+    [PyodideEvaluator2, 2],
+    [PyodideEvaluator3, 3],
+    [PyodideEvaluator4, 4],
+    [PyodideEvaluatorFull, 4],
+    [PyStepperEvaluator1, 1],
+    [PyStepperEvaluator2, 2],
   ] as const)("%p registers variant %i and requests its web counterpart", (Evaluator, variant) => {
     const registerPlugin = jest.fn().mockReturnValue({});
     const hostLoadPlugin = jest.fn().mockResolvedValue(undefined);
@@ -77,6 +130,64 @@ const testNotContains = (
   expect(suggestions).not.toContainEqual(expect.objectContaining(expected));
 };
 describe("Chapter 1 Autocomplete", () => {
+  test("suggests names imported at the top level", () => {
+    testContains(
+      "from sound import play, sine_sound\npl",
+      { name: "play", meta: CompletionItemKind.Variable },
+      2,
+      2,
+      1,
+    );
+    testContains(
+      "from sound import play, sine_sound\nsi",
+      { name: "sine_sound", meta: CompletionItemKind.Variable },
+      2,
+      2,
+      1,
+    );
+  });
+
+  test("suggests import aliases instead of their original names", () => {
+    testContains(
+      "from sound import sine_sound as sine\nsi",
+      { name: "sine", meta: CompletionItemKind.Variable },
+      2,
+      2,
+      1,
+    );
+    testNotContains(
+      "from sound import sine_sound as sine\nsi",
+      { name: "sine_sound", meta: CompletionItemKind.Variable },
+      2,
+      2,
+      1,
+    );
+  });
+
+  test("supports ordinary top-level imports and ignores nested imports", () => {
+    testContains(
+      "import audio.wave as wave\nwa",
+      { name: "wave", meta: CompletionItemKind.Variable },
+      2,
+      2,
+      1,
+    );
+    testContains(
+      "import audio.wave\na",
+      { name: "audio", meta: CompletionItemKind.Variable },
+      2,
+      1,
+      1,
+    );
+    testNotContains(
+      "def load():\n    import audio as nested\nne",
+      { name: "nested", meta: CompletionItemKind.Variable },
+      3,
+      2,
+      1,
+    );
+  });
+
   test("should suggest built-in functions", () => {
     testContains("le", { name: "len", meta: CompletionItemKind.Function }, 1, 2, 1);
   });

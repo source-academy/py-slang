@@ -1,4 +1,3 @@
-import { WEB_PLUGIN_ID } from "@sourceacademy/common-autocomplete";
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
@@ -25,7 +24,7 @@ import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
-import AutoCompletePlugin from "./plugins/autocomplete";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
@@ -54,8 +53,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
-    conductor.registerPlugin(AutoCompletePlugin, variant);
-    void conductor.hostLoadPlugin(WEB_PLUGIN_ID);
+    registerAutoCompletePlugin(conductor, variant);
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
 
     // Cast bridges the IPlugin type difference between this repo's (local/portal)

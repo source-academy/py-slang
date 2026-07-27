@@ -19,6 +19,63 @@ const getNodeText = (node: SyntaxNode, doc: string): string => {
   return doc.slice(node.from, node.to);
 };
 
+const getTopLevelImportNames = (topNode: SyntaxNode, doc: string): string[] => {
+  const names: string[] = [];
+
+  for (let statement = topNode.firstChild; statement; statement = statement.nextSibling) {
+    if (statement.type.name !== "ImportStatement") {
+      continue;
+    }
+
+    const parts: SyntaxNode[] = [];
+    for (let part = statement.firstChild; part; part = part.nextSibling) {
+      parts.push(part);
+    }
+
+    const importIndex = parts.findIndex(part => part.type.name === "import");
+    if (importIndex === -1) {
+      continue;
+    }
+
+    const isFromImport = parts[0]?.type.name === "from";
+    let firstName: string | undefined;
+    let alias: string | undefined;
+    let readingAlias = false;
+
+    const addBinding = () => {
+      const name = alias ?? firstName;
+      if (name !== undefined) {
+        names.push(name);
+      }
+      firstName = undefined;
+      alias = undefined;
+      readingAlias = false;
+    };
+
+    for (const part of parts.slice(importIndex + 1)) {
+      if (part.type.name === ",") {
+        addBinding();
+      } else if (part.type.name === "as") {
+        readingAlias = true;
+      } else if (part.type.name === "VariableName") {
+        const name = getNodeText(part, doc);
+        if (readingAlias) {
+          alias = name;
+          readingAlias = false;
+        } else if (firstName === undefined) {
+          firstName = name;
+        } else if (isFromImport) {
+          addBinding();
+          firstName = name;
+        }
+      }
+    }
+    addBinding();
+  }
+
+  return names;
+};
+
 function isCompletionItemKind(value: string): value is CompletionItemKind {
   return Object.values(CompletionItemKind).includes(value as CompletionItemKind);
 }
@@ -32,7 +89,12 @@ function isCompletionItemKind(value: string): value is CompletionItemKind {
  * @param doc The document text, used to extract variable and function names from the syntax nodes
  * @returns The Environment object representing the current scope and its child scopes, or null if the position is inside a function parameter list
  */
-const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environment | null => {
+const extractEnvironment = (
+  iter: TreeCursor,
+  topNode: SyntaxNode,
+  pos: number,
+  doc: string,
+): Environment | null => {
   const topEnv: Environment = {
     variables: [],
     functions: [],
@@ -67,6 +129,9 @@ const extractEnvironment = (iter: TreeCursor, pos: number, doc: string): Environ
     }
     if (iter.node.type.name !== "Body" && iter.node.type.name !== "Script") {
       continue;
+    }
+    if (iter.node.type.name === "Script") {
+      currentEnv.variables.push(...getTopLevelImportNames(topNode, doc));
     }
     // Iterate children
     for (let child = iter.node.firstChild; child; child = child.nextSibling) {
@@ -175,7 +240,7 @@ export const getNames = (
 
   const query = getNodeText(node, doc);
 
-  let env: Environment | null = extractEnvironment(tree.cursor(), pos, doc);
+  let env: Environment | null = extractEnvironment(tree.cursor(), tree.topNode, pos, doc);
   if (env === null) {
     return [];
   }
