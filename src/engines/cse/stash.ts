@@ -5,6 +5,7 @@ import { Closure } from "./closure";
 import { Context } from "./context";
 import { Environment } from "./environment";
 import { Stack } from "./stack";
+import { ModuleFunction } from "./types";
 
 /**
  * Value represents various runtime values in Python.
@@ -21,7 +22,8 @@ export type Value =
   | NoneValue
   | BigIntValue
   | ClosureValue
-  | ListValue;
+  | ListValue
+  | OpaqueValue;
 
 export interface ClosureValue {
   type: "closure";
@@ -87,9 +89,20 @@ export interface BuiltinValue {
   type: "builtin";
   name: string;
   func:
-    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Value)
-    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Promise<Value>);
+    | ((args: Value[], code: string, command: ExprNS.Call, context: Context) => Value | undefined)
+    | ((
+        args: Value[],
+        code: string,
+        command: ExprNS.Call,
+        context: Context,
+      ) => Promise<Value | undefined>)
+    | ModuleFunction;
   minArgs: number;
+}
+
+export interface OpaqueValue {
+  type: "opaque";
+  value: unknown;
 }
 
 /**

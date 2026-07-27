@@ -1681,10 +1681,108 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.3.0":
+"@sourceacademy/common-cse-machine@npm:^0.3.0":
   version: 0.3.0
-  resolution: "@sourceacademy/conductor@npm:0.3.0"
-  checksum: 10c0/e6d50cc0b9188fa5ec54c3bb2e6b9a0f9391ba37449e74a326c89c4e14deb00c4882700062427737e6f6fca556fd95d91fa9d7f6e125fe1d43938a65cc3c0c4d
+  resolution: "@sourceacademy/common-cse-machine@npm:0.3.0"
+  checksum: 10c0/c0462cc2dd8d779179c31d168aa3e71ea7f81818535166e38aeb3c048469fcf7eebc388ed4110d3300d6b6933cc310da3fbe4c3a4026746c5df409eb91dd7042
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/common-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-stepper@npm:0.0.1"
+  checksum: 10c0/e3a79fb07f68e24a045553a8c5c66e652df12d3b80150a20b4b4603936605e3a2e10c5636e48ba180b2a3473287727340c4b791abe8df301d00e0984d07667a4
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/conductor@npm:^0.8.0":
+  version: 0.8.0
+  resolution: "@sourceacademy/conductor@npm:0.8.0"
+  checksum: 10c0/8b970b1f5fffbcb5242f5c358fb25af8d916cb5af9ca7fa9e0128928fde1783ed65465241858a82002bd8b5f21f5f5b80d3ea57bbd05faed604e6dd1c36600e9
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/py-slang@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@sourceacademy/py-slang@workspace:."
+  dependencies:
+    "@inquirer/prompts": "npm:^8.3.2"
+    "@lezer/python": "npm:^1.1.18"
+    "@rollup/plugin-commonjs": "npm:^28.0.3"
+    "@rollup/plugin-json": "npm:^6.1.0"
+    "@rollup/plugin-node-resolve": "npm:^16.0.1"
+    "@rollup/plugin-replace": "npm:^6.0.3"
+    "@rollup/plugin-terser": "npm:^1.0.0"
+    "@rollup/plugin-typescript": "npm:^12.1.2"
+    "@rollup/plugin-wasm": "npm:^6.2.2"
+    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1"
+    "@sourceacademy/common-cse-machine": "npm:^0.3.0"
+    "@sourceacademy/common-stepper": "npm:^0.0.1"
+    "@sourceacademy/conductor": "npm:^0.8.0"
+    "@sourceacademy/pynter-wasm": "npm:^0.2.0"
+    "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
+    "@sourceacademy/runner-module-loader": "npm:^0.0.1"
+    "@sourceacademy/runner-stepper": "npm:^0.0.1"
+    "@sourceacademy/wasm-util": "npm:^1.0.6"
+    "@types/fast-levenshtein": "npm:^0.0.4"
+    "@types/jest": "npm:^29.5.14"
+    "@types/moo": "npm:^0.5.10"
+    "@types/nearley": "npm:^2.11.5"
+    "@types/node": "npm:^18.19.84"
+    commander: "npm:^14.0.3"
+    eslint: "npm:^9.39.4"
+    eslint-config-prettier: "npm:^10.1.8"
+    fast-levenshtein: "npm:^3.0.0"
+    jest: "npm:^29.7.0"
+    jsdoc: "npm:^4.0.4"
+    mathjs: "npm:^15.2.0"
+    moo: "npm:^0.5.2"
+    nearley: "npm:^2.20.1"
+    prettier: "npm:^3.8.1"
+    pyodide: "npm:^0.29.3"
+    rollup: "npm:^4.59.0"
+    rollup-plugin-polyfill-node: "npm:^0.13.0"
+    ts-jest: "npm:^29.0.5"
+    tslib: "npm:^2.8.1"
+    tsx: "npm:^4.19.0"
+    typescript: "npm:^5.5.3"
+    typescript-eslint: "npm:^8.56.1"
+    wabt: "npm:^1.0.37"
+  languageName: unknown
+  linkType: soft
+
+"@sourceacademy/pynter-wasm@npm:^0.2.0":
+  version: 0.2.0
+  resolution: "@sourceacademy/pynter-wasm@npm:0.2.0"
+  checksum: 10c0/7c780ca0d0df7972813b12e10dfa65582aa4f0a5916b8f5f7823a5602fecc5f898a8c49b5af5c72f7e82a21ae8128e06e282ea353889023fe8547ddba2e75489
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-cse-machine@npm:^3.0.0":
+  version: 3.0.0
+  resolution: "@sourceacademy/runner-cse-machine@npm:3.0.0"
+  peerDependencies:
+    "@sourceacademy/common-cse-machine": ">=0.3.0"
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/dbf3c9220bb35b2f10d46dcfd13e1c827931d9bb9fb41266eff512d5859ab7734e594cda3b0e741a9896e8f7a3598cdb4d914ef13b7ecce941f8fc1798d8965e
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-module-loader@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-module-loader@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/848d2a943cc0523ba6f6913d18ab8a1538e83998968e18b097c2bb485100cdbb701428168483a270a0451285a8d04019829f50b8321b8f1268313f7586b5a23c
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-stepper@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/0c454960bba50f1f0cfbe5d08a4c0f079100a3044ef24171104ee82594646a1fcea5e2b154dfcd7963d2b85cfb88b9e35bdcbadd85a68362c7b8b4fcb443e34d
   languageName: node
   linkType: hard
 
@@ -1733,6 +1831,13 @@ __metadata:
   dependencies:
     "@babel/types": "npm:^7.28.2"
   checksum: 10c0/b52d7d4e8fc6a9018fe7361c4062c1c190f5778cf2466817cb9ed19d69fbbb54f9a85ffedeb748ed8062d2cf7d4cc088ee739848f47c57740de1c48cbf0d0994
+  languageName: node
+  linkType: hard
+
+"@types/emscripten@npm:^1.41.4":
+  version: 1.41.5
+  resolution: "@types/emscripten@npm:1.41.5"
+  checksum: 10c0/ae816da716f896434e59df7a71b67c71ae7e85ca067a32aef1616572fc4757459515d42ade6f5b8fd8d69733a9dbd0cf23010fec5b2f41ce52c09501aa350e45
   languageName: node
   linkType: hard
 
@@ -4277,9 +4382,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"mathjs@npm:^14.9.1":
-  version: 14.9.1
-  resolution: "mathjs@npm:14.9.1"
+"mathjs@npm:^15.2.0":
+  version: 15.2.0
+  resolution: "mathjs@npm:15.2.0"
   dependencies:
     "@babel/runtime": "npm:^7.26.10"
     complex.js: "npm:^2.2.5"
@@ -4292,7 +4397,7 @@ __metadata:
     typed-function: "npm:^4.2.1"
   bin:
     mathjs: bin/cli.js
-  checksum: 10c0/7ae1f0445e12e3d8843764182c82c066c03c50bb0903cfe4c6c34869f8b1bb6648082006135176412a04cba7ea12f7756d7fc59d96ff0b803cd19a3d7de6ba8f
+  checksum: 10c0/78913fc64501166185a6118975ef475bddf23151adcfce5ecac10085b0fa1df880c3d191d54f1184289dc646823eda4807bf73a46286760247230997694697d3
   languageName: node
   linkType: hard
 
@@ -4800,47 +4905,15 @@ __metadata:
   languageName: node
   linkType: hard
 
-"py-slang@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "py-slang@workspace:."
+"pyodide@npm:^0.29.3":
+  version: 0.29.4
+  resolution: "pyodide@npm:0.29.4"
   dependencies:
-    "@inquirer/prompts": "npm:^8.3.2"
-    "@lezer/python": "npm:^1.1.18"
-    "@rollup/plugin-commonjs": "npm:^28.0.3"
-    "@rollup/plugin-json": "npm:^6.1.0"
-    "@rollup/plugin-node-resolve": "npm:^16.0.1"
-    "@rollup/plugin-replace": "npm:^6.0.3"
-    "@rollup/plugin-terser": "npm:^1.0.0"
-    "@rollup/plugin-typescript": "npm:^12.1.2"
-    "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1"
-    "@sourceacademy/conductor": "npm:^0.3.0"
-    "@sourceacademy/wasm-util": "npm:^1.0.6"
-    "@types/fast-levenshtein": "npm:^0.0.4"
-    "@types/jest": "npm:^29.5.14"
-    "@types/moo": "npm:^0.5.10"
-    "@types/nearley": "npm:^2.11.5"
-    "@types/node": "npm:^18.19.84"
-    commander: "npm:^14.0.3"
-    eslint: "npm:^9.39.4"
-    eslint-config-prettier: "npm:^10.1.8"
-    fast-levenshtein: "npm:^3.0.0"
-    jest: "npm:^29.7.0"
-    jsdoc: "npm:^4.0.4"
-    mathjs: "npm:^14.9.1"
-    moo: "npm:^0.5.2"
-    nearley: "npm:^2.20.1"
-    prettier: "npm:^3.8.1"
-    rollup: "npm:^4.59.0"
-    rollup-plugin-polyfill-node: "npm:^0.13.0"
-    ts-jest: "npm:^29.0.5"
-    tslib: "npm:^2.8.1"
-    tsx: "npm:^4.19.0"
-    typescript: "npm:^5.5.3"
-    typescript-eslint: "npm:^8.56.1"
-    wabt: "npm:^1.0.37"
-  languageName: unknown
-  linkType: soft
+    "@types/emscripten": "npm:^1.41.4"
+    ws: "npm:^8.5.0"
+  checksum: 10c0/46663db835971ca467672da4d95d47526ad31e23ea54e9cd3f8d8b27db15afa971b32e4832b920a8d139f70fc4f25db34349a2bb2f2f2758dc17893fc9962fb9
+  languageName: node
+  linkType: hard
 
 "railroad-diagrams@npm:^1.0.0":
   version: 1.0.0
@@ -5672,6 +5745,21 @@ __metadata:
     imurmurhash: "npm:^0.1.4"
     signal-exit: "npm:^3.0.7"
   checksum: 10c0/a2c282c95ef5d8e1c27b335ae897b5eca00e85590d92a3fd69a437919b7b93ff36a69ea04145da55829d2164e724bc62202cdb5f4b208b425aba0807889375c7
+  languageName: node
+  linkType: hard
+
+"ws@npm:^8.5.0":
+  version: 8.21.1
+  resolution: "ws@npm:8.21.1"
+  peerDependencies:
+    bufferutil: ^4.0.1
+    utf-8-validate: ">=5.0.2"
+  peerDependenciesMeta:
+    bufferutil:
+      optional: true
+    utf-8-validate:
+      optional: true
+  checksum: 10c0/c4c6f1d95f6d465262de2037c57c715725d67e078dd49420ede4e19115668aba159cb64d85c5e89c06eb2826be599e62e5095860ad6cc54ff42e8bd7684e1db8
   languageName: node
   linkType: hard
 

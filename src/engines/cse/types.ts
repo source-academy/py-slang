@@ -1,5 +1,7 @@
+import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
+import { Context } from "./context";
 import { Environment } from "./environment";
 import { Value } from "./stash";
 
@@ -14,8 +16,15 @@ export interface StatementSequence {
   };
 }
 
+export type ModuleFunctionGenerator = AsyncGenerator<void, TypedValue<DataType>, undefined>;
+export type ModuleFunction = (
+  args: Value[],
+  code: string,
+  command: ExprNS.Call,
+  context: Context,
+) => ModuleFunctionGenerator;
+
 export enum InstrType {
-  RESET = "Reset",
   WHILE = "WhileInstr",
   FOR = "ForInstr",
   ASSIGNMENT = "Assignment",
@@ -33,6 +42,7 @@ export enum InstrType {
   CONTINUE_MARKER = "continueMarker",
   END_OF_FUNCTION_BODY = "EndOfFunctionBody",
   LIST_ACCESS = "ListAccess",
+  MODULE_FUNCTION_CALL = "ModuleFunctionCall",
 }
 
 interface BaseInstr {
@@ -112,10 +122,6 @@ export interface EndOfFunctionBodyInstr extends BaseInstr {
   instrType: InstrType.END_OF_FUNCTION_BODY;
 }
 
-export interface ResetInstr extends BaseInstr {
-  instrType: InstrType.RESET;
-}
-
 export interface PopInstr extends BaseInstr {
   instrType: InstrType.POP;
 }
@@ -129,6 +135,12 @@ export interface ContinueMarkerInstr extends BaseInstr {
   instrType: InstrType.CONTINUE_MARKER;
 }
 
+export interface ModuleFunctionCallInstr extends BaseInstr {
+  instrType: InstrType.MODULE_FUNCTION_CALL;
+  generator: ModuleFunctionGenerator;
+  srcNode: ExprNS.Call;
+}
+
 export type Instr =
   | WhileInstr
   | ForInstr
@@ -139,7 +151,6 @@ export type Instr =
   | BranchInstr
   | EnvInstr
   | EndOfFunctionBodyInstr
-  | ResetInstr
   | PopInstr
   | BoolOpInstr
   | ListAccessInstr
@@ -147,9 +158,52 @@ export type Instr =
   | ListAssmtInstr
   | BreakInstr
   | ContinueInstr
-  | ContinueMarkerInstr;
+  | ContinueMarkerInstr
+  | ModuleFunctionCallInstr;
 
-export function typeTranslator(type: Value["type"]): string {
+/**
+ * Reworks a `typeTranslator`/PVML `getPVMLType()` output into the friendlier,
+ * unquoted wording used specifically by the "unsupported operand type(s)"
+ * family of TypeError messages (see `UnsupportedOperandTypeError` in both
+ * src/errors/errors.ts and src/engines/pvml/errors.ts) — spelled-out words
+ * ("integer", "boolean") over CPython's own abbreviations ("int", "bool"),
+ * "None" over "NoneType", and "function" over "builtin_function_or_method"
+ * (no user-visible distinction between a builtin and a closure here, same
+ * reasoning as "closure" itself already collapsing to "function"). Deliberately
+ * separate from `typeTranslator` itself, which other consumers (the CSE
+ * Machine visualizer's stash-value labels, PyCseMachinePlugin.ts) still need
+ * in its original, more CPython-literal form — changing `typeTranslator`'s
+ * own output would have silently changed those debugger labels too.
+ *
+ * `variant` (the SICPy chapter, 1-4) additionally governs "list": a pair and
+ * a length-2 list are the exact same runtime value in this dialect (no tag
+ * distinguishes "made via pair()" from "made via list-literal syntax"), so
+ * the value alone can't say which word is right. The chapter can, though —
+ * chapters 1-2 have no list-literal syntax at all (NoListsValidator), so any
+ * array-shaped value there can only have come from pair()/linked-list
+ * construction, unambiguously. At chapter 3+, where both syntaxes coexist
+ * and the ambiguity is real, "list" stays the reasonable default.
+ */
+export function friendlyTypeName(pythonTypeName: string, variant?: number): string {
+  switch (pythonTypeName) {
+    case "int":
+      return "integer";
+    case "bool":
+      return "boolean";
+    case "str":
+      return "string";
+    case "NoneType":
+      return "None";
+    case "builtin_function_or_method":
+      return "function";
+    case "list":
+      return variant !== undefined && variant <= 2 ? "pair" : "list";
+    default:
+      return pythonTypeName;
+  }
+}
+
+export function typeTranslator(type: Value["type"] | string): string {
   switch (type) {
     case "bigint":
       return "int";
@@ -159,14 +213,27 @@ export function typeTranslator(type: Value["type"]): string {
       return "bool";
     case "string":
       return "str";
+    case "list":
+      return "list";
     case "complex":
       return "complex";
     case "none":
       return "NoneType";
     case "closure":
       return "function";
+    case "builtin":
+      // Matches CPython's type(print).__name__.
+      return "builtin_function_or_method";
     default:
-      return "unknown";
+      // `type` is now `Value["type"] | string` (see this function's own
+      // history: errors.ts's TypeError class calls this with a plain
+      // `string`, not always a genuine Value["type"] tag) — an unrecognized
+      // input isn't necessarily a bug, it may already be a valid Python type
+      // name (or some other string a future caller passes deliberately).
+      // Passing it through unchanged, not collapsing it to "unknown", is
+      // what keeps that widened parameter type actually safe to call with
+      // arbitrary strings.
+      return type;
   }
 }
 
@@ -206,6 +273,12 @@ export function operatorTranslator(operator: TokenType | string) {
       return "or";
     case TokenType.IS:
       return "is";
+    case TokenType.ISNOT:
+      return "is not";
+    case TokenType.IN:
+      return "in";
+    case TokenType.NOTIN:
+      return "not in";
     default:
       return String(operator);
   }

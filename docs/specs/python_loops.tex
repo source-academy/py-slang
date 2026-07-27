@@ -1,34 +1,6 @@
 \subsection*{Loops}
 
-\subsubsection*{while loops}
-
-Roughly speaking, while loops are seen as abbreviations for function
-applications as follows:
-\[
-  \textbf{\texttt{while}}\ \textit{expression}\ \textbf{\texttt{:}}\ \textit{block}
-\]
-stands for
-
-\begin{center}
-  \begin{minipage}{90mm}
-    $\textbf{\texttt{def}}$ \lstinline{_body()}: $\textit{block}$\newline
-    \lstinline{_while( } $\textbf{\texttt{lambda:
-    }}\textit{expression}$ \lstinline{, _body )}
-  \end{minipage}
-\end{center}
-
-where \lstinline{_while} is defined as follows:
-
-\begin{lstlisting}
-def _while(test, body):
-    if test():
-        body()
-        _while(test, body)
-    else:
-        None
-\end{lstlisting}
-
-\subsubsection*{for loop through a range with one argument}
+\subsubsection*{\texttt{\textbf{for}} loop through a range with one argument}
 
 The expression in the following syntax should evaluate to an integer:
 \[
@@ -51,7 +23,7 @@ while _loop_i < _end:
   \end{minipage}
 \end{center}
 
-\subsubsection*{for loop through a range with two arguments}
+\subsubsection*{\texttt{\textbf{for}} loop through a range with two arguments}
 
 The expressions in the following syntax should both evaluate to integers:
 \[
@@ -75,7 +47,7 @@ while _loop_i < _end:
   \end{minipage}
 \end{center}
 
-\subsubsection*{for loop through a range with three arguments}
+\subsubsection*{\texttt{\textbf{for}} loop through a range with three arguments}
 
 The expressions in the following syntax should all evaluate to integers:
 \[

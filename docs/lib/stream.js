@@ -50,34 +50,34 @@ function is_stream(xs) {
 /**
  * Given linked_list xs, returns a stream of same length with
  * the same elements as xs in the same order.
- * Laziness:  Yes: linked_list_to_stream
+ * Laziness:  Yes: llist_to_stream
  * goes down the linked_list only when forced.
  * @param {linked_list} <CODE>xs</CODE> - given linked_list
  * @returns {stream} stream containing all elements of xs
  */
 
-function linked_list_to_stream(xs) {
-  return is_none(xs) ? None : pair(head(xs), () => linked_list_to_stream(tail(xs)))
+function llist_to_stream(xs) {
+  return is_none(xs) ? None : pair(head(xs), () => llist_to_stream(tail(xs)))
 }
 
 /**
  * Given stream xs, returns a linked_list of same length with
  * the same elements as xs in the same order.
- * Laziness:  No: stream_to_linked_list needs to force the whole
+ * Laziness:  No: stream_to_llist needs to force the whole
  * stream.
  * @param {stream} <CODE>xs</CODE> - given stream
  * @returns {linked_list} containing all elements of xs
  */
 
-function stream_to_linked_list(xs) {
-  return is_none(xs) ? None : pair(head(xs), stream_to_linked_list(stream_tail(xs)))
+function stream_to_llist(xs) {
+  return is_none(xs) ? None : pair(head(xs), stream_to_llist(stream_tail(xs)))
 }
 
 /**
  * Given n values, returns a stream of length n.
  * The elements of the stream are the given values in the given order.
  * Lazy? No: A complete linked linked_list is generated,
- * and then a stream using linked_list_to_stream is generated from it.
+ * and then a stream using llist_to_stream is generated from it.
  * @param {...value} <CODE>value1, value2, ...values</CODE> - given values
  * @returns {stream} stream containing all values
  */
@@ -87,7 +87,7 @@ function stream() {
   for (var i = arguments.length - 1; i >= 0; i--) {
     the_linked_list = pair(arguments[i], the_linked_list)
   }
-  return linked_list_to_stream(the_linked_list)
+  return llist_to_stream(the_linked_list)
 }
 
 /**
@@ -321,7 +321,7 @@ function integers_from(n) {
 
 function eval_stream(s, n) {
   function es(s, n) {
-    return n === 1 ? linked_list(head(s)) : pair(head(s), es(stream_tail(s), n - 1))
+    return n === 1 ? llist(head(s)) : pair(head(s), es(stream_tail(s), n - 1))
   }
   return n == 0 ? None : es(s, n)
 }

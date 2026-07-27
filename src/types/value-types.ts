@@ -145,7 +145,15 @@ export class PyComplexNumber {
     if (denominator === 0) {
       handleRuntimeError(context, new ZeroDivisionError(source, node));
     }
+    return this.divBy(other);
+  }
 
+  /**
+   * The division algorithm itself, context-free so evaluators without a CSE
+   * Context (e.g. the py2js engine) can reuse it. The caller is responsible
+   * for rejecting a zero divisor first — see div() above.
+   */
+  public divBy(other: PyComplexNumber): PyComplexNumber {
     const a = this.real;
     const b = this.imag;
     const c = other.real;
@@ -181,7 +189,7 @@ export class PyComplexNumber {
     const A = other.real;
     const B = other.imag;
 
-    const r = Math.sqrt(a * a + b * b);
+    const r = Math.hypot(a, b);
     const theta = Math.atan2(b, a);
 
     if (r === 0) {
@@ -289,9 +297,4 @@ export interface NativeStorage {
   maxExecTime: number;
   loadedModules: Record<string, ModuleFunctions>;
   loadedModuleTypes: Record<string, Record<string, string>>;
-}
-
-export interface ModuleContext {
-  state: null | unknown;
-  tabs: null | unknown[];
 }

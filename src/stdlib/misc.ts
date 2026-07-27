@@ -1,20 +1,19 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { ControlItem } from "../engines/cse/control";
 import { handleRuntimeError } from "../engines/cse/error";
-import { isFalsy } from "../engines/cse/operators";
 import {
   BigIntValue,
   BoolValue,
   BuiltinValue,
   ComplexValue,
+  NoneValue,
   NumberValue,
   StringValue,
   Value,
 } from "../engines/cse/stash";
 import { displayOutput, receiveInput } from "../engines/cse/streams";
 import { isNumeric } from "../engines/cse/utils";
-import { TypeError, UserError, ValueError } from "../errors";
+import { TypeError, UserError } from "../errors";
 import { PyComplexNumber } from "../types";
 import { GroupName, minArgMap, toPythonString, Validate } from "./utils";
 
@@ -25,7 +24,7 @@ export class MiscBuiltins {
   static arity(args: Value[], source: string, command: ExprNS.Call, context: Context): BigIntValue {
     const func = args[0];
     if (func.type !== "builtin" && func.type !== "closure") {
-      handleRuntimeError(context, new TypeError(source, command, context, func.type, "function"));
+      handleRuntimeError(context, new TypeError(source, command, context, func.type));
     }
     if (func.type === "closure") {
       const variadicInstance = func.closure.node.parameters.findIndex(param => param.isStarred);
@@ -35,124 +34,6 @@ export class MiscBuiltins {
       return { type: "bigint", value: BigInt(func.closure.node.parameters.length) };
     }
     return { type: "bigint", value: BigInt(func.minArgs) };
-  }
-
-  @Validate(null, 2, "int", true)
-  static int(args: Value[], source: string, command: ExprNS.Call, context: Context): BigIntValue {
-    if (args.length === 0) {
-      return { type: "bigint", value: BigInt(0) };
-    }
-    const arg = args[0];
-    if (!isNumeric(arg) && arg.type !== "string" && arg.type !== "bool") {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, arg.type, "str, int, float or bool"),
-      );
-    }
-
-    if (args.length === 1) {
-      if (arg.type === "number") {
-        const truncated = Math.trunc(arg.value);
-        return { type: "bigint", value: BigInt(truncated) };
-      }
-      if (arg.type === "bigint") {
-        return { type: "bigint", value: arg.value };
-      }
-      if (arg.type === "string") {
-        const str = arg.value.trim().replace(/_/g, "");
-        if (!/^[+-]?\d+$/.test(str)) {
-          handleRuntimeError(context, new ValueError(source, command, context, "int"));
-        }
-        return { type: "bigint", value: BigInt(str) };
-      }
-      return { type: "bigint", value: arg.value ? BigInt(1) : BigInt(0) };
-    }
-    const baseArg = args[1];
-    if (arg.type !== "string") {
-      handleRuntimeError(context, new TypeError(source, command, context, arg.type, "string"));
-    }
-    if (baseArg.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, baseArg.type, "int"));
-    }
-
-    let base = Number(baseArg.value);
-    let str = arg.value.trim().replace(/_/g, "");
-
-    const sign = str.startsWith("-") ? -1 : 1;
-    if (str.startsWith("+") || str.startsWith("-")) {
-      str = str.substring(1);
-    }
-
-    if (base === 0) {
-      if (str.startsWith("0x") || str.startsWith("0X")) {
-        base = 16;
-        str = str.substring(2);
-      } else if (str.startsWith("0o") || str.startsWith("0O")) {
-        base = 8;
-        str = str.substring(2);
-      } else if (str.startsWith("0b") || str.startsWith("0B")) {
-        base = 2;
-        str = str.substring(2);
-      } else {
-        base = 10;
-      }
-    }
-
-    if (base < 2 || base > 36) {
-      handleRuntimeError(context, new ValueError(source, command, context, "int"));
-    }
-
-    const validChars = "0123456789abcdefghijklmnopqrstuvwxyz".substring(0, base);
-    const regex = new RegExp(`^[${validChars}]+$`, "i");
-    if (!regex.test(str)) {
-      handleRuntimeError(context, new ValueError(source, command, context, "int"));
-    }
-
-    let res = BigInt(0);
-    for (const char of str) {
-      res = res * BigInt(base) + BigInt(validChars.indexOf(char.toLowerCase()));
-    }
-    return { type: "bigint", value: BigInt(sign) * res };
-  }
-
-  @Validate(null, 1, "float", true)
-  static float(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
-    if (args.length === 0) {
-      return { type: "number", value: 0 };
-    }
-    const val = args[0];
-    if (val.type === "bigint") {
-      return { type: "number", value: Number(val.value) };
-    } else if (val.type === "number") {
-      return { type: "number", value: val.value };
-    } else if (val.type === "bool") {
-      return { type: "number", value: val.value ? 1 : 0 };
-    } else if (val.type === "string") {
-      const str = val.value.trim().replace(/_/g, "").toLowerCase();
-      const mappings = {
-        inf: Infinity,
-        "+inf": Infinity,
-        "-inf": -Infinity,
-        infinity: Infinity,
-        "+infinity": Infinity,
-        "-infinity": -Infinity,
-        nan: NaN,
-        "+nan": NaN,
-        "-nan": NaN,
-      };
-      if (str in mappings) {
-        return { type: "number", value: mappings[str as keyof typeof mappings] };
-      }
-      const num = Number(str);
-      if (isNaN(num)) {
-        handleRuntimeError(context, new ValueError(source, command, context, "float"));
-      }
-      return { type: "number", value: num };
-    }
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, val.type, "float', 'int', 'bool' or 'str"),
-    );
   }
 
   @Validate(null, 2, "complex", true)
@@ -174,7 +55,7 @@ export class MiscBuiltins {
         val.type !== "string" &&
         val.type !== "complex"
       ) {
-        handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+        handleRuntimeError(context, new TypeError(source, command, context, val.type));
       }
       return {
         type: "complex",
@@ -189,16 +70,7 @@ export class MiscBuiltins {
         val.type !== "complex",
     );
     if (invalidType.length > 0) {
-      handleRuntimeError(
-        context,
-        new TypeError(
-          source,
-          command,
-          context,
-          invalidType[0].type,
-          "'int', 'float', 'bool' or 'complex'",
-        ),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType[0].type));
     }
     const [real, imag] = args as (BigIntValue | NumberValue | BoolValue | ComplexValue)[];
     const realPart = PyComplexNumber.fromValue(context, source, command, real.value);
@@ -210,7 +82,7 @@ export class MiscBuiltins {
   static real(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+      handleRuntimeError(context, new TypeError(source, command, context, val.type));
     }
     return { type: "number", value: val.value.real };
   }
@@ -219,18 +91,9 @@ export class MiscBuiltins {
   static imag(args: Value[], source: string, command: ExprNS.Call, context: Context): NumberValue {
     const val = args[0];
     if (val.type !== "complex") {
-      handleRuntimeError(context, new TypeError(source, command, context, val.type, "complex"));
+      handleRuntimeError(context, new TypeError(source, command, context, val.type));
     }
     return { type: "number", value: val.value.imag };
-  }
-
-  @Validate(null, 1, "bool", true)
-  static bool(args: Value[], _source: string, _command: ControlItem, _context: Context): BoolValue {
-    if (args.length === 0) {
-      return { type: "bool", value: false };
-    }
-    const val = args[0];
-    return { type: "bool", value: !isFalsy(val) };
   }
 
   @Validate(1, 1, "abs", false)
@@ -254,14 +117,11 @@ export class MiscBuiltins {
         // Calculate the modulus (absolute value) of a complex number.
         const real = x.value.real;
         const imag = x.value.imag;
-        const modulus = Math.sqrt(real * real + imag * imag);
+        const modulus = Math.hypot(real, imag);
         return { type: "number", value: modulus };
       }
       default:
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, args[0].type, "float', 'int' or 'complex"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -273,10 +133,7 @@ export class MiscBuiltins {
       // in the string
       return { type: "bigint", value: BigInt([...val.value].length) };
     }
-    handleRuntimeError(
-      context,
-      new TypeError(source, command, context, val.type, "object with length"),
-    );
+    handleRuntimeError(context, new TypeError(source, command, context, val.type));
   }
 
   static error(args: Value[], _source: string, command: ExprNS.Call, context: Context): Value {
@@ -297,18 +154,12 @@ export class MiscBuiltins {
     }
     if (isNumeric(args[0])) {
       const invalidType = args.find(arg => !isNumeric(arg))!;
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else if (args[0].type === "string") {
       const invalidType = args.find(arg => arg.type !== "string")!;
-      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -325,18 +176,12 @@ export class MiscBuiltins {
     }
     if (isNumeric(args[0])) {
       const invalidType = args.find(arg => !isNumeric(arg))!;
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, invalidType.type, "int' or 'float"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else if (args[0].type === "string") {
       const invalidType = args.find(arg => arg.type !== "string")!;
-      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type, "str"));
+      handleRuntimeError(context, new TypeError(source, command, context, invalidType.type));
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "int', 'float' or 'str'"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
   }
 
@@ -360,16 +205,13 @@ export class MiscBuiltins {
   ): NumberValue | BigIntValue {
     const numArg = args[0];
     if (!isNumeric(numArg)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, numArg.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, numArg.type));
     }
 
     let ndigitsArg: BigIntValue = { type: "bigint", value: BigInt(0) };
     if (args.length === 2 && args[1].type !== "none") {
       if (args[1].type !== "bigint") {
-        handleRuntimeError(context, new TypeError(source, command, context, args[1].type, "int"));
+        handleRuntimeError(context, new TypeError(source, command, context, args[1].type));
       }
       ndigitsArg = args[1];
     } else {
@@ -421,8 +263,9 @@ export class MiscBuiltins {
     _command: ExprNS.Call,
     _context: Context,
   ): NumberValue {
-    const currentTime = Date.now();
-    return { type: "number", value: currentTime };
+    // Python's time.time() is documented as seconds since the epoch, not milliseconds — divide
+    // Date.now()'s milliseconds down to match.
+    return { type: "number", value: Date.now() / 1000 };
   }
 
   @Validate(1, 1, "is_none", true)
@@ -480,8 +323,24 @@ export class MiscBuiltins {
     return { type: "bool", value: obj.type === "complex" };
   }
 
-  @Validate(1, 1, "is_int", true)
-  static is_int(
+  @Validate(1, 1, "is_number", true)
+  static is_number(
+    args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): BoolValue {
+    // Mirrors Scheme's `number?`: true for any number in the numeric tower
+    // (integer, float or complex), but not for booleans.
+    const obj = args[0];
+    return {
+      type: "bool",
+      value: obj.type === "bigint" || obj.type === "number" || obj.type === "complex",
+    };
+  }
+
+  @Validate(1, 1, "is_integer", true)
+  static is_integer(
     args: Value[],
     _source: string,
     _command: ExprNS.Call,
@@ -505,13 +364,20 @@ export class MiscBuiltins {
     };
   }
 
+  @Validate(0, 1, "input", true)
   static async input(
-    _args: Value[],
+    args: Value[],
     _source: string,
     _command: ExprNS.Call,
     context: Context,
   ): Promise<Value> {
-    const userInput = await receiveInput(context);
+    const prompt = args.length > 0 ? toPythonString(args[0]) : undefined;
+    if (prompt !== undefined) {
+      // Matches CPython: input(prompt) writes the prompt to stdout (no trailing newline)
+      // before blocking on stdin.
+      await displayOutput(context, prompt);
+    }
+    const userInput = await receiveInput(context, prompt);
     return { type: "string", value: userInput };
   }
 
@@ -521,7 +387,7 @@ export class MiscBuiltins {
     _command: ExprNS.Call,
     context: Context,
   ): Promise<Value> {
-    const output = args.map(arg => toPythonString(arg)).join(" ");
+    const output = args.map(arg => toPythonString(arg)).join(" ") + "\n";
     await displayOutput(context, output);
     return { type: "none" };
   }
@@ -548,6 +414,65 @@ export class MiscBuiltins {
     const obj = args[0];
     const result = toPythonString(obj, true);
     return { type: "string", value: result };
+  }
+
+  // Python's `breakpoint()` drops into a debugger; the CSE machine has no interactive debugger,
+  // so as a value it is simply a no-op that yields `None`. A zero-arg call resolving to this
+  // builtin is recognised by the CSE machine's step generator (interpreter.ts) as a breakpoint —
+  // it records the step so the host's breakpoint-navigation controls can jump to it, then this
+  // entry runs like any other builtin call. This mirrors the stepper's `breakpoint` entry
+  // (src/conductor/stepper/builtins.ts), which does the analogous thing for the substitution model.
+  static breakpoint(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
+    return { type: "none" };
+  }
+
+  // set_timeout(f, t): schedules f to be called with no arguments after t
+  // milliseconds, without blocking the calling code (source-academy/py-slang#311).
+  // Mirrors the sound_matrix module's existing JS set_timeout(f, t) (same
+  // signature and units), moved into the language itself rather than staying
+  // module-gated, since it's a capability of the evaluator, not of any one
+  // module.
+  //
+  // Not yet implemented on the CSE machine: f must still be callable when the
+  // real timer fires, which may be well after this evaluate() run has
+  // finished and context.control/context.stash have been torn down — the CSE
+  // machine has no way to resume a closure call from cold today (unlike
+  // PVML's invokeValueAsync, built for sound_matrix's own set_timeout, or
+  // py2js, where a compiled Python function already is a plain JS closure and
+  // needs no re-entry machinery at all — see
+  // src/engines/py2js/runtime.ts). Implemented only by py2js for now; this
+  // entry exists so the name resolves consistently across engines.
+  @Validate(2, 2, "set_timeout", true)
+  static set_timeout(
+    _args: Value[],
+    _source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NoneValue {
+    handleRuntimeError(
+      context,
+      new UserError("set_timeout is not yet supported by the CSE machine", command),
+    );
+  }
+
+  // clear_all_timeout(): cancels every pending set_timeout callback scheduled
+  // so far. See set_timeout above for why this is CSE-unsupported for now.
+  @Validate(0, 0, "clear_all_timeout", true)
+  static clear_all_timeout(
+    _args: Value[],
+    _source: string,
+    command: ExprNS.Call,
+    context: Context,
+  ): NoneValue {
+    handleRuntimeError(
+      context,
+      new UserError("clear_all_timeout is not yet supported by the CSE machine", command),
+    );
   }
 }
 for (const builtin of Object.getOwnPropertyNames(MiscBuiltins)) {

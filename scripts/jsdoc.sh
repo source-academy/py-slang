@@ -71,13 +71,21 @@ run() {
   # STREAMS
   run_jsdoc "STREAMS" "README_STREAMS.md" "STREAMS" "$LIB/stream.js" &
 
+  # MCE
+  run_jsdoc "MCE" "README_MCE.md" "MCE" "$LIB/mce.js" &
+  
+
   # Python §1
   run_jsdoc "Python §1" "README_1.md" "python_1" "$LIB/misc.js" "$LIB/math.js" &
   
   # Python §2
   run_jsdoc "Python §2" "README_2.md" "python_2" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" &
 
+  # Python §3
   run_jsdoc "Python §3" "README_3.md" "python_3" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" &
+
+  # Python §4
+  run_jsdoc "Python §4" "README_4.md" "python_4" "$LIB/misc.js" "$LIB/math.js" "$LIB/linked_list.js" "$LIB/pairmutator.js" "$LIB/list.js" "$LIB/stream.js" "$LIB/mce.js" &
 
   wait
 }

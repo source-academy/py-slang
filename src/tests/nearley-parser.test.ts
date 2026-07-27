@@ -87,6 +87,22 @@ describe("Literal expressions", () => {
     expect((expr as ExprNS.Literal).value).toBeCloseTo(3.14);
   });
 
+  // Python's exponentfloat grammar allows a digitpart exponent with no
+  // decimal point at all (see #214); the lexer used to require a dot before
+  // the exponent was recognized, so `1e400` lexed as `1` followed by a
+  // garbage `e400` token instead of a single float.
+  test("exponent float without a decimal point produces Literal with float value", () => {
+    const expr = parseExpr("2e3");
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBeCloseTo(2000);
+  });
+
+  test("exponent float without a decimal point overflows to Infinity, as in CPython", () => {
+    const expr = parseExpr("1e400");
+    expect(expr).toBeInstanceOf(ExprNS.Literal);
+    expect((expr as ExprNS.Literal).value).toBe(Infinity);
+  });
+
   test("True produces Literal(true)", () => {
     const expr = parseExpr("True");
     expect(expr).toBeInstanceOf(ExprNS.Literal);
@@ -150,6 +166,23 @@ describe("Literal expressions", () => {
     expect(expr).toBeInstanceOf(ExprNS.Complex);
     expect((expr as ExprNS.Complex).value.real).toBe(0);
     expect((expr as ExprNS.Complex).value.imag).toBe(3);
+  });
+
+  // Same exponentfloat gap as above (#214), but for the imaginary part of a
+  // complex literal: neither `2e3j` (no dot) nor `6.2E2j` (dot, but the
+  // lexer had no exponent handling for number_complex at all) used to lex.
+  test("complex literal with exponent and no decimal point", () => {
+    const expr = parseExpr("2e3j");
+    expect(expr).toBeInstanceOf(ExprNS.Complex);
+    expect((expr as ExprNS.Complex).value.real).toBe(0);
+    expect((expr as ExprNS.Complex).value.imag).toBe(2000);
+  });
+
+  test("complex literal with exponent and a decimal point", () => {
+    const expr = parseExpr("6.2E2j");
+    expect(expr).toBeInstanceOf(ExprNS.Complex);
+    expect((expr as ExprNS.Complex).value.real).toBe(0);
+    expect((expr as ExprNS.Complex).value.imag).toBeCloseTo(620);
   });
 
   test("large integer produces BigIntLiteral", () => {

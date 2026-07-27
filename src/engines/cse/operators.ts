@@ -1,12 +1,16 @@
 import { ExprNS } from "../../ast-types";
-import { UnsupportedOperandTypeError, ZeroDivisionError } from "../../errors/errors";
+import {
+  ListMultiplyTypeError,
+  UnsupportedOperandTypeError,
+  ZeroDivisionError,
+} from "../../errors/errors";
 import { TokenType } from "../../tokenizer";
 import { PyComplexNumber } from "../../types";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
-import { BigIntValue, NumberValue, Value } from "./stash";
+import { BigIntValue, ListValue, NumberValue, Value } from "./stash";
 import { operatorTranslator } from "./types";
-import { isCoercedComplex, isNumeric, pythonMod } from "./utils";
+import { isCoercedComplex, isNumeric, numericCompare, pythonMod } from "./utils";
 
 export type BinaryOperator =
   | "=="
@@ -59,6 +63,7 @@ export function evaluateUnaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           value.type,
           "",
           operatorTranslator(operator),
@@ -82,6 +87,7 @@ export function evaluateUnaryExpression(
             new UnsupportedOperandTypeError(
               code,
               command,
+              context,
               value.type,
               "",
               operatorTranslator(operator),
@@ -100,6 +106,7 @@ export function evaluateUnaryExpression(
             new UnsupportedOperandTypeError(
               code,
               command,
+              context,
               value.type,
               "",
               operatorTranslator(operator),
@@ -112,6 +119,7 @@ export function evaluateUnaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           value.type,
           "",
           operatorTranslator(operator),
@@ -120,9 +128,168 @@ export function evaluateUnaryExpression(
   }
 }
 
+/** A float NaN value, or a complex value with a NaN real or imaginary component; NaN is unequal to
+ * everything, including itself, as in CPython — and that propagates component-wise into complex
+ * numbers (`complex(nan, 0) == complex(nan, 0)` is False there too). */
+function isNaNValue(value: Value): boolean {
+  if (value.type === "number") return Number.isNaN(value.value);
+  if (value.type === "complex")
+    return Number.isNaN(value.value.real) || Number.isNaN(value.value.imag);
+  return false;
+}
+
 /**
- * Handles equality and inequality comparisons between any two non-list values, following Python §3 semantics.
- * This compares to the logic for Python §1 and §2 where equality and inequality for non-list values only applied to values of the same type.
+ * As in CPython, where bool is a subclass of int, booleans participate in
+ * equality and ordering comparisons as the ints they are: coerce a boolean
+ * to its int value and leave every other value untouched.
+ */
+function asIntIfBool(value: Value): Value {
+  return value.type === "bool" ? { type: "bigint", value: value.value ? 1n : 0n } : value;
+}
+
+/**
+ * Whether a value is a valid operand for numeric ordering comparisons
+ * (int, float or bool — bool as the int it is under CPython's rules).
+ */
+function isOrderable(value: Value): boolean {
+  return value.type === "bigint" || value.type === "number" || value.type === "bool";
+}
+
+/**
+ * Structural equality between any two values, following Python semantics
+ * (see docs/specs/python_typing_middle_34.tex: `==,!=` take any x any at Python §3/§4).
+ * Numbers compare across int/float/complex, and booleans participate as in
+ * CPython, where bool is a subclass of int (True == 1 is True); `None == None`
+ * is true; lists compare element-wise (recursively), as in Python; values of
+ * other differing types are unequal; remaining same-type values compare by
+ * value where they carry one, and by reference otherwise.
+ *
+ * The identity shortcut mirrors CPython's container comparison, which checks
+ * `x is y` before `x == y` per element — so a list containing NaN equals
+ * itself, while distinct NaN values are unequal. (Top-level `nan == nan` on
+ * the very same object is CPython-False; handleExpandedEquality guards that
+ * case before calling this function.)
+ *
+ * Self-referential lists without shared identity exhaust the stack, mirroring
+ * CPython's RecursionError on such comparisons.
+ *
+ * When `restrictChapter12` is set, every operand pair — including elements
+ * reached by recursing into lists — is re-checked against
+ * excludedFromChapter12Equality: §1/§2 exclude bool/function from `==`/`!=`
+ * everywhere the comparison reaches, not just at the top level, so
+ * `pair(1, 2) == pair(True, 3)` and `pair(head, 2) == pair(head, 2)` are
+ * errors at §1/§2, not silently-wrong bools.
+ */
+function structuralEquals(
+  code: string,
+  command: ExprNS.Binary,
+  context: Context,
+  operator: TokenType,
+  left: Value,
+  right: Value,
+  restrictChapter12: boolean,
+): boolean {
+  if (
+    restrictChapter12 &&
+    (excludedFromChapter12Equality(left) || excludedFromChapter12Equality(right))
+  ) {
+    handleRuntimeError(
+      context,
+      new UnsupportedOperandTypeError(
+        code,
+        command,
+        context,
+        left.type,
+        right.type,
+        operatorTranslator(operator),
+      ),
+    );
+  }
+
+  // Identity shortcut: also lets comparisons of shared substructure terminate early.
+  if (left === right) {
+    return true;
+  }
+
+  // As in CPython, booleans compare as the ints they are (True == 1, False == 0.0)
+  left = asIntIfBool(left);
+  right = asIntIfBool(right);
+
+  // NaN is unequal to everything, including another NaN (identity shortcut above
+  // deliberately wins for the same object, matching CPython's container rule)
+  if (isNaNValue(left) || isNaNValue(right)) {
+    return false;
+  }
+
+  // Complex number equality, coercing ints and floats
+  if (left.type == "complex" || right.type == "complex") {
+    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
+      return false;
+    }
+    return PyComplexNumber.fromValue(context, code, command, left.value).equals(
+      PyComplexNumber.fromValue(context, code, command, right.value),
+    );
+  }
+
+  // Ints and floats compare across types (1 == 1.0 is True)
+  if (isNumeric(left) && isNumeric(right)) {
+    return pyCompare(left, right) === 0;
+  }
+
+  // If two types are different, they are not equal
+  if (left.type != right.type) {
+    return false;
+  }
+
+  // None == None is true, as in Python
+  if (left.type == "none") {
+    return true;
+  }
+
+  // Lists compare element-wise, recursively, as in Python
+  if (left.type == "list" && right.type == "list") {
+    return (
+      left.value.length === right.value.length &&
+      left.value.every((element, i) =>
+        structuralEquals(
+          code,
+          command,
+          context,
+          operator,
+          element,
+          right.value[i],
+          restrictChapter12,
+        ),
+      )
+    );
+  }
+
+  // Remaining same-type values: by value where they carry one (e.g. strings),
+  // by reference otherwise (e.g. closures).
+  if ("value" in left && "value" in right) {
+    return left.value === right.value;
+  }
+  return left == right;
+}
+
+/**
+ * Whether a value is excluded from Python §1/§2's any x any equality: bool (avoiding
+ * CPython's bool-as-int equality, e.g. `True == 1`, as a directly written §1/§2
+ * comparison) and function values — both user-defined closures and library
+ * builtins (equality without `is` is left undefined until §3/§4 introduces it).
+ * See docs/specs/python_typing_middle_12.tex:
+ * `==,!= bool,function x any -> error`, `==,!= any x bool,function -> error`.
+ */
+function excludedFromChapter12Equality(value: Value): boolean {
+  return value.type === "bool" || value.type === "closure" || value.type === "builtin";
+}
+
+/**
+ * Handles equality and inequality comparisons using structural equality, total over all types.
+ * At Python §3/§4 this applies to any operand pair (see evaluateBinaryExpression). At Python §1/§2
+ * it is used for any operand pair where neither side is excluded (see
+ * excludedFromChapter12Equality) — every other §1/§2 operand combination is unaffected by this
+ * function.
  *
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
@@ -130,6 +297,9 @@ export function evaluateUnaryExpression(
  * @param operator The operator of the binary expression (either TokenType.DOUBLEEQUAL for equality or TokenType.NOTEQUAL for inequality)
  * @param left The left operand value
  * @param right The right operand value
+ * @param restrictChapter12 When true, re-applies excludedFromChapter12Equality at every level of
+ * recursion (not just the top-level operands), so nested bool/function values inside lists are
+ * also errors at §1/§2. Unset (false) at §3/§4, where equality is unconditionally total.
  * @returns The result of the equality comparison
  */
 export function handleExpandedEquality(
@@ -139,62 +309,79 @@ export function handleExpandedEquality(
   operator: TokenType,
   left: Value,
   right: Value,
+  restrictChapter12 = false,
 ): Value {
-  // List equality is not supported via the equality operators, only via `is`.
-  if (left.type == "list" && right.type == "list") {
-    handleRuntimeError(
-      context,
-      new UnsupportedOperandTypeError(
-        code,
-        command,
-        left.type,
-        right.type,
-        operatorTranslator(operator),
-      ),
-    );
-  }
-
-  // Handle complex number equality
-  if (left.type == "complex" || right.type == "complex") {
-    if (!isCoercedComplex(left) || !isCoercedComplex(right)) {
-      return { type: "bool", value: operator == TokenType.NOTEQUAL };
-    }
-    return {
-      type: "bool",
-      value:
-        (operator == TokenType.NOTEQUAL) !==
-        PyComplexNumber.fromValue(context, code, command, left.value).equals(
-          PyComplexNumber.fromValue(context, code, command, right.value),
-        ),
-    };
-  }
-
-  // Handle ints and floats
-  if (isNumeric(left) && isNumeric(right)) {
-    return {
-      type: "bool",
-      value: (operator == TokenType.NOTEQUAL) !== (pyCompare(left, right) === 0),
-    };
-  }
-
-  // If two types are different, they are not equal
-  if (left.type != right.type) {
+  // A top-level NaN operand is unequal to everything — even the identical
+  // object (CPython: nan == nan is False). Checked here rather than in
+  // structuralEquals so that the identity shortcut still applies to NaN
+  // *elements* inside lists, as in CPython's container comparison.
+  if (isNaNValue(left) || isNaNValue(right)) {
     return { type: "bool", value: operator == TokenType.NOTEQUAL };
   }
+  return {
+    type: "bool",
+    value:
+      (operator == TokenType.NOTEQUAL) !==
+      structuralEquals(code, command, context, operator, left, right, restrictChapter12),
+  };
+}
 
-  // Some types have value-based equality (e.g. strings), while others have reference-based equality (e.g. lists).
-  if ("value" in left && "value" in right) {
-    return {
-      type: "bool",
-      value: (left.value === right.value) !== (operator == TokenType.NOTEQUAL),
-    };
+/**
+ * Identity (`is`) between two values, following Python §3/§4 semantics (see
+ * docs/specs/python_typing_middle_34.tex: `==,!=,is,is not` take any x any).
+ * Lists and function values compare by reference — `is` is what makes sharing
+ * of structure observable — and `None is None` is true. Numbers, strings and
+ * booleans have no real object identity in this interpreter (each is a freshly
+ * wrapped primitive, not a boxed object), so — as whether `1 is 1` holds is
+ * unspecified in Python anyway (interning) — they compare by their underlying
+ * value instead, the same simplification structuralEquals already makes for
+ * these types. Values of different types are never identical (so `xs is None`
+ * is simply false for a list `xs`).
+ *
+ * The exact-same-object case is checked first, before any type- or
+ * value-based comparison: `x is x` must be true regardless of what
+ * value-equality would say about `x` compared to a *different* object with
+ * the same value — notably `x = math_nan; x is x` (true: same binding) vs.
+ * `x == x` (false: NaN is unequal to everything, including itself, per
+ * IEEE 754). Without this shortcut, the value-based fallback below would
+ * incorrectly report `x is x` as false whenever `x`'s own value-equality is
+ * false — not just for NaN floats, but for any NaN-containing complex value
+ * too (`complex(math_nan, 0) is complex(math_nan, 0)` — actually a *different*
+ * object each time, so still false, but `x is x` for one such binding must be
+ * true).
+ */
+function pyIdentical(left: Value, right: Value): boolean {
+  if (left === right) {
+    return true;
   }
-  return { type: "bool", value: (operator == TokenType.NOTEQUAL) !== (left == right) };
+  if (left.type !== right.type) {
+    return false;
+  }
+  switch (left.type) {
+    case "none":
+      return true;
+    case "list":
+      return left === right;
+    case "complex":
+      return right.type === "complex" && left.value.equals(right.value);
+    default:
+      // Numbers, strings and booleans: compare by value (see doc comment above).
+      // Function values: closures compare by their underlying closure;
+      // everything else (builtins etc.) by reference.
+      if ("value" in left && "value" in right) {
+        return left.value === right.value;
+      }
+      if ("closure" in left && "closure" in right) {
+        return left.closure === right.closure;
+      }
+      return left === right;
+  }
 }
 
 /**
  * The main function for evaluating a binary expression, which dispatches to the appropriate logic based on the operator and operand types.
- * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded equality semantics for Python §3.
+ * This includes handling of complex numbers, string concatenation and comparison, numeric operations, and expanded
+ * equality semantics for Python §3/§4 (any x any) and §1/§2 (any x any except bool/function).
  * @param code The original source code being evaluated
  * @param command The AST node corresponding to the binary expression
  * @param context The global context state
@@ -213,10 +400,59 @@ export function evaluateBinaryExpression(
   right: Value,
   variant: number,
 ): Value {
-  // Handle expanded equality semantics for Python §3,
-  // where equality and inequality comparisons between non-list values of different types are allowed
+  // Handle expanded equality semantics for Python §3/§4,
+  // where equality and inequality comparisons take any x any (structural equality)
   if ((operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) && variant >= 3) {
     return handleExpandedEquality(code, command, context, operator, left, right);
+  }
+
+  // At Python §1/§2, == and != compare structurally over anything allowed at
+  // that chapter — including cross-type comparisons, pairs and None — except
+  // bool and function values, which are excluded entirely (see
+  // excludedFromChapter12Equality and docs/specs/python_typing_middle_12.tex).
+  // Reaching this point already implies variant is 1 or 2 (variant >= 3
+  // returned above), so no further variant check is needed. An excluded
+  // operand falls through to the generic unsupported-operand error below.
+  if (
+    (operator == TokenType.DOUBLEEQUAL || operator == TokenType.NOTEQUAL) &&
+    !excludedFromChapter12Equality(left) &&
+    !excludedFromChapter12Equality(right)
+  ) {
+    return handleExpandedEquality(code, command, context, operator, left, right, true);
+  }
+
+  // At Python §3/§4, booleans participate in ordering comparisons as the ints
+  // they are, as in CPython (True < 2 is True); see the
+  // `>,>=,<,<= int,float,bool` row of docs/specs/python_typing_middle_34.tex.
+  // At §1/§2 booleans are not valid ordering operands (python_typing_middle_12.tex).
+  // The coercion is gated on both operands already being orderable so that an
+  // unsupported comparison (e.g. `True < 'abc'`) reports 'bool', not 'int', in
+  // its error message.
+  if (
+    variant >= 3 &&
+    isOrderable(left) &&
+    isOrderable(right) &&
+    (operator == TokenType.LESS ||
+      operator == TokenType.LESSEQUAL ||
+      operator == TokenType.GREATER ||
+      operator == TokenType.GREATEREQUAL)
+  ) {
+    left = asIntIfBool(left);
+    right = asIntIfBool(right);
+  }
+
+  // Handle identity semantics for `is` / `is not`, which apply to any operand
+  // pair at Python §3/§4 (see docs/specs/python_typing_middle_34.tex: `is`,
+  // `is not` any x any -> bool). The `is` operator only exists at §3/§4;
+  // chapters 1 and 2 reject it at validation time (NoIsOperatorValidator),
+  // and the variant gate here keeps the runtime as an independent backstop
+  // (at §1/§2 the operator falls through to the generic unsupported-operand
+  // error).
+  if ((operator == TokenType.IS || operator == TokenType.ISNOT) && variant >= 3) {
+    return {
+      type: "bool",
+      value: (operator == TokenType.ISNOT) !== pyIdentical(left, right),
+    };
   }
 
   // Handle Complex numbers
@@ -227,6 +463,7 @@ export function evaluateBinaryExpression(
         new UnsupportedOperandTypeError(
           code,
           command,
+          context,
           left.type,
           right.type,
           operatorTranslator(operator),
@@ -253,16 +490,16 @@ export function evaluateBinaryExpression(
       case TokenType.DOUBLESTAR:
         result = leftComplex.pow(rightComplex);
         break;
-      case TokenType.DOUBLEEQUAL:
-        return { type: "bool", value: leftComplex.equals(rightComplex) };
-      case TokenType.NOTEQUAL:
-        return { type: "bool", value: !leftComplex.equals(rightComplex) };
+      // `==`/`!=` on complex operands are handled by the §1/§2/§3/§4 equality
+      // dispatch above `evaluateBinaryExpression`'s type-specific handling —
+      // this switch is never reached for those operators.
       default:
         handleRuntimeError(
           context,
           new UnsupportedOperandTypeError(
             code,
             command,
+            context,
             left.type,
             right.type,
             operatorTranslator(operator),
@@ -272,13 +509,16 @@ export function evaluateBinaryExpression(
     return { type: "complex", value: result };
   }
 
-  // Handle comparisons with None (represented as 'none' type)
+  // Handle comparisons with None (represented as 'none' type). `==`/`!=`
+  // involving None are handled above at every chapter; every other operator
+  // on None is an error.
   if (left.type === "none" || right.type === "none") {
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -286,16 +526,44 @@ export function evaluateBinaryExpression(
     );
   }
 
-  // Handle list operations (only referential equality)
-  if (left.type == "list" || right.type == "list") {
-    if (operator == TokenType.IS && right.type === "list" && left.type === "list") {
-      return { type: "bool", value: left === right };
+  // `list * int` / `int * list`: a generic list constructor (see
+  // docs/specs/python_typing_middle_34.tex) -- the list's elements repeated
+  // as shallow copies (the same Value references, not deep clones) `n`
+  // times, or `[]` for `n <= 0`. `bool` is explicitly not a valid count
+  // (unlike real Python, where True/False are ints) -- checked as its own
+  // "list" type, not "bigint", so it falls into the dedicated error below
+  // rather than silently being coerced. §3/§4 only -- at §1/§2 a "list" stash
+  // value is actually a cons pair (see docs/specs/python_typing_middle_34.tex
+  // vs _middle_12.tex), which has no `*` row at any chapter before §3.
+  if (
+    variant >= 3 &&
+    operator === TokenType.STAR &&
+    (left.type === "list" || right.type === "list")
+  ) {
+    const list = left.type === "list" ? left : (right as ListValue);
+    const other = left.type === "list" ? right : left;
+    if (other.type !== "bigint") {
+      handleRuntimeError(context, new ListMultiplyTypeError(code, command, context));
     }
+    const count = Number(other.value);
+    const repeated: Value[] = [];
+    for (let i = 0; i < count; i++) {
+      for (const val of list.value) {
+        repeated.push(val);
+      }
+    }
+    return { type: "list", value: repeated };
+  }
+
+  // Handle list operations (`is`, `is not`, and `==`/`!=` at every chapter are
+  // handled above; everything else on lists is an error)
+  if (left.type == "list" || right.type == "list") {
     handleRuntimeError(
       context,
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -314,6 +582,7 @@ export function evaluateBinaryExpression(
           new UnsupportedOperandTypeError(
             code,
             command,
+            context,
             left.type,
             right.type,
             operatorTranslator(operator),
@@ -322,11 +591,9 @@ export function evaluateBinaryExpression(
       }
     }
     if (left.type === "string" && right.type === "string") {
+      // `==`/`!=` on string operands are handled by the §1/§2/§3/§4 equality
+      // dispatch above; this switch only ever sees ordering operators.
       switch (operator) {
-        case TokenType.DOUBLEEQUAL:
-          return { type: "bool", value: left.value === right.value };
-        case TokenType.NOTEQUAL:
-          return { type: "bool", value: left.value !== right.value };
         case TokenType.LESS:
           return { type: "bool", value: left.value < right.value };
         case TokenType.LESSEQUAL:
@@ -343,6 +610,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -356,6 +624,7 @@ export function evaluateBinaryExpression(
       new UnsupportedOperandTypeError(
         code,
         command,
+        context,
         left.type,
         right.type,
         operatorTranslator(operator),
@@ -450,22 +719,21 @@ export function evaluateBinaryExpression(
       }
       break;
 
-    // Comparison Operators
-    case TokenType.DOUBLEEQUAL:
-    case TokenType.NOTEQUAL:
+    // Comparison Operators. `==`/`!=` are handled by the §1/§2/§3/§4 equality
+    // dispatch above `evaluateBinaryExpression`'s type-specific handling, so
+    // only ordering operators ever reach this switch.
     case TokenType.LESS:
     case TokenType.LESSEQUAL:
     case TokenType.GREATER:
     case TokenType.GREATEREQUAL: {
+      // As in CPython, NaN is unordered: every ordering comparison with a
+      // NaN operand is False.
+      if (isNaNValue(left) || isNaNValue(right)) {
+        return { type: "bool", value: false };
+      }
       const cmp = pyCompare(left, right);
       let result: boolean;
       switch (operator) {
-        case TokenType.DOUBLEEQUAL:
-          result = cmp === 0;
-          break;
-        case TokenType.NOTEQUAL:
-          result = cmp !== 0;
-          break;
         case TokenType.LESS:
           result = cmp < 0;
           break;
@@ -489,6 +757,7 @@ export function evaluateBinaryExpression(
     new UnsupportedOperandTypeError(
       code,
       command,
+      context,
       left.type,
       right.type,
       operatorTranslator(operator),
@@ -497,192 +766,14 @@ export function evaluateBinaryExpression(
 }
 
 /**
- * TEMPORARY IMPLEMENTATION
- * This function is a simplified comparison between int and float
- * to mimic Python-like ordering semantics.
- *
- * TODO: In future, replace this with proper method dispatch to
- * __eq__, __lt__, __gt__, etc., according to Python's object model.
- *
- * pyCompare: Compares a Python-style big integer (int_num) with a float (float_num),
- * returning -1, 0, or 1 for less-than, equal, or greater-than.
- *
- * This logic follows CPython's approach in floatobject.c, ensuring Python-like semantics:
- *
- * 1. Special Values:
- *    - If float_num is inf, any finite int_num is smaller (returns -1).
- *    - If float_num is -inf, any finite int_num is larger (returns 1).
- *
- * 2. Compare by Sign:
- *    - Determine each number’s sign (negative, zero, or positive). If they differ, return based on sign.
- *    - If both are zero, treat them as equal.
- *
- * 3. Safe Conversion:
- *    - If |int_num| <= 2^53, safely convert it to a double and do a normal floating comparison.
- *
- * 4. Handling Large Integers:
- *    - For int_num beyond 2^53, approximate the magnitudes via exponent/bit length.
- *    - Compare the integer’s digit count with float_num’s order of magnitude.
- *
- * 5. Close Cases:
- *    - If both integer and float have the same digit count, convert float_num to a “big-int-like” string
- *      (approximateBigIntString) and compare lexicographically to int_num’s string.
- *
- * By layering sign checks, safe numeric range checks, and approximate comparisons,
- * we achieve a Python-like ordering of large integers vs floats.
+ * Compares a Python-style big integer with a float, returning -1, 0, or 1 for
+ * less-than, equal, or greater-than. The actual numeric algorithm (safe-range
+ * conversion, magnitude approximation for values outside it) lives in
+ * `numericCompare` in ./utils, shared with the PVML engine's interpreter so
+ * both engines agree on cross-type (bigint vs float) ordering.
  */
 function pyCompare(val1: NumberValue | BigIntValue, val2: NumberValue | BigIntValue): number {
-  // Handle same type comparisons first
-  if (val1.type === "bigint" && val2.type === "bigint") {
-    if (val1.value < val2.value) return -1;
-    if (val1.value > val2.value) return 1;
-    return 0;
-  }
-  if (val1.type === "number" && val2.type === "number") {
-    if (val1.value < val2.value) return -1;
-    if (val1.value > val2.value) return 1;
-    return 0;
-  }
-  let int_val: bigint;
-  let float_val: number;
-  if (val1.type === "bigint" && val2.type === "number") {
-    int_val = val1.value;
-    float_val = val2.value;
-  } else if (val1.type === "number" && val2.type === "bigint") {
-    int_val = val2.value;
-    float_val = val1.value;
-    // for swapped order, swap the result of comparison here
-    return -pyCompare(val2, val1);
-  } else {
-    return 0;
-  }
-  // int_num.value < float_num.value => -1
-  // int_num.value = float_num.value => 0
-  // int_num.value > float_num.value => 1
-
-  // If float_num is positive Infinity, then int_num is considered smaller.
-  if (float_val === Infinity) {
-    return -1;
-  }
-  if (float_val === -Infinity) {
-    return 1;
-  }
-
-  const signInt = int_val < 0n ? -1 : int_val > 0n ? 1 : 0;
-  const signFlt = Math.sign(float_val); // -1, 0, or 1
-
-  if (signInt < signFlt) return -1; // e.g. int<0, float>=0 => int < float
-  if (signInt > signFlt) return 1; // e.g. int>=0, float<0 => int > float
-
-  // Both have the same sign (including 0).
-  // If both are zero, treat them as equal.
-  if (signInt === 0 && signFlt === 0) {
-    return 0;
-  }
-
-  // Both are either positive or negative.
-  // If |int_num.value| is within 2^53, it can be safely converted to a JS number for an exact comparison.
-  const absInt = int_val < 0n ? -int_val : int_val;
-  const MAX_SAFE = 9007199254740991; // 2^53 - 1
-
-  if (absInt <= MAX_SAFE) {
-    // Safe conversion to double.
-    const intAsNum = Number(int_val);
-    const diff = intAsNum - float_val;
-    if (diff === 0) return 0;
-    return diff < 0 ? -1 : 1;
-  }
-
-  // For large integers exceeding 2^53, need to distinguish more carefully.
-  // Determine the order of magnitude of float_num.value (via log10) and compare it with
-  // the number of digits of int_num.value. An approximate comparison can indicate whether
-  // int_num.value is greater or less than float_num.value.
-
-  // First, check if float_num.value is nearly zero (but not zero).
-  if (float_val === 0) {
-    // Although signFlt would be 0 and handled above, just to be safe:
-    return signInt;
-  }
-
-  const absFlt = Math.abs(float_val);
-  // Determine the order of magnitude.
-  const exponent = Math.floor(Math.log10(absFlt));
-
-  // Get the decimal string representation of the absolute integer.
-  const intStr = absInt.toString();
-  const intDigits = intStr.length;
-
-  // If exponent + 1 is less than intDigits, then |int_num.value| has more digits
-  // and is larger (if positive) or smaller (if negative) than float_num.value.
-  // Conversely, if exponent + 1 is greater than intDigits, int_num.value has fewer digits.
-  const integerPartLen = exponent + 1;
-  if (integerPartLen < intDigits) {
-    // length of int_num.value is larger => all positive => int_num.value > float_num.value
-    //                => all negative => int_num.value < float_num.value
-    return signInt > 0 ? 1 : -1;
-  } else if (integerPartLen > intDigits) {
-    // length of int_num.value is smaller => all positive => int_num.value < float_num.value
-    //                => all negative => int_num.value > float_num.value
-    return signInt > 0 ? -1 : 1;
-  } else {
-    // If the number of digits is the same, they may be extremely close.
-    // Method: Convert float_num.value into an approximate BigInt string and perform a lexicographical comparison.
-    const floatApproxStr = approximateBigIntString(absFlt, 30);
-
-    const aTrim = intStr.replace(/^0+/, "");
-    const bTrim = floatApproxStr.replace(/^0+/, "");
-
-    // If lengths differ after trimming, the one with more digits is larger.
-    if (aTrim.length > bTrim.length) {
-      return signInt > 0 ? 1 : -1;
-    } else if (aTrim.length < bTrim.length) {
-      return signInt > 0 ? -1 : 1;
-    } else {
-      // Same length: use lexicographical comparison.
-      const cmp = aTrim.localeCompare(bTrim);
-      if (cmp === 0) {
-        return 0;
-      }
-      // cmp>0 => aTrim > bTrim => aVal > bVal
-      return cmp > 0 ? (signInt > 0 ? 1 : -1) : signInt > 0 ? -1 : 1;
-    }
-  }
-}
-
-function approximateBigIntString(num: number, precision: number): string {
-  // Use scientific notation to obtain a string in the form "3.333333333333333e+49"
-  const s = num.toExponential(precision);
-  // Split into mantissa and exponent parts.
-  // The regular expression matches strings of the form: /^([\d.]+)e([+\-]\d+)$/
-  const match = s.match(/^([\d.]+)e([+\-]\d+)$/);
-  if (!match) {
-    // For extremely small or extremely large numbers, toExponential() should follow this format.
-    // As a fallback, return Math.floor(num).toString()
-    return Math.floor(num).toString();
-  }
-  let mantissaStr = match[1]; // "3.3333333333..."
-  const exp = parseInt(match[2], 10); // e.g. +49
-
-  // Remove the decimal point
-  mantissaStr = mantissaStr.replace(".", "");
-  // Get the current length of the mantissa string
-  const len = mantissaStr.length;
-  // Calculate the required integer length: for exp ≥ 0, we want the integer part
-  // to have (1 + exp) digits.
-  const integerLen = 1 + exp;
-  if (integerLen <= 0) {
-    // This indicates num < 1 (e.g., exponent = -1, mantissa = "3" results in 0.xxx)
-    // For big integer comparison, such a number is very small, so simply return "0"
-    return "0";
-  }
-
-  if (len < integerLen) {
-    // The mantissa is not long enough; pad with zeros at the end.
-    return mantissaStr.padEnd(integerLen, "0");
-  }
-  // If the mantissa is too long, truncate it (this is equivalent to taking the floor).
-  // Rounding could be applied if necessary, but truncation is sufficient for comparison.
-  return mantissaStr.slice(0, integerLen);
+  return numericCompare(val1.value, val2.value);
 }
 
 export function isFalsy(value: Value): boolean {

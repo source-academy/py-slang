@@ -27,10 +27,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -58,10 +55,7 @@ export class MathBuiltins {
     const x = args[0];
 
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -88,10 +82,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -118,10 +109,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -144,10 +132,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -171,15 +156,9 @@ export class MathBuiltins {
     const y = args[0];
     const x = args[1];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     } else if (!isNumeric(y)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, y.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, y.type));
     }
 
     let yNum: number, xNum: number;
@@ -208,10 +187,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -238,10 +214,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -264,10 +237,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -290,10 +260,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -316,10 +283,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -343,10 +307,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     const erfc = 1 - MathBuiltins.math_erf([args[0]], source, command, context).value;
@@ -365,9 +326,9 @@ export class MathBuiltins {
     const k = args[1];
 
     if (n.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, n.type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, n.type));
     } else if (k.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, k.type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, k.type));
     }
 
     const nVal = BigInt(n.value);
@@ -401,7 +362,7 @@ export class MathBuiltins {
     const n = args[0];
 
     if (n.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, n.type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, n.type));
     }
 
     const nVal = BigInt(n.value);
@@ -435,7 +396,7 @@ export class MathBuiltins {
 
     const values = args.map(v => {
       if (v.type !== "bigint") {
-        handleRuntimeError(context, new TypeError(source, command, context, v.type, "int"));
+        handleRuntimeError(context, new TypeError(source, command, context, v.type));
       }
       return BigInt(v.value);
     });
@@ -476,7 +437,7 @@ export class MathBuiltins {
   ): BigIntValue {
     const nValObj = args[0];
     if (nValObj.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type));
     }
 
     const n: bigint = nValObj.value;
@@ -517,7 +478,7 @@ export class MathBuiltins {
 
     const values = args.map(val => {
       if (val.type !== "bigint") {
-        handleRuntimeError(context, new TypeError(source, command, context, val.type, "int"));
+        handleRuntimeError(context, new TypeError(source, command, context, val.type));
       }
       return BigInt(val.value);
     });
@@ -555,7 +516,7 @@ export class MathBuiltins {
   ): BigIntValue {
     const nValObj = args[0];
     if (nValObj.type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, nValObj.type));
     }
     const n = BigInt(nValObj.value);
 
@@ -567,10 +528,7 @@ export class MathBuiltins {
       } else if (kValObj.type === "bigint") {
         k = BigInt(kValObj.value);
       } else {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, kValObj.type, "int' or 'None"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, kValObj.type));
       }
     }
 
@@ -609,7 +567,7 @@ export class MathBuiltins {
       return { type: "bigint", value: ceiled };
     }
 
-    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
+    handleRuntimeError(context, new TypeError(source, command, context, x.type));
   }
 
   @Validate(1, 1, "math_fabs", false)
@@ -630,16 +588,13 @@ export class MathBuiltins {
     if (x.type === "number") {
       const numVal: number = x.value;
       if (typeof numVal !== "number") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, x.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, x.type));
       }
       const absVal: number = Math.abs(numVal);
       return { type: "number", value: absVal };
     }
 
-    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
+    handleRuntimeError(context, new TypeError(source, command, context, x.type));
   }
 
   @Validate(1, 1, "math_floor", false)
@@ -658,16 +613,13 @@ export class MathBuiltins {
     if (x.type === "number") {
       const numVal: number = x.value;
       if (typeof numVal !== "number") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, x.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, x.type));
       }
       const floored: bigint = BigInt(Math.floor(numVal));
       return { type: "bigint", value: floored };
     }
 
-    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
+    handleRuntimeError(context, new TypeError(source, command, context, x.type));
   }
 
   // Computes the product of a and b along with the rounding error using Dekker's algorithm.
@@ -704,10 +656,7 @@ export class MathBuiltins {
     } else if (val.type === "number") {
       return val.value;
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, val.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, val.type));
     }
   }
 
@@ -789,10 +738,7 @@ export class MathBuiltins {
     } else if (x.type === "number") {
       xValue = x.value;
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let yValue: number;
@@ -801,10 +747,7 @@ export class MathBuiltins {
     } else if (y.type === "number") {
       yValue = y.value;
     } else {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, y.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, y.type));
     }
 
     if (yValue === 0) {
@@ -829,10 +772,7 @@ export class MathBuiltins {
     if (x.type === "number") {
       const numVal: number = x.value;
       if (typeof numVal !== "number") {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, x.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, x.type));
       }
       let truncated: number;
       if (numVal === 0) {
@@ -845,7 +785,7 @@ export class MathBuiltins {
       return { type: "bigint", value: BigInt(truncated) };
     }
 
-    handleRuntimeError(context, new TypeError(source, command, context, x.type, "float' or 'int"));
+    handleRuntimeError(context, new TypeError(source, command, context, x.type));
   }
 
   @Validate(2, 2, "math_copysign", false)
@@ -858,15 +798,9 @@ export class MathBuiltins {
     const [x, y] = args;
 
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     } else if (!isNumeric(y)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, y.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, y.type));
     }
 
     const xVal = Number(x.value);
@@ -888,10 +822,7 @@ export class MathBuiltins {
   ): BoolValue {
     const xValObj = args[0];
     if (!isNumeric(xValObj)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, xValObj.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, xValObj.type));
     }
 
     const x = Number(xValObj.value);
@@ -909,10 +840,7 @@ export class MathBuiltins {
   ): BoolValue {
     const xValObj = args[0];
     if (!isNumeric(xValObj)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, xValObj.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, xValObj.type));
     }
 
     const x = Number(xValObj.value);
@@ -930,10 +858,7 @@ export class MathBuiltins {
   ): BoolValue {
     const xValObj = args[0];
     if (!isNumeric(xValObj)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, xValObj.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, xValObj.type));
     }
 
     const x = Number(xValObj.value);
@@ -952,7 +877,7 @@ export class MathBuiltins {
     const xVal = MathBuiltins._toNumber(args[0], source, command, context);
 
     if (args[1].type !== "bigint") {
-      handleRuntimeError(context, new TypeError(source, command, context, args[1].type, "int"));
+      handleRuntimeError(context, new TypeError(source, command, context, args[1].type));
     }
     const expVal = args[1].value;
 
@@ -1000,10 +925,7 @@ export class MathBuiltins {
       if (xVal.type === "bigint") {
         x = Number(xVal.value);
       } else {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, xVal.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, xVal.type));
       }
     } else {
       x = xVal.value;
@@ -1028,10 +950,7 @@ export class MathBuiltins {
       if (xVal.type === "bigint") {
         x = Number(xVal.value);
       } else {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, xVal.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, xVal.type));
       }
     } else {
       x = xVal.value;
@@ -1055,10 +974,7 @@ export class MathBuiltins {
       if (xVal.type === "bigint") {
         x = Number(xVal.value);
       } else {
-        handleRuntimeError(
-          context,
-          new TypeError(source, command, context, xVal.type, "float' or 'int"),
-        );
+        handleRuntimeError(context, new TypeError(source, command, context, xVal.type));
       }
     } else {
       x = xVal.value;
@@ -1077,10 +993,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -1103,10 +1016,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     const z = MathBuiltins._toNumber(x, source, command, context);
@@ -1124,10 +1034,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     const z = MathBuiltins._toNumber(x, source, command, context);
@@ -1145,10 +1052,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
     let num: number;
     if (x.type === "number") {
@@ -1167,10 +1071,7 @@ export class MathBuiltins {
 
     const baseArg = args[1];
     if (!isNumeric(baseArg)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, baseArg.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, baseArg.type));
     }
     let baseNum: number;
     if (baseArg.type === "number") {
@@ -1195,10 +1096,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     let num: number;
     if (x.type === "number") {
@@ -1223,10 +1121,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     let num: number;
     if (x.type === "number") {
@@ -1251,10 +1146,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, args[0].type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     let num: number;
     if (x.type === "number") {
@@ -1281,15 +1173,9 @@ export class MathBuiltins {
     const exp = args[1];
 
     if (!isNumeric(base)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, base.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, base.type));
     } else if (!isNumeric(exp)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, exp.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, exp.type));
     }
 
     let baseNum: number;
@@ -1319,10 +1205,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let deg: number;
@@ -1340,10 +1223,7 @@ export class MathBuiltins {
   static math_sin(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -1361,10 +1241,7 @@ export class MathBuiltins {
   static math_sinh(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -1382,10 +1259,7 @@ export class MathBuiltins {
   static math_tan(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -1408,10 +1282,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;
@@ -1434,10 +1305,7 @@ export class MathBuiltins {
   ): NumberValue {
     const x = args[0];
     if (!isNumeric(x)) {
-      handleRuntimeError(
-        context,
-        new TypeError(source, command, context, x.type, "float' or 'int"),
-      );
+      handleRuntimeError(context, new TypeError(source, command, context, x.type));
     }
 
     let num: number;

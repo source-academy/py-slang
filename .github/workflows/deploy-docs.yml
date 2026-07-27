@@ -32,11 +32,16 @@ jobs:
         run: |
           chmod +x scripts/jsdoc.sh
           ./scripts/jsdoc.sh prepare
-      - name: Deploy to Branch
+      - name: Deploy to docs site (/python)
         uses: peaceiris/actions-gh-pages@v4
         with:
           deploy_key: ${{ secrets.DOCS_DEPLOY_SSH_KEY }}
           publish_dir: docs/python
           external_repository: source-academy/docs.sourceacademy.org
-          publish_branch: deploy-py-slang
-          force_orphan: true
+          publish_branch: master
+          # Publish into the /python subfolder so the docs are served at
+          # https://docs.sourceacademy.org/python/ alongside the Source docs.
+          destination_dir: python
+          # Keep the existing Source docs (published to the branch root by
+          # js-slang) intact; only the /python subfolder is updated here.
+          keep_files: true

@@ -16,7 +16,8 @@ export function createBreakContinueValidator(): FeatureValidator {
         return;
       } else if (node instanceof StmtNS.Break || node instanceof StmtNS.Continue) {
         if ((depthPerScope.get(env) ?? 0) === 0) {
-          throw new BreakContinueOutsideLoopError(node);
+          const kind = node instanceof StmtNS.Break ? "break" : "continue";
+          throw new BreakContinueOutsideLoopError(node, kind);
         }
       }
     },

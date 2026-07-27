@@ -12,17 +12,22 @@ import {
   type WasmNumeric,
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
-import { WasmExports } from ".";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { TokenType } from "../../tokenizer";
+import { LibFuncType } from "./library";
 import {
   ALLOC_ENV_FX,
   APPLY_FX_NAME,
+  APPLY_HOST_CLOSURE_BEGIN_FX,
+  APPLY_HOST_CLOSURE_FINISH_FX,
+  APPLY_HOST_CLOSURE_SET_ARG_FX,
   applyFuncFactory,
   ARITHMETIC_OP_FX,
   ARITHMETIC_OP_TAG,
   BOOL_NOT_FX,
   BOOLISE_FX,
+  CHAPTER,
+  CHECK_BOOL_FX,
   CHECK_INT_FX,
   CLEAR_GC_HEADER_FX,
   COLLECT_FX,
@@ -70,8 +75,8 @@ import {
   SILENT_PUSH_SHADOW_STACK_FX,
   TO_SPACE_END_PTR,
   TO_SPACE_START_PTR,
-} from "./constants";
-import { LibFuncType } from "./library";
+} from "./runtime";
+import { WasmExports } from "./types";
 
 const FOR_END_PREFIX = "_for_end_";
 const FOR_STEP_PREFIX = "_for_step_";
@@ -108,10 +113,28 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   private builtIns: WasmCall[];
   private interactiveMode = false;
   private pageCount: number;
+  private chapter: number;
 
   private environment: Binding[][] = [[]];
   private userFunctions: WasmInstruction[][] = [];
   private forDepth = 0;
+  /** Bound name (alias if given) -> index into the module-binding table the
+   * modules.get/modules.call host imports resolve against — the order the
+   * evaluator collected the chunk's `from X import ...` bindings in (see
+   * moduleInterop.ts's PreparedModuleBindings and PyWasmEvaluator's
+   * loadImports). Empty when the caller supplied no bindings, in which case
+   * any FromImport statement is a compile error (e.g. the CLI runner). */
+  private moduleBindingIndices: Map<string, number>;
+  /** Total byte length of the data-section strings — the boundary below
+   * which a STRING payload pointer has no GC object header (same select
+   * LOG_FX does against the DATA_END global). Set during visitFileInputStmt;
+   * exposed so the modules.call host import can read string arguments (see
+   * getDataEnd/moduleInterop.ts's readWasmValue). */
+  private dataEnd = 0;
+
+  getDataEnd(): number {
+    return this.dataEnd;
+  }
 
   private getLexAddress(name: string): [number, number] {
     for (let i = this.environment.length - 1; i >= 0; i--) {
@@ -121,12 +144,18 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       if (index === -1) continue;
 
       if (curr[index].tag === "nonlocal") {
-        throw new Error(`Name ${curr[index].name} is used prior to nonlocal declaration!`);
+        // Mirrors CSE's FreeVariableUnboundError (src/errors/errors.ts): a
+        // `nonlocal`-declared name read before its owning enclosing scope
+        // has assigned it a value.
+        throw new Error(
+          `NameError: cannot access free variable '${curr[index].name}' where it is not associated with a value in enclosing scope`,
+        );
       }
 
       return [this.environment.length - 1 - i, index];
     }
-    throw new Error(`Name ${name} not defined!`);
+    // Mirrors CSE's NameError (src/errors/errors.ts).
+    throw new Error(`NameError: name '${name}' is not defined`);
   }
 
   private collectDeclarations(
@@ -142,6 +171,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         } else if (stmt instanceof StmtNS.Assign && stmt.target instanceof ExprNS.Variable) {
           // base case: variable declaration in assignment statement
           found.push(stmt.target.name.lexeme);
+        } else if (stmt instanceof StmtNS.FromImport) {
+          // base case: `from X import a, b as c` binds a and c
+          found.push(...stmt.names.map(spec => (spec.alias ?? spec.name).lexeme));
         } else if (stmt instanceof StmtNS.If) {
           // recursively search if and else block
           found.push(...findLexemes(stmt.body, forDepth));
@@ -184,9 +216,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           throw new Error(`No binding for nonlocal ${l} found!`);
         }
 
-        // tag this binding as nonlocal so
-        // if it's accessed before its nonlocal statement,
-        // throw error
+        // tag this binding as nonlocal so if it's accessed before its nonlocal statement, error
         bindings.forEach(binding => {
           if (binding.name === l) binding.tag = "nonlocal";
         });
@@ -203,9 +233,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     builtInFunctions: LibFuncType[],
     interactiveMode: boolean,
     pageCount: number,
+    chapter: number,
+    moduleBindings: string[] = [],
   ) {
     this.strings = initialStrings;
     this.pageCount = pageCount;
+    this.chapter = chapter;
+    this.moduleBindingIndices = new Map(moduleBindings.map((name, i) => [name, i]));
 
     this.builtIns = builtInFunctions.map(({ name, arity, body, isVoid, hasVarArgs }, i) => {
       this.environment[0].push({ name, tag: "local" });
@@ -263,6 +297,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       strings.push(wasm.data(i32.const(heapPointer), BuilderGenerator.toWasmDataString(str)));
       heapPointer += BuilderGenerator.utf8ByteLength(str);
     }
+    this.dataEnd = heapPointer;
 
     // exported functions for parse
     const exports: { [key in keyof WasmExports]: WasmExport } = {
@@ -279,6 +314,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       malloc: wasm.export("malloc").func(MALLOC_FX.name),
       peekShadowStack: wasm.export("peekShadowStack").func(PEEK_SHADOW_STACK_FX.name),
       getListElement: wasm.export("getListElement").func(DEBUG_GET_LIST_ELEMENT_FX.name),
+      applyClosureBegin: wasm.export("applyClosureBegin").func(APPLY_HOST_CLOSURE_BEGIN_FX.name),
+      applyClosureSetArg: wasm
+        .export("applyClosureSetArg")
+        .func(APPLY_HOST_CLOSURE_SET_ARG_FX.name),
+      applyClosureFinish: wasm.export("applyClosureFinish").func(APPLY_HOST_CLOSURE_FINISH_FX.name),
     };
 
     const memoryEndPointer = this.pageCount * 64 * 1024;
@@ -300,6 +340,23 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .func("$_host_parse")
           .params(i32, i32)
           .results(i32, i64),
+        wasm
+          .import("arith", "ext")
+          .func("$_host_arith_ext")
+          .params(i32, i32, i64, i32, i64)
+          .results(i32, i64),
+        // Imported-module support (see moduleInterop.ts): `get` materialises
+        // a pre-loaded imported value (sync); `call` runs an imported module
+        // function (async on the JS side — only callable under JSPI, see
+        // index.ts). Declared unconditionally, like every other host import,
+        // so the import object shape is uniform; chunks without imports
+        // never execute them.
+        wasm.import("modules", "get").func("$_host_module_get").params(i32).results(i32, i64),
+        wasm
+          .import("modules", "call")
+          .func("$_host_module_call")
+          .params(i32, i32, i32)
+          .results(i32, i64),
       )
       .globals(
         wasm.global(DATA_END, i32).init(i32.const(heapPointer)),
@@ -312,6 +369,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         wasm.global(SHADOW_STACK_TOP, i32).init(i32.const(memoryEndPointer)),
         wasm.global(SHADOW_STACK_PTR, mut.i32).init(i32.const(memoryEndPointer)),
         wasm.global(CURR_ENV, mut.i32).init(i32.const(0)),
+        wasm.global(CHAPTER, i32).init(i32.const(this.chapter)),
       )
       .datas(...strings)
       .funcs(
@@ -361,6 +419,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     else if (type === TokenType.MINUS) opTag = ARITHMETIC_OP_TAG.SUB;
     else if (type === TokenType.STAR) opTag = ARITHMETIC_OP_TAG.MUL;
     else if (type === TokenType.SLASH) opTag = ARITHMETIC_OP_TAG.DIV;
+    else if (type === TokenType.DOUBLESLASH) opTag = ARITHMETIC_OP_TAG.FLOORDIV;
+    else if (type === TokenType.PERCENT) opTag = ARITHMETIC_OP_TAG.MOD;
+    else if (type === TokenType.DOUBLESTAR) opTag = ARITHMETIC_OP_TAG.POW;
     else throw new Error(`Unsupported binary operator: ${type}`);
 
     return wasm.call(ARITHMETIC_OP_FX).args(left, right, i32.const(opTag));
@@ -378,6 +439,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     else if (type === TokenType.LESSEQUAL) opTag = COMPARISON_OP_TAG.LTE;
     else if (type === TokenType.GREATER) opTag = COMPARISON_OP_TAG.GT;
     else if (type === TokenType.GREATEREQUAL) opTag = COMPARISON_OP_TAG.GTE;
+    else if (type === TokenType.IS) opTag = COMPARISON_OP_TAG.IS;
+    else if (type === TokenType.ISNOT) opTag = COMPARISON_OP_TAG.ISNOT;
     else throw new Error(`Unsupported comparison operator: ${type}`);
 
     return wasm.call(COMPARISON_OP_FX).args(left, right, i32.const(opTag));
@@ -388,12 +451,16 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     const type = expr.operator.type;
     if (type === TokenType.MINUS) return wasm.call(NEG_FX).args(right);
-    else if (type === TokenType.NOT) return wasm.call(BOOL_NOT_FX).args(right);
+    else if (type === TokenType.NOT)
+      return wasm.call(BOOL_NOT_FX).args(wasm.call(CHECK_BOOL_FX).args(right));
     else throw new Error(`Unsupported unary operator: ${type}`);
   }
 
   visitBoolOpExpr(expr: ExprNS.BoolOp): WasmNumeric {
-    const left = this.visit(expr.left);
+    // `and`/`or`'s *left* operand must be an actual bool (see
+    // docs/specs/python_typing_back.tex: `bool, any -> any`) -- only the
+    // right operand's short-circuit test is general BOOLISE_FX truthiness.
+    const left = wasm.call(CHECK_BOOL_FX).args(this.visit(expr.left));
     const right = this.visit(expr.right);
 
     const type = expr.operator.type;
@@ -903,8 +970,34 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");
   }
-  visitFromImportStmt(_stmt: StmtNS.FromImport): WasmInstruction {
-    throw new Error("Method not implemented.");
+  /** `from X import a, b as c` compiles to one store per imported name: the
+   * modules.get host import materialises the (already-loaded and
+   * pre-converted — see moduleInterop.ts) value for that binding index as a
+   * wasm value, and SET_LEX_ADDR binds it. The actual module *loading*
+   * happened before compilation even started (PyWasmEvaluator's
+   * loadImports), mirroring the CSE machine's and PVML's two-phase model —
+   * this statement only materialises values into the environment, which is
+   * also why it must run during main() rather than at instantiation time
+   * (heap/shadow-stack globals are only live inside main). */
+  visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+    return wasm.raw`${stmt.names.map(spec => {
+      const boundName = (spec.alias ?? spec.name).lexeme;
+      const bindingIndex = this.moduleBindingIndices.get(boundName);
+      if (bindingIndex === undefined) {
+        throw new Error(
+          `Module imports are not supported here (no module bindings were supplied for "${boundName}" — ` +
+            `use an evaluator with a module loader, e.g. PyWasmEvaluator)`,
+        );
+      }
+      const [depth, index] = this.getLexAddress(boundName);
+      return wasm
+        .call(SET_LEX_ADDR_FX)
+        .args(
+          i32.const(depth),
+          i32.const(index),
+          wasm.call("$_host_module_get").args(i32.const(bindingIndex)),
+        );
+    })}`;
   }
   visitGlobalStmt(_stmt: StmtNS.Global): WasmInstruction {
     throw new Error("Method not implemented.");
