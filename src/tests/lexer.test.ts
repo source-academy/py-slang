@@ -118,3 +118,40 @@ describe("Lexer valid indentation", () => {
     expect(types.filter(t => t === "dedent").length).toBe(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Explicit line continuation (backslash-newline)
+// ---------------------------------------------------------------------------
+describe("Lexer explicit line continuation", () => {
+  test("backslash-newline joins two physical lines into one logical line", () => {
+    const src = "total = 1 + 2 + 3 + \\\n        4 + 5\n";
+    const types = tokenTypes(src);
+    // Only one logical-line newline should be emitted (the trailing one),
+    // and no indent/dedent tokens from the continuation's leading whitespace.
+    expect(types.filter(t => t === "newline")).toHaveLength(1);
+    expect(types).not.toContain("indent");
+    expect(types).not.toContain("dedent");
+  });
+
+  test("continuation inside an indented block", () => {
+    const src = "def f():\n    x = 1 + \\\n        2\n    return x\n";
+    expect(() => tokenize(src)).not.toThrow();
+    const types = tokenTypes(src);
+    expect(types.filter(t => t === "indent").length).toBe(1);
+    expect(types.filter(t => t === "dedent").length).toBe(1);
+  });
+
+  test("CRLF line ending after backslash", () => {
+    const src = "total = 1 + \\\r\n2\r\n";
+    expect(() => tokenize(src)).not.toThrow();
+  });
+
+  test("multiple consecutive continuations", () => {
+    const src = "x = 1 + \\\n    2 + \\\n    3\n";
+    expect(() => tokenize(src)).not.toThrow();
+  });
+
+  test("backslash not immediately followed by newline still throws", () => {
+    expect(() => tokenize("x = 1 \\ + 2\n")).toThrow();
+  });
+});

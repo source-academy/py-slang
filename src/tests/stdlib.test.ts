@@ -1,4 +1,5 @@
 import {
+  MissingRequiredPositionalError,
   RecursionError,
   TypeError,
   UnsupportedOperandTypeError,
@@ -13,7 +14,13 @@ import pairmutator from "../stdlib/pairmutator";
 import stream from "../stdlib/stream";
 import { PyComplexNumber } from "../types";
 import { FeatureNotSupportedError } from "../validator";
-import { generateTestCases, TestCases } from "./utils";
+import {
+  generateCPythonTestCases,
+  generateNativePynterTestCases,
+  generatePvmlInBrowserTestCases,
+  generateTestCases,
+  TestCases,
+} from "./utils";
 
 describe("Standard Library Tests", () => {
   describe("Chapter 1 Builtins", () => {
@@ -26,6 +33,7 @@ describe("Standard Library Tests", () => {
         ["abs(0)", 0n, null],
         ["abs(-2147483648)", 2147483648n, null],
         ["abs(2147483647)", 2147483647n, null],
+        ["abs(1e200+0j)", 1e200, null],
         ['abs("")', TypeError, null],
         ["abs(True)", TypeError, null],
       ],
@@ -64,6 +72,297 @@ describe("Standard Library Tests", () => {
         ["math_cos(True)", TypeError, null],
         ['math_cos("")', TypeError, null],
       ],
+      math_acos: [
+        ["math_acos(1)", 0, null],
+        ["math_acos(0.5)", 1.0471975511965979, null],
+        ["math_acos(2)", ValueError, null],
+        ["math_acos(True)", TypeError, null],
+        // NaN propagates rather than tripping the [-1, 1] domain check -- see #275's Gemini review.
+        ["math_acos(math_nan)", NaN, null],
+      ],
+      math_acosh: [
+        ["math_acosh(1)", 0, null],
+        ["math_acosh(2.0)", 1.3169578969248166, null],
+        ["math_acosh(0.5)", ValueError, null],
+        ["math_acosh(True)", TypeError, null],
+        ["math_acosh(math_nan)", NaN, null],
+      ],
+      math_asin: [
+        ["math_asin(1)", 1.5707963267948966, null],
+        ["math_asin(0.5)", 0.5235987755982989, null],
+        ["math_asin(2)", ValueError, null],
+        ["math_asin(True)", TypeError, null],
+        ["math_asin(math_nan)", NaN, null],
+      ],
+      math_asinh: [
+        ["math_asinh(1)", 0.881373587019543, null],
+        ["math_asinh(0.0)", 0, null],
+        ["math_asinh(True)", TypeError, null],
+      ],
+      math_atan: [
+        ["math_atan(1)", 0.7853981633974483, null],
+        ["math_atan(0.0)", 0, null],
+        ["math_atan(True)", TypeError, null],
+      ],
+      math_atan2: [
+        ["math_atan2(1,1)", 0.7853981633974483, null],
+        ["math_atan2(0.0,-1.0)", 3.141592653589793, null],
+        ['math_atan2("", 1)', TypeError, null],
+        ['math_atan2(1, "")', TypeError, null],
+      ],
+      math_atanh: [
+        ["math_atanh(0)", 0, null],
+        ["math_atanh(0.5)", 0.5493061443340548, null],
+        ["math_atanh(1)", ValueError, null],
+        ["math_atanh(True)", TypeError, null],
+        ["math_atanh(math_nan)", NaN, null],
+      ],
+      math_cosh: [
+        ["math_cosh(0)", 1, null],
+        ["math_cosh(1.0)", 1.5430806348152437, null],
+        ["math_cosh(True)", TypeError, null],
+      ],
+      math_degrees: [
+        ["math_degrees(math_pi)", 180, null],
+        ["math_degrees(0)", 0, null],
+        ["math_degrees(True)", TypeError, null],
+      ],
+      math_erf: [
+        ["math_erf(0)", 0, null],
+        ["math_erf(1.0)", 0.8427007929497148, null],
+        ["math_erf(True)", TypeError, null],
+      ],
+      math_erfc: [
+        ["math_erfc(0)", 1, null],
+        ["math_erfc(1.0)", 0.15729920705028522, null],
+        ["math_erfc(True)", TypeError, null],
+      ],
+      math_comb: [
+        ["math_comb(5,2)", 10n, null],
+        ["math_comb(10,3)", 120n, null],
+        ["math_comb(3,5)", 0n, null],
+        ["math_comb(-1,2)", ValueError, null],
+      ],
+      math_factorial: [
+        ["math_factorial(5)", 120n, null],
+        ["math_factorial(0)", 1n, null],
+        ["math_factorial(-1)", ValueError, null],
+      ],
+      math_gcd: [
+        ["math_gcd()", 0n, null],
+        ["math_gcd(12,18)", 6n, null],
+        ["math_gcd(0,5)", 5n, null],
+        ["math_gcd(0,0)", 0n, null],
+        ["math_gcd(-12,18)", 6n, null],
+        ["math_gcd(4,6,8)", 2n, null],
+      ],
+      math_isqrt: [
+        ["math_isqrt(0)", 0n, null],
+        ["math_isqrt(1)", 1n, null],
+        ["math_isqrt(10)", 3n, null],
+        ["math_isqrt(16)", 4n, null],
+        ["math_isqrt(-1)", ValueError, null],
+      ],
+      math_lcm: [
+        ["math_lcm()", 1n, null],
+        ["math_lcm(4,6)", 12n, null],
+        ["math_lcm(0,5)", 0n, null],
+        ["math_lcm(-4,6)", 12n, null],
+        ["math_lcm(4,6,8)", 24n, null],
+      ],
+      math_perm: [
+        ["math_perm(5)", 120n, null],
+        ["math_perm(5,2)", 20n, null],
+        ["math_perm(5,None)", 120n, null],
+        ["math_perm(3,5)", 0n, null],
+        ["math_perm(-1,2)", ValueError, null],
+      ],
+      math_ceil: [
+        ["math_ceil(5)", 5n, null],
+        ["math_ceil(3.2)", 4n, null],
+        ["math_ceil(-3.2)", -3n, null],
+        ["math_ceil(True)", TypeError, null],
+      ],
+      math_fabs: [
+        ["math_fabs(-5)", 5, null],
+        ["math_fabs(-5.5)", 5.5, null],
+        ["math_fabs(True)", TypeError, null],
+      ],
+      math_floor: [
+        ["math_floor(5)", 5n, null],
+        ["math_floor(3.7)", 3n, null],
+        ["math_floor(-3.2)", -4n, null],
+        ["math_floor(True)", TypeError, null],
+      ],
+      math_fma: [
+        ["math_fma(2,3,4.0)", 10, null],
+        ["math_fma(1.5,2,0.5)", 3.5, null],
+        ["math_fma(True,1,1)", TypeError, null],
+      ],
+      math_fmod: [
+        ["math_fmod(7,3)", 1, null],
+        ["math_fmod(-7.0,3)", -1, null],
+        ["math_fmod(5,0)", ValueError, null],
+        ["math_fmod(True,1)", TypeError, null],
+      ],
+      math_remainder: [
+        ["math_remainder(7,3)", 1, null],
+        ["math_remainder(5.0,2)", 1, null],
+        ["math_remainder(5,0)", ValueError, null],
+        ["math_remainder(True,1)", TypeError, null],
+        ["math_remainder(1,True)", TypeError, null],
+      ],
+      math_trunc: [
+        ["math_trunc(5)", 5n, null],
+        ["math_trunc(3.7)", 3n, null],
+        ["math_trunc(-3.7)", -3n, null],
+        ["math_trunc(0.0)", 0n, null],
+        ["math_trunc(True)", TypeError, null],
+      ],
+      math_copysign: [
+        ["math_copysign(3,-1)", -3, null],
+        ["math_copysign(3.0,1)", 3, null],
+        ["math_copysign(3, -0.0)", -3, null],
+        ['math_copysign("", 1)', TypeError, null],
+        ['math_copysign(1, "")', TypeError, null],
+      ],
+      math_isfinite: [
+        ["math_isfinite(1)", true, null],
+        ["math_isfinite(math_inf)", false, null],
+        ["math_isfinite(math_nan)", false, null],
+        ['math_isfinite("")', TypeError, null],
+      ],
+      math_isinf: [
+        ["math_isinf(math_inf)", true, null],
+        ["math_isinf(1)", false, null],
+        ["math_isinf(-math_inf)", true, null],
+        ['math_isinf("")', TypeError, null],
+      ],
+      math_isnan: [
+        ["math_isnan(math_nan)", true, null],
+        ["math_isnan(1)", false, null],
+        ['math_isnan("")', TypeError, null],
+      ],
+      math_ldexp: [
+        ["math_ldexp(1,3)", 8, null],
+        ["math_ldexp(3.0,-2)", 0.75, null],
+        ["math_ldexp(True,1)", TypeError, null],
+      ],
+      math_cbrt: [
+        ["math_cbrt(27)", 3, null],
+        ["math_cbrt(-8.0)", -2, null],
+        ["math_cbrt(True)", TypeError, null],
+      ],
+      math_exp: [
+        ["math_exp(0)", 1, null],
+        ["math_exp(1.0)", 2.718281828459045, null],
+        ["math_exp(True)", TypeError, null],
+      ],
+      math_exp2: [
+        ["math_exp2(3)", 8, null],
+        ["math_exp2(0.0)", 1, null],
+        ["math_exp2(True)", TypeError, null],
+      ],
+      math_expm1: [
+        ["math_expm1(0)", 0, null],
+        ["math_expm1(1.0)", 1.718281828459045, null],
+        ["math_expm1(True)", TypeError, null],
+      ],
+      math_gamma: [
+        ["math_gamma(5)", 24, null],
+        ["math_gamma(0.5)", 1.7724538509055154, null],
+        ["math_gamma(True)", TypeError, null],
+      ],
+      math_lgamma: [
+        ["math_lgamma(5)", 3.178053830347945, null],
+        ["math_lgamma(2.0)", 0, null],
+        ["math_lgamma(True)", TypeError, null],
+      ],
+      math_log: [
+        ["math_log(1)", 0, null],
+        ["math_log(8,2)", 3, null],
+        ["math_log(0)", ValueError, null],
+        ["math_log(8,0)", ValueError, null],
+        ["math_log(True)", TypeError, null],
+        ["math_log(8, True)", TypeError, null],
+        ["math_log(math_nan)", NaN, null],
+      ],
+      math_log10: [
+        ["math_log10(100)", 2, null],
+        ["math_log10(1000.0)", 3, null],
+        ["math_log10(0)", ValueError, null],
+        ["math_log10(True)", TypeError, null],
+        ["math_log10(math_nan)", NaN, null],
+      ],
+      math_log1p: [
+        ["math_log1p(0)", 0, null],
+        ["math_log1p(1.0)", 0.6931471805599453, null],
+        ["math_log1p(-1)", ValueError, null],
+        ["math_log1p(True)", TypeError, null],
+        ["math_log1p(math_nan)", NaN, null],
+      ],
+      math_log2: [
+        ["math_log2(8)", 3, null],
+        ["math_log2(0.5)", -1, null],
+        ["math_log2(0)", ValueError, null],
+        ["math_log2(True)", TypeError, null],
+        ["math_log2(math_nan)", NaN, null],
+      ],
+      math_pow: [
+        ["math_pow(2,10)", 1024, null],
+        ["math_pow(2.0,0.5)", 1.4142135623730951, null],
+        ['math_pow("",1)', TypeError, null],
+        ['math_pow(1,"")', TypeError, null],
+      ],
+      math_radians: [
+        ["math_radians(180)", 3.141592653589793, null],
+        ["math_radians(90.0)", 1.5707963267948966, null],
+        ["math_radians(True)", TypeError, null],
+      ],
+      math_sinh: [
+        ["math_sinh(0)", 0, null],
+        ["math_sinh(1.0)", 1.1752011936438014, null],
+        ["math_sinh(True)", TypeError, null],
+      ],
+      math_tan: [
+        ["math_tan(0)", 0, null],
+        ["math_tan(0.7853981633974483)", 1, null],
+        ["math_tan(True)", TypeError, null],
+      ],
+      math_tanh: [
+        ["math_tanh(0)", 0, null],
+        ["math_tanh(1.0)", 0.7615941559557649, null],
+        ["math_tanh(True)", TypeError, null],
+      ],
+      math_sqrt: [
+        ["math_sqrt(16)", 4, null],
+        ["math_sqrt(2.0)", 1.4142135623730951, null],
+        ["math_sqrt(-1)", ValueError, null],
+        ["math_sqrt(True)", TypeError, null],
+        ["math_sqrt(math_nan)", NaN, null],
+      ],
+    };
+    // PVML-in-browser's assertIntArgs deliberately treats a plain float as
+    // already-int (see its own doc comment in src/engines/pvml/builtins.ts)
+    // -- a documented, permissive design difference from CSE/native
+    // Pynter/CPython, not a gap to close. These TypeError assertions only
+    // hold for the three engines that actually distinguish int from float at
+    // this level, so -- unlike mathTests -- this table is never run through
+    // generatePvmlInBrowserTestCases.
+    const mathIntArgTypeErrorTests: TestCases = {
+      math_comb: [
+        ["math_comb(5.0,2)", TypeError, null],
+        ["math_comb(5,2.0)", TypeError, null],
+      ],
+      math_factorial: [["math_factorial(5.0)", TypeError, null]],
+      math_gcd: [["math_gcd(5.0)", TypeError, null]],
+      math_isqrt: [["math_isqrt(5.0)", TypeError, null]],
+      math_lcm: [["math_lcm(5.0)", TypeError, null]],
+      math_ldexp: [["math_ldexp(1,2.0)", TypeError, null]],
+      math_perm: [
+        ["math_perm(5.0)", TypeError, null],
+        ["math_perm(5,2.0)", TypeError, null],
+      ],
     };
     const miscTests: TestCases = {
       equality: [
@@ -88,12 +387,15 @@ describe("Standard Library Tests", () => {
         ["1+0j == 1.0", true, null], // complex == float
         ["1.5+0j == 1.5", true, null], // complex with float real == float
         ["1.5+1j == 1.5", false, null], // complex == diff float
+        // `==`/`!=` take any x any at Python §1 too (unified with §2 — see
+        // docs/specs/python_typing_middle_12.tex), except bool and function operands, which
+        // remain an error; None and cross-type comparisons now compare structurally instead.
         ["True == True", UnsupportedOperandTypeError, null], // bool == bool
         ["1 == True", UnsupportedOperandTypeError, null], // int == bool
-        ["1 == None", UnsupportedOperandTypeError, null], // int == None
+        ["1 == None", false, null], // int == None
         ["True == 1", UnsupportedOperandTypeError, null], // bool == int
-        ["None == 1", UnsupportedOperandTypeError, null], // None == int
-        ["None == None", UnsupportedOperandTypeError, null], // None == None
+        ["None == 1", false, null], // None == int
+        ["None == None", true, null], // None == None
         ["[] == []", FeatureNotSupportedError, null], // list literals are not supported,
         ["(lambda x: x) == (lambda x: x)", UnsupportedOperandTypeError, null], // function == diff function
         ["1 == (lambda x: x)", UnsupportedOperandTypeError, null], // int == function
@@ -101,13 +403,13 @@ describe("Standard Library Tests", () => {
         ["'' == ''", true, null], // empty string == empty string
         ["hello = 'hello'\nhello == 'hello'", true, null], // string == string
         ["hello = 'hello'\nhello == 'Hello'", false, null], // string == diff string
-        ["1 == ''", UnsupportedOperandTypeError, null], // int == string
-        ["'' == 1", UnsupportedOperandTypeError, null], // string == int
+        ["1 == ''", false, null], // int == string
+        ["'' == 1", false, null], // string == int
         ["'' == True", UnsupportedOperandTypeError, null], // string == bool
-        ["'' == None", UnsupportedOperandTypeError, null], // string == None
+        ["'' == None", false, null], // string == None
         ["'' == (lambda x: x)", UnsupportedOperandTypeError, null], // string == function
-        ["'' == 1.0", UnsupportedOperandTypeError, null], // string == float
-        ["'' == 1+0j", UnsupportedOperandTypeError, null], // string == complex
+        ["'' == 1.0", false, null], // string == float
+        ["'' == 1+0j", false, null], // string == complex
       ],
       inequality: [
         ["1 != 1", false, null], // int != int
@@ -133,23 +435,23 @@ describe("Standard Library Tests", () => {
         ["1.5+1j != 1.5", true, null], // complex != diff float
         ["True != True", UnsupportedOperandTypeError, null], // bool != bool
         ["1 != True", UnsupportedOperandTypeError, null], // int != bool
-        ["1 != None", UnsupportedOperandTypeError, null], // int != None
+        ["1 != None", true, null], // int != None
         ["True != 1", UnsupportedOperandTypeError, null], // bool != int
-        ["None != 1", UnsupportedOperandTypeError, null], // None != int
-        ["None != None", UnsupportedOperandTypeError, null], // None != None
+        ["None != 1", true, null], // None != int
+        ["None != None", false, null], // None != None
         ["(lambda x: x) != (lambda x: x)", UnsupportedOperandTypeError, null], // function != diff function
         ["(1 != (lambda x: x))", UnsupportedOperandTypeError, null], // int != function
         ["def a():\n    return 2\na != a", UnsupportedOperandTypeError, null], // function != function,
         ["'' != ''", false, null], // empty string != empty string
         ["hello = 'hello'\nhello != 'hello'", false, null], // string != string
         ["hello = 'hello'\nhello != 'Hello'", true, null], // string != diff string
-        ["1 != ''", UnsupportedOperandTypeError, null], // int != string
-        ["'' != 1", UnsupportedOperandTypeError, null], // string != int
+        ["1 != ''", true, null], // int != string
+        ["'' != 1", true, null], // string != int
         ["'' != True", UnsupportedOperandTypeError, null], // string != bool
-        ["'' != None", UnsupportedOperandTypeError, null], // string != None
+        ["'' != None", true, null], // string != None
         ["'' != (lambda x: x)", UnsupportedOperandTypeError, null], // string != function
-        ["'' != 1.0", UnsupportedOperandTypeError, null], // string != float
-        ["'' != 1+0j", UnsupportedOperandTypeError, null], // string != complex
+        ["'' != 1.0", true, null], // string != float
+        ["'' != 1+0j", true, null], // string != complex
       ],
       "gt, gte, lt, lte": [
         ["1 > 1", false, null], // int > int
@@ -690,20 +992,30 @@ describe("Standard Library Tests", () => {
         ["a = 18446744073709551616\nstr(a)", "18446744073709551616", null],
         ["a = 18446744073709551616\nrepr(a)", "18446744073709551616", null],
         ["a = 18446744073709551616\nb = 2**64\na == b", true, null],
-        ["a = 18446744073709551616\nb = int('18446744073709551615')\na != b", true, null],
+        ["a = 18446744073709551616\nb = 18446744073709551615\na != b", true, null],
         ["def f(x): return 1 + f(x)\nf(2)", RecursionError, null],
         ["def f(x): return f(x - 1) if x > 0 else 0\nf(10240)", 0n, null],
       ],
       "is functions": [
-        ["is_int(1)", true, null],
-        ["is_int(1.0)", false, null],
-        ["is_int(3.14)", false, null],
-        ["is_int(True)", false, null],
-        ["is_int(None)", false, null],
-        ["is_int(lambda x: x)", false, null],
-        ["is_int(print)", false, null],
-        ["is_int(1+0j)", false, null],
-        ['is_int("abc")', false, null],
+        ["is_integer(1)", true, null],
+        ["is_integer(1.0)", false, null],
+        ["is_integer(3.14)", false, null],
+        ["is_integer(True)", false, null],
+        ["is_integer(None)", false, null],
+        ["is_integer(lambda x: x)", false, null],
+        ["is_integer(print)", false, null],
+        ["is_integer(1+0j)", false, null],
+        ['is_integer("abc")', false, null],
+
+        ["is_number(1)", true, null],
+        ["is_number(1.0)", true, null],
+        ["is_number(3.14)", true, null],
+        ["is_number(1+0j)", true, null],
+        ["is_number(True)", false, null],
+        ["is_number(None)", false, null],
+        ["is_number(lambda x: x)", false, null],
+        ["is_number(print)", false, null],
+        ['is_number("abc")', false, null],
 
         ["is_float(1)", false, null],
         ["is_float(1.0)", true, null],
@@ -790,62 +1102,6 @@ describe("Standard Library Tests", () => {
       ],
 
       coercing: [
-        ["int()", 0n, null], // int() with no arguments returns 0
-        ["int(1)", 1n, null],
-        ["int(1.0)", 1n, null],
-        ["int(3.14)", 3n, null],
-        ["int(True)", 1n, null],
-        ["int(None)", TypeError, null],
-        ["int(lambda x: x)", TypeError, null],
-        ["int(print)", TypeError, null],
-        ["int(1+0j)", TypeError, null],
-        ['int("abc")', ValueError, null],
-        ['int("1.0")', ValueError, null],
-        ['int("1")', 1n, null],
-        ['int("1_000")', 1000n, null],
-        ['int("1_000e+2")', ValueError, null],
-        ['int("13", 1)', ValueError, null], // base must be between 2 and 36, or 0
-        ['int("13", 2)', ValueError, null], // invalid literal for int() with base 2: '13'
-        ['int("101", 2)', 5n, null],
-        ['int("0xFF", 0)', 255n, null],
-        ['int("0b101", 0)', 5n, null],
-        ['int("0o77", 0)', 63n, null],
-        ['int("-0o77", 0)', -63n, null],
-        ['int("0o77.3", 0)', ValueError, null],
-        ['int("0o77e+2", 0)', ValueError, null],
-        ['int("1_000", 0)', 1000n, null],
-        ["int(True, 0)", TypeError, null],
-        ['int("13", 256)', ValueError, null], // base must be between 2 and 36, or 0
-
-        // TODO: Add more coercion test cases for int() where double underscores between digits is prohibited
-
-        ["float()", 0, null],
-        ["float(1)", 1, null],
-        ["float(1.0)", 1, null],
-        ["float(3.14)", 3.14, null],
-        ["float(True)", 1.0, null],
-        ["float(None)", TypeError, null],
-        ["float(lambda x: x)", TypeError, null],
-        ["float(print)", TypeError, null],
-        ["float(1+0j)", TypeError, null],
-        ['float("abc")', ValueError, null],
-        ['float("1.0")', 1.0, null],
-        ['float("1")', 1, null],
-        ['float("1_000")', 1000, null],
-        ['float("1_000e+2")', 100000, null],
-        ['float("13")', 13, null],
-        ['float("13.05")', 13.05, null],
-        ['float("-13.05")', -13.05, null],
-        ['float("inf")', Infinity, null],
-        ['float("-inf")', -Infinity, null],
-        ['float("nan")', NaN, null],
-        ['float("-nan")', NaN, null],
-        ['float("+nan")', NaN, null],
-        ['float("infinity")', Infinity, null],
-        ['float("+infinity")', Infinity, null],
-        ['float("-infinity")', -Infinity, null],
-        // TODO: Add more coercion test cases for float() where double underscores between digits is prohibited
-
         ["complex()", new PyComplexNumber(0, 0), null], // complex() with no arguments returns 0j
         ["complex(1)", PyComplexNumber.fromBigInt(1n), null],
         ["complex(1.0)", PyComplexNumber.fromNumber(1), null],
@@ -882,30 +1138,13 @@ describe("Standard Library Tests", () => {
         ["complex(1, None)", TypeError, null],
         ["complex(1, lambda x: x)", TypeError, null],
         ["complex(0, 1j)", new PyComplexNumber(-1, 0), null],
-
-        ["bool()", false, null], // bool() with no arguments returns False
-        ["bool(1)", true, null],
-        ["bool(0)", false, null],
-        ["bool(1.0)", true, null],
-        ["bool(0.0)", false, null],
-        ["bool(1+0j)", true, null],
-        ["bool(0+0j)", false, null],
-        ["bool(None)", false, null],
-        ["bool(lambda x: x)", true, null],
-        ["bool(print)", true, null],
-        ['bool("")', false, null],
-        ['bool("abc")', true, null],
-        ['bool(" ")', true, null],
       ],
       arity: [
         ["arity(abs)", 1n, null],
         ["arity(arity)", 1n, null],
-        ["arity(bool)", 0n, null],
         ["arity(complex)", 0n, null],
         ["arity(error)", 0n, null],
-        ["arity(float)", 0n, null],
         ["arity(imag)", 1n, null],
-        ["arity(int)", 0n, null],
         ["arity(math_acos)", 1n, null],
         ["arity(math_acosh)", 1n, null],
         ["arity(math_asin)", 1n, null],
@@ -961,7 +1200,7 @@ describe("Standard Library Tests", () => {
         ["arity(is_string)", 1n, null],
         ["arity(is_function)", 1n, null],
         ["arity(is_float)", 1n, null],
-        ["arity(is_int)", 1n, null],
+        ["arity(is_integer)", 1n, null],
         ["arity(len)", 1n, null],
         ["arity(max)", 2n, null],
         ["arity(min)", 2n, null],
@@ -996,6 +1235,21 @@ describe("Standard Library Tests", () => {
         ["len(lambda x: x)", TypeError, null],
         ["len(print)", TypeError, null],
       ],
+      "max/min": [
+        ["max(1, 7, 3)", 7n, null],
+        ["min(4, 2, 9)", 2n, null],
+        ["max(1.5, 2.5)", 2.5, null],
+        ["max('a', 'c', 'b')", "c", null],
+        // Unlike CPython's max()/min(), which accept a single iterable
+        // argument (max([1, 2, 3]) == 3), this dialect's max/min always
+        // require >= 2 direct arguments -- there is no single-iterable form
+        // (see the chapter-3 "max/min: no single-iterable form" test below
+        // for the pair/list borderline case).
+        ["max(5)", MissingRequiredPositionalError, null],
+        ["min(5)", MissingRequiredPositionalError, null],
+        ["max()", MissingRequiredPositionalError, null],
+        ["min()", MissingRequiredPositionalError, null],
+      ],
       "CRLF tests": [
         ["hello = 'hello'\r\nhello", "hello", null],
         ["hello = 'hello'\r\nhello\r\n", "hello", null],
@@ -1006,68 +1260,116 @@ describe("Standard Library Tests", () => {
     };
 
     generateTestCases(mathTests, 1, [misc, math]);
+    generateTestCases(mathIntArgTypeErrorTests, 1, [misc, math]);
     generateTestCases(miscTests, 1, [misc, math]);
+    // Pynter only supports Python §3 (see pynter/README.md). mathTests is
+    // chapter-agnostic builtin behaviour (e.g. `abs(True)` is a TypeError
+    // regardless of chapter), so it's still valid to run at §3. miscTests,
+    // however, asserts §1-*specific* restrictions (bool/None/function
+    // excluded from ==/!=/ordering, list literals rejected) that are only
+    // true at §1/§2 — genuinely false at §3, not just "untested" there — so
+    // it's deliberately not run through Pynter at all here.
+    generateNativePynterTestCases(mathTests, 3);
+    generateNativePynterTestCases(mathIntArgTypeErrorTests, 3);
+    // Unlike native Pynter, PVML-in-browser isn't restricted to §3, so
+    // miscTests' §1-specific restrictions can be checked directly at §1.
+    generatePvmlInBrowserTestCases(mathTests, 1, [misc, math]);
+    generatePvmlInBrowserTestCases(miscTests, 1, [misc, math]);
+    generateCPythonTestCases(mathTests, 1);
+    generateCPythonTestCases(mathIntArgTypeErrorTests, 1);
+    generateCPythonTestCases(miscTests, 1);
   });
 
   describe("Chapter 3 Builtins", () => {
     const miscTests: TestCases = {
+      // `is` now applies to any x any at Python §3/§4 (docs/specs/python_typing_middle_34.tex),
+      // not just the reference types (list, function, None): numbers, strings and booleans are
+      // valid operands too. Since this interpreter has no real object identity for immutable
+      // primitives (each is a freshly wrapped value, not a boxed object) they compare by their
+      // underlying value instead, the same simplification `==` already makes for these types.
       "is operator": [
-        ["1 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["2 is 1", UnsupportedOperandTypeError, null], // int is int
-        ["1 is (1+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["2 is (1.0+0j)", UnsupportedOperandTypeError, null], // int is complex
-        ["3 is (1+1j)", UnsupportedOperandTypeError, null], // int is complex
-        ["1 is 1.0", UnsupportedOperandTypeError, null], // int is float
-        ["1 is 2.0", UnsupportedOperandTypeError, null], // int is diff float
-        ["3.14 is 3.14", UnsupportedOperandTypeError, null], // float is float
-        ["3.15 is 3.14", UnsupportedOperandTypeError, null], // float is diff float
-        ["1.0 is 1", UnsupportedOperandTypeError, null], // float is int
-        ["1.0 is 2", UnsupportedOperandTypeError, null], // float is diff int
-        ["1.0 is (1+0j)", UnsupportedOperandTypeError, null], // float is complex
-        ["(1+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex
-        ["-(1+0j) is (1+1j)", UnsupportedOperandTypeError, null], // complex is complex with diff imaginary
-        ["(1.2+0j) is (1+0j)", UnsupportedOperandTypeError, null], // complex is complex with diff real
-        ["(1.2+1j) is (1.2+1.2j)", UnsupportedOperandTypeError, null], // complex is diff complex
-        ["(1+0j) is 1", UnsupportedOperandTypeError, null], // complex is int
-        ["(1.0+0j) is 1", UnsupportedOperandTypeError, null], // complex with float real is int
-        ["(1+0j) is 1.0", UnsupportedOperandTypeError, null], // complex is float
-        ["(1.5+0j) is 1.5", UnsupportedOperandTypeError, null], // complex with float real is float
-        ["(1.5+1j) is 1.5", UnsupportedOperandTypeError, null], // complex is diff float
-        ["True is True", UnsupportedOperandTypeError, null], // bool is bool
-        ["1 is True", UnsupportedOperandTypeError, null], // int is bool
-        ["1 is None", UnsupportedOperandTypeError, null], // int is None
-        ["True is 1", UnsupportedOperandTypeError, null], // bool is int
-        ["None is 1", UnsupportedOperandTypeError, null], // None is int
-        ["None is None", UnsupportedOperandTypeError, null], // None is None
-        ["(lambda x: x) is (lambda x: x)", UnsupportedOperandTypeError, null], // function is diff function
-        ["(1 is (lambda x: x))", UnsupportedOperandTypeError, null], // int is function
-        ["def a():\n    return 2\na is a", UnsupportedOperandTypeError, null], // function is function,
-        ["'' is ''", UnsupportedOperandTypeError, null], // empty string is empty string
-        ["hello = 'hello'\nhello is 'hello'", UnsupportedOperandTypeError, null], // string is string
-        ["hello = 'hello'\nhello is 'Hello'", UnsupportedOperandTypeError, null], // string is diff string
-        ["'a' is 'abc'", UnsupportedOperandTypeError, null], // string is longer string
-        ["'a' is 'A'", UnsupportedOperandTypeError, null], // string is string with diff case
-        ["'#' is '$'", UnsupportedOperandTypeError, null], // string is string with diff character
-        ["1 is ''", UnsupportedOperandTypeError, null], // int is string
-        ["'' is 1", UnsupportedOperandTypeError, null], // string is int
-        ["'' is True", UnsupportedOperandTypeError, null], // string is bool
-        ["'' is None", UnsupportedOperandTypeError, null], // string is None
-        ["'' is (lambda x: x)", UnsupportedOperandTypeError, null], // string is function
-        ["'' is 1.0", UnsupportedOperandTypeError, null], // string is float
-        ["'' is (1+0j)", UnsupportedOperandTypeError, null], // string is complex
-        ["1 is 0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is 0.0", UnsupportedOperandTypeError, null], // int is zero
-        ["1 is (0+0j)", UnsupportedOperandTypeError, null], // int is zero
+        ["1 is 1", true, null], // int is int, same value
+        ["1 is 1.0", false, null], // int is float — different types, never identical
+        ["3.14 is 3.14", true, null], // float is float, same value
+        ["(1+0j) is (1+0j)", true, null], // complex is complex, same value
+        ["True is True", true, null], // bool is bool, same value
+        ["1 is True", false, null], // int is bool — different types, never identical
+        ["hello = 'hello'\nhello is 'hello'", true, null], // string is string, same value
+        ["1 is None", false, null], // number x reference — different types, never identical
+        ["None is 1", false, null],
+        ["'' is None", false, null],
+        ["'' is (lambda x: x)", false, null],
+        ["[1,2,3] is ''", false, null],
+        ["1 is (lambda x: x)", false, null],
+        ["a = [1,2,3]\na is 1", false, null],
+        ["None is None", true, null], // None is None
+        ["(lambda x: x) is (lambda x: x)", false, null], // function is diff function
+        ["def a():\n    return 2\na is a", true, null], // function is same function
+        ["f = lambda x: x\ng = f\nf is g", true, null], // function is its alias
+        ["a = [1,2,3]\na is None", false, null], // list is None (the Python idiom)
+        ["(lambda x: x) is None", false, null], // function is None
+        ["None is []", false, null], // None is list
         ["[1,2,3] is [1,2,3]", false, null], // list is list with same elements
         ["a = [1,2,3]\na is a", true, null], // list is itself
+        ["a = [1,2,3]\nb = a\na is b", true, null], // list is its alias
         ["a = [1,2,3]\na is [1,2,3]", false, null], // list is different list with same elements
         ["[1,2,3] is [1,2,4]", false, null], // list is different list with different elements
         ["[1,2,3] is [1,2]", false, null], // list is different list with different length
-        ["[1,2,3] is ''", UnsupportedOperandTypeError, null], // list is string
+        ["[1,2,3] is (lambda x: x)", false, null], // list is function
+      ],
+      // math_nan is a shared singleton value; as in CPython, nan == nan is
+      // False even for the identical object, while a list containing that nan
+      // equals itself (container comparison checks identity per element first)
+      "NaN comparisons": [
+        ["math_nan == math_nan", false, null],
+        ["math_nan != math_nan", true, null],
+        ["math_nan < 1", false, null],
+        ["math_nan >= math_nan", false, null],
+        ["[math_nan] == [math_nan]", true, null],
+        ["x = [math_nan]\nx == x", true, null],
+        // `is` identity must hold regardless of what value-equality says about the same object:
+        // math_nan is math_nan is the same binding, so it's identical, even though it is not
+        // structurally equal to itself (== is False, per IEEE 754 — see above).
+        ["math_nan is math_nan", true, null],
+        ["x = math_nan\nx is x", true, null],
+        ["x = complex(math_nan, 0)\nx is x", true, null],
+        // NaN-ness propagates component-wise into complex: a complex value with a NaN real or
+        // imaginary part is unequal to everything, including itself, same as a plain float NaN —
+        // but (as with math_nan above) a *shared* NaN-complex nested in a container still equals
+        // itself, since container comparison checks identity per element first.
+        ["x = complex(math_nan, 0)\nx == x", false, null],
+        ["x = complex(math_nan, 0)\nx != x", true, null],
+        ["x = complex(0, math_nan)\nx == x", false, null],
+        ["complex(math_nan, 0) == complex(math_nan, 0)", false, null],
+        ["c = complex(math_nan, 0)\n[c] == [c]", true, null],
+        ["[complex(math_nan, 0)] == [complex(math_nan, 0)]", false, null],
+      ],
+      // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
+      "is not operator": [
+        ["1 is not 1", false, null],
+        ["'x' is not 'x'", false, null],
+        ["None is not None", false, null],
+        ["a = [1,2,3]\na is not a", false, null],
+        ["a = [1,2,3]\nb = [1,2,3]\na is not b", true, null],
+        ["a = [1,2,3]\na is not None", true, null],
+        ["(lambda x: x) is not (lambda x: x)", true, null],
       ],
       arity: [
         ["arity((lambda *args: args))", 0n, null],
         ["arity((lambda x, *args: args))", 1n, null],
+        // These last two pin arity()'s *actual* behavior for a parameter
+        // after a rest param (`z` in `def f(x, *args, z): ...`) — not real
+        // keyword-only-parameter support. This shape isn't spec'd for any
+        // Source Academy Python chapter (docs/specs/python_3_bnf.tex's own
+        // `rest-names` grammar disallows anything after the `*name`), and
+        // `z` is never actually bound to anything (environment.ts's
+        // createEnvironment skips it once the rest param is consumed, and
+        // this dialect has no keyword-argument call syntax for anything to
+        // supply it through regardless) — arity() (misc.ts) just returns
+        // the index of the *first* starred parameter regardless of what
+        // follows it, which is where 2 and 0 come from. See the PVML
+        // exclusion of these same two entries below for the fuller
+        // rationale on why neither PVML pathway can meaningfully test this.
         ["def f(x, y, *args, z):\n    pass\narity(f)", 2n, null],
         ["def f(*args, x, y, z):\n    pass\narity(f)", 0n, null],
         ["arity([1, 2, 3])", TypeError, null],
@@ -1082,7 +1384,58 @@ describe("Standard Library Tests", () => {
         ["a = '👨‍👩‍👧‍👦'\na[0]", "👨", null],
         ["a = '👨‍👩‍👧‍👦'\na[1]", "\u200d", null],
       ],
+      // Unlike CPython's max()/min(), which accept a single iterable argument
+      // (max([1, 2, 3]) == 3), this dialect's max/min always require >= 2
+      // direct arguments. A list or pair is the borderline case: it *looks*
+      // like the single-iterable form CPython supports, but is rejected the
+      // same way max(5) is (see the chapter-1 "max/min" tests above), since
+      // it's still just one argument — a pair is a two-element Python list
+      // under the hood, so both forms hit the same arity check.
+      "max/min: no single-iterable form": [
+        ["max([1, 5])", MissingRequiredPositionalError, null],
+        ["max(pair(1, 5))", MissingRequiredPositionalError, null],
+      ],
     };
     generateTestCases(miscTests, 3, [misc, math, linkedList, stream, list, pairmutator]);
+    // `def f(x, *args, z): ...` (`z` keyword-only in real CPython, per PEP
+    // 3102) isn't spec'd for any Source Academy Python chapter at all —
+    // docs/specs/python_3_bnf.tex's own `rest-names` grammar disallows
+    // anything after the `*name` — and CSE doesn't give it working
+    // semantics either: environment.ts's createEnvironment never binds `z`
+    // once the rest param is consumed (it's simply skipped), and this
+    // dialect has no keyword-argument call syntax anywhere for `z` to ever
+    // receive a value through regardless. So this isn't "a real Python
+    // feature PVML is missing" — CSE's parser/resolver just don't reject
+    // the shape, and arity() (misc.ts) happens to return a number for it
+    // anyway (the index of the *first* starred parameter, with no special
+    // handling for what follows it — hence 2 and 0 below, not some
+    // deliberate "keyword-only arity" concept). PVMLCompiler's
+    // fromFunctionNode rejects this shape outright at compile time (see
+    // PVMLIR's `hasRestParam` doc comment) — arguably more consistent with
+    // the spec than CSE's silent-parse-into-an-unbound-parameter behavior,
+    // not a gap relative to it. The two entries below exercising this shape
+    // are dropped from the table passed to either PVML pathway entirely
+    // rather than run and skipped: neither could ever meaningfully support
+    // it without this dialect gaining keyword-argument call syntax in
+    // general, which is a much bigger, unrelated undertaking. The
+    // plain-`*args` entries just above them (no trailing params after the
+    // rest param) are unaffected and run normally on both.
+    const miscTestsForPvml: TestCases = {
+      ...miscTests,
+      arity: miscTests.arity.filter(
+        ([code]) =>
+          code !== "def f(x, y, *args, z):\n    pass\narity(f)" &&
+          code !== "def f(*args, x, y, z):\n    pass\narity(f)",
+      ),
+    };
+    generateNativePynterTestCases(miscTestsForPvml, 3);
+    generatePvmlInBrowserTestCases(miscTestsForPvml, 3, [
+      misc,
+      math,
+      linkedList,
+      stream,
+      list,
+      pairmutator,
+    ]);
   });
 });

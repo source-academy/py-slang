@@ -1,14 +1,15 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
 import { Stash } from "../engines/cse/stash";
 import {
+  createBufferedOutputStream,
   createErrorStream,
   createInputStream,
-  createOutputStream,
   destroyStreams,
   displayError,
 } from "../engines/cse/streams";
@@ -22,6 +23,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 import PyDataDisplayPlugin from "./plugins/PyDataDisplayPlugin";
 
@@ -42,6 +44,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly ensurePreludesLoaded: () => Promise<void>;
   private readonly csePlugin: CseMachinePlugin;
   private readonly dataDisplayPlugin: PyDataDisplayPlugin;
+  /** Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
+   * see GenericDataHandler.ts. Engine-agnostic, so this is the same instance
+   * type py2js's evaluator uses; only the pythonToModule/moduleToPython
+   * conversion layer (modules.ts) is CSE-specific. */
+  private readonly dataHandler = new GenericDataHandler();
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -60,6 +67,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
         this.context.nativeStorage.builtins.set(name, value);
       }
     }
+    this.conductor.registerPlugin(
+      ModuleLoaderRunnerPlugin,
+      this.conductor,
+      asInterfacableEvaluator(this, this.dataHandler),
+    );
 
     this.ensurePreludesLoaded = once(async () => {
       if (this.preludeText.trim()) {
@@ -77,14 +89,17 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
+    const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
     try {
       this.context.streams = {
         initialised: true,
-        stdout: createOutputStream(this.conductor),
+        stdout,
         stderr: createErrorStream(this.conductor),
         stdin: createInputStream(this.conductor),
+        flushStdout: () => flushOutput(this.conductor),
       };
-
+      this.context.conductor = this.conductor;
+      this.context.evaluator = this.dataHandler;
       await this.ensurePreludesLoaded();
 
       const script = chunk + "\n";
@@ -105,6 +120,12 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       const stash = new Stash();
       this.context.control = control;
       this.context.stash = stash;
+      // this.context persists across evaluateChunk calls; reset per-run state that the
+      // interpreter accumulates so a prior run's breakpoint()/changepoint steps don't leak
+      // into this one.
+      this.context.runtime.breakpointSteps = [];
+      this.context.runtime.changepointSteps = [];
+      this.context.runtime.break = false;
 
       // CSE chapters (3+): collect snapshots up to the step cap, then stop.
       // Output produced after the step cap is not emitted — that's intentional.
@@ -121,21 +142,23 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
           }
         }
 
-        const snapshots = await collectSnapshots(
+        const { snapshots, breakpointSteps } = await collectSnapshots(
           this.context,
           control,
           stash,
-          100000,
           -1,
           this.variant,
           script,
           maxSnapshots,
         );
-        this.csePlugin.sendSnapshots(snapshots);
+        flushOutput(this.conductor);
+        this.csePlugin.sendSnapshots(snapshots, breakpointSteps);
       } else {
-        await collectSnapshots(this.context, control, stash, 100000, -1, this.variant, script, 0);
+        await collectSnapshots(this.context, control, stash, -1, this.variant, script, 0);
+        flushOutput(this.conductor);
       }
     } catch (e) {
+      flushOutput(this.conductor);
       const errors = Array.isArray(e) ? e : [e];
       await Promise.all(
         errors.map(e => {

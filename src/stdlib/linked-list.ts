@@ -10,8 +10,22 @@ import { GroupName, minArgMap, toPythonString, Validate } from "./utils";
 
 const linkedListBuiltins = new Map<string, BuiltinValue>();
 
-const isPair = (value: Value): value is ListValue => {
+export const isPair = (value: Value): value is ListValue => {
   return value.type === "list" && value.value.length === 2;
+};
+
+/**
+ * Whether `value` is a proper linked list: a chain of pairs (as constructed by `pair()`/`llist()`)
+ * terminated by `None`, rather than an arbitrary 2-element list. Distinguishing this from a bare
+ * `isPair()` check matters at the module interop boundary (see `pythonToModule`'s "list" case in
+ * `engines/cse/modules.ts`), where a plain 2-element list shouldn't be misidentified as a pair
+ * chain just because it happens to have length 2.
+ */
+export const isProperList = (value: Value): boolean => {
+  if (value.type === "none") {
+    return true;
+  }
+  return isPair(value) && isProperList(value.value[1]);
 };
 
 class LinkedListBuiltins {
@@ -20,8 +34,8 @@ class LinkedListBuiltins {
     return { type: "list", value: args };
   }
 
-  @Validate(0, null, "linked_list", true)
-  static linked_list(
+  @Validate(0, null, "llist", true)
+  static llist(
     args: Value[],
     source: string,
     command: ExprNS.Call,
@@ -31,7 +45,7 @@ class LinkedListBuiltins {
       return { type: "none" };
     }
     const head = args[0];
-    const tail = LinkedListBuiltins.linked_list(args.slice(1), source, command, context);
+    const tail = LinkedListBuiltins.llist(args.slice(1), source, command, context);
     return { type: "list", value: [head, tail] };
   }
 
@@ -48,7 +62,7 @@ class LinkedListBuiltins {
   @Validate(1, 1, "head", true)
   static head(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (!isPair(args[0])) {
-      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     return args[0].value[0];
   }
@@ -56,48 +70,35 @@ class LinkedListBuiltins {
   @Validate(1, 1, "tail", true)
   static tail(args: Value[], source: string, command: ExprNS.Call, context: Context): Value {
     if (!isPair(args[0])) {
-      handleRuntimeError(context, new TypeError(source, command, context, args[0].type, "pair"));
+      handleRuntimeError(context, new TypeError(source, command, context, args[0].type));
     }
     return args[0].value[1];
   }
 
-  static _is_linked_list(value: Value): boolean {
-    if (value.type === "none") {
-      return true;
-    }
-    return isPair(value) && LinkedListBuiltins._is_linked_list(value.value[1]);
+  static _is_llist(value: Value): boolean {
+    return isProperList(value);
   }
 
-  static _print_linked_list(
+  static _print_llist(
     value: Value,
     source: string,
     command: ExprNS.Call,
     context: Context,
   ): string {
-    if (!LinkedListBuiltins._is_linked_list(value)) {
+    if (!LinkedListBuiltins._is_llist(value)) {
       if (!isPair(value)) {
         return toPythonString(value, true);
       }
-      const string1 = LinkedListBuiltins._print_linked_list(
-        value.value[0],
-        source,
-        command,
-        context,
-      );
-      const string2 = LinkedListBuiltins._print_linked_list(
-        value.value[1],
-        source,
-        command,
-        context,
-      );
+      const string1 = LinkedListBuiltins._print_llist(value.value[0], source, command, context);
+      const string2 = LinkedListBuiltins._print_llist(value.value[1], source, command, context);
       return "[" + string1 + ", " + string2 + "]";
     }
 
-    let string = "linked_list(";
+    let string = "llist(";
     let current = value;
 
     while (current.type == "list" && current.value.length === 2) {
-      string += LinkedListBuiltins._print_linked_list(current.value[0], source, command, context);
+      string += LinkedListBuiltins._print_llist(current.value[0], source, command, context);
       string += ", ";
       current = LinkedListBuiltins.tail([current], source, command, context);
     }
@@ -107,14 +108,14 @@ class LinkedListBuiltins {
     string += ")";
     return string;
   }
-  @Validate(1, 1, "print_linked_list", true)
-  static async print_linked_list(
+  @Validate(1, 1, "print_llist", true)
+  static async print_llist(
     args: Value[],
     source: string,
     command: ExprNS.Call,
     context: Context,
   ): Promise<NoneValue> {
-    const stringValue = LinkedListBuiltins._print_linked_list(args[0], source, command, context);
+    const stringValue = LinkedListBuiltins._print_llist(args[0], source, command, context);
     await displayOutput(context, stringValue + "\n");
     return { type: "none" };
   }

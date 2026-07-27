@@ -26,6 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
+import { loadModules, moduleToPython } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -45,8 +46,8 @@ import {
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
+  ModuleFunctionCallInstr,
   PopInstr,
-  ResetInstr,
   UnOpInstr,
   WhileInstr,
 } from "./types";
@@ -61,15 +62,17 @@ import {
   isNode,
   pyDefineVariable,
   pyGetGlobalVariable,
+  pyGetNonlocalVariable,
   pyGetVariable,
+  pySetNonlocalVariable,
   scanForAssignments,
   scanForGlobalDeclarations,
+  scanForNonlocalDeclarations,
 } from "./utils";
 
 export interface IOptions {
   isPrelude: boolean;
   groups: Group[];
-  envSteps: number;
   stepLimit: number;
   variant: number;
   recursionLimit: number;
@@ -124,7 +127,6 @@ export async function evaluate(
   const opts: IOptions = {
     isPrelude: false,
     groups: [],
-    envSteps: 100000,
     stepLimit: -1,
     recursionLimit: 1024,
     variant: 4,
@@ -145,13 +147,14 @@ export async function evaluate(
     context.control = new Control(program);
     context.stash = new Stash();
 
+    await evaluateImports(program as StmtNS.FileInput, context, code);
+
     // Adaptation for new feature
     const result = await runCSEMachine(
       code,
       context,
       context.control,
       context.stash,
-      opts.envSteps,
       opts.stepLimit,
       opts.recursionLimit,
       opts.variant,
@@ -165,44 +168,60 @@ export async function evaluate(
   }
 }
 
-// function evaluateImports(program: StmtNS.Stmt, context: Context) {
-//   try {
-//     const [importNodeMap] = filterImportDeclarations(program)
-//     const environment = currentEnvironment(context)
-//     for (const [moduleName, nodes] of importNodeMap) {
-//       const functions = context.nativeStorage.loadedModules[moduleName]
-//       for (const node of nodes) {
-//         for (const spec of node.specifiers) {
-//           declareIdentifier(context, spec.local.name, node, environment)
-//           let obj: any
+type ModuleImportMapValue = { name: string; alias: string | undefined; node: StmtNS.FromImport };
+function filterImportDeclarations(program: StmtNS.FileInput): Map<string, ModuleImportMapValue[]> {
+  const importNodeMap = new Map<string, ModuleImportMapValue[]>();
+  for (const stmt of program.statements) {
+    if (stmt instanceof StmtNS.FromImport) {
+      const moduleName = stmt.module.lexeme;
+      if (!importNodeMap.has(moduleName)) {
+        importNodeMap.set(moduleName, []);
+      }
+      importNodeMap.get(moduleName)!.push(
+        ...stmt.names.map(spec => ({
+          name: spec.name.lexeme,
+          alias: spec.alias?.lexeme,
+          node: stmt,
+        })),
+      );
+    }
+  }
+  return importNodeMap;
+}
 
-//           switch (spec.type) {
-//             case 'ImportSpecifier': {
-//               if (spec.imported.type === 'Identifier') {
-//                 obj = functions[spec.imported.name];
-//               } else {
-//                 throw new Error(`Unexpected literal import: ${spec.imported.value}`);
-//               }
-//               break
-//             }
-//             case 'ImportDefaultSpecifier': {
-//               obj = functions.default
-//               break
-//             }
-//             case 'ImportNamespaceSpecifier': {
-//               obj = functions
-//               break
-//             }
-//           }
+async function evaluateImports(
+  program: StmtNS.FileInput,
+  context: Context,
+  code: string,
+): Promise<void> {
+  const importNodeMap = filterImportDeclarations(program);
+  if (importNodeMap.size === 0) {
+    return;
+  }
+  if (context.evaluator === null || context.conductor === null) {
+    throw new Error("Context is not properly initialized with evaluator and conductor");
+  }
 
-//           defineVariable(context, spec.local.name, obj, true, node)
-//         }
-//       }
-//     }
-//   } catch (error) {
-//     handleRuntimeError(context, error as RuntimeSourceError)
-//   }
-// }
+  await loadModules(context, [...importNodeMap.keys()]);
+  for (const [moduleName, nodes] of importNodeMap) {
+    for (const node of nodes) {
+      const importedFunc = context.nativeStorage.loadedModules[moduleName]?.[node.name];
+      if (!importedFunc) {
+        throw new error.ModuleFunctionNotFoundError(moduleName, moduleName, node.name, node.node);
+      }
+    }
+    await Promise.all(
+      nodes.map(async node => {
+        const importedFunc = context.nativeStorage.loadedModules[moduleName][node.name];
+        pyDefineVariable(
+          context,
+          node.alias || node.name,
+          await moduleToPython(context, code, undefined, importedFunc.value),
+        );
+      }),
+    );
+  }
+}
 
 /**
  * The primary runner/loop of the explicit control evaluator.
@@ -210,7 +229,6 @@ export async function evaluate(
  * @param context The context to evaluate the program in.
  * @param control Points to the current Control stack.
  * @param stash Points to the current Stash.
- * @param envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -222,7 +240,6 @@ export async function runCSEMachine(
   context: Context,
   control: Control,
   stash: Stash,
-  envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
@@ -233,7 +250,6 @@ export async function runCSEMachine(
     context,
     control,
     stash,
-    envSteps,
     stepLimit,
     recursionLimit,
     variant,
@@ -256,7 +272,6 @@ export async function runCSEMachine(
  * @param context The context of the program.
  * @param control The control stack.
  * @param stash The stash storage.
- * @param _envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -268,12 +283,20 @@ export async function* generateCSEMachineStateStream(
   context: Context,
   control: Control,
   stash: Stash,
-  _envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
   isPrelude: boolean = false,
 ) {
+  // Stamped here, not just by evaluate(), since this is the one function every
+  // execution path funnels through (evaluate()'s own runCSEMachine, and
+  // PyCseMachinePlugin.ts's collectSnapshots, both call this directly) — see
+  // Context.variant's own doc comment for why error construction needs it.
+  context.variant = variant;
+
+  // Evaluate imports before starting the main evaluation loop
+  await evaluateImports(control.peek() as StmtNS.FileInput, context, code);
+
   // steps: number of steps completed
   let steps = 0;
 
@@ -291,12 +314,6 @@ export async function* generateCSEMachineStateStream(
     pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
   }
   while (command) {
-    // Return to capture a snapshot of the control and stash after the target step count is reached
-    // if (!isPrelude && steps === envSteps) {
-    //   yield { stash, control, steps }
-    //   return
-    // }
-
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
       const node = isNode(command) ? command : command.srcNode;
@@ -309,7 +326,31 @@ export async function* generateCSEMachineStateStream(
       // Hence, next step will change the environment
       context.runtime.changepointSteps.push(steps + 1);
     }
+
+    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
+    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
+    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
+    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
+    // so it can be peeked here, before that instruction runs.
+    if (
+      !isPrelude &&
+      isInstr(command) &&
+      command.instrType === InstrType.APPLICATION &&
+      command.numOfArgs === 0
+    ) {
+      const callee = stash.peek();
+      if (callee?.type === "builtin" && callee.name === "breakpoint") {
+        // `steps` here is the count as of the end of the *previous* iteration — i.e. the
+        // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
+        // this very APPLICATION instruction on top of its control, which is what "steps - 1"
+        // below reproduces.
+        context.runtime.breakpointSteps.push(steps - 1);
+        context.runtime.break = true;
+      }
+    }
+
     control.pop();
+
     if (isNode(command)) {
       const node = command;
 
@@ -370,7 +411,7 @@ function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
 type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
-type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert" | "NonLocal">;
+type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert">;
 type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;
@@ -537,6 +578,12 @@ const cmdEvaluators: CmdEvaluators = {
     // and writes to the module-level environment.
   },
 
+  NonLocal: function () {
+    // `nonlocal x` is a declaration — no runtime effect; the interpreter uses
+    // closure.nonlocalVariables (populated at FunctionDef time) to route reads
+    // and writes to the nearest enclosing function environment.
+  },
+
   Variable: function (
     code: string,
     variable: ExprNS.Variable,
@@ -548,9 +595,12 @@ const cmdEvaluators: CmdEvaluators = {
     const name = variable.name.lexeme;
     const currentEnv = currentEnvironment(context);
     const isGlobal = currentEnv.closure?.globalVariables.has(name) ?? false;
+    const isNonlocal = currentEnv.closure?.nonlocalVariables.has(name) ?? false;
     const value = isGlobal
       ? pyGetGlobalVariable(code, context, name, variable)
-      : pyGetVariable(code, context, name, variable);
+      : isNonlocal
+        ? pyGetNonlocalVariable(code, context, name, variable)
+        : pyGetVariable(code, context, name, variable);
     stash.push(value);
   },
 
@@ -628,13 +678,26 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const globalVariables = scanForGlobalDeclarations(functionDefNode.body);
-    const localVariables = scanForAssignments(functionDefNode.body, globalVariables);
+    const nonlocalVariables = scanForNonlocalDeclarations(functionDefNode.body);
+    const localVariables = scanForAssignments(
+      functionDefNode.body,
+      globalVariables,
+      nonlocalVariables,
+    );
+    // Parameters are local to the function too — a nested function's `nonlocal x` must be
+    // able to target an enclosing function's parameter, not just its assigned/for-target
+    // locals (a parameter is never global/nonlocal itself; the resolver already rejects
+    // that combination as a scope conflict, so no need to filter here).
+    for (const param of functionDefNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromFunctionDef(
       functionDefNode,
       currentEnvironment(context),
       context,
       localVariables,
       globalVariables,
+      nonlocalVariables,
     );
     pyDefineVariable(context, functionDefNode.name.lexeme, { type: "closure", closure });
   },
@@ -648,6 +711,9 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     const localVariables = scanForAssignments(lambdaNode.body);
+    for (const param of lambdaNode.parameters) {
+      localVariables.add(param.lexeme);
+    }
     const closure = Closure.makeFromLambda(
       lambdaNode,
       currentEnvironment(context),
@@ -668,7 +734,7 @@ const cmdEvaluators: CmdEvaluators = {
     let head;
     while (true) {
       head = control.pop();
-      if (!head || (isInstr(head) && head.instrType === InstrType.RESET)) {
+      if (!head || (isInstr(head) && head.instrType === InstrType.ENVIRONMENT)) {
         break;
       }
     }
@@ -820,16 +886,6 @@ const cmdEvaluators: CmdEvaluators = {
   /**
    * Instructions
    */
-  [InstrType.RESET]: function (
-    _code: string,
-    _command: ResetInstr,
-    context: Context,
-    _control: Control,
-    _stash: Stash,
-    _isPrelude: boolean,
-  ) {
-    popEnvironment(context);
-  },
 
   [InstrType.ASSIGNMENT]: function (
     code: string,
@@ -850,9 +906,12 @@ const cmdEvaluators: CmdEvaluators = {
       }
       const currentEnv = currentEnvironment(context);
       const isGlobal = currentEnv.closure?.globalVariables.has(instr.symbol) ?? false;
+      const isNonlocal = currentEnv.closure?.nonlocalVariables.has(instr.symbol) ?? false;
       if (isGlobal) {
         const progEnv = getProgramEnvironment(context) ?? currentEnv;
         pyDefineVariable(context, instr.symbol, value, progEnv);
+      } else if (isNonlocal) {
+        pySetNonlocalVariable(code, context, instr.symbol, value, instr.srcNode as ExprNS.Expr);
       } else {
         pyDefineVariable(context, instr.symbol, value);
       }
@@ -973,6 +1032,7 @@ const cmdEvaluators: CmdEvaluators = {
           new UnsupportedOperandTypeError(
             code,
             boolOpNode,
+            context,
             left.type,
             "",
             boolOpNode.operator.type,
@@ -1019,7 +1079,8 @@ const cmdEvaluators: CmdEvaluators = {
         elements.unshift(element);
       }
     }
-    stash.push({ type: "list", value: elements });
+    const listValue: Value = { type: "list", value: elements };
+    stash.push(listValue);
   },
 
   [InstrType.WHILE]: function (
@@ -1035,7 +1096,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (condition.type !== "bool") {
       handleRuntimeError(
         context,
-        new error.TypeError(code, instr.srcNode as StmtNS.Stmt, context, condition.type, "bool"),
+        new error.TypeError(code, instr.srcNode as StmtNS.Stmt, context, condition.type),
       );
       return;
     }
@@ -1068,7 +1129,6 @@ const cmdEvaluators: CmdEvaluators = {
             node.iter,
             context,
             [start.type, end.type, step.type].filter(t => t !== "bigint")[0],
-            "int",
           ),
         );
       }
@@ -1086,13 +1146,18 @@ const cmdEvaluators: CmdEvaluators = {
         return;
       }
       control.push(instr);
+      // Line is the real for-statement's line — this per-iteration bookkeeping is
+      // logically part of evaluating that statement, not a separate, lineless step.
+      const forLine = node.startToken.line;
       const generateBigIntLiteral = (value: bigint): ExprNS.BigIntLiteral => {
-        const token = new Token(TokenType.BIGINT, value.toString(), 0, 0, -1);
+        const token = new Token(TokenType.BIGINT, value.toString(), forLine, 0, -1);
+        token.synthetic = true;
         return new ExprNS.BigIntLiteral(token, token, value.toString());
       };
       const v1Lit = generateBigIntLiteral(start.value);
       const v3Lit = generateBigIntLiteral(step.value);
-      const plusToken = new Token(TokenType.PLUS, "+", 0, 0, -1);
+      const plusToken = new Token(TokenType.PLUS, "+", forLine, 0, -1);
+      plusToken.synthetic = true;
       const nextStartExpr = new ExprNS.Binary(plusToken, plusToken, v1Lit, plusToken, v3Lit);
       Object.assign(nextStartExpr, { syntheticLabel: `${start.value}+${step.value}` });
       control.push(generateBigIntLiteral(step.value));
@@ -1100,7 +1165,7 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(nextStartExpr);
       control.push(instrCreator.continueMarkerInstr(node));
       control.push(...instr.body.slice().reverse());
-      control.push(generateForIncrement(node.target.lexeme, start.value));
+      control.push(generateForIncrement(node.target.lexeme, start.value, forLine));
     }
   },
   [InstrType.CONTINUE_MARKER]: function () {},
@@ -1114,13 +1179,16 @@ const cmdEvaluators: CmdEvaluators = {
   ) {
     // Tail-Call Optimisation
     const topElement = control.peek();
+    let shouldPushEnvInstr = true;
     if (
       topElement !== undefined &&
       isInstr(topElement) &&
-      topElement.instrType === InstrType.RESET
+      topElement.instrType === InstrType.ENVIRONMENT
     ) {
-      control.pop();
-      popEnvironment(context);
+      shouldPushEnvInstr = false;
+      while (currentEnvironment(context).id !== topElement.env.id) {
+        popEnvironment(context);
+      }
     }
 
     const numOfArgs = instr.numOfArgs;
@@ -1146,13 +1214,7 @@ const cmdEvaluators: CmdEvaluators = {
             }
             handleRuntimeError(
               context,
-              new error.TypeError(
-                code,
-                instr.srcNode,
-                context,
-                val ? val.type : "NoneType",
-                "iterable",
-              ),
+              new error.TypeError(code, instr.srcNode, context, val ? val.type : "NoneType"),
             );
           });
 
@@ -1160,9 +1222,10 @@ const cmdEvaluators: CmdEvaluators = {
 
     if (callable?.type == "closure") {
       const closure = callable.closure;
-      const callerEnv = currentEnvironment(context);
-      control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
-      control.push(instrCreator.resetInstr(instr.srcNode));
+      if (shouldPushEnvInstr) {
+        const callerEnv = currentEnvironment(context);
+        control.push(instrCreator.envInstr(callerEnv, instr.srcNode));
+      }
       if (closure.node.kind === "FunctionDef") {
         control.push(instrCreator.endOfFunctionBodyInstr(instr.srcNode));
       }
@@ -1180,19 +1243,23 @@ const cmdEvaluators: CmdEvaluators = {
       }
     } else if (callable?.type === "builtin") {
       const result = await callable.func(args, code, instr.srcNode, context);
-      if (result !== undefined) {
+      if (result === undefined) {
+        return;
+      }
+      if ("next" in result) {
+        const funcCallInstr: ModuleFunctionCallInstr = {
+          instrType: InstrType.MODULE_FUNCTION_CALL,
+          generator: result,
+          srcNode: instr.srcNode,
+        };
+        control.push(funcCallInstr);
+      } else {
         stash.push(result);
       }
     } else {
       handleRuntimeError(
         context,
-        new error.TypeError(
-          code,
-          instr.srcNode,
-          context,
-          callable ? callable.type : "NoneType",
-          "callable",
-        ),
+        new error.TypeError(code, instr.srcNode, context, callable ? callable.type : "NoneType"),
       );
     }
   },
@@ -1215,34 +1282,30 @@ const cmdEvaluators: CmdEvaluators = {
           instr.srcNode as ExprNS.Expr,
           context,
           list ? list.type : "NoneType",
-          "list or string",
         ),
       );
     }
     if (!index || index.type !== "bigint") {
       handleRuntimeError(
         context,
-        new error.TypeError(
-          code,
-          instr.srcNode as ExprNS.Expr,
-          context,
-          index?.type || "NoneType",
-          "int",
-        ),
+        new error.ListIndexTypeError(code, instr.srcNode as ExprNS.Expr, context),
       );
     }
     const idx = Number(index.value);
     // TODO: make this O(1)
-    if (idx >= [...list.value].length) {
+    const codePoints = list.type === "string" ? [...list.value] : undefined;
+    const length = codePoints ? codePoints.length : list.value.length;
+    if (idx < -length || idx >= length) {
       handleRuntimeError(
         context,
-        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, list.value.length),
+        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, length, false),
       );
     }
+    const wrappedIdx = idx < 0 ? idx + length : idx;
     if (list.type === "string") {
-      stash.push({ type: "string", value: [...list.value].at(idx) ?? "" });
+      stash.push({ type: "string", value: codePoints![wrappedIdx] });
     } else {
-      stash.push(list.value[idx]);
+      stash.push(list.value[wrappedIdx]);
     }
   },
 
@@ -1295,5 +1358,21 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     stash.push({ type: "none" });
+  },
+
+  [InstrType.MODULE_FUNCTION_CALL]: async function (
+    code: string,
+    instr: ModuleFunctionCallInstr,
+    context: Context,
+    control: Control,
+    stash: Stash,
+    _isPrelude: boolean,
+  ) {
+    control.push(instr);
+    const nextValue = await instr.generator.next();
+    if (nextValue.done) {
+      control.pop();
+      stash.push(await moduleToPython(context, code, instr.srcNode, nextValue.value));
+    }
   },
 };

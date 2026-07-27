@@ -1,0 +1,662 @@
+import Buffer from "../../utils/buffer";
+import { PyComplexNumber } from "../../types";
+import OpCodes, {
+  getInstructionSize,
+  OPCODE_MAX,
+  PYNTER_ADDITIONAL_SUPPORTED_OPCODES,
+  unsupportedOpcodeMessage,
+} from "./opcodes";
+import { Instruction, PVMLProgram, PVMLIR } from "./types";
+
+const SVM_MAGIC = 0x5005acad;
+const MAJOR_VER = 0;
+const MINOR_VER = 0;
+
+let UTF8_ENCODER: TextEncoder | undefined;
+let UTF8_DECODER: TextDecoder | undefined;
+
+/**
+ * A "hole" in an assembled function.
+ */
+interface Hole {
+  offset: number;
+  referent: ["string", string] | ["function", number];
+}
+
+/**
+ * Intermediate (partially serialised) function.
+ */
+interface ImFunction {
+  binary: Uint8Array;
+  holes: Hole[];
+  finalOffset: number | null;
+}
+
+function writeHeader(b: Buffer, entrypoint: number, constantCount: number) {
+  b.cursor = 0;
+  b.putU(32, SVM_MAGIC);
+  b.putU(16, MAJOR_VER);
+  b.putU(16, MINOR_VER);
+  b.putU(32, entrypoint);
+  b.putU(32, constantCount);
+}
+
+function writeStringConstant(b: Buffer, s: string) {
+  if (UTF8_ENCODER === undefined) {
+    UTF8_ENCODER = new TextEncoder();
+  }
+  const sBytes = UTF8_ENCODER.encode(s);
+
+  b.align(4);
+  b.putU(16, 1);
+  b.putU(32, sBytes.byteLength + 1);
+  b.putA(sBytes);
+  b.putU(8, 0);
+}
+
+function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
+  const code = f.toInstructions();
+  const { stackSize, envSize, numArgs } = f;
+  const holes: Hole[] = [];
+  const b = new Buffer();
+
+  b.putU(8, stackSize);
+  b.putU(8, envSize);
+  b.putU(8, numArgs);
+  // Former padding byte, now has_rest_param (pynter's pvm_function_t): tells
+  // native Pynter's op_call/op_call_t to bind only numArgs - 1 fixed params
+  // and collect the rest of the caller's arguments into a fresh array bound
+  // to the last slot — see PVMLIR's hasRestParam doc comment and pynter's
+  // vm.c for the matching read side.
+  b.putU(8, f.hasRestParam ? 1 : 0);
+
+  const instrOffsets = code
+    .map(i => getInstructionSize(i.opcode))
+    .reduce((ss, s) => (ss.push(ss[ss.length - 1] + s), ss), [0]);
+
+  for (const [instr, index] of code.map((i1, i2) => [i1, i2] as [Instruction, number])) {
+    if (instr.opcode < 0 || instr.opcode > OPCODE_MAX) {
+      throw new Error(`Invalid opcode ${instr.opcode.toString()}`);
+    }
+    if (
+      targetMaxOpcode !== undefined &&
+      instr.opcode > targetMaxOpcode &&
+      !PYNTER_ADDITIONAL_SUPPORTED_OPCODES.has(instr.opcode)
+    ) {
+      throw new Error(unsupportedOpcodeMessage(instr.opcode));
+    }
+    const opcode: OpCodes = instr.opcode;
+    b.putU(8, opcode);
+    switch (opcode) {
+      case OpCodes.LDCI:
+      case OpCodes.LGCI:
+        if (!Number.isInteger(instr.arg1 as number)) {
+          throw new Error(
+            `Non-integral operand to LDCI/LDGI: ${instr.arg1} (this is a compiler bug)`,
+          );
+        }
+        b.putI(32, instr.arg1 as number);
+        break;
+      case OpCodes.LDCF32:
+      case OpCodes.LGCF32:
+        b.putF(32, instr.arg1 as number);
+        break;
+      case OpCodes.LDCF64:
+      case OpCodes.LGCF64:
+        b.putF(64, instr.arg1 as number);
+        break;
+      case OpCodes.LGCS:
+        holes.push({
+          offset: b.cursor,
+          referent: ["string", instr.arg1 as string],
+        });
+        b.putU(32, 0);
+        break;
+      case OpCodes.NEWC:
+        holes.push({
+          offset: b.cursor,
+          referent: ["function", instr.arg1 as number],
+        });
+        b.putU(32, 0);
+        break;
+      case OpCodes.LDLG:
+      case OpCodes.LDLF:
+      case OpCodes.LDLB:
+      case OpCodes.STLG:
+      case OpCodes.STLF:
+      case OpCodes.STLB:
+      case OpCodes.CALL:
+      case OpCodes.CALLT:
+      case OpCodes.NEWENV:
+      case OpCodes.NEWCP:
+      case OpCodes.NEWCV:
+      case OpCodes.NEWA:
+        b.putU(8, instr.arg1 as number);
+        break;
+      case OpCodes.LDPG:
+      case OpCodes.LDPF:
+      case OpCodes.LDPB:
+      case OpCodes.STPG:
+      case OpCodes.STPF:
+      case OpCodes.STPB:
+      case OpCodes.CALLP:
+      case OpCodes.CALLTP:
+      case OpCodes.CALLV:
+      case OpCodes.CALLTV:
+        b.putU(8, instr.arg1 as number);
+        b.putU(8, instr.arg2 as number);
+        break;
+      case OpCodes.BRF:
+      case OpCodes.BRT:
+      case OpCodes.BR:
+      case OpCodes.FOR_ITER:
+        const offset = instrOffsets[index + (instr.arg1 as number)] - instrOffsets[index + 1];
+        b.putI(32, offset);
+        break;
+      case OpCodes.JMP:
+        throw new Error("JMP assembling not implemented");
+      case OpCodes.LGCBI:
+        throw new Error(
+          "LGCBI (arbitrary-precision integer) cannot be serialised to the fixed-width " +
+            "PVML binary format; this opcode is browser-pathway-only (PVMLInterpreter's " +
+            "in-memory PVMLIR) and should never reach the assembler",
+        );
+      case OpCodes.LGCC: {
+        // Unlike LGCBI, this now serialises for real — native Pynter has an
+        // actual complex-number representation (see opcodes.ts's LGCC doc
+        // comment). `instr.arg1` is already the resolved PyComplexNumber
+        // here (PVMLIR.toInstructions() resolves the in-memory pool-index
+        // encoding back to the real object before this function ever sees
+        // it — same as LGCS's string constants), so no pool lookup is
+        // needed; just write both components as inline float32s, matching
+        // getInstructionSize(LGCC)'s 9-byte size. Precision loss from
+        // double (PyComplexNumber) to float32 here is deliberate — native
+        // Pynter's own complex type is single-precision throughout, to
+        // match its existing scalar float width.
+        const complex = instr.arg1 as PyComplexNumber;
+        b.putF(32, complex.real);
+        b.putF(32, complex.imag);
+        break;
+      }
+      case OpCodes.CALLA:
+      case OpCodes.CALLTA:
+        // Structurally these are nullary and *could* be encoded (no operand
+        // to lose precision on, unlike LGCBI/LGCC) — but a program using
+        // them always also uses LGCBI for its int literals (int literals are
+        // unconditionally bigint in browser-pathway compilation), which
+        // already can't be serialised, and targetsPynter mode rejects
+        // spread calls outright at compile time (see PVMLCompiler's
+        // compileSpreadCall) — so this opcode never legitimately reaches the
+        // assembler in practice either. Throwing explicitly here, rather
+        // than silently falling through the switch, keeps that intent clear
+        // instead of looking like an oversight.
+        throw new Error(
+          "CALLA/CALLTA (call-site argument spreading) cannot be serialised to the fixed-width " +
+            "PVML binary format; this opcode is browser-pathway-only (PVMLInterpreter's " +
+            "in-memory PVMLIR) and should never reach the assembler",
+        );
+    }
+  }
+
+  const binary = b.asArray();
+  if (binary.byteLength - 4 !== instrOffsets[instrOffsets.length - 1]) {
+    throw new Error(
+      `Assembler bug: calculated function length ${
+        instrOffsets[instrOffsets.length - 1]
+      } is different from actual length ${binary.byteLength - 4}`,
+    );
+  }
+
+  return {
+    binary: b.asArray(),
+    holes,
+    finalOffset: null,
+  };
+}
+
+export function assemble(p: PVMLProgram, targetMaxOpcode?: number): Uint8Array {
+  const entrypointIndex = p.entryPoint;
+  const jsonFns = p.functions;
+
+  // serialise all the functions
+  const imFns = jsonFns.map(fn => serialiseFunction(fn, targetMaxOpcode));
+
+  // collect all string constants
+  const uniqueStrings = [
+    ...new Set(
+      ([] as string[]).concat(
+        ...imFns.map(fn =>
+          fn.holes
+            .filter(hole => hole.referent[0] === "string")
+            .map(hole => hole.referent[1] as string),
+        ),
+      ),
+    ),
+  ];
+
+  const bin = new Buffer();
+  // skip header for now
+  bin.cursor = 0x10;
+
+  // write all the strings, and store their positions
+  const stringMap: Map<string, number> = new Map();
+  for (const str of uniqueStrings) {
+    bin.align(4);
+    stringMap.set(str, bin.cursor);
+    writeStringConstant(bin, str);
+  }
+
+  // layout the functions, but don't actually write them yet
+  const fnStartOffset = bin.cursor;
+  for (const fn of imFns) {
+    bin.align(4);
+    fn.finalOffset = bin.cursor;
+    bin.cursor += fn.binary.byteLength;
+  }
+
+  // now fill in the holes
+  for (const fn of imFns) {
+    const view = new DataView(fn.binary.buffer);
+    for (const hole of fn.holes) {
+      let offset;
+      if (hole.referent[0] === "string") {
+        offset = stringMap.get(hole.referent[1]);
+      } else {
+        offset = imFns[hole.referent[1]].finalOffset;
+      }
+      if (offset === undefined || offset === null) {
+        throw new Error(`Assembler bug: missing string/function: ${JSON.stringify(hole)}`);
+      }
+      view.setUint32(hole.offset, offset, true);
+    }
+  }
+
+  // now we write the functions
+  bin.cursor = fnStartOffset;
+  for (const fn of imFns) {
+    bin.align(4);
+    if (bin.cursor !== fn.finalOffset) {
+      throw new Error("Assembler bug: function offset changed");
+    }
+    bin.putA(fn.binary);
+  }
+
+  bin.cursor = 0;
+  writeHeader(bin, imFns[entrypointIndex].finalOffset!, uniqueStrings.length);
+
+  return bin.asArray();
+}
+
+export function disassemble(p: Uint8Array): PVMLProgram {
+  const view = new DataView(p.buffer, p.byteOffset, p.byteLength);
+
+  const align4 = (n: number) => (n + 3) & ~3;
+
+  const magic = view.getUint32(0, true);
+  if (magic !== SVM_MAGIC) {
+    throw new Error("Invalid SVM binary: bad magic number");
+  }
+
+  const major = view.getUint16(4, true);
+  const minor = view.getUint16(6, true);
+  if (major !== MAJOR_VER || minor !== MINOR_VER) {
+    throw new Error(`Unsupported PVML version ${major}.${minor}`);
+  }
+
+  const entrypointOffset = view.getUint32(8, true);
+  const constantCount = view.getUint32(12, true);
+
+  if (UTF8_DECODER === undefined) {
+    UTF8_DECODER = new TextDecoder();
+  }
+
+  let cursor = 0x10;
+  const stringByOffset: Map<number, string> = new Map();
+
+  for (let i = 0; i < constantCount; i++) {
+    cursor = align4(cursor);
+    if (cursor + 6 > p.byteLength) {
+      throw new Error("Truncated PVML binary while reading constants");
+    }
+    const strOffset = cursor;
+    const tag = view.getUint16(cursor, true);
+    cursor += 2;
+    if (tag !== 1) {
+      throw new Error(`Unsupported constant tag ${tag}`);
+    }
+    const size = view.getUint32(cursor, true);
+    cursor += 4;
+    if (size === 0 || cursor + size > p.byteLength) {
+      throw new Error("Truncated PVML binary while reading string constant");
+    }
+    const raw = new Uint8Array(p.buffer, p.byteOffset + cursor, size);
+    const strBytes = raw.subarray(0, size - 1);
+    const value = UTF8_DECODER.decode(strBytes);
+    stringByOffset.set(strOffset, value);
+    cursor += size;
+  }
+
+  cursor = align4(cursor);
+  const functionsStart = cursor;
+
+  if (functionsStart >= p.byteLength) {
+    throw new Error("Malformed PVML binary: no function section");
+  }
+
+  // First pass: discover function start offsets by parsing from known starts.
+  // Using getInstructionSize to advance prevents matching NEWC inside immediates.
+  const functionOffsetSet = new Set<number>([entrypointOffset]);
+  const worklist: number[] = [entrypointOffset];
+
+  while (worklist.length > 0) {
+    const fnOffset = worklist.pop()!;
+    let pc = fnOffset + 4; // skip 4-byte function header
+
+    while (pc < p.byteLength) {
+      if (pc !== fnOffset && functionOffsetSet.has(pc)) break;
+
+      const opcode = view.getUint8(pc);
+      if (opcode > OPCODE_MAX) break;
+
+      if (opcode === OpCodes.NEWC && pc + 5 <= p.byteLength) {
+        const targetOffset = view.getUint32(pc + 1, true);
+        if (
+          targetOffset >= functionsStart &&
+          targetOffset < p.byteLength &&
+          !functionOffsetSet.has(targetOffset)
+        ) {
+          functionOffsetSet.add(targetOffset);
+          worklist.push(targetOffset);
+        }
+      }
+
+      pc += getInstructionSize(opcode);
+    }
+  }
+
+  const functionOffsets = Array.from(functionOffsetSet).sort((a, b) => a - b);
+
+  // Intermediate raw function data (mutable until all fixups are applied)
+  interface RawFunction {
+    stackSize: number;
+    envSize: number;
+    numArgs: number;
+    hasRestParam: boolean;
+    instructions: Instruction[];
+  }
+
+  // Second pass: parse each function into mutable raw data
+  const rawFunctions: RawFunction[] = [];
+  const offsetToIndex = new Map<number, number>();
+  const closureFixups: Array<{ fnIndex: number; instrIndex: number; targetOffset: number }> = [];
+
+  for (let fnIdx = 0; fnIdx < functionOffsets.length; fnIdx++) {
+    const fnStart = functionOffsets[fnIdx];
+    const fnEnd = fnIdx + 1 < functionOffsets.length ? functionOffsets[fnIdx + 1] : p.byteLength;
+
+    offsetToIndex.set(fnStart, fnIdx);
+
+    if (fnStart + 4 > fnEnd) {
+      throw new Error(`Function at offset 0x${fnStart.toString(16)} is too small`);
+    }
+
+    const stackSize = view.getUint8(fnStart);
+    const envSize = view.getUint8(fnStart + 1);
+    const numArgs = view.getUint8(fnStart + 2);
+    // Former padding byte, now has_rest_param — see serialiseFunction's own
+    // comment on the write side.
+    const hasRestParamByte = view.getUint8(fnStart + 3);
+
+    if (hasRestParamByte !== 0 && hasRestParamByte !== 1) {
+      throw new Error(`Invalid function has_rest_param byte at offset 0x${fnStart.toString(16)}`);
+    }
+    const hasRestParam = hasRestParamByte === 1;
+
+    cursor = fnStart + 4;
+
+    const instructions: Instruction[] = [];
+    const instructionSizes: number[] = [];
+    const branchFixups: Array<{ index: number; byteOffset: number }> = [];
+    const newcFixups: Array<{ instrIndex: number; targetOffset: number }> = [];
+
+    // Parse instructions until we reach the next function or end
+    while (cursor < fnEnd) {
+      const opcodeStart = cursor;
+      const opcode = view.getUint8(cursor);
+
+      if (opcode > OPCODE_MAX) {
+        throw new Error(`Invalid opcode ${opcode} at offset 0x${cursor.toString(16)}`);
+      }
+
+      cursor += 1;
+
+      let arg1: number | string | PyComplexNumber | undefined;
+      let arg2: number | undefined;
+
+      switch (opcode) {
+        case OpCodes.LDCI:
+        case OpCodes.LGCI:
+          if (cursor + 4 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          arg1 = view.getInt32(cursor, true);
+          cursor += 4;
+          break;
+        case OpCodes.LDCF32:
+        case OpCodes.LGCF32:
+          if (cursor + 4 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          arg1 = view.getFloat32(cursor, true);
+          cursor += 4;
+          break;
+        case OpCodes.LDCF64:
+        case OpCodes.LGCF64:
+          if (cursor + 8 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          arg1 = view.getFloat64(cursor, true);
+          cursor += 8;
+          break;
+        case OpCodes.LGCS: {
+          if (cursor + 4 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          const strOffset = view.getUint32(cursor, true);
+          cursor += 4;
+          const str = stringByOffset.get(strOffset);
+          if (str === undefined) {
+            throw new Error(`Unknown string constant at offset 0x${strOffset.toString(16)}`);
+          }
+          arg1 = str;
+          break;
+        }
+        case OpCodes.NEWC: {
+          if (cursor + 4 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          const targetOffset = view.getUint32(cursor, true);
+          cursor += 4;
+          arg1 = targetOffset;
+          newcFixups.push({ instrIndex: instructions.length, targetOffset });
+          break;
+        }
+        case OpCodes.LDLG:
+        case OpCodes.LDLF:
+        case OpCodes.LDLB:
+        case OpCodes.STLG:
+        case OpCodes.STLF:
+        case OpCodes.STLB:
+        case OpCodes.CALL:
+        case OpCodes.CALLT:
+        case OpCodes.NEWENV:
+        case OpCodes.NEWCP:
+        case OpCodes.NEWCV:
+        case OpCodes.NEWA:
+          if (cursor + 1 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          arg1 = view.getUint8(cursor);
+          cursor += 1;
+          break;
+        case OpCodes.LDPG:
+        case OpCodes.LDPF:
+        case OpCodes.LDPB:
+        case OpCodes.STPG:
+        case OpCodes.STPF:
+        case OpCodes.STPB:
+        case OpCodes.CALLP:
+        case OpCodes.CALLTP:
+        case OpCodes.CALLV:
+        case OpCodes.CALLTV:
+          if (cursor + 2 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          arg1 = view.getUint8(cursor);
+          arg2 = view.getUint8(cursor + 1);
+          cursor += 2;
+          break;
+        case OpCodes.BRF:
+        case OpCodes.BRT:
+        case OpCodes.BR:
+        case OpCodes.FOR_ITER: {
+          if (cursor + 4 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          const rawOffset = view.getInt32(cursor, true);
+          cursor += 4;
+          arg1 = rawOffset;
+          branchFixups.push({ index: instructions.length, byteOffset: rawOffset });
+          break;
+        }
+        case OpCodes.JMP:
+          throw new Error("JMP disassembly not implemented");
+        case OpCodes.LGCBI:
+          throw new Error(
+            "LGCBI (arbitrary-precision integer) cannot appear in a serialised PVML binary; " +
+              "this opcode is browser-pathway-only and assemble() refuses to encode it",
+          );
+        case OpCodes.LGCC: {
+          // Two inline float32s (real, imag), matching how serialiseFunction
+          // writes them above — reconstructs a PyComplexNumber directly
+          // rather than a pool index, since the disassembled Instruction
+          // shape carries the resolved value either way (see LGCS's string
+          // case just above, which similarly reconstructs the string
+          // itself, not an offset).
+          if (cursor + 8 > p.byteLength) {
+            throw new Error("Truncated instruction");
+          }
+          const real = view.getFloat32(cursor, true);
+          const imag = view.getFloat32(cursor + 4, true);
+          cursor += 8;
+          arg1 = new PyComplexNumber(real, imag);
+          break;
+        }
+        case OpCodes.CALLA:
+        case OpCodes.CALLTA:
+          throw new Error(
+            "CALLA/CALLTA (call-site argument spreading) cannot appear in a serialised PVML " +
+              "binary; this opcode is browser-pathway-only and assemble() refuses to encode it",
+          );
+      }
+
+      const instruction: Instruction = { opcode };
+      if (arg1 !== undefined) {
+        instruction.arg1 = arg1;
+      }
+      if (arg2 !== undefined) {
+        instruction.arg2 = arg2;
+      }
+      instructions.push(instruction);
+      instructionSizes.push(cursor - opcodeStart);
+    }
+
+    // Convert branch byte offsets to instruction indices
+    const offsets: number[] = [0];
+    for (const size of instructionSizes) {
+      offsets.push(offsets[offsets.length - 1] + size);
+    }
+
+    for (const { index, byteOffset } of branchFixups) {
+      const afterCurrent = offsets[index + 1];
+      const targetByteOffset = afterCurrent + byteOffset;
+      const targetIndex = offsets.indexOf(targetByteOffset);
+      if (targetIndex === -1) {
+        throw new Error(
+          `Invalid branch target: afterCurrent=${afterCurrent}, byteOffset=${byteOffset}, targetByteOffset=${targetByteOffset}, offsets=[${offsets.join(",")}]`,
+        );
+      }
+      instructions[index].arg1 = targetIndex - index;
+    }
+
+    rawFunctions.push({ stackSize, envSize, numArgs, hasRestParam, instructions });
+
+    for (const fixup of newcFixups) {
+      closureFixups.push({
+        fnIndex: fnIdx,
+        instrIndex: fixup.instrIndex,
+        targetOffset: fixup.targetOffset,
+      });
+    }
+  }
+
+  if (rawFunctions.length === 0) {
+    throw new Error("PVML binary does not contain any functions");
+  }
+
+  const entrypointIndex = offsetToIndex.get(entrypointOffset);
+  if (entrypointIndex === undefined) {
+    throw new Error("Entrypoint function offset not found in binary");
+  }
+
+  // Apply closure fixups on mutable data before freezing into PVMLIR
+  for (const { fnIndex, instrIndex, targetOffset } of closureFixups) {
+    const targetIndex = offsetToIndex.get(targetOffset);
+    if (targetIndex === undefined) {
+      throw new Error(`Unknown function reference at offset 0x${targetOffset.toString(16)}`);
+    }
+    rawFunctions[fnIndex].instructions[instrIndex].arg1 = targetIndex;
+  }
+
+  // Now freeze into immutable PVMLIR instances
+  const functions = rawFunctions.map(f => {
+    const n = f.instructions.length;
+    const opcodes = new Int32Array(n);
+    const arg1s = new Float64Array(n);
+    const arg2s = new Int32Array(n);
+    const strings: string[] = [];
+
+    for (let i = 0; i < n; i++) {
+      opcodes[i] = f.instructions[i].opcode;
+      const a1 = f.instructions[i].arg1;
+      if (typeof a1 === "string") {
+        arg1s[i] = strings.length;
+        strings.push(a1);
+      } else {
+        arg1s[i] = (a1 as number) ?? 0;
+      }
+      arg2s[i] = (f.instructions[i].arg2 as number) ?? 0;
+    }
+
+    // symbolCount = envSize - numArgs (since envSize = symbolCount + numArgs)
+    const symbolCount = f.envSize - f.numArgs;
+    // LGCBI never survives serialisation (see the throw above), so a disassembled
+    // function's bigint pool is always empty.
+    const bigints: bigint[] = [];
+    return new PVMLIR(
+      opcodes,
+      arg1s,
+      arg2s,
+      strings,
+      bigints,
+      f.stackSize,
+      symbolCount,
+      f.numArgs,
+      undefined,
+      undefined,
+      f.hasRestParam,
+    );
+  });
+
+  return new PVMLProgram(entrypointIndex, functions);
+}

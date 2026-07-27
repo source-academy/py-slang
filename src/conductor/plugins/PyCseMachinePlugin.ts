@@ -1,25 +1,25 @@
-import { Context } from "../../engines/cse/context";
-import { Control } from "../../engines/cse/control";
-import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
-import { Stash, Value } from "../../engines/cse/stash";
-import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
-import { TokenType } from "../../tokenizer";
-import { toPythonFloat } from "../../stdlib/utils";
-import { Environment } from "../../engines/cse/environment";
-import { Closure } from "../../engines/cse/closure";
 import type {
   CseSnapshot,
   CseSerializedEnvFrame as SerializedEnvFrame,
   CseSerializedInstruction as SerializedInstruction,
   CseSerializedValue as SerializedValue,
 } from "@sourceacademy/common-cse-machine";
+import { Closure } from "../../engines/cse/closure";
+import { Context } from "../../engines/cse/context";
+import { Control } from "../../engines/cse/control";
+import { Environment, UNASSIGNED } from "../../engines/cse/environment";
+import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
+import { Stash, Value } from "../../engines/cse/stash";
+import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
+import { toPythonFloat } from "../../stdlib/utils";
+import { TokenType } from "../../tokenizer";
 
 type ControlStackItem = {
   instrType?: string;
   env?: Environment;
   kind?: string;
-  startToken?: { indexInSource?: number; line?: number; lexeme?: string };
-  endToken?: { indexInSource?: number; line?: number; lexeme?: string } | null;
+  startToken?: { indexInSource?: number; line?: number; lexeme?: string; synthetic?: boolean };
+  endToken?: { indexInSource?: number; line?: number; lexeme?: string; synthetic?: boolean } | null;
   body?: Array<{ kind: string }> | { kind: string; body: Array<{ kind: string }> };
   syntheticLabel?: string;
   numOfArgs?: number;
@@ -72,14 +72,20 @@ function formatValue(v: Value): string {
       return `[${items.join(", ")}${suffix}]`;
     }
     case "builtin":
+      // Matches CPython's repr() of a builtin, and what print(print) shows in the REPL.
       return `<built-in function ${v.name}>`;
+    case "opaque":
+      return `<opaque value>`;
     default:
       v satisfies never;
       return "?";
   }
 }
 
-function serializeValue(v: Value, envId = ""): SerializedValue {
+function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedValue {
+  // A local that createEnvironment preallocated at CALL time but that hasn't been
+  // assigned yet — mirrors js-slang's uninitialized-`const`/`let` placeholder rendering.
+  if (v === UNASSIGNED) return { displayValue: "", label: "unassigned" };
   if (v === undefined || v === null) return { displayValue: "None", label: "NoneType" };
   const base = { displayValue: formatValue(v), label: typeTranslator(v.type) };
   if (v.type === "closure") {
@@ -149,13 +155,13 @@ const PY_TO_JS_INSTR_TYPE: Partial<Record<InstrType, string>> = {
   [InstrType.BRANCH]: "Branch",
   [InstrType.WHILE]: "While", // py: "WhileInstr" → js: "While"
   [InstrType.FOR]: "For", // py: "ForInstr"   → js: "For"
-  [InstrType.RESET]: "Reset",
   [InstrType.LIST]: "ArrayLiteral", // py: "ListLiteral" → js: "ArrayLiteral"
   [InstrType.LIST_ACCESS]: "ArrayAccess", // py: "ListAccess"  → js: "ArrayAccess"
   [InstrType.LIST_ASSIGNMENT]: "ArrayAssignment", // py: "ListAssignment" → js: "ArrayAssignment"
   [InstrType.CONTINUE_MARKER]: "ContinueMarker", // py: "continueMarker" → js: "ContinueMarker"
   [InstrType.BREAK]: "Break", // py: "BreakInstr"  → js: "Break"
   [InstrType.CONTINUE]: "Continue", // py: "ContinueInstr" → js: "Continue"
+  [InstrType.MODULE_FUNCTION_CALL]: "ModuleFunctionCall",
 };
 
 // Map py-slang AST node kinds → js-slang ESTree node type names so the animation
@@ -188,8 +194,6 @@ const PY_TO_JS_NODE_TYPE: Record<string, string> = {
 
 function instrDisplayText(item: ControlStackItem): string {
   switch (item.instrType as InstrType) {
-    case InstrType.RESET:
-      return "return";
     case InstrType.END_OF_FUNCTION_BODY:
       return "return None";
     case InstrType.POP:
@@ -220,6 +224,8 @@ function instrDisplayText(item: ControlStackItem): string {
     case InstrType.BINARY_OP:
     case InstrType.BOOL_OP:
       return operatorTranslator(item.symbol!);
+    case InstrType.MODULE_FUNCTION_CALL:
+      return `mod call ${item.numOfArgs}`;
     default:
       return String(item.instrType);
   }
@@ -238,6 +244,9 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     }
     // Extra fields consumed by specific animations.
     if (item.instrType === InstrType.APPLICATION && item.numOfArgs !== undefined) {
+      meta.numOfArgs = item.numOfArgs;
+    }
+    if (item.instrType === InstrType.MODULE_FUNCTION_CALL && item.numOfArgs !== undefined) {
       meta.numOfArgs = item.numOfArgs;
     }
     if (item.instrType === InstrType.ASSIGNMENT && item.symbol !== undefined) {
@@ -267,10 +276,11 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
       endTok != null && endTok.indexInSource !== undefined
         ? endTok.indexInSource + (endTok.lexeme?.length ?? 0)
         : -1;
-    // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) have both
-    // tokens pinned to position 0. Require start > 0 OR end token at a real position
-    // to guard against slicing the wrong source text.
-    const isRealSourceNode = start > 0 || (endTok?.indexInSource ?? 0) > 0;
+    // Synthetic nodes generated at runtime (e.g. loop range BigIntLiterals) carry tokens
+    // explicitly marked `synthetic` — they don't correspond to real source text, even
+    // when their indexInSource coincides with a genuine position (e.g. 0, the very first
+    // token of the file). Do not infer syntheticness from position alone.
+    const isRealSourceNode = !item.startToken?.synthetic && !endTok?.synthetic;
     let displayText: string;
     let loc: { startLine: number; endLine: number } | undefined;
     if (start >= 0 && end > start && end <= code.length && isRealSourceNode) {
@@ -303,20 +313,33 @@ function serializeControlItem(item: ControlStackItem, code: string): SerializedI
     // For block-like nodes pass body length and child types so the adapter can build
     // stub body arrays (used by ControlExpansionAnimation / StatementSequence handling).
     if (
-      jsNodeType === "StatementSequence" ||
-      jsNodeType === "FunctionDeclaration" ||
-      jsNodeType === "ArrowFunctionExpression"
+      (jsNodeType === "StatementSequence" ||
+        jsNodeType === "FunctionDeclaration" ||
+        jsNodeType === "ArrowFunctionExpression") &&
+      item.body !== undefined
     ) {
-      const body = Array.isArray(item.body)
-        ? item.body
-        : item.body !== undefined && item.body !== null && "body" in item.body
+      const body =
+        item.body !== undefined &&
+        item.body !== null &&
+        "body" in item.body &&
+        jsNodeType === "StatementSequence"
           ? item.body.body
-          : [];
-      nodeMeta.bodyLength = body.length;
-      nodeMeta.bodyNodeTypes = body.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
+          : item.body;
+      const bodyArray = Array.isArray(body) ? body : [body];
+      nodeMeta.bodyLength = bodyArray.length;
+      nodeMeta.bodyNodeTypes = bodyArray.map(n => PY_TO_JS_NODE_TYPE[n.kind] ?? "Identifier");
     }
 
-    return Object.keys(nodeMeta).length > 0 ? { displayText, metadata: nodeMeta } : { displayText };
+    // Expression statements ("1 + 2" as a bare statement) are indistinguishable from a
+    // plain sub-expression once pushed — the machine only reveals it was a statement
+    // later, when the "pop" instruction that discards its value appears (issue #270).
+    // Tag it so the visualizer can mark it distinctly (e.g. a different color) up front.
+    const tag = item.kind === "SimpleExpr" ? "expressionStatement" : undefined;
+
+    const result: SerializedInstruction = { displayText };
+    if (Object.keys(nodeMeta).length > 0) result.metadata = nodeMeta;
+    if (tag) result.tag = tag;
+    return result;
   }
 
   return { displayText: "<unknown>" };
@@ -342,7 +365,7 @@ function serializeEnvChain(
     queue.push(env);
     visit(env.tail);
     for (const val of Object.values(env.head)) {
-      if (val && val.type === "closure") visit(val.closure?.environment);
+      if (val && val !== UNASSIGNED && val.type === "closure") visit(val.closure?.environment);
     }
   };
 
@@ -390,6 +413,7 @@ function serializeEnvChain(
         })),
       isActive: env.id === activeEnv.id,
       isOnCallStack: callStackIds.has(env.id),
+      globalNames: env.closure?.globalVariables.size ? [...env.closure.globalVariables] : undefined,
     }));
 }
 
@@ -399,20 +423,25 @@ export async function collectSnapshots(
   context: Context,
   control: Control,
   stash: Stash,
-  envSteps: number,
   stepLimit: number,
   variant: number,
   code: string,
   maxSnapshots: number = 1000,
-): Promise<CseSnapshot[]> {
+): Promise<{ snapshots: CseSnapshot[]; breakpointSteps: number[] }> {
   const snapshots: CseSnapshot[] = [];
+  // Runtime-fabricated nodes (e.g. implicit range() bounds, the for-loop increment —
+  // see utils.ts's evaluateForIterator/generateForIncrement) carry tokens pinned to
+  // line 0, since they don't correspond to any line the user actually wrote. Real
+  // tokens are always 1-based (see parser/token-bridge.ts), so line 0 is an
+  // unambiguous "not a real line" signal. Keep showing the last real line instead of
+  // flickering to 0 while these synthetic nodes are being evaluated.
+  let lastKnownLine: number | undefined;
 
   const stream = generateCSEMachineStateStream(
     code,
     context,
     control,
     stash,
-    envSteps,
     stepLimit,
     1024,
     variant,
@@ -426,7 +455,7 @@ export async function collectSnapshots(
     if (snapshots.length >= maxSnapshots) break;
 
     const activeEnv = context.runtime.environments[0];
-    const rawControlStack = c.getStack();
+    const rawControlStack = c.getStack() as unknown as ControlStackItem[];
     const controlItems = rawControlStack
       .slice()
       .reverse()
@@ -447,18 +476,26 @@ export async function collectSnapshots(
     // machine's updateInspector, which reads context.runtime.nodes[0] for the blue
     // "current line" highlight. py-slang nodes carry a 1-based startToken.line.
     const currentNode = context.runtime.nodes[0] as { startToken?: { line?: number } } | undefined;
-    const currentLine: number | undefined = currentNode?.startToken?.line;
+    const rawLine = currentNode?.startToken?.line;
+    if (rawLine) {
+      lastKnownLine = rawLine;
+    }
 
     snapshots.push({
       stepIndex: steps - 1,
       control: controlItems,
       stash: stashItems,
       environments,
-      currentLine,
+      currentLine: lastKnownLine,
     });
   }
 
-  return snapshots;
+  // context.runtime.breakpointSteps is recorded by the interpreter regardless of the
+  // maxSnapshots cutoff above; filter out any indices past what was actually collected so the
+  // host never gets pointed at a step with no corresponding snapshot.
+  const breakpointSteps = context.runtime.breakpointSteps.filter(step => step < snapshots.length);
+
+  return { snapshots, breakpointSteps };
 }
 
 // The runner-side plugin that transports these snapshots now lives in
@@ -466,4 +503,4 @@ export async function collectSnapshots(
 // Python-specific serialization of control/stash/environment into CseSnapshots.
 
 // Exported for unit testing only — not part of the public API.
-export { formatValue, serializeValue, instrDisplayText, serializeControlItem, serializeEnvChain };
+export { formatValue, instrDisplayText, serializeControlItem, serializeEnvChain, serializeValue };

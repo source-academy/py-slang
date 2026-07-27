@@ -27,7 +27,12 @@ jobs:
       - run: yarn run build --all
       - run: yarn run format:ci
       - run: yarn run lint
-      - run: yarn run test-coverage
+      - name: Run tests (including CPython ground-truth checks for sourceacademy-sicp)
+        run: yarn run test-coverage
+        env:
+          CPYTHON_PATH: python3
+      - name: Run pyodide evaluator tests
+        run: yarn run test:pyodide
       - name: Coveralls
         uses: coverallsapp/github-action@v2
         with:

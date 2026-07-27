@@ -1,6 +1,6 @@
 import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { operatorTranslator } from "../engines/cse/types";
+import { friendlyTypeName, operatorTranslator, typeTranslator } from "../engines/cse/types";
 import { Token } from "../tokenizer";
 import { TokenType } from "../tokenizer/tokenizer";
 export enum ErrorType {
@@ -92,28 +92,6 @@ export class RuntimeSourceError implements SourceError {
   }
 }
 
-// Local copy to avoid circular import from utils
-function typeTranslator(type: string): string {
-  switch (type) {
-    case "bigint":
-      return "int";
-    case "number":
-      return "float";
-    case "bool":
-      return "bool";
-    case "string":
-      return "str";
-    case "complex":
-      return "complex";
-    case "none":
-      return "NoneType";
-    case "closure":
-      return "function";
-    default:
-      return "unknown";
-  }
-}
-
 /* Searches backwards and forwards till it hits a newline */
 export function getFullLine(
   source: string,
@@ -153,11 +131,14 @@ export class IndexError extends RuntimeSourceError {
     context: Context,
     index: number,
     length: number,
+    isAssignment = false,
   ) {
     super(node);
     this.type = ErrorType.RUNTIME;
     this.message =
-      "IndexError: list index out of range. You tried to access index " +
+      (isAssignment
+        ? "IndexError: list assignment index out of range. You tried to assign to index "
+        : "IndexError: list index out of range. You tried to access index ") +
       index +
       " but the list only has " +
       length +
@@ -165,10 +146,48 @@ export class IndexError extends RuntimeSourceError {
   }
 }
 
+export class ListIndexTypeError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt, _context: Context) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const indicator = createErrorIndicator(snippet, 0);
+    const hint = "TypeError: list indices must be integers";
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
+  }
+}
+
+export class ListMultiplyTypeError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Binary, _context: Context) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
+    const indicator = createErrorIndicator(snippet, errorPos);
+    const hint = "TypeError: can't multiply list by non-integer";
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
+  }
+}
+
 export class UnsupportedOperandTypeError extends RuntimeSourceError {
   constructor(
     source: string,
     node: ExprNS.Binary | ExprNS.BoolOp | ExprNS.Unary,
+    context: Context,
     wrongType1: string,
     wrongType2: string,
     operand: string | TokenType,
@@ -178,38 +197,31 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
 
     const index = node.startToken.indexInSource;
     const operatorStr = operatorTranslator(operand);
-    const typeStr1 = typeTranslator(wrongType1);
+    const typeStr1 = friendlyTypeName(typeTranslator(wrongType1), context.variant);
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    let hint =
-      "TypeError: unsupported operand type(s) for " +
-      operand +
-      ": '" +
-      wrongType1 +
-      "' and '" +
-      wrongType2 +
-      "'";
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = node.operator.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
+    let hint: string;
     let suggestion: string;
     if (wrongType2 === "") {
       // Format for Unary operators
-      hint = `TypeError: bad operand type for unary ${operatorStr}: '${typeStr1}'`;
-      suggestion = `You are using the unary '${operatorStr}' operator on '${typeStr1}', which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
+      hint = `TypeError: bad operand type for unary ${operatorStr}: ${typeStr1}`;
+      suggestion = `You are using the unary '${operatorStr}' operator on ${typeStr1}, which is not a supported type for this operation.\nMake sure the operator is of the correct type.\n`;
     } else {
       // Format for Binary operators
-      const typeStr2 = typeTranslator(wrongType2);
-      hint = `TypeError: unsupported operand type(s) for ${operatorStr}: '${typeStr1}' and '${typeStr2}'`;
-      suggestion = `You are using the '${operatorStr}' operator between '${typeStr1}' and '${typeStr2}', which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`;
+      const typeStr2 = friendlyTypeName(typeTranslator(wrongType2), context.variant);
+      hint = `TypeError: unsupported operand type(s) for ${operatorStr}: ${typeStr1} and ${typeStr2}`;
+      suggestion = `You are using the '${operatorStr}' operator between ${typeStr1} and ${typeStr2}, which are not compatible types for this operation.\nMake sure both operands are of the correct type.\n`;
     }
 
     // Assemble the final multi-line message
-    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
   }
 }
 
@@ -475,10 +487,9 @@ export class TypeError extends RuntimeSourceError {
     node: ExprNS.Expr | StmtNS.Stmt,
     context: Context,
     originalType: string,
-    targetType: string,
   ) {
     super(node);
-    originalType = typeTranslator(originalType);
+    const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
     this.type = ErrorType.TYPE;
     const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
@@ -486,14 +497,36 @@ export class TypeError extends RuntimeSourceError {
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const hint =
-      "TypeError: '" + originalType + "' cannot be interpreted as an '" + targetType + "'.";
+    // Almost every call site is a builtin call (math_sin(x), tail(xs), ...) —
+    // name it after the callee the user actually wrote, matching
+    // UnsupportedOperandTypeError's "unsupported operand type(s) for +: ..."
+    // phrasing. The few non-Call sites (subscript assignment, xs[i] = v, see
+    // evaluateListAssignment in utils.ts) have no callee to name; "subscript
+    // assignment" covers all three of those (bad list, bad index, bad value)
+    // uniformly rather than needing a fourth constructor parameter just for
+    // three call sites.
+    //
+    // Checked via the `kind` discriminant, not `instanceof ExprNS.Call` —
+    // `ExprNS` is otherwise only ever used as a type here, so TypeScript
+    // elides the import entirely from the compiled output; using it as a
+    // runtime value would force a real import of ast-types.ts, which
+    // re-enters this very module (ast-types.ts -> types/index.ts ->
+    // types/value-types.ts -> engines/cse/error.ts -> back to this file)
+    // mid-load, before RuntimeSourceError above is defined yet.
+    const callNode = node as {
+      kind?: string;
+      callee?: { kind?: string; name?: { lexeme?: string } };
+    };
+    const subject =
+      callNode.kind === "Call" && callNode.callee?.kind === "Variable"
+        ? (callNode.callee.name?.lexeme ?? "subscript assignment")
+        : "subscript assignment";
+    const hint = `TypeError: unsupported argument type for ${subject}: ${typeStr}`;
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
     const name = "TypeError";
-    const suggestion = " Make sure the value you are passing is compatible with the expected type.";
     const msg =
       name +
       " at line " +
@@ -504,8 +537,7 @@ export class TypeError extends RuntimeSourceError {
       " ".repeat(adjustedOffset) +
       indicator +
       "\n" +
-      hint +
-      suggestion;
+      hint;
     this.message = msg;
   }
 }
@@ -557,7 +589,34 @@ export class UnboundLocalError extends RuntimeSourceError {
 
     const hint = `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`;
     const suggestion = `The variable '${name}' is used in the current function, so it's considered a local variable. However, you tried to access it before a value was assigned to it in the local scope. Assign a value to '${name}' before you use it.`;
-    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
+    this.message = msg;
+  }
+}
+
+// Distinct from UnboundLocalError: raised when a name captured from an enclosing function
+// (either via an explicit `nonlocal` declaration, or an implicit closure read that needs
+// no such declaration) hasn't been assigned yet by its owning scope at the point it's
+// read — the name is a free/cell variable, not a local of the current function. Matches
+// CPython's wording for this exact situation, e.g.:
+//   NameError: cannot access free variable 'x' where it is not associated with a value in enclosing scope
+export class FreeVariableUnboundError extends RuntimeSourceError {
+  constructor(source: string, name: string, node: ExprNS.Expr) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const { lineIndex, fullLine } = getFullLine(source, node.startToken.indexInSource);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+
+    const hint = `NameError: cannot access free variable '${name}' where it is not associated with a value in enclosing scope`;
+    const suggestion = `The variable '${name}' is bound in an enclosing function, not the current one. However, that enclosing function hasn't assigned '${name}' a value yet at this point. Assign a value to '${name}' in the enclosing function before this reference runs.`;
+    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -578,7 +637,7 @@ export class NameError extends RuntimeSourceError {
     const indicator = createErrorIndicator(snippet, errorPos);
     const hint = `NameError: name '${name}' is not defined`;
     const suggestion = `The name '${name}' is not defined in the current scope. Check for typos or make sure the variable is assigned a value before being used.`;
-    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `NameError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }
@@ -607,7 +666,28 @@ export class BuiltinReassignmentError extends RuntimeSourceError {
 
     const hint = `TypeError: cannot reassign built-in function '${name}'`;
     const suggestion = `You are trying to assign a value to '${name}', which is a built-in function. This is not allowed.`;
-    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
+    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
+    this.message = msg;
+  }
+}
+
+export class ModuleFunctionNotFoundError extends RuntimeSourceError {
+  constructor(source: string, moduleName: string, functionName: string, node: StmtNS.FromImport) {
+    super(node);
+    this.type = ErrorType.IMPORT;
+    const { lineIndex, fullLine } = getFullLine(source, node.startToken.indexInSource);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const errorPos = 0;
+    const indicator = createErrorIndicator(snippet, errorPos);
+
+    const hint = `ImportError: cannot import name '${functionName}' from '${moduleName}'`;
+    const suggestion = `The module '${moduleName}' does not have a function named '${functionName}', or it may not be exported. Check the module's documentation to see the list of available functions and ensure that '${functionName}' is correctly defined and exported in '${moduleName}'.`;
+    const msg = `ImportError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n${suggestion}`;
     this.message = msg;
   }
 }

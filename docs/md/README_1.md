@@ -28,18 +28,18 @@ textbook section that introduces it and a small example.
 
 Literal values are simple expressions that directly evaluate to values. These
 include numbers in the usual decimal notation, the two boolean values
-`True` and `False`, and the predeclared names `None`.
+`True` and `False`, and the value `None`.
 More on literal values in <a href="https://sourceacademy.org/sicpjs/1.1">section
 1.1 The Elements of Programming</a> of the textbook.
 
-### Variable declarations
+### Declaration assignments
 
-Variable declarations are done in Python § with <PRE><CODE>my_name = x + 2</CODE></PRE>
-Variables are created the moment a value is assigned to them using the `=` operator.
+Variables are declared in Python §1 with declaration assignments
+such as <PRE><CODE>my_name = x + 2</CODE></PRE>.
 In this statement, the variable `my_name` is bound to the result
 of evaluating `x + 2`. 
 You can read more about the <EM>scope of names</EM> in
-<a href="https://sourceacademy.org/sicpjs/1.1.8">section 1.1.8
+<a href="https://sourceacademy.org/sicpy/1.1.8">section 1.1.8
 Functions as Black-Box Abstractions</a>.
 
 ### Conditional statements and conditional expressions
@@ -50,10 +50,10 @@ gets evaluated or an <EM>alternative expression</EM>. This is done by writing,
 for example
 <PRE><CODE>return 7 if p() else f(y)</CODE></PRE>
 Read more on conditional expressions in
-<a href="https://sourceacademy.org/sicpjs/1.1.6">section 1.1.6
+<a href="https://sourceacademy.org/sicpy/1.1.6">section 1.1.6
 Conditional Expressions and Predicates</a>.
-<EM>Conditional evaluation</EM> is also possible within statements, for
-example the body of a function declaration. For that, you can use <EM>conditional
+<EM>Conditional evaluation</EM> is also possible in statements, for
+example the body of a function definition. For that, you can use <EM>conditional
 statements</EM>, for example:
 <PRE><CODE>if p(x):
     return 7
@@ -61,10 +61,10 @@ else:
     return f(y)
 </CODE></PRE>
 Read about <EM>conditional statements</EM> in
-<a href="https://sourceacademy.org/sicpjs/1.3.2">section 1.3.2
-Function Definition Expressions</a>.
+<a href="https://sourceacademy.org/sicpy/1.3.2">section 1.3.2
+Constructing Functions using Lambda Expressions</a>.
 
-### Function declarations and function definitions
+### Function definitions and lambda expressions
 
 A function declaration is a statement that declares a name and binds it
 to a function. For example

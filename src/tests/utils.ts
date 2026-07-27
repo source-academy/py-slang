@@ -1,19 +1,26 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
 import { ConductorError, ErrorType } from "@sourceacademy/conductor/common";
-import { StmtNS } from "../ast-types";
+import { ExprNS, StmtNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { CSEResultPromise, evaluate, IOptions } from "../engines/cse/interpreter";
 import { Stash, Value } from "../engines/cse/stash";
 import { displayError } from "../engines/cse/streams";
-import { SVMLCompiler } from "../engines/svml/svml-compiler";
-import { SVMLInterpreter } from "../engines/svml/svml-interpreter";
+import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
+import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { RuntimeSourceError } from "../errors";
 import { parse } from "../parser/parser-adapter";
-import { Resolver } from "../resolver";
+import { analyzeWithEnvironments, Resolver } from "../resolver";
+import { RunError, VARIANT_GROUPS } from "../runner";
+import { runCodePvmlDetailed } from "../pvml-runner";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
-import { Group } from "../stdlib/utils";
+import { Group, toPythonFloat, toPythonString } from "../stdlib/utils";
+import { Token, TokenType } from "../tokenizer";
 import { PyComplexNumber, RecursivePartial, Result } from "../types";
-import { makeValidatorsForChapter } from "../validator";
+import { FeatureNotSupportedError, makeValidatorsForChapter } from "../validator";
+import { BreakContinueOutsideLoopError } from "../validator/types";
 import Stmt = StmtNS.Stmt;
 
 /**
@@ -172,6 +179,7 @@ export const generateMockStreams = (context: Context, output: OutputType[]) => {
     stdin: {
       stream: stdinStream,
       reader: stdinStream.getReader(),
+      setNextPrompt: () => {},
     },
   };
 };
@@ -262,70 +270,1270 @@ export const generateTestCases = (testCases: TestCases, variant: number, groups:
 };
 
 // ---------------------------------------------------------------------------
-// SVML test utilities
+// PVML test utilities
 // ---------------------------------------------------------------------------
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ErrorClass = new (...args: any[]) => Error;
 
 /**
- * Expected value for an SVML test case.
- * SVML's toJSValue returns JS primitives directly, so no bigint or PyComplexNumber.
- * `undefined` means the expression should evaluate to Python None / no return value.
+ * Marks a whole-number PVMLTestExpectedValue as a Python float, not an int
+ * (e.g. `asFloat(180)` for `math_degrees(math_pi) == 180.0`, not `180`) —
+ * needed because a plain whole-number `number` here means int by default
+ * (this table's own long-established convention: `["1 + 1", 2, null]` means
+ * the bigint `2n`, not the float `2.0`), and JS's `Number.isInteger(180)`
+ * can't otherwise tell "180" and "180.0" apart to know when that default is
+ * wrong. Real Python's own math module has plenty of these: `math_fmod`,
+ * `math_remainder`, `math_copysign`, `math_ldexp`, `math_exp2`, `math_gamma`,
+ * `math_degrees`, `math_erf`/`math_erfc`, `math_fabs` all return float even
+ * for whole-number inputs/outputs, verified against real CPython.
  */
-export type SVMLTestExpectedValue = number | boolean | string | null | undefined | ErrorClass;
+class PyFloatMarker {
+  constructor(public readonly value: number) {}
+}
+export function asFloat(value: number): PyFloatMarker {
+  return new PyFloatMarker(value);
+}
 
 /**
- * Same shape as TestCases but with SVML-compatible expected values.
+ * Expected value for an PVML test case.
+ * Python `int` results come back from toJSValue as a genuine JS `bigint`
+ * (see PVMLType.BIGINT) — expressed here as a plain `number` for test-table
+ * brevity; runTestCase() below compares a bigint result against it by value
+ * (`Number(result) === expected`), not by `toBe`/`Object.is`. A whole-number
+ * float result (as opposed to this dialect's own int-returning arithmetic)
+ * needs `asFloat(...)` instead — see its doc comment above — a fractional
+ * `number` (e.g. `3.14`) is unambiguous and needs no wrapper. Complex-valued
+ * results have no dedicated variant here either — assert them via str()
+ * (e.g. `["str(1+2j)", "(1+2j)", null]`), same idea.
+ * `undefined` means "don't check a result value at all" (e.g. the program's
+ * last statement isn't an expression, or is already an explicit print()
+ * call whose own return value isn't the point) — for Python `None` itself,
+ * use `null`.
+ */
+export type PVMLTestExpectedValue =
+  | number
+  | boolean
+  | string
+  | null
+  | undefined
+  | ErrorClass
+  | PyFloatMarker;
+
+/**
+ * Same shape as TestCases but with PVML-compatible expected values.
  * Each tuple: [code, expected, output].
  *   - expected: a JS primitive, undefined, null, or an Error subclass (for expected throws)
  *   - output: expected print outputs, or null if none expected
  */
-export type SVMLTestCases = Record<string, [string, SVMLTestExpectedValue, string[] | null][]>;
+export type PVMLTestCases = Record<string, [string, PVMLTestExpectedValue, string[] | null][]>;
 
-export const generateSVMLTestCases = (testCases: SVMLTestCases) => {
+/** Reasons a test case is skipped for the PVML compiler + PVMLInterpreter pathway,
+ * checked in order — mirrors NATIVE_PYNTER_SKIP_REASONS below, for the same
+ * reason: a case that's genuinely out of this pathway's scope should be a
+ * labeled skip, not a failure someone has to keep re-diagnosing as "known".
+ * Currently empty: parse()/tokenize()/apply_in_underlying_python() are all
+ * wired up (see builtins.ts) — PARSE_FEATURE_CALL_RE below is only used by
+ * NATIVE_PYNTER_SKIP_REASONS now, native Pynter being the pathway that
+ * genuinely still doesn't (and won't) support them. */
+const PVML_SKIP_REASONS: {
+  matches: (code: string) => boolean;
+  reason: string;
+}[] = [];
+
+/**
+ * @param variant The Python chapter to compile test cases for (default 4, the
+ * broadest — matches PyPvmlEvaluator's own hardcoded chapter). Matters both
+ * for chapter-gated operator semantics (`==`/`!=`/ordering's bool handling,
+ * `is`/`is not`) and for which chapter's validators (NoListsValidator,
+ * NoIsOperatorValidator, ...) apply during resolution.
+ * @param groups Stdlib groups to load — same as generateTestCases()'s
+ * `groups` param. Defaults to `[misc, math]` (this pathway's own previous,
+ * implicit default) rather than `[]`, so existing callers that don't
+ * override it keep seeing `print`/etc. Each group's SICPy prelude (if any)
+ * is compiled and run once per test case, into the same PVMLInterpreter
+ * globalEnv the case itself then runs against (PVMLCompiler's `useGlobalMap`
+ * mode — see its doc comment), so prelude-defined functions (e.g.
+ * `pair`/`head` from linkedList) are callable from the case. Each case gets
+ * a *fresh* globalEnv — unlike PyPvmlEvaluator's REPL semantics, cases here
+ * are independent of one another, matching generateTestCases()/
+ * generateNativePynterTestCases().
+ */
+/**
+ * A Python script has no return value of its own (see pvml-compiler.ts's
+ * visitFileInputStmt doc comment) — PVMLInterpreter.execute() always yields
+ * `undefined`. To let this test harness still check "what did the last
+ * expression evaluate to", it uses the same technique a real Python program
+ * would (and the exact one used elsewhere in this file's own generatePVMLTestCases
+ * call sites): print() the expression. If the program's last top-level
+ * statement is a bare expression, this rewrites it (in the already-parsed
+ * AST, not by re-serializing/re-parsing source text, so an expression with
+ * its own side effects is evaluated exactly once) into `print(<that
+ * expression>)`, and the last captured output line is compared against
+ * `expected`'s Python str() form — see expectedToPythonStr below. Requires
+ * `print` to be resolvable (i.e. the `misc` group, in scope for every
+ * generatePVMLTestCases call site below).
+ */
+function wrapLastExpressionInPrint(ast: StmtNS.FileInput): boolean {
+  const last = ast.statements[ast.statements.length - 1];
+  if (!(last instanceof StmtNS.SimpleExpr)) return false;
+  const token = new Token(TokenType.NAME, "print", last.startToken.line, 0, -1);
+  token.synthetic = true;
+  const printCallee = new ExprNS.Variable(token, token, token);
+  const call = new ExprNS.Call(last.startToken, last.endToken, printCallee, [last.expression]);
+  ast.statements[ast.statements.length - 1] = new StmtNS.SimpleExpr(
+    last.startToken,
+    last.endToken,
+    call,
+  );
+  return true;
+}
+
+/**
+ * The exact string print()/str() would produce for a PVMLTestExpectedValue
+ * (excluding the ErrorClass case, handled separately by a throw check) —
+ * compared against captured print() output. `number` is ambiguous between a
+ * Python int and float (unlike CSE's own TestOutputValue, which has a
+ * separate bigint case): a whole-number `number` is presumed to mean an int
+ * result (e.g. `5` -> `"5"`) since that's this dialect's more common case,
+ * not a fact this function can know for certain — a case where the actual
+ * result is a float (e.g. math_remainder, which always returns float in
+ * real Python even for int inputs) needs its own table entry using a
+ * non-integer-shaped expectation, or gets caught and corrected the same way
+ * pvml-interpreter.test.ts's math_remainder/math_ldexp cases were: run it,
+ * see what it actually prints, verify against real CPython, fix the table.
+ */
+function expectedToPythonStr(expected: number | boolean | string | null): string {
+  if (expected === null) return "None";
+  if (typeof expected === "boolean") return expected ? "True" : "False";
+  if (typeof expected === "string") return expected;
+  if (Number.isInteger(expected)) return String(expected);
+  return toPythonFloat(expected);
+}
+
+export const generatePVMLTestCases = (
+  testCases: PVMLTestCases,
+  variant: number = 4,
+  groups: Group[] = [misc, math],
+) => {
+  const preludeText = groups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+
+  /** Runs `script` against `globalEnv` (mutated in place). `capturedResult` is the printed text
+   * from wrapLastExpressionInPrint's auto-wrap (popped off `outputs` before returning, so it
+   * doesn't get mixed up with the code's own explicit print() calls) — `undefined` if the script's
+   * last statement wasn't a bare expression, i.e. nothing to capture. Compiles+resolves fresh each
+   * call, using whatever names are already in `globalEnv` (from an earlier call with the same map,
+   * e.g. the prelude) so this script can reference them. */
+  const runAgainstGlobalEnv = (
+    script: string,
+    globalEnv: Map<string, PVMLBoxType>,
+    wantsCapture: boolean = false,
+  ): { capturedResult: string | undefined; outputs: string[] } => {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    // Only auto-wrap when the test case actually wants to observe a result
+    // (expected !== undefined) -- a case with expected: undefined isn't
+    // necessarily "the last statement isn't an expression" (e.g. a bare
+    // `print("hello")` call as the whole program *is* a SimpleExpr, but
+    // wrapping it again would double-call print, printing "None" for the
+    // inner call's own None return value instead of "hello").
+    const wrapped = wantsCapture && wrapLastExpressionInPrint(ast);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      variant,
+      groups,
+      [],
+      Array.from(globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const outputs: string[] = [];
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => outputs.push(msg),
+      globalEnv,
+      programText: script,
+    });
+    interpreter.execute();
+    const capturedResult = wrapped ? outputs.pop() : undefined;
+    return { capturedResult, outputs };
+  };
+
+  type PVMLInternalCase = {
+    code: string;
+    expected: PVMLTestExpectedValue;
+    output: string[] | null;
+    label: string;
+  };
+
+  const runTestCase = ({ code, expected, output }: PVMLInternalCase) => {
+    const globalEnv = new Map<string, PVMLBoxType>();
+    if (preludeText.trim()) {
+      runAgainstGlobalEnv(preludeText, globalEnv);
+    }
+
+    if (typeof expected === "function") {
+      expect(() => runAgainstGlobalEnv(code, globalEnv)).toThrow(expected);
+      return;
+    }
+
+    const { capturedResult, outputs } = runAgainstGlobalEnv(
+      code,
+      globalEnv,
+      expected !== undefined,
+    );
+
+    if (expected === undefined) {
+      expect(capturedResult).toBeUndefined();
+    } else if (
+      expected instanceof PyFloatMarker ||
+      (typeof expected === "number" && !Number.isInteger(expected))
+    ) {
+      // Genuine floating-point computation (log, gamma, sqrt, ...) can legitimately differ in
+      // the last ULP depending on computation order/platform -- exact string comparison is too
+      // strict here, unlike the int/bool/string/None cases below, which have no such ambiguity.
+      const wanted = expected instanceof PyFloatMarker ? expected.value : expected;
+      expect(Number(capturedResult)).toBeCloseTo(wanted);
+    } else {
+      expect(capturedResult).toBe(expectedToPythonStr(expected));
+    }
+
+    if (output !== null) {
+      expect(outputs).toEqual(output);
+    }
+  };
+
   for (const [sectionName, tests] of Object.entries(testCases)) {
     describe(sectionName, () => {
-      test.each(
-        tests.map(([code, expected, output]) => ({
-          code,
-          expected,
-          output,
-          label: typeof expected === "function" ? expected.name : JSON.stringify(expected),
-        })),
-      )("$code → $label", ({ code, expected, output }) => {
-        const source = code.endsWith("\n") ? code : code + "\n";
-        if (typeof expected === "function") {
-          expect(() => {
-            const ast = parse(source);
-            const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-            new SVMLInterpreter(program).execute();
-          }).toThrow(expected);
-          return;
+      const internalCases: PVMLInternalCase[] = tests.map(([code, expected, output]) => ({
+        code,
+        expected,
+        output,
+        label:
+          typeof expected === "function"
+            ? expected.name
+            : expected instanceof PyFloatMarker
+              ? `${expected.value}.0`
+              : JSON.stringify(expected),
+      }));
+
+      const supported: PVMLInternalCase[] = [];
+      const skipBuckets = new Map<string, PVMLInternalCase[]>();
+      for (const testCase of internalCases) {
+        const reason = PVML_SKIP_REASONS.find(({ matches }) => matches(testCase.code))?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
+        } else {
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
+        }
+      }
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)("$code → $label", runTestCase);
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$code → $label (${reason})`, runTestCase);
+      }
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Native Pynter (pvml/pynter) parity test utilities
+//
+// Reruns the same `TestCases` tables used by generateTestCases() (the CSE
+// suite) against the PVML compiler + a native Pynter `runner` binary, to
+// track how far the pvml/pynter pathway currently is from CSE parity.
+//
+// Opt-in: set PYNTER_RUNNER_PATH to a built `runner` binary
+// (https://github.com/source-academy/pynter#build-locally) to enable these.
+// Skipped entirely otherwise, since CI doesn't build the native binary.
+// Failures are expected and informative here, not a sign of broken infra —
+// see README.md's "Running the standalone CLI (repl)" section for the
+// pathway's known, current limitations.
+// ---------------------------------------------------------------------------
+
+/**
+ * Compares a Pynter float result against the CSE (float64) reference value.
+ * Pynter's floats are IEEE-754 single-precision, so the reference value must
+ * be rounded to float32 before comparing — otherwise every comparison is
+ * inflated by the fp64→fp32 rounding a *correct* Pynter would also incur.
+ * The tolerance is relative to that rounded value's magnitude (a fixed
+ * absolute tolerance is meaningless once a value exceeds a few thousand, and
+ * too generous once it's near zero), with a generous ULP budget on top to
+ * absorb rounding compounded across chained float32 arithmetic (loops,
+ * transcendental functions) rather than a single operation.
+ */
+const FLOAT32_EPSILON = Math.pow(2, -23);
+const FLOAT32_ULP_BUDGET = 4096;
+
+export function isCloseToFloat32(actual: unknown, wanted: number): boolean {
+  if (typeof actual !== "number") return false;
+  if (Number.isNaN(wanted)) return Number.isNaN(actual);
+  const rounded = Math.fround(wanted);
+  if (!Number.isFinite(rounded)) return actual === rounded;
+  const tolerance = FLOAT32_EPSILON * FLOAT32_ULP_BUDGET * Math.max(Math.abs(rounded), 1);
+  return Math.abs(actual - rounded) <= tolerance;
+}
+
+/**
+ * Matches a call to parse()/tokenize(): these turn SICPy source text into a
+ * data structure for py-slang's own metacircular-evaluator feature (chapter
+ * 4's stdlib/parser.ts). That's not a Python 3 language or library feature —
+ * it has no meaningful analogue once a program is compiled to bytecode and
+ * run on a VM like Pynter, so it's out of scope for parity here regardless
+ * of Pynter's own capabilities. Deliberately doesn't also match
+ * apply_in_underlying_python() (same parser.ts group, same chapter-4-only
+ * status) even though that'd be right for native-Pynter purposes too — this
+ * predicate is shared with CPYTHON_SKIP_REASONS below, where
+ * apply_in_underlying_python is the deliberate exception (it has a real
+ * CPython equivalent, sicp.mce, unlike parse()/tokenize() themselves — see
+ * parser-stdlib.test.ts's own comment on its generateCPythonTestCases call).
+ * See involvesChapter4OnlyParserFeature below for the native-Pynter-only version.
+ */
+const PARSE_FEATURE_CALL_RE = /\b(?:parse|tokenize)\s*\(/;
+
+function involvesParseFeature(code: string): boolean {
+  return PARSE_FEATURE_CALL_RE.test(code);
+}
+
+/**
+ * Matches a call to apply_in_underlying_python(): same stdlib/parser.ts
+ * group as parse()/tokenize() (see PARSE_FEATURE_CALL_RE just above), same
+ * chapter-4-only status, same "out of scope for native Pynter" conclusion —
+ * native Pynter only ever targets chapter 3 (see pynter/README.md), and the
+ * parser group isn't even part of VARIANT_GROUPS[3] (parser-stdlib.test.ts
+ * has to override the group list explicitly just to reach this function at
+ * all). Kept separate from involvesParseFeature/PARSE_FEATURE_CALL_RE
+ * because that predicate is shared with CPYTHON_SKIP_REASONS below, where
+ * apply_in_underlying_python is deliberately NOT skipped (unlike parse/
+ * tokenize, it has a real CPython equivalent to compare against).
+ */
+const APPLY_IN_UNDERLYING_PYTHON_RE = /\bapply_in_underlying_python\s*\(/;
+
+function involvesChapter4OnlyParserFeature(code: string): boolean {
+  return involvesParseFeature(code) || APPLY_IN_UNDERLYING_PYTHON_RE.test(code);
+}
+
+/** Reasons a test case is skipped for the native Pynter pathway, checked in order. */
+const NATIVE_PYNTER_SKIP_REASONS: {
+  matches: (code: string, expected: TestExpectedValue) => boolean;
+  reason: string;
+}[] = [
+  {
+    matches: code => involvesChapter4OnlyParserFeature(code),
+    reason: "parse()/tokenize()/apply_in_underlying_python() aren't part of Python 3",
+  },
+  {
+    // Not a bug: native Pynter's complex components are single-precision
+    // (float32, matching this VM's existing scalar float width — see
+    // pynter's siheap_complex_t), and 1e200 vastly exceeds float32's
+    // ~3.4e38 max, so hypotf(1e200f, 0) overflows to +Infinity. An exact
+    // one-off match (not a general "any huge complex" predicate) since this
+    // is the only test case exercising a value this far outside float32's
+    // range.
+    matches: code => code === "abs(1e200+0j)",
+    reason: "native Pynter's complex components are float32, which 1e200 overflows",
+  },
+  {
+    // Each has its own individual, unrelated-to-complex-numbers root cause:
+    //  - abs(-2147483648) / abs(2147483647): native Pynter's ints are
+    //    32-bit (unlike CSE's arbitrary-precision bigint) — exactly the
+    //    "let's not worry about bigints" limitation already accepted for
+    //    this pathway, just not previously visible.
+    //  - `'x' is not 'x'` / `hello is 'hello'`: not a real gap. Python's
+    //    language spec makes no promise about string identity at all —
+    //    CPython's small-string/literal interning is its own implementation
+    //    detail, not something a conforming implementation must reproduce.
+    //    Native Pynter allocating a fresh heap string per literal occurrence
+    //    is an equally valid choice; this is CSE and native Pynter making
+    //    different (both legitimate) choices on unspecified behavior, not
+    //    native Pynter being wrong. Kept here as a documented, accepted
+    //    divergence, not a bug to fix.
+    matches: code =>
+      new Set([
+        "abs(-2147483648)",
+        "abs(2147483647)",
+        "'x' is not 'x'",
+        "hello = 'hello'\nhello is 'hello'",
+      ]).has(code),
+    reason: "known, pre-existing native-Pynter gap unrelated to complex numbers",
+  },
+];
+
+/**
+ * Reruns `testCases` (as already used with generateTestCases() for the CSE
+ * machine) through the PVML compiler + native Pynter, at the given chapter
+ * `variant`. See the file-level comment above for gating/expectations.
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups,
+ * matching whatever non-default combination the sibling generateTestCases()
+ * call for the same suite uses (e.g. stream tests run CSE at variant 2 with
+ * extra `stream`/`pairmutator` groups layered on).
+ */
+export const generateNativePynterTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+) => {
+  // Pynter's target is Python (SICPy) §3 specifically (see pynter/README.md) —
+  // every native-Pynter test case must be posed as a §3 program, regardless of
+  // which chapter the sibling generateTestCases() call for the same suite uses.
+  if (variant !== 3) {
+    throw new Error(
+      `generateNativePynterTestCases: Pynter only supports Python §3; got variant ${variant}.`,
+    );
+  }
+
+  const pynterPath = process.env.PYNTER_RUNNER_PATH;
+  const describeBlock = pynterPath ? describe : describe.skip;
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describeBlock(`[pvml/pynter] ${funcName}`, () => {
+      const runTestCase = async ({ code, expected, output }: InternalTestCase) => {
+        let result;
+        try {
+          result = await runCodePvmlDetailed(code, variant, {
+            pynterPath: pynterPath!,
+            groups,
+            captureLastExpression: typeof expected !== "function",
+          });
+        } catch (e) {
+          if (typeof expected === "function") {
+            // CSE also expects a failure here; any RunError counts as agreement.
+            expect(e).toBeInstanceOf(RunError);
+            return;
+          }
+          throw e;
         }
 
-        const outputs: string[] = [];
-        const ast = parse(source);
-        const program = SVMLCompiler.fromProgram(ast).compileProgram(ast);
-        const interpreter = new SVMLInterpreter(program, {
-          sendOutput: msg => outputs.push(msg),
-        });
-        const result = SVMLInterpreter.toJSValue(interpreter.execute());
-
-        if (expected === undefined) {
-          expect(result).toBeUndefined();
-        } else if (expected === null) {
-          expect(result).toBeNull();
-        } else if (typeof expected === "number" && !Number.isInteger(expected)) {
-          expect(result).toBeCloseTo(expected);
-        } else {
-          expect(result).toBe(expected);
+        if (typeof expected === "function") {
+          throw new Error(
+            `Expected an error (${expected.name}), but pvml/pynter completed with ` +
+              `captured result: ${result.capturedResult}`,
+          );
         }
 
         if (output !== null) {
-          expect(outputs).toEqual(output);
+          expect(result.output).toBe(output.map(line => `${line}\n`).join(""));
         }
-      });
+
+        if (typeof expected === "number") {
+          expect(isCloseToFloat32(Number(result.capturedResult), expected)).toBe(true);
+        } else if (expected instanceof PyComplexNumber) {
+          if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
+            // NaN never round-trips through isCloseToFloat32 (never "close
+            // to" anything, including itself) — compare the printed string
+            // directly instead, same as the plain-float NaN case elsewhere
+            // in this file.
+            expect(result.capturedResult).toBe(expected.toString());
+          } else {
+            // Native Pynter's own printer (pynter/vm/include/pynter/display.h)
+            // doesn't wrap non-zero-real values in parens the way
+            // PyComplexNumber.toString() does, but fromString() accepts either
+            // form, so no stripping needed here.
+            const parsed = PyComplexNumber.fromString(result.capturedResult ?? "");
+            expect(isCloseToFloat32(parsed.real, expected.real)).toBe(true);
+            expect(isCloseToFloat32(parsed.imag, expected.imag)).toBe(true);
+          }
+        } else {
+          expect(result.capturedResult).toBe(toPythonString(testOutputValueToCseValue(expected)));
+        }
+      };
+
+      const internalTestCases = createInternalTestCases(tests);
+      const supported: InternalTestCase[] = [];
+      const skipBuckets = new Map<string, InternalTestCase[]>();
+      for (const testCase of internalTestCases) {
+        const reason = NATIVE_PYNTER_SKIP_REASONS.find(({ matches }) =>
+          matches(testCase.code, testCase.expected),
+        )?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
+        } else {
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
+        }
+      }
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases in each bucket.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$label (${reason})`, runTestCase);
+      }
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// PVML-in-browser parity test utilities
+//
+// Reruns the same `TestCases` tables already used with generateTestCases()
+// (the CSE machine) and generateNativePynterTestCases() (native Pynter)
+// against the PVML compiler + PVMLInterpreter — the pure-TypeScript
+// "PVML-in-browser" VM (see pvml-runner.ts's runCodePvmlInterpreterDetailed).
+// No native binary is involved, so — unlike generateNativePynterTestCases,
+// gated behind PYNTER_RUNNER_PATH — this runs unconditionally. Unlike native
+// Pynter (§3 only, see runCodePvmlDetailed's doc comment), the in-browser
+// interpreter supports all four SICPy chapters, so `variant` is a required
+// parameter here, matching generateTestCases()'s own signature, rather than
+// hardcoded to 3 — callers should pass the same variant as their sibling
+// generateTestCases() call for the same table.
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether `expr` is a bare call to `print`/`display` (both the same
+ * primitive — see builtins.ts's PRIMITIVE_FUNCTIONS, index 5). A shared
+ * TestCases table entry occasionally already ends in one of these itself
+ * (e.g. parser-stdlib.test.ts's `'print(parse("42"))'`, printing a parsed
+ * data structure as its own way of observing it), with `expected: null` for
+ * that call's own (always-None) return value — the auto-wrap below must not
+ * wrap such a case again (`print(print(...))`), or it would print an extra
+ * "None" line and corrupt the `output` assertion.
+ */
+function isBarePrintCall(expr: ExprNS.Expr): boolean {
+  return (
+    expr instanceof ExprNS.Call &&
+    expr.callee instanceof ExprNS.Variable &&
+    (expr.callee.name.lexeme === "print" || expr.callee.name.lexeme === "display")
+  );
+}
+
+/**
+ * Converts a TestOutputValue (see TestCases' own doc comment) into a CSE
+ * `Value`, so it can be rendered with the exact same toPythonString() the
+ * PVML print() builtin itself uses (see builtins.ts case 5) — comparing the
+ * two engines' output through one shared formatter, rather than a second
+ * hand-written one that could drift from either.
+ */
+function testOutputValueToCseValue(v: TestOutputValue): Value {
+  if (v === null) return { type: "none" };
+  if (typeof v === "bigint") return { type: "bigint", value: v };
+  if (typeof v === "number") return { type: "number", value: v };
+  if (typeof v === "boolean") return { type: "bool", value: v };
+  if (typeof v === "string") return { type: "string", value: v };
+  if (v instanceof PyComplexNumber) return { type: "complex", value: v };
+  return { type: "list", value: v.map(testOutputValueToCseValue) };
+}
+
+/**
+ * Reruns `testCases` through the PVML compiler + PVMLInterpreter (in-browser),
+ * at the given chapter `variant`. A Python script has no return value of its
+ * own (see pvml-compiler.ts's visitFileInputStmt doc comment), so — exactly
+ * as generatePVMLTestCases and operator-conformance-pvml.test.ts already do
+ * — a case's last bare-expression statement is rewritten (in the parsed AST,
+ * not by re-serializing source, so a side-effecting expression still runs
+ * only once) into `print(<that expression>)`, unless it's already a bare
+ * print()/display() call (see isBarePrintCall, whose own return is always
+ * None). Captured output is then compared, as text, against `expected`
+ * rendered through the very same toPythonString() PVML's own print()
+ * builtin uses.
+ *
+ * `bigint`/`bool`/`string`/`null`/`list` expected values are compared
+ * exactly — this dialect's ints are arbitrary-precision (LGCBI, not a
+ * float-precision-limited encoding) and every other case has no
+ * floating-point imprecision to account for. A top-level `number` (always a
+ * Python float here — a whole-number *int* result uses TestOutputValue's
+ * `bigint` variant instead) is compared with `toBeCloseTo` rather than exact
+ * text, and a `complex` result's real/imag parts likewise: a math builtin
+ * (or complex arithmetic itself) needing its own numerical approximation
+ * (gamma, erf, ...) can differ from CSE's own implementation in the last ULP
+ * without either being wrong — matching the tolerance generateTestCases()
+ * already applies to these same table entries (see its own `expect.closeTo`
+ * on both `number` and `complex`'s `real`/`imag`).
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups,
+ * matching whatever non-default combination the sibling generateTestCases()/
+ * generateNativePynterTestCases() call for the same suite uses (e.g. stream
+ * tests add `stream`/`pairmutator` groups on top). Each group's prelude is
+ * compiled and run once per test case into a *fresh* globalEnv — mirroring
+ * generatePVMLTestCases' own per-case prelude handling — so prelude-defined
+ * functions (e.g. `equal`/`map`/`reverse` from linkedList) are callable from
+ * the case, with no state leaking between cases.
+ *
+ * `knownGaps` — exact `code` strings (from this same `testCases` table) that
+ * are known to currently fail against the in-browser pathway — are
+ * registered as `test.skip.each` with a reason pointing at
+ * https://github.com/source-academy/py-slang/issues/258, instead of failing
+ * the suite. This mirrors PVML_SKIP_REASONS/NATIVE_PYNTER_SKIP_REASONS'
+ * pattern of a labeled, visible skip rather than silently dropping a case,
+ * but keyed to an exact, enumerated list rather than a matcher predicate:
+ * these are real, uncategorized behavioral gaps (missing builtins, a
+ * prelude-closure-linking crash, scoping bugs — see the issue), not a
+ * structural "this pathway doesn't support X at all" carve-out a predicate
+ * could describe cleanly, so an exact match keeps this from ever silently
+ * swallowing a *new*, different failure in the same table.
+ */
+export const generatePvmlInBrowserTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+  knownGaps: string[] = [],
+) => {
+  const knownGapSet = new Set(knownGaps);
+  const resolvedGroups = groups ?? VARIANT_GROUPS[variant];
+  if (!resolvedGroups) {
+    throw new Error(`generatePvmlInBrowserTestCases: invalid variant ${variant}. Expected 1-4.`);
+  }
+  const preludeText = resolvedGroups
+    .map(g => g.prelude ?? "")
+    .filter(p => p.trim())
+    .join("\n");
+
+  /** Compiles+runs `script` fresh against `globalEnv` (mutated in place),
+   * using whatever names are already in it (e.g. from an earlier prelude
+   * run). Mirrors generatePVMLTestCases' own runAgainstGlobalEnv, plus the
+   * isBarePrintCall double-wrap guard described above. */
+  const runAgainstGlobalEnv = (
+    script: string,
+    globalEnv: Map<string, PVMLBoxType>,
+    wantsCapture: boolean = false,
+  ): { capturedResult: string | undefined; outputs: string[] } => {
+    const source = script.endsWith("\n") ? script : script + "\n";
+    const ast = parse(source);
+    const last = ast.statements[ast.statements.length - 1];
+    const alreadyPrints = last instanceof StmtNS.SimpleExpr && isBarePrintCall(last.expression);
+    const wrapped = wantsCapture && !alreadyPrints && wrapLastExpressionInPrint(ast);
+    const { errors, environments } = analyzeWithEnvironments(
+      ast,
+      source,
+      variant,
+      resolvedGroups,
+      [],
+      Array.from(globalEnv.keys()),
+    );
+    if (errors.length > 0) {
+      throw errors[0];
+    }
+    const compiler = PVMLCompiler.fromProgram(ast, variant, environments, true);
+    const program = compiler.compileProgram(ast);
+    const outputs: string[] = [];
+    const interpreter = new PVMLInterpreter(program, {
+      sendOutput: msg => outputs.push(msg),
+      globalEnv,
+      programText: script,
+    });
+    interpreter.execute();
+    const capturedResult = wrapped
+      ? outputs.pop()
+      : wantsCapture && alreadyPrints
+        ? "None"
+        : undefined;
+    return { capturedResult, outputs };
+  };
+
+  const runTestCase = ({ code, expected, output }: InternalTestCase) => {
+    const globalEnv = new Map<string, PVMLBoxType>();
+    if (preludeText.trim()) {
+      runAgainstGlobalEnv(preludeText, globalEnv);
+    }
+
+    if (typeof expected === "function") {
+      expect(() => runAgainstGlobalEnv(code, globalEnv)).toThrow();
+      return;
+    }
+
+    const { capturedResult, outputs } = runAgainstGlobalEnv(code, globalEnv, true);
+
+    if (output !== null) {
+      expect(outputs).toEqual(output);
+    }
+
+    if (typeof expected === "number") {
+      if (Number.isNaN(expected)) {
+        // NaN isn't "close to" anything, including itself, so toBeCloseTo
+        // below would always fail here -- compare the printed "nan" string
+        // instead, same as the PyComplexNumber NaN case just below.
+        expect(capturedResult).toBe("nan");
+        return;
+      }
+      expect(Number(capturedResult)).toBeCloseTo(expected);
+    } else if (expected instanceof PyComplexNumber) {
+      if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
+        // NaN never round-trips through fromString()/toBeCloseTo below (NaN
+        // isn't "close to" anything, including itself) — and needs no
+        // tolerance anyway, since NaN/Infinity print deterministically, no
+        // floating-point rounding involved. Compare the captured string
+        // directly against the same toString() the interpreter's own
+        // print() used to produce it (mirrors generateTestCases()'s own
+        // `isNaN(expected.real) ? NaN : expect.closeTo(...)` special case).
+        expect(capturedResult).toBe(expected.toString());
+        return;
+      }
+      // Complex arithmetic is genuine floating-point computation too (not a
+      // fixed-precision encoding like bigint/bool/string/None) — real/imag
+      // parts get the same toBeCloseTo tolerance as a top-level `number`
+      // above, matching the tolerance generateTestCases() itself already
+      // applies to these same table entries (see its own `expect.closeTo`
+      // on `real`/`imag`). toPythonString()'s complex format wraps
+      // non-zero-real values in parens (see PyComplexNumber.toString()),
+      // which fromString() doesn't accept back, so strip them first.
+      const parsed = PyComplexNumber.fromString((capturedResult ?? "").replace(/^\(|\)$/g, ""));
+      expect(parsed.real).toBeCloseTo(expected.real);
+      expect(parsed.imag).toBeCloseTo(expected.imag);
+    } else {
+      expect(capturedResult).toBe(toPythonString(testOutputValueToCseValue(expected)));
+    }
+  };
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describe(`[pvml-in-browser] ${funcName}`, () => {
+      const internalCases = createInternalTestCases(tests);
+      const supported = internalCases.filter(({ code }) => !knownGapSet.has(code));
+      const skipped = internalCases.filter(({ code }) => knownGapSet.has(code));
+
+      // test.each throws if given an empty array, rather than registering zero
+      // tests, so only call it for groups that actually have cases.
+      if (supported.length > 0) {
+        test.each(supported)(`$label`, runTestCase);
+      }
+      if (skipped.length > 0) {
+        test.skip.each(skipped)(
+          `$label (known PVML-in-browser gap, see py-slang#258)`,
+          runTestCase,
+        );
+      }
+    });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// CPython parity test utilities (issue #224)
+//
+// Reruns the same `TestCases` tables used by generateTestCases() (the CSE
+// suite) against real CPython + the `sourceacademy-sicp` package
+// (python/sicp/), so that a program's *entire result*, not just the library's
+// own pytest suite, is checked against the actual reference implementation
+// students eventually run their code on. One persistent `python3` subprocess
+// per describe block (scripts/cpython_batch_runner.py), fed every case as a
+// single JSON batch — the suite has thousands of cases, so a process spawned
+// per case would dominate the runtime.
+//
+// Opt-in: set CPYTHON_PATH to a `python3` binary (python/sicp/ is added to
+// its sys.path by the runner script itself — no install needed). Skipped
+// entirely otherwise, since CI doesn't have Python available by default.
+//
+// Unlike native-Pynter parity, a fair number of cases here are *expected* to
+// disagree with CPython by design, not because a pathway is behind on a
+// shared spec: Source Academy Python's own pedagogical restrictions (chapter-
+// gated syntax, `is` restricted to reference types, bool excluded from
+// arithmetic) have no CPython equivalent to compare against. Those are
+// filtered by CPYTHON_SKIP_REASONS the same way native-Pynter skips things
+// Pynter's VM can't do — the two lists barely overlap, since they're skipping
+// for opposite reasons (CPython is *more* permissive than this dialect,
+// Pynter is *less*). As with native-Pynter, failures that make it through the
+// skip list are informative, not necessarily a sign of broken infra — see
+// README.md.
+// ---------------------------------------------------------------------------
+
+const CPYTHON_BATCH_RUNNER = path.join(__dirname, "..", "..", "scripts", "cpython_batch_runner.py");
+
+/** A JSON-number-unsafe float value, round-tripped through the batch runner as a tagged string
+ * (JSON has no Infinity/NaN). */
+type CPythonFloat = number | "nan" | "inf" | "-inf";
+
+type CPythonValue =
+  | { type: "none" }
+  | { type: "bool"; value: boolean }
+  | { type: "int"; value: string }
+  | { type: "float"; value: CPythonFloat }
+  | { type: "complex"; value: { real: CPythonFloat; imag: CPythonFloat } }
+  | { type: "str"; value: string }
+  | { type: "list"; value: CPythonValue[] }
+  | { type: "other"; repr: string };
+
+interface CPythonCaseResult {
+  id: string;
+  output: string[];
+  error: string | null;
+  result: CPythonValue | null;
+}
+
+/** Runs `cases` through scripts/cpython_batch_runner.py in one subprocess, keyed by id. Throws if
+ * the runner itself couldn't execute (missing python3, sicp/ not importable, ...) — an individual
+ * case's own Python-level error is captured in its own result, not thrown here. */
+function runCPythonBatch(
+  pythonPath: string,
+  cases: { id: string; code: string }[],
+): Map<string, CPythonCaseResult> {
+  const stdout = execFileSync(pythonPath, [CPYTHON_BATCH_RUNNER], {
+    input: JSON.stringify(cases),
+    encoding: "utf-8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  const results = JSON.parse(stdout) as CPythonCaseResult[];
+  return new Map(results.map(r => [r.id, r]));
+}
+
+function floatToComparable(n: number): CPythonFloat {
+  if (Number.isNaN(n)) return "nan";
+  if (n === Infinity) return "inf";
+  if (n === -Infinity) return "-inf";
+  return n;
+}
+
+/** Converts a CSE `TestOutputValue` to a value comparable with the batch runner's serialized
+ * result shape (same tagged-union shape on both sides). Unlike native-Pynter's comparison (see
+ * generateNativePynterTestCases), this needs no float32 rounding or complex-number exclusion —
+ * CPython has real doubles and real complex numbers, matching the CSE machine's own value model
+ * closely. `undefined` for a value the runner can't/doesn't decode (functions, etc.), same
+ * fallback native-Pynter's version uses. */
+function cpythonExpectedToComparable(expected: TestOutputValue): CPythonValue | undefined {
+  if (typeof expected === "bigint") return { type: "int", value: expected.toString() };
+  if (typeof expected === "number") return { type: "float", value: floatToComparable(expected) };
+  if (typeof expected === "boolean") return { type: "bool", value: expected };
+  if (typeof expected === "string") return { type: "str", value: expected };
+  if (expected === null) return { type: "none" };
+  if (expected instanceof PyComplexNumber) {
+    return {
+      type: "complex",
+      value: {
+        real: floatToComparable(expected.real),
+        imag: floatToComparable(expected.imag),
+      },
+    };
+  }
+  if (Array.isArray(expected)) {
+    const values = expected.map(cpythonExpectedToComparable);
+    if (values.some(v => v === undefined)) return undefined;
+    return { type: "list", value: values as CPythonValue[] };
+  }
+  return undefined;
+}
+
+/** Whether `expected` is a resolve-time chapter-gating restriction (a Python §<N> feature not
+ * being available yet — lists, `is`, loops, lambda, ... at an earlier chapter): purely a Source
+ * Academy Python pedagogical device with no CPython concept to compare against, since CPython has
+ * no notion of "chapter" at all — every one of these is valid CPython syntax regardless of which
+ * py-slang chapter validator is active. */
+function isChapterGatingError(expected: TestExpectedValue): boolean {
+  return (
+    typeof expected === "function" &&
+    (expected.prototype instanceof FeatureNotSupportedError ||
+      expected === FeatureNotSupportedError ||
+      expected.prototype instanceof BreakContinueOutsideLoopError ||
+      expected === BreakContinueOutsideLoopError)
+  );
+}
+
+/**
+ * Builtins that accept int/float/complex freely but specifically exclude `bool` — the actual
+ * "dialect deliberately excludes bool" surface `isBoolRejection` below is about. Confirmed against
+ * source, not guessed: every math.ts function using the shared `isNumeric()` helper (which
+ * excludes `bool` by construction — see its own doc comment) is `math_`-prefixed, plus misc.ts's
+ * `abs`/`max`/`min`/`round`, which reject `bool` via their own type switches for the same reason.
+ * Deliberately excludes lookalikes like `arity`/`len`, which also raise TypeError for an all-bool
+ * argument list but for an unrelated reason (not callable / no length) — seeing *any* value there,
+ * bool included, is genuinely wrong in both this dialect and CPython, not a bool-vs-int-subclass
+ * divergence, so those cases should still be checked against CPython, not skipped.
+ */
+const BOOL_EXCLUDING_NUMERIC_BUILTIN_RE = /^(?:abs|max|min|round|math_\w+)$/;
+
+/**
+ * Whether `code` is a call to one of the builtins above where every argument is a plain
+ * `True`/`False`/numeric literal, at least one of them `True`/`False`, and `expected` is an error:
+ * unlike CPython (where `bool` is an `int` subclass, so e.g. `abs(True) == 1`), this dialect
+ * deliberately excludes `bool` from every arithmetic/numeric builtin and operator (see
+ * `asIntIfBool`'s doc comment in operators.ts) — a pedagogical rule with no CPython equivalent, not
+ * a bug. High-volume: nearly every numeric builtin has one of these cases, so left unfiltered it
+ * would swamp genuinely interesting failures. Deliberately allows a *mix* of a bool literal with a
+ * plain numeric one (`math_fmod(True, 1)`, `math_remainder(1, True)`), not just an all-bool
+ * argument list — a multi-arg builtin's bool-rejection check can fire on either position, and
+ * CPython accepts the mixed call exactly as readily as the all-bool one (bool is still an int
+ * subclass either way). The "at least one bool" requirement is what keeps this from also matching
+ * an unrelated all-numeric domain-check case like `math_sqrt(-1)` (a genuine ValueError in both
+ * this dialect and CPython, not a bool-vs-int-subclass divergence at all).
+ */
+const BOOL_REJECTION_CALL_RE = /^(\w+)\(([^()]*)\)$/;
+const BOOL_OR_PLAIN_NUMERIC_ARG_RE = /^(?:True|False|-?\d+(?:\.\d+)?)$/;
+
+function isBoolRejection(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const match = BOOL_REJECTION_CALL_RE.exec(code.trim());
+  if (match === null || !BOOL_EXCLUDING_NUMERIC_BUILTIN_RE.test(match[1])) return false;
+  const args = match[2].split(",").map(a => a.trim());
+  return (
+    args.length > 0 &&
+    args.every(a => BOOL_OR_PLAIN_NUMERIC_ARG_RE.test(a)) &&
+    args.some(a => a === "True" || a === "False")
+  );
+}
+
+/**
+ * Matches a `while` loop whose condition is a bare non-comparison expression (a literal or an
+ * arithmetic/variable expression, with no comparison/boolean operator) -- e.g. `while 1:`,
+ * `while None:`, `while y + 1:`, but not `while i < 5:`. This dialect requires while-conditions to
+ * be exactly `bool`, unlike CPython's normal truthy/falsy semantics -- a pedagogical restriction
+ * with no CPython equivalent, like `isBoolRejection` above. Critical to skip, not just cosmetic:
+ * some of these (`while 1:`, `while y + 1:`) are genuine infinite loops under real CPython, since
+ * py-slang's error fires before the loop body ever runs but CPython has nothing to stop it -- left
+ * unfiltered, this hangs the whole batch runner (see issue #224 test-mode hang investigation).
+ */
+const WHILE_CONDITION_RE = /\bwhile\s+([^:\n]+):/;
+const COMPARISON_OR_BOOLEAN_OP_RE = /==|!=|<=|>=|<|>|\bin\b|\bis\b|\bnot\b|\band\b|\bor\b/;
+
+function isWhileNonBoolCondition(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const match = code.match(WHILE_CONDITION_RE);
+  return match !== null && !COMPARISON_OR_BOOLEAN_OP_RE.test(match[1]);
+}
+
+/**
+ * Whether `code`'s last line is a bare `==`/`!=` comparison and `expected` is an error: equality
+ * in real Python never raises TypeError for any combination of built-in types (int/float/bool/
+ * str/None/function/complex all fall back to identity-based comparison, returning False rather
+ * than erroring), but this dialect deliberately rejects `bool`/function operands in `==`/`!=` as a
+ * pedagogical restriction (see `docs/specs/python_typing_middle_12.tex`) -- so any such case is
+ * unconditionally a chapter-only divergence, never a real CPython error.
+ */
+function isEqualityOperatorError(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return /==|!=/.test(last);
+}
+
+/**
+ * Whether `code` is a bare arithmetic/ordering operator expression (`+ - * / % **  < > <= >=`)
+ * between a bool/int literal pair, expecting an error: like `isBoolRejection` above but for
+ * operator syntax rather than call syntax (`True + True`, `1 > True`, ...) -- `bool` being an
+ * `int` subclass in CPython means none of these raise, unlike this dialect's exclusion of `bool`
+ * from arithmetic/ordering. `*` between two bool/int literals is ordinary multiplication here
+ * (`True * True == 1`); it's only string operands that make `*` mean repetition, which is a
+ * different divergence (`isStringRepetition` below) and doesn't overlap with this pattern, since
+ * this one requires both operands to be bool/int literals. Deliberately excludes string/None/
+ * function operands (`'' > True` genuinely raises in CPython too, since only int/bool support
+ * these operators with each other) and excludes `==`/`!=` (handled by `isEqualityOperatorError`
+ * above, with its own, unconditional rationale).
+ */
+const BOOL_NUMERIC_OPERATOR_RE =
+  /^(True|False|\d+)\s*(\*\*|<=|>=|<|>|\+|-|\*|\/|%)\s*(True|False|\d+)$/;
+
+function isBoolNumericOperator(code: string, expected: TestExpectedValue): boolean {
+  return typeof expected === "function" && BOOL_NUMERIC_OPERATOR_RE.test(code.trim());
+}
+
+/**
+ * Whether `code` is `<string literal> * <int/bool literal>` (or reversed) expecting an error:
+ * CPython's `*` between a string and an int (or bool, an int subclass) is sequence repetition
+ * (`'ab' * 3 == 'ababab'`), which this dialect doesn't support at all -- unlike every other
+ * skip reason here, CPython is *more* capable in this one specific case, not just more permissive
+ * about bool.
+ */
+const STRING_REPETITION_RE =
+  /^(?:'[^']*'\s*\*\s*(?:True|False|\d+)|(?:True|False|\d+)\s*\*\s*'[^']*')$/;
+
+function isStringRepetition(code: string, expected: TestExpectedValue): boolean {
+  return typeof expected === "function" && STRING_REPETITION_RE.test(code.trim());
+}
+
+/**
+ * Whether `code`'s last line is `<list literal> * <True|False>` or `<True|False> * <list literal>`:
+ * real Python's `*` between a list and a bool (an int subclass) is ordinary list repetition
+ * (`[1, 2] * True == [1, 2]`), unlike this dialect's deliberate exclusion of bool as a list-repeat
+ * count (docs/specs/python_typing_middle_34.tex) -- same class of divergence as
+ * `isBoolNumericOperator` above, just for list operands instead of numeric ones.
+ */
+const LIST_BOOL_MULTIPLY_RE = /^\[[^\]]*\]\s*\*\s*(True|False)$|^(True|False)\s*\*\s*\[[^\]]*\]$/;
+
+function isListBoolMultiply(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return LIST_BOOL_MULTIPLY_RE.test(last);
+}
+
+/**
+ * Whether `code`'s last line subscripts (reads or assigns) with a bare `True`/`False` index
+ * (`xs[True]`, `xs[True] = 5`): real Python allows bool as a list index (bool being an int
+ * subclass, so `xs[True]` is just `xs[1]`), unlike this dialect's deliberate exclusion of bool as
+ * a list index (docs/specs/python_typing_middle_34.tex).
+ */
+const LIST_BOOL_SUBSCRIPT_RE = /\[(True|False)\](?:\s*=\s*.+)?$/;
+
+function isListBoolSubscript(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const lines = code.trim().split("\n");
+  const last = lines[lines.length - 1].trim();
+  return LIST_BOOL_SUBSCRIPT_RE.test(last);
+}
+
+/** Whether `code` is `-True` or `-False`: unary-minus form of the same bool/int-subclass
+ * divergence as `isBoolRejection`/`isBoolNumericOperator` above. */
+function isUnaryMinusBool(code: string, expected: TestExpectedValue): boolean {
+  const trimmed = code.trim();
+  return typeof expected === "function" && (trimmed === "-True" || trimmed === "-False");
+}
+
+/**
+ * Whether `code` is `not <non-bool>` expecting an error: real Python's `not` accepts any operand
+ * and uses its truthiness (`not 1` is `False`, `not ''` is `True`), unlike this dialect, which
+ * requires the operand to be exactly `bool`. Same restriction as `isWhileNonBoolCondition` above,
+ * applied to the unary `not` operator instead of a `while`-condition.
+ */
+function isNotNonBool(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const trimmed = code.trim();
+  if (!trimmed.startsWith("not ")) return false;
+  const operand = trimmed.slice(4).trim();
+  return operand !== "True" && operand !== "False";
+}
+
+/**
+ * Whether `code` is `<non-bool> and ...` / `<non-bool> or ...` expecting an error: like
+ * `isNotNonBool` above, real Python's `and`/`or` accept any left operand and short-circuit on its
+ * truthiness, never raising, unlike this dialect's requirement that it be exactly `bool`.
+ */
+function isAndOrNonBoolLeft(code: string, expected: TestExpectedValue): boolean {
+  if (typeof expected !== "function") return false;
+  const match = code.trim().match(/^(.+?)\s+(?:and|or)\s+.+$/);
+  if (match === null) return false;
+  const left = match[1].trim();
+  return left !== "True" && left !== "False";
+}
+
+/**
+ * Whether `code` is `str(lambda ...)` or `repr(lambda ...)`: this dialect prints a clean
+ * `<function (anonymous)>` for anonymous functions, but CPython's real repr for a lambda includes
+ * its memory address (`<function <lambda> at 0x...>`), which changes every run -- not just a
+ * different string, but a fundamentally non-reproducible one, so there's no CPython "ground
+ * truth" value to compare against here at all.
+ */
+function isLambdaRepr(code: string): boolean {
+  return /^(?:str|repr)\(lambda /.test(code.trim());
+}
+
+/**
+ * Whether `code` is `arity(<name>)` where `<name>` is a real CPython builtin that
+ * `python/sicp` exposes by direct alias rather than reimplementing (every `math_*` name --
+ * `python/sicp/math.py` is literally `math_foo = _math.foo` for all of them -- plus the handful
+ * from python/README.md's Compatibility section: `round`, `max`, `min`, `str`, `input`, `complex`,
+ * ...). `arity()`'s `inspect`-based introspection on these reflects CPython's own C-level
+ * signature, not this dialect's fixed pedagogical arity, and that signature isn't even stable
+ * across CPython versions (e.g. `math.nextafter` gained an optional third parameter in 3.12) --
+ * so this can't be pinned to a fixed list of "currently mismatched" names without silently
+ * breaking again on the next Python release. Structural, not enumerated: skip the whole class.
+ */
+const CPYTHON_NATIVE_BUILTIN_ARITY_NAMES = new Set([
+  "round",
+  "abs",
+  "len",
+  "max",
+  "min",
+  "str",
+  "repr",
+  "int",
+  "float",
+  "complex",
+  "bool",
+  "print",
+  "input",
+]);
+
+function isArityOfNativeCPythonBuiltin(code: string): boolean {
+  const match = code.trim().match(/^arity\((\w+)\)$/);
+  if (match === null) return false;
+  const name = match[1];
+  return name.startsWith("math_") || CPYTHON_NATIVE_BUILTIN_ARITY_NAMES.has(name);
+}
+
+/** Whether `code` references `__program__`, a py-slang-only pseudo-variable (the literal source
+ * text of the running program) with no CPython equivalent -- same idea as `involvesParseFeature`
+ * below, just a different py-slang-specific feature. */
+function usesProgramIntrospection(code: string): boolean {
+  return /__program__/.test(code);
+}
+
+/** Reasons a test case is skipped for the CPython pathway, checked in order. */
+const CPYTHON_SKIP_REASONS: {
+  matches: (code: string, expected: TestExpectedValue) => boolean;
+  reason: string;
+}[] = [
+  {
+    matches: isBoolRejection,
+    reason: "bool is an int subclass in CPython, unlike this dialect's arithmetic/numeric builtins",
+  },
+  {
+    matches: isWhileNonBoolCondition,
+    reason:
+      "while-conditions must be exactly bool in this dialect, unlike CPython's truthy/falsy " +
+      "semantics -- some of these are genuine infinite loops under CPython",
+  },
+  {
+    matches: isEqualityOperatorError,
+    reason: "==/!= never raise in CPython for any built-in type combination",
+  },
+  {
+    matches: isBoolNumericOperator,
+    reason:
+      "bool is an int subclass in CPython, unlike this dialect's arithmetic/ordering operators",
+  },
+  {
+    matches: isStringRepetition,
+    reason: "CPython supports string*int repetition, which this dialect doesn't implement",
+  },
+  {
+    matches: isListBoolMultiply,
+    reason: "bool is an int subclass in CPython, unlike this dialect's list-repeat operand rule",
+  },
+  {
+    matches: isListBoolSubscript,
+    reason: "bool is an int subclass in CPython, unlike this dialect's list-index rule",
+  },
+  {
+    matches: isUnaryMinusBool,
+    reason: "bool is an int subclass in CPython, unlike this dialect's unary minus",
+  },
+  {
+    matches: isNotNonBool,
+    reason:
+      "not/and/or require exactly bool operands in this dialect, unlike CPython's truthy/falsy semantics",
+  },
+  {
+    matches: isAndOrNonBoolLeft,
+    reason:
+      "not/and/or require exactly bool operands in this dialect, unlike CPython's truthy/falsy semantics",
+  },
+  {
+    matches: (code, _expected) => isLambdaRepr(code),
+    reason: "CPython's lambda repr embeds a memory address, so there's no stable value to compare",
+  },
+  {
+    matches: (code, _expected) => isArityOfNativeCPythonBuiltin(code),
+    reason:
+      "arity() sees these CPython builtins' real (optional/variadic, version-dependent) signature, not the dialect's fixed one",
+  },
+  {
+    matches: (code, _expected) => usesProgramIntrospection(code),
+    reason: "__program__ is a py-slang-only pseudo-variable with no CPython equivalent",
+  },
+  {
+    matches: (_code, expected) => isChapterGatingError(expected),
+    reason: "chapter-gating is a Source Academy Python concept CPython has no equivalent of",
+  },
+  {
+    matches: code => involvesParseFeature(code),
+    reason: "parse()/tokenize() aren't part of Python 3 (sicp.mce has no equivalent)",
+  },
+];
+
+/**
+ * Reruns `testCases` (as already used with generateTestCases() for the CSE machine) through real
+ * CPython, at the given chapter `variant`. See the file-level comment above for gating and
+ * expectations.
+ *
+ * `groups` overrides the default VARIANT_GROUPS[variant] stdlib groups, matching whatever
+ * non-default combination the sibling generateTestCases() call for the same suite uses.
+ */
+export const generateCPythonTestCases = (
+  testCases: TestCases,
+  variant: number,
+  groups?: Group[],
+) => {
+  void variant; // Not needed by the runner itself (sicp exposes the full superset of builtins
+  // unconditionally); kept as a parameter so call sites read the same as generateTestCases()'s.
+  void groups; // Same: sicp has no notion of "this group isn't loaded yet", so nothing to pass on.
+
+  const pythonPath = process.env.CPYTHON_PATH;
+  const describeBlock = pythonPath ? describe : describe.skip;
+
+  for (const [funcName, tests] of Object.entries(testCases)) {
+    describeBlock(`[cpython] ${funcName}`, () => {
+      const internalTestCases = createInternalTestCases(tests);
+      const supported: InternalTestCase[] = [];
+      const skipBuckets = new Map<string, InternalTestCase[]>();
+      for (const testCase of internalTestCases) {
+        const reason = CPYTHON_SKIP_REASONS.find(({ matches }) =>
+          matches(testCase.code, testCase.expected),
+        )?.reason;
+        if (reason === undefined) {
+          supported.push(testCase);
+        } else {
+          (skipBuckets.get(reason) ?? skipBuckets.set(reason, []).get(reason)!).push(testCase);
+        }
+      }
+
+      // Stable id assigned once, here — every downstream use (the batch request sent to CPython,
+      // and test.each's own per-case key) reads from this single array, rather than each
+      // independently re-deriving "index into `supported`" via its own separate `.map((c, i) =>
+      // ...)`. Two such re-derivations only agree today because both happen to iterate the same
+      // unmutated `supported` array; a filter/sort introduced between them later would silently
+      // misattribute a CPython result to the wrong test case.
+      const supportedWithId = supported.map((c, i) => ({ ...c, id: String(i) }));
+
+      let batchResults: Map<string, CPythonCaseResult> = new Map();
+      if (pythonPath && supportedWithId.length > 0) {
+        beforeAll(() => {
+          batchResults = runCPythonBatch(
+            pythonPath,
+            supportedWithId.map(({ id, code }) => ({ id, code })),
+          );
+        });
+      }
+
+      const runTestCase = (testCase: InternalTestCase, id: string) => {
+        const { expected, output } = testCase;
+        const result = batchResults.get(id);
+        if (!result) throw new Error("CPython batch result missing for this case");
+
+        if (typeof expected === "function") {
+          // CSE also expects a failure here; any CPython exception counts as agreement — exact
+          // exception class/message parity isn't the point (py-slang's own error names, like
+          // MissingRequiredPositionalError, don't exist in CPython).
+          expect(result.error).not.toBeNull();
+          return;
+        }
+
+        expect(result.error).toBeNull();
+        if (output !== null) {
+          expect(result.output).toEqual(output);
+        }
+
+        const wanted = cpythonExpectedToComparable(expected as TestOutputValue);
+        if (wanted === undefined || result.result === undefined) return; // not decodable; skip value check
+        if (wanted.type === "float" && result.result?.type === "float") {
+          const a = result.result.value;
+          const w = wanted.value;
+          if (typeof a === "number" && typeof w === "number") {
+            expect(a).toBeCloseTo(w);
+            return;
+          }
+        }
+        if (wanted.type === "complex" && result.result?.type === "complex") {
+          const aReal = result.result.value.real;
+          const aImag = result.result.value.imag;
+          const wReal = wanted.value.real;
+          const wImag = wanted.value.imag;
+          if (
+            typeof aReal === "number" &&
+            typeof wReal === "number" &&
+            typeof aImag === "number" &&
+            typeof wImag === "number"
+          ) {
+            expect(aReal).toBeCloseTo(wReal);
+            expect(aImag).toBeCloseTo(wImag);
+            return;
+          }
+        }
+        expect(result.result).toEqual(wanted);
+      };
+
+      if (supportedWithId.length > 0) {
+        test.each(supportedWithId)(`$label`, ({ id, ...testCase }) => runTestCase(testCase, id));
+      }
+      for (const [reason, cases] of skipBuckets) {
+        test.skip.each(cases)(`$label (${reason})`, () => {});
+      }
     });
   }
 };

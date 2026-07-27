@@ -9,7 +9,7 @@ Click on a name to see how it is defined and used.
 <P/>
 Note that we expect
 all arguments of `math_...`
-functions to be either an integer or float, as defined by the function `is_int` and `is_float`. An implementation
+functions to be either an integer or float, as defined by the function `is_integer` and `is_float`. An implementation
 of Python § does not need to check whether all arguments of `math_...`
 functions are indeed integer or float.
 <P/>

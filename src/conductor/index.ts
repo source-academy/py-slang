@@ -4,6 +4,31 @@ export {
   PyCseEvaluator3,
   PyCseEvaluator4,
 } from "./PyCseEvaluator";
-export { PySvmlEvaluator } from "./PySvmlEvaluator";
-export { PyWasmEvaluator } from "./PyWasmEvaluator";
-export { PySvmlSinterEvaluator } from "./PySvmlSinterEvaluator";
+export {
+  PyPvmlEvaluator,
+  PyPvmlEvaluator1,
+  PyPvmlEvaluator2,
+  PyPvmlEvaluator3,
+  PyPvmlEvaluator4,
+} from "./PyPvmlEvaluator";
+export { PyPvmlPynterEvaluator } from "./PyPvmlPynterEvaluator";
+export {
+  PyodideEvaluator1,
+  PyodideEvaluator2,
+  PyodideEvaluator3,
+  PyodideEvaluator4,
+  PyodideEvaluatorFull,
+} from "./PyodideEvaluator";
+export {
+  Py2JsEvaluator1,
+  Py2JsEvaluator2,
+  Py2JsEvaluator3,
+  Py2JsEvaluator4,
+} from "./Py2JsEvaluator";
+export { PyStepperEvaluator1, PyStepperEvaluator2 } from "./PyStepperEvaluator";
+export {
+  PyWasmEvaluator1,
+  PyWasmEvaluator2,
+  PyWasmEvaluator3,
+  PyWasmEvaluator4,
+} from "./PyWasmEvaluator";

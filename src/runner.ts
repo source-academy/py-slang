@@ -42,8 +42,6 @@ export class RunError extends Error {
 }
 
 export interface RunOptions {
-  /** Maximum number of environment steps before stopping. Default: 100000. */
-  envSteps?: number;
   /** Hard step limit (-1 = unlimited). Default: -1. */
   stepLimit?: number;
 }
@@ -74,7 +72,7 @@ function makeMemoryStreams(onOutput: (s: string) => void, onError: (s: string) =
     initialised: true as const,
     stdout: { stream: stdoutStream, writer: stdoutStream.getWriter() },
     stderr: { stream: stderrStream, writer: stderrStream.getWriter() },
-    stdin: { stream: stdinStream, reader: stdinStream.getReader() },
+    stdin: { stream: stdinStream, reader: stdinStream.getReader(), setNextPrompt: () => {} },
   };
 }
 
@@ -89,7 +87,7 @@ export async function runCode(
   variant: number,
   options: RunOptions = {},
 ): Promise<string> {
-  const { envSteps = 100000, stepLimit = -1 } = options;
+  const { stepLimit = -1 } = options;
 
   const groups = VARIANT_GROUPS[variant];
   if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
@@ -117,7 +115,6 @@ export async function runCode(
         context,
         new Control(preludeAst),
         new Stash(),
-        envSteps,
         stepLimit,
         variant,
         preludeText + "\n",
@@ -171,7 +168,19 @@ export async function runCode(
     context.control = control;
     context.stash = stash;
 
-    await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
+    try {
+      await collectSnapshots(context, control, stash, stepLimit, variant, script, 0);
+    } catch (e: unknown) {
+      // handleRuntimeError (src/engines/cse/error.ts) both records the error on
+      // context.errors *and* throws it, so a runtime error escapes right past the
+      // context.errors check below instead of being converted to a RunError by it. If
+      // handleRuntimeError already recorded it, fall through to that check, which builds a
+      // proper message from context.errors; otherwise (a genuinely unrecorded throw) wrap
+      // the escaping value directly, same as the parse()-error catch above.
+      if (context.errors.length === 0) {
+        throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+      }
+    }
 
     if (context.errors.length > 0 || errors.length > 0) {
       throw new RunError(

@@ -38,7 +38,7 @@ def is_stream(xs):
     )
 
 
-def linked_list_to_stream(xs):
+def llist_to_stream(xs):
     """
     A stream is either None or a pair whose tail is
     a nullary function that returns a stream.
@@ -46,17 +46,17 @@ def linked_list_to_stream(xs):
     return (
         None
         if is_none(xs)
-        else pair(head(xs), lambda: linked_list_to_stream(tail(xs)))
+        else pair(head(xs), lambda: llist_to_stream(tail(xs)))
     )
 
 
-def stream_to_linked_list(xs):
+def stream_to_llist(xs):
     """
-    stream_to_linked_list transforms a given stream to a linked list
-    Lazy? No: stream_to_linked_list needs to force the whole stream
+    stream_to_llist transforms a given stream to a linked list
+    Lazy? No: stream_to_llist needs to force the whole stream
     """
     return (
-        None if is_none(xs) else pair(head(xs), stream_to_linked_list(stream_tail(xs)))
+        None if is_none(xs) else pair(head(xs), stream_to_llist(stream_tail(xs)))
     )
 
 
@@ -74,8 +74,8 @@ def stream_map(f, s):
     stream_map applies first arg f to the elements of the second
     argument, assumed to be a stream.
     f is applied element-by-element:
-    stream_map(f, linked_list_to_stream(linked_list(1,2)) results in
-    the same as linked_list_to_stream(linked_list(f(1),f(2)))
+    stream_map(f, llist_to_stream(llist(1,2)) results in
+    the same as llist_to_stream(llist(f(1),f(2)))
     stream_map throws an exception if the second argument is not a
     stream, and if the second argument is a nonempty stream and the
     first argument is not a function.
@@ -109,7 +109,7 @@ def stream_for_each(fun, xs):
     """
     stream_for_each applies first arg fun to the elements of the stream
     passed as second argument. fun is applied element-by-element:
-    for_each(fun, linked_list_to_stream(linked_list(1, 2,None))) results in the calls fun(1)
+    for_each(fun, llist_to_stream(llist(1, 2,None))) results in the calls fun(1)
     and fun(2).
     stream_for_each returns True.
     stream_for_each throws an exception if the second argument is not a
@@ -260,7 +260,7 @@ def eval_stream(s, n):
 
     def es(s, n):
         return (
-            linked_list(head(s))
+            llist(head(s))
             if n == 1
             else pair(head(s), es(stream_tail(s), n - 1))
         )

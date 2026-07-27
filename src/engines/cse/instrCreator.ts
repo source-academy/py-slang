@@ -17,9 +17,10 @@ import {
   ListAccessInstr,
   ListAssmtInstr,
   ListInstr,
+  ModuleFunctionCallInstr,
+  ModuleFunctionGenerator,
   Node,
   PopInstr,
-  ResetInstr,
   StatementSequence,
   UnOpInstr,
   WhileInstr,
@@ -75,11 +76,6 @@ export const continueInstr = (srcNode: Node): ContinueInstr => ({
 export const binOpInstr = (symbol: TokenType, srcNode: Node): BinOpInstr => ({
   instrType: InstrType.BINARY_OP,
   symbol,
-  srcNode,
-});
-
-export const resetInstr = (srcNode: Node): ResetInstr => ({
-  instrType: InstrType.RESET,
   srcNode,
 });
 
@@ -142,4 +138,13 @@ export const whileInstr = (
   srcNode,
   test,
   body,
+});
+
+export const moduleFunctionCallInstr = (
+  generator: ModuleFunctionGenerator,
+  srcNode: ExprNS.Call,
+): ModuleFunctionCallInstr => ({
+  instrType: InstrType.MODULE_FUNCTION_CALL,
+  generator,
+  srcNode,
 });

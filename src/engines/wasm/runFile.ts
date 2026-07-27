@@ -10,6 +10,13 @@ import { compileToWasmAndRun } from "./index";
     process.exit(1);
   }
 
-  const { prints } = await compileToWasmAndRun(readFileSync(resolve(filePath), "utf8"));
+  const { errors, prints } = await compileToWasmAndRun(readFileSync(resolve(filePath), "utf8"));
+
+  if (errors.length > 0) {
+    errors.forEach(error => console.error(error.message));
+    process.exitCode = 1;
+    return;
+  }
+
   prints.forEach(p => console.log(p));
 })();
