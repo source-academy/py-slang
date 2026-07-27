@@ -526,11 +526,6 @@ function identityCheck(): WasmInstruction[] {
                 wasm
                   .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)))
                   .then(
-                    // wasm.call(POP_SHADOW_STACK_FX),
-                    // wasm.raw`(local.set $y_val) (local.set $y_tag)`,
-                    // wasm.call(POP_SHADOW_STACK_FX),
-                    // wasm.raw`(local.set $x_val) (local.set $x_tag)`,
-
                     local.set(
                       "$is_result",
                       i32.and(
@@ -549,11 +544,6 @@ function identityCheck(): WasmInstruction[] {
                     wasm
                       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.STRING)))
                       .then(
-                        // wasm.call(POP_SHADOW_STACK_FX),
-                        // wasm.raw`(local.set $y_val) (local.set $y_tag)`,
-                        // wasm.call(POP_SHADOW_STACK_FX),
-                        // wasm.raw`(local.set $x_val) (local.set $x_tag)`,
-
                         local.set(
                           "$is_result",
                           i32.eqz(
