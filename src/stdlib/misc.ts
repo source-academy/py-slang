@@ -1,5 +1,5 @@
 import { ExprNS } from "../ast-types";
-import PyDataDisplayPlugin from "../conductor/plugins/PyDataDisplayPlugin";
+import CseDataDisplayPlugin from "../conductor/plugins/CseDataDisplayPlugin";
 import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
 import {
@@ -417,15 +417,13 @@ export class MiscBuiltins {
     return { type: "string", value: result };
   }
 
-  @Validate(1, 1, "draw_data", true)
   static draw_data(
     args: Value[],
     _source: string,
     _command: ExprNS.Call,
     _context: Context,
   ): NoneValue {
-    const obj = args[0];
-    PyDataDisplayPlugin.instance?.sendData(obj);
+    CseDataDisplayPlugin.instance?.sendData(args);
     return { type: "none" };
   }
 

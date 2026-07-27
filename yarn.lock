@@ -1645,8 +1645,8 @@ __metadata:
 
 "@sourceacademy/common-data-display@file:../plugins/src/common/data-display::locator=%40sourceacademy%2Fpy-slang%40workspace%3A.":
   version: 0.0.1
-  resolution: "@sourceacademy/common-data-display@file:../plugins/src/common/data-display#../plugins/src/common/data-display::hash=ee0464&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
-  checksum: 10c0/8384dc34f6df5870cc0fe574a6e73f18df26712306d5a745e3332846a4165a06f4c6cdfa57d112549b6c6fcd2e0c8759f626c467f4385ee45fb70201d9b65ad5
+  resolution: "@sourceacademy/common-data-display@file:../plugins/src/common/data-display#../plugins/src/common/data-display::hash=7a64f8&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
+  checksum: 10c0/364dfea3516a8b3dfc0c6d7753851f4f08b3f150f2eb4ffdb63e2e1e645ab1a6c8be454ed984aa3cd9fa8e3d6552879b56167213be5d390beaffc3e960e541ea
   languageName: node
   linkType: hard
 
@@ -1677,12 +1677,12 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
-    "@sourceacademy/common-data-display": ../plugins/src/common/data-display
+    "@sourceacademy/common-data-display": "file:../plugins/src/common/data-display"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.0"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
-    "@sourceacademy/runner-data-display": ../plugins/src/runner/data-display
+    "@sourceacademy/runner-data-display": "file:../plugins/src/runner/data-display"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
@@ -1732,10 +1732,10 @@ __metadata:
 
 "@sourceacademy/runner-data-display@file:../plugins/src/runner/data-display::locator=%40sourceacademy%2Fpy-slang%40workspace%3A.":
   version: 0.0.1
-  resolution: "@sourceacademy/runner-data-display@file:../plugins/src/runner/data-display#../plugins/src/runner/data-display::hash=36b725&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
+  resolution: "@sourceacademy/runner-data-display@file:../plugins/src/runner/data-display#../plugins/src/runner/data-display::hash=3e6eb2&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
   peerDependencies:
     "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/23604859e9c3257ab20d7ac90074517577fee9f6f79f0afe4310c30c8887841cd8af7bbb305840b4abc5432e2896ad9654bcd6f69a8debc4f2dc3a482f45b543
+  checksum: 10c0/24108b472b778d6b05debf2d432d7c7137f2c2a2d9b0acf71ab3811d90f6045563cf249f7460fc8736238efff29a8d44648624a4b3123eaa876e9da82e471d08
   languageName: node
   linkType: hard
 

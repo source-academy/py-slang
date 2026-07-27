@@ -1,31 +1,32 @@
 import { erf, gamma, lgamma } from "mathjs";
+import { transform } from "../../stdlib/parser";
+import { minArgMap, toPythonString } from "../../stdlib/utils";
 import { friendlyTypeName } from "../cse/types";
 import { numericCompare } from "../cse/utils";
-import { minArgMap, toPythonString } from "../../stdlib/utils";
-import { transform } from "../../stdlib/parser";
 // Imported only for their module-load side effect of populating
 // `minArgMap` (via each builtin's `@Validate` decorator, see stdlib/utils.ts)
 // — used below to build PRIMITIVE_MIN_ARGS for arity(). `../../stdlib/parser`
 // (imported above for `transform`) already covers the parser group's own
 // names (parse/tokenize/apply_in_underlying_python).
-import "../../stdlib/misc";
-import "../../stdlib/math";
+import PvmlDataDisplayPlugin from "../../conductor/plugins/PvmlDataDisplayPlugin";
+import pythonLexer from "../../parser/lexer";
+import { parse as parsePython } from "../../parser/parser-adapter";
 import "../../stdlib/linked-list";
 import "../../stdlib/list";
+import "../../stdlib/math";
+import "../../stdlib/misc";
 import "../../stdlib/pairmutator";
 import "../../stdlib/stream";
 import { PyComplexNumber } from "../../types";
-import { parse as parsePython } from "../../parser/parser-adapter";
-import pythonLexer from "../../parser/lexer";
 import { cseValueToPvmlBox, pvmlBoxToCseValue } from "./cse-interop";
-import type { PVMLArray, PVMLBoxType } from "./types";
-import { getPVMLType, isPVMLObject, PVMLType } from "./types";
 import {
   MissingRequiredPositionalError,
   PVMLInterpreterError,
   ValueError,
   ZeroDivisionError,
 } from "./errors";
+import type { PVMLArray, PVMLBoxType } from "./types";
+import { getPVMLType, isPVMLObject, PVMLType } from "./types";
 
 /**
  * Maps canonical SICPy builtin names (as defined by the CSE machine's stdlib
@@ -221,6 +222,7 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_nextafter", 128],
   ["math_ulp", 129],
   ["input", 130],
+  ["draw_data", 132]
 ]);
 
 /**
@@ -559,7 +561,7 @@ function isProperLlist(v: PVMLBoxType): boolean {
  * no general str()/repr() support (case 90 above is an unimplemented stub, matching native Pynter),
  * so this is deliberately minimal -- just the value shapes a linked-list leaf can actually be.
  */
-function llistLeafRepr(v: PVMLBoxType): string {
+export function llistLeafRepr(v: PVMLBoxType): string {
   if (v === null || v === undefined) return "None";
   if (typeof v === "boolean") return v ? "True" : "False";
   if (typeof v === "number" || typeof v === "bigint") return String(v);
@@ -1324,6 +1326,9 @@ export function executePrimitive(
       // synchronous interpreter has no async-stdin equivalent of.
       throw new PVMLInterpreterError("input() is not supported by the PVML-in-browser pathway");
 
+    case 132: // draw_data — see PRIMITIVE_FUNCTIONS' doc comment: a real CSE feature this
+      PvmlDataDisplayPlugin.instance?.sendData(args);
+      break;
     default:
       throw new PVMLInterpreterError(`Unknown primitive function index: ${primitiveIndex}`);
   }

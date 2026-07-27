@@ -24,8 +24,8 @@ import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import CseDataDisplayPlugin from "./plugins/CseDataDisplayPlugin";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
-import PyDataDisplayPlugin from "./plugins/PyDataDisplayPlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -43,7 +43,6 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   private readonly preludeText: string;
   private readonly ensurePreludesLoaded: () => Promise<void>;
   private readonly csePlugin: CseMachinePlugin;
-  private readonly dataDisplayPlugin: PyDataDisplayPlugin;
   /** Conductor's module-interop protocol (pairs/arrays/closures/opaques) —
    * see GenericDataHandler.ts. Engine-agnostic, so this is the same instance
    * type py2js's evaluator uses; only the pythonToModule/moduleToPython
@@ -60,7 +59,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.
     this.csePlugin = conductor.registerPlugin(CseMachinePlugin);
-    this.dataDisplayPlugin = conductor.registerPlugin(PyDataDisplayPlugin);
+    conductor.registerPlugin(CseDataDisplayPlugin);
     this.conductor.hostLoadPlugin("data-display");
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {

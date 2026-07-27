@@ -2,16 +2,16 @@ import { ArrayValue, Config, Data } from "@sourceacademy/common-data-display";
 import { BaseDataDisplayRunnerPlugin } from "@sourceacademy/runner-data-display";
 import { ListValue, Value } from "../../engines/cse/stash";
 import { toPythonString } from "../../stdlib/utils";
-export default class PyDataDisplayPlugin extends BaseDataDisplayRunnerPlugin<Value> {
-  public static instance?: PyDataDisplayPlugin;
+export default class CseDataDisplayPlugin extends BaseDataDisplayRunnerPlugin<Value> {
+  public static instance?: CseDataDisplayPlugin;
   constructor(...args: ConstructorParameters<typeof BaseDataDisplayRunnerPlugin>) {
     super(...args);
-    PyDataDisplayPlugin.instance = this;
+    CseDataDisplayPlugin.instance = this;
   }
   getConfig(): Config {
     return {
       sicpTextbookName: "Structure and Interpretation of Computer Programs",
-      sicpTextbookUrl: "https://source-academy.github.io/sicp/",
+      sicpTextbookUrl: "https://sourceacademy.org/sicpy/",
       functionCallText: "draw_data(x1, x2, x3, ..., xn)",
     };
   }

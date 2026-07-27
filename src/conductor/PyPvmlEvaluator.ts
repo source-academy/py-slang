@@ -2,9 +2,9 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { moduleToPvml } from "../engines/pvml/modules";
-import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import linkedList from "../stdlib/linked-list";
@@ -17,6 +17,7 @@ import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import PvmlDataDisplayPlugin from "./plugins/PvmlDataDisplayPlugin";
 
 function once(fn: () => Promise<void>): () => Promise<void> {
   let promise: Promise<void> | undefined;
@@ -70,6 +71,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * a module's exports are read against, and wrapped via
    * asInterfacableEvaluator when registering ModuleLoaderRunnerPlugin. */
   private readonly dataHandler = new GenericDataHandler();
+
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
@@ -82,6 +84,8 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       .map(g => g.prelude ?? "")
       .filter(p => p.trim())
       .join("\n");
+    conductor.registerPlugin(PvmlDataDisplayPlugin);
+    conductor.hostLoadPlugin("data-display");
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);
@@ -193,6 +197,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       const returnValue = await this.runChunk(chunk, ast);
       this.conductor.sendResult(PVMLInterpreter.toJSValue(returnValue));
     } catch (e) {
+      console.error(e);
       this.conductor.sendError(new EvaluatorError(e));
     }
   }

@@ -3,6 +3,7 @@ import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Py2JsSession } from "../engines/py2js";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import PyDataDisplayPlugin from "./plugins/CseDataDisplayPlugin";
 
 /**
  * Runs Python by compiling it to JavaScript — the py2js engine
@@ -57,6 +58,9 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
       this.conductor,
       asInterfacableEvaluator(this, dataHandler),
     );
+    conductor.registerPlugin(PyDataDisplayPlugin);
+    this.conductor.hostLoadPlugin("data-display");
+
     this.session = new Py2JsSession(variant, {
       onOutput: line => this.conductor.sendOutput(line),
       onPendingWorkChange: delta => (delta > 0 ? this.beginPendingWork() : this.endPendingWork()),
