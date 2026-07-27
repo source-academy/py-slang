@@ -24,6 +24,7 @@ export default class PyDataDisplayPlugin extends BaseDataDisplayRunnerPlugin<Val
       case "string":
       case "none":
       case "error":
+      case "opaque":
         return { type: "string", value: toPythonString(data, true) };
       case "builtin":
       case "function":
