@@ -1,4 +1,4 @@
-import { CompletionItemKind } from "@sourceacademy/autocomplete";
+import { CompletionItemKind } from "@sourceacademy/common-autocomplete";
 import { readdir, writeFile } from "node:fs/promises";
 
 /**

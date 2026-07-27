@@ -28,7 +28,7 @@
  *
  */
 
-import { AceRules } from "@sourceacademy/autocomplete";
+import type { AceRules } from "@sourceacademy/common-autocomplete";
 import math from "../../../stdlib/math";
 import misc from "../../../stdlib/misc";
 import { getIllegalKeywords, getKeywords } from "./keywords";

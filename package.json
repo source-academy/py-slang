@@ -53,7 +53,6 @@
     "@rollup/plugin-terser": "^1.0.0",
     "@rollup/plugin-typescript": "^12.1.2",
     "@rollup/plugin-wasm": "^6.2.2",
-    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1",
     "@types/fast-levenshtein": "^0.0.4",
     "@types/jest": "^29.5.14",
     "@types/moo": "^0.5.10",
@@ -73,10 +72,12 @@
     "typescript-eslint": "^8.56.1"
   },
   "dependencies": {
+    "@sourceacademy/common-autocomplete": "file:..\\plugins\\src\\common\\autocomplete",
     "@sourceacademy/common-cse-machine": "^0.3.0",
     "@sourceacademy/common-stepper": "^0.0.1",
     "@sourceacademy/conductor": "^0.8.0",
     "@sourceacademy/pynter-wasm": "^0.2.0",
+    "@sourceacademy/runner-autocomplete": "file:..\\plugins\\src\\runner\\autocomplete",
     "@sourceacademy/runner-cse-machine": "^3.0.0",
     "@sourceacademy/runner-module-loader": "^0.0.1",
     "@sourceacademy/runner-stepper": "^0.0.1",

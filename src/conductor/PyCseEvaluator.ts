@@ -1,5 +1,6 @@
+import { WEB_PLUGIN_ID } from "@sourceacademy/common-autocomplete";
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Context } from "../engines/cse/context";
@@ -49,16 +50,12 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
    * conversion layer (modules.ts) is CSE-specific. */
   private readonly dataHandler = new GenericDataHandler();
 
-  protected constructor(
-    conductor: IRunnerPlugin,
-    variant: number,
-    groups: Group[],
-    evaluatorName: string,
-  ) {
+  protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
-    conductor.registerPlugin(AutoCompletePlugin, variant, evaluatorName);
+    conductor.registerPlugin(AutoCompletePlugin, variant);
+    void conductor.hostLoadPlugin(WEB_PLUGIN_ID);
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
 
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
@@ -181,29 +178,24 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
 export class PyCseEvaluator1 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 1, [misc, math], "PyCseEvaluator1");
+    super(conductor, 1, [misc, math]);
   }
 }
 
 export class PyCseEvaluator2 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList], "PyCseEvaluator2");
+    super(conductor, 2, [misc, math, linkedList]);
   }
 }
 
 export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream], "PyCseEvaluator3");
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
   }
 }
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(
-      conductor,
-      4,
-      [misc, math, linkedList, list, pairmutator, stream, parser],
-      "PyCseEvaluator4",
-    );
+    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
   }
 }

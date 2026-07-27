@@ -1672,12 +1672,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/autocomplete@github:source-academy/autocomplete#0.0.1":
+"@sourceacademy/common-autocomplete@file:..\\plugins\\src\\common\\autocomplete::locator=%40sourceacademy%2Fpy-slang%40workspace%3A.":
   version: 0.0.1
-  resolution: "@sourceacademy/autocomplete@https://github.com/source-academy/autocomplete.git#commit=db3ba73eedcef82eff6b4031e423804b67a2bb6e"
-  peerDependencies:
-    "@sourceacademy/conductor": ">=0.3.0"
-  checksum: 10c0/0c836d923d5658071882b4125445237f99cbef97f2f0b2834f0b244587a5dabd44944e4c6cda766ad3458c6646a8302bf7354a513b7486ec174fb46809f4a08b
+  resolution: "@sourceacademy/common-autocomplete@file:../plugins/src/common/autocomplete#../plugins/src/common/autocomplete::hash=31bc8d&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
+  checksum: 10c0/516ffdf17154b257da5ef9515159a68b9f30272ef66e2233ca5e98890a75af97a56fa8797bdb9b729c4aadaafaf27ef506fed8a1c020b16cb71172cf9ef078d0
   languageName: node
   linkType: hard
 
@@ -1715,11 +1713,12 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
-    "@sourceacademy/autocomplete": "github:source-academy/autocomplete#0.0.1"
+    "@sourceacademy/common-autocomplete": "file:..\\plugins\\src\\common\\autocomplete"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.0"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
+    "@sourceacademy/runner-autocomplete": "file:..\\plugins\\src\\runner\\autocomplete"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
@@ -1755,6 +1754,15 @@ __metadata:
   version: 0.2.0
   resolution: "@sourceacademy/pynter-wasm@npm:0.2.0"
   checksum: 10c0/7c780ca0d0df7972813b12e10dfa65582aa4f0a5916b8f5f7823a5602fecc5f898a8c49b5af5c72f7e82a21ae8128e06e282ea353889023fe8547ddba2e75489
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-autocomplete@file:..\\plugins\\src\\runner\\autocomplete::locator=%40sourceacademy%2Fpy-slang%40workspace%3A.":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-autocomplete@file:../plugins/src/runner/autocomplete#../plugins/src/runner/autocomplete::hash=484a12&locator=%40sourceacademy%2Fpy-slang%40workspace%3A."
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/9d2c9632f00db5015c707ef49997b0fe2bc7f9addc1cf96e52e527ad2a5b16309d2e41664754aa42b5054fcd8c4c34c39510bcaa87b1b7a2eb2d2d15cae5f32e
   languageName: node
   linkType: hard
 

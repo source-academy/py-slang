@@ -1,6 +1,58 @@
 import { parser } from "@lezer/python";
-import { CompletionItemKind } from "@sourceacademy/autocomplete";
+import { CompletionItemKind, WEB_PLUGIN_ID } from "@sourceacademy/common-autocomplete";
+import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import {
+  PyCseEvaluator1,
+  PyCseEvaluator2,
+  PyCseEvaluator3,
+  PyCseEvaluator4,
+} from "../../src/conductor/PyCseEvaluator";
+import AutoCompletePlugin from "../../src/conductor/plugins/autocomplete";
+import pythonMode from "../../src/conductor/plugins/autocomplete/mode";
 import { getNames } from "../../src/conductor/plugins/autocomplete/resolver";
+
+describe("Python autocomplete plugin registration", () => {
+  test.each([
+    [PyCseEvaluator1, 1],
+    [PyCseEvaluator2, 2],
+    [PyCseEvaluator3, 3],
+    [PyCseEvaluator4, 4],
+  ] as const)("%p registers variant %i and requests its web counterpart", (Evaluator, variant) => {
+    const registerPlugin = jest.fn().mockReturnValue({});
+    const hostLoadPlugin = jest.fn().mockResolvedValue(undefined);
+    const conductor = {
+      registerPlugin,
+      hostLoadPlugin,
+    } as unknown as IRunnerPlugin;
+
+    new Evaluator(conductor);
+
+    expect(registerPlugin).toHaveBeenCalledWith(AutoCompletePlugin, variant);
+    expect(hostLoadPlugin).toHaveBeenCalledWith(WEB_PLUGIN_ID);
+  });
+});
+
+describe("Python autocomplete mode", () => {
+  test.each([1, 2, 3, 4])("uses an Ace mode ID independent of evaluator names", variant => {
+    const mode = pythonMode(variant);
+
+    expect(mode.id).toBe(`ace/mode/python${variant}`);
+    expect(mode.snippetFileId).toBe("ace/snippets/python");
+  });
+
+  test("delegates Python editor hooks with hookFrom", () => {
+    const mode = pythonMode(1);
+
+    expect(mode.foldingRules).toEqual({
+      hookFrom: "ace/mode/folding/pythonic",
+      args: ["\\:"],
+    });
+    expect(mode.indents).toEqual({ hookFrom: "ace/mode/python" });
+    expect(mode.outdents).toEqual({ hookFrom: "ace/mode/python" });
+    expect(mode.autoOutdent).toEqual({ hookFrom: "ace/mode/python" });
+  });
+});
+
 const testContains = (
   code: string,
   expected: { name: string; meta: CompletionItemKind },
