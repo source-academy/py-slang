@@ -1,4 +1,7 @@
-import { BaseDataVisualizerRunnerPlugin, type RefIdAllocator } from "@sourceacademy/runner-data-visualizer";
+import {
+  BaseDataVisualizerRunnerPlugin,
+  type RefIdAllocator,
+} from "@sourceacademy/runner-data-visualizer";
 import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-visualizer";
 
 import { Value } from "../../engines/cse/stash";

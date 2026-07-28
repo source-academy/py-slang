@@ -74,7 +74,8 @@ describe("toDataVisualizerNode", () => {
     const node = toDataVisualizerNode(outer, refs);
     if (node.type !== "array") throw new Error("expected an array node");
     const [first, second] = node.children;
-    if (first.type !== "array") throw new Error("expected the first occurrence to be an array node");
+    if (first.type !== "array")
+      throw new Error("expected the first occurrence to be an array node");
     expect(second).toEqual({ type: "ref", refId: first.refId });
   });
 

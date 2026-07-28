@@ -206,6 +206,15 @@ export class PyCseEvaluator3 extends PyCseEvaluatorBase {
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser, dataVisualizer]);
+    super(conductor, 4, [
+      misc,
+      math,
+      linkedList,
+      list,
+      pairmutator,
+      stream,
+      parser,
+      dataVisualizer,
+    ]);
   }
 }

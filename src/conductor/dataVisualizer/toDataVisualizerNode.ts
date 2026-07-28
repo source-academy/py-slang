@@ -14,7 +14,10 @@ import { toPythonString } from "../../stdlib/utils";
  * list, regardless of length, becomes the wire format's N-ary `"array"` node; the host distinguishes
  * "pair" from "list" by `children.length`, not by tag.
  */
-export function toDataVisualizerNode(value: Value, refs: RefIdAllocator): SerializedDataVisualizerNode {
+export function toDataVisualizerNode(
+  value: Value,
+  refs: RefIdAllocator,
+): SerializedDataVisualizerNode {
   switch (value.type) {
     case "none":
       return { type: "empty" };
