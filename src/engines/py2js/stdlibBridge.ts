@@ -42,6 +42,8 @@
  * bridged builtins carry pyMinArgs so it reports the same numbers the CSE
  * machine does.
  */
+import type { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
+
 import { ExprNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
 import { Token, TokenType } from "../../tokenizer";
@@ -387,6 +389,45 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
 }
 
 /**
+ * draw_data(value1, value2, *values) (bridged as part of the LINKED_LISTS group, alongside
+ * pair/llist/head/tail — available from chapter 2 onward, matching python_2_specs.md's own
+ * documented signature and CSE's identical chapter gating). Reimplemented natively rather than
+ * through the generic bridge for two reasons:
+ *
+ *  - toTagged/toTaggedList (above) walk a pair/list's spine with no cycle guard — fine for every
+ *    other bridged builtin, none of which is ever handed a genuinely self-referential structure in
+ *    practice, but chapter 3+'s set_head/set_tail can build exactly that, and a user visualizing such
+ *    a structure is precisely the case draw_data exists to handle gracefully (a "ref" node, not a
+ *    hang). Passing the native args straight to the plugin's sendDrawing — which walks them via
+ *    toDataVisualizerNodePy2Js (conductor/dataVisualizer/), with its own refs-based cycle guard —
+ *    avoids that conversion entirely.
+ *  - sendDrawing is synchronous and fire-and-forget (a channel send), so there is no async result to
+ *    thread back through the generic bridge's Value round-trip in the first place.
+ *
+ * `plugin` is undefined below chapter 2 (bridgeStdlibGroups is never called with one there — see
+ * Py2JsEvaluator.ts) and in every standalone/test run (runCodePy2Js et al. pass no dataVisualizer
+ * option), in which case this is a silent no-op, exactly like context.dataVisualizer?.sendDrawing(...)
+ * on the CSE side when no host conductor is attached.
+ */
+function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefined): PyFunction {
+  const f = ((...args: PyValue[]) => {
+    if (args.length < 2) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `draw_data() takes at least 2 arguments (${args.length} given)`,
+      );
+    }
+    plugin?.sendDrawing(args);
+    return null;
+  }) as PyFunction;
+  f.pyName = "draw_data";
+  f.pyArity = -1;
+  f.pyBuiltin = true;
+  f.pyMinArgs = 2;
+  return f;
+}
+
+/**
  * Bridge every builtin (and constant) of the given stdlib groups into py2js
  * native values. `source` is the program text, used by stdlib error
  * constructors for their (currently synthetic) location info.
@@ -396,6 +437,7 @@ export function bridgeStdlibGroups(
   groups: Group[],
   source: string,
   variant: number,
+  dataVisualizer?: BaseDataVisualizerRunnerPlugin<PyValue>,
 ): Record<string, PyValue> {
   const context = new Context();
   context.variant = variant;
@@ -407,9 +449,8 @@ export function bridgeStdlibGroups(
           ? bridgeBuiltin(rt, name, value, context, source)
           : fromTagged(name, value);
     }
-    // See nativeSetPairSlot/nativeStream's doc comments for why these two
-    // groups' primitives are reimplemented natively instead of left as the
-    // generic bridge produced above.
+    // See nativeSetPairSlot/nativeStream/nativeDrawData's doc comments for why these groups'
+    // primitives are reimplemented natively instead of left as the generic bridge produced above.
     if (group.name === GroupName.PAIRMUTATORS) {
       out.set_head = nativeSetPairSlot("set_head", 0, variant <= 2);
       out.set_tail = nativeSetPairSlot("set_tail", 1, variant <= 2);
@@ -419,6 +460,12 @@ export function bridgeStdlibGroups(
     }
     if (group.name === GroupName.MCE) {
       out.apply_in_underlying_python = nativeApplyInUnderlyingPython(rt);
+    }
+    // LINKED_LISTS (pair/llist/head/tail) is chapter 2's own "list library" — draw_data belongs
+    // alongside it rather than in its own group (unlike the CSE machine, which uses a dedicated
+    // DATA_VISUALIZER group), so it inherits the exact same chapter-2-onward availability.
+    if (group.name === GroupName.LINKED_LISTS) {
+      out.draw_data = nativeDrawData(dataVisualizer);
     }
   }
   return out;

@@ -14,6 +14,7 @@
  * src/tests/operator-conformance-py2js.test.ts.
  */
 import { IDataHandler } from "@sourceacademy/conductor/types";
+import type { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
 import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
@@ -273,6 +274,14 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    */
   requestInput?: (prompt?: string) => Promise<string>;
   /**
+   * The host conductor's data visualizer plugin, threaded down to draw_data (bridged as one of the
+   * LINKED_LISTS group's native builtins — see stdlibBridge.ts's nativeDrawData). The conductor
+   * evaluator (Py2JsEvaluator.ts) registers and supplies its own instance for chapter 2+, mirroring
+   * PyCseEvaluatorBase's identical registration; left unset for standalone/test use (runCodePy2Js et
+   * al. never pass one), in which case draw_data is a silent no-op.
+   */
+  dataVisualizer?: BaseDataVisualizerRunnerPlugin<PyValue>;
+  /**
    * `__program__`'s value for this session — "the string representation of
    * the editor content at the time when 'Run' was last pressed" per
    * docs/specs/python_interpreter.tex, for the REPL case. Mirrors
@@ -333,7 +342,7 @@ export class Py2JsSession {
     // Same builtin layering as prepare(): bridged stdlib under the native
     // core, extraBuiltins over everything. The bridge's source string is
     // empty — its synthetic error nodes never point at real chunk text.
-    const bridged = bridgeStdlibGroups(this.rt, this.groups, "", variant);
+    const bridged = bridgeStdlibGroups(this.rt, this.groups, "", variant, options.dataVisualizer);
     for (const [name, value] of Object.entries(bridged)) {
       if (!(name in this.rt.builtins)) this.rt.builtins[name] = value;
     }
