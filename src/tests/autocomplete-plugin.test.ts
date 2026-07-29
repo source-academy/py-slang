@@ -69,7 +69,7 @@ function requestAutocomplete(
       declarations = message.declarations;
     }
   });
-  channel.send({ type: "request", code, row, column });
+  channel.send({ type: "request", requestId: 0, code, row, column });
   return declarations;
 }
 

@@ -19,6 +19,10 @@ function makeMockConductor(withModuleLoader: boolean = true) {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    // Both also called by registerAutoCompletePlugin at construction time, regardless of
+    // withModuleLoader - registerPlugin gets overridden below when the module loader is wanted.
+    registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
     ...(withModuleLoader && {
       registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
         dataHandler = evaluator;
