@@ -194,12 +194,12 @@ const isSubsequence = (sub: string, str: string): boolean => {
 };
 
 /**
- * Converts a 1-based line and column number to a 0-based index in the document string. If the line or column is out of bounds,
- * it returns the closest valid index (e.g. end of document).
+ * Converts a 1-based line and 0-based column number to a 0-based index in the document string. If the line or column is out of bounds,
+ * it returns the closest valid index (e.g. end of line or end of document).
  *
  * @param doc The document text
  * @param line The 1-based line number
- * @param column The 1-based column number
+ * @param column The 0-based column number
  * @returns The 0-based index in the document string corresponding to the given line and column, or the closest valid index if out of bounds
  */
 const convertPosToIndex = (doc: string, line: number, column: number): number => {
@@ -212,7 +212,9 @@ const convertPosToIndex = (doc: string, line: number, column: number): number =>
     pos = newlineIndex + 1;
     line--;
   }
-  return pos + column;
+  const lineEnd = doc.indexOf("\n", pos);
+  const limit = lineEnd === -1 ? doc.length : lineEnd;
+  return Math.min(pos + column, limit);
 };
 
 /**

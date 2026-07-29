@@ -289,14 +289,14 @@ describe("Chapter 3 Autocomplete", () => {
   test("while loops internals should not be visible", () => {
     testNotContains(
       "x = 10\nwhile x > 0:\n    y = x + 5\n    x -= 1\n    zab = y * 2\nza",
-      { name: "y", meta: CompletionItemKind.Variable },
+      { name: "zab", meta: CompletionItemKind.Variable },
       6,
       2,
       3,
     );
     testNotContains(
       "x = 10\nwhile x > 0:\n    y = x + 5\n    x -= 1\n    zab = y * 2\ny",
-      { name: "zab", meta: CompletionItemKind.Variable },
+      { name: "y", meta: CompletionItemKind.Variable },
       6,
       1,
       3,

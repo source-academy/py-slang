@@ -108,12 +108,17 @@ export default (variant: number) => {
         next: "qstring",
       },
       {
-        token: "keyword.operator",
-        regex: "\\+|\\-|\\*|\\*\\*|\\/|\\/\\/|%|@|<<|>>|&|\\||\\^|~|<|>|<=|=>|==|!=|<>|=",
+        // Ace's tokenizer takes the first rule that matches at the current position, and within
+        // a single regex, JS alternation picks the first alternative that matches rather than the
+        // longest - so punctuation (compound tokens like +=, ->, **=) must come before
+        // keyword.operator, and each regex's own alternatives must be longest-first (e.g. **
+        // before *, <= before <), or the shorter prefix always wins and swallows the rest.
+        token: "punctuation",
+        regex: ",|:|;|\\->|\\+=|\\-=|\\*=|\\/=|\\/\\/=|%=|@=|&=|\\|=|\\^=|>>=|<<=|\\*\\*=",
       },
       {
-        token: "punctuation",
-        regex: ",|:|;|\\->|\\+=|\\-=|\\*=|\\/=|\\/\\/=|%=|@=|&=|\\|=|^=|>>=|<<=|\\*\\*=",
+        token: "keyword.operator",
+        regex: "\\*\\*|\\/\\/|<=|>=|==|!=|<>|<<|>>|\\+|\\-|\\*|\\/|%|@|&|\\||\\^|~|<|>|=",
       },
       {
         token: "paren.lparen",
