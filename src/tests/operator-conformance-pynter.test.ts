@@ -27,7 +27,7 @@ import { parse } from "../parser/parser-adapter";
 import { runCodePvmlDetailed } from "../pvml-runner";
 import { Resolver } from "../resolver";
 import { RunError, VARIANT_GROUPS } from "../runner";
-import { Group } from "../stdlib/utils";
+import { Group, toPythonString } from "../stdlib/utils";
 import { PyComplexNumber } from "../types";
 import { makeValidatorsForChapter } from "../validator";
 import {
@@ -88,7 +88,14 @@ async function cseOutcome(code: string, chapter: number, groups: Group[]): Promi
 }
 
 /** CSE stash types this sweep can produce a value for (see universeForChapter/literalFor). */
-const PVML_SUPPORTED_STASH_TYPES = new Set(["bigint", "number", "bool", "string", "complex"]);
+const PVML_SUPPORTED_STASH_TYPES = new Set([
+  "bigint",
+  "number",
+  "bool",
+  "string",
+  "complex",
+  "list",
+]);
 
 /**
  * Compares a CSE stash value against the text native Pynter's own print()
@@ -125,6 +132,15 @@ function pvmlValueMatches(wantType: string, wantValue: unknown, capturedResult: 
       const actual = PyComplexNumber.fromString(capturedResult);
       return isCloseToFloat32(actual.real, want.real) && isCloseToFloat32(actual.imag, want.imag);
     }
+    case "list":
+      // wantValue is the raw CSE Value[] a list-typed stash entry carries
+      // (cseOutcome's own `lastPopped.value`) — reconstruct the full Value
+      // and render it through the same toPythonString every other engine's
+      // list-typed comparisons use (see generateNativePynterTestCases in
+      // utils.ts), matching native Pynter's own printer exactly (confirmed:
+      // both print `[1, 2, 1, 2]` for `[1, 2] * 2`, no format differences to
+      // account for the way complex/float need tolerance above).
+      return capturedResult === toPythonString({ type: "list", value: wantValue as Value[] });
     default:
       return false;
   }
@@ -190,16 +206,12 @@ const describeBlock = pynterPath ? describe : describe.skip;
  * Reasons a native-Pynter operator-conformance case is skipped, mirroring
  * NATIVE_PYNTER_SKIP_REASONS in utils.ts — same rationale, different file
  * since this suite computes its own `code` strings from the operator/type
- * cross product rather than a shared TestCases table.
+ * cross product rather than a shared TestCases table. Nothing currently
+ * needs this (py-slang#309's list*int gap closed — pvmlValueMatches now
+ * decodes list-typed results) — kept as the extension point for whatever
+ * genuine skip the next audit finds, rather than removed and re-added.
  */
-function nativePynterSkipReason(op: string, left: PyType, right: PyType): string | undefined {
-  if (op === "*" && (left === "list" || right === "list")) {
-    // Native Pynter's own VM supports list*int (see vm.c's op_mul_g), but
-    // pvmlValueMatches() below has no case for a list-typed CSE stash value
-    // yet — a comparison-mechanism gap in this file, not a runtime bug. See
-    // py-slang#309 for the tracking issue.
-    return "list-typed results aren't decoded by this file's comparison logic yet";
-  }
+function nativePynterSkipReason(_op: string, _left: PyType, _right: PyType): string | undefined {
   return undefined;
 }
 
