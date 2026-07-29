@@ -389,9 +389,9 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
 }
 
 /**
- * draw_data(value1, value2, *values) (bridged as part of the LINKED_LISTS group, alongside
- * pair/llist/head/tail — available from chapter 2 onward, matching python_2_specs.md's own
- * documented signature and CSE's identical chapter gating). Reimplemented natively rather than
+ * draw_data(value1, *values) (bridged as part of the LINKED_LISTS group, alongside
+ * pair/llist/head/tail — available from chapter 2 onward, matching the documented signature
+ * (docs/lib/linked_list.py) and CSE's identical chapter gating). Reimplemented natively rather than
  * through the generic bridge for two reasons:
  *
  *  - toTagged/toTaggedList (above) walk a pair/list's spine with no cycle guard — fine for every
@@ -411,10 +411,10 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
  */
 function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefined): PyFunction {
   const f = ((...args: PyValue[]) => {
-    if (args.length < 2) {
+    if (args.length < 1) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `draw_data() takes at least 2 arguments (${args.length} given)`,
+        `draw_data() takes at least 1 argument (${args.length} given)`,
       );
     }
     plugin?.sendDrawing(args);
@@ -423,7 +423,7 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
   f.pyName = "draw_data";
   f.pyArity = -1;
   f.pyBuiltin = true;
-  f.pyMinArgs = 2;
+  f.pyMinArgs = 1;
   return f;
 }
 
