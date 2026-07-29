@@ -5,6 +5,7 @@ import { Py2JsSession } from "../engines/py2js";
 import { Py2JsDataVisualizerRunnerPlugin } from "./dataVisualizer/Py2JsDataVisualizerRunnerPlugin";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
  * Runs Python by compiling it to JavaScript — the py2js engine
@@ -59,6 +60,7 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, variant);
     const dataHandler = new GenericDataHandler();
     this.conductor.registerPlugin(
       ModuleLoaderRunnerPlugin,

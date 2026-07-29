@@ -95,13 +95,13 @@ describe("Chapter 1 — most restrictive", () => {
   });
 
   test("while loop is banned in chapter 1", () => {
-    analyzeThrows("while True:\n    pass", 1, [FeatureNotSupportedError]);
+    analyzeThrows("while True:\n    x = 1", 1, [FeatureNotSupportedError]);
   });
 
   test("for loop is banned in chapter 1", () => {
     // Feature gate runs after resolver; use a declared variable as iter
     // so the resolver passes and the feature gate can fire.
-    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 1, [FeatureNotSupportedError]);
+    analyzeThrows("xs = 1\nfor i in xs:\n    x = 1", 1, [FeatureNotSupportedError]);
   });
 
   test("lambda is allowed in chapter 1", () => {
@@ -143,11 +143,11 @@ describe("Chapter 1 — most restrictive", () => {
   });
 
   test("rest params are banned in chapter 1", () => {
-    analyzeThrows("def f(*args):\n    pass", 1, [FeatureNotSupportedError]);
+    analyzeThrows("def f(*args):\n    x = 1", 1, [FeatureNotSupportedError]);
   });
 
   test("spread in call is banned in chapter 1", () => {
-    analyzeThrows("def f(a):\n    pass\nf(*f)", 1, [FeatureNotSupportedError]);
+    analyzeThrows("def f(a):\n    x = 1\nf(*f)", 1, [FeatureNotSupportedError]);
   });
 
   test("lambda *args is banned in chapter 1", () => {
@@ -155,11 +155,11 @@ describe("Chapter 1 — most restrictive", () => {
   });
 
   test("function-name reassignment is banned in chapter 1", () => {
-    analyzeThrows("def f():\n    pass\nf = 1", 1);
+    analyzeThrows("def f():\n    x = 1\nf = 1", 1);
   });
 
   test("function reassignment is banned in chapter 1", () => {
-    analyzeThrows("def f():\n    pass\ndef f():\n    pass", 1);
+    analyzeThrows("def f():\n    x = 1\ndef f():\n    x = 1", 1);
   });
 });
 
@@ -173,11 +173,11 @@ describe("Chapter 2 — loops and reassignment still banned", () => {
   });
 
   test("while loop is banned in chapter 2", () => {
-    analyzeThrows("while True:\n    pass", 2, [FeatureNotSupportedError]);
+    analyzeThrows("while True:\n    x = 1", 2, [FeatureNotSupportedError]);
   });
 
   test("for loop is banned in chapter 2", () => {
-    analyzeThrows("xs = 1\nfor i in xs:\n    pass", 2, [FeatureNotSupportedError]);
+    analyzeThrows("xs = 1\nfor i in xs:\n    x = 1", 2, [FeatureNotSupportedError]);
   });
 
   test("list literal is banned in chapter 2", () => {
@@ -191,11 +191,11 @@ describe("Chapter 2 — loops and reassignment still banned", () => {
   });
 
   test("rest params are banned in chapter 2", () => {
-    analyzeThrows("def f(*args):\n    pass", 2, [FeatureNotSupportedError]);
+    analyzeThrows("def f(*args):\n    x = 1", 2, [FeatureNotSupportedError]);
   });
 
   test("spread in call is banned in chapter 2", () => {
-    analyzeThrows("def f(a):\n    pass\nf(*f)", 2, [FeatureNotSupportedError]);
+    analyzeThrows("def f(a):\n    x = 1\nf(*f)", 2, [FeatureNotSupportedError]);
   });
 
   test("lambda *args is banned in chapter 2", () => {

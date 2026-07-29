@@ -153,7 +153,7 @@ test("set_timeout requires a callable first argument", () => {
 });
 
 test("set_timeout requires a numeric second argument", () => {
-  expect(() => runCodePy2Js(`def f():\n    pass\nset_timeout(f, 'soon')`, 1)).toThrow(/TypeError/);
+  expect(() => runCodePy2Js(`def f():\n    x = 1\nset_timeout(f, 'soon')`, 1)).toThrow(/TypeError/);
 });
 
 test("clear_all_timeout takes no arguments", () => {

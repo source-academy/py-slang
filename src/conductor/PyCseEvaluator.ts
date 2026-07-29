@@ -1,5 +1,5 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
-import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
@@ -27,6 +27,7 @@ import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { PythonDataVisualizerRunnerPlugin } from "./dataVisualizer/PyDataVisualizerRunnerPlugin";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
@@ -58,6 +59,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     super(conductor);
     this.variant = variant;
     this.groups = groups;
+    registerAutoCompletePlugin(conductor, variant);
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
 
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
@@ -112,7 +114,6 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.evaluator = this.dataHandler;
       this.context.dataVisualizer = this.dataVisualizerPlugin ?? null;
       await this.ensurePreludesLoaded();
-
       const script = chunk + "\n";
       const ast = parse(script);
       const errors = analyze(

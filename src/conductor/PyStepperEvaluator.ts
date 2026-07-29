@@ -4,6 +4,7 @@ import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/run
 import { RunnerStatus } from "@sourceacademy/conductor/types";
 
 import { parse } from "../parser";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { evaluatePython } from "./stepper/getSteps";
 import { preprocessPython } from "./stepper/preprocess";
 import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
@@ -27,6 +28,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, chapter: number) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
     // Register the language-agnostic stepper runner (Python binding) and load its host (web) half.
     this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin);

@@ -16,6 +16,7 @@ import mce from "../stdlib/parser";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
  * Compiles Python to a WASM module and runs it via compileToWasmAndRun.
@@ -50,6 +51,7 @@ class PyWasmEvaluator extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, chapter: number, groups: Group[]) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
     this.groups = groups;
   }
