@@ -37,9 +37,15 @@ export default (variant: number) => {
   const keywords = getKeywords(variant).join("|");
   const illegalKeywords = getIllegalKeywords(variant).join("|");
   const stdlibBuiltins = new Map([...math.builtins, ...misc.builtins]);
-  const builtinConstants = [...stdlibBuiltins.keys()]
-    .filter(x => stdlibBuiltins.get(x)?.type !== "builtin")
-    .join("|");
+  // True/False/None are unconditional literal atoms in the grammar (see python-grammar.ts) in
+  // every chapter, so - matching Ace's stock Python mode this file is adapted from - they're
+  // colored as constant.language rather than plain keyword, alongside the stdlib constants.
+  const builtinConstants = [
+    "True",
+    "False",
+    "None",
+    ...[...stdlibBuiltins.keys()].filter(x => stdlibBuiltins.get(x)?.type !== "builtin"),
+  ].join("|");
 
   let builtinFunctions = [...stdlibBuiltins.keys()]
     .filter(x => stdlibBuiltins.get(x)?.type === "builtin")

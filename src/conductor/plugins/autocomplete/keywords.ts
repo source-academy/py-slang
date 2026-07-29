@@ -5,19 +5,26 @@ export const getKeywords = (variant: number): string[] => {
     "elif",
     "else",
     "from",
-    "global",
     "if",
     "import",
     "lambda",
     "not",
     "or",
-    "pass",
     "return",
-    "nonlocal",
   ];
 
   if (variant >= 3) {
-    keywords = keywords.concat(["while", "for", "in", "break", "continue"]);
+    keywords = keywords.concat([
+      "while",
+      "for",
+      "in",
+      "break",
+      "continue",
+      "is",
+      "global",
+      "nonlocal",
+      "pass",
+    ]);
   }
   return keywords;
 };
@@ -30,7 +37,6 @@ export const getIllegalKeywords = (variant: number): string[] => {
     "del",
     "except",
     "finally",
-    "is",
     "match",
     "case",
     "raise",
@@ -42,7 +48,17 @@ export const getIllegalKeywords = (variant: number): string[] => {
   ];
 
   if (variant < 3) {
-    illegalKeywords = illegalKeywords.concat(["while", "for", "break", "continue", "in"]);
+    illegalKeywords = illegalKeywords.concat([
+      "while",
+      "for",
+      "break",
+      "continue",
+      "in",
+      "is",
+      "global",
+      "nonlocal",
+      "pass",
+    ]);
   }
   return illegalKeywords;
 };
