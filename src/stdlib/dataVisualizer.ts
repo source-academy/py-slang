@@ -6,9 +6,9 @@ import { GroupName, minArgMap, Validate } from "./utils";
 const dataVisualizerBuiltins = new Map<string, BuiltinValue>();
 
 export class DataVisualizerBuiltins {
-  // Minimum 2 args per python_2_specs.md's own documented signature:
-  // `def draw_data(value1, value2, *values)` — diverges from js-slang's minimum of 1.
-  @Validate(2, null, "draw_data", true)
+  // Minimum 1 arg, matching the documented signature `def draw_data(value1, *values)`
+  // (docs/lib/linked_list.py) and js-slang's own minimum.
+  @Validate(1, null, "draw_data", true)
   static async draw_data(
     args: Value[],
     _source: string,

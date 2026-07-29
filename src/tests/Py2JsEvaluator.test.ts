@@ -179,17 +179,14 @@ describe("Py2JsEvaluator2", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0].name).toBe("TypeError");
 
-    await evaluator.evaluateChunk("draw_data(1)\n");
-    expect(errors).toHaveLength(2);
-    expect(errors[1].name).toBe("TypeError");
-
     // The mock conductor's registerPlugin returns undefined (no real plugin attached, mirroring
     // "the normal case outside a real Conductor run" — see dataVisualizer.test.ts on the CSE
     // side) — draw_data still validates arity and returns None without crashing.
+    await evaluator.evaluateChunk("print(draw_data(1))\n");
     await evaluator.evaluateChunk("print(draw_data(1, 2))\n");
     await evaluator.evaluateChunk("print(draw_data(1, 2, 3))\n");
 
-    expect(errors).toHaveLength(2);
-    expect(outputs).toEqual(["None", "None"]);
+    expect(errors).toHaveLength(1);
+    expect(outputs).toEqual(["None", "None", "None"]);
   });
 });

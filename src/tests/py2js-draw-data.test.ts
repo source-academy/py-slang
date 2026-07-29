@@ -18,6 +18,15 @@ function makeFakePlugin() {
   return { plugin, rows };
 }
 
+test("draw_data accepts a single argument (minimum is 1, not 2)", async () => {
+  const { plugin, rows } = makeFakePlugin();
+  const session = new Py2JsSession(2, { dataVisualizer: plugin });
+
+  await session.runChunk("draw_data(pair(1, 2))\n");
+
+  expect(rows).toEqual([[[1n, 2n]]]);
+});
+
 test("draw_data forwards its arguments to the data visualizer plugin's sendDrawing, unconverted", async () => {
   const { plugin, rows } = makeFakePlugin();
   const session = new Py2JsSession(2, { dataVisualizer: plugin });
