@@ -1,6 +1,8 @@
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Py2JsSession } from "../engines/py2js";
+import { Py2JsDataVisualizerRunnerPlugin } from "./dataVisualizer/Py2JsDataVisualizerRunnerPlugin";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
@@ -46,9 +48,15 @@ import { registerAutoCompletePlugin } from "./plugins/autocomplete";
  * whatever grace window the host happens to allow after a chunk resolves).
  *
  * Chapters 1-4 (the engine rejects other variants).
+ *
+ * draw_data (chapter 2+, bridged natively as part of the LINKED_LISTS group — see
+ * stdlibBridge.ts's nativeDrawData): registered only for §2+, exactly mirroring
+ * PyCseEvaluatorBase's identical gate — draw_data doesn't exist as a builtin below that, so there's
+ * no reason to register the plugin or have the host fetch its web bundle for §1 users.
  */
 abstract class Py2JsEvaluatorBase extends BasicEvaluator {
   private readonly session: Py2JsSession;
+  private readonly dataVisualizerPlugin?: Py2JsDataVisualizerRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
@@ -59,16 +67,24 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
       this.conductor,
       asInterfacableEvaluator(this, dataHandler),
     );
+
+    if (variant >= 2) {
+      this.dataVisualizerPlugin = conductor.registerPlugin(Py2JsDataVisualizerRunnerPlugin);
+      conductor.hostLoadPlugin(DATA_VISUALIZER_DIRECTORY_ID);
+    }
+
     this.session = new Py2JsSession(variant, {
       onOutput: line => this.conductor.sendOutput(line),
       onPendingWorkChange: delta => (delta > 0 ? this.beginPendingWork() : this.endPendingWork()),
       requestInput: prompt => this.conductor.requestInput(prompt),
       dataHandler,
+      dataVisualizer: this.dataVisualizerPlugin,
     });
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
+      await this.dataVisualizerPlugin?.resetRun();
       await this.session.runChunk(chunk);
       this.conductor.sendResult(undefined);
     } catch (e) {

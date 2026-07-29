@@ -13,7 +13,12 @@ import { Py2JsEvaluator1, Py2JsEvaluator2 } from "../conductor/Py2JsEvaluator";
 /** Minimal IRunnerPlugin mock: the evaluator calls sendResult/sendError/
  * sendOutput on its `conductor`, plus registerPlugin once in its constructor
  * (module-loader registration — see Py2JsEvaluator.ts); no test here imports
- * anything, so the stub just needs to exist, not do anything real. */
+ * anything, so the stub just needs to exist, not do anything real.
+ * hostLoadPlugin is called (chapter 2+ only) to fetch the data visualizer's
+ * host bundle — no test here opens that tab, so it's a no-op stub too;
+ * registerPlugin returning undefined means draw_data (also chapter 2+) is
+ * exercised against no plugin, the same "no real Conductor run" case
+ * dataVisualizer.test.ts covers on the CSE side. */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: { name: string; message: string }[] = [];
@@ -23,6 +28,7 @@ function makeMockConductor() {
     sendError: (e: unknown) => errors.push(e as { name: string; message: string }),
     sendOutput: (m: string) => outputs.push(m),
     registerPlugin: () => undefined,
+    hostLoadPlugin: () => undefined,
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }
@@ -129,6 +135,16 @@ describe("Py2JsEvaluator1", () => {
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["1", "a b", ""]);
   });
+
+  test("draw_data doesn't exist as a name below chapter 2", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new Py2JsEvaluator1(conductor);
+
+    await evaluator.evaluateChunk("draw_data(1, 2)\n");
+
+    expect(errors).toHaveLength(1);
+    expect(outputs).toEqual([]);
+  });
 });
 
 describe("Py2JsEvaluator2", () => {
@@ -153,5 +169,24 @@ describe("Py2JsEvaluator2", () => {
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["[2, [4, None]]"]);
+  });
+
+  test("draw_data validates arity, and returns None without a real Conductor-attached plugin", async () => {
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new Py2JsEvaluator2(conductor);
+
+    await evaluator.evaluateChunk("draw_data()\n");
+    expect(errors).toHaveLength(1);
+    expect(errors[0].name).toBe("TypeError");
+
+    // The mock conductor's registerPlugin returns undefined (no real plugin attached, mirroring
+    // "the normal case outside a real Conductor run" — see dataVisualizer.test.ts on the CSE
+    // side) — draw_data still validates arity and returns None without crashing.
+    await evaluator.evaluateChunk("print(draw_data(1))\n");
+    await evaluator.evaluateChunk("print(draw_data(1, 2))\n");
+    await evaluator.evaluateChunk("print(draw_data(1, 2, 3))\n");
+
+    expect(errors).toHaveLength(1);
+    expect(outputs).toEqual(["None", "None", "None"]);
   });
 });

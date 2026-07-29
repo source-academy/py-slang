@@ -1,5 +1,6 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
+import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Context } from "../engines/cse/context";
@@ -15,6 +16,7 @@ import {
 } from "../engines/cse/streams";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
+import dataVisualizer from "../stdlib/dataVisualizer";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -23,6 +25,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { PythonDataVisualizerRunnerPlugin } from "./dataVisualizer/PyDataVisualizerRunnerPlugin";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
@@ -48,6 +51,9 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
    * type py2js's evaluator uses; only the pythonToModule/moduleToPython
    * conversion layer (modules.ts) is CSE-specific. */
   private readonly dataHandler = new GenericDataHandler();
+  /** Registered only for §2+ — draw_data doesn't exist as a builtin below that, so there's no
+   * reason to register the plugin or have the host fetch its web bundle for §1 users. */
+  private readonly dataVisualizerPlugin?: PythonDataVisualizerRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -62,6 +68,11 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     this.csePlugin = conductor.registerPlugin(
       CseMachinePlugin as never,
     ) as unknown as CseMachinePlugin;
+
+    if (variant >= 2) {
+      this.dataVisualizerPlugin = conductor.registerPlugin(PythonDataVisualizerRunnerPlugin);
+      conductor.hostLoadPlugin(DATA_VISUALIZER_DIRECTORY_ID);
+    }
 
     for (const group of this.groups) {
       for (const [name, value] of group.builtins) {
@@ -101,6 +112,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       };
       this.context.conductor = this.conductor;
       this.context.evaluator = this.dataHandler;
+      this.context.dataVisualizer = this.dataVisualizerPlugin ?? null;
       await this.ensurePreludesLoaded();
       const script = chunk + "\n";
       const ast = parse(script);
@@ -126,6 +138,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.runtime.breakpointSteps = [];
       this.context.runtime.changepointSteps = [];
       this.context.runtime.break = false;
+      await this.dataVisualizerPlugin?.resetRun();
 
       // CSE chapters (3+): collect snapshots up to the step cap, then stop.
       // Output produced after the step cap is not emitted — that's intentional.
@@ -182,18 +195,27 @@ export class PyCseEvaluator1 extends PyCseEvaluatorBase {
 
 export class PyCseEvaluator2 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList]);
+    super(conductor, 2, [misc, math, linkedList, dataVisualizer]);
   }
 }
 
 export class PyCseEvaluator3 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream, dataVisualizer]);
   }
 }
 
 export class PyCseEvaluator4 extends PyCseEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+    super(conductor, 4, [
+      misc,
+      math,
+      linkedList,
+      list,
+      pairmutator,
+      stream,
+      parser,
+      dataVisualizer,
+    ]);
   }
 }
