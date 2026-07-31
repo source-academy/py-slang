@@ -259,3 +259,39 @@ describe('error messages say "pair" at chapter 2, "list" at chapter 3+ (matching
     // parameter didn't break the ordinary (non-list) error path.
   });
 });
+
+describe("printing a self-referential list mirrors CPython's cycle marker, not a stack overflow (issue #341)", () => {
+  test.each([
+    // Cycle at the top-level list's own position [0].
+    ["a = [1]\na[0] = a\nprint(a)", "[[...]]\n"],
+    // Cycle at position [1] of a 2-element list.
+    ["p = [1, 2]\np[1] = p\nprint(p)", "[1, [...]]\n"],
+    // Cycle at position [2] of a 3-element list.
+    ["q = [1, 2, 3]\nq[2] = q\nprint(q)", "[1, 2, [...]]\n"],
+    // Cycle one level down, not at the top level: the *inner* list (at
+    // outer[1]) refers to itself at its own position [1].
+    ["outer = [0, [1, 2]]\nouter[1][1] = outer[1]\nprint(outer)", "[0, [1, [...]]]\n"],
+    // Same, but the inner list's self-reference is at its position [2].
+    ["outer = [0, [1, 2, 3]]\nouter[1][2] = outer[1]\nprint(outer)", "[0, [1, 2, [...]]]\n"],
+    // Cycle two levels down: a[1][1] is a nested list that refers back to
+    // its own parent (a[1]), not to itself or to the top-level list.
+    ["a = [10, [20, [30, 0]]]\na[1][1][1] = a[1]\nprint(a)", "[10, [20, [30, [...]]]]\n"],
+    // Indirect (mutual) cycle across two top-level lists, neither of which
+    // refers to itself directly.
+    [
+      "b = [1, 0]\nc = [2, 0]\nb[1] = c\nc[1] = b\nprint(b)\nprint(c)",
+      "[1, [2, [...]]]\n[2, [1, [...]]]\n",
+    ],
+    // A value shared by two positions (not a cycle) still prints in full
+    // both times — the marker is only for a genuine ancestor cycle.
+    ["shared = [1, 2]\nf = [shared, shared]\nprint(f)", "[[1, 2], [1, 2]]\n"],
+  ])("%s", async (code, expected) => {
+    expect(await runCode(code, 3)).toBe(expected);
+    expect(runCodePy2Js(code, 3).output).toBe(expected);
+  });
+
+  test.each(["str", "repr"])("%s() of a self-referential list also avoids the overflow", name => {
+    const code = `a = [1]\na[0] = a\nprint(${name}(a))`;
+    expect(runCodePy2Js(code, 3).output).toBe("[[...]]\n");
+  });
+});
