@@ -71,6 +71,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Verify release tag matches pyproject.toml version
+        # A release tagged sicp-vX.Y.Z whose pyproject.toml version doesn't
+        # match builds dist files for the *wrong* version. PyPI then either
+        # silently publishes under the wrong version or, if that version was
+        # already released, rejects the upload with "400 File already exists"
+        # (see sicp-v0.2.0, which was tagged before the version bump landed).
+        run: |
+          tag_version="${GITHUB_REF_NAME#sicp-v}"
+          pkg_version="$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::Release tag '${GITHUB_REF_NAME}' does not match pyproject.toml version '${pkg_version}'. Bump the version and re-tag before releasing."
+            exit 1
+          fi
       - run: python -m pip install --upgrade pip build pytest
       - run: python -m pip install -e .
       - name: Run tests before publishing
