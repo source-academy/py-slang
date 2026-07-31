@@ -22,9 +22,9 @@ function print(...object) { }
 function error(...object) { }
 
 /**
- * Evaluates to the <CODE>None</CODE> value with no effect on the program — the Python analogue of
- * JavaScript's <CODE>debugger;</CODE> statement. In the stepper and CSE machine visualization, <CODE>breakpoint()</CODE> additionally
- * marks a step that the breakpoint navigation can jump to.
+ * Evaluates to the <CODE>None</CODE> value with no effect on the program. In the stepper and CSE
+ * machine visualization, <CODE>breakpoint()</CODE> additionally marks a step that the breakpoint
+ * navigation can jump to.
  *
  * @returns {NoneType} the <CODE>None</CODE> value
  */
