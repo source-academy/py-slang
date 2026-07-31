@@ -21,6 +21,20 @@ export class Environment {
   // The parent of this environment
   enclosing: Environment | null;
   names: Map<string, Token>;
+  /**
+   * Where each name in `names` was *first* declared in this scope — for diagnostics only (e.g.
+   * NameReassignmentError's "already declared here" pointer). `names` itself gets overwritten on
+   * every hoist of a name (declareName has no "first wins" rule: `resolve(Stmt[])`'s hoisting pass
+   * runs unconditionally over every Assign/FunctionDef in a statement list, including a list
+   * re-hoisted more than once against the same environment, e.g. an if-arm and its else-arm, which
+   * share their enclosing scope's environment — see visitIfStmt), which is required for forward
+   * references to resolve but means `names.get(name)` can end up pointing at an unrelated later
+   * occurrence, or even the very statement the reassignment error is itself about, rather than the
+   * name's true original declaration (issue #211). Seeded from the environment's initial `names`
+   * (so a function/lambda parameter's own token is its own "first declared" location — see the
+   * constructor), then updated by declareName only the first time a name is set, never after.
+   */
+  firstDeclarations: Map<string, Token>;
   // Function names in the environment.
   functions: Set<string>;
   // Names that are from import bindings, like 'y' in `from x import y`.
@@ -58,6 +72,7 @@ export class Environment {
     this.source = source;
     this.enclosing = enclosing;
     this.names = names;
+    this.firstDeclarations = new Map(names);
     this.functions = new Set();
     this.moduleBindings = new Set();
     this.definedNames = new Set();
@@ -171,6 +186,9 @@ export class Environment {
   }
   declareName(identifier: Token) {
     this.names.set(identifier.lexeme, identifier);
+    if (!this.firstDeclarations.has(identifier.lexeme)) {
+      this.firstDeclarations.set(identifier.lexeme, identifier);
+    }
     this.definedNames.add(identifier.lexeme);
   }
   // Same as declareName but allowed to re-declare later.
@@ -375,7 +393,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     let curr = this.environment;
     while (curr !== this.functionScope) {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
-        const token = curr.names.get(identifier.lexeme);
+        // firstDeclarations (not names) so the reported location is the name's actual first
+        // declaration in curr, not whatever declareName last hoisted there — see firstDeclarations'
+        // doc comment.
+        const token = curr.firstDeclarations.get(identifier.lexeme);
         if (token === undefined) {
           this.errors.push(new Error("placeholder error"));
           return;

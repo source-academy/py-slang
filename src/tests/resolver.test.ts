@@ -256,4 +256,64 @@ print(outer())
       expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
     });
   });
+
+  // NameReassignmentError's "already declared here" pointer must reference the name's actual
+  // first declaration, not whichever occurrence declareName's hoisting pass happened to visit
+  // last against the shared environment (issue #211) — detection was already correct; only the
+  // reported location was wrong.
+  describe("NameReassignmentError points at the original declaration, not the reassignment (#211)", () => {
+    function reassignmentMessage(code: string, variant = 1): string {
+      try {
+        toPythonAstAndResolve(code, variant);
+        throw new Error("did not throw");
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(ResolverErrors.NameReassignmentError);
+        return e.message;
+      }
+    }
+
+    test("two reassignments: points at the first assignment (line 1), not the reassignment (line 2)", () => {
+      const message = reassignmentMessage("x = 1\nx = 2");
+      expect(message).toContain("already been declared in the same environment at line 1");
+      expect(message).not.toContain("already been declared in the same environment at line 2");
+    });
+
+    test("three reassignments: still points at the very first one (line 1), not the last hoisted one (line 3)", () => {
+      const message = reassignmentMessage("x = 1\nx = 2\nx = 3");
+      expect(message).toContain("already been declared in the same environment at line 1");
+    });
+
+    test("a parameter reassigned in its own function body points at the def line, not at the reassignment", () => {
+      const code = `
+def f(x):
+    x = 1
+    return x
+f(1)
+`;
+      const message = reassignmentMessage(code, 1);
+      expect(message).toContain("already been declared in the same environment at line 2");
+      expect(message).toContain("def f(x):");
+      expect(message).not.toContain("already been declared in the same environment at line 3");
+    });
+
+    test("same local assigned in both if/else arms points at the if-arm (its true first declaration)", () => {
+      const code = `
+def f(c):
+    if c:
+        x = 1
+    else:
+        x = 2
+    return x
+f(True)
+`;
+      // Source §1's no-reassignment rule is const-like: assigning the same name in both arms of
+      // an if/else counts as a reassignment even though the arms are exclusive (see
+      // py2js-unbound.test.ts's identical case) — only meaningful at chapter 1.
+      const message = reassignmentMessage(code, 1);
+      // "x = 1" (the if-arm, line 4) is the true first declaration; "x = 2" (the else-arm, line 6,
+      // where the error itself fires) must not be reported as its own "already declared" location.
+      expect(message).toContain("already been declared in the same environment at line 4");
+      expect(message).not.toContain("already been declared in the same environment at line 6");
+    });
+  });
 });

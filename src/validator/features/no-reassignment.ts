@@ -49,7 +49,10 @@ export function createNoReassignmentValidator(): FeatureValidator {
           env.source,
           target.indexInSource,
           target.indexInSource + name.length,
-          env.names.get(name)!,
+          // firstDeclarations (not names) so "already declared here" points at the name's actual
+          // first declaration in this scope — names.get(name) would instead give whichever
+          // occurrence declareName's hoisting pass happened to visit last (issue #211).
+          env.firstDeclarations.get(name)!,
         );
       }
       declared.add(name);
