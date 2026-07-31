@@ -290,8 +290,12 @@ describe("printing a self-referential list mirrors CPython's cycle marker, not a
     expect(runCodePy2Js(code, 3).output).toBe(expected);
   });
 
-  test.each(["str", "repr"])("%s() of a self-referential list also avoids the overflow", name => {
-    const code = `a = [1]\na[0] = a\nprint(${name}(a))`;
-    expect(runCodePy2Js(code, 3).output).toBe("[[...]]\n");
-  });
+  test.each(["str", "repr"])(
+    "%s() of a self-referential list also avoids the overflow",
+    async name => {
+      const code = `a = [1]\na[0] = a\nprint(${name}(a))`;
+      expect(await runCode(code, 3)).toBe("[[...]]\n");
+      expect(runCodePy2Js(code, 3).output).toBe("[[...]]\n");
+    },
+  );
 });
