@@ -1700,10 +1700,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.8.2":
-  version: 0.8.2
-  resolution: "@sourceacademy/conductor@npm:0.8.2"
-  checksum: 10c0/a37dbed6c9ff1f92cb1b7938366c4647cc7c89aaa54b9b843ceaa2088933e251b84b2acae61753bad599c11f0becf95013a771bd7c999735ed8896c3195c9f53
+"@sourceacademy/conductor@npm:^0.8.3":
+  version: 0.8.3
+  resolution: "@sourceacademy/conductor@npm:0.8.3"
+  checksum: 10c0/25a35004fd92abc3f9342c1928a6be884388d3a8465cdc26491ccf56566121dd7a68a0c305defe668dfe7b96eebe61e93059631f80a92e0d9a4dc2775090f3e5
   languageName: node
   linkType: hard
 
@@ -1724,7 +1724,7 @@ __metadata:
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-data-visualizer": "npm:^0.0.1"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
-    "@sourceacademy/conductor": "npm:^0.8.2"
+    "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
