@@ -1,7 +1,7 @@
 Python §3 is a small programming language, designed for the third chapter
 of the textbook
-<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
 
 ## What names are predeclared in Python §3?
 
@@ -47,7 +47,7 @@ the value of the existing variable. In the example above, the first line creates
 variable `x` and assigns it to 1. The third line changes the value of `x` to 2.
 
 Read more on variable declaration and assignment in
-<a href="https://sourceacademy.org/sicpjs/3.1.1">section 3.1.1 Local State Variables</a>
+<a href="https://sourceacademy.org/sicpy/3.1.1">section 3.1.1 Local State Variables</a>
 of the textbook.
 
 ### While loops

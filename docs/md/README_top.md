@@ -1,6 +1,6 @@
   Python § is a family of languages, designed for the textbook
-  <a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-  of Computer Programs, JavaScript Adaptation</a> (SICP JS) and supported by the
+  <a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+  of Computer Programs, Python Adaptation</a> (SICPy) and supported by the
   <a href="https://sourceacademy.org">Source Academy</a> system.  The languages are
   called Python §1, Python §2, Python §3 and Python §4, corresponding to the
   respective chapters 1, 2, 3 and 4 of the textbook. Each previous Python §
