@@ -1622,6 +1622,49 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
     );
     expect(flagged).toHaveLength(0);
   });
+
+  // Real Python's breakpoint(*args, **kws) takes any number of arguments (forwarded to
+  // sys.breakpointhook); the stepper's own no-op breakpoint entry already ignores them regardless
+  // (see builtins.ts), so the bare-statement form should still be recognised as a debugger target
+  // for any arity, not just zero (issue #257).
+  test.each([
+    ["one literal argument", "breakpoint(5)"],
+    ["several literal arguments", "breakpoint(1, 2, 3)"],
+  ])("%s: still evaluates as a no-op and is flagged as a breakpoint target", (_desc, call) => {
+    expect(result(`${call}\n1 + 1`)).toBe("2");
+    const flagged = steps(`${call}\n1 + 1`).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].markers?.[0]?.explanation).toBe("Evaluating breakpoint statement");
+  });
+
+  test("an argument that is itself reducible is stepped through first, then flagged once all arguments are values", () => {
+    // breakpoint(1 + 2): the argument isn't a value yet, so the statement must not be flagged as the
+    // debugger target on the very first encounter — only once `1 + 2` has itself reduced to `3` (the
+    // point analogous to the CSE machine's APPLICATION instruction actually firing).
+    const src = "breakpoint(1 + 2)\n1 + 1";
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0].markers?.[0]?.explanation).toBe("Evaluating breakpoint statement");
+    // Confirm the argument really was reduced before the flagged step: the flagged step's own tree
+    // already shows `3`, not `1 + 2`.
+    const args = (flagged[0].ast as any).body[0].expression.arguments;
+    expect(args).toHaveLength(1);
+    expect(args[0].type).toBe("Literal");
+    expect(args[0].value).toBe(3n);
+  });
+
+  test("aliased and called with arguments is still flagged as a breakpoint target", () => {
+    const src = "bp = breakpoint\nbp(1, 2)\n1 + 1";
+    expect(result(src)).toBe("2");
+    const flagged = steps(src).filter(
+      step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
+    );
+    expect(flagged).toHaveLength(1);
+  });
 });
 
 describe("Python stepper — cumulative print output per step", () => {

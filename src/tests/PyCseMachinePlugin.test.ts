@@ -739,4 +739,28 @@ f()`,
     const second = await run("x = 1");
     expect(second.breakpointSteps).toHaveLength(0);
   });
+
+  // Real Python's breakpoint(*args, **kws) takes any number of arguments (forwarded to
+  // sys.breakpointhook); the no-op CSE builtin already ignores them regardless (stdlib/misc.ts), so
+  // navigation should record the step the same way it does for breakpoint() (issue #257).
+  it.each([
+    ["one positional argument", "breakpoint(5)"],
+    ["several positional arguments", "breakpoint(1, 2, 3)"],
+    ["an argument that is itself a call", "breakpoint(1 + 2)"],
+  ])("is still recorded when called with %s", async (_desc, call) => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints(`${call}\nx = 1`);
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("is detected through an alias called with arguments", async () => {
+    const { breakpointSteps } = await runAndCollectWithBreakpoints("bp = breakpoint\nbp(1, 2)");
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("evaluates to None and ignores its arguments, same as the zero-arg form", async () => {
+    const snapshots = await runAndCollect("x = breakpoint(1, 2, 3)");
+    const last = snapshots[snapshots.length - 1];
+    const xBinding = last.environments.flatMap(e => e.bindings).find(b => b.name === "x");
+    expect(xBinding?.value.displayValue).toBe("None");
+  });
 });
