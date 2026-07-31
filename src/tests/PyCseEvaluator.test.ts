@@ -157,7 +157,9 @@ describe("PyCseEvaluator1..4 (chapter selection)", () => {
     const evaluator = new PyCseEvaluator3(conductor);
 
     await evaluator.evaluateChunk("print([1, 2, 3][0])");
-    await evaluator.evaluateChunk("total = 0\nfor i in range(3):\n    total = total + i\nprint(total)");
+    await evaluator.evaluateChunk(
+      "total = 0\nfor i in range(3):\n    total = total + i\nprint(total)",
+    );
 
     expect(errors).toEqual([]);
     expect(outputs).toEqual(["1\n", "3\n"]);
