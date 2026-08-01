@@ -293,7 +293,12 @@ async function prepareDual(
   if (hasLocalImports(ast.statements)) {
     const entrypointFilePath = options.entrypointFilePath ?? "/main.py";
     try {
-      effectiveScript = await bundleLocalImports(script, entrypointFilePath, toFileGetter(options), variant);
+      effectiveScript = await bundleLocalImports(
+        script,
+        entrypointFilePath,
+        toFileGetter(options),
+        variant,
+      );
     } catch (e: unknown) {
       throw new Py2JsRunError("analysis", (e as Error)?.message ?? String(e));
     }

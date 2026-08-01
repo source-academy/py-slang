@@ -17,9 +17,13 @@ import { runCodePy2JsDual, Py2JsSession } from "../engines/py2js";
 
 describe("runCodePy2JsDual local imports", () => {
   test("imports a value and a function from a sibling file", async () => {
-    const { output } = await runCodePy2JsDual("from .utils import CONST, square\nprint(square(CONST))\n", 3, {
-      files: { "/utils.py": "CONST = 4\ndef square(x):\n    return x * x\n" },
-    });
+    const { output } = await runCodePy2JsDual(
+      "from .utils import CONST, square\nprint(square(CONST))\n",
+      3,
+      {
+        files: { "/utils.py": "CONST = 4\ndef square(x):\n    return x * x\n" },
+      },
+    );
     expect(output).toBe("16\n");
   });
 
@@ -39,9 +43,13 @@ describe("runCodePy2JsDual local imports", () => {
   });
 
   test("supports an alias", async () => {
-    const { output } = await runCodePy2JsDual("from .utils import square as sq\nprint(sq(3))\n", 3, {
-      files: { "/utils.py": "def square(x):\n    return x * x\n" },
-    });
+    const { output } = await runCodePy2JsDual(
+      "from .utils import square as sq\nprint(sq(3))\n",
+      3,
+      {
+        files: { "/utils.py": "def square(x):\n    return x * x\n" },
+      },
+    );
     expect(output).toBe("9\n");
   });
 
@@ -72,9 +80,13 @@ describe("runCodePy2JsDual local imports", () => {
   });
 
   test("importing an undefined name silently gives None (matching js-slang's own __access_export__)", async () => {
-    const { output } = await runCodePy2JsDual("from .utils import does_not_exist\nprint(does_not_exist)\n", 3, {
-      files: { "/utils.py": "x = 1\n" },
-    });
+    const { output } = await runCodePy2JsDual(
+      "from .utils import does_not_exist\nprint(does_not_exist)\n",
+      3,
+      {
+        files: { "/utils.py": "x = 1\n" },
+      },
+    );
     expect(output).toBe("None\n");
   });
 

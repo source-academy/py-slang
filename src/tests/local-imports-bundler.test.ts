@@ -34,7 +34,12 @@ describe("resolveLocalModulePath", () => {
 describe("bundleLocalImports", () => {
   test("a program with no local imports is returned completely unchanged", async () => {
     const entrypoint = "print(1)\n";
-    const bundled = await bundleLocalImports(entrypoint, "/main.py", () => Promise.resolve(undefined), 1);
+    const bundled = await bundleLocalImports(
+      entrypoint,
+      "/main.py",
+      () => Promise.resolve(undefined),
+      1,
+    );
     expect(bundled).toBe(entrypoint);
   });
 
@@ -43,7 +48,12 @@ describe("bundleLocalImports", () => {
       "/test.py": "def square(x):\n    return x * x\n\nCONST = 4\n",
     };
     const entrypoint = "from .test import square, CONST\nprint(square(CONST))\n";
-    const bundled = await bundleLocalImports(entrypoint, "/main.py", p => Promise.resolve(files[p]), 2);
+    const bundled = await bundleLocalImports(
+      entrypoint,
+      "/main.py",
+      p => Promise.resolve(files[p]),
+      2,
+    );
 
     // The generated program is exactly what a student could be shown: a
     // pair()/head()/tail()-based access helper, one wrapper function per
@@ -51,7 +61,9 @@ describe("bundleLocalImports", () => {
     // the entrypoint's own imports rewritten as plain lookups against it.
     expect(bundled).toContain("def __access_named_export__(named_exports, lookup_name):");
     expect(bundled).toContain("def __module_test_py__():");
-    expect(bundled).toContain('return pair(pair("CONST", CONST), pair(pair("square", square), None))');
+    expect(bundled).toContain(
+      'return pair(pair("CONST", CONST), pair(pair("square", square), None))',
+    );
     expect(bundled).toContain("__exports_test_py__ = __module_test_py__()");
     expect(bundled).toContain('square = __access_named_export__(__exports_test_py__, "square")');
     expect(bundled).toContain('CONST = __access_named_export__(__exports_test_py__, "CONST")');
@@ -127,7 +139,12 @@ describe("bundleLocalImports", () => {
 
   test("importing a missing file raises a clear error", async () => {
     await expect(
-      bundleLocalImports("from .missing import x\n", "/main.py", () => Promise.resolve(undefined), 3),
+      bundleLocalImports(
+        "from .missing import x\n",
+        "/main.py",
+        () => Promise.resolve(undefined),
+        3,
+      ),
     ).rejects.toThrow(/not found/);
   });
 

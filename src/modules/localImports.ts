@@ -210,7 +210,11 @@ interface SplitStatements {
   boundNames: Set<string>;
 }
 
-function splitStatements(source: string, statements: StmtNS.Stmt[], currentPath: string): SplitStatements {
+function splitStatements(
+  source: string,
+  statements: StmtNS.Stmt[],
+  currentPath: string,
+): SplitStatements {
   const pieces: string[] = [];
   const level0ImportTexts: string[] = [];
   const localImportTargets: string[] = [];
@@ -225,7 +229,9 @@ function splitStatements(source: string, statements: StmtNS.Stmt[], currentPath:
       const exportsVar = exportsVarName(targetPath);
       for (const spec of stmt.names) {
         const bound = (spec.alias ?? spec.name).lexeme;
-        pieces.push(`${bound} = ${ACCESS_HELPER_NAME}(${exportsVar}, ${JSON.stringify(spec.name.lexeme)})`);
+        pieces.push(
+          `${bound} = ${ACCESS_HELPER_NAME}(${exportsVar}, ${JSON.stringify(spec.name.lexeme)})`,
+        );
       }
       continue;
     }
@@ -257,7 +263,11 @@ interface BundleState {
   needsAccessHelper: boolean;
 }
 
-async function bundleFile(state: BundleState, source: string, path: string): Promise<SplitStatements> {
+async function bundleFile(
+  state: BundleState,
+  source: string,
+  path: string,
+): Promise<SplitStatements> {
   const script = source.endsWith("\n") ? source : source + "\n";
   const ast = parse(script);
   const split = splitStatements(script, ast.statements, path);
