@@ -52,7 +52,7 @@
  */
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { numericCompare, pythonMod } from "../cse/utils";
-import type { Value } from "../cse/stash";
+import type { ListValue, Value } from "../cse/stash";
 import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 import { stringify } from "../../utils/stringify";
@@ -198,8 +198,18 @@ function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): neve
  * structured print — by reusing the actual algorithm, not a second
  * hand-written copy that could quietly drift. Only reached for pairs (and
  * whatever they contain); every other pyStr case keeps its own fast path.
+ *
+ * `memo` maps a PyList already being converted to its (still being filled
+ * in) ListValue, keyed by identity and populated *before* recursing into the
+ * list's elements — a chapter-3 `a[0] = a` self-reference is a real cyclic
+ * JS array, and without this a naive `v.map(toDisplayValue)` recurses
+ * forever (issue #341). Populating the memo before descending means a
+ * PyList reachable from itself converts to a ListValue reachable from
+ * itself — the same cyclic-graph shape stringify.ts's own ancestor
+ * tracking already knows how to render (as CPython does) without
+ * stringify needing to know anything py2js-specific.
  */
-function toDisplayValue(v: PyValue): Value {
+function toDisplayValue(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
   if (v === null) return { type: "none" };
   switch (typeof v) {
     case "bigint":
@@ -218,7 +228,12 @@ function toDisplayValue(v: PyValue): Value {
       ) as Value;
     default:
       if (Array.isArray(v)) {
-        return { type: "list", value: v.map(toDisplayValue) };
+        const memoized = memo.get(v);
+        if (memoized !== undefined) return memoized;
+        const listValue: ListValue = { type: "list", value: [] };
+        memo.set(v, listValue);
+        listValue.value = v.map(elem => toDisplayValue(elem, memo));
+        return listValue;
       }
       // stringify()'s convert() has no dedicated "opaque" case — it falls to
       // the generic `<${type} object>` fallback, matching pyStr's own
