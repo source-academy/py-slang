@@ -1118,6 +1118,17 @@ export class PVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
+    if (_stmt.level > 0) {
+      // Local-file imports (leading dots) aren't implemented on PVML yet —
+      // reject explicitly rather than silently no-op'ing, which would leave
+      // the imported name unbound instead of raising a clear error (see
+      // PyPvmlEvaluator.ts's loadImports, which already rejects this earlier
+      // for the conductor entrypoint; this is the same guard for any direct,
+      // non-conductor caller).
+      throw new Error(
+        "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.",
+      );
+    }
     // A genuine no-op, matching the CSE machine's own FromImport handler
     // (src/engines/cse/interpreter.ts): SICPy has no real per-file module
     // system — every stdlib group's names are preloaded into the global

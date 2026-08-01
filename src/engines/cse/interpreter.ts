@@ -26,7 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
-import { loadModules, moduleToPython } from "./modules";
+import { loadModules, moduleToPython, RelativeImportNotSupportedError } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -200,6 +200,12 @@ async function evaluateImports(
   }
   if (context.evaluator === null || context.conductor === null) {
     throw new Error("Context is not properly initialized with evaluator and conductor");
+  }
+
+  for (const nodes of importNodeMap.values()) {
+    if (nodes.some(n => n.node.level > 0)) {
+      handleRuntimeError(context, new RelativeImportNotSupportedError());
+    }
   }
 
   await loadModules(context, [...importNodeMap.keys()]);

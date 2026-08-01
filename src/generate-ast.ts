@@ -89,7 +89,7 @@ export class AstWriter {
       "Break      -> ()",
       "Continue   -> ()",
       "Return     -> value: ExprNS.Expr | null",
-      "FromImport -> module: Token, names: { name: Token; alias: Token | null }[]",
+      "FromImport -> module: Token, names: { name: Token; alias: Token | null }[], level: number",
       "Global     -> name: Token",
       "NonLocal   -> name: Token",
       "Assert     -> value: ExprNS.Expr",

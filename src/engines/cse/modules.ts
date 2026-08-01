@@ -20,6 +20,19 @@ export class ModuleNotFoundError extends RuntimeSourceError {
   }
 }
 
+/** `from .foo import x` / `from ..pkg.foo import x` (level > 0): local-file
+ * imports are not implemented on the CSE machine yet (see py2js for the
+ * supported engine) — reject explicitly rather than treating the dotted
+ * path as a conductor module name, which would either 404 confusingly or,
+ * worse, collide with an unrelated real module of the same bare name. */
+export class RelativeImportNotSupportedError extends RuntimeSourceError {
+  constructor() {
+    super();
+    this.message =
+      "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.";
+  }
+}
+
 export async function loadModules(context: Context, moduleNames: string[]): Promise<void> {
   await Promise.all(
     moduleNames.map(async moduleName => {

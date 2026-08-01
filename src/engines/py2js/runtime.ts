@@ -573,6 +573,7 @@ export class Py2JsRuntime {
     return this.pendingImports[name];
   }
 
+
   /** None singleton alias so compiled code can say __py.None. */
   readonly None = null;
 

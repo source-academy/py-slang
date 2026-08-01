@@ -68,6 +68,15 @@ class PyWasmEvaluator extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on the WASM
+          // engine yet (see py2js for the supported engine) — reject
+          // explicitly rather than treating the dotted path as a conductor
+          // module name.
+          throw new Error(
+            "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.",
+          );
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);

@@ -772,6 +772,26 @@ describe("Import statement", () => {
     expect(imp.module.lexeme).toBe("math");
     expect(imp.names[0].name.lexeme).toBe("sqrt");
     expect(imp.names[0].alias).toBeNull();
+    expect(imp.level).toBe(0);
+  });
+
+  test("relative import: from .utils import foo has level 1", () => {
+    const stmts = parseStmts("from .utils import foo");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(1);
+    expect(imp.module.lexeme).toBe("utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+  });
+
+  test("relative import: from ..pkg.utils import foo as bar has level 2", () => {
+    const stmts = parseStmts("from ..pkg.utils import foo as bar");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(2);
+    expect(imp.module.lexeme).toBe("pkg.utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+    expect(imp.names[0].alias!.lexeme).toBe("bar");
   });
 
   test("from x import (a, b, c) produces FromImport with multiple names", () => {
