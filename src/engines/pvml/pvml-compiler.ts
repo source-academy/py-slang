@@ -1,4 +1,5 @@
 import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
@@ -1125,9 +1126,7 @@ export class PVMLCompiler
       // PyPvmlEvaluator.ts's loadImports, which already rejects this earlier
       // for the conductor entrypoint; this is the same guard for any direct,
       // non-conductor caller).
-      throw new Error(
-        "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.",
-      );
+      throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
     }
     // A genuine no-op, matching the CSE machine's own FromImport handler
     // (src/engines/cse/interpreter.ts): SICPy has no real per-file module

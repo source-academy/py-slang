@@ -13,6 +13,7 @@ import {
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { TokenType } from "../../tokenizer";
 import { LibFuncType } from "./library";
 import {
@@ -986,9 +987,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       // as a conductor module name (see PyWasmEvaluator.ts's loadImports,
       // which already rejects this earlier for the conductor entrypoint;
       // this is the same guard for any direct, non-conductor caller).
-      throw new Error(
-        "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.",
-      );
+      throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
     }
     return wasm.raw`${stmt.names.map(spec => {
       const boundName = (spec.alias ?? spec.name).lexeme;

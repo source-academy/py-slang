@@ -67,12 +67,43 @@ export class LocalImportError extends Error {
 
 const INDENT = "    ";
 
+/** Matches the same triple-quoted string shape as the tokenizer's own
+ * `string_triple_double`/`string_triple_single` rules (src/parser/lexer.ts) —
+ * used only to find spans whose *content* must not be touched by
+ * indentation, not to re-lex the file. */
+const TRIPLE_QUOTED_STRING = /"""(?:[^\\]|\\.)*?"""|'''(?:[^\\]|\\.)*?'''/g;
+
+/** Line indices (0-based, within `text`) that fall on or after a multi-line
+ * triple-quoted string's *second* line. Prepending indentation to a line is
+ * only safe when the inserted whitespace lands before real code — on every
+ * line from a multi-line string's second line through its closing
+ * delimiter's own line, the entire line (up to the closing delimiter) is
+ * part of the string's own value, so indenting it would inject spaces into
+ * the string's content. The opening line is exempt: the indent there lands
+ * before whatever precedes the opening delimiter (e.g. `doc = """`), which
+ * is never part of the string's value. */
+function linesInsideMultilineStrings(text: string): Set<number> {
+  const lines = new Set<number>();
+  for (const match of text.matchAll(TRIPLE_QUOTED_STRING)) {
+    const startLine = text.slice(0, match.index).split("\n").length - 1;
+    const endLine = text.slice(0, match.index + match[0].length).split("\n").length - 1;
+    for (let line = startLine + 1; line <= endLine; line++) {
+      lines.add(line);
+    }
+  }
+  return lines;
+}
+
 /** Prepends `indent` to every non-empty line — blank lines stay blank
- * rather than becoming trailing whitespace. */
+ * rather than becoming trailing whitespace — except lines that are part of
+ * a multi-line triple-quoted string's own value (see
+ * `linesInsideMultilineStrings`), which are left untouched so the string's
+ * content survives bundling unchanged. */
 function indentBlock(text: string, indent: string = INDENT): string {
+  const protectedLines = linesInsideMultilineStrings(text);
   return text
     .split("\n")
-    .map(line => (line.length > 0 ? indent + line : line))
+    .map((line, i) => (line.length > 0 && !protectedLines.has(i) ? indent + line : line))
     .join("\n");
 }
 

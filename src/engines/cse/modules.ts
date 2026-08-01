@@ -6,7 +6,7 @@ import {
 } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { ExprNS, StmtNS } from "../../ast-types";
-import { RuntimeSourceError } from "../../errors";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE, RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
@@ -28,8 +28,7 @@ export class ModuleNotFoundError extends RuntimeSourceError {
 export class RelativeImportNotSupportedError extends RuntimeSourceError {
   constructor(node?: StmtNS.FromImport) {
     super(node);
-    this.message =
-      "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.";
+    this.message = RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE;
   }
 }
 

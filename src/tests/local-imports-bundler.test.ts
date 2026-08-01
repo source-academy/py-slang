@@ -89,6 +89,34 @@ describe("bundleLocalImports", () => {
     expect(await runCode(bundled, 2)).toBe("hi\n");
   });
 
+  test("a multi-line triple-quoted string in a dependency survives bundling unchanged", async () => {
+    // Naively re-indenting a dependency's copied source text (to nest it
+    // inside `def __module_x__(): ...`) would inject the indent into the
+    // string's own interior lines and closing delimiter's line — corrupting
+    // its value even though nothing about the string itself changed.
+    const files: Record<string, string> = {
+      "/utils.py": 'doc = """\nline one\nline two\n"""\ndef helper():\n    return 1\n',
+    };
+    const bundled = await bundleLocalImports(
+      "from .utils import doc\nprint(doc)\n",
+      "/main.py",
+      p => Promise.resolve(files[p]),
+      2,
+    );
+    expect(await runCode(bundled, 2)).toBe("\nline one\nline two\n\n");
+  });
+
+  test("a single-line triple-quoted string in a dependency still gets indented normally", async () => {
+    const files: Record<string, string> = { "/utils.py": 'doc = """hello world"""\n' };
+    const bundled = await bundleLocalImports(
+      "from .utils import doc\nprint(doc)\n",
+      "/main.py",
+      p => Promise.resolve(files[p]),
+      2,
+    );
+    expect(await runCode(bundled, 2)).toBe("hello world\n");
+  });
+
   test("supports an alias", async () => {
     const files: Record<string, string> = { "/utils.py": "def square(x):\n    return x * x\n" };
     const bundled = await bundleLocalImports(

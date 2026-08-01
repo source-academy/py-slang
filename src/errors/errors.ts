@@ -693,7 +693,14 @@ export class ModuleFunctionNotFoundError extends RuntimeSourceError {
 }
 
 /*
-    The offset is calculated as follows:    
+    The offset is calculated as follows:
     Current position is one after real position of end of token: 1
 */
 export const MAGIC_OFFSET = 1;
+
+/** `from .foo import x` / `from ..pkg.foo import x` (level > 0): the message
+ * every engine that doesn't implement local-file imports (see py2js, the
+ * only engine that does — src/modules/localImports.ts) rejects with, kept
+ * in one place so CSE/PVML/WASM's guards can't drift out of sync. */
+export const RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE =
+  "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.";
