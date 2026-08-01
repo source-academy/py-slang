@@ -51,7 +51,7 @@ import { GroupName } from "../../stdlib/utils";
 import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
-import type { BuiltinValue, Value } from "../cse/stash";
+import type { BuiltinValue, ListValue, Value } from "../cse/stash";
 import {
   isPairShaped,
   Py2JsRuntime,
@@ -74,7 +74,20 @@ function syntheticCallNode(name: string): ExprNS.Call {
  * it stands in for — see the file header's note on lossless pass-through. */
 const functionOrigin = new WeakMap<object, PyFunction>();
 
-function toTagged(v: PyValue): Value {
+/**
+ * `memo` maps a PyList already being converted to its (still being filled
+ * in) tagged ListValue, keyed by identity and populated *before* recursing
+ * into the list's elements/spine — chapter 3's set_head/set_tail, or a
+ * literal-list subscript assignment (`a[0] = a`), can build a genuinely
+ * cyclic PyList (issue #341), and without this a bridged builtin's argument
+ * conversion recurses/loops forever converting it. Populating the memo
+ * before descending means a PyList reachable from itself converts to a
+ * ListValue reachable from itself, so whatever CSE builtin receives it sees
+ * the same kind of cyclic Value graph its own native (non-bridged) callers
+ * already have to cope with (e.g. stringify.ts's ancestor tracking) —
+ * cycle-handling stays the shared builtin's job, not this bridge's.
+ */
+function toTagged(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
   switch (typeof v) {
     case "bigint":
       return { type: "bigint", value: v };
@@ -120,7 +133,7 @@ function toTagged(v: PyValue): Value {
       // reproduces CSE's own is_list/list_length answers exactly, including
       // on a 2-element list (which CSE cannot tell apart from a pair
       // either — see runtime.ts's PyList doc comment).
-      if (Array.isArray(v)) return toTaggedList(v);
+      if (Array.isArray(v)) return toTaggedList(v, memo);
       // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
@@ -143,27 +156,49 @@ function toTagged(v: PyValue): Value {
  * tail-recursive the user's own Python is (its own tail calls go through
  * py2js's trampoline; this bridge conversion does not). The walk continues
  * exactly as long as the current node is itself a 2-element list (a chain
- * link); it stops — falling through to a plain `.map()` — the moment that
- * shape breaks, which correctly covers a flat N-element (N≠2) literal list
- * (zero iterations) and a pair whose tail isn't itself a pair (one
- * iteration) with no separate case needed for either. `heads[i]`/the final
- * tail are still converted via the ordinary (recursive) toTagged, since each
- * head is normally a scalar leaf; a list-of-lists nested arbitrarily deep
- * through a head position remains a (much rarer) recursion, same as before.
+ * link) not already seen this walk; it stops — falling through to the final
+ * tail conversion — the moment that shape breaks (a flat N-element (N≠2)
+ * literal list: zero iterations; a pair whose tail isn't itself a pair: one
+ * iteration) or the chain loops back on itself (chapter 3's set_tail, or an
+ * N-element list looping back into itself, e.g. `a[0] = a`). `heads[i]`/the
+ * final tail are still converted via the ordinary (recursive) toTagged,
+ * since each head is normally a scalar leaf; a list-of-lists nested
+ * arbitrarily deep through a head position remains a (much rarer)
+ * recursion, same as before.
+ *
+ * Each spine node gets its ListValue placeholder allocated (and memoized)
+ * before its tail is known, exactly like toTagged's memo contract — so
+ * closing a cycle back onto an earlier node just reuses that node's
+ * placeholder as the tail, producing a genuinely cyclic Value graph instead
+ * of looping forever building `heads`.
  */
-function toTaggedList(v: PyList): Value {
-  if (!isPairShaped(v)) return { type: "list", value: v.map(toTagged) };
-  const heads: PyValue[] = [];
+function toTaggedList(v: PyList, memo: Map<PyList, Value>): Value {
+  const memoized = memo.get(v);
+  if (memoized !== undefined) return memoized;
+  if (!isPairShaped(v)) {
+    const listValue: ListValue = { type: "list", value: [] };
+    memo.set(v, listValue);
+    listValue.value = v.map(elem => toTagged(elem, memo));
+    return listValue;
+  }
+  const nodes: PyList[] = [];
+  const placeholders: ListValue[] = [];
   let current: PyValue = v;
   while (isPairShaped(current)) {
-    heads.push(current[0]);
+    const seen = memo.get(current);
+    if (seen !== undefined) break;
+    const placeholder: ListValue = { type: "list", value: [] };
+    memo.set(current, placeholder);
+    nodes.push(current);
+    placeholders.push(placeholder);
     current = current[1];
   }
-  let tail = toTagged(current);
-  for (let i = heads.length - 1; i >= 0; i--) {
-    tail = { type: "list", value: [toTagged(heads[i]), tail] };
+  let tail = isPairShaped(current) ? memo.get(current)! : toTagged(current, memo);
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    placeholders[i].value = [toTagged(nodes[i][0], memo), tail];
+    tail = placeholders[i];
   }
-  return tail;
+  return memo.get(v)!;
 }
 
 function fromTagged(name: string, v: Value): PyValue {
@@ -242,7 +277,12 @@ function bridgeBuiltin(
   const f = rt.def(name, -1, (...args: PyValue[]) => {
     let result: Value | undefined | Promise<Value | undefined>;
     try {
-      result = call(args.map(toTagged), source, command, context);
+      result = call(
+        args.map(a => toTagged(a)),
+        source,
+        command,
+        context,
+      );
     } catch (e) {
       // handleRuntimeError (src/engines/cse/error.ts) throws a
       // RuntimeSourceError — a plain object implementing SourceError, not
