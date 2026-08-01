@@ -5,7 +5,7 @@ import {
   TypedValue,
 } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
-import { ExprNS } from "../../ast-types";
+import { ExprNS, StmtNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
@@ -26,8 +26,8 @@ export class ModuleNotFoundError extends RuntimeSourceError {
  * path as a conductor module name, which would either 404 confusingly or,
  * worse, collide with an unrelated real module of the same bare name. */
 export class RelativeImportNotSupportedError extends RuntimeSourceError {
-  constructor() {
-    super();
+  constructor(node?: StmtNS.FromImport) {
+    super(node);
     this.message =
       "ImportError: relative imports (e.g. 'from .module import name') are not yet supported by this engine.";
   }

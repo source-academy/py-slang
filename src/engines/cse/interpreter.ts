@@ -203,8 +203,9 @@ async function evaluateImports(
   }
 
   for (const nodes of importNodeMap.values()) {
-    if (nodes.some(n => n.node.level > 0)) {
-      handleRuntimeError(context, new RelativeImportNotSupportedError());
+    const offending = nodes.find(n => n.node.level > 0);
+    if (offending !== undefined) {
+      handleRuntimeError(context, new RelativeImportNotSupportedError(offending.node));
     }
   }
 

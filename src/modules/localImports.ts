@@ -116,12 +116,27 @@ export function resolveLocalModulePath(
   return "/" + segments.join("/") + ".py";
 }
 
+/** A short, deterministic hash of `path` — distinguishes paths that sanitize
+ * to the same identifier fragment below (e.g. "/a/b.py" vs "/a_b.py", both
+ * of which collapse to "a_b_py" once non-alphanumeric runs become `_`). */
+function pathHash(path: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < path.length; i++) {
+    h ^= path.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(36);
+}
+
 /** A stable, valid Python identifier fragment for `path` — the same input
  * always produces the same output, which is what lets a file bundled in an
  * earlier chunk of a persistent session be recognized from a later chunk's
- * own bundling pass (see `priorGlobalNames`) with no separate cache. */
+ * own bundling pass (see `priorGlobalNames`) with no separate cache. The
+ * hash suffix keeps this injective even when two different paths sanitize
+ * to the same fragment. */
 function slugify(path: string): string {
-  return path.replace(/^\/+/, "").replace(/[^a-zA-Z0-9]+/g, "_");
+  const sanitized = path.replace(/^\/+/, "").replace(/[^a-zA-Z0-9]+/g, "_");
+  return `${sanitized}_${pathHash(path)}`;
 }
 
 function moduleFnName(path: string): string {
@@ -134,6 +149,19 @@ function exportsVarName(path: string): string {
 
 const ACCESS_HELPER_NAME = "__access_named_export__";
 
+/** Reserved aliases for the `pair`/`head`/`tail` primitives the generated
+ * code below depends on. Bare names would resolve dynamically against
+ * whatever the *current* global scope binds them to — if a bundled
+ * program's own top-level code ever rebinds `pair`/`head`/`tail` (e.g.
+ * `def pair(a, b): ...`), the generated export machinery would silently
+ * start calling the student's own function instead of the SICPy builtin.
+ * Captured once, alongside `ACCESS_HELPER_SRC`, before any of the bundled
+ * files' own statements run. */
+const ALIAS_PAIR = "__li_pair__";
+const ALIAS_HEAD = "__li_head__";
+const ALIAS_TAIL = "__li_tail__";
+const ALIASES_SRC = `${ALIAS_PAIR} = pair\n${ALIAS_HEAD} = head\n${ALIAS_TAIL} = tail\n`;
+
 /** Mirrors js-slang's own `__access_named_export__` (its local-import
  * prelude, stdlib/localImport.prelude.ts) line for line: a linear walk
  * through `pair(pair(name, value), rest)` nodes, `None`-terminated. */
@@ -141,12 +169,12 @@ const ACCESS_HELPER_SRC = `def ${ACCESS_HELPER_NAME}(named_exports, lookup_name)
     if named_exports == None:
         return None
     else:
-        name = head(head(named_exports))
-        value = tail(head(named_exports))
+        name = ${ALIAS_HEAD}(${ALIAS_HEAD}(named_exports))
+        value = ${ALIAS_TAIL}(${ALIAS_HEAD}(named_exports))
         if name == lookup_name:
             return value
         else:
-            return ${ACCESS_HELPER_NAME}(tail(named_exports), lookup_name)
+            return ${ACCESS_HELPER_NAME}(${ALIAS_TAIL}(named_exports), lookup_name)
 `;
 
 /**
@@ -190,9 +218,19 @@ function topLevelBoundNames(stmts: StmtNS.Stmt[], into: Set<string> = new Set())
 function buildReturnExpr(names: Set<string>): string {
   let expr = "None";
   for (const name of names) {
-    expr = `pair(pair(${JSON.stringify(name)}, ${name}), ${expr})`;
+    expr = `${ALIAS_PAIR}(${ALIAS_PAIR}(${JSON.stringify(name)}, ${name}), ${expr})`;
   }
   return expr;
+}
+
+/** A single level-0 (conductor-module) `from X import ...` statement,
+ * hoisted verbatim — kept structured (not just its source text) so hoisting
+ * can detect two files binding the same name from different modules (see
+ * `BundleState.hoistedBindings`). */
+interface Level0Import {
+  text: string;
+  module: string;
+  boundNames: string[];
 }
 
 interface SplitStatements {
@@ -200,9 +238,9 @@ interface SplitStatements {
    * assignment line per name for each local (level > 0) import — in
    * original statement order, not yet indented. */
   bodyText: string;
-  /** Every level-0 FromImport's own verbatim source text (hoisted
-   * separately — see this module's doc comment). */
-  level0ImportTexts: string[];
+  /** Every level-0 FromImport in this file, hoisted separately — see this
+   * module's doc comment. */
+  level0Imports: Level0Import[];
   /** Every level>0 import this file's statements need, resolved to an
    * absolute path — walked (recursively) before this file's own def is
    * emitted, so each target's `__exports_*__` already exists by then. */
@@ -216,12 +254,16 @@ function splitStatements(
   currentPath: string,
 ): SplitStatements {
   const pieces: string[] = [];
-  const level0ImportTexts: string[] = [];
+  const level0Imports: Level0Import[] = [];
   const localImportTargets: string[] = [];
   for (const stmt of statements) {
     if (isFromImport(stmt)) {
       if (stmt.level === 0) {
-        level0ImportTexts.push(spanText(source, stmt));
+        level0Imports.push({
+          text: spanText(source, stmt),
+          module: stmt.module.lexeme,
+          boundNames: stmt.names.map(spec => (spec.alias ?? spec.name).lexeme),
+        });
         continue;
       }
       const targetPath = resolveLocalModulePath(currentPath, stmt.level, stmt.module.lexeme);
@@ -239,7 +281,7 @@ function splitStatements(
   }
   return {
     bodyText: pieces.join("\n"),
-    level0ImportTexts,
+    level0Imports,
     localImportTargets,
     boundNames: topLevelBoundNames(statements),
   };
@@ -260,6 +302,12 @@ interface BundleState {
   moduleDefs: string[];
   /** Every hoisted level-0 FromImport's own verbatim text, file-visit order. */
   hoistedImports: string[];
+  /** Bound name -> the level-0 module it was hoisted from, for every
+   * hoisted import so far in this pass. Every bundled file shares one flat
+   * global scope once flattened, so two files importing the same name from
+   * two *different* modules cannot both be satisfied — caught here instead
+   * of silently letting the later binding win. */
+  hoistedBindings: Map<string, string>;
   needsAccessHelper: boolean;
 }
 
@@ -279,7 +327,20 @@ async function bundleFile(
     );
   }
 
-  state.hoistedImports.push(...split.level0ImportTexts);
+  for (const imp of split.level0Imports) {
+    for (const bound of imp.boundNames) {
+      const previous = state.hoistedBindings.get(bound);
+      if (previous !== undefined && previous !== imp.module) {
+        throw new LocalImportError(
+          `conflicting imports of '${bound}': one file imports it from module '${previous}', ` +
+            `another from module '${imp.module}'. Bundled files share one global scope, so use ` +
+            "an alias (`as ...`) to disambiguate.",
+        );
+      }
+      state.hoistedBindings.set(bound, imp.module);
+    }
+    if (!state.hoistedImports.includes(imp.text)) state.hoistedImports.push(imp.text);
+  }
   if (split.localImportTargets.length > 0) state.needsAccessHelper = true;
 
   state.inProgress.add(path);
@@ -343,15 +404,17 @@ export async function bundleLocalImports(
     inProgress: new Set(),
     moduleDefs: [],
     hoistedImports: [],
+    hoistedBindings: new Map(),
     needsAccessHelper: false,
   };
   const entrypointSplit = await bundleFile(state, entrypointSource, entrypointPath);
 
   const parts: string[] = [];
+  parts.push(...state.hoistedImports);
   if (state.needsAccessHelper && !priorGlobalNames.has(ACCESS_HELPER_NAME)) {
+    parts.push(ALIASES_SRC);
     parts.push(ACCESS_HELPER_SRC);
   }
-  parts.push(...state.hoistedImports);
   parts.push(...state.moduleDefs);
   parts.push(entrypointSplit.bodyText);
   return parts.join("\n") + "\n";

@@ -117,8 +117,10 @@ describe("__program__ shows the flattened single-file program", () => {
     await session.runChunk("from .utils import square, CONST\nprint(__program__)\n");
     const program = output.join("\n");
     expect(program).toContain("def __access_named_export__(named_exports, lookup_name):");
-    expect(program).toContain("def __module_utils_py__():");
-    expect(program).toContain('square = __access_named_export__(__exports_utils_py__, "square")');
+    expect(program).toMatch(/def __module_utils_py_\w+__\(\):/);
+    expect(program).toMatch(
+      /square = __access_named_export__\(__exports_utils_py_\w+__, "square"\)/,
+    );
     // The raw multi-file entrypoint text (with its own `from .utils import`
     // line) is gone — replaced by the flattened program's own lookups.
     expect(program).not.toContain("from .utils import");
