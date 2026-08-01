@@ -89,6 +89,20 @@ describe("PyCseEvaluator1 (chapter 1, no CSE snapshots)", () => {
     expect(errors).toHaveLength(1);
     expect(outputs).toEqual(["1\n"]);
   });
+
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // CSE doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors, outputs } = makeMockConductor();
+    const evaluator = new PyCseEvaluator1(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect((errors[0] as { message: string }).message).toMatch(/relative imports/);
+    expect(outputs).toEqual([]);
+  });
 });
 
 describe("PyCseEvaluator3/4 (CSE snapshots)", () => {

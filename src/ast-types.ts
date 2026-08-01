@@ -365,15 +365,18 @@ export namespace StmtNS {
     readonly kind = "FromImport";
     module: Token;
     names: { name: Token; alias: Token | null }[];
+    level: number;
     constructor(
       startToken: Token,
       endToken: Token,
       module: Token,
       names: { name: Token; alias: Token | null }[],
+      level: number,
     ) {
       super(startToken, endToken);
       this.module = module;
       this.names = names;
+      this.level = level;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitFromImportStmt(this);

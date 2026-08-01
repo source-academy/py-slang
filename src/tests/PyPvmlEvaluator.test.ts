@@ -82,6 +82,19 @@ describe("PyPvmlEvaluator", () => {
 
     expect(errors).toHaveLength(1);
   });
+
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // PVML doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/relative imports/);
+  });
 });
 
 // PyPvmlEvaluator1..4 mirror PyCseEvaluator1..4 (see PyCseEvaluator.ts): each

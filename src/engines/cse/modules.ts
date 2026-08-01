@@ -5,8 +5,8 @@ import {
   TypedValue,
 } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
-import { ExprNS } from "../../ast-types";
-import { RuntimeSourceError } from "../../errors";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE, RuntimeSourceError } from "../../errors";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
@@ -17,6 +17,18 @@ export class ModuleNotFoundError extends RuntimeSourceError {
   constructor(public readonly moduleName: string) {
     super();
     this.message = `Module "${moduleName}" not found.`;
+  }
+}
+
+/** `from .foo import x` / `from ..pkg.foo import x` (level > 0): local-file
+ * imports are not implemented on the CSE machine yet (see py2js for the
+ * supported engine) — reject explicitly rather than treating the dotted
+ * path as a conductor module name, which would either 404 confusingly or,
+ * worse, collide with an unrelated real module of the same bare name. */
+export class RelativeImportNotSupportedError extends RuntimeSourceError {
+  constructor(node?: StmtNS.FromImport) {
+    super(node);
+    this.message = RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE;
   }
 }
 

@@ -101,12 +101,19 @@ program -> (import_stmt %newline):* (statement | %newline):*
 # ============================================================================
 
 import_stmt ->
-    "from" dotted_name "import" import_clause
-      {% ([kw, mod,, names]: [moo.Token, Token, moo.Token, StmtNS.FromImport["names"]]) => {
+    "from" relative_module "import" import_clause
+      {% ([kw, mod,, names]: [moo.Token, { name: Token; level: number }, moo.Token, StmtNS.FromImport["names"]]) => {
            const last = names[names.length-1];
            const endTok = last.alias || last.name;
-           return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
+           return new StmtNS.FromImport(toAstToken(kw), endTok, mod.name, names, mod.level);
          } %}
+
+# relative-module ::= "."... dotted-name   (leading dots address a local file
+# relative to the importing file's own directory - one dot per directory
+# level, mirroring CPython's relative-import syntax; a bare name with no
+# leading dots (level 0) keeps meaning a Source Academy module, as today.)
+relative_module -> ("."):* dotted_name
+  {% ([dots, name]: [moo.Token[], Token]) => ({ level: dots.length, name }) %}
 
 # dotted-name ::= name ( . name )...                     [python_1_bnf.tex line 20]
 dotted_name -> %name ("." %name):*
