@@ -16,6 +16,7 @@ import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
+import { FULL_PYTHON_VARIANT } from "./plugins/autocomplete/keywords";
 
 /** Same per-chapter stdlib surface as every other engine (PyCseEvaluator.ts,
  * py2js's PY2JS_GROUPS) — used here so the Resolver recognizes names like
@@ -305,7 +306,7 @@ export class PyodideEvaluator4 extends ChapterPyodideEvaluator {
  * rather than a chapter's subset. */
 export class PyodideEvaluatorFull extends PyodideEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, "*", 4);
+    super(conductor, "*", FULL_PYTHON_VARIANT);
   }
 
   protected validateChunk(): void {

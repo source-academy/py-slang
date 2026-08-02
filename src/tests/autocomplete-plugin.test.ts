@@ -9,6 +9,7 @@ import {
 } from "@sourceacademy/common-autocomplete";
 import type { IChannel, IConduit } from "@sourceacademy/conductor/conduit";
 import AutoCompletePlugin from "../conductor/plugins/autocomplete";
+import { FULL_PYTHON_VARIANT } from "../conductor/plugins/autocomplete/keywords";
 
 class TestChannel<T> implements IChannel<T> {
   readonly name = "test";
@@ -184,5 +185,26 @@ describe("AutoCompletePlugin Conductor channels", () => {
         }),
       }),
     );
+  });
+
+  test("'as' is a legal keyword, not highlighted as invalid, in every chapter", () => {
+    const chapter1 = makePlugin(1);
+    const chapter1Mode = requestMode(chapter1.webSyntax);
+    const chapter1Mapper = chapter1Mode?.highlightRules.constants.find(isKeywordMapperRule);
+
+    expect(chapter1Mapper?.token.map.keyword.split("|")).toContain("as");
+    expect(chapter1Mapper?.token.map["invalid.illegal"].split("|")).not.toContain("as");
+  });
+
+  test("Python Full highlights every Python keyword as legal, none as invalid", () => {
+    const full = makePlugin(FULL_PYTHON_VARIANT);
+    const fullMode = requestMode(full.webSyntax);
+    const fullMapper = fullMode?.highlightRules.constants.find(isKeywordMapperRule);
+
+    const legalKeywords = fullMapper?.token.map.keyword.split("|");
+    for (const keyword of ["yield", "class", "try", "with", "except", "as"]) {
+      expect(legalKeywords).toContain(keyword);
+    }
+    expect(fullMapper?.token.map["invalid.illegal"]).toBe("");
   });
 });
