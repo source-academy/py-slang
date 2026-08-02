@@ -749,12 +749,12 @@ f()`,
     ["an argument that is itself a call", "breakpoint(1 + 2)"],
   ])("is still recorded when called with %s", async (_desc, call) => {
     const { breakpointSteps } = await runAndCollectWithBreakpoints(`${call}\nx = 1`);
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    expect(breakpointSteps).toHaveLength(1);
   });
 
   it("is detected through an alias called with arguments", async () => {
     const { breakpointSteps } = await runAndCollectWithBreakpoints("bp = breakpoint\nbp(1, 2)");
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    expect(breakpointSteps).toHaveLength(1);
   });
 
   it("evaluates to None and ignores its arguments, same as the zero-arg form", async () => {
