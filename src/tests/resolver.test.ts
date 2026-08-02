@@ -256,4 +256,18 @@ print(outer())
       expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
     });
   });
+
+  describe("NameReassignmentError wording (#211)", () => {
+    test("describes the reassignment site as 'reassigned', not 'declared'", () => {
+      const code = "x = 1\nx = 2";
+      try {
+        toPythonAstAndResolve(code, 1);
+        throw new Error("did not throw");
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(ResolverErrors.NameReassignmentError);
+        expect(e.message).toContain("A name has been reassigned here.");
+        expect(e.message).not.toContain("A name has been declared here.");
+      }
+    });
+  });
 });

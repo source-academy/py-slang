@@ -50,7 +50,7 @@ export namespace ResolverErrors {
       oldName: Token,
     ) {
       const { lineIndex, fullLine } = getFullLine(source, start);
-      let hint = ` A name has been declared here.`;
+      let hint = ` A name has been reassigned here.`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
       hint = hint.padStart(hint.length + col - diff, " ");
