@@ -174,6 +174,19 @@ describe("PyWasmEvaluator module imports", () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // WASM doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors } = makeMockConductor(false);
+    const evaluator = new PyWasmEvaluator3(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/relative imports/);
+  });
+
   // Calling an imported module *function* requires JSPI (WebAssembly.Suspending/
   // promising) — absent on this runtime, it's supposed to fail loudly (see
   // index.ts) rather than hang or silently misbehave; present, the call must

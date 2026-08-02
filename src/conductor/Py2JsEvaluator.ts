@@ -77,9 +77,35 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
       onOutput: line => this.conductor.sendOutput(line),
       onPendingWorkChange: delta => (delta > 0 ? this.beginPendingWork() : this.endPendingWork()),
       requestInput: prompt => this.conductor.requestInput(prompt),
+      // A local import (`from .foo import x`, source-academy/py-slang#378)
+      // resolves a sibling file through this — conductor's own
+      // requestFile(fileName), already backed by whatever multi-file store
+      // the host has (e.g. the frontend's folder-mode BrowserFS), the same
+      // primitive BasicEvaluator.startEvaluator already uses to fetch the
+      // entrypoint itself. No new host-side protocol needed.
+      fileGetter: path => this.conductor.requestFile(path),
       dataHandler,
       dataVisualizer: this.dataVisualizerPlugin,
     });
+  }
+
+  /**
+   * The host's own entrypoint file name (e.g. "/main.py" in a folder-mode
+   * program) — BasicEvaluator's default evaluateFile discards it, but a
+   * local import needs to know what directory "." means, so this override
+   * captures it on the session before delegating exactly as the default
+   * implementation would.
+   *
+   * (`__program__` needs no help from here: Py2JsSession.runChunkInternal
+   * sets it itself, automatically, from whatever text it's actually about
+   * to compile — see that method's own comment. This evaluator used to
+   * never supply it at all, which crashed every reference to `__program__`
+   * with a raw ReferenceError rather than a Python-level NameError; fixed
+   * at the source rather than by adding another external call here.)
+   */
+  async evaluateFile(fileName: string, fileContent: string): Promise<void> {
+    this.session.setEntrypointFilePath(fileName);
+    return this.evaluateChunk(fileContent);
   }
 
   async evaluateChunk(chunk: string): Promise<void> {

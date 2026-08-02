@@ -5,6 +5,7 @@ import { moduleToPvml } from "../engines/pvml/modules";
 import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import linkedList from "../stdlib/linked-list";
@@ -134,6 +135,12 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on PVML yet
+          // (see py2js for the supported engine) — reject explicitly rather
+          // than treating the dotted path as a conductor module name.
+          throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);
