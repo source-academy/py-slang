@@ -334,18 +334,16 @@ export async function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
 
-    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
-    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
-    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
-    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
-    // so it can be peeked here, before that instruction runs.
-    if (
-      !isPrelude &&
-      isInstr(command) &&
-      command.instrType === InstrType.APPLICATION &&
-      command.numOfArgs === 0
-    ) {
-      const callee = stash.peek();
+    // A call resolving to the `breakpoint` builtin, detected by identity (not source text) so
+    // aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's breakpoint
+    // detection in reduce.ts. Real Python's `breakpoint(*args, **kws)` takes any number of
+    // arguments (forwarded to sys.breakpointhook, which this builtin already ignores either way —
+    // see stdlib/misc.ts), so this fires for any arity, not just zero. APPLICATION pops its callee
+    // off the stash itself, after popping `numOfArgs` args first — by the time this instruction is
+    // about to run, all `numOfArgs` args are already evaluated and sit on top of the callee, so
+    // peekAt(numOfArgs) reaches down past them to the callee, still before APPLICATION runs.
+    if (!isPrelude && isInstr(command) && command.instrType === InstrType.APPLICATION) {
+      const callee = stash.peekAt(command.numOfArgs);
       if (callee?.type === "builtin" && callee.name === "breakpoint") {
         // `steps` here is the count as of the end of the *previous* iteration — i.e. the
         // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
