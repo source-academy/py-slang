@@ -36,6 +36,7 @@ import {
   PyodideEvaluatorFull,
 } from "../../src/conductor/PyodideEvaluator";
 import AutoCompletePlugin from "../../src/conductor/plugins/autocomplete";
+import { FULL_PYTHON_VARIANT } from "../../src/conductor/plugins/autocomplete/keywords";
 import pythonMode from "../../src/conductor/plugins/autocomplete/mode";
 import { getNames } from "../../src/conductor/plugins/autocomplete/resolver";
 
@@ -67,7 +68,7 @@ describe("Python autocomplete plugin registration", () => {
     [PyodideEvaluator2, 2],
     [PyodideEvaluator3, 3],
     [PyodideEvaluator4, 4],
-    [PyodideEvaluatorFull, 4],
+    [PyodideEvaluatorFull, FULL_PYTHON_VARIANT],
     [PyStepperEvaluator1, 1],
     [PyStepperEvaluator2, 2],
   ] as const)("%p registers variant %i and requests its web counterpart", (Evaluator, variant) => {
