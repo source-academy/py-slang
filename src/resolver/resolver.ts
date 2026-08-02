@@ -183,7 +183,6 @@ export class Environment {
         this.source,
         identifier.indexInSource,
         identifier.indexInSource + identifier.lexeme.length,
-        lookup,
       );
     }
     this.names.set(identifier.lexeme, RedefineableTokenSentinel);
@@ -375,12 +374,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     let curr = this.environment;
     while (curr !== this.functionScope) {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
-        const token = curr.names.get(identifier.lexeme);
-        if (token === undefined) {
-          this.errors.push(new Error("placeholder error"));
-          return;
-        }
-
         this.errors.push(
           new ResolverErrors.NameReassignmentError(
             identifier.line,
@@ -388,7 +381,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             this.source,
             identifier.indexInSource,
             identifier.indexInSource + identifier.lexeme.length,
-            token,
           ),
         );
         return;
