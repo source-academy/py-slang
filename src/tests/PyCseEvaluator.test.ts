@@ -157,23 +157,27 @@ describe("PyCseEvaluator3/4 (CSE snapshots)", () => {
   });
 
   test("gutter-click breakpoint lines don't leak into a chunk that didn't request them", async () => {
-    const { conductor, errors, sendSnapshots } = makeMockConductor({
+    // Same evaluator and conductor across both calls, mutating the mocked /__cse_config__ file in
+    // between - unlike a fresh evaluator (which would trivially start with no breakpointSteps
+    // regardless of any reset logic), this actually exercises evaluateChunk's per-run reset
+    // (this.context.runtime.breakpointSteps = []; see PyCseEvaluator.ts), the same reset the
+    // breakpoint()-leak test above exercises for an explicit breakpoint() call.
+    const files: Record<string, string> = {
       "/__cse_config__": JSON.stringify({ breakpointLines: [1] }),
-    });
+    };
+    const { conductor, errors, sendSnapshots } = makeMockConductor(files);
     const evaluator = new PyCseEvaluator3(conductor);
 
     await evaluator.evaluateChunk("x = 1");
-
     expect(errors).toEqual([]);
     const [, firstBreakpointSteps] = sendSnapshots.mock.calls[0];
     expect(firstBreakpointSteps.length).toBeGreaterThan(0);
 
-    // A fresh evaluator with no configured breakpoint lines: no breakpointSteps at all.
-    const { conductor: plainConductor, sendSnapshots: plainSendSnapshots } = makeMockConductor();
-    const plainEvaluator = new PyCseEvaluator3(plainConductor);
-    await plainEvaluator.evaluateChunk("x = 1");
-    const [, plainBreakpointSteps] = plainSendSnapshots.mock.calls[0];
-    expect(plainBreakpointSteps).toEqual([]);
+    delete files["/__cse_config__"];
+    await evaluator.evaluateChunk("x = 1");
+    expect(errors).toEqual([]);
+    const [, secondBreakpointSteps] = sendSnapshots.mock.calls[1];
+    expect(secondBreakpointSteps).toEqual([]);
   });
 });
 

@@ -785,18 +785,33 @@ describe("gutter-click breakpoints (#383)", () => {
     return collectSnapshots(ctx, new Control(ast), new Stash(), -1, variant, script);
   }
 
+  /** The source line of the statement on top of control at `stepIndex` — i.e. the statement a
+   * breakpoint step is about to evaluate. `metadata.startLine` comes straight from the node's own
+   * `startToken.line` (`serializeControlItem`), so this pins down exactly which statement
+   * `markBreakpoints` resolved to, unlike a snapshot's own `currentLine` (the *previously*
+   * evaluated node - off by one from what's on top of control at a breakpoint step). */
+  function breakpointLine(
+    snapshots: Awaited<ReturnType<typeof runWithGutterBreakpoints>>["snapshots"],
+    stepIndex: number,
+  ): number | undefined {
+    const step = snapshots.find(s => s.stepIndex === stepIndex);
+    return (step?.control[0]?.metadata as { startLine?: number } | undefined)?.startLine;
+  }
+
   it("records a breakpointSteps entry for a plain statement's line", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints("x = 1\ny = 2", [1]);
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints("x = 1\ny = 2", [1]);
+    expect(breakpointSteps).toHaveLength(1);
+    expect(breakpointLine(snapshots, breakpointSteps[0])).toBe(1);
   });
 
   it("resolves a click on a blank line to the next statement", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints("x = 1\n\ny = 2", [2]);
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints("x = 1\n\ny = 2", [2]);
+    expect(breakpointSteps).toHaveLength(1);
+    expect(breakpointLine(snapshots, breakpointSteps[0])).toBe(3);
   });
 
   it("is recorded inside a function body", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints(
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints(
       `def f():
     y = 1
     return y
@@ -804,21 +819,25 @@ describe("gutter-click breakpoints (#383)", () => {
 f()`,
       [2],
     );
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    expect(breakpointSteps).toHaveLength(1);
+    expect(breakpointLine(snapshots, breakpointSteps[0])).toBe(2);
   });
 
   it("is recorded on every iteration inside a loop, in ascending order", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints(
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints(
       `for x in range(3):
     y = x`,
       [2],
     );
     expect(breakpointSteps.length).toBe(3);
     expect([...breakpointSteps].sort((a, b) => a - b)).toEqual(breakpointSteps);
+    for (const step of breakpointSteps) {
+      expect(breakpointLine(snapshots, step)).toBe(2);
+    }
   });
 
   it("resolves a click on an if statement's header to the if statement itself", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints(
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints(
       `x = 1
 if x > 0:
     y = 1
@@ -826,7 +845,8 @@ else:
     y = 2`,
       [2],
     );
-    expect(breakpointSteps.length).toBeGreaterThan(0);
+    expect(breakpointSteps).toHaveLength(1);
+    expect(breakpointLine(snapshots, breakpointSteps[0])).toBe(2);
   });
 
   it("ignores a line past the end of the program", async () => {
@@ -835,8 +855,17 @@ else:
   });
 
   it("composes with an explicit breakpoint() call elsewhere in the same program", async () => {
-    const { breakpointSteps } = await runWithGutterBreakpoints("breakpoint()\nx = 1\ny = 2", [3]);
-    // One from the explicit breakpoint() call, one from the gutter click on `y = 2`.
-    expect(breakpointSteps.length).toBe(2);
+    const { snapshots, breakpointSteps } = await runWithGutterBreakpoints(
+      "breakpoint()\nx = 1\ny = 2",
+      [3],
+    );
+    // One from the explicit breakpoint() call (line 1's APPLICATION instruction is on top, not a
+    // node, so it carries no startLine - checked via displayText instead), one from the gutter
+    // click on `y = 2` (line 3).
+    expect(breakpointSteps).toHaveLength(2);
+    expect(
+      snapshots.find(s => s.stepIndex === breakpointSteps[0])?.control[0]?.displayText,
+    ).toContain("call");
+    expect(breakpointLine(snapshots, breakpointSteps[1])).toBe(3);
   });
 });
