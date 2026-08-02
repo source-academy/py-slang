@@ -8,6 +8,7 @@ import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { compileToWasmAndRun } from "../engines/wasm";
 import { prepareModuleBindings, PreparedModuleBindings } from "../engines/wasm/moduleInterop";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
@@ -68,6 +69,13 @@ class PyWasmEvaluator extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on the WASM
+          // engine yet (see py2js for the supported engine) — reject
+          // explicitly rather than treating the dotted path as a conductor
+          // module name.
+          throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);

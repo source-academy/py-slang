@@ -13,6 +13,7 @@ import {
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { TokenType } from "../../tokenizer";
 import { LibFuncType } from "./library";
 import {
@@ -980,6 +981,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
    * also why it must run during main() rather than at instantiation time
    * (heap/shadow-stack globals are only live inside main). */
   visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+    if (stmt.level > 0) {
+      // Local-file imports (leading dots) aren't implemented on the WASM
+      // engine yet — reject explicitly rather than treating the dotted path
+      // as a conductor module name (see PyWasmEvaluator.ts's loadImports,
+      // which already rejects this earlier for the conductor entrypoint;
+      // this is the same guard for any direct, non-conductor caller).
+      throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+    }
     return wasm.raw`${stmt.names.map(spec => {
       const boundName = (spec.alias ?? spec.name).lexeme;
       const bindingIndex = this.moduleBindingIndices.get(boundName);
