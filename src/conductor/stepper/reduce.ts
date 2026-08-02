@@ -815,18 +815,23 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op
       // statement (like `pass`) that also marks a step the host's breakpoint navigation (the
       // double-arrow) can jump to. Detected here against the *current*, already-substituted tree — a
-      // zero-arg call whose callee is (by now) literally the built-in identifier `breakpoint` —
-      // instead of the student's original syntax, so it behaves like every other built-in: reached
-      // directly (`breakpoint()`) or via aliasing (`bp = breakpoint; bp()`) is indistinguishable, just
-      // as `p = print; p(1)` already is. This only matches when the call is the *whole* of a bare
-      // statement; used any other way (`x = breakpoint()`, nested in a larger expression, passed
-      // around) it falls through to `reduceExpr` below and reduces as an ordinary built-in call
-      // yielding `None`, matching Python's real return value.
+      // call whose callee is (by now) literally the built-in identifier `breakpoint`, with every
+      // argument already reduced to a value — instead of the student's original syntax, so it behaves
+      // like every other built-in: reached directly (`breakpoint()`) or via aliasing
+      // (`bp = breakpoint; bp()`) is indistinguishable, just as `p = print; p(1)` already is. Real
+      // Python's `breakpoint(*args, **kws)` takes any number of arguments (forwarded to
+      // sys.breakpointhook, which the CSE/stepper's own no-op `breakpoint` already ignores either way —
+      // see stdlib/misc.ts), so this fires for any arity, not just zero — matching the point
+      // `contractCall` below would otherwise apply the builtin at (args not yet all values still takes
+      // an ordinary reduction step first, via `reduceExpr` below). This only matches when the call is
+      // the *whole* of a bare statement; used any other way (`x = breakpoint()`, nested in a larger
+      // expression, passed around) it falls through to `reduceExpr` below and reduces as an ordinary
+      // built-in call yielding `None`, matching Python's real return value.
       if (
         expr.type === "CallExpression" &&
         (expr.callee as StepNode).type === "Identifier" &&
         (expr.callee as StepNode).name === "breakpoint" &&
-        (expr.arguments as StepNode[]).length === 0
+        (expr.arguments as StepNode[]).every(isValue)
       ) {
         return {
           kind: "step",
