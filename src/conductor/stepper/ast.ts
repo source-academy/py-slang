@@ -15,6 +15,10 @@
 /** A single estree-shaped stepper node. Plain JSON: a `type` discriminator plus child fields. */
 export interface StepNode {
   type: string;
+  /** Set by `translate.ts` when the source statement was flagged by `markBreakpoints` (a gutter
+   * click resolved to its closest enclosing statement — see `../../breakpoints.ts`). Checked by
+   * `reduce.ts` alongside its existing `breakpoint()`-call detection. */
+  hasBreakpoint?: boolean;
   [key: string]: unknown;
 }
 

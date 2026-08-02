@@ -5,7 +5,11 @@ import { Context } from "./context";
 import { Environment } from "./environment";
 import { Value } from "./stash";
 
-export type Node = { isEnvDependent?: boolean } & (StmtNS.Stmt | ExprNS.Expr | StatementSequence);
+export type Node = { isEnvDependent?: boolean; hasBreakpoint?: boolean } & (
+  | StmtNS.Stmt
+  | ExprNS.Expr
+  | StatementSequence
+);
 
 export interface StatementSequence {
   kind: "StatementSequence";

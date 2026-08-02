@@ -131,6 +131,16 @@ function block(statements: StmtNS.Stmt[]): StepNode {
 }
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
+  const node = translateStmtInner(stmt);
+  // `hasBreakpoint` is bolted onto the source statement by `markBreakpoints` (see
+  // `../../breakpoints.ts`); copy it across so `reduce.ts` can still see it once the statement
+  // has become an (estree-shaped, location-free) `StepNode` — mirrors how `breakpoint()` itself
+  // is detected structurally at reduction time rather than here at translation time (see below).
+  if ((stmt as StmtNS.Stmt & { hasBreakpoint?: boolean }).hasBreakpoint) node.hasBreakpoint = true;
+  return node;
+}
+
+function translateStmtInner(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
     case "SimpleExpr": {
       const expr = (stmt as StmtNS.SimpleExpr).expression;
