@@ -354,6 +354,15 @@ export async function* generateCSEMachineStateStream(
       }
     }
 
+    // A node flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
+    // statement — see `breakpoints.ts`) is treated exactly like an explicit `breakpoint()` call:
+    // recorded the moment it's about to be evaluated, using the same `steps - 1` step-index
+    // convention as the block above.
+    if (!isPrelude && isNode(command) && command.hasBreakpoint) {
+      context.runtime.breakpointSteps.push(steps - 1);
+      context.runtime.break = true;
+    }
+
     control.pop();
 
     if (isNode(command)) {

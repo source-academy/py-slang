@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { markBreakpoints } from "../breakpoints";
 import {
   collectSnapshots,
   formatValue,
@@ -762,5 +763,80 @@ f()`,
     const last = snapshots[snapshots.length - 1];
     const xBinding = last.environments.flatMap(e => e.bindings).find(b => b.name === "x");
     expect(xBinding?.value.displayValue).toBe("None");
+  });
+});
+
+describe("gutter-click breakpoints (#383)", () => {
+  // A gutter click only carries a line number; `markBreakpoints` (../breakpoints) resolves it to
+  // the closest enclosing statement and flags it, and the interpreter checks that flag right next
+  // to its existing breakpoint() check (interpreter.ts) — so a gutter click should produce the
+  // same kind of `breakpointSteps` entry an equivalent breakpoint() call would.
+
+  /** Like `runAndCollectWithBreakpoints`, but marks `lines` via `markBreakpoints` instead of
+   * relying on an explicit `breakpoint()` call in the source. */
+  async function runWithGutterBreakpoints(code: string, lines: number[], variant = 3) {
+    const ctx = new Context();
+    for (const [name, val] of [...math.builtins, ...misc.builtins]) {
+      ctx.nativeStorage.builtins.set(name, val);
+    }
+    const script = code + "\n";
+    const ast = parse(script);
+    markBreakpoints(ast, lines);
+    return collectSnapshots(ctx, new Control(ast), new Stash(), -1, variant, script);
+  }
+
+  it("records a breakpointSteps entry for a plain statement's line", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints("x = 1\ny = 2", [1]);
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("resolves a click on a blank line to the next statement", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints("x = 1\n\ny = 2", [2]);
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("is recorded inside a function body", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints(
+      `def f():
+    y = 1
+    return y
+
+f()`,
+      [2],
+    );
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("is recorded on every iteration inside a loop, in ascending order", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints(
+      `for x in range(3):
+    y = x`,
+      [2],
+    );
+    expect(breakpointSteps.length).toBe(3);
+    expect([...breakpointSteps].sort((a, b) => a - b)).toEqual(breakpointSteps);
+  });
+
+  it("resolves a click on an if statement's header to the if statement itself", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints(
+      `x = 1
+if x > 0:
+    y = 1
+else:
+    y = 2`,
+      [2],
+    );
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  it("ignores a line past the end of the program", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints("x = 1", [50]);
+    expect(breakpointSteps).toHaveLength(0);
+  });
+
+  it("composes with an explicit breakpoint() call elsewhere in the same program", async () => {
+    const { breakpointSteps } = await runWithGutterBreakpoints("breakpoint()\nx = 1\ny = 2", [3]);
+    // One from the explicit breakpoint() call, one from the gutter click on `y = 2`.
+    expect(breakpointSteps.length).toBe(2);
   });
 });
