@@ -195,9 +195,25 @@ function translateStmtInner(stmt: StmtNS.Stmt): StepNode {
     }
     case "Pass":
       return { type: "PassStatement" };
+    case "FromImport":
+      return { type: "ImportStatement", raw: importText(stmt as StmtNS.FromImport) };
     default:
       return { type: "ExpressionStatement", expression: identifier(`<${stmt.kind}>`) };
   }
+}
+
+/** Reconstructs `from X import Y [as Z], ...` (or its relative `from .X import ...` form) as display
+ * text for {@link translateStmtInner}'s `"FromImport"` case. The statement itself never reduces (see
+ * `reduce.ts`'s `"ImportStatement"` case) — imported names are resolved and bound before stepping
+ * begins (see `../getSteps`), mirroring how the CSE machine's own `FromImport` evaluator is a no-op
+ * once its own upfront `evaluateImports` pass has run — so this text is purely what the student's
+ * source reads like on this step, not something the reducer interprets. */
+function importText(stmt: StmtNS.FromImport): string {
+  const module = ".".repeat(stmt.level) + stmt.module.lexeme;
+  const names = stmt.names
+    .map(({ name, alias }) => (alias ? `${name.lexeme} as ${alias.lexeme}` : name.lexeme))
+    .join(", ");
+  return `from ${module} import ${names}`;
 }
 
 /** Translates a parsed Python file into the estree-shaped {@link program} root the stepper reduces. */

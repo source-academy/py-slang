@@ -2,9 +2,11 @@ import { STEPPER_DIRECTORY_ID } from "@sourceacademy/common-stepper";
 import { ConductorError, EvaluatorSyntaxError } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { RunnerStatus } from "@sourceacademy/conductor/types";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 
 import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { fetchRunConfig } from "./runConfig";
 import { evaluatePython } from "./stepper/getSteps";
@@ -21,9 +23,17 @@ import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
  *
  * This mirrors js-slang's `SourceStepperEvaluator`; only parsing and step production are
  * Python-specific.
+ *
+ * Module loading (`from X import y`, py-slang#385): a `GenericDataHandler` — the same engine-agnostic
+ * `IDataHandler` implementation `PyCseEvaluatorBase`/`Py2JsEvaluatorBase` use — is registered with
+ * `ModuleLoaderRunnerPlugin` exactly as those evaluators do, so `ModuleLoaderRunnerPlugin.instance` is
+ * reachable from the stepper module for resolving a program's imports before stepping begins. Handed
+ * to `PythonStepperRunnerPlugin` at registration below, which threads it into `getPythonSteps` (see
+ * `moduleInterop.ts`'s `resolveImports`) for both the Stepper tab's steps and the REPL's final value.
  */
 abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private readonly stepper: PythonStepperRunnerPlugin;
+  private readonly dataHandler = new GenericDataHandler();
   /** The selected SICPy sublanguage (1–4). Gates which built-ins preprocessing accepts, so e.g. a
    * §1 program cannot use the §2 list library — see {@link preprocessPython}. */
   private readonly chapter: number;
@@ -33,8 +43,13 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
     // Register the language-agnostic stepper runner (Python binding) and load its host (web) half.
-    this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin);
+    this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin, this.dataHandler);
     conductor.hostLoadPlugin(STEPPER_DIRECTORY_ID);
+    this.conductor.registerPlugin(
+      ModuleLoaderRunnerPlugin,
+      this.conductor,
+      asInterfacableEvaluator(this, this.dataHandler),
+    );
   }
 
   /**
@@ -79,7 +94,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
 
       // Reduce to the final value for the REPL. We send a string (never `undefined`) so the result
       // survives the channel and does not break the host's result saga.
-      this.conductor.sendResult(evaluatePython(ast));
+      this.conductor.sendResult(await evaluatePython(ast, this.dataHandler));
     } catch (error) {
       this.conductor.sendError(
         error instanceof SyntaxError
