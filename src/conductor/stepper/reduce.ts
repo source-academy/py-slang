@@ -584,10 +584,7 @@ function contractConditional(node: StepNode): ReduceResult {
   };
 }
 
-async function contractCall(
-  node: StepNode,
-  context: StepperContext,
-): Promise<ReduceResult | null> {
+async function contractCall(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const callee = node.callee as StepNode;
   const args = node.arguments as StepNode[];
 
@@ -1164,10 +1161,7 @@ export async function reduceProgram(
  * argument expression (which then reduces in place) — and falling off the end yields Python `None`.
  * Mirrors Source's `StepperBlockExpression`.
  */
-async function reduceBlock(
-  node: StepNode,
-  context: StepperContext,
-): Promise<ReduceResult | null> {
+async function reduceBlock(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const none = (): StepNode => literal(null, "None");
   const fallOff = (preRedex: StepNode, isBreakpoint = false): ReduceResult => {
     const result = none();

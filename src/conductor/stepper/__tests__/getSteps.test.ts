@@ -2071,6 +2071,8 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       mathmod: [{ symbol: "double", value: { type: DataType.NUMBER, value: 1 } }],
     });
     const ast = parse("from mathmod import triple\ntriple\n");
-    await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(/cannot import name 'triple'/);
+    await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(
+      /cannot import name 'triple'/,
+    );
   });
 });
