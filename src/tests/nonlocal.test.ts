@@ -830,7 +830,14 @@ def grandouter():
     outer()
 grandouter()
 `;
-    expect(() => toPythonAstAndResolve(code, 3)).toThrow(SyntaxError);
+    // Matches CPython's own wording for this diagnostic (#187) — and, since the name reaching
+    // this point is by definition already spelled correctly (there's simply no binding it can
+    // resolve to as nonlocal), no "Perhaps you meant to type 'x'?" suggestion should appear
+    // either, even though `x` genuinely exists in scope here (the very global-shadowed binding
+    // blocking resolution) and would otherwise be the Levenshtein-closest — and thus most
+    // confusing possible — suggestion.
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/no binding for nonlocal 'x' found/);
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow(/Perhaps you meant/);
   });
 
   test("nonlocal with no binding construct anywhere in any enclosing function is still rejected", () => {
@@ -842,6 +849,7 @@ def outer():
     inner()
 outer()
 `;
-    expect(() => toPythonAstAndResolve(code, 3)).toThrow(SyntaxError);
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/no binding for nonlocal 'x' found/);
+    expect(() => toPythonAstAndResolve(code, 3)).not.toThrow(/Perhaps you meant/);
   });
 });
