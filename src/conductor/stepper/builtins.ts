@@ -24,6 +24,8 @@ import {
   type StepNode,
   complexLiteral,
   isComplexValue,
+  isModuleFunctionNode,
+  isOpaqueNode,
   isPairNode,
   isResultValue,
   literal,
@@ -107,6 +109,7 @@ const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) ||
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
+  n.type === "ModuleFunction" ||
   (n.type === "Identifier" && isBuiltinFunctionName(String(n.name)));
 
 /* node constructors */
@@ -417,6 +420,9 @@ Object.assign(BUILTIN_FUNCTIONS, {
     if (f.type === "Identifier" && isBuiltinFunctionName(String(f.name))) {
       return intLiteral(BigInt(BUILTIN_MIN_ARGS[String(f.name)] ?? 1));
     }
+    if (isModuleFunctionNode(f)) {
+      return intLiteral(BigInt(f.minArgs as number));
+    }
     return typeError("arity() argument must be a function");
   },
   print: (args: StepNode[]): StepNode => {
@@ -485,6 +491,7 @@ function pyTypeName(node: StepNode): string {
   if (isNoneNode(node)) return "NoneType";
   if (isPairNode(node)) return "pair";
   if (isFunctionNode(node)) return "function";
+  if (isOpaqueNode(node)) return String(node.label);
   return node.type;
 }
 
