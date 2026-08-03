@@ -7,6 +7,7 @@ import {
   type StepNode,
 } from "../ast";
 import { isBuiltinConstantName } from "../builtins";
+import { markBreakpoints } from "../../../breakpoints";
 import { parse } from "../../../parser";
 import { evaluatePython, getPythonSteps } from "../getSteps";
 import { formatPrintLlistOutput } from "../lists";
@@ -1664,6 +1665,66 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
       step => step.markers?.[0]?.redexNodeType === "DebuggerStatement",
     );
     expect(flagged).toHaveLength(1);
+  });
+});
+
+describe("Python stepper — gutter-click breakpoints (#383)", () => {
+  // A gutter click only carries a line number, not an AST node: `markBreakpoints` (../../../breakpoints)
+  // resolves it to the closest enclosing statement and flags it; `translate.ts` copies that flag onto
+  // the corresponding StepNode, and `reduce.ts` folds it into the same `isBreakpoint` field the
+  // breakpoint() detection above uses — so it surfaces identically, via `redexNodeType ===
+  // "DebuggerStatement"` on the *before* marker.
+
+  function stepsWithBreakpoints(src: string, lines: number[]) {
+    const ast = parse(src + "\n");
+    markBreakpoints(ast, lines);
+    return getPythonSteps(ast);
+  }
+
+  function flaggedExplanations(src: string, lines: number[]) {
+    return stepsWithBreakpoints(src, lines)
+      .filter(step => step.markers?.[0]?.redexNodeType === "DebuggerStatement")
+      .map(step => step.markers?.[0]?.explanation);
+  }
+
+  test("a click on a plain statement's line marks it as a breakpoint target", () => {
+    expect(flaggedExplanations("x = 1\ny = 2", [1])).toEqual([
+      "Declaring and substituting x into the rest of the block",
+    ]);
+  });
+
+  test("a click on a blank line snaps to the next statement", () => {
+    expect(flaggedExplanations("x = 1\n\ny = 2", [2])).toEqual([
+      "Declaring and substituting y into the rest of the block",
+    ]);
+  });
+
+  test("a click inside a function body marks that statement, not the def line", () => {
+    // Fires on the *first* step that reaches the `y = x + 1` line (`x` already substituted to `4`
+    // by the call, so the first step is reducing `4 + 1`) — not the later "declared and
+    // substituted" step, matching a debugger stopping the moment execution reaches the line.
+    const src = "def f(x):\n  y = x + 1\n  return y\nf(4)";
+    expect(flaggedExplanations(src, [2])).toEqual(["Evaluating binary expression 4 + 1"]);
+  });
+
+  test("a multi-step statement is only a breakpoint target once, not on every step it takes", () => {
+    // `y`'s initializer takes three expression steps (1 + 2, then + 3, then bind); a naive
+    // "the whole statement is flagged" check would mark all of them. Only the first should carry
+    // `redexNodeType === "DebuggerStatement"`.
+    const flagged = flaggedExplanations("y = 1 + 2 + 3", [1]);
+    expect(flagged).toHaveLength(1);
+  });
+
+  test("a click past the end of the program marks nothing", () => {
+    expect(flaggedExplanations("x = 1", [50])).toEqual([]);
+  });
+
+  test("composes with an explicit breakpoint() call elsewhere in the same program", () => {
+    const flagged = flaggedExplanations("breakpoint()\nx = 1\ny = 2", [3]);
+    expect(flagged).toEqual([
+      "Evaluating breakpoint statement",
+      "Declaring and substituting y into the rest of the block",
+    ]);
   });
 });
 

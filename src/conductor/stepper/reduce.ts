@@ -846,13 +846,19 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       }
       const reduced = reduceExpr(expr);
       if (reduced) {
+        // `hasBreakpoint: false` on the carried-forward copy: `head` still has one more expression
+        // step to take, so it stays the head on the next call to this function with the *same*
+        // `hasBreakpoint` flag (plain object spread) — clearing it here is what makes a gutter
+        // breakpoint (see `headBreakpoint` in `reduceProgram`/`reduceBlock`) fire exactly once, on
+        // this first step reaching the statement, rather than on every subsequent expression step
+        // taken while still evaluating it.
         return {
           kind: "step",
-          newBody: [{ ...head, expression: reduced.node }, ...rest],
+          newBody: [{ ...head, expression: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
           postNewBody: reduced.postNode
-            ? [{ ...head, expression: reduced.postNode }, ...rest]
+            ? [{ ...head, expression: reduced.postNode, hasBreakpoint: false }, ...rest]
             : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
@@ -870,17 +876,29 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       if (!isValue(init)) {
         const reduced = reduceExpr(init);
         if (reduced) {
+          // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
           return {
             kind: "step",
-            newBody: [{ ...head, declarations: [{ ...decl, init: reduced.node }] }, ...rest],
+            newBody: [
+              { ...head, declarations: [{ ...decl, init: reduced.node }], hasBreakpoint: false },
+              ...rest,
+            ],
             preRedex: reduced.preRedex,
             postRedex: reduced.postRedex,
             postNewBody: reduced.postNode
-              ? [{ ...head, declarations: [{ ...decl, init: reduced.postNode }] }, ...rest]
+              ? [
+                  {
+                    ...head,
+                    declarations: [{ ...decl, init: reduced.postNode }],
+                    hasBreakpoint: false,
+                  },
+                  ...rest,
+                ]
               : undefined,
             explanation: reduced.explanation,
             beforeExplanation: reduced.beforeExplanation,
             output: reduced.output,
+            isBreakpoint: reduced.isBreakpoint,
           };
         }
         return { kind: "irreducible" };
@@ -940,13 +958,14 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
     case "IfStatement": {
       const reduced = reduceExpr(head.test as StepNode);
       if (reduced) {
+        // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
         return {
           kind: "step",
-          newBody: [{ ...head, test: reduced.node }, ...rest],
+          newBody: [{ ...head, test: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
           postNewBody: reduced.postNode
-            ? [{ ...head, test: reduced.postNode }, ...rest]
+            ? [{ ...head, test: reduced.postNode, hasBreakpoint: false }, ...rest]
             : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
@@ -987,6 +1006,12 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
   const head = body[0];
   const rest = body.slice(1);
   const outcome = stepHead(head, rest);
+  // A statement flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
+  // statement — see `../../breakpoints.ts`, propagated onto the `StepNode` by `translate.ts`) is
+  // treated exactly like an explicit `breakpoint()` call: computed once here, where `head` is in
+  // scope, and OR'd into every `ReduceResult` this function can return for it, rather than
+  // threading it through every `stepHead` arm individually.
+  const headBreakpoint = !!head.hasBreakpoint;
 
   switch (outcome.kind) {
     case "step":
@@ -998,7 +1023,7 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
-        isBreakpoint: outcome.isBreakpoint,
+        isBreakpoint: outcome.isBreakpoint || headBreakpoint,
       };
     case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
@@ -1017,6 +1042,7 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         postNode: prog,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "return": // A `return` at the top level is not valid Python; treat the program as done.
@@ -1034,7 +1060,7 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
  */
 function reduceBlock(node: StepNode): ReduceResult | null {
   const none = (): StepNode => literal(null, "None");
-  const fallOff = (preRedex: StepNode): ReduceResult => {
+  const fallOff = (preRedex: StepNode, isBreakpoint = false): ReduceResult => {
     const result = none();
     return {
       node: result,
@@ -1042,6 +1068,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
       postRedex: result,
       explanation: "Function returned None",
       beforeExplanation: "Function returning None",
+      isBreakpoint,
     };
   };
 
@@ -1051,6 +1078,8 @@ function reduceBlock(node: StepNode): ReduceResult | null {
   const head = body[0];
   const rest = body.slice(1);
   const outcome = stepHead(head, rest);
+  // See the identical `headBreakpoint` note in `reduceProgram`.
+  const headBreakpoint = !!head.hasBreakpoint;
 
   switch (outcome.kind) {
     case "step":
@@ -1062,7 +1091,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
-        isBreakpoint: outcome.isBreakpoint,
+        isBreakpoint: outcome.isBreakpoint || headBreakpoint,
       };
     case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a
@@ -1074,6 +1103,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         postRedex: arg,
         explanation: `Returned ${unparse(arg)}`,
         beforeExplanation: `Returning ${unparse(arg)}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "finished-expression": {
@@ -1081,7 +1111,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
       // was the last statement, the function fell off the end → None. As in `reduceProgram`'s
       // "finished-expression" case, the after step shows the value green once more (`postNode`) before
       // it disappears on the next contraction.
-      if (rest.length === 0) return fallOff(head);
+      if (rest.length === 0) return fallOff(head, headBreakpoint);
       const text = unparse(head.expression as StepNode);
       return {
         node: { ...node, body: rest },
@@ -1090,6 +1120,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         postNode: node,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "irreducible":

@@ -3,8 +3,10 @@ import { ConductorError, EvaluatorSyntaxError } from "@sourceacademy/conductor/c
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { RunnerStatus } from "@sourceacademy/conductor/types";
 
+import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
+import { fetchRunConfig } from "./runConfig";
 import { evaluatePython } from "./stepper/getSteps";
 import { preprocessPython } from "./stepper/preprocess";
 import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
@@ -59,6 +61,9 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     try {
       const script = chunk + "\n";
       const ast = parse(script);
+
+      const config = await fetchRunConfig(this.conductor);
+      markBreakpoints(ast, config.breakpointLines ?? []);
 
       // Preprocessing: reject an undefined variable as a (preprocessing) error and do NOT run the
       // stepper — a free name has no meaning in the substitution model. Mirrors Source's

@@ -26,14 +26,14 @@ import {
  * PythonDataVisualizerRunnerPlugin (used via `this.dataVisualizerPlugin?.resetRun()`). One
  * generic stub covers every registerPlugin call: only the methods each plugin path actually
  * invokes need to exist. */
-function makeMockConductor() {
+function makeMockConductor(files: Record<string, string> = {}) {
   const results: unknown[] = [];
   const errors: unknown[] = [];
   const outputs: string[] = [];
   const sendSnapshots = jest.fn();
   const resetRun = jest.fn().mockResolvedValue(undefined);
   const conductor = {
-    requestFile: () => Promise.resolve(undefined),
+    requestFile: (name: string) => Promise.resolve(files[name]),
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
@@ -137,6 +137,46 @@ describe("PyCseEvaluator3/4 (CSE snapshots)", () => {
     const [, firstBreakpointSteps] = sendSnapshots.mock.calls[0];
     const [, secondBreakpointSteps] = sendSnapshots.mock.calls[1];
     expect(firstBreakpointSteps.length).toBeGreaterThan(0);
+    expect(secondBreakpointSteps).toEqual([]);
+  });
+
+  test("gutter-click breakpoint lines from /__cse_config__ (#383) surface in sendSnapshots", async () => {
+    // The host has no dedicated message for gutter clicks; it serves them through the same
+    // /__cse_config__ virtual file evaluateChunk already fetches stepLimit from (see runConfig.ts).
+    const { conductor, errors, sendSnapshots } = makeMockConductor({
+      "/__cse_config__": JSON.stringify({ breakpointLines: [2] }),
+    });
+    const evaluator = new PyCseEvaluator3(conductor);
+
+    await evaluator.evaluateChunk("x = 1\ny = 2");
+
+    expect(errors).toEqual([]);
+    expect(sendSnapshots).toHaveBeenCalledTimes(1);
+    const [, breakpointSteps] = sendSnapshots.mock.calls[0];
+    expect(breakpointSteps.length).toBeGreaterThan(0);
+  });
+
+  test("gutter-click breakpoint lines don't leak into a chunk that didn't request them", async () => {
+    // Same evaluator and conductor across both calls, mutating the mocked /__cse_config__ file in
+    // between - unlike a fresh evaluator (which would trivially start with no breakpointSteps
+    // regardless of any reset logic), this actually exercises evaluateChunk's per-run reset
+    // (this.context.runtime.breakpointSteps = []; see PyCseEvaluator.ts), the same reset the
+    // breakpoint()-leak test above exercises for an explicit breakpoint() call.
+    const files: Record<string, string> = {
+      "/__cse_config__": JSON.stringify({ breakpointLines: [1] }),
+    };
+    const { conductor, errors, sendSnapshots } = makeMockConductor(files);
+    const evaluator = new PyCseEvaluator3(conductor);
+
+    await evaluator.evaluateChunk("x = 1");
+    expect(errors).toEqual([]);
+    const [, firstBreakpointSteps] = sendSnapshots.mock.calls[0];
+    expect(firstBreakpointSteps.length).toBeGreaterThan(0);
+
+    delete files["/__cse_config__"];
+    await evaluator.evaluateChunk("x = 1");
+    expect(errors).toEqual([]);
+    const [, secondBreakpointSteps] = sendSnapshots.mock.calls[1];
     expect(secondBreakpointSteps).toEqual([]);
   });
 });

@@ -14,6 +14,7 @@ import {
   destroyStreams,
   displayError,
 } from "../engines/cse/streams";
+import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import dataVisualizer from "../stdlib/dataVisualizer";
@@ -29,6 +30,7 @@ import { PythonDataVisualizerRunnerPlugin } from "./dataVisualizer/PyDataVisuali
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { collectSnapshots } from "./plugins/PyCseMachinePlugin";
+import { fetchRunConfig } from "./runConfig";
 
 function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let promise: Promise<T> | undefined;
@@ -145,15 +147,9 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       // Chapters 1-2: run to completion via the generator (maxSnapshots=0 → no
       // snapshots collected, CSE tab never appears) so stdout/errors are emitted.
       if (this.variant >= 3) {
-        const configRaw = await this.conductor.requestFile("/__cse_config__");
-        let maxSnapshots = 1000;
-        if (configRaw) {
-          try {
-            maxSnapshots = (JSON.parse(configRaw) as { stepLimit?: number }).stepLimit ?? 1000;
-          } catch {
-            // malformed config — fall back to default step limit
-          }
-        }
+        const config = await fetchRunConfig(this.conductor);
+        const maxSnapshots = config.stepLimit ?? 1000;
+        markBreakpoints(ast, config.breakpointLines ?? []);
 
         const { snapshots, breakpointSteps } = await collectSnapshots(
           this.context,
