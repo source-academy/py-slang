@@ -41,12 +41,19 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { when: "alternate", parts: [{ token: "else:", cls: "identifier" }, { child: "alternate" }] },
     ],
     PassStatement: [{ token: "pass", cls: "identifier" }],
+    // Never reduces (see reduce.ts's "ImportStatement" case) — `raw` is display text reconstructed
+    // by translate.ts's `importText`, not something the host interprets structurally.
+    ImportStatement: [{ prop: "raw", cls: "identifier" }],
 
     // Atoms
     Literal: [{ prop: "raw", cls: "literal" }],
     // Plain names are uncoloured (white), like Source — only keywords/operators are coloured. A
     // function name shown as a value collapses to a bold mu-term (see `functionValues` below).
     Identifier: [{ prop: "name" }],
+    // A callable imported from a module (see ast.ts's `moduleFunction`) — always just its name, like
+    // Identifier; there's no inline/expanded form to collapse from (unlike a bound def/lambda — see
+    // `functionValues` below), since it has no Python body.
+    ModuleFunction: [{ prop: "name" }],
 
     // Expressions
     BinaryExpression: [
@@ -80,6 +87,10 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { child: "body" },
     ],
     ArrayExpression: ["[", { list: "elements", sep: ", " }, "]"],
+    // An opaque module value (e.g. a `rune` Rune) — no structure to render, just its label. See
+    // `ast.ts`'s `opaqueValue`; `dataUrl` (a rendered thumbnail, source-academy/modules#879) isn't
+    // rendered by the host yet.
+    Opaque: [{ token: "<", cls: "identifier" }, { prop: "label", cls: "identifier" }, ">"],
   },
 
   // Parenthesisation precedence (higher binds tighter). Mirrors Python's grammar; the host wraps a
@@ -104,6 +115,8 @@ export const pythonSyntaxProfile: SyntaxProfile = {
   expressionPrecedence: {
     Identifier: 20,
     ArrayExpression: 20,
+    Opaque: 20,
+    ModuleFunction: 20,
     Literal: 18,
     CallExpression: 18,
     UnaryExpression: 15,

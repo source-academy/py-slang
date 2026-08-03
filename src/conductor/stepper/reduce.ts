@@ -23,6 +23,8 @@
  * bounded only by the step limit — a non-terminating recursion stops at "Maximum number of steps".
  */
 
+import type { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
+
 import {
   type ComplexValue,
   type StepNode,
@@ -31,6 +33,7 @@ import {
   isComplexValue,
   isEmptyList,
   isFunctionValue,
+  isModuleFunctionNode,
   isPairNode,
   isResultValue,
   isTruthy,
@@ -42,8 +45,15 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import { applyBuiltin, formatPrintOutput, isBuiltinFunctionName, isStepperValue } from "./builtins";
+import {
+  applyBuiltin,
+  checkArity,
+  formatPrintOutput,
+  isBuiltinFunctionName,
+  isStepperValue,
+} from "./builtins";
 import { formatPrintLlistOutput } from "./lists";
+import { callModuleFunction } from "./moduleInterop";
 
 export interface ReduceResult {
   /** The program/expression after this single contraction — becomes `current` for the next step. */
@@ -571,7 +581,10 @@ function contractConditional(node: StepNode): ReduceResult {
   };
 }
 
-function contractCall(node: StepNode): ReduceResult | null {
+async function contractCall(
+  node: StepNode,
+  evaluator: IDataHandler | undefined,
+): Promise<ReduceResult | null> {
   const callee = node.callee as StepNode;
   const args = node.arguments as StepNode[];
 
@@ -597,6 +610,39 @@ function contractCall(node: StepNode): ReduceResult | null {
           : name === "print_llist"
             ? formatPrintLlistOutput(args)
             : undefined,
+    };
+  }
+
+  // A function imported from a module (`from rune import circle`, py-slang#385) — see
+  // `moduleInterop.ts`'s module doc comment for the scope this covers (no Python closure crossing
+  // into the call) and why it can't be represented as an ordinary `applyBuiltin` name lookup (the
+  // binding is per-program, substituted in by `getSteps.ts`'s `resolveImports`, not a fixed global
+  // table). `evaluator` is only absent when no module loader is wired up at all (see
+  // `resolveImports`'s doc comment), in which case no `ModuleFunction` node could exist in the tree
+  // in the first place — this branch is unreachable then, not a silent no-op.
+  if (isModuleFunctionNode(callee)) {
+    if (!args.every(isValue)) return null;
+    if (evaluator === undefined) {
+      throw new Error(`NameError: name '${String(callee.name)}' is not defined`);
+    }
+    const name = String(callee.name);
+    const minArgs = callee.minArgs as number;
+    // Checked up front, like a static built-in's own `checkArity` call inside `applyBuiltin` — a
+    // wrong-arity call gets a proper Python-style TypeError instead of whatever native error falls
+    // out of spreading a mismatched argument list into the module's own closure.
+    checkArity(name, args, minArgs, callee.isVararg ? null : minArgs);
+    const result = await callModuleFunction(
+      evaluator,
+      callee.closure as TypedValue<DataType.CLOSURE>,
+      name,
+      args,
+    );
+    return {
+      node: result,
+      preRedex: node,
+      postRedex: result,
+      explanation: `Ran ${name}`,
+      beforeExplanation: `Running ${name}`,
     };
   }
 
@@ -707,7 +753,10 @@ function rebuildIndex(
 }
 
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
-export function reduceExpr(node: StepNode): ReduceResult | null {
+export async function reduceExpr(
+  node: StepNode,
+  evaluator: IDataHandler | undefined,
+): Promise<ReduceResult | null> {
   switch (node.type) {
     case "Identifier":
       // A leftover name is an atom: a built-in function name, or an unbound name that does not reduce
@@ -716,48 +765,48 @@ export function reduceExpr(node: StepNode): ReduceResult | null {
       // from the first step rather than contracting mid-run.
       return null;
     case "BinaryExpression": {
-      const left = reduceExpr(node.left as StepNode);
+      const left = await reduceExpr(node.left as StepNode, evaluator);
       if (left) return rebuild(node, "left", left);
-      const right = reduceExpr(node.right as StepNode);
+      const right = await reduceExpr(node.right as StepNode, evaluator);
       if (right) return rebuild(node, "right", right);
       return contractBinary(node);
     }
     case "LogicalExpression": {
-      const left = reduceExpr(node.left as StepNode);
+      const left = await reduceExpr(node.left as StepNode, evaluator);
       if (left) return rebuild(node, "left", left);
       return contractLogical(node);
     }
     case "UnaryExpression": {
-      const arg = reduceExpr(node.argument as StepNode);
+      const arg = await reduceExpr(node.argument as StepNode, evaluator);
       if (arg) return rebuild(node, "argument", arg);
       return contractUnary(node);
     }
     case "ConditionalExpression": {
-      const test = reduceExpr(node.test as StepNode);
+      const test = await reduceExpr(node.test as StepNode, evaluator);
       if (test) return rebuild(node, "test", test);
       return contractConditional(node);
     }
     case "CallExpression": {
-      const callee = reduceExpr(node.callee as StepNode);
+      const callee = await reduceExpr(node.callee as StepNode, evaluator);
       if (callee) return rebuild(node, "callee", callee);
       const args = node.arguments as StepNode[];
       for (let i = 0; i < args.length; i++) {
-        const reduced = reduceExpr(args[i]);
+        const reduced = await reduceExpr(args[i], evaluator);
         if (reduced) return rebuildIndex(node, "arguments", i, reduced);
       }
-      return contractCall(node);
+      return contractCall(node, evaluator);
     }
     case "ArrayExpression": {
       const elements = node.elements as StepNode[];
       for (let i = 0; i < elements.length; i++) {
-        const reduced = reduceExpr(elements[i]);
+        const reduced = await reduceExpr(elements[i], evaluator);
         if (reduced) return rebuildIndex(node, "elements", i, reduced);
       }
       return null;
     }
     case "BlockStatement":
       // A function body in expression position (produced by applying a multi-statement `def`).
-      return reduceBlock(node);
+      return reduceBlock(node, evaluator);
     default:
       return null;
   }
@@ -808,7 +857,11 @@ type HeadOutcome =
  * branch; a `pass` is dropped. Boundary cases (`finished-expression`/`return`/`irreducible`) are
  * reported back for the caller to resolve.
  */
-function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
+async function stepHead(
+  head: StepNode,
+  rest: StepNode[],
+  evaluator: IDataHandler | undefined,
+): Promise<HeadOutcome> {
   switch (head.type) {
     case "ExpressionStatement": {
       const expr = head.expression as StepNode;
@@ -844,7 +897,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
           isBreakpoint: true,
         };
       }
-      const reduced = reduceExpr(expr);
+      const reduced = await reduceExpr(expr, evaluator);
       if (reduced) {
         // `hasBreakpoint: false` on the carried-forward copy: `head` still has one more expression
         // step to take, so it stays the head on the next call to this function with the *same*
@@ -874,7 +927,7 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       const decl = declaratorOf(head);
       const init = decl.init as StepNode;
       if (!isValue(init)) {
-        const reduced = reduceExpr(init);
+        const reduced = await reduceExpr(init, evaluator);
         if (reduced) {
           // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
           return {
@@ -955,8 +1008,22 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         explanation: "Evaluated pass statement",
         beforeExplanation: "Evaluating pass statement",
       };
+    case "ImportStatement":
+      // A no-op, like `PassStatement` above: imported names are resolved and bound before stepping
+      // begins (see `../getSteps`), mirroring the CSE machine's own `FromImport` evaluator, which is a
+      // no-op for the identical reason (its own `evaluateImports` pass already ran). By the time this
+      // statement is reached there is nothing left to do.
+      return {
+        kind: "step",
+        newBody: rest,
+        preRedex: head,
+        postRedex: head,
+        postNewBody: [head, ...rest],
+        explanation: "Evaluated import statement",
+        beforeExplanation: "Evaluating import statement",
+      };
     case "IfStatement": {
-      const reduced = reduceExpr(head.test as StepNode);
+      const reduced = await reduceExpr(head.test as StepNode, evaluator);
       if (reduced) {
         // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
         return {
@@ -999,13 +1066,16 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
  * leading statement is a finished value statement that is last (the program's value), or nothing is
  * left to reduce.
  */
-export function reduceProgram(prog: StepNode): ReduceResult | null {
+export async function reduceProgram(
+  prog: StepNode,
+  evaluator?: IDataHandler,
+): Promise<ReduceResult | null> {
   const body = prog.body as StepNode[];
   if (body.length === 0) return null;
 
   const head = body[0];
   const rest = body.slice(1);
-  const outcome = stepHead(head, rest);
+  const outcome = await stepHead(head, rest, evaluator);
   // A statement flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
   // statement — see `../../breakpoints.ts`, propagated onto the `StepNode` by `translate.ts`) is
   // treated exactly like an explicit `breakpoint()` call: computed once here, where `head` is in
@@ -1058,7 +1128,10 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
  * argument expression (which then reduces in place) — and falling off the end yields Python `None`.
  * Mirrors Source's `StepperBlockExpression`.
  */
-function reduceBlock(node: StepNode): ReduceResult | null {
+async function reduceBlock(
+  node: StepNode,
+  evaluator: IDataHandler | undefined,
+): Promise<ReduceResult | null> {
   const none = (): StepNode => literal(null, "None");
   const fallOff = (preRedex: StepNode, isBreakpoint = false): ReduceResult => {
     const result = none();
@@ -1077,7 +1150,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
 
   const head = body[0];
   const rest = body.slice(1);
-  const outcome = stepHead(head, rest);
+  const outcome = await stepHead(head, rest, evaluator);
   // See the identical `headBreakpoint` note in `reduceProgram`.
   const headBreakpoint = !!head.hasBreakpoint;
 

@@ -13,10 +13,12 @@ import type {
   SerializedStepperNode,
   SerializedStepperStep,
 } from "@sourceacademy/common-stepper";
+import type { IDataHandler } from "@sourceacademy/conductor/types";
 
 import type { StmtNS } from "../../ast-types";
 import { type StepNode, unparse } from "./ast";
 import { isStepperValue, substituteBuiltinConstants } from "./builtins";
+import { resolveImports } from "./moduleInterop";
 import { reduceProgram } from "./reduce";
 import { translateProgram } from "./translate";
 
@@ -64,7 +66,11 @@ function isComplete(prog: StepNode): boolean {
   return false;
 }
 
-function drive(prog: StepNode, contractionLimit: number): Step[] {
+async function drive(
+  prog: StepNode,
+  contractionLimit: number,
+  evaluator: IDataHandler | undefined,
+): Promise<Step[]> {
   // The program's cumulative output so far. A `print(...)` contraction reports its text via
   // `result.output`; we append it *between* that contraction's before and after steps, so the text
   // first appears on the "Ran print" (after) step and persists on every step after it. Every step
@@ -82,9 +88,9 @@ function drive(prog: StepNode, contractionLimit: number): Step[] {
 
   let current = prog;
   for (let i = 0; i < contractionLimit; i++) {
-    let result: ReturnType<typeof reduceProgram>;
+    let result: Awaited<ReturnType<typeof reduceProgram>>;
     try {
-      result = reduceProgram(current);
+      result = await reduceProgram(current, evaluator);
     } catch (error) {
       // A runtime error during reduction (e.g. ZeroDivisionError): evaluation is stuck. Show the
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
@@ -233,16 +239,23 @@ function serializeStep(step: Step): SerializedStep {
  *
  * @param fileInput The parsed Python program.
  * @param stepLimit Maximum number of *steps* (two per contraction); defaults to 1000.
+ * @param evaluator The conductor module-interop handle (`IDataHandler`) used to resolve this
+ * program's `FromImport`s, if any — see `moduleInterop.ts`'s `resolveImports`. `undefined` when no
+ * module loader is wired up (e.g. a test calling this directly); every imported name is then simply
+ * left unbound, exactly as if this parameter didn't exist.
  */
-export function getPythonSteps(
+export async function getPythonSteps(
   fileInput: StmtNS.FileInput,
   stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
-): SerializedStepperStep[] {
+  evaluator?: IDataHandler,
+): Promise<SerializedStepperStep[]> {
   const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
   // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
-  // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}.
-  const program = substituteBuiltinConstants(translateProgram(fileInput));
-  return drive(program, contractionLimit).map(serializeStep);
+  // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}. Imported
+  // names are resolved and substituted the same way, immediately after — see `resolveImports`.
+  const translated = substituteBuiltinConstants(translateProgram(fileInput));
+  const program = await resolveImports(fileInput, evaluator, translated);
+  return (await drive(program, contractionLimit, evaluator)).map(serializeStep);
 }
 
 /**
@@ -252,9 +265,20 @@ export function getPythonSteps(
  * program value; see `reduceProgram`) — so we remember the last top-level expression's text as the
  * program reduces, just before it is discarded, and echo that. The stepper's reduction *is* the
  * program's value in the substitution model, so no separate interpreter is needed.
+ *
+ * @param evaluator See `getPythonSteps`'s identical parameter.
  */
-export function evaluatePython(fileInput: StmtNS.FileInput): string {
-  let current = substituteBuiltinConstants(translateProgram(fileInput));
+export async function evaluatePython(
+  fileInput: StmtNS.FileInput,
+  evaluator?: IDataHandler,
+): Promise<string> {
+  const translated = substituteBuiltinConstants(translateProgram(fileInput));
+  // Import resolution is deliberately outside the try/catch below: a `ModuleImportError` (module not
+  // found, a relative import, a name a module doesn't export) is a student-actionable, preprocessing-
+  // shaped error — it should propagate to the caller exactly like a `preprocessPython` error does, not
+  // be swallowed into the REPL's result text the way a mid-reduction runtime fault (e.g.
+  // ZeroDivisionError) is below.
+  let current = await resolveImports(fileInput, evaluator, translated);
   let resultRepr = "";
   try {
     for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
@@ -267,7 +291,7 @@ export function evaluatePython(fileInput: StmtNS.FileInput): string {
         const expr = last.expression as StepNode;
         resultRepr = expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
       }
-      const result = reduceProgram(current);
+      const result = await reduceProgram(current, evaluator);
       if (result === null) break;
       current = result.node;
     }

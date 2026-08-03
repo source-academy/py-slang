@@ -24,6 +24,8 @@ import {
   type StepNode,
   complexLiteral,
   isComplexValue,
+  isModuleFunctionNode,
+  isOpaqueNode,
   isPairNode,
   isResultValue,
   literal,
@@ -107,6 +109,7 @@ const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) ||
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
+  n.type === "ModuleFunction" ||
   (n.type === "Identifier" && isBuiltinFunctionName(String(n.name)));
 
 /* node constructors */
@@ -146,7 +149,10 @@ export function formatPrintOutput(args: StepNode[]): string {
   return args.map(a => pyStr(a, false)).join(" ") + "\n";
 }
 
-function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
+/** Validates `args.length` against `[min, max]` (`max: null` means "at least `min`", i.e. variadic),
+ * throwing a Python-style `TypeError` shaped like a wrong-arity call to any callable — a static
+ * built-in here, or an imported `ModuleFunction` (see `reduce.ts`'s `contractCall`). */
+export function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
   if (args.length < min || (max !== null && args.length > max)) {
     const want = max === null ? `at least ${min}` : min === max ? `${min}` : `${min} to ${max}`;
     typeError(`${name}() takes ${want} argument(s) but ${args.length} were given`);
@@ -417,6 +423,9 @@ Object.assign(BUILTIN_FUNCTIONS, {
     if (f.type === "Identifier" && isBuiltinFunctionName(String(f.name))) {
       return intLiteral(BigInt(BUILTIN_MIN_ARGS[String(f.name)] ?? 1));
     }
+    if (isModuleFunctionNode(f)) {
+      return intLiteral(BigInt(f.minArgs as number));
+    }
     return typeError("arity() argument must be a function");
   },
   print: (args: StepNode[]): StepNode => {
@@ -485,6 +494,7 @@ function pyTypeName(node: StepNode): string {
   if (isNoneNode(node)) return "NoneType";
   if (isPairNode(node)) return "pair";
   if (isFunctionNode(node)) return "function";
+  if (isOpaqueNode(node)) return String(node.label);
   return node.type;
 }
 
