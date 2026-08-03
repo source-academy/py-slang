@@ -1963,6 +1963,19 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       "from visualmod import make_thing, is_same_thing\nis_same_thing(make_thing())\n",
     );
     expect(await evaluatePython(ast, dh)).toBe("True");
+
+    // Bound to a name first, not nested directly as a call argument: `x`'s value substitutes into
+    // `is_same_thing(x)` via `substitute`'s Identifier case, which — unlike the direct-nesting form
+    // above (plain object-spread rebuilding, no `substitute` involved) — `clone()`s the Opaque node
+    // being substituted in. `clone` deep-copies `handle`'s wrapper object, so this only round-trips
+    // correctly because `TypedValue<DataType.OPAQUE>.value` (`OpaqueIdentifier`, an `Identifier &
+    // {...}` brand — see conductor's own types) is a plain `number` at runtime: the clone is a new
+    // object with the same primitive id, and `GenericDataHandler.opaqueMap` looks values up by that
+    // id, not by object reference — so a structurally-cloned handle still resolves to the original.
+    const boundAst = parse(
+      "from visualmod import make_thing, is_same_thing\nx = make_thing()\nis_same_thing(x)\n",
+    );
+    expect(await evaluatePython(boundAst, dh)).toBe("True");
   });
 
   test("arity() reports an imported function's real parameter count", async () => {
