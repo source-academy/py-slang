@@ -149,7 +149,10 @@ export function formatPrintOutput(args: StepNode[]): string {
   return args.map(a => pyStr(a, false)).join(" ") + "\n";
 }
 
-function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
+/** Validates `args.length` against `[min, max]` (`max: null` means "at least `min`", i.e. variadic),
+ * throwing a Python-style `TypeError` shaped like a wrong-arity call to any callable — a static
+ * built-in here, or an imported `ModuleFunction` (see `reduce.ts`'s `contractCall`). */
+export function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
   if (args.length < min || (max !== null && args.length > max)) {
     const want = max === null ? `at least ${min}` : min === max ? `${min}` : `${min} to ${max}`;
     typeError(`${name}() takes ${want} argument(s) but ${args.length} were given`);

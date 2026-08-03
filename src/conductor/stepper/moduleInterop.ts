@@ -44,8 +44,16 @@ import { isBuiltinFunctionName } from "./builtins";
 
 /** Thrown for a student-actionable import problem (module not found, name not exported, a relative
  * import) — surfaced by `getSteps.ts`'s callers the same way a preprocessing error is, rather than
- * left to manifest later as a confusing "Evaluation stuck" deep into a run. */
-export class ModuleImportError extends Error {}
+ * left to manifest later as a confusing "Evaluation stuck" deep into a run. `cause` (when the loader
+ * itself rejected, e.g. a module-not-found case) is set as a plain field rather than via `Error`'s
+ * two-argument constructor: this project's `lib` target predates `ErrorOptions`/`cause`. */
+export class ModuleImportError extends Error {
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message);
+    this.cause = options?.cause;
+  }
+  readonly cause?: unknown;
+}
 
 /** Thrown internally by `stepNodeToModule` for a value shape this interop layer cannot cross the
  * module boundary with. Turned into a graceful "Evaluation stuck" by `contractCall`, exactly like any
@@ -162,8 +170,11 @@ export async function moduleToStepNode(
       return opaqueValue(ctorName ?? "opaque", value);
     }
     case DataType.CLOSURE: {
-      const minArgs = await evaluator.closure_arity(value);
-      return moduleFunction(name, value, minArgs);
+      const [minArgs, isVararg] = await Promise.all([
+        evaluator.closure_arity(value),
+        evaluator.closure_is_vararg(value),
+      ]);
+      return moduleFunction(name, value, minArgs, isVararg);
     }
     case DataType.PAIR:
     case DataType.ARRAY: {
@@ -249,17 +260,20 @@ export async function resolveImports(
   const loader = ModuleLoaderRunnerPlugin.instance;
 
   const moduleNames = [...new Set(imports.map(s => s.module.lexeme))];
-  const plugins = new Map(
-    await Promise.all(
-      moduleNames.map(async moduleName => {
-        try {
-          return [moduleName, await loader.requestModule(moduleName)] as const;
-        } catch {
-          throw new ModuleImportError(`Module "${moduleName}" not found.`);
-        }
-      }),
-    ),
-  );
+  // `allSettled`, not `all`: every module is requested regardless of whether an earlier one
+  // rejects, so a second rejection is observed (and its promise handled) rather than becoming an
+  // unhandled rejection racing the first one's `throw` below. `cause` preserves the loader's own
+  // rejection reason (a genuine load failure, not just "not found") for diagnosis.
+  const settled = await Promise.allSettled(moduleNames.map(name => loader.requestModule(name)));
+  const plugins = new Map<string, Awaited<ReturnType<typeof loader.requestModule>>>();
+  for (let i = 0; i < settled.length; i++) {
+    const outcome = settled[i];
+    const moduleName = moduleNames[i];
+    if (outcome.status === "rejected") {
+      throw new ModuleImportError(`Module "${moduleName}" not found.`, { cause: outcome.reason });
+    }
+    plugins.set(moduleName, outcome.value);
+  }
 
   // Binding runs sequentially in source order (not concurrently) so two imports binding the same
   // name resolve deterministically — last one in source order wins, matching plain reassignment —

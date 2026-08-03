@@ -1927,6 +1927,79 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(opaqueNode.label).toBe("Thing");
   });
 
+  test("an opaque value round-trips: one module call's result passed into another", async () => {
+    // stepNodeToModule reads an Opaque node's `handle` back out (see its "Opaque" case) so a value
+    // created by one imported function can be forwarded, unchanged, as an argument to another —
+    // never converted to/from any stepper-representable form along the way.
+    const dh = new GenericDataHandler();
+    class Thing {}
+    const theThing = new Thing();
+    async function* makeThingFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return dh.opaque_make(theThing);
+    }
+    async function* isSameThingFunc(
+      x: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      const payload = await dh.opaque_get(x as TypedValue<DataType.OPAQUE>);
+      return { type: DataType.BOOLEAN, value: payload === theThing };
+    }
+    const makeThing = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [] },
+      makeThingFunc,
+    );
+    const isSameThing = await dh.closure_make(
+      { returnType: DataType.BOOLEAN, args: [DataType.OPAQUE] },
+      isSameThingFunc,
+    );
+    installFakeModule({
+      visualmod: [
+        { symbol: "make_thing", value: makeThing },
+        { symbol: "is_same_thing", value: isSameThing },
+      ],
+    });
+    const ast = parse(
+      "from visualmod import make_thing, is_same_thing\nis_same_thing(make_thing())\n",
+    );
+    expect(await evaluatePython(ast, dh)).toBe("True");
+  });
+
+  test("arity() reports an imported function's real parameter count", async () => {
+    const dh = new GenericDataHandler();
+    async function* addFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: 0 };
+    }
+    const add = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER, DataType.NUMBER] },
+      addFunc,
+    );
+    installFakeModule({ mathmod: [{ symbol: "add", value: add }] });
+    const ast = parse("from mathmod import add\narity(add)\n");
+    expect(await evaluatePython(ast, dh)).toBe("2");
+  });
+
+  test("calling an imported function with the wrong arity is a Python-style TypeError, not a native crash", async () => {
+    const dh = new GenericDataHandler();
+    async function* doubleFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      throw new Error("should never be invoked — arity is checked before the call is placed");
+    }
+    const double = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      doubleFunc,
+    );
+    installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
+    const ast = parse("from mathmod import double\ndouble(1, 2)\n");
+    const steps = await getPythonSteps(ast, undefined, dh);
+    const secondLast = steps.at(-2);
+    expect(secondLast?.markers?.[0]?.explanation).toBe(
+      "TypeError: double() takes 1 argument(s) but 2 were given",
+    );
+    expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+  });
+
   test("a Python closure argument is declined — the call stays stuck, not silently wrong", async () => {
     // See moduleInterop.ts's module doc comment: forwarding a Python-authored callable into a module
     // call would need the module to call back into Python, which this design explicitly doesn't
@@ -1951,6 +2024,19 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     installFakeModule({});
     const ast = parse("from nosuchmodule import x\nx\n");
     await expect(getPythonSteps(ast, undefined, dh)).rejects.toThrow(/not found/i);
+
+    // The loader's own rejection reason survives as `cause`, not just the generic "not found" text —
+    // see moduleInterop.ts's resolveImports.
+    let caught: unknown;
+    try {
+      await getPythonSteps(parse("from nosuchmodule import x\nx\n"), undefined, dh);
+    } catch (error) {
+      caught = error;
+    }
+    expect((caught as { cause?: unknown }).cause).toBeInstanceOf(Error);
+    expect(((caught as { cause?: Error }).cause as Error).message).toBe(
+      "no such module: nosuchmodule",
+    );
   });
 
   test("a name a module doesn't export is a clear error", async () => {

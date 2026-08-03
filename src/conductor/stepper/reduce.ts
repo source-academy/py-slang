@@ -45,7 +45,13 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import { applyBuiltin, formatPrintOutput, isBuiltinFunctionName, isStepperValue } from "./builtins";
+import {
+  applyBuiltin,
+  checkArity,
+  formatPrintOutput,
+  isBuiltinFunctionName,
+  isStepperValue,
+} from "./builtins";
 import { formatPrintLlistOutput } from "./lists";
 import { callModuleFunction } from "./moduleInterop";
 
@@ -620,6 +626,11 @@ async function contractCall(
       throw new Error(`NameError: name '${String(callee.name)}' is not defined`);
     }
     const name = String(callee.name);
+    const minArgs = callee.minArgs as number;
+    // Checked up front, like a static built-in's own `checkArity` call inside `applyBuiltin` — a
+    // wrong-arity call gets a proper Python-style TypeError instead of whatever native error falls
+    // out of spreading a mismatched argument list into the module's own closure.
+    checkArity(name, args, minArgs, callee.isVararg ? null : minArgs);
     const result = await callModuleFunction(
       evaluator,
       callee.closure as TypedValue<DataType.CLOSURE>,

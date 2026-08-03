@@ -55,14 +55,22 @@ export function opaqueValue(label: string, handle: unknown, dataUrl?: string): S
  * `def`/`lambda` value, but with no Python body to substitute into: calling it (see `reduce.ts`'s
  * `contractCall`) round-trips through the module via `closure` instead. `closure` is the underlying
  * `TypedValue<DataType.CLOSURE>` handle (kept as `unknown` for the same reason as `opaqueValue`'s
- * `handle`); `minArgs` backs the `arity()` built-in exactly like a `def`/`lambda`'s parameter count.
- * Substituted into the program in place of the imported name before stepping begins (see
- * `getSteps.ts`'s `resolveImports`), exactly like a built-in constant or a bound `def` — never looked
- * up by name at call time, so nothing needs threading through the reducer beyond the one `evaluator`
- * parameter `contractCall` needs to actually place the call.
+ * `handle`); `minArgs` backs the `arity()` built-in exactly like a `def`/`lambda`'s parameter count,
+ * and (together with `isVararg`) the arity check `contractCall` runs before actually placing a call —
+ * `isVararg: false` means `minArgs` is an exact count (like a built-in's `min === max`), `true` means
+ * it's only a lower bound (extra arguments are collected by the module's own closure). Substituted
+ * into the program in place of the imported name before stepping begins (see `getSteps.ts`'s
+ * `resolveImports`), exactly like a built-in constant or a bound `def` — never looked up by name at
+ * call time, so nothing needs threading through the reducer beyond the one `evaluator` parameter
+ * `contractCall` needs to actually place the call.
  */
-export function moduleFunction(name: string, closure: unknown, minArgs: number): StepNode {
-  return { type: "ModuleFunction", name, closure, minArgs };
+export function moduleFunction(
+  name: string,
+  closure: unknown,
+  minArgs: number,
+  isVararg: boolean,
+): StepNode {
+  return { type: "ModuleFunction", name, closure, minArgs, isVararg };
 }
 
 /** Whether `node` is an opaque module value. See {@link opaqueValue}. */
