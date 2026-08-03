@@ -49,7 +49,6 @@ export function createNoReassignmentValidator(): FeatureValidator {
           env.source,
           target.indexInSource,
           target.indexInSource + name.length,
-          env.names.get(name)!,
         );
       }
       declared.add(name);
