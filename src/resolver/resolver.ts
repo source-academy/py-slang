@@ -868,14 +868,20 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     // skipping the current function itself (nonlocal can never bind to it).
     const found = this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 2);
     if (!found) {
+      // A dedicated message matching CPython's own wording for this exact diagnostic (#187) —
+      // not the generic NameNotFoundError, whose "Perhaps you meant to type 'x'?" suggestion is
+      // actively misleading here: the closest Levenshtein match is often `name` itself (e.g. the
+      // very binding an intermediate `global name` is blocking resolution past), since a name
+      // reaching this point is, by definition, spelled correctly and simply unresolvable as
+      // nonlocal — there is nothing sensible to suggest instead.
       this.errors.push(
-        new ResolverErrors.NameNotFoundError(
+        new ResolverErrors.ScopeConflictError(
           stmt.name.line,
           stmt.name.col,
           this.source,
           stmt.name.indexInSource,
-          stmt.name.indexInSource + stmt.name.lexeme.length,
-          this.environment?.suggestName(stmt.name) ?? null,
+          stmt.name.indexInSource + name.length,
+          `no binding for nonlocal '${name}' found`,
         ),
       );
     }
