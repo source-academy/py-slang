@@ -1,5 +1,4 @@
 import { getFullLine, MAGIC_OFFSET } from "../errors";
-import { Token } from "../tokenizer";
 
 export namespace ResolverErrors {
   export class BaseResolverError extends SyntaxError {
@@ -41,30 +40,12 @@ export namespace ResolverErrors {
   }
 
   export class NameReassignmentError extends BaseResolverError {
-    constructor(
-      line: number,
-      col: number,
-      source: string,
-      start: number,
-      current: number,
-      oldName: Token,
-    ) {
+    constructor(line: number, col: number, source: string, start: number, current: number) {
       const { lineIndex, fullLine } = getFullLine(source, start);
-      let hint = ` A name has been declared here.`;
+      let hint = ` A name has been reassigned here.`;
       const diff = current - start;
       hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
       hint = hint.padStart(hint.length + col - diff, " ");
-      const { lineIndex: oldLine, fullLine: oldUnpaddedNameLine } = getFullLine(
-        source,
-        oldName.indexInSource,
-      );
-      const oldNameLine = "\n" + oldUnpaddedNameLine + "\n";
-      let sugg = ` However, it has already been declared in the same environment at line ${oldLine}, here: `;
-      sugg = sugg.padStart(sugg.length + col - MAGIC_OFFSET + 1, " ");
-      sugg = "\n" + sugg;
-      hint += sugg;
-      oldNameLine.padStart(oldNameLine.length + col - MAGIC_OFFSET + 1, " ");
-      hint += oldNameLine;
       const name = "NameReassignmentError";
       super(name, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = "NameReassignmentError";
