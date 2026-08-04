@@ -827,6 +827,28 @@ describe("Import statement", () => {
     expect(imp.module.lexeme).toBe("foo.bar");
     expect(imp.names).toHaveLength(2);
   });
+
+  // py-slang#393: a leading blank line or comment isn't a statement, and
+  // must not count as one — it shouldn't be able to knock a `from` import
+  // out of the program's import-prefix section. Blank lines/comments
+  // *between* imports already worked (the lexer collapses each into a
+  // single `newline` token that already pairs with the previous import),
+  // so those aren't regression-tested here, only the previously-broken
+  // leading case.
+  test("a leading blank line before the first import still parses it as an import", () => {
+    const stmts = parseStmts("\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("a leading comment before the first import still parses it as an import", () => {
+    const stmts = parseStmts("# a comment\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("several leading blank/comment lines before the first import still parse it as an import", () => {
+    const stmts = parseStmts("# one\n\n# two\n\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
 });
 
 // ---------------------------------------------------------------------------
