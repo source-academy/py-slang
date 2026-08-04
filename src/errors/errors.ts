@@ -245,19 +245,14 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     if (variadic) {
       adverb = "at least";
     }
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
 
+    let detail: string;
     if (typeof params === "number") {
       this.missingParamCnt = params;
       this.missingParamName = "";
       const givenParamCnt = args.length;
-      if (this.missingParamCnt === 1 || this.missingParamCnt === 0) {
-      }
-      const msg = `TypeError: ${this.functionName}() takes ${adverb} ${this.missingParamCnt} argument (${givenParamCnt} given)
+      detail = `TypeError: ${this.functionName}() takes ${adverb} ${this.missingParamCnt} argument (${givenParamCnt} given)
 Check the function definition of '${this.functionName}' and make sure to provide all required positional arguments in the correct order.`;
-      this.message += msg;
     } else {
       this.missingParamCnt = params.length - args.length;
       const missingNames: string[] = [];
@@ -266,10 +261,20 @@ Check the function definition of '${this.functionName}' and make sure to provide
         missingNames.push("\'" + param + "\'");
       }
       this.missingParamName = this.joinWithCommasAndAnd(missingNames);
-      const msg = `TypeError: ${this.functionName}() missing ${this.missingParamCnt} required positional argument(s): ${this.missingParamName}
+      detail = `TypeError: ${this.functionName}() missing ${this.missingParamCnt} required positional argument(s): ${this.missingParamName}
 You called ${this.functionName}() without providing the required positional argument ${this.missingParamName}. Make sure to pass all required arguments when calling ${this.functionName}.`;
-      this.message += msg;
     }
+
+    // py-slang#397: skip the fabricated "at line 1" header for a synthetic (no real
+    // position) token — see TypeError/ValueError's identical check above.
+    if (node.startToken.synthetic) {
+      this.message = detail;
+      return;
+    }
+
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n" + detail;
   }
 
   private joinWithCommasAndAnd(names: string[]): string {
@@ -307,29 +312,34 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
       adverb = "at most";
     }
 
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
-
+    let detail: string;
     if (typeof params === "number") {
       this.expectedCount = params;
       this.givenCount = args.length;
-      if (this.expectedCount === 1 || this.expectedCount === 0) {
-        this.message += `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} argument (${this.givenCount} given)`;
-      } else {
-        this.message += `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} arguments (${this.givenCount} given)`;
-      }
+      detail =
+        this.expectedCount === 1 || this.expectedCount === 0
+          ? `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} argument (${this.givenCount} given)`
+          : `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} arguments (${this.givenCount} given)`;
     } else {
       this.expectedCount = params.length;
       this.givenCount = args.length;
-      if (this.expectedCount === 1 || this.expectedCount === 0) {
-        this.message += `TypeError: ${this.functionName}() takes ${this.expectedCount} positional argument but ${this.givenCount} were given`;
-      } else {
-        this.message += `TypeError: ${this.functionName}() takes ${this.expectedCount} positional arguments but ${this.givenCount} were given`;
-      }
+      detail =
+        this.expectedCount === 1 || this.expectedCount === 0
+          ? `TypeError: ${this.functionName}() takes ${this.expectedCount} positional argument but ${this.givenCount} were given`
+          : `TypeError: ${this.functionName}() takes ${this.expectedCount} positional arguments but ${this.givenCount} were given`;
+    }
+    detail += `\nRemove the extra argument(s) when calling '${this.functionName}', or check if the function definition accepts more arguments.`;
+
+    // py-slang#397: skip the fabricated "at line 1" header for a synthetic (no real
+    // position) token — see TypeError/ValueError's identical check above.
+    if (node.startToken.synthetic) {
+      this.message = detail;
+      return;
     }
 
-    this.message += `\nRemove the extra argument(s) when calling '${this.functionName}', or check if the function definition accepts more arguments.`;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n" + detail;
   }
 }
 

@@ -150,4 +150,34 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
       "TypeError: in predefined function 'reduce': 'int' object is not callable",
     );
   });
+
+  // MissingRequiredPositionalError/TooManyPositionalArgumentsError (the Validate
+  // decorator's arity checks — src/stdlib/utils.ts, shared by every @Validate-annotated
+  // stdlib builtin) were missed by the original synthetic-token fix above: they build
+  // their own "TypeError at line X" header independently of TypeError/ValueError, so
+  // an arity mismatch calling *any* stdlib builtin via py2js — math_acos(2, 3, 4),
+  // tail(1, 2), etc. — still showed the fabricated line number until this was added.
+  test("too many arguments to a stdlib builtin has no fabricated line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\nmath_acos(2, 3, 4)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: math_acos() takes exactly 1 argument (3 given)\nRemove the extra argument(s) when calling 'math_acos', or check if the function definition accepts more arguments.",
+    );
+  });
+
+  test("a missing argument to a stdlib builtin has no fabricated line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\nmath_acos()", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: math_acos() takes exactly 1 argument (0 given)\nCheck the function definition of 'math_acos' and make sure to provide all required positional arguments in the correct order.",
+    );
+  });
 });
