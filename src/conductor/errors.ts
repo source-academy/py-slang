@@ -88,7 +88,13 @@ export class InvalidIdentifierError extends ModuleInterfaceError {
     public readonly identifier: Identifier,
     public readonly identifierType: "array" | "pair" | "closure" | "opaque",
   ) {
-    super("InternalModuleError", node, source, `Invalid ${identifierType} identifier: ${identifier}`, false);
+    super(
+      "InternalModuleError",
+      node,
+      source,
+      `Invalid ${identifierType} identifier: ${identifier}`,
+      false,
+    );
   }
 }
 
@@ -118,7 +124,13 @@ export class InvalidLengthError extends ModuleInterfaceError {
     public readonly expected: number,
     public readonly actual: number,
   ) {
-    super("ValueError", node, source, `Expected ${noun} length of ${expected}, got ${actual}`, true);
+    super(
+      "ValueError",
+      node,
+      source,
+      `Expected ${noun} length of ${expected}, got ${actual}`,
+      true,
+    );
   }
 }
 
@@ -162,11 +174,13 @@ export class InvalidOpaqueUpdateError extends ModuleInterfaceError {
 }
 
 export class InvalidArrayCreationError extends ModuleInterfaceError {
-  constructor(
-    node: ExprNS.Call | undefined,
-    source: string | undefined,
-    type: string,
-  ) {
-    super("InternalModuleError", node, source, `Cannot create an array of ${type} without specifying a default value`, false);
+  constructor(node: ExprNS.Call | undefined, source: string | undefined, type: string) {
+    super(
+      "InternalModuleError",
+      node,
+      source,
+      `Cannot create an array of ${type} without specifying a default value`,
+      false,
+    );
   }
 }

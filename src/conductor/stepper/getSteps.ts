@@ -81,7 +81,11 @@ function isComplete(prog: StepNode): boolean {
  * structural error rather than a native Error subclass. Preserve its formatted message when the
  * stepper catches it, instead of rendering the object as `[object Object]`. */
 function errorMessage(error: unknown): string {
-  if (typeof error === "object" && error !== null && typeof (error as { message?: unknown }).message === "string") {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
     return (error as { message: string }).message;
   }
   return String(error);

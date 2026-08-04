@@ -323,7 +323,13 @@ export function createModuleCall(
   getExports: () => WasmExports | null,
   dataEnd: number,
   prepared: PreparedModuleBindings,
-): (handleIndex: number, envPtr: number, argLen: number, callStart: number, callEnd: number) => Promise<[number, bigint]> {
+): (
+  handleIndex: number,
+  envPtr: number,
+  argLen: number,
+  callStart: number,
+  callEnd: number,
+) => Promise<[number, bigint]> {
   return async (handleIndex, envPtr, argLen, callStart, callEnd) => {
     const exports = getExports();
     if (!exports) throw new Error("WASM exports not initialised");

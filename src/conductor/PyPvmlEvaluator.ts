@@ -85,7 +85,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       .map(g => g.prelude ?? "")
       .filter(p => p.trim())
       .join("\n");
-    this.dataHandler = new GenericDataHandler(this.variant)
+    this.dataHandler = new GenericDataHandler(this.variant);
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);

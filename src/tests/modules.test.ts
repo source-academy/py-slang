@@ -2,7 +2,7 @@ import {
   DataType,
   type ExternCallable,
   type IFunctionSignature,
-  type TypedValue
+  type TypedValue,
 } from "@sourceacademy/conductor/types";
 import { ExprNS, StmtNS } from "../ast-types";
 import { GenericDataHandler } from "../conductor/GenericDataHandler";
@@ -351,10 +351,14 @@ describe("module interop conversions", () => {
 
       const closure = await pythonToModule(context, "", undefined, add);
       const result = await drainGenerator(
-        evaluator.closure_call(closure as TypedValue<DataType.CLOSURE>, [
-          { type: DataType.NUMBER, value: 2 },
-          { type: DataType.NUMBER, value: 3 },
-        ], DataType.NUMBER),
+        evaluator.closure_call(
+          closure as TypedValue<DataType.CLOSURE>,
+          [
+            { type: DataType.NUMBER, value: 2 },
+            { type: DataType.NUMBER, value: 3 },
+          ],
+          DataType.NUMBER,
+        ),
       );
 
       expect(await evaluator.closure_arity(closure as TypedValue<DataType.CLOSURE>)).toBe(2);

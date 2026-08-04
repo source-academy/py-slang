@@ -199,7 +199,7 @@ export async function pvmlToModule(
         const arity =
           value.type === "closure"
             ? value.ir.numArgs
-            : PRIMITIVE_MIN_ARGS.get(value.primitiveIndex) ?? 0;
+            : (PRIMITIVE_MIN_ARGS.get(value.primitiveIndex) ?? 0);
         const isVararg = value.type === "primitive" || value.ir.hasRestParam;
         async function* callback(
           ...args: TypedValue<DataType>[]

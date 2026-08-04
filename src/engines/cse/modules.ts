@@ -123,8 +123,8 @@ export async function pythonToModule(
       return context.evaluator.closure_make<DataType[], DataType>(
         { returnType: DataType.ANY, args: Array(value.minArgs).fill(DataType.ANY) },
         builtinFunc,
-        undefined, 
-        true
+        undefined,
+        true,
       );
     case "bigint":
       return { type: DataType.NUMBER, value: Number(value.value) };
@@ -223,7 +223,7 @@ export async function moduleToPython(
         const result = yield* context.evaluator!.closure_call(
           value as TypedValue<DataType.CLOSURE>,
           await Promise.all(args.map(arg => pythonToModule(context, code, command, arg))),
-          DataType.ANY
+          DataType.ANY,
         );
         return result;
       }

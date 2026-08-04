@@ -128,7 +128,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
         sum = yield* dh.closure_call(
           wave as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
           [num(i)],
-          DataType.NUMBER
+          DataType.NUMBER,
         );
       }
       return sum;
@@ -150,12 +150,12 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
           const a = yield* dh.closure_call(
             waveA as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
             [t],
-            DataType.NUMBER
+            DataType.NUMBER,
           );
           const b = yield* dh.closure_call(
             waveB as TypedValue<DataType.CLOSURE, DataType.NUMBER>,
             [t],
-            DataType.NUMBER
+            DataType.NUMBER,
           );
           return num(a.value + b.value);
         },

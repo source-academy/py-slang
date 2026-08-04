@@ -63,7 +63,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     this.groups = groups;
     registerAutoCompletePlugin(conductor, variant);
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
-    this.dataHandler = new GenericDataHandler(variant, );
+    this.dataHandler = new GenericDataHandler(variant);
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.

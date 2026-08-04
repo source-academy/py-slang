@@ -21,6 +21,7 @@ import {
   TypedValue,
 } from "@sourceacademy/conductor/types";
 import { asInterfacableEvaluator, GenericDataHandler } from "../conductor/GenericDataHandler";
+import { InvalidIdentifierError, InvalidTypeError } from "../conductor/errors";
 
 function fakeEvaluator(): IEvaluator {
   return { startEvaluator: () => Promise.resolve(undefined) };
@@ -121,9 +122,9 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
 
   test("list_to_vec rejects a non-list value", async () => {
     const dh = new GenericDataHandler(4);
-    await expect(dh.list_to_vec(num(42) as unknown as TypedValue<DataType.LIST>)).rejects.toThrow(
-      /Expected a list, got type/,
-    );
+    await expect(async () =>
+      dh.list_to_vec(num(42) as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidTypeError);
   });
 
   test("list_to_vec rejects a dangling/invalid pair identifier", async () => {
@@ -132,9 +133,9 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
       type: DataType.PAIR,
       value: 9999 as unknown as PairIdentifier,
     };
-    await expect(dh.list_to_vec(bogus as unknown as TypedValue<DataType.LIST>)).rejects.toThrow(
-      /Invalid pair identifier/,
-    );
+    await expect(async () =>
+      dh.list_to_vec(bogus as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   test("length counts list()'s elements", async () => {
@@ -143,22 +144,22 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
     expect(await dh.length(xs)).toBe(4);
   });
 
-  test("length throws on a non-list value", () => {
+  test("length throws on a non-list value", async () => {
     const dh = new GenericDataHandler(4);
-    expect(() => dh.length(num(42) as unknown as TypedValue<DataType.LIST>)).toThrow(
-      /Expected a list, got type/,
-    );
+    await expect(async () =>
+      dh.length(num(42) as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidTypeError);
   });
 
-  test("length throws on a dangling/invalid pair identifier", () => {
+  test("length throws on a dangling/invalid pair identifier", async () => {
     const dh = new GenericDataHandler(4);
     const bogus: TypedValue<DataType.PAIR> = {
       type: DataType.PAIR,
       value: 9999 as unknown as PairIdentifier,
     };
-    expect(() => dh.length(bogus as unknown as TypedValue<DataType.LIST>)).toThrow(
-      /Invalid pair identifier/,
-    );
+    await expect(async () =>
+      dh.length(bogus as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   test("accumulate reduces a list left-to-right through a closure", async () => {
@@ -203,8 +204,7 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
       num(42) as unknown as TypedValue<DataType.LIST>,
       DataType.NUMBER,
     );
-
-    await expect(gen.next()).rejects.toThrow(/Expected a list, got type/);
+    await expect(async () => gen.next()).rejects.toBeInstanceOf(InvalidTypeError);
   });
 });
 
@@ -245,15 +245,17 @@ describe("PAIR and ARRAY are interchangeable, per Martin's 'pair is just a 2-ele
     const asPair = arr as unknown as TypedValue<DataType.PAIR>;
 
     await expect(dh.pair_assert(asPair, DataType.NUMBER, DataType.NUMBER)).resolves.toBeUndefined();
-    expect(() => dh.pair_assert(asPair, DataType.CONST_STRING)).toThrow(/Expected head of type/);
+    await expect(async () => dh.pair_assert(asPair, DataType.CONST_STRING)).rejects.toBeInstanceOf(
+      InvalidTypeError,
+    );
   });
 
   test("pair_head throws on a too-short array (fewer than 2 elements), same as a dangling pair", async () => {
     const dh = new GenericDataHandler(4);
     const arr = await dh.array_make(DataType.NUMBER, 1, num(0));
-    expect(() => dh.pair_head(arr as unknown as TypedValue<DataType.PAIR>)).toThrow(
-      /Invalid pair identifier/,
-    );
+    await expect(async () =>
+      dh.pair_head(arr as unknown as TypedValue<DataType.PAIR>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   test("is_list/list_to_vec/length/accumulate accept a DataType.ARRAY directly", async () => {

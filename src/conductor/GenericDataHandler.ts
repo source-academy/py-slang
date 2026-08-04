@@ -12,7 +12,15 @@ import {
 } from "@sourceacademy/conductor/types";
 import { isSameType } from "@sourceacademy/conductor/util";
 import { ExprNS } from "../ast-types";
-import { InvalidArityError, InvalidArrayCreationError, InvalidIdentifierError, InvalidIndexError, InvalidLengthError, InvalidOpaqueUpdateError, InvalidTypeError } from "./errors";
+import {
+  InvalidArityError,
+  InvalidArrayCreationError,
+  InvalidIdentifierError,
+  InvalidIndexError,
+  InvalidLengthError,
+  InvalidOpaqueUpdateError,
+  InvalidTypeError,
+} from "./errors";
 const DEFAULT_VALUES = {
   [DataType.NUMBER]: { type: DataType.NUMBER, value: 0 },
   [DataType.CONST_STRING]: { type: DataType.CONST_STRING, value: "" },
@@ -64,7 +72,7 @@ export class GenericDataHandler implements IDataHandler {
   >();
   private opaqueMap = new Map<OpaqueIdentifier, { value: unknown; immutable: boolean }>();
   private uniqueId = 0;
-  
+
   private currentCall: ExprNS.Call | undefined = undefined;
   private currentSource: string | undefined = undefined;
 
@@ -107,10 +115,7 @@ export class GenericDataHandler implements IDataHandler {
     }
   }
 
-  constructor(
-    public readonly variant: number,
-  ) {}
-
+  constructor(public readonly variant: number) {}
 
   getCurrentModuleName(): string | undefined {
     return undefined;
@@ -176,12 +181,7 @@ export class GenericDataHandler implements IDataHandler {
     }
     const pair = this.pairMap.get(p.value);
     if (!pair) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        p.value,
-        "pair",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, p.value, "pair");
     }
     return { kind: "pair", pair, head: pair.head, tail: pair.tail };
   }
@@ -244,7 +244,7 @@ export class GenericDataHandler implements IDataHandler {
       throw new InvalidArrayCreationError(
         this.currentCall,
         this.currentSource,
-        this.getTypeName(t)
+        this.getTypeName(t),
       );
     }
     const elements = new Array(len).fill(init ?? DEFAULT_VALUES[t as keyof typeof DEFAULT_VALUES]);
@@ -258,12 +258,7 @@ export class GenericDataHandler implements IDataHandler {
   array_length(a: TypedValue<DataType.ARRAY>): Promise<number> {
     const array = this.arrayMap.get(a.value);
     if (!array) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        a.value,
-        "array",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     return Promise.resolve(array.elements.length);
   }
@@ -278,12 +273,7 @@ export class GenericDataHandler implements IDataHandler {
     const array = this.arrayMap.get(a.value);
 
     if (!array) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        a.value,
-        "array",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
 
     if (idx < 0 || idx >= array.elements.length) {
@@ -298,12 +288,7 @@ export class GenericDataHandler implements IDataHandler {
   array_type<T extends DataType>(a: TypedValue<DataType.ARRAY, T>): Promise<NoInfer<T>> {
     const array = this.arrayMap.get(a.value);
     if (array === undefined) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        a.value,
-        "array",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     return Promise.resolve(array.type as NoInfer<T>);
   }
@@ -320,12 +305,7 @@ export class GenericDataHandler implements IDataHandler {
     const array = this.arrayMap.get(a.value);
 
     if (!array) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        a.value,
-        "array",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
 
     if (idx < 0 || idx >= array.elements.length) {
@@ -359,12 +339,7 @@ export class GenericDataHandler implements IDataHandler {
   ): Promise<void> {
     const array = this.arrayMap.get(a.value);
     if (!array) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        a.value,
-        "array",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     if (type !== undefined && array.type !== type) {
       throw new InvalidTypeError(
@@ -381,7 +356,7 @@ export class GenericDataHandler implements IDataHandler {
         this.currentSource,
         "array",
         length,
-        array.elements.length
+        array.elements.length,
       );
     }
     return Promise.resolve();
@@ -412,12 +387,7 @@ export class GenericDataHandler implements IDataHandler {
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     const closure = this.closureMap.get(c.value);
     if (closure === undefined) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        c.value,
-        "closure",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
     if (!closure.isVararg && args.length !== closure.sig.args.length) {
       throw new InvalidArityError(
@@ -435,10 +405,13 @@ export class GenericDataHandler implements IDataHandler {
         continue;
       }
       // If the argument is a pair or list type and the return type is an array (or vice-versa), skip for now till we remove the pair type.
-      if ((closure.sig.args[i] === DataType.PAIR || closure.sig.args[i] === DataType.LIST) && arg.type === DataType.ARRAY) {
+      if (
+        (closure.sig.args[i] === DataType.PAIR || closure.sig.args[i] === DataType.LIST) &&
+        arg.type === DataType.ARRAY
+      ) {
         continue;
       }
-      if ((closure.sig.args[i] === DataType.ARRAY) && arg.type == DataType.PAIR) {
+      if (closure.sig.args[i] === DataType.ARRAY && arg.type == DataType.PAIR) {
         continue;
       }
       if (!isSameType(arg.type, closure.sig.args[i])) {
@@ -452,7 +425,15 @@ export class GenericDataHandler implements IDataHandler {
       }
     }
     const result = yield* closure.func(...args);
-    if (result.type !== returnType && returnType !== DataType.ANY && !((returnType === DataType.PAIR || returnType === DataType.LIST) && result.type === DataType.ARRAY) && !(returnType === DataType.ARRAY && result.type === DataType.PAIR)) {
+    if (
+      result.type !== returnType &&
+      returnType !== DataType.ANY &&
+      !(
+        (returnType === DataType.PAIR || returnType === DataType.LIST) &&
+        result.type === DataType.ARRAY
+      ) &&
+      !(returnType === DataType.ARRAY && result.type === DataType.PAIR)
+    ) {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,
@@ -469,12 +450,7 @@ export class GenericDataHandler implements IDataHandler {
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     const closure = this.closureMap.get(c.value);
     if (closure === undefined) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        c.value,
-        "closure",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
     return (yield* closure.func(...args)) as TypedValue<NoInfer<T>>;
   }
@@ -511,12 +487,7 @@ export class GenericDataHandler implements IDataHandler {
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
     const closure = this.closureMap.get(c.value);
     if (!closure) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        c.value,
-        "closure",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
     if (closure.sig.args.length !== arity && !closure.isVararg) {
       throw new InvalidArityError(
@@ -539,31 +510,17 @@ export class GenericDataHandler implements IDataHandler {
   opaque_get(o: TypedValue<DataType.OPAQUE>): Promise<unknown> {
     const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        o.value,
-        "opaque",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, o.value, "opaque");
     }
     return Promise.resolve(opaque.value);
   }
   opaque_update(o: TypedValue<DataType.OPAQUE>, v: unknown): Promise<void> {
     const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
-      throw new InvalidIdentifierError(
-        this.currentCall,
-        this.currentSource,
-        o.value,
-        "opaque",
-      );
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, o.value, "opaque");
     }
     if (opaque.immutable) {
-      throw new InvalidOpaqueUpdateError(
-        this.currentCall,
-        this.currentSource,
-        o.value
-      );
+      throw new InvalidOpaqueUpdateError(this.currentCall, this.currentSource, o.value);
     }
     opaque.value = v;
     return Promise.resolve();
@@ -619,7 +576,7 @@ export class GenericDataHandler implements IDataHandler {
 
           "a list",
           this.getTypeName(DataType.LIST),
-          this.getTypeName(current.type, current)
+          this.getTypeName(current.type, current),
         );
       }
       const pair = this.pairMap.get(current.value);
