@@ -861,6 +861,23 @@ describe("Token tracking", () => {
     const expr = parseExpr("1 + 2") as ExprNS.Binary;
     expect(expr.startToken.lexeme).toBe("1");
   });
+
+  // py-slang#394: the triple-quoted string tokens were missing moo's
+  // `lineBreaks: true`, so moo's own line/col counters silently stopped
+  // advancing across the string's embedded newlines — every token after a
+  // multi-line triple-quoted string reported the wrong line/column.
+  test("line tracking survives a multi-line triple-quoted string", () => {
+    const stmts = parseStmts("x = '''\nline2\nline3\n'''\ny = 1");
+    expect(stmts[0].startToken.line).toBe(1);
+    expect(stmts[1].startToken.line).toBe(5);
+  });
+
+  test("a syntax error after a multi-line triple-quoted string reports the right line (py-slang#394 repro)", () => {
+    // Mirrors the issue's exact repro: an invalid `&` token six lines below
+    // a multi-line triple-quoted string used to be reported against a line
+    // inside the string instead of its own line.
+    expect(() => parseStmts("1 + 2\n'''\na\nb\n'''\n&\n4 + 5")).toThrow(/line 6 col 1/);
+  });
 });
 
 // ---------------------------------------------------------------------------
