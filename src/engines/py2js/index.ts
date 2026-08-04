@@ -122,6 +122,18 @@ function hasLocalImports(statements: StmtNS.Stmt[]): boolean {
   return statements.some(s => s.kind === "FromImport" && (s as StmtNS.FromImport).level > 0);
 }
 
+/** Formats a caught error for Py2JsRunError's message: `${e.name}: ${e.message}`, except
+ * a Py2JsRuntimeError's own .message already starts with its own kind as a literal string
+ * (stdlibBridge.ts's error-kind prefixing, py-slang#397) — re-adding e.name in front of an
+ * already-prefixed message would double it ("TypeError: TypeError: ..."). Detected from the
+ * message's own text (any leading "Word: "), not by comparing against e.name — e.name is
+ * ultimately sourced from e.constructor.name (stdlibBridge.ts), which a minified production
+ * build mangles, while the literal "TypeError: " etc. baked into the message text survives. */
+function formatCaughtError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  return /^[A-Za-z]+: /.test(e.message) ? e.message : `${e.name}: ${e.message}`;
+}
+
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
   ...args: string[]
 ) => (rt: Py2JsRuntime) => Promise<void>;
@@ -244,7 +256,7 @@ function setupRuntime(
     } catch (e: unknown) {
       throw new Py2JsRunError(
         "runtime",
-        e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+        formatCaughtError(e),
       );
     } finally {
       rt.compilingPrelude = false;
@@ -359,7 +371,7 @@ export function runCodePy2Js(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
     );
   }
   return { output: rt.output.join("") };
@@ -383,7 +395,7 @@ export async function runCodePy2JsDual(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
     );
   }
   return { output: rt.output.join("") };

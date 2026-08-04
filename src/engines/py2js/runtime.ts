@@ -966,22 +966,43 @@ export class Py2JsRuntime {
     if (typeof f !== "function") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+        this.withEnclosingPredefinedFunction(
+          `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+        ),
       );
     }
     if (f.pyArity >= 0 && f.pyArity !== nArgs) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `${f.pyName}() takes ${f.pyArity} argument${f.pyArity === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+        this.withEnclosingPredefinedFunction(
+          `${f.pyName}() takes ${f.pyArity} argument${f.pyArity === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+        ),
       );
     }
     if (sync && f.asyncOnly) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `${f.pyName}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+        this.withEnclosingPredefinedFunction(
+          `${f.pyName}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+        ),
       );
     }
     return f;
+  }
+
+  /**
+   * Prefixes `detail` with "in predefined function 'X': " when the call currently being
+   * checked (about to run, not yet pushed onto preludeOrigin) was made from inside a
+   * predefined (prelude) function — e.g. reduce(1, 2, xs) fails because reduce itself
+   * tries to call its non-callable first argument; the student never called anything
+   * literally named "reduce" wrongly, reduce did (py-slang#397). Called before the
+   * attempted call's own frame is pushed, so the current top of preludeOrigin is
+   * already the caller's, unlike stdlibBridge.ts's equivalent (which reads one frame
+   * later, from inside the already-pushed, already-failing call itself).
+   */
+  private withEnclosingPredefinedFunction(detail: string): string {
+    const enclosing = this.enclosingPreludeFunction();
+    return enclosing ? `in predefined function '${enclosing}': ${detail}` : detail;
   }
 
   /** Non-tail call: run the trampoline until a real value comes back. */

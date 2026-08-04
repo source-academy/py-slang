@@ -92,8 +92,11 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
     } catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toMatch(/in predefined function 'map'/);
-    expect(message).not.toMatch(/_map/);
+    // Right after the error-name prefix, not appended — the most actionable fact
+    // (which call the student wrote led here) reads first, Python-traceback-style.
+    expect(message).toBe(
+      "TypeError: in predefined function 'map': unsupported argument type for tail: integer",
+    );
   });
 
   test("a builtin called directly at the top level names no enclosing function", () => {
@@ -130,5 +133,21 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
       message = (e as Error).message;
     }
     expect(message).toMatch(/in predefined function 'map'/);
+  });
+
+  // A different code path entirely: reduce(f, ...) calling its own non-callable f
+  // argument raises through Py2JsRuntime.checkCallable directly (runtime.ts), not
+  // through the CSE-bridged stdlib errors.ts covers above. Same underlying fix
+  // (enclosingPreludeFunction), applied at the other place py2js raises errors.
+  test("reduce() calling a non-callable f names reduce, not a bare 'not callable'", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(reduce(1, 2, llist(12, 2, 3)))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: in predefined function 'reduce': 'int' object is not callable",
+    );
   });
 });

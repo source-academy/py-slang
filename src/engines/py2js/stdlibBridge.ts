@@ -302,11 +302,22 @@ function bridgeBuiltin(
         // The builtin itself is named in e.message already ("...for tail: ...");
         // this instead names the *enclosing* predefined function, if any — e.g. a
         // student calling map() never wrote or sees _map, the internal helper that
-        // actually calls tail() (py-slang#397).
+        // actually calls tail() (py-slang#397). Inserted right after the error-name
+        // prefix ("TypeError: ") rather than appended, so the most actionable fact —
+        // *which* call the student actually wrote led here — reads first, matching
+        // how a Python traceback lists the outer frame before the innermost error.
         const enclosing = rt.enclosingPreludeFunction();
-        const message = enclosing
-          ? `${e.message} (in predefined function '${enclosing}')`
-          : e.message;
+        let message = e.message;
+        if (enclosing) {
+          // Detected from the message's own text ("TypeError: ...", "ValueError: ..."),
+          // not e.constructor.name — a minified production build mangles class names,
+          // but every RuntimeSourceError subclass bakes its own error-kind word as a
+          // literal string into the message itself, so this survives minification.
+          const match = message.match(/^([A-Za-z]+): /);
+          message = match
+            ? `${match[0]}in predefined function '${enclosing}': ${message.slice(match[0].length)}`
+            : `in predefined function '${enclosing}': ${message}`;
+        }
         throw new Py2JsRuntimeError(e.constructor.name, message);
       }
       throw e;
