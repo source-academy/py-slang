@@ -200,11 +200,33 @@ export function pyTypeName(v: PyValue, sayPair = false): string {
   }
 }
 
-function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): never {
+/**
+ * Prefixes `detail` with "in predefined function 'X': " when `enclosing` is set — the
+ * predefined (prelude) function whose own code is what tripped over a bad argument
+ * (py-slang#397), e.g. llist_ref(xs, False) fails because llist_ref's own `n == 0`
+ * comparison rejects a bool, not because of anything in a callback the student wrote.
+ * A free function, not a Py2JsRuntime method, since operator-error call sites like
+ * pyEquals/pyOrder/complexBinop below have no `this` to call enclosingPreludeFunction
+ * on themselves — their caller (binop, a method) computes it once and passes it down.
+ */
+function withEnclosingPredefinedFunction(detail: string, enclosing: string | undefined): string {
+  return enclosing ? `in predefined function '${enclosing}': ${detail}` : detail;
+}
+
+function unsupported(
+  op: string,
+  l: PyValue,
+  r?: PyValue,
+  sayPair = false,
+  enclosing?: string,
+): never {
   const rhs = r === undefined ? "" : ` and '${pyTypeName(r, sayPair)}'`;
   throw new Py2JsRuntimeError(
     "UnsupportedOperandTypeError",
-    `unsupported operand type(s) for ${op}: '${pyTypeName(l, sayPair)}'${rhs}`,
+    withEnclosingPredefinedFunction(
+      `unsupported operand type(s) for ${op}: '${pyTypeName(l, sayPair)}'${rhs}`,
+      enclosing,
+    ),
   );
 }
 
@@ -370,12 +392,12 @@ function isNaNValue(v: PyValue): boolean {
  * threading in src/engines/cse/operators.ts, re-checked at every level of
  * list/pair recursion, not just the top level.
  */
-function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
+function pyEquals(l: PyValue, r: PyValue, restrict: boolean, enclosing?: string): boolean {
   if (restrict && (typeof l === "boolean" || typeof l === "function")) {
-    unsupported("==", l, r, restrict);
+    unsupported("==", l, r, restrict, enclosing);
   }
   if (restrict && (typeof r === "boolean" || typeof r === "function")) {
-    unsupported("==", l, r, restrict);
+    unsupported("==", l, r, restrict, enclosing);
   }
   // At chapter 3+, booleans compare as the ints they are (True == 1, False ==
   // 0.0) — mirrors asIntIfBool's use in CSE's structuralEquals. At chapter
@@ -432,7 +454,13 @@ function pyIdentical(l: PyValue, r: PyValue): boolean {
  * asIntIfBool's use in evaluateBinaryExpression). NaN is unordered: every
  * comparison is False.
  */
-function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolean {
+function pyOrder(
+  op: string,
+  l: PyValue,
+  r: PyValue,
+  universal: boolean,
+  enclosing?: string,
+): boolean {
   // Gated on both operands already being bool-or-numeric — as in CSE — so an
   // unsupported comparison against some other type (e.g. `True < 'abc'`)
   // still reports 'bool', not 'int', in its error message below.
@@ -453,7 +481,7 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
         return l >= r;
     }
   }
-  if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal);
+  if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal, enclosing);
   if ((typeof l === "number" && Number.isNaN(l)) || (typeof r === "number" && Number.isNaN(r))) {
     return false;
   }
@@ -470,8 +498,15 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
   }
 }
 
-function complexBinop(op: string, l: PyValue, r: PyValue, sayPair: boolean): PyComplexNumber {
-  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r)) unsupported(op, l, r, sayPair);
+function complexBinop(
+  op: string,
+  l: PyValue,
+  r: PyValue,
+  sayPair: boolean,
+  enclosing?: string,
+): PyComplexNumber {
+  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r))
+    unsupported(op, l, r, sayPair, enclosing);
   const a = toComplex(l);
   const b = toComplex(r);
   switch (op) {
@@ -498,7 +533,7 @@ function complexBinop(op: string, l: PyValue, r: PyValue, sayPair: boolean): PyC
       }
     default:
       // %, // and every ordering operator are unsupported on complex operands
-      unsupported(op, l, r, sayPair);
+      unsupported(op, l, r, sayPair, enclosing);
   }
 }
 
@@ -713,25 +748,30 @@ export class Py2JsRuntime {
       }
     }
 
+    // Computed once, up front — passed down through every unsupported()-reaching
+    // path below (see that function's doc comment for why the free helpers it
+    // calls need this threaded in rather than looked up via `this`).
+    const enclosing = this.enclosingPreludeFunction();
+
     // Same dispatch order as evaluateBinaryExpression (cse/operators.ts):
     // equality first (it is total over the non-excluded §1 universe), then
     // ordering, then the complex branch, then None/string, then numerics.
     switch (op) {
       case "==":
-        return pyEquals(l, r, !this.universalEquality);
+        return pyEquals(l, r, !this.universalEquality, enclosing);
       case "!=":
-        return !pyEquals(l, r, !this.universalEquality);
+        return !pyEquals(l, r, !this.universalEquality, enclosing);
       case "<":
       case "<=":
       case ">":
       case ">=":
-        return pyOrder(op, l, r, this.universalEquality);
+        return pyOrder(op, l, r, this.universalEquality, enclosing);
       case "is":
       case "is not":
         // NoIsOperatorValidator (the resolver) already rejects this operator
         // at chapter 1-2; universalEquality false here is an independent
         // runtime backstop, matching the CSE machine's own variant gate.
-        if (!this.universalEquality) unsupported(op, l, r, !this.universalEquality);
+        if (!this.universalEquality) unsupported(op, l, r, !this.universalEquality, enclosing);
         return (op === "is not") !== pyIdentical(l, r);
     }
 
@@ -759,16 +799,16 @@ export class Py2JsRuntime {
     }
 
     if (isComplex(l) || isComplex(r)) {
-      return complexBinop(op, l, r, !this.universalEquality);
+      return complexBinop(op, l, r, !this.universalEquality, enclosing);
     }
 
     // String concatenation: str + str only.
     if (typeof l === "string" || typeof r === "string") {
       if (op === "+" && typeof l === "string" && typeof r === "string") return l + r;
-      unsupported(op, l, r, !this.universalEquality);
+      unsupported(op, l, r, !this.universalEquality, enclosing);
     }
 
-    if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !this.universalEquality);
+    if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !this.universalEquality, enclosing);
 
     // Mixed int/float (or float/float) arithmetic: coerce to float, as the CSE
     // machine does (with the same potential precision loss on huge ints).
@@ -799,25 +839,26 @@ export class Py2JsRuntime {
           );
         return a ** b;
       default:
-        unsupported(op, l, r, !this.universalEquality);
+        unsupported(op, l, r, !this.universalEquality, enclosing);
     }
   }
 
   unop(op: string, v: PyValue): PyValue {
     const sayPair = !this.universalEquality;
+    const enclosing = this.enclosingPreludeFunction();
     switch (op) {
       case "not":
-        if (typeof v !== "boolean") unsupported("not", v, undefined, sayPair);
+        if (typeof v !== "boolean") unsupported("not", v, undefined, sayPair, enclosing);
         return !v;
       case "-":
         if (typeof v === "bigint") return -v;
         if (typeof v === "number") return -v;
         if (isComplex(v)) return new PyComplexNumber(-v.real, -v.imag);
-        unsupported("-", v, undefined, sayPair);
+        unsupported("-", v, undefined, sayPair, enclosing);
         break;
       case "+":
         if (isNum(v) || isComplex(v)) return v;
-        unsupported("+", v, undefined, sayPair);
+        unsupported("+", v, undefined, sayPair, enclosing);
     }
     throw new Py2JsRuntimeError("UnsupportedOperandTypeError", `bad unary operator ${op}`);
   }
@@ -922,7 +963,8 @@ export class Py2JsRuntime {
 
   /** Left operand of and/or must be bool (mirrors the CSE BOOL_OP instruction). */
   boolLeft(v: PyValue, op: string): boolean {
-    if (typeof v !== "boolean") unsupported(op, v, undefined, !this.universalEquality);
+    if (typeof v !== "boolean")
+      unsupported(op, v, undefined, !this.universalEquality, this.enclosingPreludeFunction());
     return v;
   }
 
@@ -962,47 +1004,44 @@ export class Py2JsRuntime {
     }
   }
 
+  /**
+   * The enclosing-function naming below (py-slang#397) is called before the attempted
+   * call's own frame is pushed, so the current top of preludeOrigin is already the
+   * caller's — e.g. reduce(1, 2, xs) fails because reduce itself tries to call its
+   * non-callable first argument; the student never called anything literally named
+   * "reduce" wrongly, reduce did. Unlike stdlibBridge.ts's equivalent (which reads one
+   * frame later, from inside the already-pushed, already-failing call itself).
+   */
   private checkCallable(f: PyValue, nArgs: number, sync: boolean): PyFunction {
+    const enclosing = this.enclosingPreludeFunction();
     if (typeof f !== "function") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        this.withEnclosingPredefinedFunction(
+        withEnclosingPredefinedFunction(
           `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+          enclosing,
         ),
       );
     }
     if (f.pyArity >= 0 && f.pyArity !== nArgs) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        this.withEnclosingPredefinedFunction(
+        withEnclosingPredefinedFunction(
           `${f.pyName}() takes ${f.pyArity} argument${f.pyArity === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+          enclosing,
         ),
       );
     }
     if (sync && f.asyncOnly) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        this.withEnclosingPredefinedFunction(
+        withEnclosingPredefinedFunction(
           `${f.pyName}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+          enclosing,
         ),
       );
     }
     return f;
-  }
-
-  /**
-   * Prefixes `detail` with "in predefined function 'X': " when the call currently being
-   * checked (about to run, not yet pushed onto preludeOrigin) was made from inside a
-   * predefined (prelude) function — e.g. reduce(1, 2, xs) fails because reduce itself
-   * tries to call its non-callable first argument; the student never called anything
-   * literally named "reduce" wrongly, reduce did (py-slang#397). Called before the
-   * attempted call's own frame is pushed, so the current top of preludeOrigin is
-   * already the caller's, unlike stdlibBridge.ts's equivalent (which reads one frame
-   * later, from inside the already-pushed, already-failing call itself).
-   */
-  private withEnclosingPredefinedFunction(detail: string): string {
-    const enclosing = this.enclosingPreludeFunction();
-    return enclosing ? `in predefined function '${enclosing}': ${detail}` : detail;
   }
 
   /** Non-tail call: run the trampoline until a real value comes back. */

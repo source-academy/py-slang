@@ -180,4 +180,33 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
       "TypeError: math_acos() takes exactly 1 argument (0 given)\nCheck the function definition of 'math_acos' and make sure to provide all required positional arguments in the correct order.",
     );
   });
+
+  // A third distinct error path: llist_ref's own `n == 0` comparison (a binary
+  // operator, evaluated inline in compiled code — not a builtin call, not
+  // checkCallable) rejects a bool argument the student passed in. binop/unop and
+  // the free helpers they delegate to (pyEquals/pyOrder/complexBinop) didn't carry
+  // enclosing-function context at all until this was added.
+  test("llist_ref(xs, False) names llist_ref — the bug is in llist_ref's own comparison", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(llist_ref(llist(1, 2, 3), False))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "UnsupportedOperandTypeError: in predefined function 'llist_ref': unsupported operand type(s) for ==: 'bool' and 'int'",
+    );
+  });
+
+  test("an operator error inside the student's own callback is still never blamed on filter", () => {
+    let message = "";
+    try {
+      runCodePy2Js("filter(lambda x: 1 * True, llist(1, 2, 3))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "UnsupportedOperandTypeError: unsupported operand type(s) for *: 'int' and 'bool'",
+    );
+  });
 });
