@@ -13,17 +13,28 @@ import type {
   SerializedStepperNode,
   SerializedStepperStep,
 } from "@sourceacademy/common-stepper";
-import type { IDataHandler } from "@sourceacademy/conductor/types";
 
 import type { StmtNS } from "../../ast-types";
 import { type StepNode, unparse } from "./ast";
 import { isStepperValue, substituteBuiltinConstants } from "./builtins";
+import type { StepperContext } from "./context";
 import { resolveImports } from "./moduleInterop";
 import { reduceProgram } from "./reduce";
 import { translateProgram } from "./translate";
 
 /** Default cap on the number of *contractions*; each contraction emits two steps. */
 const DEFAULT_CONTRACTION_LIMIT = 500;
+
+/** `stepLimit` (steps, the public unit — see `getPythonSteps`/`evaluatePython`) to a contraction
+ * count (two steps per contraction). Shared by both entry points so they always agree on how far to
+ * reduce a given `stepLimit` — see py-slang#191's CodeRabbit review: `evaluatePython` used to loop to
+ * a hardcoded `DEFAULT_CONTRACTION_LIMIT` regardless of what `stepLimit` its sibling was actually
+ * given, so a run configured with a *smaller* `stepLimit` could have the Stepper tab's own pass stop
+ * before reaching an `input()` call the REPL-value pass still tried to reach — `InputRecorder.replaying`
+ * would then fall back to a live request, prompting the student a second time for the same input. */
+function contractionLimitFor(stepLimit: number): number {
+  return Math.max(1, Math.floor(stepLimit / 2));
+}
 
 interface Marker {
   redex?: StepNode;
@@ -69,7 +80,7 @@ function isComplete(prog: StepNode): boolean {
 async function drive(
   prog: StepNode,
   contractionLimit: number,
-  evaluator: IDataHandler | undefined,
+  context: StepperContext,
 ): Promise<Step[]> {
   // The program's cumulative output so far. A `print(...)` contraction reports its text via
   // `result.output`; we append it *between* that contraction's before and after steps, so the text
@@ -90,7 +101,7 @@ async function drive(
   for (let i = 0; i < contractionLimit; i++) {
     let result: Awaited<ReturnType<typeof reduceProgram>>;
     try {
-      result = await reduceProgram(current, evaluator);
+      result = await reduceProgram(current, context);
     } catch (error) {
       // A runtime error during reduction (e.g. ZeroDivisionError): evaluation is stuck. Show the
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
@@ -239,23 +250,24 @@ function serializeStep(step: Step): SerializedStep {
  *
  * @param fileInput The parsed Python program.
  * @param stepLimit Maximum number of *steps* (two per contraction); defaults to 1000.
- * @param evaluator The conductor module-interop handle (`IDataHandler`) used to resolve this
- * program's `FromImport`s, if any — see `moduleInterop.ts`'s `resolveImports`. `undefined` when no
- * module loader is wired up (e.g. a test calling this directly); every imported name is then simply
- * left unbound, exactly as if this parameter didn't exist.
+ * @param context The stepper's bundled host capabilities (module resolution, `input()`) — see
+ * `context.ts`. Defaults to `{}` (neither capability wired up — e.g. a test calling this directly);
+ * a program that needs one it doesn't have simply degrades gracefully (an unresolved import throws a
+ * clear `ModuleImportError`; an `input()` call stays "Evaluation stuck") exactly as if this parameter
+ * didn't exist.
  */
 export async function getPythonSteps(
   fileInput: StmtNS.FileInput,
   stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
-  evaluator?: IDataHandler,
+  context: StepperContext = {},
 ): Promise<SerializedStepperStep[]> {
-  const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
+  const contractionLimit = contractionLimitFor(stepLimit);
   // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
   // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}. Imported
   // names are resolved and substituted the same way, immediately after — see `resolveImports`.
   const translated = substituteBuiltinConstants(translateProgram(fileInput));
-  const program = await resolveImports(fileInput, evaluator, translated);
-  return (await drive(program, contractionLimit, evaluator)).map(serializeStep);
+  const program = await resolveImports(fileInput, context.evaluator, translated);
+  return (await drive(program, contractionLimit, context)).map(serializeStep);
 }
 
 /**
@@ -266,22 +278,35 @@ export async function getPythonSteps(
  * program reduces, just before it is discarded, and echo that. The stepper's reduction *is* the
  * program's value in the substitution model, so no separate interpreter is needed.
  *
- * @param evaluator See `getPythonSteps`'s identical parameter.
+ * @param stepLimit Same meaning as `getPythonSteps`'s identical parameter, and — when re-deriving the
+ * REPL's echoed value after `getPythonSteps` has already run for the same program, as
+ * `PyStepperEvaluatorBase`'s `runChunk` does — it must be passed the *same* value that pass used.
+ * Both entry points reduce the identical AST from the identical starting substitutions, so a
+ * mismatched limit would let one pass stop before the other, which matters most for `input()`:
+ * `InputRecorder.replaying` only has recorded answers for calls the Stepper tab's own pass actually
+ * reached, so this pass reaching further would fall back to a live request and prompt the student a
+ * second time for what should already be answered.
+ * @param context See `getPythonSteps`'s identical parameter. When re-deriving the REPL's echoed
+ * value after `getPythonSteps` has already run for the same program (as `PyStepperEvaluatorBase`'s
+ * `runChunk` does), pass a `requestInput` that *replays* the same answers rather than asking the
+ * student again — see `PyStepperEvaluator.ts`'s `InputRecorder`.
  */
 export async function evaluatePython(
   fileInput: StmtNS.FileInput,
-  evaluator?: IDataHandler,
+  stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
+  context: StepperContext = {},
 ): Promise<string> {
+  const contractionLimit = contractionLimitFor(stepLimit);
   const translated = substituteBuiltinConstants(translateProgram(fileInput));
   // Import resolution is deliberately outside the try/catch below: a `ModuleImportError` (module not
   // found, a relative import, a name a module doesn't export) is a student-actionable, preprocessing-
   // shaped error — it should propagate to the caller exactly like a `preprocessPython` error does, not
   // be swallowed into the REPL's result text the way a mid-reduction runtime fault (e.g.
   // ZeroDivisionError) is below.
-  let current = await resolveImports(fileInput, evaluator, translated);
+  let current = await resolveImports(fileInput, context.evaluator, translated);
   let resultRepr = "";
   try {
-    for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
+    for (let i = 0; i < contractionLimit; i++) {
       // Remember the final expression's text before the next contraction discards it. A trailing
       // non-expression statement (e.g. an assignment) contributes no value, so `resultRepr` keeps the
       // last expression seen — or stays "" if the program never ends on one.
@@ -291,7 +316,7 @@ export async function evaluatePython(
         const expr = last.expression as StepNode;
         resultRepr = expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
       }
-      const result = await reduceProgram(current, evaluator);
+      const result = await reduceProgram(current, context);
       if (result === null) break;
       current = result.node;
     }
