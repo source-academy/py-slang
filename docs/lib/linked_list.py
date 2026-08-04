@@ -83,14 +83,15 @@ def llist(*values):
     """
     pass
 
-def draw_data(value1, value2, *values):
+def draw_data(value1, *values):
     """
     PRIMITIVE
     Visualizes the arguments in a separate drawing area in the Source
     Academy using box-and-pointer diagrams.
 
     Parameters:
-        value1 (value1, value2, ...values): given values
+        value1 (value): first value to visualize
+        values (value1, value2, ...): additional values to visualize
     """
     pass
 

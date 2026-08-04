@@ -52,7 +52,7 @@
  */
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { numericCompare, pythonMod } from "../cse/utils";
-import type { Value } from "../cse/stash";
+import type { ListValue, Value } from "../cse/stash";
 import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 import { stringify } from "../../utils/stringify";
@@ -198,8 +198,18 @@ function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): neve
  * structured print — by reusing the actual algorithm, not a second
  * hand-written copy that could quietly drift. Only reached for pairs (and
  * whatever they contain); every other pyStr case keeps its own fast path.
+ *
+ * `memo` maps a PyList already being converted to its (still being filled
+ * in) ListValue, keyed by identity and populated *before* recursing into the
+ * list's elements — a chapter-3 `a[0] = a` self-reference is a real cyclic
+ * JS array, and without this a naive `v.map(toDisplayValue)` recurses
+ * forever (issue #341). Populating the memo before descending means a
+ * PyList reachable from itself converts to a ListValue reachable from
+ * itself — the same cyclic-graph shape stringify.ts's own ancestor
+ * tracking already knows how to render (as CPython does) without
+ * stringify needing to know anything py2js-specific.
  */
-function toDisplayValue(v: PyValue): Value {
+function toDisplayValue(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
   if (v === null) return { type: "none" };
   switch (typeof v) {
     case "bigint":
@@ -218,7 +228,12 @@ function toDisplayValue(v: PyValue): Value {
       ) as Value;
     default:
       if (Array.isArray(v)) {
-        return { type: "list", value: v.map(toDisplayValue) };
+        const memoized = memo.get(v);
+        if (memoized !== undefined) return memoized;
+        const listValue: ListValue = { type: "list", value: [] };
+        memo.set(v, listValue);
+        listValue.value = v.map(elem => toDisplayValue(elem, memo));
+        return listValue;
       }
       // stringify()'s convert() has no dedicated "opaque" case — it falls to
       // the generic `<${type} object>` fallback, matching pyStr's own
@@ -488,6 +503,17 @@ export class Py2JsRuntime {
    * `output` above still accumulates regardless.
    */
   onOutput?: (line: string) => void;
+
+  /**
+   * Reports a scheduled set_timeout callback beginning (+1) or ending/being
+   * cancelled (-1) — the conductor evaluator forwards these to
+   * BasicEvaluator's beginPendingWork()/endPendingWork() (source-academy/
+   * conductor), which keeps the host from tearing down this runtime (and any
+   * real setTimeout still pending in it) the instant the top-level chunk's
+   * own evaluateChunk() call resolves. See set_timeout's own doc comment for
+   * why that race exists at all.
+   */
+  onPendingWorkChange?: (delta: 1 | -1) => void;
 
   /**
    * Requests one line of input, resolving with what the user typed —
@@ -1091,6 +1117,13 @@ export class Py2JsRuntime {
      * evaluateChunk has already resolved/sent its result) — reported through
      * onOutput instead of being silently lost, matching how a real browser
      * reports an uncaught async error to the console rather than nowhere.
+     *
+     * onPendingWorkChange(+1) here and (-1) once f's call settles (or, below,
+     * once clear_all_timeout cancels it first) tells the conductor evaluator
+     * this callback may still run after evaluateChunk() itself has resolved —
+     * see that hook's own doc comment for why, without it, the host can (and
+     * did — this is source-academy/py-slang#329) tear the whole runtime down
+     * out from under a timer that hasn't fired yet.
      */
     set_timeout: this.builtin("set_timeout", 2, (f, delay) => {
       const sayPair = !this.universalEquality;
@@ -1108,24 +1141,33 @@ export class Py2JsRuntime {
       }
       const id = setTimeout(() => {
         this.pendingTimeouts.delete(id);
-        this.acall(f, []).catch((e: unknown) => {
-          const line =
-            e instanceof Py2JsRuntimeError
-              ? `${e.pyKind}: ${e.message}`
-              : e instanceof Error
-                ? `${e.name}: ${e.message}`
-                : String(e);
-          this.output.push(line + "\n");
-          this.onOutput?.(line);
-        });
+        this.acall(f, [])
+          .catch((e: unknown) => {
+            const line =
+              e instanceof Py2JsRuntimeError
+                ? `${e.pyKind}: ${e.message}`
+                : e instanceof Error
+                  ? `${e.name}: ${e.message}`
+                  : String(e);
+            this.output.push(line + "\n");
+            this.onOutput?.(line);
+          })
+          .finally(() => this.onPendingWorkChange?.(-1));
       }, Number(delay));
       this.pendingTimeouts.add(id);
+      this.onPendingWorkChange?.(1);
       return null;
     }),
     /** Cancels every set_timeout callback scheduled so far (on this runtime)
-     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). */
+     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). Each
+     * cancelled timer matches the +1 its own set_timeout call reported, same
+     * as if it had fired — it never will now, so the pending count must still
+     * settle back to what's actually still outstanding (nothing, typically). */
     clear_all_timeout: this.builtin("clear_all_timeout", 0, () => {
-      for (const id of this.pendingTimeouts) clearTimeout(id);
+      for (const id of this.pendingTimeouts) {
+        clearTimeout(id);
+        this.onPendingWorkChange?.(-1);
+      }
       this.pendingTimeouts.clear();
       return null;
     }),

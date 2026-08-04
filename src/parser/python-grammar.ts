@@ -106,7 +106,22 @@ const tokList = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [
 const Lexer = pythonLexer;
 const ParserRules = [
   { name: "program$ebnf$1", symbols: [] },
-  { name: "program$ebnf$1$subexpression$1", symbols: ["import_stmt", { type: "newline" }] },
+  { name: "program$ebnf$1$subexpression$1$ebnf$1", symbols: [] },
+  { name: "program$ebnf$1$subexpression$1$ebnf$1$subexpression$1", symbols: [{ type: "newline" }] },
+  {
+    name: "program$ebnf$1$subexpression$1$ebnf$1",
+    symbols: [
+      "program$ebnf$1$subexpression$1$ebnf$1",
+      "program$ebnf$1$subexpression$1$ebnf$1$subexpression$1",
+    ],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "program$ebnf$1$subexpression$1",
+    symbols: ["program$ebnf$1$subexpression$1$ebnf$1", "import_stmt", { type: "newline" }],
+  },
   {
     name: "program$ebnf$1",
     symbols: ["program$ebnf$1", "program$ebnf$1$subexpression$1"],
@@ -128,10 +143,10 @@ const ParserRules = [
     name: "program",
     symbols: ["program$ebnf$1", "program$ebnf$2"],
     postprocess: ([imports, stmts]: [
-      [StmtNS.FromImport, moo.Token][],
+      [moo.Token[], StmtNS.FromImport, moo.Token][],
       ([StmtNS.Stmt] | [moo.Token])[],
     ]) => {
-      const importNodes = imports.map(d => d[0]);
+      const importNodes = imports.map(d => d[1]);
       const stmtNodes = stmts.map(d => d[0]).filter(s => "startToken" in s);
       const filtered = [...importNodes, ...stmtNodes];
       const start = filtered[0]
@@ -143,17 +158,31 @@ const ParserRules = [
   },
   {
     name: "import_stmt",
-    symbols: [{ literal: "from" }, "dotted_name", { literal: "import" }, "import_clause"],
+    symbols: [{ literal: "from" }, "relative_module", { literal: "import" }, "import_clause"],
     postprocess: ([kw, mod, , names]: [
       moo.Token,
-      Token,
+      { name: Token; level: number },
       moo.Token,
       StmtNS.FromImport["names"],
     ]) => {
       const last = names[names.length - 1];
       const endTok = last.alias || last.name;
-      return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
+      return new StmtNS.FromImport(toAstToken(kw), endTok, mod.name, names, mod.level);
     },
+  },
+  { name: "relative_module$ebnf$1", symbols: [] },
+  { name: "relative_module$ebnf$1$subexpression$1", symbols: [{ literal: "." }] },
+  {
+    name: "relative_module$ebnf$1",
+    symbols: ["relative_module$ebnf$1", "relative_module$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "relative_module",
+    symbols: ["relative_module$ebnf$1", "dotted_name"],
+    postprocess: ([dots, name]: [moo.Token[], Token]) => ({ level: dots.length, name }),
   },
   { name: "dotted_name$ebnf$1", symbols: [] },
   { name: "dotted_name$ebnf$1$subexpression$1", symbols: [{ literal: "." }, { type: "name" }] },
@@ -413,11 +442,7 @@ const ParserRules = [
     symbols: ["if_statement$ebnf$2$subexpression$1"],
     postprocess: id,
   },
-  {
-    name: "if_statement$ebnf$2",
-    symbols: [],
-    postprocess: () => null,
-  },
+  { name: "if_statement$ebnf$2", symbols: [], postprocess: () => null },
   {
     name: "if_statement",
     symbols: [
@@ -716,11 +741,7 @@ const ParserRules = [
   },
   { name: "expressions$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
   { name: "expressions$ebnf$2", symbols: ["expressions$ebnf$2$subexpression$1"], postprocess: id },
-  {
-    name: "expressions$ebnf$2",
-    symbols: [],
-    postprocess: () => null,
-  },
+  { name: "expressions$ebnf$2", symbols: [], postprocess: () => null },
   {
     name: "expressions",
     symbols: ["expression", "expressions$ebnf$1", "expressions$ebnf$2"],
@@ -744,11 +765,7 @@ const ParserRules = [
     symbols: ["spread_expressions$ebnf$2$subexpression$1"],
     postprocess: id,
   },
-  {
-    name: "spread_expressions$ebnf$2",
-    symbols: [],
-    postprocess: () => null,
-  },
+  { name: "spread_expressions$ebnf$2", symbols: [], postprocess: () => null },
   {
     name: "spread_expressions",
     symbols: ["spread_expression", "spread_expressions$ebnf$1", "spread_expressions$ebnf$2"],

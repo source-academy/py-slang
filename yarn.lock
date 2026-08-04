@@ -1259,6 +1259,42 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@lezer/common@npm:^1.0.0, @lezer/common@npm:^1.2.0, @lezer/common@npm:^1.3.0":
+  version: 1.5.1
+  resolution: "@lezer/common@npm:1.5.1"
+  checksum: 10c0/49baefdfc6f2244ad4f7d4a318149729fbecfd634fe1f7769883b5098ab9b35429140851e524c3a97614594004d8a3ad08fdd91221a63438be8c31ff2431fb54
+  languageName: node
+  linkType: hard
+
+"@lezer/highlight@npm:^1.0.0":
+  version: 1.2.3
+  resolution: "@lezer/highlight@npm:1.2.3"
+  dependencies:
+    "@lezer/common": "npm:^1.3.0"
+  checksum: 10c0/3bcb4fce7a1a45b5973895d7cb2be47970a0098700f2a0970aef9878ffd37f540285a2d7388ec1f524726ec90cc5196b5701bbb9764b7e7300786d772b7d2ce2
+  languageName: node
+  linkType: hard
+
+"@lezer/lr@npm:^1.0.0":
+  version: 1.4.8
+  resolution: "@lezer/lr@npm:1.4.8"
+  dependencies:
+    "@lezer/common": "npm:^1.0.0"
+  checksum: 10c0/8bd2228a316a5ef8da01908e3e22aca95fa9695211ffe56f3e8be756b37d0810d5aa91fbbdd274b198a343051d8637e130e26f51161161f089244af242b653c9
+  languageName: node
+  linkType: hard
+
+"@lezer/python@npm:^1.1.18":
+  version: 1.1.18
+  resolution: "@lezer/python@npm:1.1.18"
+  dependencies:
+    "@lezer/common": "npm:^1.2.0"
+    "@lezer/highlight": "npm:^1.0.0"
+    "@lezer/lr": "npm:^1.0.0"
+  checksum: 10c0/8d984729e887808c75800f18ed54560adfd4e67094b301a1666bdcd49e8987ab45f04c515563a92dfb1377d4a04dcf6616adc50a75285afe9ab53ab90f659bd5
+  languageName: node
+  linkType: hard
+
 "@npmcli/agent@npm:^4.0.0":
   version: 4.0.0
   resolution: "@npmcli/agent@npm:4.0.0"
@@ -1636,10 +1672,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/common-autocomplete@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-autocomplete@npm:0.0.1"
+  checksum: 10c0/24be061f41ba6629585681abafb8b29e00f3f6e79723ca92d242655324c12e9de8f38e041192040f1271d24a71974920bf48bf4aa26cc0163e221806fe15917e
+  languageName: node
+  linkType: hard
+
 "@sourceacademy/common-cse-machine@npm:^0.3.0":
   version: 0.3.0
   resolution: "@sourceacademy/common-cse-machine@npm:0.3.0"
   checksum: 10c0/c0462cc2dd8d779179c31d168aa3e71ea7f81818535166e38aeb3c048469fcf7eebc388ed4110d3300d6b6933cc310da3fbe4c3a4026746c5df409eb91dd7042
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/common-data-visualizer@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-data-visualizer@npm:0.0.1"
+  checksum: 10c0/ce926ba006bf5a6ed6d06fd318c51089be4015596b0b98a52b2160fde1834e1f968a4bdbfb9685e6990505836cdf2c6ac42ce77abfbf3ab58fcb3ed0d5e2402d
   languageName: node
   linkType: hard
 
@@ -1650,10 +1700,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/conductor@npm:^0.7.2":
-  version: 0.7.2
-  resolution: "@sourceacademy/conductor@npm:0.7.2"
-  checksum: 10c0/84cff73c8c67a5884c9a06774f514b2dc4275e14ee282c7eee4fd32618857f63cdc2a736c4e5d2b6501b7b39d6c9e2f7192af1dbbc8ec1542721c08252c1f022
+"@sourceacademy/conductor@npm:^0.8.3":
+  version: 0.8.3
+  resolution: "@sourceacademy/conductor@npm:0.8.3"
+  checksum: 10c0/25a35004fd92abc3f9342c1928a6be884388d3a8465cdc26491ccf56566121dd7a68a0c305defe668dfe7b96eebe61e93059631f80a92e0d9a4dc2775090f3e5
   languageName: node
   linkType: hard
 
@@ -1662,6 +1712,7 @@ __metadata:
   resolution: "@sourceacademy/py-slang@workspace:."
   dependencies:
     "@inquirer/prompts": "npm:^8.3.2"
+    "@lezer/python": "npm:^1.1.18"
     "@rollup/plugin-commonjs": "npm:^28.0.3"
     "@rollup/plugin-json": "npm:^6.1.0"
     "@rollup/plugin-node-resolve": "npm:^16.0.1"
@@ -1669,11 +1720,15 @@ __metadata:
     "@rollup/plugin-terser": "npm:^1.0.0"
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
+    "@sourceacademy/common-autocomplete": "npm:^0.0.1"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
+    "@sourceacademy/common-data-visualizer": "npm:^0.0.1"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
-    "@sourceacademy/conductor": "npm:^0.7.2"
-    "@sourceacademy/pynter-wasm": "npm:^0.1.0"
+    "@sourceacademy/conductor": "npm:^0.8.3"
+    "@sourceacademy/pynter-wasm": "npm:^0.2.0"
+    "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
+    "@sourceacademy/runner-data-visualizer": "npm:^0.0.1"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
@@ -1704,10 +1759,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
-"@sourceacademy/pynter-wasm@npm:^0.1.0":
-  version: 0.1.0
-  resolution: "@sourceacademy/pynter-wasm@npm:0.1.0"
-  checksum: 10c0/21e1acb65ea6a2de4ffff48811606acbc84b76a6503ae8f86bc884c9b0f0ad288b3bdec3ad1df1156b5b16967ced8243d3f3bb8727c728e902bce18345b564ae
+"@sourceacademy/pynter-wasm@npm:^0.2.0":
+  version: 0.2.0
+  resolution: "@sourceacademy/pynter-wasm@npm:0.2.0"
+  checksum: 10c0/7c780ca0d0df7972813b12e10dfa65582aa4f0a5916b8f5f7823a5602fecc5f898a8c49b5af5c72f7e82a21ae8128e06e282ea353889023fe8547ddba2e75489
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-autocomplete@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@sourceacademy/runner-autocomplete@npm:0.0.2"
+  dependencies:
+    "@sourceacademy/common-autocomplete": "npm:^0.0.1"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/7bdf7ea448899b0121d240ab8ccad97b9bbea43b2abbf08c4637d6badf22c67867cf7a98763de152f90b6e84243b4223ff7ca2210e3ee55a23832d5663c13958
   languageName: node
   linkType: hard
 
@@ -1718,6 +1784,15 @@ __metadata:
     "@sourceacademy/common-cse-machine": ">=0.3.0"
     "@sourceacademy/conductor": ">=0.3.0"
   checksum: 10c0/dbf3c9220bb35b2f10d46dcfd13e1c827931d9bb9fb41266eff512d5859ab7734e594cda3b0e741a9896e8f7a3598cdb4d914ef13b7ecce941f8fc1798d8965e
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-data-visualizer@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-data-visualizer@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/conductor": ">=0.3.0"
+  checksum: 10c0/d5e1530c90e9508ed8e32f23d906fdd46696f94ac720c0c7c11c5d57fbe1781c54ca91741c22b099779f2f9937c24b6ecf426daa59fe6db14376e6793414c849
   languageName: node
   linkType: hard
 
@@ -2292,12 +2367,12 @@ __metadata:
   linkType: hard
 
 "brace-expansion@npm:^1.1.7":
-  version: 1.1.16
-  resolution: "brace-expansion@npm:1.1.16"
+  version: 1.1.12
+  resolution: "brace-expansion@npm:1.1.12"
   dependencies:
     balanced-match: "npm:^1.0.0"
     concat-map: "npm:0.0.1"
-  checksum: 10c0/b2a915bbedbf4e45840d1fb9a4d391bbf26a79475bd134714d3cee34f1f0edb0ce982738028843be5fbaf8039429f71fa487df8c915b6065ced542c83e58fae6
+  checksum: 10c0/975fecac2bb7758c062c20d0b3b6288c7cc895219ee25f0a64a9de662dbac981ff0b6e89909c3897c1f84fa353113a721923afdec5f8b2350255b097f12b1f73
   languageName: node
   linkType: hard
 
@@ -4031,14 +4106,14 @@ __metadata:
   linkType: hard
 
 "js-yaml@npm:^3.13.1":
-  version: 3.15.0
-  resolution: "js-yaml@npm:3.15.0"
+  version: 3.14.2
+  resolution: "js-yaml@npm:3.14.2"
   dependencies:
     argparse: "npm:^1.0.7"
     esprima: "npm:^4.0.0"
   bin:
     js-yaml: bin/js-yaml.js
-  checksum: 10c0/ca966bd354ac5b1b7a4694ebdba46526796aa3a6a99529fa540af2abf85918bd155a50ccc0166b413130a00622999973754458ec01e7095bc902177bfdbd5b64
+  checksum: 10c0/3261f25912f5dd76605e5993d0a126c2b6c346311885d3c483706cd722efe34f697ea0331f654ce27c00a42b426e524518ec89d65ed02ea47df8ad26dcc8ce69
   languageName: node
   linkType: hard
 
@@ -4183,11 +4258,11 @@ __metadata:
   linkType: hard
 
 "linkify-it@npm:^5.0.0":
-  version: 5.0.2
-  resolution: "linkify-it@npm:5.0.2"
+  version: 5.0.0
+  resolution: "linkify-it@npm:5.0.0"
   dependencies:
     uc.micro: "npm:^2.0.0"
-  checksum: 10c0/dd70b1735a13d41a2cff0a058ac3771166038f23f6aff004dd53873cf985c64b107902fe0b544a5b3d1ff6e63249cf9c648fb3ae9f285481db48f56887adb0d6
+  checksum: 10c0/ff4abbcdfa2003472fc3eb4b8e60905ec97718e11e33cca52059919a4c80cc0e0c2a14d23e23d8c00e5402bc5a885cdba8ca053a11483ab3cc8b3c7a52f88e2d
   languageName: node
   linkType: hard
 
@@ -5326,15 +5401,15 @@ __metadata:
   linkType: hard
 
 "tar@npm:^7.5.4":
-  version: 7.5.21
-  resolution: "tar@npm:7.5.21"
+  version: 7.5.22
+  resolution: "tar@npm:7.5.22"
   dependencies:
     "@isaacs/fs-minipass": "npm:^4.0.0"
     chownr: "npm:^3.0.0"
     minipass: "npm:^7.1.2"
     minizlib: "npm:^3.1.0"
     yallist: "npm:^5.0.0"
-  checksum: 10c0/bce0e51692356078e6f6a909d5c93f5b4c099c097ffea19b1b1bf10385539a429baba26bca59aabbace68c4519d16f2f1c07afe7eaab55876a449a032480fabc
+  checksum: 10c0/1311f6be85a8157ac4c9147bae43e13923d2a1aae15e4aa1bd5239e4e03d2cf53cfe103dde7f35832fbb4c938b042856bc8e9a0afd29abd05e2d1608788c4fea
   languageName: node
   linkType: hard
 

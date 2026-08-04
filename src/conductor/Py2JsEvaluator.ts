@@ -1,8 +1,11 @@
+import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Py2JsSession } from "../engines/py2js";
-import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import { Py2JsDataVisualizerRunnerPlugin } from "./dataVisualizer/Py2JsDataVisualizerRunnerPlugin";
 import { EvaluatorError } from "./errors";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
  * Runs Python by compiling it to JavaScript — the py2js engine
@@ -35,28 +38,79 @@ import { EvaluatorError } from "./errors";
  * with no imports of its own (see Py2JsSession.runChunk's use of
  * Resolver.referencedNames).
  *
+ * set_timeout(f, t) (source-academy/py-slang#311) schedules a real callback
+ * that can fire well after evaluateChunk() itself has resolved — the
+ * session's onPendingWorkChange hook is wired straight to BasicEvaluator's
+ * own beginPendingWork()/endPendingWork(), so the host (e.g. Source
+ * Academy's frontend) doesn't tear this evaluator's environment down while
+ * one is still pending (source-academy/py-slang#329 is what happens without
+ * this: the callback is silently killed mid-flight, unreliably, past
+ * whatever grace window the host happens to allow after a chunk resolves).
+ *
  * Chapters 1-4 (the engine rejects other variants).
+ *
+ * draw_data (chapter 2+, bridged natively as part of the LINKED_LISTS group — see
+ * stdlibBridge.ts's nativeDrawData): registered only for §2+, exactly mirroring
+ * PyCseEvaluatorBase's identical gate — draw_data doesn't exist as a builtin below that, so there's
+ * no reason to register the plugin or have the host fetch its web bundle for §1 users.
  */
 abstract class Py2JsEvaluatorBase extends BasicEvaluator {
   private readonly session: Py2JsSession;
+  private readonly dataVisualizerPlugin?: Py2JsDataVisualizerRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
     const dataHandler = new GenericDataHandler(variant);
+    registerAutoCompletePlugin(conductor, variant);
     this.conductor.registerPlugin(
       ModuleLoaderRunnerPlugin,
       this.conductor,
       asInterfacableEvaluator(this, dataHandler),
     );
+
+    if (variant >= 2) {
+      this.dataVisualizerPlugin = conductor.registerPlugin(Py2JsDataVisualizerRunnerPlugin);
+      conductor.hostLoadPlugin(DATA_VISUALIZER_DIRECTORY_ID);
+    }
+
     this.session = new Py2JsSession(variant, {
       onOutput: line => this.conductor.sendOutput(line),
+      onPendingWorkChange: delta => (delta > 0 ? this.beginPendingWork() : this.endPendingWork()),
       requestInput: prompt => this.conductor.requestInput(prompt),
+      // A local import (`from .foo import x`, source-academy/py-slang#378)
+      // resolves a sibling file through this — conductor's own
+      // requestFile(fileName), already backed by whatever multi-file store
+      // the host has (e.g. the frontend's folder-mode BrowserFS), the same
+      // primitive BasicEvaluator.startEvaluator already uses to fetch the
+      // entrypoint itself. No new host-side protocol needed.
+      fileGetter: path => this.conductor.requestFile(path),
       dataHandler,
+      dataVisualizer: this.dataVisualizerPlugin,
     });
+  }
+
+  /**
+   * The host's own entrypoint file name (e.g. "/main.py" in a folder-mode
+   * program) — BasicEvaluator's default evaluateFile discards it, but a
+   * local import needs to know what directory "." means, so this override
+   * captures it on the session before delegating exactly as the default
+   * implementation would.
+   *
+   * (`__program__` needs no help from here: Py2JsSession.runChunkInternal
+   * sets it itself, automatically, from whatever text it's actually about
+   * to compile — see that method's own comment. This evaluator used to
+   * never supply it at all, which crashed every reference to `__program__`
+   * with a raw ReferenceError rather than a Python-level NameError; fixed
+   * at the source rather than by adding another external call here.)
+   */
+  async evaluateFile(fileName: string, fileContent: string): Promise<void> {
+    this.session.setEntrypointFilePath(fileName);
+    return this.evaluateChunk(fileContent);
   }
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
+      await this.dataVisualizerPlugin?.resetRun();
       await this.session.runChunk(chunk);
       this.conductor.sendResult(undefined);
     } catch (e) {

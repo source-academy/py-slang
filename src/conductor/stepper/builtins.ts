@@ -24,6 +24,8 @@ import {
   type StepNode,
   complexLiteral,
   isComplexValue,
+  isModuleFunctionNode,
+  isOpaqueNode,
   isPairNode,
   isResultValue,
   literal,
@@ -107,14 +109,16 @@ const isNumberNode = (n: StepNode): boolean => isIntNode(n) || isFloatNode(n) ||
 const isFunctionNode = (n: StepNode): boolean =>
   n.type === "ArrowFunctionExpression" ||
   n.type === "FunctionDeclaration" ||
-  (n.type === "Identifier" && isBuiltinFunctionName(String(n.name)));
+  n.type === "ModuleFunction" ||
+  (n.type === "Identifier" &&
+    (isBuiltinFunctionName(String(n.name)) || isSpecialFormName(String(n.name))));
 
 /* node constructors */
 const intLiteral = (v: bigint): StepNode => literal(v, v.toString(), false);
 const boolLiteral = (b: boolean): StepNode => literal(b, b ? "True" : "False");
 
 /** Python `str()` / `repr()` of a stepper value. */
-function pyStr(node: StepNode, repr: boolean): string {
+export function pyStr(node: StepNode, repr: boolean): string {
   if (node.type === "Literal") {
     const v = node.value;
     if (typeof v === "string") return repr ? pythonStringRepr(v) : v;
@@ -146,7 +150,10 @@ export function formatPrintOutput(args: StepNode[]): string {
   return args.map(a => pyStr(a, false)).join(" ") + "\n";
 }
 
-function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
+/** Validates `args.length` against `[min, max]` (`max: null` means "at least `min`", i.e. variadic),
+ * throwing a Python-style `TypeError` shaped like a wrong-arity call to any callable — a static
+ * built-in here, or an imported `ModuleFunction` (see `reduce.ts`'s `contractCall`). */
+export function checkArity(name: string, args: StepNode[], min: number, max: number | null): void {
   if (args.length < min || (max !== null && args.length > max)) {
     const want = max === null ? `at least ${min}` : min === max ? `${min}` : `${min} to ${max}`;
     typeError(`${name}() takes ${want} argument(s) but ${args.length} were given`);
@@ -417,6 +424,14 @@ Object.assign(BUILTIN_FUNCTIONS, {
     if (f.type === "Identifier" && isBuiltinFunctionName(String(f.name))) {
       return intLiteral(BigInt(BUILTIN_MIN_ARGS[String(f.name)] ?? 1));
     }
+    if (f.type === "Identifier" && isSpecialFormName(String(f.name))) {
+      // `input([prompt])`: 0 required arguments, matching the same min-args convention as every
+      // other optional-argument builtin (e.g. `print`, `str`) in BUILTIN_MIN_ARGS below.
+      return intLiteral(0n);
+    }
+    if (isModuleFunctionNode(f)) {
+      return intLiteral(BigInt(f.minArgs as number));
+    }
     return typeError("arity() argument must be a function");
   },
   print: (args: StepNode[]): StepNode => {
@@ -485,6 +500,7 @@ function pyTypeName(node: StepNode): string {
   if (isNoneNode(node)) return "NoneType";
   if (isPairNode(node)) return "pair";
   if (isFunctionNode(node)) return "function";
+  if (isOpaqueNode(node)) return String(node.label);
   return node.type;
 }
 
@@ -515,6 +531,20 @@ export function isBuiltinFunctionName(name: string): boolean {
   return Object.prototype.hasOwnProperty.call(BUILTIN_FUNCTIONS, name);
 }
 
+/** Built-ins recognised by name (for preprocessing, aliasing — `p = input; p()` — and introspection
+ * via `is_function`/`arity`) but deliberately *not* `BUILTIN_FUNCTIONS` entries: each needs a real
+ * host capability (see `context.ts`'s `StepperContext`) beyond its arguments to evaluate, so it's
+ * handled by name in `reduce.ts`'s `contractCall` instead of `applyBuiltin`'s pure dispatch. Currently
+ * just `input` (py-slang#191) — `time_time`/`random_random` stay genuinely unsupported (no stepper
+ * equivalent of "ask the host for the current time/a random number" exists, unlike input's real
+ * `IRunnerPlugin.requestInput`), so they're not special forms, just absent. */
+const SPECIAL_FORM_NAMES = new Set(["input"]);
+
+/** Whether `name` is a special-form builtin. See {@link SPECIAL_FORM_NAMES}. */
+export function isSpecialFormName(name: string): boolean {
+  return SPECIAL_FORM_NAMES.has(name);
+}
+
 /** The Python §2 built-in names (the linked-list library — see {@link ./lists}). They are *not* part
  * of the §1 core, so they only become available from chapter 2 on. */
 const CHAPTER_2_FUNCTION_NAMES = new Set(Object.keys(listBuiltins));
@@ -542,7 +572,8 @@ export function getAvailableBuiltinNames(chapter: number): string[] {
   const functions = Object.keys(BUILTIN_FUNCTIONS).filter(name =>
     isBuiltinFunctionAvailable(name, chapter),
   );
-  return [...functions, ...Object.keys(MATH_CONSTANTS)];
+  // Special forms (currently just `input`) are §1 core, like the MISC library, so no chapter gate.
+  return [...functions, ...SPECIAL_FORM_NAMES, ...Object.keys(MATH_CONSTANTS)];
 }
 
 /** Applies the built-in `name` to already-reduced value `args`. Throws on misuse (→ stuck). */
@@ -559,6 +590,8 @@ export function applyBuiltin(name: string, args: StepNode[]): StepNode {
  */
 export function isStepperValue(node: StepNode): boolean {
   return (
-    isResultValue(node) || (node.type === "Identifier" && isBuiltinFunctionName(String(node.name)))
+    isResultValue(node) ||
+    (node.type === "Identifier" &&
+      (isBuiltinFunctionName(String(node.name)) || isSpecialFormName(String(node.name))))
   );
 }

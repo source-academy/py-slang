@@ -22,9 +22,9 @@ function print(...object) { }
 function error(...object) { }
 
 /**
- * Evaluates to the <CODE>None</CODE> value with no effect on the program — the Python analogue of
- * JavaScript's <CODE>debugger;</CODE> statement. In the stepper, <CODE>breakpoint()</CODE> additionally
- * marks a step that the breakpoint navigation can jump to.
+ * Evaluates to the <CODE>None</CODE> value with no effect on the program. In the stepper and CSE
+ * machine visualization, <CODE>breakpoint()</CODE> additionally marks a step that the breakpoint
+ * navigation can jump to.
  *
  * @returns {NoneType} the <CODE>None</CODE> value
  */
@@ -72,17 +72,6 @@ defaults to <CODE>0</CODE>.
  * @returns {complex} a complex number constructed from the given <CODE>value</CODE>
  */
 function complex(v = 0, i = 0) { }
-
-/**
- * Prints the provided <CODE>*object</CODE> arguments to the standard output (similar to a simplified
- * <CODE>print</CODE>) and then raises an exception. This function accepts a variable number of arguments,
- * converts them to their <CODE>string</CODE> representations using <CODE>str()</CODE>, outputs them (with a
- * newline) just like what <CODE>print</CODE> does, and immediately halts execution by raising an exception.
- *
- * @param {any} <CODE>*object</CODE> - Objects to be printed to the standard output
- * @returns {NoneType} the <CODE>None</CODE> value
- */
-function error(...object) { }
 
 /**
  * Return the imaginary part of a complex number <CODE>x</CODE>.
@@ -199,18 +188,6 @@ function max(arg1, arg2, ...args) { }
 function min(arg1, arg2, ...args) { }
 
 /**
- * A simplified version of the Python built-in <CODE>print</CODE> function.
- * This function takes any number of parameters <CODE>*object</CODE>, converts them to their
- * <CODE>string</CODE> representations using <CODE>str()</CODE>, and writes them to the standard
- * output (<CODE>sys.stdout</CODE>), followed by a newline character. See the official Python
- * documentation for <CODE>print</CODE>.
- *
- * @param {any} <CODE>*object</CODE> - object(s) to be printed to the standard output
- * @returns {NoneType} the <CODE>None</CODE> value
- */
-function print(...object) { }
-
-/**
  * Return the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>.
  *
  * @returns {float} the next random floating-point number in the range <CODE>0.0 ≤ X < 1.0</CODE>
@@ -257,9 +234,19 @@ function round(number, ndigits) { }
 function str(object = "") { }
 
 /**
- * Return the number of milliseconds elapsed since <CODE>January 1, 1970 00:00:00 UTC</CODE>.
+ * Schedules <CODE>f</CODE> to be called with no arguments after <CODE>t</CODE> milliseconds have
+ * elapsed, without blocking the calling code. <CODE>f</CODE> is invoked once, the next time the
+ * scheduled delay elapses.
  *
- * @returns {float} current time in milliseconds
+ * @param {function} <CODE>f</CODE> - the function to call once <CODE>t</CODE> milliseconds have elapsed
+ * @param {int | float} <CODE>t</CODE> - the delay, in milliseconds, before <CODE>f</CODE> is called
+ * @returns {None} None
  */
-function time_time() { }
+function set_timeout(f, t) { }
 
+/**
+ * Cancels every <CODE>set_timeout</CODE> callback that has been scheduled but has not yet fired.
+ *
+ * @returns {None} None
+ */
+function clear_all_timeout() { }

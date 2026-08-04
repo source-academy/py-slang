@@ -26,7 +26,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
-import { loadModules, moduleToPython } from "./modules";
+import { loadModules, moduleToPython, RelativeImportNotSupportedError } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -202,6 +202,13 @@ async function evaluateImports(
     throw new Error("Context is not properly initialized with evaluator and conductor");
   }
 
+  for (const nodes of importNodeMap.values()) {
+    const offending = nodes.find(n => n.node.level > 0);
+    if (offending !== undefined) {
+      handleRuntimeError(context, new RelativeImportNotSupportedError(offending.node));
+    }
+  }
+
   await loadModules(context, [...importNodeMap.keys()]);
   for (const [moduleName, nodes] of importNodeMap) {
     for (const node of nodes) {
@@ -327,18 +334,16 @@ export async function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
 
-    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
-    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
-    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
-    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
-    // so it can be peeked here, before that instruction runs.
-    if (
-      !isPrelude &&
-      isInstr(command) &&
-      command.instrType === InstrType.APPLICATION &&
-      command.numOfArgs === 0
-    ) {
-      const callee = stash.peek();
+    // A call resolving to the `breakpoint` builtin, detected by identity (not source text) so
+    // aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's breakpoint
+    // detection in reduce.ts. Real Python's `breakpoint(*args, **kws)` takes any number of
+    // arguments (forwarded to sys.breakpointhook, which this builtin already ignores either way —
+    // see stdlib/misc.ts), so this fires for any arity, not just zero. APPLICATION pops its callee
+    // off the stash itself, after popping `numOfArgs` args first — by the time this instruction is
+    // about to run, all `numOfArgs` args are already evaluated and sit on top of the callee, so
+    // peekAt(numOfArgs) reaches down past them to the callee, still before APPLICATION runs.
+    if (!isPrelude && isInstr(command) && command.instrType === InstrType.APPLICATION) {
+      const callee = stash.peekAt(command.numOfArgs);
       if (callee?.type === "builtin" && callee.name === "breakpoint") {
         // `steps` here is the count as of the end of the *previous* iteration — i.e. the
         // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
@@ -347,6 +352,15 @@ export async function* generateCSEMachineStateStream(
         context.runtime.breakpointSteps.push(steps - 1);
         context.runtime.break = true;
       }
+    }
+
+    // A node flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
+    // statement — see `breakpoints.ts`) is treated exactly like an explicit `breakpoint()` call:
+    // recorded the moment it's about to be evaluated, using the same `steps - 1` step-index
+    // convention as the block above.
+    if (!isPrelude && isNode(command) && command.hasBreakpoint) {
+      context.runtime.breakpointSteps.push(steps - 1);
+      context.runtime.break = true;
     }
 
     control.pop();
@@ -1110,13 +1124,12 @@ const cmdEvaluators: CmdEvaluators = {
   },
   [InstrType.FOR]: function (
     code: string,
-    command: ControlItem,
+    instr: ForInstr,
     context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ForInstr;
     const step = stash.pop();
     const end = stash.pop();
     const start = stash.pop();

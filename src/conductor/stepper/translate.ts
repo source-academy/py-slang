@@ -131,6 +131,16 @@ function block(statements: StmtNS.Stmt[]): StepNode {
 }
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
+  const node = translateStmtInner(stmt);
+  // `hasBreakpoint` is bolted onto the source statement by `markBreakpoints` (see
+  // `../../breakpoints.ts`); copy it across so `reduce.ts` can still see it once the statement
+  // has become an (estree-shaped, location-free) `StepNode` — mirrors how `breakpoint()` itself
+  // is detected structurally at reduction time rather than here at translation time (see below).
+  if ((stmt as StmtNS.Stmt & { hasBreakpoint?: boolean }).hasBreakpoint) node.hasBreakpoint = true;
+  return node;
+}
+
+function translateStmtInner(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
     case "SimpleExpr": {
       const expr = (stmt as StmtNS.SimpleExpr).expression;
@@ -185,9 +195,25 @@ function translateStmt(stmt: StmtNS.Stmt): StepNode {
     }
     case "Pass":
       return { type: "PassStatement" };
+    case "FromImport":
+      return { type: "ImportStatement", raw: importText(stmt as StmtNS.FromImport) };
     default:
       return { type: "ExpressionStatement", expression: identifier(`<${stmt.kind}>`) };
   }
+}
+
+/** Reconstructs `from X import Y [as Z], ...` (or its relative `from .X import ...` form) as display
+ * text for {@link translateStmtInner}'s `"FromImport"` case. The statement itself never reduces (see
+ * `reduce.ts`'s `"ImportStatement"` case) — imported names are resolved and bound before stepping
+ * begins (see `../getSteps`), mirroring how the CSE machine's own `FromImport` evaluator is a no-op
+ * once its own upfront `evaluateImports` pass has run — so this text is purely what the student's
+ * source reads like on this step, not something the reducer interprets. */
+function importText(stmt: StmtNS.FromImport): string {
+  const module = ".".repeat(stmt.level) + stmt.module.lexeme;
+  const names = stmt.names
+    .map(({ name, alias }) => (alias ? `${name.lexeme} as ${alias.lexeme}` : name.lexeme))
+    .join(", ");
+  return `from ${module} import ${names}`;
 }
 
 /** Translates a parsed Python file into the estree-shaped {@link program} root the stepper reduces. */

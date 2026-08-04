@@ -13,25 +13,35 @@
  * Closures crossing the module boundary, in EITHER direction, are
  * async-generator calls by conductor's own contract (`ExternCallable` is
  * `(...args) => AsyncGenerator<...>`) — not an implementation choice of any
- * particular engine. Concretely:
+ * particular engine — but that mandatory shape is only the *fallback*, not the
+ * only path, in either direction: `GenericDataHandler.closure_call_sync` is a
+ * shared, engine-agnostic escape hatch that doesn't care which side of the
+ * boundary a closure came from, only whether its underlying function carries a
+ * `.sync` twin. Concretely:
  *
- *  - Python calling an imported module function (`from math import sqrt`):
- *    wrapped as a `PyFunction` whose body runs `dh.closure_call_unchecked`
- *    and iterates the generator. `.next()` on an async generator always
- *    resolves via microtask, so this is unavoidably async — the function is
- *    `asyncOnly` (see runtime.ts), callable only through `acall`/dual mode,
- *    never through a sync module callback.
+ *  - Python calling an imported module function (`from math import sqrt`, or
+ *    a hot per-call accessor like pix_n_flix's `get_pixel_value`): wrapped as
+ *    a `PyFunction` whose sync body attempts `dh.closure_call_sync` first
+ *    (converting arguments/result through the same restricted scalar
+ *    converters as the `.sync` fast path below) and falls back to the async
+ *    body — `dh.closure_call_unchecked`, iterating the generator — only when
+ *    no `.sync` twin is available for that particular call. Today that's most
+ *    module closures (no `.sync` twin attached), which simply throw the same
+ *    "needs a frontend round-trip" error the sync body always raised before;
+ *    a closure that does carry one skips the mandatory async-generator shape
+ *    entirely, the same way sound's wave sampling already does.
  *  - A module calling a Python-defined function (the sound-module scenario:
  *    `play(wave, duration)` samples `wave` many times): the Python closure is
  *    wrapped via `dh.closure_make(sig, func, ...)`, where conductor requires
  *    `func` itself to be an async generator. Its *body*, though, is authored
- *    here, and does a single direct, synchronous `rt.callSync` — no
- *    interpreter re-entry (unlike the CSE machine's `modules.ts`, whose
+ *    here, and (outside the `.sync` fast path below) runs fn via `rt.acall` —
+ *    no interpreter re-entry (unlike the CSE machine's `modules.ts`, whose
  *    equivalent closure wrapper pushes onto `control`/`stash` and resumes the
- *    whole step loop per call). One microtask per call is unavoidable
- *    (conductor's contract, not py2js's), but the work inside it is a plain
- *    JS function call — see the engine README's module-interop notes for the
- *    measured cost.
+ *    whole step loop per call), but still able to await a nested asyncOnly
+ *    module call fn itself makes (source-academy/py-slang#348). One microtask
+ *    per call is unavoidable (conductor's contract, not py2js's), but the
+ *    work inside it is a plain JS function call — see the engine README's
+ *    module-interop notes for the measured cost.
  *
  * Chapter 1 has no list type (NoListsValidator) and no way to construct or
  * consume one, so DataType.PAIR round-trips through PyList — a pair and a
@@ -56,12 +66,18 @@ import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
  * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
  * used only by the `.sync` fast path a Python closure crossing into a module
  * gets below (see GenericDataHandler.closure_call_sync's doc for the overall
- * design). Cover exactly the value shapes a scalar-in/scalar-out closure (a
- * wave function, sampled 44100x/sec by the sound module) needs: numbers,
- * booleans, strings, None. Return `undefined` for anything else (pairs,
- * closures, opaques, complex) - the "no sync path" signal, safe to use for
- * *arguments* (nothing has run yet) but not for the *result* once the real
- * call has already happened - see pyClosureFunc.sync below.
+ * design). Cover the value shapes a scalar-in/scalar-out closure (a wave
+ * function, sampled 44100x/sec by the sound module) needs - numbers,
+ * booleans, strings, None - plus OPAQUE, needed for an opaque-handle
+ * accessor (pix_n_flix's get_pixel_value/set_pixel_value, taking an opaque
+ * image handle as `source`/`dest`, sampled up to width*height*8x/frame).
+ * OPAQUE needs no real conversion work either way - same as the async
+ * moduleToPython/pythonToModule cases below, it's a zero-cost passthrough
+ * (`new PyOpaque(value)` / `value.typed`), not a scalar decode, so it costs
+ * nothing to add here. Return `undefined` for anything else (pairs, closures,
+ * complex) - the "no sync path" signal, safe to use for *arguments* (nothing
+ * has run yet) but not for the *result* once the real call has already
+ * happened - see pyClosureFunc.sync below.
  */
 function moduleToPythonSync(value: TypedValue<DataType>): PyValue | undefined {
   switch (value.type) {
@@ -74,12 +90,15 @@ function moduleToPythonSync(value: TypedValue<DataType>): PyValue | undefined {
     case DataType.VOID:
     case DataType.EMPTY_LIST:
       return null;
+    case DataType.OPAQUE:
+      return new PyOpaque(value);
     default:
       return undefined;
   }
 }
 
 function pythonToModuleSync(value: PyValue): TypedValue<DataType> | undefined {
+  if (value instanceof PyOpaque) return value.typed;
   switch (typeof value) {
     case "bigint":
       return { type: DataType.NUMBER, value: Number(value) };
@@ -128,22 +147,40 @@ export async function pythonToModule(
         ...args: TypedValue<DataType>[]
       ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
         const nativeArgs = await Promise.all(args.map(a => moduleToPython(rt, dh, a)));
-        const result = rt.callSync(fn, nativeArgs);
+        // rt.acall, not rt.callSync: this generator body only ever runs when
+        // dh.closure_call_sync's `.sync` fast path below has already failed
+        // (see closure_call_sync's doc) or was never attempted, so a microtask
+        // per call is already being paid here regardless. Running fn's *async*
+        // body means a call fn makes to another module closure - e.g. the
+        // student's own callback calling an unrelated asyncOnly module
+        // function, like `adsr` from inside a `stacking_adsr` envelope lambda
+        // (source-academy/py-slang#348) - can actually await that round-trip
+        // instead of hitting asyncOnly's synchronous-call guard. For an
+        // ordinary fn with no such nested call, acall degrades to essentially
+        // the same cost as callSync (see acall's own doc comment), so this
+        // costs nothing in the common case and fixes the compound one.
+        const result = await rt.acall(fn, nativeArgs);
         return pythonToModule(rt, dh, result);
       }
-      // The fast path: rt.callSync(fn, ...) is already synchronous (py2js's
-      // whole point) - the only async part of the body above is argument/
+      // The fast path: rt.callSync(fn, ...) is synchronous (py2js's whole
+      // point) - the only async part of the body above is argument/
       // result conversion, and that's only async because moduleToPython/
       // pythonToModule are written uniformly with the closure case (which
       // genuinely needs `await dh.closure_make(...)`). For a scalar-in/
       // scalar-out closure (the wave-sampling shape), conversion never
       // actually needs to await anything, so this restricted synchronous
-      // twin removes the last microtask too. Bailing to `undefined` for an
-      // unsupported *argument* is safe (fn hasn't run yet); once fn has
-      // actually run, a result that doesn't fit is a hard error, not a
-      // fallback signal - falling back to the async path at that point would
-      // call fn a second time, double-running any side effects (print(),
-      // mutation) it has.
+      // twin removes the last microtask too. Unlike pyClosureFunc above, this
+      // fast path deliberately keeps rt.callSync rather than rt.acall - it
+      // exists only for provably scalar-only closures (moduleToPythonSync/
+      // pythonToModuleSync below bail to `undefined` the moment an argument or
+      // result isn't a plain scalar), so fn can never reach a nested asyncOnly
+      // call through this path in the first place; going through the sync
+      // body here is what makes the hot, 44100Hz-sampling case actually fast.
+      // Bailing to `undefined` for an unsupported *argument* is safe (fn
+      // hasn't run yet); once fn has actually run, a result that doesn't fit
+      // is a hard error, not a fallback signal - falling back to the async
+      // path at that point would call fn a second time, double-running any
+      // side effects (print(), mutation) it has.
       (
         pyClosureFunc as typeof pyClosureFunc & {
           sync?: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
@@ -265,23 +302,72 @@ export async function moduleToPython(
       return new PyOpaque(value);
     case DataType.CLOSURE: {
       const arity = await dh.closure_arity(value);
-      const f = rt.def(name, arity, () => {
-        // Defensive backstop: the asyncOnly guard in call()/checkCallable
-        // already rejects this before the body would run through the
-        // normal call path; this only fires on a direct raw invocation that
-        // bypasses the runtime (e.g. module code calling the JS function
-        // value itself instead of going through rt.call/rt.acall).
-        throw new Py2JsRuntimeError(
-          "TypeError",
-          `${name}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
-        );
+      // closure_call_sync (GenericDataHandler, not part of conductor's own IDataHandler
+      // contract - see the doc comment on syncCall below) is the mirror image of
+      // pythonToModule's own `.sync` fast path above: a module closure - e.g.
+      // pix_n_flix's get_pixel_value/set_pixel_value, sampled up to width*height*8
+      // times per frame from inside a student's filter - can carry a `.sync` twin
+      // proving it never needs a real host round-trip, exactly like a scalar-in/
+      // scalar-out wave function does in the other direction. The sync body below
+      // attempts that fast path on every call (not just once - unlike a Python
+      // closure's fixed dual-compiled shape, a module closure's sync-capability is
+      // discovered per call, since closure_call_sync itself is what tells us whether
+      // one exists); asyncBody remains the always-correct fallback for calls that
+      // reach it via acall (dual-mode's async spine) or when no `.sync` twin exists.
+      const syncCall = (
+        dh as IDataHandler & {
+          closure_call_sync?: (
+            c: TypedValue<DataType.CLOSURE>,
+            args: TypedValue<DataType>[],
+          ) => TypedValue<DataType> | undefined;
+        }
+      ).closure_call_sync?.bind(dh);
+      const f = rt.def(name, arity, (...args: PyValue[]) => {
+        const typedArgs: TypedValue<DataType>[] = [];
+        for (const a of args) {
+          // An argument outside the restricted scalar coverage safely means "no
+          // sync path for this call" - nothing has run yet, so falling through to
+          // the same error the old unconditional-throw body always raised is exact,
+          // not a guess.
+          const converted = pythonToModuleSync(a);
+          if (converted === undefined) {
+            throw new Py2JsRuntimeError(
+              "TypeError",
+              `${name}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+            );
+          }
+          typedArgs.push(converted);
+        }
+        const result = syncCall?.(value, typedArgs);
+        if (result === undefined) {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            `${name}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+          );
+        }
+        // Once closure_call_sync has actually run - real module-side effects may
+        // already have happened - there is no safe fallback if the *result* doesn't
+        // fit; that would risk calling the closure a second time via asyncBody.
+        // Mirrors pyClosureFunc.sync's identical stance in the other direction.
+        const converted = moduleToPythonSync(result);
+        if (converted === undefined) {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            `${name}() returned a value that cannot be produced by a synchronous module callback`,
+          );
+        }
+        return converted;
       });
       // Renders as a built-in function (matching the spirit of the CSE
       // machine's own convention for module closures — see the file header
       // comment on threading the real symbol name through, an improvement
       // over CSE's literal "closure" placeholder name there).
       f.pyBuiltin = true;
-      f.asyncOnly = true;
+      // Deliberately not asyncOnly: whether a *specific call* can use the sync body
+      // is now decided dynamically (per the loop above), not fixed at import time -
+      // most module closures still have no `.sync` twin and will simply throw the
+      // same "needs a frontend round-trip" error checkCallable's asyncOnly guard
+      // used to raise earlier, just one level in.
       f.asyncBody = async (...args: PyValue[]) => {
         const typedArgs = await Promise.all(args.map(a => pythonToModule(rt, dh, a)));
         // Use the checked path just like the CSE module bridge. DataType.ANY

@@ -27,10 +27,10 @@ const PYODIDE_TIMEOUT = 60_000;
  * NameErrors on these same as CSE/PVML/WASM currently do. */
 const KNOWN_SICP_GAPS = new Set<string>(["parse", "tokenize", "set_timeout", "clear_all_timeout"]);
 
-/** Minimal IRunnerPlugin mock — see Py2JsEvaluator.test.ts's identical stub
- * for why this is enough: the evaluator only calls sendResult/sendError/
- * sendOutput, and never registers a module-loader plugin (pyodide can't
- * reach conductor's module protocol at all — see PyodideEvaluator.ts). */
+/** Minimal IRunnerPlugin mock, mirroring Py2JsEvaluator.test.ts's: the evaluator calls
+ * sendResult/sendError/sendOutput, plus registerPlugin/hostLoadPlugin once at construction
+ * time (registerAutoCompletePlugin) — but never registers a module-loader plugin (pyodide
+ * can't reach conductor's module protocol at all — see PyodideEvaluator.ts). */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: { name: string; message: string }[] = [];
@@ -40,6 +40,7 @@ function makeMockConductor() {
     sendError: (e: unknown) => errors.push(e as { name: string; message: string }),
     sendOutput: (m: string) => outputs.push(m),
     registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }

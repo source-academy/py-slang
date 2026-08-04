@@ -8,6 +8,7 @@ import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { compileToWasmAndRun } from "../engines/wasm";
 import { PreparedModuleBindings, prepareModuleBindings } from "../engines/wasm/moduleInterop";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
@@ -16,6 +17,7 @@ import mce from "../stdlib/parser";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
  * Compiles Python to a WASM module and runs it via compileToWasmAndRun.
@@ -50,6 +52,7 @@ class PyWasmEvaluator extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, chapter: number, groups: Group[]) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
     this.groups = groups;
     this.dataHandler = new GenericDataHandler(chapter);
@@ -67,6 +70,13 @@ class PyWasmEvaluator extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on the WASM
+          // engine yet (see py2js for the supported engine) — reject
+          // explicitly rather than treating the dotted path as a conductor
+          // module name.
+          throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);

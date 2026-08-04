@@ -15,6 +15,10 @@
 /** A single estree-shaped stepper node. Plain JSON: a `type` discriminator plus child fields. */
 export interface StepNode {
   type: string;
+  /** Set by `translate.ts` when the source statement was flagged by `markBreakpoints` (a gutter
+   * click resolved to its closest enclosing statement — see `../../breakpoints.ts`). Checked by
+   * `reduce.ts` alongside its existing `breakpoint()`-call detection. */
+  hasBreakpoint?: boolean;
   [key: string]: unknown;
 }
 
@@ -25,6 +29,58 @@ export interface StepNode {
 /** Builds a `Literal` whose displayed text is `raw` (so Python reprs like `True`/`None` survive). */
 export function literal(value: unknown, raw: string, pyFloat = false): StepNode {
   return { type: "Literal", value, raw, pyFloat };
+}
+
+/**
+ * An opaque value from an imported module (e.g. a `rune` `Rune`) whose payload has no representation
+ * in the stepper's value model — unlike every other {@link StepNode} value it is never inspected or
+ * decomposed, only ever substituted around and passed to further calls (including back into another
+ * module call — see `moduleInterop.ts`'s `stepNodeToModule`, which reads `handle` back out for exactly
+ * that). `label` is a short display name (ideally the underlying payload's own constructor name, e.g.
+ * `"Rune"`; `"opaque"` if that isn't available) shown as `<label>` — see {@link unparse}'s `"Opaque"`
+ * case. `handle` is the underlying `TypedValue<DataType.OPAQUE>` (kept as `unknown` here so `ast.ts`
+ * stays free of any conductor-specific type — `moduleInterop.ts` does the casting). `dataUrl` is an
+ * optional rendered thumbnail a module may supply (see source-academy/modules#879); unset until a
+ * module opts into that convention, and not yet rendered by the host — reserved here so the field
+ * survives `substitute`/`clone` (both copy unknown fields structurally) once host rendering catches up.
+ */
+export function opaqueValue(label: string, handle: unknown, dataUrl?: string): StepNode {
+  const node: StepNode = { type: "Opaque", label, handle };
+  if (dataUrl !== undefined) node.dataUrl = dataUrl;
+  return node;
+}
+
+/**
+ * A callable exported by an imported module (e.g. `rune`'s `circle`) — the stepper's analogue of a
+ * `def`/`lambda` value, but with no Python body to substitute into: calling it (see `reduce.ts`'s
+ * `contractCall`) round-trips through the module via `closure` instead. `closure` is the underlying
+ * `TypedValue<DataType.CLOSURE>` handle (kept as `unknown` for the same reason as `opaqueValue`'s
+ * `handle`); `minArgs` backs the `arity()` built-in exactly like a `def`/`lambda`'s parameter count,
+ * and (together with `isVararg`) the arity check `contractCall` runs before actually placing a call —
+ * `isVararg: false` means `minArgs` is an exact count (like a built-in's `min === max`), `true` means
+ * it's only a lower bound (extra arguments are collected by the module's own closure). Substituted
+ * into the program in place of the imported name before stepping begins (see `getSteps.ts`'s
+ * `resolveImports`), exactly like a built-in constant or a bound `def` — never looked up by name at
+ * call time, so nothing needs threading through the reducer beyond the one `evaluator` parameter
+ * `contractCall` needs to actually place the call.
+ */
+export function moduleFunction(
+  name: string,
+  closure: unknown,
+  minArgs: number,
+  isVararg: boolean,
+): StepNode {
+  return { type: "ModuleFunction", name, closure, minArgs, isVararg };
+}
+
+/** Whether `node` is an opaque module value. See {@link opaqueValue}. */
+export function isOpaqueNode(node: StepNode): boolean {
+  return node.type === "Opaque";
+}
+
+/** Whether `node` is a callable imported from a module. See {@link moduleFunction}. */
+export function isModuleFunctionNode(node: StepNode): boolean {
+  return node.type === "ModuleFunction";
 }
 
 /** Python's textual form of a JS `number`: `inf`/`-inf`/`nan` for the specials, and a trailing `.0`
@@ -149,6 +205,8 @@ export function isValue(node: StepNode): boolean {
     case "Identifier":
     case "ArrowFunctionExpression":
     case "FunctionDeclaration":
+    case "Opaque":
+    case "ModuleFunction":
       return true;
     case "ArrayExpression":
       return (node.elements as StepNode[]).every(isValue);
@@ -173,6 +231,8 @@ export function isResultValue(node: StepNode): boolean {
     case "Literal":
     case "ArrowFunctionExpression":
     case "FunctionDeclaration":
+    case "Opaque":
+    case "ModuleFunction":
       return true;
     case "ArrayExpression":
       return (node.elements as StepNode[]).every(isResultValue);
@@ -309,6 +369,10 @@ export function unparse(node: StepNode | null | undefined): string {
       return String((node.id as StepNode).name);
     case "ArrayExpression":
       return `[${(node.elements as StepNode[]).map(unparse).join(", ")}]`;
+    case "Opaque":
+      return `<${node.label}>`;
+    case "ModuleFunction":
+      return String(node.name);
     default:
       return `<${node.type}>`;
   }

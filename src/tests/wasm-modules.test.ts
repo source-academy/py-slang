@@ -19,6 +19,10 @@ function makeMockConductor(withModuleLoader: boolean = true) {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    // Both also called by registerAutoCompletePlugin at construction time, regardless of
+    // withModuleLoader - registerPlugin gets overridden below when the module loader is wanted.
+    registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
     ...(withModuleLoader && {
       registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
         dataHandler = evaluator;
@@ -168,6 +172,19 @@ describe("PyWasmEvaluator module imports", () => {
     await evaluator.evaluateChunk("from testmod import nonexistent\nprint(nonexistent)\n");
 
     expect(errors.length).toBeGreaterThan(0);
+  });
+
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // WASM doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors } = makeMockConductor(false);
+    const evaluator = new PyWasmEvaluator3(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/relative imports/);
   });
 
   // Calling an imported module *function* requires JSPI (WebAssembly.Suspending/

@@ -7,13 +7,15 @@ import { NoListsValidator } from "./features/no-lists";
 import { NoLoopsValidator } from "./features/no-loops";
 import { NoGlobalValidator } from "./features/no-global";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
+import { NoPassValidator } from "./features/no-pass";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { NoRestParamsValidator } from "./features/no-rest-params";
 import { NoSpreadValidator } from "./features/no-spread";
 import { FeatureValidator } from "./types";
 
 /**
- * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no nonlocal, no rest params, no annotated assignments, no is operator.
+ * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no global, no nonlocal,
+ * no pass, no rest params, no annotated assignments, no is operator.
  * Factory function returns a fresh set of validators (stateful ones reset each time).
  */
 export function makeChapter1Validators(): FeatureValidator[] {
@@ -24,6 +26,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoGlobalValidator,
     NoNonlocalValidator,
+    NoPassValidator,
     NoRestParamsValidator,
     NoSpreadValidator,
     NoAnnAssignValidator,
@@ -32,7 +35,8 @@ export function makeChapter1Validators(): FeatureValidator[] {
 }
 
 /**
- * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no global, no nonlocal, no rest params, no annotated assignments, no is operator.
+ * Source Chapter 2: no lists, no loops, no reassignment, no break/continue, no global, no nonlocal,
+ * no pass, no rest params, no annotated assignments, no is operator.
  * Linked-list library available (None as linked list expression).
  */
 export function makeChapter2Validators(): FeatureValidator[] {
@@ -43,6 +47,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoBreakContinueValidator,
     NoGlobalValidator,
     NoNonlocalValidator,
+    NoPassValidator,
     NoRestParamsValidator,
     NoSpreadValidator,
     NoAnnAssignValidator,

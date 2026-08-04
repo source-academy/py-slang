@@ -7,8 +7,9 @@ import {
   PyPvmlEvaluator4,
 } from "../conductor/PyPvmlEvaluator";
 
-/** Minimal IRunnerPlugin mock: PyPvmlEvaluator only ever calls sendResult/
- * sendError/sendOutput on its `conductor`. */
+/** Minimal IRunnerPlugin mock: PyPvmlEvaluator calls sendResult/sendError/
+ * sendOutput on its `conductor`, plus registerPlugin/hostLoadPlugin once at
+ * construction time (registerAutoCompletePlugin). */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: unknown[] = [];
@@ -17,6 +18,8 @@ function makeMockConductor() {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }
@@ -78,6 +81,19 @@ describe("PyPvmlEvaluator", () => {
     await evaluator.evaluateChunk("undefined_name\n");
 
     expect(errors).toHaveLength(1);
+  });
+
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // PVML doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/relative imports/);
   });
 });
 

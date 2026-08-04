@@ -92,19 +92,23 @@ describe("__program__", () => {
     }
   });
 
-  test("a REPL/conductor session uses the caller-supplied programText", async () => {
+  test("a REPL/conductor session sets __program__ automatically, from the chunk it's actually running", async () => {
+    // No caller-supplied override needed or possible: __program__ is simply
+    // whatever text this chunk is — Py2JsSession keeps it current itself,
+    // the same way the CSE machine's own pyDefineVariable("__program__", ...)
+    // does internally, not something an external caller manages.
     const lines: string[] = [];
-    const session = new Py2JsSession(4, {
-      onOutput: l => lines.push(l),
-      programText: "the editor content at the time Run was last pressed",
-    });
+    const session = new Py2JsSession(4, { onOutput: l => lines.push(l) });
     await session.runChunk("print(__program__)\n");
-    expect(lines).toEqual(["the editor content at the time Run was last pressed"]);
+    expect(lines).toEqual(["print(__program__)\n"]);
   });
 
-  test("a REPL/conductor session with no programText leaves __program__ unbound (NameError)", async () => {
-    const session = new Py2JsSession(4);
-    await expect(session.runChunk("print(__program__)\n")).rejects.toThrow();
+  test("a later chunk sees its own text, not an earlier chunk's", async () => {
+    const lines: string[] = [];
+    const session = new Py2JsSession(4, { onOutput: l => lines.push(l) });
+    await session.runChunk("x = 1\n");
+    await session.runChunk("print(__program__)\n");
+    expect(lines).toEqual(["print(__program__)\n"]);
   });
 });
 

@@ -772,6 +772,26 @@ describe("Import statement", () => {
     expect(imp.module.lexeme).toBe("math");
     expect(imp.names[0].name.lexeme).toBe("sqrt");
     expect(imp.names[0].alias).toBeNull();
+    expect(imp.level).toBe(0);
+  });
+
+  test("relative import: from .utils import foo has level 1", () => {
+    const stmts = parseStmts("from .utils import foo");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(1);
+    expect(imp.module.lexeme).toBe("utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+  });
+
+  test("relative import: from ..pkg.utils import foo as bar has level 2", () => {
+    const stmts = parseStmts("from ..pkg.utils import foo as bar");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(2);
+    expect(imp.module.lexeme).toBe("pkg.utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+    expect(imp.names[0].alias!.lexeme).toBe("bar");
   });
 
   test("from x import (a, b, c) produces FromImport with multiple names", () => {
@@ -806,6 +826,28 @@ describe("Import statement", () => {
     const imp = stmts[0] as StmtNS.FromImport;
     expect(imp.module.lexeme).toBe("foo.bar");
     expect(imp.names).toHaveLength(2);
+  });
+
+  // py-slang#393: a leading blank line or comment isn't a statement, and
+  // must not count as one — it shouldn't be able to knock a `from` import
+  // out of the program's import-prefix section. Blank lines/comments
+  // *between* imports already worked (the lexer collapses each into a
+  // single `newline` token that already pairs with the previous import),
+  // so those aren't regression-tested here, only the previously-broken
+  // leading case.
+  test("a leading blank line before the first import still parses it as an import", () => {
+    const stmts = parseStmts("\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("a leading comment before the first import still parses it as an import", () => {
+    const stmts = parseStmts("# a comment\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("several leading blank/comment lines before the first import still parse it as an import", () => {
+    const stmts = parseStmts("# one\n\n# two\n\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
   });
 });
 

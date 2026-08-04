@@ -1,7 +1,7 @@
 Python §2 is a small programming language, designed for the second chapter
 of the textbook
-<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
 
 ## What names are predeclared in Python §2?
 
@@ -25,7 +25,7 @@ these groups:
 You can use all features of
 <a href="../python_1/">Python §1</a> and all
 features that are introduced in
-<a href="https://sourceacademy.org/sicpjs/2">chapter 2</a> of the
+<a href="https://sourceacademy.org/sicpy/2">chapter 2</a> of the
 textbook.
 Below are the features that Python §2 adds to Python §1.
 

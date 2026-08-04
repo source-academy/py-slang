@@ -113,7 +113,7 @@ type StepperOutcome = { kind: "value"; text: string } | { kind: "error" } | { ki
  * "Evaluation stuck" — distinguishing "error" from a genuine "stuck" (no preceding error-shaped
  * explanation) this way.
  */
-function stepperOutcome(code: string, chapter: number): StepperOutcome {
+async function stepperOutcome(code: string, chapter: number): Promise<StepperOutcome> {
   const script = code + "\n";
   let ast: StmtNS.FileInput;
   try {
@@ -125,10 +125,10 @@ function stepperOutcome(code: string, chapter: number): StepperOutcome {
     return { kind: "error" };
   }
 
-  const steps = getPythonSteps(ast);
+  const steps = await getPythonSteps(ast);
   const last = steps[steps.length - 1];
   if (last.markers?.[0]?.explanation === "Evaluation complete") {
-    return { kind: "value", text: evaluatePython(ast) };
+    return { kind: "value", text: await evaluatePython(ast) };
   }
   const secondLast = steps[steps.length - 2];
   const secondLastExplanation = secondLast?.markers?.[0]?.explanation;
@@ -180,7 +180,7 @@ for (const chapter of [1, 2]) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
             testOrSkip(code)(code, async () => {
               const wanted = await cseOutcome(code, chapter, groups);
-              const actual = stepperOutcome(code, chapter);
+              const actual = await stepperOutcome(code, chapter);
               expectMatch(wanted, actual);
             });
           }
@@ -193,7 +193,7 @@ for (const chapter of [1, 2]) {
         const code = `-${literalFor(operand, chapter)}`;
         testOrSkip(code)(code, async () => {
           const wanted = await cseOutcome(code, chapter, groups);
-          const actual = stepperOutcome(code, chapter);
+          const actual = await stepperOutcome(code, chapter);
           expectMatch(wanted, actual);
         });
       }
@@ -208,7 +208,7 @@ for (const chapter of [1, 2]) {
         const code = `not ${literalFor(operand, chapter)}`;
         testOrSkip(code)(code, async () => {
           const wanted = await cseOutcome(code, chapter, groups);
-          const actual = stepperOutcome(code, chapter);
+          const actual = await stepperOutcome(code, chapter);
           if (wanted.kind === "value") {
             expect(actual.kind).toBe("value");
           } else {
@@ -225,7 +225,7 @@ for (const chapter of [1, 2]) {
             const code = `${literalFor(left, chapter)} ${op} ${literalFor(right, chapter)}`;
             testOrSkip(code)(code, async () => {
               const wanted = await cseOutcome(code, chapter, groups);
-              const actual = stepperOutcome(code, chapter);
+              const actual = await stepperOutcome(code, chapter);
               if (wanted.kind === "value") {
                 expect(actual.kind).toBe("value");
               } else {
