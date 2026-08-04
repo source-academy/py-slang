@@ -7,7 +7,7 @@
  * Error` check up the call chain unless bridgeBuiltin converts them at the
  * boundary where they actually originate.
  */
-import { runCodePy2Js } from "../engines/py2js";
+import { runCodePy2Js, Py2JsSession } from "../engines/py2js";
 
 test("tail() on a non-pair surfaces a real TypeError, not [object Object]", () => {
   expect(() => runCodePy2Js("print(tail(5))", 2)).toThrow(
@@ -114,5 +114,21 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
       message = (e as Error).message;
     }
     expect(message).not.toMatch(/predefined function/);
+  });
+
+  // Py2JsSession (what the conductor evaluator actually uses for the Playground)
+  // loads the stdlib prelude through its own runChunk, a separate code path from
+  // setupRuntime's one-shot prelude load that runCodePy2Js/runCodePy2JsDual use —
+  // each needs its own compilingPrelude wrapping, or prelude functions loaded via
+  // a session never get tagged pyPrelude and this attribution silently never fires.
+  test("Py2JsSession also names the enclosing predefined function", async () => {
+    const session = new Py2JsSession(2);
+    let message = "";
+    try {
+      await session.runChunk("map(1, 2)");
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/in predefined function 'map'/);
   });
 });

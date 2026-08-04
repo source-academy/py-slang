@@ -536,7 +536,19 @@ export class Py2JsSession {
         .map(g => g.prelude ?? "")
         .filter(p => p.trim())
         .join("\n");
-      if (preludeText.trim()) await this.runChunkInternal(preludeText);
+      if (preludeText.trim()) {
+        // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — the
+        // Py2JsSession analogue of setupRuntime's identical wrapping around its own,
+        // separate prelude-loading call above. Without this, a bridged builtin's error
+        // can never name the predefined function it happened inside of (py-slang#397)
+        // for any conductor-evaluator session, since that's the only path they use.
+        this.rt.compilingPrelude = true;
+        try {
+          await this.runChunkInternal(preludeText);
+        } finally {
+          this.rt.compilingPrelude = false;
+        }
+      }
     }
     await this.runChunkInternal(code);
   }
