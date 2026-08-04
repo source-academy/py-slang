@@ -306,7 +306,11 @@ function bridgeBuiltin(
         // prefix ("TypeError: ") rather than appended, so the most actionable fact —
         // *which* call the student actually wrote led here — reads first, matching
         // how a Python traceback lists the outer frame before the innermost error.
-        const enclosing = rt.enclosingPreludeFunction();
+        //
+        // Except error(): that's how a prelude author writes a fully custom message —
+        // llist_ref's own error("llist_ref: index out of bounds") already names itself,
+        // so attributing it too would say "llist_ref" twice.
+        const enclosing = name === "error" ? undefined : rt.enclosingPreludeFunction();
         let message = e.message;
         if (enclosing) {
           // Detected from the message's own text ("TypeError: ...", "ValueError: ..."),

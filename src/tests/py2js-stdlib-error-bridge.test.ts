@@ -209,4 +209,17 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
       "UnsupportedOperandTypeError: unsupported operand type(s) for *: 'int' and 'bool'",
     );
   });
+
+  // error() is how a prelude author writes a fully custom, already-self-naming message
+  // (llist_ref's own error("llist_ref: index out of bounds")) — attributing it too would
+  // say "llist_ref" twice ("in predefined function 'llist_ref': llist_ref: ...").
+  test("error() calls are exempt from attribution — the message already names itself", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(llist_ref(llist(1, 2), 5))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe("Error: llist_ref: index out of bounds\n");
+  });
 });
