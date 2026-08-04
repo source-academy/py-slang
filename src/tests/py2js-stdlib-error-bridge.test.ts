@@ -7,7 +7,7 @@
  * Error` check up the call chain unless bridgeBuiltin converts them at the
  * boundary where they actually originate.
  */
-import { runCodePy2Js } from "../engines/py2js";
+import { runCodePy2Js, Py2JsSession } from "../engines/py2js";
 
 test("tail() on a non-pair surfaces a real TypeError, not [object Object]", () => {
   expect(() => runCodePy2Js("print(tail(5))", 2)).toThrow(
@@ -30,4 +30,196 @@ test("the thrown error's message is never the literal string [object Object]", (
   }
   expect(caught).toBeInstanceOf(Error);
   expect((caught as Error).message).not.toBe("[object Object]");
+});
+
+/**
+ * py-slang#397: bridged builtins raise using a synthetic call-site token (see
+ * stdlibBridge.ts's syntheticCallNode) with no real source position, so the
+ * TypeError/ValueError location header ("at line 1\n\n...") errors.ts would
+ * otherwise print is not just imprecise, it's actively wrong — always
+ * reporting a placeholder near the top of the file regardless of where the
+ * call actually happened. Two independent lines of defense here: never print
+ * a fabricated location at all, and where possible name the enclosing
+ * predefined (prelude) function instead, so "unsupported argument type for
+ * tail" at least says *which* library call the student wrote led there.
+ */
+describe("py-slang#397: no fabricated line number, name the enclosing predefined function", () => {
+  test("a leading blank line before the call does not produce a wrong line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\n\ntail(0)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toMatch(/at line/);
+    expect(message).toMatch(/unsupported argument type for tail/);
+  });
+
+  test("a ValueError also has no fabricated line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\nmath_sqrt(-1)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toMatch(/at line/);
+    expect(message).toMatch(/math domain error/);
+  });
+
+  // Pre-existing crash on main, incidentally fixed by the same synthetic-token check:
+  // ValueError's location header did `" ".repeat(offset)`, and offset is -1 whenever
+  // fullLine.indexOf(snippet) can't find the (synthetic, not-really-there) snippet in
+  // the line it's pointing at — String#repeat throws RangeError on a negative count,
+  // so a ValueError-raising builtin like math_sqrt crashed with a raw JS RangeError
+  // instead of ever producing a Python-style error at all.
+  test("math_sqrt(-1) raises a real ValueError, not a raw JS RangeError", () => {
+    let caught: unknown;
+    try {
+      runCodePy2Js("math_sqrt(-1)", 2);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).name).not.toBe("RangeError");
+    expect((caught as Error).message).not.toMatch(/Invalid count value/);
+    expect((caught as Error).message).toMatch(/math domain error/);
+  });
+
+  test("tail() failing inside map()'s own internal helper names map, not the helper", () => {
+    let message = "";
+    try {
+      runCodePy2Js("map(print, 0)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    // Right after the error-name prefix, not appended — the most actionable fact
+    // (which call the student wrote led here) reads first, Python-traceback-style.
+    expect(message).toBe(
+      "TypeError: in predefined function 'map': unsupported argument type for tail: integer",
+    );
+  });
+
+  test("a builtin called directly at the top level names no enclosing function", () => {
+    let message = "";
+    try {
+      runCodePy2Js("tail(0)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toMatch(/predefined function/);
+  });
+
+  test("an error inside the student's own callback is never blamed on map", () => {
+    let message = "";
+    try {
+      runCodePy2Js("def bad(x):\n    return tail(x)\nmap(bad, pair(1, None))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).not.toMatch(/predefined function/);
+  });
+
+  // Py2JsSession (what the conductor evaluator actually uses for the Playground)
+  // loads the stdlib prelude through its own runChunk, a separate code path from
+  // setupRuntime's one-shot prelude load that runCodePy2Js/runCodePy2JsDual use —
+  // each needs its own compilingPrelude wrapping, or prelude functions loaded via
+  // a session never get tagged pyPrelude and this attribution silently never fires.
+  test("Py2JsSession also names the enclosing predefined function", async () => {
+    const session = new Py2JsSession(2);
+    let message = "";
+    try {
+      await session.runChunk("map(1, 2)");
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toMatch(/in predefined function 'map'/);
+  });
+
+  // A different code path entirely: reduce(f, ...) calling its own non-callable f
+  // argument raises through Py2JsRuntime.checkCallable directly (runtime.ts), not
+  // through the CSE-bridged stdlib errors.ts covers above. Same underlying fix
+  // (enclosingPreludeFunction), applied at the other place py2js raises errors.
+  test("reduce() calling a non-callable f names reduce, not a bare 'not callable'", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(reduce(1, 2, llist(12, 2, 3)))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: in predefined function 'reduce': 'int' object is not callable",
+    );
+  });
+
+  // MissingRequiredPositionalError/TooManyPositionalArgumentsError (the Validate
+  // decorator's arity checks — src/stdlib/utils.ts, shared by every @Validate-annotated
+  // stdlib builtin) were missed by the original synthetic-token fix above: they build
+  // their own "TypeError at line X" header independently of TypeError/ValueError, so
+  // an arity mismatch calling *any* stdlib builtin via py2js — math_acos(2, 3, 4),
+  // tail(1, 2), etc. — still showed the fabricated line number until this was added.
+  test("too many arguments to a stdlib builtin has no fabricated line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\nmath_acos(2, 3, 4)", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: math_acos() takes exactly 1 argument (3 given)\nRemove the extra argument(s) when calling 'math_acos', or check if the function definition accepts more arguments.",
+    );
+  });
+
+  test("a missing argument to a stdlib builtin has no fabricated line number", () => {
+    let message = "";
+    try {
+      runCodePy2Js("\n\nmath_acos()", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "TypeError: math_acos() takes exactly 1 argument (0 given)\nCheck the function definition of 'math_acos' and make sure to provide all required positional arguments in the correct order.",
+    );
+  });
+
+  // A third distinct error path: llist_ref's own `n == 0` comparison (a binary
+  // operator, evaluated inline in compiled code — not a builtin call, not
+  // checkCallable) rejects a bool argument the student passed in. binop/unop and
+  // the free helpers they delegate to (pyEquals/pyOrder/complexBinop) didn't carry
+  // enclosing-function context at all until this was added.
+  test("llist_ref(xs, False) names llist_ref — the bug is in llist_ref's own comparison", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(llist_ref(llist(1, 2, 3), False))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "UnsupportedOperandTypeError: in predefined function 'llist_ref': unsupported operand type(s) for ==: 'bool' and 'int'",
+    );
+  });
+
+  test("an operator error inside the student's own callback is still never blamed on filter", () => {
+    let message = "";
+    try {
+      runCodePy2Js("filter(lambda x: 1 * True, llist(1, 2, 3))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe(
+      "UnsupportedOperandTypeError: unsupported operand type(s) for *: 'int' and 'bool'",
+    );
+  });
+
+  // error() is how a prelude author writes a fully custom, already-self-naming message
+  // (llist_ref's own error("llist_ref: index out of bounds")) — attributing it too would
+  // say "llist_ref" twice ("in predefined function 'llist_ref': llist_ref: ...").
+  test("error() calls are exempt from attribution — the message already names itself", () => {
+    let message = "";
+    try {
+      runCodePy2Js("print(llist_ref(llist(1, 2), 5))", 2);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toBe("Error: llist_ref: index out of bounds\n");
+  });
 });

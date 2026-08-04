@@ -245,19 +245,14 @@ export class MissingRequiredPositionalError extends RuntimeSourceError {
     if (variadic) {
       adverb = "at least";
     }
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
 
+    let detail: string;
     if (typeof params === "number") {
       this.missingParamCnt = params;
       this.missingParamName = "";
       const givenParamCnt = args.length;
-      if (this.missingParamCnt === 1 || this.missingParamCnt === 0) {
-      }
-      const msg = `TypeError: ${this.functionName}() takes ${adverb} ${this.missingParamCnt} argument (${givenParamCnt} given)
+      detail = `TypeError: ${this.functionName}() takes ${adverb} ${this.missingParamCnt} argument (${givenParamCnt} given)
 Check the function definition of '${this.functionName}' and make sure to provide all required positional arguments in the correct order.`;
-      this.message += msg;
     } else {
       this.missingParamCnt = params.length - args.length;
       const missingNames: string[] = [];
@@ -266,10 +261,20 @@ Check the function definition of '${this.functionName}' and make sure to provide
         missingNames.push("\'" + param + "\'");
       }
       this.missingParamName = this.joinWithCommasAndAnd(missingNames);
-      const msg = `TypeError: ${this.functionName}() missing ${this.missingParamCnt} required positional argument(s): ${this.missingParamName}
+      detail = `TypeError: ${this.functionName}() missing ${this.missingParamCnt} required positional argument(s): ${this.missingParamName}
 You called ${this.functionName}() without providing the required positional argument ${this.missingParamName}. Make sure to pass all required arguments when calling ${this.functionName}.`;
-      this.message += msg;
     }
+
+    // py-slang#397: skip the fabricated "at line 1" header for a synthetic (no real
+    // position) token — see TypeError/ValueError's identical check above.
+    if (node.startToken.synthetic) {
+      this.message = detail;
+      return;
+    }
+
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n" + detail;
   }
 
   private joinWithCommasAndAnd(names: string[]): string {
@@ -307,29 +312,34 @@ export class TooManyPositionalArgumentsError extends RuntimeSourceError {
       adverb = "at most";
     }
 
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n";
-
+    let detail: string;
     if (typeof params === "number") {
       this.expectedCount = params;
       this.givenCount = args.length;
-      if (this.expectedCount === 1 || this.expectedCount === 0) {
-        this.message += `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} argument (${this.givenCount} given)`;
-      } else {
-        this.message += `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} arguments (${this.givenCount} given)`;
-      }
+      detail =
+        this.expectedCount === 1 || this.expectedCount === 0
+          ? `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} argument (${this.givenCount} given)`
+          : `TypeError: ${this.functionName}() takes ${adverb} ${this.expectedCount} arguments (${this.givenCount} given)`;
     } else {
       this.expectedCount = params.length;
       this.givenCount = args.length;
-      if (this.expectedCount === 1 || this.expectedCount === 0) {
-        this.message += `TypeError: ${this.functionName}() takes ${this.expectedCount} positional argument but ${this.givenCount} were given`;
-      } else {
-        this.message += `TypeError: ${this.functionName}() takes ${this.expectedCount} positional arguments but ${this.givenCount} were given`;
-      }
+      detail =
+        this.expectedCount === 1 || this.expectedCount === 0
+          ? `TypeError: ${this.functionName}() takes ${this.expectedCount} positional argument but ${this.givenCount} were given`
+          : `TypeError: ${this.functionName}() takes ${this.expectedCount} positional arguments but ${this.givenCount} were given`;
+    }
+    detail += `\nRemove the extra argument(s) when calling '${this.functionName}', or check if the function definition accepts more arguments.`;
+
+    // py-slang#397: skip the fabricated "at line 1" header for a synthetic (no real
+    // position) token — see TypeError/ValueError's identical check above.
+    if (node.startToken.synthetic) {
+      this.message = detail;
+      return;
     }
 
-    this.message += `\nRemove the extra argument(s) when calling '${this.functionName}', or check if the function definition accepts more arguments.`;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    this.message = "TypeError at line " + lineIndex + "\n\n    " + fullLine + "\n" + detail;
   }
 }
 
@@ -453,18 +463,28 @@ export class ValueError extends RuntimeSourceError {
   constructor(source: string, node: ExprNS.Expr, context: Context, functionName: string) {
     super(node);
     this.type = ErrorType.TYPE;
+    const hint = "ValueError: math domain error. ";
+    const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
+
+    // py-slang#397: a synthetic token (e.g. py2js's bridged-builtin call site — see
+    // stdlibBridge.ts's syntheticCallNode) carries no real position, only a hardcoded
+    // placeholder — showing "at line 1" would be actively misleading, so skip the
+    // location header/snippet entirely when the position isn't real.
+    if (node.startToken.synthetic) {
+      this.message = hint + suggestion;
+      return;
+    }
+
     const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const hint = "ValueError: math domain error. ";
     const offset = fullLine.indexOf(snippet);
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
     const name = "ValueError";
-    const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
     const msg =
       name +
       " at line " +
@@ -491,12 +511,6 @@ export class TypeError extends RuntimeSourceError {
     super(node);
     const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
     this.type = ErrorType.TYPE;
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
     // Almost every call site is a builtin call (math_sin(x), tail(xs), ...) —
     // name it after the callee the user actually wrote, matching
     // UnsupportedOperandTypeError's "unsupported operand type(s) for +: ..."
@@ -522,6 +536,22 @@ export class TypeError extends RuntimeSourceError {
         ? (callNode.callee.name?.lexeme ?? "subscript assignment")
         : "subscript assignment";
     const hint = `TypeError: unsupported argument type for ${subject}: ${typeStr}`;
+
+    // py-slang#397: a synthetic token (e.g. py2js's bridged-builtin call site — see
+    // stdlibBridge.ts's syntheticCallNode) carries no real position, only a hardcoded
+    // placeholder — showing "at line 1" would be actively misleading, so skip the
+    // location header/snippet entirely when the position isn't real.
+    if (node.startToken.synthetic) {
+      this.message = hint;
+      return;
+    }
+
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = 0;

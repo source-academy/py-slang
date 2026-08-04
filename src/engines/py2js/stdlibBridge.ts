@@ -299,7 +299,30 @@ function bridgeBuiltin(
       // displayError falls back to a generic "Error" name for the same
       // reason), so the constructor is the only reliable source for it.
       if (e instanceof RuntimeSourceError) {
-        throw new Py2JsRuntimeError(e.constructor.name, e.message);
+        // The builtin itself is named in e.message already ("...for tail: ...");
+        // this instead names the *enclosing* predefined function, if any — e.g. a
+        // student calling map() never wrote or sees _map, the internal helper that
+        // actually calls tail() (py-slang#397). Inserted right after the error-name
+        // prefix ("TypeError: ") rather than appended, so the most actionable fact —
+        // *which* call the student actually wrote led here — reads first, matching
+        // how a Python traceback lists the outer frame before the innermost error.
+        //
+        // Except error(): that's how a prelude author writes a fully custom message —
+        // llist_ref's own error("llist_ref: index out of bounds") already names itself,
+        // so attributing it too would say "llist_ref" twice.
+        const enclosing = name === "error" ? undefined : rt.enclosingPreludeFunction();
+        let message = e.message;
+        if (enclosing) {
+          // Detected from the message's own text ("TypeError: ...", "ValueError: ..."),
+          // not e.constructor.name — a minified production build mangles class names,
+          // but every RuntimeSourceError subclass bakes its own error-kind word as a
+          // literal string into the message itself, so this survives minification.
+          const match = message.match(/^([A-Za-z]+): /);
+          message = match
+            ? `${match[0]}in predefined function '${enclosing}': ${message.slice(match[0].length)}`
+            : `in predefined function '${enclosing}': ${message}`;
+        }
+        throw new Py2JsRuntimeError(e.constructor.name, message);
       }
       throw e;
     }
@@ -312,6 +335,7 @@ function bridgeBuiltin(
     return result === undefined ? null : fromTagged(name, result);
   });
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = builtin.minArgs;
   return f;
 }
@@ -341,6 +365,7 @@ function nativeSetPairSlot(name: string, index: 0 | 1, sayPair: boolean): PyFunc
   f.pyName = name;
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
 }
@@ -366,12 +391,14 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
     if (index >= args.length) return null;
     const tail = rt.def("anonymous stream", 0, () => build(args, index + 1));
     tail.pyBuiltin = true;
+    tail.pyNative = true;
     return [args[index], tail];
   };
   const f = ((...args: PyValue[]) => build(args, 0)) as PyFunction;
   f.pyName = "stream";
   f.pyArity = -1;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 0;
   return f;
 }
@@ -424,6 +451,7 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
   f.pyName = "apply_in_underlying_python";
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
 }
@@ -463,6 +491,7 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
   f.pyName = "draw_data";
   f.pyArity = -1;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 1;
   return f;
 }
