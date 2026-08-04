@@ -106,7 +106,22 @@ const tokList = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [
 const Lexer = pythonLexer;
 const ParserRules = [
   { name: "program$ebnf$1", symbols: [] },
-  { name: "program$ebnf$1$subexpression$1", symbols: ["import_stmt", { type: "newline" }] },
+  { name: "program$ebnf$1$subexpression$1$ebnf$1", symbols: [] },
+  { name: "program$ebnf$1$subexpression$1$ebnf$1$subexpression$1", symbols: [{ type: "newline" }] },
+  {
+    name: "program$ebnf$1$subexpression$1$ebnf$1",
+    symbols: [
+      "program$ebnf$1$subexpression$1$ebnf$1",
+      "program$ebnf$1$subexpression$1$ebnf$1$subexpression$1",
+    ],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "program$ebnf$1$subexpression$1",
+    symbols: ["program$ebnf$1$subexpression$1$ebnf$1", "import_stmt", { type: "newline" }],
+  },
   {
     name: "program$ebnf$1",
     symbols: ["program$ebnf$1", "program$ebnf$1$subexpression$1"],
@@ -128,10 +143,10 @@ const ParserRules = [
     name: "program",
     symbols: ["program$ebnf$1", "program$ebnf$2"],
     postprocess: ([imports, stmts]: [
-      [StmtNS.FromImport, moo.Token][],
+      [moo.Token[], StmtNS.FromImport, moo.Token][],
       ([StmtNS.Stmt] | [moo.Token])[],
     ]) => {
-      const importNodes = imports.map(d => d[0]);
+      const importNodes = imports.map(d => d[1]);
       const stmtNodes = stmts.map(d => d[0]).filter(s => "startToken" in s);
       const filtered = [...importNodes, ...stmtNodes];
       const start = filtered[0]
