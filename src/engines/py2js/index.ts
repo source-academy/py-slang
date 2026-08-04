@@ -254,10 +254,7 @@ function setupRuntime(
     try {
       new Function("__py", preludeJs)(rt);
     } catch (e: unknown) {
-      throw new Py2JsRunError(
-        "runtime",
-        formatCaughtError(e),
-      );
+      throw new Py2JsRunError("runtime", formatCaughtError(e));
     } finally {
       rt.compilingPrelude = false;
     }
