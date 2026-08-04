@@ -79,12 +79,21 @@ const tokList       = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [t
 # program ::= import-stmt ... block              [python_1_bnf.tex line 18]
 #
 # Enforces: imports come before statements.  An import after a statement
-# is a parse error.
+# is a parse error. A leading run of blank lines/comments before an import
+# is not a statement and must not count as one (py-slang#393) — the lexer
+# already collapses any blank lines/comments between two real tokens into
+# a single `newline` token (see lexer.ts's processTokens), so each import
+# only ever needs at most one such leading token. The optional leading
+# `(%newline):*` is tied to (i.e. inside the same repetition as) its own
+# import_stmt, rather than factored out as a separate top-level group,
+# specifically so a bare leading newline with no import to follow can only
+# ever be matched by the trailing `(statement | %newline):*` group — a
+# factored-out version is ambiguous about which group consumes it.
 # ============================================================================
 
-program -> (import_stmt %newline):* (statement | %newline):*
-  {% ([imports, stmts]: [[StmtNS.FromImport, moo.Token][], ([StmtNS.Stmt] | [moo.Token])[]]) => {
-       const importNodes = imports.map(d => d[0]);
+program -> ((%newline):* import_stmt %newline):* (statement | %newline):*
+  {% ([imports, stmts]: [[moo.Token[], StmtNS.FromImport, moo.Token][], ([StmtNS.Stmt] | [moo.Token])[]]) => {
+       const importNodes = imports.map(d => d[1]);
        const stmtNodes = stmts.map(d => d[0]).filter(s => 'startToken' in s);
        const filtered = [...importNodes, ...stmtNodes];
        const start = filtered[0]
