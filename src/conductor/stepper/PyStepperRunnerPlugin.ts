@@ -27,7 +27,10 @@ const DEFAULT_STEP_LIMIT = 1000;
  */
 export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.FileInput> {
   private readonly context: StepperContext;
-  private readonly stepLimit: number;
+  /** Public so `PyStepperEvaluatorBase.runChunk` can pass the exact same value to its own separate
+   * `evaluatePython` call — see that function's `stepLimit` doc comment for why the two passes must
+   * agree, not just default to the same number. */
+  readonly stepLimit: number;
 
   constructor(
     conduit: IConduit,

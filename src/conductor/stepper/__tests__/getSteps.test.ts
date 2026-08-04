@@ -305,6 +305,92 @@ describe("Python stepper — built-in functions and constants", () => {
     // if unusual, configuration, not a student mistake).
     expect((await explanations('input("name? ")')).pop()).toBe("Evaluation stuck");
   });
+
+  test("a bare 'input' name is a value (complete, not stuck)", async () => {
+    expect((await explanations("input")).pop()).toBe("Evaluation complete");
+  });
+});
+
+describe("Python stepper — input() (py-slang#191)", () => {
+  test("resolves the mocked answer as a Python string, and evaluation completes", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("Ada"));
+    const ast = parse('input("Write your string here: ")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(allSteps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+    expect(requestInput).toHaveBeenCalledWith("Write your string here: ");
+  });
+
+  test("the answer is usable like any other string — printed, concatenated", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("Ada"));
+    const ast = parse('print(input("Write your string here: "))\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    // Output is cumulative (see "cumulative print output per step" above), so the prompt itself is
+    // still there ahead of the print's own output.
+    expect((allSteps.at(-1) as { output?: string } | undefined)?.output).toBe(
+      "Write your string here: Ada\n",
+    );
+  });
+
+  test("the prompt appears as this call's own output, with no trailing newline (unlike print)", async () => {
+    // Matches CPython's input(prompt): the prompt is written to stdout exactly as given, with no
+    // newline appended — the answer that follows is expected on the same line in a real terminal.
+    // Mirrors the CSE machine's own displayOutput(context, prompt) call — see streams.ts.
+    const requestInput = jest.fn(() => Promise.resolve("answer"));
+    const ast = parse('input("Name: ")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    const ranStep = allSteps.find(s => s.markers?.[0]?.explanation === "Ran input");
+    expect(ranStep).toBeDefined();
+    expect((ranStep as unknown as { output?: string }).output).toBe("Name: ");
+  });
+
+  test("input() with no argument writes nothing and calls requestInput with undefined", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("hi"));
+    const ast = parse("input()\n");
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(requestInput).toHaveBeenCalledWith(undefined);
+    expect(allSteps.some(s => (s as { output?: string }).output)).toBe(false);
+  });
+
+  test("a non-string prompt is converted via str() before being sent", async () => {
+    const requestInput = jest.fn(() => Promise.resolve(""));
+    await getPythonSteps(parse("input(5)\n"), undefined, { requestInput });
+    expect(requestInput).toHaveBeenCalledWith("5");
+  });
+
+  test("multiple input() calls are answered in program order, one prompt per call", async () => {
+    const answers = ["Ada", "Grace"];
+    const requestInput = jest.fn(() => Promise.resolve(answers.shift()!));
+    const ast = parse('x = input("first: ")\ny = input("second: ")\nx + y\n');
+    expect(await evaluatePython(ast, undefined, { requestInput })).toBe("'AdaGrace'");
+    expect(requestInput).toHaveBeenNthCalledWith(1, "first: ");
+    expect(requestInput).toHaveBeenNthCalledWith(2, "second: ");
+  });
+
+  test("wrong arity is a proper TypeError, and never reaches requestInput", async () => {
+    const requestInput = jest.fn();
+    const ast = parse('input("a", "b")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(allSteps.at(-2)?.markers?.[0]?.explanation).toBe(
+      "TypeError: input() takes 0 to 1 argument(s) but 2 were given",
+    );
+    expect(allSteps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+    expect(requestInput).not.toHaveBeenCalled();
+  });
+
+  test("aliasing works, like every other built-in: p = input; p(...)", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("aliased"));
+    const ast = parse('p = input\np("prompt")\n');
+    expect(await evaluatePython(ast, undefined, { requestInput })).toBe("'aliased'");
+    expect(requestInput).toHaveBeenCalledWith("prompt");
+  });
+
+  test("arity(input) is 0 (an optional prompt, like print's own optional arguments)", async () => {
+    expect(await evaluatePython(parse("arity(input)\n"))).toBe("0");
+  });
+
+  test("is_function(input) is True", async () => {
+    expect(await evaluatePython(parse("is_function(input)\n"))).toBe("True");
+  });
 });
 
 describe("Python stepper — undefined variables are a preprocessing error", () => {
@@ -1890,7 +1976,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       physics: [{ symbol: "GRAVITY", value: { type: DataType.NUMBER, value: 9.8 } }],
     });
     const ast = parse("from physics import GRAVITY\nGRAVITY * 2\n");
-    expect(await evaluatePython(ast, { evaluator: dh })).toBe("19.6");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("19.6");
   });
 
   test("a function export is called through, sync-fast-path or not, and its result is usable", async () => {
@@ -1907,7 +1993,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
     const ast = parse("from mathmod import double\ndouble(21) + 1\n");
-    expect(await evaluatePython(ast, { evaluator: dh })).toBe("43.0");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("43.0");
   });
 
   test("an opaque return value completes the program (renders as its label, never inspected)", async () => {
@@ -1975,7 +2061,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const ast = parse(
       "from visualmod import make_thing, is_same_thing\nis_same_thing(make_thing())\n",
     );
-    expect(await evaluatePython(ast, { evaluator: dh })).toBe("True");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("True");
 
     // Bound to a name first, not nested directly as a call argument: `x`'s value substitutes into
     // `is_same_thing(x)` via `substitute`'s Identifier case, which — unlike the direct-nesting form
@@ -1988,7 +2074,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const boundAst = parse(
       "from visualmod import make_thing, is_same_thing\nx = make_thing()\nis_same_thing(x)\n",
     );
-    expect(await evaluatePython(boundAst, { evaluator: dh })).toBe("True");
+    expect(await evaluatePython(boundAst, undefined, { evaluator: dh })).toBe("True");
   });
 
   test("arity() reports an imported function's real parameter count", async () => {
@@ -2003,7 +2089,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "add", value: add }] });
     const ast = parse("from mathmod import add\narity(add)\n");
-    expect(await evaluatePython(ast, { evaluator: dh })).toBe("2");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("2");
   });
 
   test("calling an imported function with the wrong arity is a Python-style TypeError, not a native crash", async () => {

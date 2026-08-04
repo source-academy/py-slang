@@ -25,6 +25,17 @@ import { translateProgram } from "./translate";
 /** Default cap on the number of *contractions*; each contraction emits two steps. */
 const DEFAULT_CONTRACTION_LIMIT = 500;
 
+/** `stepLimit` (steps, the public unit — see `getPythonSteps`/`evaluatePython`) to a contraction
+ * count (two steps per contraction). Shared by both entry points so they always agree on how far to
+ * reduce a given `stepLimit` — see py-slang#191's CodeRabbit review: `evaluatePython` used to loop to
+ * a hardcoded `DEFAULT_CONTRACTION_LIMIT` regardless of what `stepLimit` its sibling was actually
+ * given, so a run configured with a *smaller* `stepLimit` could have the Stepper tab's own pass stop
+ * before reaching an `input()` call the REPL-value pass still tried to reach — `InputRecorder.replaying`
+ * would then fall back to a live request, prompting the student a second time for the same input. */
+function contractionLimitFor(stepLimit: number): number {
+  return Math.max(1, Math.floor(stepLimit / 2));
+}
+
 interface Marker {
   redex?: StepNode;
   redexType?: "beforeMarker" | "afterMarker";
@@ -250,7 +261,7 @@ export async function getPythonSteps(
   stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
   context: StepperContext = {},
 ): Promise<SerializedStepperStep[]> {
-  const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
+  const contractionLimit = contractionLimitFor(stepLimit);
   // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
   // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}. Imported
   // names are resolved and substituted the same way, immediately after — see `resolveImports`.
@@ -267,6 +278,14 @@ export async function getPythonSteps(
  * program reduces, just before it is discarded, and echo that. The stepper's reduction *is* the
  * program's value in the substitution model, so no separate interpreter is needed.
  *
+ * @param stepLimit Same meaning as `getPythonSteps`'s identical parameter, and — when re-deriving the
+ * REPL's echoed value after `getPythonSteps` has already run for the same program, as
+ * `PyStepperEvaluatorBase`'s `runChunk` does — it must be passed the *same* value that pass used.
+ * Both entry points reduce the identical AST from the identical starting substitutions, so a
+ * mismatched limit would let one pass stop before the other, which matters most for `input()`:
+ * `InputRecorder.replaying` only has recorded answers for calls the Stepper tab's own pass actually
+ * reached, so this pass reaching further would fall back to a live request and prompt the student a
+ * second time for what should already be answered.
  * @param context See `getPythonSteps`'s identical parameter. When re-deriving the REPL's echoed
  * value after `getPythonSteps` has already run for the same program (as `PyStepperEvaluatorBase`'s
  * `runChunk` does), pass a `requestInput` that *replays* the same answers rather than asking the
@@ -274,8 +293,10 @@ export async function getPythonSteps(
  */
 export async function evaluatePython(
   fileInput: StmtNS.FileInput,
+  stepLimit = 2 * DEFAULT_CONTRACTION_LIMIT,
   context: StepperContext = {},
 ): Promise<string> {
+  const contractionLimit = contractionLimitFor(stepLimit);
   const translated = substituteBuiltinConstants(translateProgram(fileInput));
   // Import resolution is deliberately outside the try/catch below: a `ModuleImportError` (module not
   // found, a relative import, a name a module doesn't export) is a student-actionable, preprocessing-
@@ -285,7 +306,7 @@ export async function evaluatePython(
   let current = await resolveImports(fileInput, context.evaluator, translated);
   let resultRepr = "";
   try {
-    for (let i = 0; i < DEFAULT_CONTRACTION_LIMIT; i++) {
+    for (let i = 0; i < contractionLimit; i++) {
       // Remember the final expression's text before the next contraction discards it. A trailing
       // non-expression statement (e.g. an assignment) contributes no value, so `resultRepr` keeps the
       // last expression seen — or stays "" if the program never ends on one.

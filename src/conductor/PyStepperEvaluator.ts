@@ -154,7 +154,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
       // answers the pass above already recorded — see `InputRecorder`'s doc comment — rather than
       // prompting the student a second time for the same input.
       this.conductor.sendResult(
-        await evaluatePython(ast, {
+        await evaluatePython(ast, this.stepper.stepLimit, {
           evaluator: this.dataHandler,
           requestInput: this.inputRecorder.replaying,
         }),
