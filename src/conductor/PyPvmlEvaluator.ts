@@ -121,6 +121,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       globalEnv: this.globalEnv,
       programText: script,
       variant: this.variant,
+      onCallLocation: (start, end) => this.dataHandler.setCurrentCallLocation(start, end),
     });
     const result = await interpreter.executeAsync();
     this.globalEnv = interpreter.getGlobalEnv();

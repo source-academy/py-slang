@@ -625,6 +625,15 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
     if (context.evaluator === undefined) {
       throw new Error(`NameError: name '${String(callee.name)}' is not defined`);
     }
+    const sourceStart = node.sourceStart;
+    const sourceEnd = node.sourceEnd;
+    if (typeof sourceStart === "number" && typeof sourceEnd === "number") {
+      (
+        context.evaluator as typeof context.evaluator & {
+          setCurrentCallLocation?: (start: number, end: number) => void;
+        }
+      ).setCurrentCallLocation?.(sourceStart, sourceEnd);
+    }
     const name = String(callee.name);
     const minArgs = callee.minArgs as number;
     // Checked up front, like a static built-in's own `checkArity` call inside `applyBuiltin` — a

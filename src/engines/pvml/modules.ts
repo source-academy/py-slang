@@ -200,7 +200,7 @@ export async function pvmlToModule(
           return pvmlToModule(dh, result, callPvml);
         }
         return dh.closure_make(
-          { returnType: DataType.VOID, args: Array(arity).fill(DataType.VOID) },
+          { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
           callback,
         );
       }

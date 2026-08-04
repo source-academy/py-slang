@@ -114,6 +114,10 @@ function translateExpr(expr: ExprNS.Expr): StepNode {
         type: "CallExpression",
         callee: translateExpr(e.callee),
         arguments: e.args.map(translateExpr),
+        // Retained through substitution/rebuilding so an imported-module call
+        // can report the original Python call site to GenericDataHandler.
+        sourceStart: e.startToken.indexInSource,
+        sourceEnd: e.endToken.indexInSource + e.endToken.lexeme.length,
       };
     }
     case "List": {

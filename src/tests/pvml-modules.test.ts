@@ -62,6 +62,14 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  const onlyNumber = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (x: TypedValue<DataType.NUMBER>) {
+      return x;
+    },
+  );
+
   const applyTwice = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE, DataType.NUMBER] },
     async function* (f: TypedValue<DataType.CLOSURE>, x: TypedValue<DataType>) {
@@ -222,6 +230,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     exports: [
       { symbol: "answer", value: num(42) },
       { symbol: "double", value: double },
+      { symbol: "only_number", value: onlyNumber },
       { symbol: "apply_twice", value: applyTwice },
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
@@ -255,6 +264,18 @@ function makeFakeLoader(dh: IDataHandler) {
 }
 
 describe("PyPvmlEvaluator module imports", () => {
+  test("reports a module type error at the imported call site", async () => {
+    const { conductor, errors } = makeMockConductor();
+    const evaluator = new PyPvmlEvaluator4(conductor);
+
+    await evaluator.evaluateChunk('from testmod import only_number\nonly_number("bad")\n');
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatchObject({ name: "TypeError" });
+    expect((errors[0] as Error).message).toContain("TypeError at line 2");
+    expect((errors[0] as Error).message).toContain('only_number("bad")');
+  });
+
   test("imports a constant", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new PyPvmlEvaluator4(conductor);
@@ -526,7 +547,7 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(scheduledCallbacks).toHaveLength(1);
 
     const dh = getDataHandler();
-    const gen = dh.closure_call(scheduledCallbacks[0], [], DataType.VOID);
+    const gen = dh.closure_call(scheduledCallbacks[0], [], DataType.ANY);
     let step = await gen.next();
     while (!step.done) {
       step = await gen.next();
@@ -563,7 +584,7 @@ describe("PyPvmlEvaluator module imports", () => {
     // like a real setTimeout chain firing one after another.
     while (scheduledCallbacks.length > 0) {
       const cb = scheduledCallbacks.shift()!;
-      const gen = dh.closure_call(cb, [], DataType.VOID);
+      const gen = dh.closure_call(cb, [], DataType.ANY);
       let step = await gen.next();
       while (!step.done) {
         step = await gen.next();
@@ -600,7 +621,7 @@ describe("PyPvmlEvaluator module imports", () => {
     let drained = 0;
     while (scheduledCallbacks.length > 0) {
       const cb = scheduledCallbacks.shift()!;
-      const gen = dh.closure_call(cb, [], DataType.VOID);
+      const gen = dh.closure_call(cb, [], DataType.ANY);
       let step = await gen.next();
       while (!step.done) {
         step = await gen.next();
@@ -662,9 +683,9 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(outputs).toEqual(["30.0"]);
   });
 
-  test("a VOID-signature passthrough closure (repeat's identity/composition shape) round-trips a list correctly - was [0.0, None], now [0.0]", async () => {
+  test("an ANY-signature passthrough closure (repeat's identity/composition shape) round-trips a list correctly - was [0.0, None], now [0.0]", async () => {
     // The actual repeat bug: identity has no declared LIST/ARRAY type to guide encoding (it's
-    // generic over any T, declared DataType.VOID), so [0] used to cross in as a PAIR/EMPTY_LIST
+    // generic over any T, declared DataType.ANY), so [0] used to cross in as a PAIR/EMPTY_LIST
     // chain and come back out through moduleToPvml's old shallow PAIR case as a 2-element
     // [head, tail] with EMPTY_LIST misread as an extra None element, instead of a flat 1-element
     // list. Now that pvmlToModule always builds a flat ARRAY for any Python list, this round-trips
@@ -678,7 +699,7 @@ describe("PyPvmlEvaluator module imports", () => {
     expect(outputs).toEqual(["[0.0]"]);
   });
 
-  test("an empty list through the same VOID-signature passthrough round-trips to [], not None", async () => {
+  test("an empty list through the same ANY-signature passthrough round-trips to [], not None", async () => {
     // Regression test: an earlier version of this fix special-cased an empty Python list to build
     // EMPTY_LIST directly (matching pre-existing behavior) - but EMPTY_LIST is also what Python's
     // None maps to, so identity([]) printed "None" instead of "[]". A genuine 0-length ARRAY (no

@@ -425,7 +425,12 @@ export class PVMLCompiler
     }
   }
 
-  private emitFunctionCall(token: Token, numArgs: number, isTailCall: boolean): void {
+  private emitFunctionCall(
+    token: Token,
+    numArgs: number,
+    isTailCall: boolean,
+    location?: { start: number; end: number },
+  ): void {
     const annotation = this.getTokenAnnotation(token);
 
     if (annotation.isPrimitive) {
@@ -433,7 +438,7 @@ export class PVMLCompiler
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
     } else {
       const userOpcode = isTailCall ? OpCodes.CALLT : OpCodes.CALL;
-      this.builder.emitCall(userOpcode, numArgs);
+      this.builder.emitCall(userOpcode, numArgs, location);
     }
   }
 
@@ -785,7 +790,10 @@ export class PVMLCompiler
       const maxArgStackSize = this.compileCallArgs(expr.args);
 
       const numArgs = expr.args.length;
-      this.emitFunctionCall(callee.name, numArgs, isTail);
+      this.emitFunctionCall(callee.name, numArgs, isTail, {
+        start: expr.startToken.indexInSource,
+        end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+      });
 
       return {
         maxStackSize: functionStackEffect + maxArgStackSize,
@@ -805,7 +813,10 @@ export class PVMLCompiler
 
     const numArgs = expr.args.length;
     const userOpcode = isTail ? OpCodes.CALLT : OpCodes.CALL;
-    this.builder.emitCall(userOpcode, numArgs);
+    this.builder.emitCall(userOpcode, numArgs, {
+      start: expr.startToken.indexInSource,
+      end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+    });
 
     return {
       maxStackSize: calleeResult.maxStackSize + maxArgStackSize,
@@ -851,7 +862,10 @@ export class PVMLCompiler
     this.builder.emitPrimitiveCall(OpCodes.CALLP, CONCAT_ARRAYS_PRIMITIVE_INDEX, expr.args.length);
 
     const userOpcode = isTail ? OpCodes.CALLTA : OpCodes.CALLA;
-    this.builder.emitNullary(userOpcode);
+    this.builder.emitNullary(userOpcode, {
+      start: expr.startToken.indexInSource,
+      end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+    });
 
     return {
       maxStackSize: calleeResult.maxStackSize + maxPieceStackSize,

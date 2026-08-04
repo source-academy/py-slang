@@ -299,6 +299,8 @@ export class PVMLIR {
    * `numArgs - 1` fixed params and collecting the rest into a fresh array —
    * see pynter's vm.c. */
   readonly hasRestParam: boolean;
+  /** Source spans for dynamic call instructions, indexed by program counter. */
+  readonly callLocations: readonly ({ start: number; end: number } | undefined)[];
   /**
    * The function table of the PVMLProgram this function was compiled into —
    * stamped by PVMLProgram's constructor once every sibling PVMLIR exists,
@@ -331,6 +333,7 @@ export class PVMLIR {
     functionName: string = "(anonymous)",
     complexes: PyComplexNumber[] = [],
     hasRestParam: boolean = false,
+    callLocations: readonly ({ start: number; end: number } | undefined)[] = [],
   ) {
     this.opcodes = opcodes;
     this.arg1s = arg1s;
@@ -344,6 +347,7 @@ export class PVMLIR {
     this.numArgs = numArgs;
     this.functionName = functionName;
     this.hasRestParam = hasRestParam;
+    this.callLocations = callLocations;
   }
 
   /** Compatibility: reconstruct Instruction[] for assembler/debug (not hot path). */
