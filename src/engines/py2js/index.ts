@@ -484,6 +484,7 @@ export class Py2JsSession {
     this.entrypointFilePath = options.entrypointFilePath ?? "/main.py";
     this.fileGetter = toFileGetter(options);
     this.rt = new Py2JsRuntime(variant >= 3);
+    this.rt.onCurrentCall = (start, end) => this.dataHandler.setCurrentCallLocation(start, end);
     this.rt.onOutput = options.onOutput;
     this.rt.onPendingWorkChange = options.onPendingWorkChange;
     this.rt.requestInput = options.requestInput;
@@ -531,7 +532,6 @@ export class Py2JsSession {
         .join("\n");
       if (preludeText.trim()) await this.runChunkInternal(preludeText);
     }
-    this.dataHandler.setCurrentSource(code);
     await this.runChunkInternal(code);
   }
 
@@ -555,6 +555,11 @@ export class Py2JsSession {
       );
       ast = parse(script);
     }
+
+    // Local imports may have expanded this into a different source string.
+    // The active call spans below are offsets into this final script, not the
+    // entry file's original text.
+    this.dataHandler.setCurrentSource(script);
 
     // __program__ is simply "the single string Python program that gets
     // compiled to JS" — set here, unconditionally, from whatever that

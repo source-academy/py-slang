@@ -120,8 +120,24 @@ export class GenericDataHandler implements IDataHandler {
     this.currentCall = call;
   }
 
+  /**
+   * Records a generated evaluator's call site.  Unlike the CSE evaluator,
+   * compiled evaluators cannot retain the AST object at runtime, but the
+   * diagnostic code only needs its source span.
+   */
+  setCurrentCallLocation(start: number, end: number): void {
+    this.currentCall = {
+      startToken: { indexInSource: start },
+      endToken: { indexInSource: end, lexeme: "" },
+    } as ExprNS.Call;
+  }
+
   setCurrentSource(source: string | undefined): void {
     this.currentSource = source;
+    // A call node is meaningful only within the source it came from.  In
+    // persistent evaluators, retaining it across chunks/files would point a
+    // later module-loading error at an unrelated earlier program.
+    this.currentCall = undefined;
   }
 
   pair_make(
@@ -418,7 +434,11 @@ export class GenericDataHandler implements IDataHandler {
       if (closure.sig.args[i] === DataType.ANY) {
         continue;
       }
-      if (closure.sig.args[i] === DataType.PAIR && arg.type === DataType.ARRAY) {
+      // If the argument is a pair or list type and the return type is an array (or vice-versa), skip for now till we remove the pair type.
+      if ((closure.sig.args[i] === DataType.PAIR || closure.sig.args[i] === DataType.LIST) && arg.type === DataType.ARRAY) {
+        continue;
+      }
+      if ((closure.sig.args[i] === DataType.ARRAY) && arg.type == DataType.PAIR) {
         continue;
       }
       if (!isSameType(arg.type, closure.sig.args[i])) {
@@ -432,7 +452,7 @@ export class GenericDataHandler implements IDataHandler {
       }
     }
     const result = yield* closure.func(...args);
-    if (result.type !== returnType && returnType !== DataType.ANY) {
+    if (result.type !== returnType && returnType !== DataType.ANY && !((returnType === DataType.PAIR || returnType === DataType.LIST) && result.type === DataType.ARRAY) && !(returnType === DataType.ARRAY && result.type === DataType.PAIR)) {
       throw new InvalidTypeError(
         this.currentCall,
         this.currentSource,

@@ -30,7 +30,43 @@ describe.each<EvaluatorEngine>(["pycse", "py2js"])(
       expect(harness.errors[0].message).toContain(
         "Expected argument 0 to have type 'int' or 'float', got 'str'",
       );
+      expect(harness.errors[0].message).toContain("TypeError at line 2");
+      expect(harness.errors[0].message).toContain('only_number("not a number")');
       expect(harness.errors[0].message).not.toContain("[object Object]");
+    });
+
+    test("attributes a module error to the outer call after evaluating a nested call", async () => {
+      const harness = makeEvaluatorTestHarness(engine);
+      const identity = await harness.dataHandler.closure_make(
+        { args: [DataType.ANY], returnType: DataType.ANY },
+        async function* (
+          value: TypedValue<DataType>,
+        ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+          await Promise.resolve();
+          return value;
+        },
+      );
+      const onlyNumber = await harness.dataHandler.closure_make(
+        { args: [DataType.NUMBER], returnType: DataType.NUMBER },
+        async function* (
+          value: TypedValue<DataType.NUMBER>,
+        ): AsyncGenerator<void, TypedValue<DataType.NUMBER>, undefined> {
+          await Promise.resolve();
+          return value;
+        },
+      );
+      harness.installModule("validation", [
+        { symbol: "identity", value: identity },
+        { symbol: "only_number", value: onlyNumber },
+      ]);
+
+      await harness.evaluate(
+        'from validation import identity, only_number\nonly_number(identity("not a number"))\n',
+      );
+
+      expect(harness.errors).toHaveLength(1);
+      expect(harness.errors[0].message).toContain("TypeError at line 2");
+      expect(harness.errors[0].message).toContain('only_number(identity("not a number"))');
     });
 
     test("reports data-interface bounds errors instead of a raw JavaScript exception", async () => {

@@ -127,6 +127,7 @@ class PyWasmEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     try {
       const source = chunk.endsWith("\n") ? chunk : chunk + "\n";
+      this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
       const { errors, prints, renderedResult } = await compileToWasmAndRun(chunk, true, {
@@ -152,6 +153,7 @@ class PyWasmEvaluator extends BasicEvaluator {
   async evaluateFile(fileName: string, fileContent: string): Promise<void> {
     try {
       const source = fileContent.endsWith("\n") ? fileContent : fileContent + "\n";
+      this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
       const { errors, prints } = await compileToWasmAndRun(fileContent, false, {

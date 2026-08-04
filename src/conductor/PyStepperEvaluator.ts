@@ -131,6 +131,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     this.conductor.updateStatus(RunnerStatus.RUNNING, true);
     try {
       const script = chunk + "\n";
+      this.dataHandler.setCurrentSource(script);
       const ast = parse(script);
 
       const config = await fetchRunConfig(this.conductor);

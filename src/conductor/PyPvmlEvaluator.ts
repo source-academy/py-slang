@@ -101,6 +101,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * loadImports); it must be the parse of `script` + trailing newline. */
   private async runChunk(script: string, ast?: StmtNS.FileInput): Promise<PVMLBoxType> {
     const source = script.endsWith("\n") ? script : script + "\n";
+    this.dataHandler.setCurrentSource(source);
     ast ??= parse(source);
     const { errors, environments } = analyzeWithEnvironments(
       ast,

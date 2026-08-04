@@ -65,6 +65,7 @@ export function makeEvaluatorTestHarness(
       });
     },
     sendOutput: (output: string) => outputs.push(output),
+    hostLoadPlugin: () => undefined,
     requestFile: () => Promise.resolve(null),
     requestInput: () => Promise.resolve(""),
     registerPlugin: (...args: unknown[]) => {

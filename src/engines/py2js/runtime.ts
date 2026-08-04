@@ -495,6 +495,14 @@ export class Py2JsRuntime {
    */
   constructor(public readonly universalEquality: boolean = false) {}
 
+  /** Installed by Py2JsSession so generated code can report its active call
+   * site to the shared module data handler. */
+  onCurrentCall?: (start: number, end: number) => void;
+
+  setCurrentCall(start: number, end: number): void {
+    this.onCurrentCall?.(start, end);
+  }
+
   output: string[] = [];
 
   /**

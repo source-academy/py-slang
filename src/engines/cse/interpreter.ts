@@ -681,7 +681,6 @@ const cmdEvaluators: CmdEvaluators = {
       control.push(arg instanceof ExprNS.Starred ? arg.value : arg);
     }
     control.push(callNode.callee);
-    context.evaluator?.setCurrentCall(callNode);
   },
 
   FunctionDef: function (
@@ -1191,6 +1190,10 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    // This is the point at which the call is actually applied.  Recording it
+    // while merely scheduling its children made a nested argument call leak
+    // into the outer call's module-interface error.
+    context.evaluator?.setCurrentCall(instr.srcNode);
     // Tail-Call Optimisation
     const topElement = control.peek();
     let shouldPushEnvInstr = true;

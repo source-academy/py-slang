@@ -152,7 +152,14 @@ const emitFloat = (n: number): string =>
 function emitCall(c: ExprNS.Call, a: boolean, ctx: EmitCtx): string {
   const callee = emitExpr(c.callee, a, ctx);
   const args = c.args.map(arg => emitExpr(arg, a, ctx)).join(", ");
-  return a ? `(await __py.acall(${callee}, [${args}]))` : `__py.call(${callee}, [${args}])`;
+  const start = c.startToken.indexInSource;
+  const end = c.endToken.indexInSource + c.endToken.lexeme.length;
+  // Evaluate callee/arguments first: either can contain another call and
+  // update the active span.  Set this call's span only immediately before its
+  // own dispatch, so a module error is attributed to the outer call.
+  return a
+    ? `(await (async () => { const __callee = ${callee}; const __args = [${args}]; __py.setCurrentCall(${start}, ${end}); return await __py.acall(__callee, __args); })())`
+    : `(() => { const __callee = ${callee}; const __args = [${args}]; __py.setCurrentCall(${start}, ${end}); return __py.call(__callee, __args); })()`;
 }
 
 /**
