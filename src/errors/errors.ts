@@ -453,18 +453,28 @@ export class ValueError extends RuntimeSourceError {
   constructor(source: string, node: ExprNS.Expr, context: Context, functionName: string) {
     super(node);
     this.type = ErrorType.TYPE;
+    const hint = "ValueError: math domain error. ";
+    const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
+
+    // py-slang#397: a synthetic token (e.g. py2js's bridged-builtin call site — see
+    // stdlibBridge.ts's syntheticCallNode) carries no real position, only a hardcoded
+    // placeholder — showing "at line 1" would be actively misleading, so skip the
+    // location header/snippet entirely when the position isn't real.
+    if (node.startToken.synthetic) {
+      this.message = hint + suggestion;
+      return;
+    }
+
     const index = node.startToken.indexInSource;
     const { lineIndex, fullLine } = getFullLine(source, index);
     const snippet = source.substring(
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const hint = "ValueError: math domain error. ";
     const offset = fullLine.indexOf(snippet);
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
     const name = "ValueError";
-    const suggestion = `Ensure that the input value(s) passed to '${functionName}' satisfy the mathematical requirements`;
     const msg =
       name +
       " at line " +
@@ -491,12 +501,6 @@ export class TypeError extends RuntimeSourceError {
     super(node);
     const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
     this.type = ErrorType.TYPE;
-    const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
     // Almost every call site is a builtin call (math_sin(x), tail(xs), ...) —
     // name it after the callee the user actually wrote, matching
     // UnsupportedOperandTypeError's "unsupported operand type(s) for +: ..."
@@ -522,6 +526,22 @@ export class TypeError extends RuntimeSourceError {
         ? (callNode.callee.name?.lexeme ?? "subscript assignment")
         : "subscript assignment";
     const hint = `TypeError: unsupported argument type for ${subject}: ${typeStr}`;
+
+    // py-slang#397: a synthetic token (e.g. py2js's bridged-builtin call site — see
+    // stdlibBridge.ts's syntheticCallNode) carries no real position, only a hardcoded
+    // placeholder — showing "at line 1" would be actively misleading, so skip the
+    // location header/snippet entirely when the position isn't real.
+    if (node.startToken.synthetic) {
+      this.message = hint;
+      return;
+    }
+
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
     const offset = fullLine.indexOf(snippet);
     const adjustedOffset = offset >= 0 ? offset : 0;
     const errorPos = 0;

@@ -235,6 +235,10 @@ function setupRuntime(
     .join("\n");
   if (preludeText.trim()) {
     const preludeJs = compileScript(rt, preludeText + "\n", variant, "sync");
+    // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — lets a
+    // bridged builtin's error name the predefined function it happened inside of
+    // (py-slang#397), e.g. tail() failing inside map()'s own _map helper.
+    rt.compilingPrelude = true;
     try {
       new Function("__py", preludeJs)(rt);
     } catch (e: unknown) {
@@ -242,6 +246,8 @@ function setupRuntime(
         "runtime",
         e instanceof Error ? `${e.name}: ${e.message}` : String(e),
       );
+    } finally {
+      rt.compilingPrelude = false;
     }
   }
 

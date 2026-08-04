@@ -97,6 +97,23 @@ export interface PyFunction {
   pyArity: number;
   pyBuiltin?: boolean;
   /**
+   * True for a function compiled from a stdlib group's own SICPy prelude
+   * source (e.g. linked-list.prelude.ts's map/filter/reduce), set by `def`
+   * while `compilingPrelude` is on — see that field and
+   * `enclosingPreludeFunction` (py-slang#397). Unset for both native/bridged
+   * builtins and the user's own compiled functions.
+   */
+  pyPrelude?: boolean;
+  /**
+   * True for a native/bridged builtin (set by `builtin()` and
+   * `bridgeBuiltin`) — a leaf operation that is never itself "user code" or
+   * "library code" and so, unlike pyPrelude/plain user functions, must not
+   * become its own boundary when computing `enclosingPreludeFunction`
+   * (py-slang#397): it transparently passes its caller's origin through
+   * rather than resetting or claiming it.
+   */
+  pyNative?: boolean;
+  /**
    * For bridged stdlib builtins: the CSE-side minArgs, reported by the
    * native arity() builtin so both engines answer arity questions
    * identically (bridged functions run with pyArity -1, leaving argument
@@ -494,6 +511,63 @@ export class Py2JsRuntime {
    * sites are unaffected; index.ts passes `variant >= 3` explicitly.
    */
   constructor(public readonly universalEquality: boolean = false) {}
+
+  /**
+   * True while `setupRuntime` (index.ts) is executing a stdlib group's
+   * compiled prelude script — `def`/`def2` tag every function created during
+   * that window `pyPrelude: true` (py-slang#397). Never true for anything
+   * else: native/bridged builtins are `def`'d directly from TS, and the
+   * user's own script always compiles and runs in a separate call, outside
+   * this window.
+   */
+  compilingPrelude = false;
+
+  /**
+   * Parallel to the call stack, one entry per currently-executing frame: the name of
+   * the outermost predefined (prelude) function that frame is logically running
+   * inside of, or undefined if it isn't (and isn't nested within one). Lets
+   * `enclosingPreludeFunction` (py-slang#397) find which predefined function, if any,
+   * a bridged builtin's error occurred inside of — e.g. `tail()` failing partway
+   * through `map()`'s own `_map` helper should name `map`, the function the user
+   * actually called, not `_map`, an implementation detail they never wrote.
+   *
+   * Set once by `call`/`acall` when a frame is genuinely pushed, and deliberately
+   * left untouched across a tail-call bounce: TCO means "the same logical frame, a
+   * different function now running in it" (map tail-calling into _map is exactly
+   * this), so the frame's already-resolved origin must survive the bounce rather
+   * than being recomputed from whatever function it bounces into.
+   */
+  private readonly preludeOrigin: (string | undefined)[] = [];
+
+  /**
+   * The origin a *new* frame for `fn` should record when genuinely pushed (not
+   * bounced into):
+   *  - prelude code: its own name if entered fresh, or the caller's inherited
+   *    origin if already nested inside prelude code (a deeper prelude helper
+   *    doesn't override the outer one the user actually called).
+   *  - a native/bridged builtin: transparently passes the caller's origin
+   *    through unchanged — it's a leaf operation, never itself a boundary,
+   *    so it inherits "still inside map" from a prelude caller just as much
+   *    as it inherits "not inside anything" from a top-level one.
+   *  - anything else (a genuine user-defined function): always undefined,
+   *    a hard boundary — an error inside code the user actually wrote must
+   *    never be attributed to a predefined function, even if that function
+   *    was itself invoked as a callback passed into one (e.g. map(f, xs)).
+   */
+  private originForNewFrame(fn: PyFunction): string | undefined {
+    const callerOrigin = this.preludeOrigin[this.preludeOrigin.length - 1];
+    if (fn.pyPrelude) return callerOrigin ?? fn.pyName;
+    if (fn.pyNative) return callerOrigin;
+    return undefined;
+  }
+
+  /** The predefined function, if any, the currently executing frame is running
+   * inside of — undefined when it isn't nested within prelude code at all (e.g. a
+   * builtin called directly at the top level, or from inside a user-defined
+   * function that was itself called from prelude code). */
+  enclosingPreludeFunction(): string | undefined {
+    return this.preludeOrigin[this.preludeOrigin.length - 1];
+  }
 
   output: string[] = [];
 
@@ -912,12 +986,25 @@ export class Py2JsRuntime {
 
   /** Non-tail call: run the trampoline until a real value comes back. */
   call(f: PyValue, args: PyValue[]): PyValue {
-    let result = this.checkCallable(f, args.length, true)(...args);
-    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
-      const t = result as TailCall;
-      result = this.checkCallable(t.f, t.args.length, true)(...t.args);
+    let fn = this.checkCallable(f, args.length, true);
+    this.preludeOrigin.push(this.originForNewFrame(fn));
+    try {
+      let result = fn(...args);
+      while (
+        result !== null &&
+        typeof result === "object" &&
+        (result as TailCall).__tail === true
+      ) {
+        const t = result as TailCall;
+        fn = this.checkCallable(t.f, t.args.length, true);
+        // A tail call bounces on the *same* logical frame — preludeOrigin is
+        // deliberately not touched here; see its own doc comment for why.
+        result = fn(...t.args);
+      }
+      return result === undefined ? null : (result as PyValue);
+    } finally {
+      this.preludeOrigin.pop();
     }
-    return result === undefined ? null : (result as PyValue);
   }
 
   /**
@@ -928,13 +1015,22 @@ export class Py2JsRuntime {
    */
   async acall(f: PyValue, args: PyValue[]): Promise<PyValue> {
     let fn = this.checkCallable(f, args.length, false);
-    let result = await (fn.asyncBody ?? fn)(...args);
-    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
-      const t = result as TailCall;
-      fn = this.checkCallable(t.f, t.args.length, false);
-      result = await (fn.asyncBody ?? fn)(...t.args);
+    this.preludeOrigin.push(this.originForNewFrame(fn));
+    try {
+      let result = await (fn.asyncBody ?? fn)(...args);
+      while (
+        result !== null &&
+        typeof result === "object" &&
+        (result as TailCall).__tail === true
+      ) {
+        const t = result as TailCall;
+        fn = this.checkCallable(t.f, t.args.length, false);
+        result = await (fn.asyncBody ?? fn)(...t.args);
+      }
+      return result === undefined ? null : (result as PyValue);
+    } finally {
+      this.preludeOrigin.pop();
     }
-    return result === undefined ? null : (result as PyValue);
   }
 
   /** Tail call marker: bounced on the caller's trampoline instead of growing the stack. */
@@ -947,6 +1043,7 @@ export class Py2JsRuntime {
     const f = fn as PyFunction;
     f.pyName = name;
     f.pyArity = arity;
+    if (this.compilingPrelude) f.pyPrelude = true;
     return f;
   }
 
@@ -983,6 +1080,7 @@ export class Py2JsRuntime {
   private builtin(name: string, arity: number, fn: (...args: PyValue[]) => PyValue): PyFunction {
     const f = this.def(name, arity, fn);
     f.pyBuiltin = true;
+    f.pyNative = true;
     return f;
   }
 
@@ -1060,6 +1158,7 @@ export class Py2JsRuntime {
         },
       );
       f.pyBuiltin = true;
+      f.pyNative = true;
       f.asyncOnly = true;
       return f;
     })(),

@@ -299,7 +299,15 @@ function bridgeBuiltin(
       // displayError falls back to a generic "Error" name for the same
       // reason), so the constructor is the only reliable source for it.
       if (e instanceof RuntimeSourceError) {
-        throw new Py2JsRuntimeError(e.constructor.name, e.message);
+        // The builtin itself is named in e.message already ("...for tail: ...");
+        // this instead names the *enclosing* predefined function, if any — e.g. a
+        // student calling map() never wrote or sees _map, the internal helper that
+        // actually calls tail() (py-slang#397).
+        const enclosing = rt.enclosingPreludeFunction();
+        const message = enclosing
+          ? `${e.message} (in predefined function '${enclosing}')`
+          : e.message;
+        throw new Py2JsRuntimeError(e.constructor.name, message);
       }
       throw e;
     }
@@ -312,6 +320,7 @@ function bridgeBuiltin(
     return result === undefined ? null : fromTagged(name, result);
   });
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = builtin.minArgs;
   return f;
 }
@@ -341,6 +350,7 @@ function nativeSetPairSlot(name: string, index: 0 | 1, sayPair: boolean): PyFunc
   f.pyName = name;
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
 }
@@ -366,12 +376,14 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
     if (index >= args.length) return null;
     const tail = rt.def("anonymous stream", 0, () => build(args, index + 1));
     tail.pyBuiltin = true;
+    tail.pyNative = true;
     return [args[index], tail];
   };
   const f = ((...args: PyValue[]) => build(args, 0)) as PyFunction;
   f.pyName = "stream";
   f.pyArity = -1;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 0;
   return f;
 }
@@ -424,6 +436,7 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
   f.pyName = "apply_in_underlying_python";
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
 }
@@ -463,6 +476,7 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
   f.pyName = "draw_data";
   f.pyArity = -1;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 1;
   return f;
 }
