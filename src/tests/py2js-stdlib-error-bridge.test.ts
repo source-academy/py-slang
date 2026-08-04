@@ -66,6 +66,25 @@ describe("py-slang#397: no fabricated line number, name the enclosing predefined
     expect(message).toMatch(/math domain error/);
   });
 
+  // Pre-existing crash on main, incidentally fixed by the same synthetic-token check:
+  // ValueError's location header did `" ".repeat(offset)`, and offset is -1 whenever
+  // fullLine.indexOf(snippet) can't find the (synthetic, not-really-there) snippet in
+  // the line it's pointing at — String#repeat throws RangeError on a negative count,
+  // so a ValueError-raising builtin like math_sqrt crashed with a raw JS RangeError
+  // instead of ever producing a Python-style error at all.
+  test("math_sqrt(-1) raises a real ValueError, not a raw JS RangeError", () => {
+    let caught: unknown;
+    try {
+      runCodePy2Js("math_sqrt(-1)", 2);
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).name).not.toBe("RangeError");
+    expect((caught as Error).message).not.toMatch(/Invalid count value/);
+    expect((caught as Error).message).toMatch(/math domain error/);
+  });
+
   test("tail() failing inside map()'s own internal helper names map, not the helper", () => {
     let message = "";
     try {
