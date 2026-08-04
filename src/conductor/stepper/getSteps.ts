@@ -77,6 +77,16 @@ function isComplete(prog: StepNode): boolean {
   return false;
 }
 
+/** RuntimeSourceError (including GenericDataHandler's module-interface errors) is deliberately a
+ * structural error rather than a native Error subclass. Preserve its formatted message when the
+ * stepper catches it, instead of rendering the object as `[object Object]`. */
+function errorMessage(error: unknown): string {
+  if (typeof error === "object" && error !== null && typeof (error as { message?: unknown }).message === "string") {
+    return (error as { message: string }).message;
+  }
+  return String(error);
+}
+
 async function drive(
   prog: StepNode,
   contractionLimit: number,
@@ -106,7 +116,7 @@ async function drive(
       // A runtime error during reduction (e.g. ZeroDivisionError): evaluation is stuck. Show the
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
-      const message = error instanceof Error ? error.message : String(error);
+      const message = errorMessage(error);
       pushStep(current, [{ redexType: "beforeMarker", explanation: message }]);
       pushStep(current, [{ explanation: "Evaluation stuck" }]);
       return steps;
@@ -324,7 +334,7 @@ export async function evaluatePython(
     // A runtime error (e.g. ZeroDivisionError) surfaces in the REPL as its message; the stepper
     // separately shows an "Evaluation stuck" step. We never throw here, so a runtime fault is not
     // mistaken for a syntax/preprocessing error (which is what switches the host to the home tab).
-    return error instanceof Error ? error.message : String(error);
+    return errorMessage(error);
   }
 
   return resultRepr;

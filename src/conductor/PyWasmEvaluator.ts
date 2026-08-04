@@ -130,6 +130,10 @@ class PyWasmEvaluator extends BasicEvaluator {
       this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
+      if (moduleBindings) {
+        moduleBindings.onCallLocation = (start, end) =>
+          this.dataHandler.setCurrentCallLocation(start, end);
+      }
       const { errors, prints, renderedResult } = await compileToWasmAndRun(chunk, true, {
         chapter: this.chapter,
         groups: this.groups,
@@ -156,6 +160,10 @@ class PyWasmEvaluator extends BasicEvaluator {
       this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
+      if (moduleBindings) {
+        moduleBindings.onCallLocation = (start, end) =>
+          this.dataHandler.setCurrentCallLocation(start, end);
+      }
       const { errors, prints } = await compileToWasmAndRun(fileContent, false, {
         chapter: this.chapter,
         groups: this.groups,

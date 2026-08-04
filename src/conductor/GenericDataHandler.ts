@@ -647,7 +647,6 @@ export class GenericDataHandler implements IDataHandler {
   }
   list_to_vec(xs: TypedValue<DataType.LIST>): Promise<TypedValue<DataType>[]> {
     try {
-      console.log(this.readListElements(xs));
       return Promise.resolve(this.readListElements(xs));
     } catch (e) {
       return Promise.reject(e);

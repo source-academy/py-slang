@@ -204,7 +204,7 @@ export async function pythonToModule(
       };
       const arity = Math.max(0, fn.pyArity);
       return dh.closure_make(
-        { returnType: DataType.VOID, args: Array(arity).fill(DataType.VOID) },
+        { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
         pyClosureFunc,
       );
     }

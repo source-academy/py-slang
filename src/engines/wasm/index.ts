@@ -66,6 +66,14 @@ export async function compileToWasmAndRun(
   let debugFunctions: Pick<WasmExports, "peekShadowStack" | "getListElement"> | null = null;
 
   const prepared = options.moduleBindings;
+  // Module calls are compiled against `script`, which has the standard
+  // library prelude inserted between leading imports and the user's first
+  // executable statement. Diagnostics, however, use the original user
+  // source held by PyWasmEvaluator. Preserve the coordinate transform for
+  // the module-call host import.
+  if (prepared) {
+    prepared.sourceOffset = prelude.length + 1;
+  }
   const jspi = getJspi();
 
   try {

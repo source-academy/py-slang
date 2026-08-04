@@ -2112,6 +2112,30 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
   });
 
+  test("reports GenericDataHandler errors at the imported module call site", async () => {
+    const dh = new GenericDataHandler(2);
+    const outOfBounds = await dh.closure_make(
+      { returnType: DataType.VOID, args: [] },
+      async function* (): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+        const array = await dh.array_make(DataType.NUMBER, 1, {
+          type: DataType.NUMBER,
+          value: 0,
+        });
+        await dh.array_get(array, 3);
+        return { type: DataType.VOID, value: undefined };
+      },
+    );
+    installFakeModule({ validation: [{ symbol: "out_of_bounds", value: outOfBounds }] });
+    const source = "from validation import out_of_bounds\nout_of_bounds()\n";
+    dh.setCurrentSource(source);
+
+    const value = await evaluatePython(parse(source), undefined, { evaluator: dh });
+
+    expect(value).toContain("IndexError at line 2");
+    expect(value).toContain("out_of_bounds()");
+    expect(value).toContain("list index out of range");
+  });
+
   test("a Python closure argument is declined — the call stays stuck, not silently wrong", async () => {
     // See moduleInterop.ts's module doc comment: forwarding a Python-authored callable into a module
     // call would need the module to call back into Python, which this design explicitly doesn't
@@ -2122,7 +2146,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       throw new Error("should never be invoked — the call must stay stuck before reaching here");
     }
     const apply = await dh.closure_make(
-      { returnType: DataType.NUMBER, args: [DataType.VOID] },
+      { returnType: DataType.NUMBER, args: [DataType.ANY] },
       applyFunc,
     );
     installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });

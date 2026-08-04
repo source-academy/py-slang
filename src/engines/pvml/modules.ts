@@ -1,4 +1,6 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
+import { GenericDataHandler } from "../../conductor/GenericDataHandler";
+import { PRIMITIVE_MIN_ARGS } from "./builtins";
 import { PVMLBoxType, PVMLExtern, PVMLHostCall, getPVMLType, isPVMLObject } from "./types";
 
 /**
@@ -40,7 +42,7 @@ async function readCompoundElements(
  * the module export's symbol, used only to label the resulting extern for
  * display/error messages. */
 export async function moduleToPvml(
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   value: TypedValue<DataType> | undefined | null,
   name: string,
 ): Promise<PVMLBoxType> {
@@ -115,7 +117,7 @@ export async function moduleToPvml(
  * call. `callPvml` re-enters the interpreter when the module later invokes a
  * converted PVML closure/primitive. */
 export async function pvmlToModule(
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   value: PVMLBoxType,
   callPvml: PVMLHostCall,
 ): Promise<TypedValue<DataType>> {
@@ -184,6 +186,9 @@ export async function pvmlToModule(
         if (value.originalClosure) {
           return value.originalClosure;
         }
+        throw new Error(
+          "PVML extern value is missing its original conductor closure (shouldn't happen, please report this bug)",
+        );
       // No originalClosure (shouldn't happen for any extern moduleToPvml creates today, but fall
       // through to the general wrapping path below rather than assume it can't occur).
       case "closure":
@@ -191,7 +196,11 @@ export async function pvmlToModule(
         // Any callable PVML value a module receives becomes a conductor
         // closure that re-enters the interpreter (see PVMLHostCall).
         // dispatchCall handles closure and primitive values uniformly.
-        const arity = value.type === "closure" ? value.ir.numArgs : 0;
+        const arity =
+          value.type === "closure"
+            ? value.ir.numArgs
+            : PRIMITIVE_MIN_ARGS.get(value.primitiveIndex) ?? 0;
+        const isVararg = value.type === "primitive" || value.ir.hasRestParam;
         async function* callback(
           ...args: TypedValue<DataType>[]
         ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
@@ -202,6 +211,8 @@ export async function pvmlToModule(
         return dh.closure_make(
           { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
           callback,
+          undefined,
+          isVararg,
         );
       }
     }

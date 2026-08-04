@@ -76,6 +76,11 @@ export type PreparedModuleBindings = {
    * opaques/closures. */
   handles: ModuleHandle[];
   dh: IDataHandler;
+  /** Called immediately before a module closure is invoked, with the
+   * source span supplied by the compiled call site. */
+  onCallLocation?: (start: number, end: number) => void;
+  /** Number of generated prelude characters inserted before user code. */
+  sourceOffset?: number;
 };
 
 /** Async phase: converts one module-export TypedValue into the synchronous
@@ -282,7 +287,7 @@ async function readWasmValue(
       const closureTag = tag;
       const closureVal = val;
       return dh.closure_make(
-        { returnType: DataType.VOID, args: [] },
+        { returnType: DataType.ANY, args: [] },
         async function* (...callArgs: TypedValue<DataType>[]) {
           exports.applyClosureBegin(closureTag, closureVal, callArgs.length);
           // Each argument is converted/materialised *between* wasm calls
@@ -318,8 +323,8 @@ export function createModuleCall(
   getExports: () => WasmExports | null,
   dataEnd: number,
   prepared: PreparedModuleBindings,
-): (handleIndex: number, envPtr: number, argLen: number) => Promise<[number, bigint]> {
-  return async (handleIndex, envPtr, argLen) => {
+): (handleIndex: number, envPtr: number, argLen: number, callStart: number, callEnd: number) => Promise<[number, bigint]> {
+  return async (handleIndex, envPtr, argLen, callStart, callEnd) => {
     const exports = getExports();
     if (!exports) throw new Error("WASM exports not initialised");
 
@@ -327,6 +332,11 @@ export function createModuleCall(
     if (!handle) throw new Error(`Invalid module handle: ${handleIndex}`);
     if (handle.value.type !== DataType.CLOSURE) {
       throw new Error(`'${handle.name}' (an imported module value) is not callable`);
+    }
+
+    if (callStart >= 0 && callEnd >= callStart) {
+      const offset = prepared.sourceOffset ?? 0;
+      prepared.onCallLocation?.(callStart - offset, callEnd - offset);
     }
 
     // Read all raw (tag, val) pairs first: readWasmValue never allocates,
