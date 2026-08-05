@@ -402,7 +402,10 @@ export class GenericDataHandler implements IDataHandler {
     if (closure === undefined) {
       throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
-    if (args.length < closure.sig.args.length || (!closure.isVararg && args.length > closure.sig.args.length)) {
+    if (
+      args.length < closure.sig.args.length ||
+      (!closure.isVararg && args.length > closure.sig.args.length)
+    ) {
       throw new InvalidArityError(
         this.currentCall,
         this.currentSource,

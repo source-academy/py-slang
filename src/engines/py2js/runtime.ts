@@ -554,7 +554,7 @@ export class Py2JsRuntime {
   setCurrentCall(start: number, end: number): void {
     this.onCurrentCall?.(start, end);
   }
-  
+
   /**
    * True while `setupRuntime` (index.ts) is executing a stdlib group's
    * compiled prelude script — `def`/`def2` tag every function created during
