@@ -16,6 +16,8 @@ module.exports = {
       "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/runner/index.js",
     "^@sourceacademy/conductor/types$":
       "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/types/index.js",
+    "^@sourceacademy/conductor/util$":
+      "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/util/index.js",
   },
   transform: {
     "^.+\\.tsx?$": [
@@ -38,6 +40,9 @@ module.exports = {
             ],
             "@sourceacademy/conductor/types": [
               "node_modules/@sourceacademy/conductor/dist/conductor/types/index.d.ts",
+            ],
+            "@sourceacademy/conductor/util": [
+              "node_modules/@sourceacademy/conductor/dist/conductor/util/index.d.ts",
             ],
           },
         },

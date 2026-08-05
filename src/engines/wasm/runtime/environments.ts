@@ -169,7 +169,7 @@ export const RETURN_VOID_SUFFIX = [
 export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
   wasm
     .func(APPLY_FX_NAME)
-    .params({ $arg_len: i32 })
+    .params({ $arg_len: i32, $call_start: i32, $call_end: i32 })
     .locals({
       [RETURN_ENV_NAME]: i32,
       $val: i64,
@@ -248,7 +248,13 @@ export const applyFuncFactory = (bodies: WasmInstruction[][]) =>
             ),
           wasm
             .call("$_host_module_call")
-            .args(i32.wrap_i64(local.get("$val")), global.get(CURR_ENV), local.get("$arg_len")),
+            .args(
+              i32.wrap_i64(local.get("$val")),
+              global.get(CURR_ENV),
+              local.get("$arg_len"),
+              local.get("$call_start"),
+              local.get("$call_end"),
+            ),
           wasm.return(...RETURN_NONVOID_SUFFIX),
         ),
 
@@ -703,7 +709,7 @@ export const APPLY_HOST_CLOSURE_FINISH_FX = wasm
   .func("$_apply_host_closure_finish")
   .params({ $arg_count: i32 })
   .results(i32, i64)
-  .body(wasm.call(APPLY_FX_NAME).args(local.get("$arg_count")));
+  .body(wasm.call(APPLY_FX_NAME).args(local.get("$arg_count"), i32.const(-1), i32.const(-1)));
 
 // Helper function for interactive mode: takes (tag, value) and returns either
 // the shadow stack value (if tag is gcable) or the original (tag, value)

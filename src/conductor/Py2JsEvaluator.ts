@@ -1,10 +1,10 @@
-import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
+import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { Py2JsSession } from "../engines/py2js";
 import { Py2JsDataVisualizerRunnerPlugin } from "./dataVisualizer/Py2JsDataVisualizerRunnerPlugin";
-import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
@@ -60,8 +60,8 @@ abstract class Py2JsEvaluatorBase extends BasicEvaluator {
 
   protected constructor(conductor: IRunnerPlugin, variant: number) {
     super(conductor);
+    const dataHandler = new GenericDataHandler(variant);
     registerAutoCompletePlugin(conductor, variant);
-    const dataHandler = new GenericDataHandler();
     this.conductor.registerPlugin(
       ModuleLoaderRunnerPlugin,
       this.conductor,

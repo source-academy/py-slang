@@ -2,9 +2,9 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { moduleToPvml } from "../engines/pvml/modules";
-import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
@@ -71,7 +71,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * see GenericDataHandler.ts. Passed to moduleToPvml as the IDataHandler
    * a module's exports are read against, and wrapped via
    * asInterfacableEvaluator when registering ModuleLoaderRunnerPlugin. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
@@ -85,6 +85,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       .map(g => g.prelude ?? "")
       .filter(p => p.trim())
       .join("\n");
+    this.dataHandler = new GenericDataHandler(this.variant);
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);
@@ -100,6 +101,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * loadImports); it must be the parse of `script` + trailing newline. */
   private async runChunk(script: string, ast?: StmtNS.FileInput): Promise<PVMLBoxType> {
     const source = script.endsWith("\n") ? script : script + "\n";
+    this.dataHandler.setCurrentSource(source);
     ast ??= parse(source);
     const { errors, environments } = analyzeWithEnvironments(
       ast,
@@ -119,6 +121,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       globalEnv: this.globalEnv,
       programText: script,
       variant: this.variant,
+      onCallLocation: (start, end) => this.dataHandler.setCurrentCallLocation(start, end),
     });
     const result = await interpreter.executeAsync();
     this.globalEnv = interpreter.getGlobalEnv();

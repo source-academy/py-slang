@@ -204,7 +204,7 @@ export async function pythonToModule(
       };
       const arity = Math.max(0, fn.pyArity);
       return dh.closure_make(
-        { returnType: DataType.VOID, args: Array(arity).fill(DataType.VOID) },
+        { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
         pyClosureFunc,
       );
     }
@@ -370,7 +370,10 @@ export async function moduleToPython(
       // used to raise earlier, just one level in.
       f.asyncBody = async (...args: PyValue[]) => {
         const typedArgs = await Promise.all(args.map(a => pythonToModule(rt, dh, a)));
-        const gen = dh.closure_call_unchecked(value, typedArgs);
+        // Use the checked path just like the CSE module bridge. DataType.ANY
+        // accepts the closure's declared return type while still validating
+        // its argument signature in GenericDataHandler.
+        const gen = dh.closure_call(value, typedArgs, DataType.ANY);
         let step = await gen.next();
         while (!step.done) step = await gen.next();
         return moduleToPython(rt, dh, step.value);

@@ -84,7 +84,7 @@ class InputRecorder {
  */
 abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private readonly stepper: PythonStepperRunnerPlugin;
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   private readonly inputRecorder = new InputRecorder(prompt => this.conductor.requestInput(prompt));
   /** The selected SICPy sublanguage (1–4). Gates which built-ins preprocessing accepts, so e.g. a
    * §1 program cannot use the §2 list library — see {@link preprocessPython}. */
@@ -94,6 +94,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     super(conductor);
     registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
+    this.dataHandler = new GenericDataHandler(chapter);
     // Register the language-agnostic stepper runner (Python binding) and load its host (web) half.
     this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin, {
       evaluator: this.dataHandler,
@@ -130,6 +131,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     this.conductor.updateStatus(RunnerStatus.RUNNING, true);
     try {
       const script = chunk + "\n";
+      this.dataHandler.setCurrentSource(script);
       const ast = parse(script);
 
       const config = await fetchRunConfig(this.conductor);

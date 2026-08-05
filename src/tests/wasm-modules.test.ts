@@ -49,11 +49,19 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  const onlyNumber = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (x: TypedValue<DataType.NUMBER>) {
+      return x;
+    },
+  );
+
   const applyTwice = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE, DataType.NUMBER] },
     async function* (f: TypedValue<DataType.CLOSURE>, x: TypedValue<DataType>) {
-      const once = yield* dh.closure_call_unchecked(f, [x]);
-      const twice = yield* dh.closure_call_unchecked(f, [once]);
+      const once = yield* dh.closure_call(f, [x], DataType.NUMBER);
+      const twice = yield* dh.closure_call(f, [once], DataType.NUMBER);
       return twice;
     },
   );
@@ -78,7 +86,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   const callWithThree = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE] },
     async function* (f: TypedValue<DataType.CLOSURE>) {
-      return yield* dh.closure_call_unchecked(f, [num(1), num(2), num(3)]);
+      return yield* dh.closure_call(f, [num(1), num(2), num(3)], DataType.NUMBER);
     },
   );
 
@@ -88,6 +96,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "flag", value: { type: DataType.BOOLEAN, value: true } },
       { symbol: "greeting", value: { type: DataType.CONST_STRING, value: "hello" } },
       { symbol: "double", value: double },
+      { symbol: "only_number", value: onlyNumber },
       { symbol: "apply_twice", value: applyTwice },
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
@@ -200,6 +209,22 @@ describe("PyWasmEvaluator module imports", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["42", "None"]);
+    });
+
+    test("reports the Python source location for a module argument error", async () => {
+      const { conductor, errors } = makeMockConductor();
+      const evaluator = new PyWasmEvaluator3(conductor);
+
+      await evaluator.evaluateChunk(
+        'from testmod import only_number\nonly_number("not a number")\n',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0])).toContain("TypeError at line 2");
+      expect(String(errors[0])).toContain('only_number("not a number")');
+      expect(String(errors[0])).toContain(
+        "Expected argument 0 to have type 'int' or 'float', got 'str'",
+      );
     });
 
     test("a higher-order module function calls back into a Python closure", async () => {

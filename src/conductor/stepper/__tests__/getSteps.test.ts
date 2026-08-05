@@ -1,6 +1,9 @@
 import { DataType, type TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 
+import { markBreakpoints } from "../../../breakpoints";
+import { parse } from "../../../parser";
+import { GenericDataHandler } from "../../GenericDataHandler";
 import {
   emptyList,
   expressionStatement,
@@ -10,9 +13,6 @@ import {
   type StepNode,
 } from "../ast";
 import { isBuiltinConstantName } from "../builtins";
-import { markBreakpoints } from "../../../breakpoints";
-import { parse } from "../../../parser";
-import { GenericDataHandler } from "../../GenericDataHandler";
 import { evaluatePython, getPythonSteps } from "../getSteps";
 import { formatPrintLlistOutput } from "../lists";
 import { preprocessPython } from "../preprocess";
@@ -1971,7 +1971,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("a constant export is substituted as a literal, like a built-in constant", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     installFakeModule({
       physics: [{ symbol: "GRAVITY", value: { type: DataType.NUMBER, value: 9.8 } }],
     });
@@ -1980,7 +1980,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("a function export is called through, sync-fast-path or not, and its result is usable", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     async function* doubleFunc(
       a: TypedValue<DataType>,
     ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
@@ -1997,7 +1997,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("an opaque return value completes the program (renders as its label, never inspected)", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     class Thing {}
     async function* makeThingFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
@@ -2030,7 +2030,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     // stepNodeToModule reads an Opaque node's `handle` back out (see its "Opaque" case) so a value
     // created by one imported function can be forwarded, unchanged, as an argument to another —
     // never converted to/from any stepper-representable form along the way.
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     class Thing {}
     const theThing = new Thing();
     async function* makeThingFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
@@ -2078,7 +2078,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("arity() reports an imported function's real parameter count", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     async function* addFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
       return { type: DataType.NUMBER, value: 0 };
@@ -2093,7 +2093,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("calling an imported function with the wrong arity is a Python-style TypeError, not a native crash", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     async function* doubleFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
       throw new Error("should never be invoked — arity is checked before the call is placed");
@@ -2112,17 +2112,41 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
   });
 
+  test("reports GenericDataHandler errors at the imported module call site", async () => {
+    const dh = new GenericDataHandler(2);
+    const outOfBounds = await dh.closure_make(
+      { returnType: DataType.VOID, args: [] },
+      async function* (): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+        const array = await dh.array_make(DataType.NUMBER, 1, {
+          type: DataType.NUMBER,
+          value: 0,
+        });
+        await dh.array_get(array, 3);
+        return { type: DataType.VOID, value: undefined };
+      },
+    );
+    installFakeModule({ validation: [{ symbol: "out_of_bounds", value: outOfBounds }] });
+    const source = "from validation import out_of_bounds\nout_of_bounds()\n";
+    dh.setCurrentSource(source);
+
+    const value = await evaluatePython(parse(source), undefined, { evaluator: dh });
+
+    expect(value).toContain("IndexError at line 2");
+    expect(value).toContain("out_of_bounds()");
+    expect(value).toContain("list index out of range");
+  });
+
   test("a Python closure argument is declined — the call stays stuck, not silently wrong", async () => {
     // See moduleInterop.ts's module doc comment: forwarding a Python-authored callable into a module
     // call would need the module to call back into Python, which this design explicitly doesn't
     // support yet — an honest "Evaluation stuck", the same degrade `input()` already gets.
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     async function* applyFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
       throw new Error("should never be invoked — the call must stay stuck before reaching here");
     }
     const apply = await dh.closure_make(
-      { returnType: DataType.NUMBER, args: [DataType.VOID] },
+      { returnType: DataType.NUMBER, args: [DataType.ANY] },
       applyFunc,
     );
     installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
@@ -2132,7 +2156,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("a missing module is a clear error, not a silent unbound name", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     installFakeModule({});
     const ast = parse("from nosuchmodule import x\nx\n");
     await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(/not found/i);
@@ -2152,7 +2176,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
   });
 
   test("a name a module doesn't export is a clear error", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(2);
     installFakeModule({
       mathmod: [{ symbol: "double", value: { type: DataType.NUMBER, value: 1 } }],
     });

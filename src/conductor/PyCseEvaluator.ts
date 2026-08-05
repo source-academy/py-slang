@@ -1,8 +1,9 @@
+import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { CseMachinePlugin } from "@sourceacademy/runner-cse-machine";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
+import { markBreakpoints } from "../breakpoints";
 import { Context } from "../engines/cse/context";
 import { Control } from "../engines/cse/control";
 import { evaluate } from "../engines/cse/interpreter";
@@ -14,7 +15,6 @@ import {
   destroyStreams,
   displayError,
 } from "../engines/cse/streams";
-import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser/parser-adapter";
 import { analyze } from "../resolver/analysis";
 import dataVisualizer from "../stdlib/dataVisualizer";
@@ -52,7 +52,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
    * see GenericDataHandler.ts. Engine-agnostic, so this is the same instance
    * type py2js's evaluator uses; only the pythonToModule/moduleToPython
    * conversion layer (modules.ts) is CSE-specific. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** Registered only for §2+ — draw_data doesn't exist as a builtin below that, so there's no
    * reason to register the plugin or have the host fetch its web bundle for §1 users. */
   private readonly dataVisualizerPlugin?: PythonDataVisualizerRunnerPlugin;
@@ -63,7 +63,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
     this.groups = groups;
     registerAutoCompletePlugin(conductor, variant);
     this.preludeText = groups.map(g => g.prelude ?? "").join("\n");
-
+    this.dataHandler = new GenericDataHandler(variant);
     // Cast bridges the IPlugin type difference between this repo's (local/portal)
     // conductor and the one @sourceacademy/runner-cse-machine builds against. Once both
     // use the same published conductor, the cast can be removed.
@@ -89,6 +89,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
     this.ensurePreludesLoaded = once(async () => {
       if (this.preludeText.trim()) {
+        this.dataHandler.setCurrentSource(this.preludeText + "\n");
         const ast = parse(this.preludeText + "\n");
         await evaluate(this.preludeText + "\n", ast, this.context, {
           isPrelude: true,
@@ -116,6 +117,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.evaluator = this.dataHandler;
       this.context.dataVisualizer = this.dataVisualizerPlugin ?? null;
       await this.ensurePreludesLoaded();
+      this.dataHandler.setCurrentSource(chunk);
       const script = chunk + "\n";
       const ast = parse(script);
       const errors = analyze(
