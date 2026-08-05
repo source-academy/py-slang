@@ -89,6 +89,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
 
     this.ensurePreludesLoaded = once(async () => {
       if (this.preludeText.trim()) {
+        this.dataHandler.setCurrentSource(this.preludeText + "\n");
         const ast = parse(this.preludeText + "\n");
         await evaluate(this.preludeText + "\n", ast, this.context, {
           isPrelude: true,
@@ -105,7 +106,6 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     const { context: stdout, flush: flushOutput } = createBufferedOutputStream();
     try {
-      this.dataHandler.setCurrentSource(chunk);
       this.context.streams = {
         initialised: true,
         stdout,
@@ -117,6 +117,7 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       this.context.evaluator = this.dataHandler;
       this.context.dataVisualizer = this.dataVisualizerPlugin ?? null;
       await this.ensurePreludesLoaded();
+      this.dataHandler.setCurrentSource(chunk);
       const script = chunk + "\n";
       const ast = parse(script);
       const errors = analyze(

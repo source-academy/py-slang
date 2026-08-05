@@ -99,7 +99,7 @@ export class GenericDataHandler implements IDataHandler {
         return "'function'";
       case DataType.ANY:
         return "'any'";
-      case DataType.OPAQUE:
+      case DataType.OPAQUE: {
         if (value === undefined) {
           return "'opaque'";
         }
@@ -112,6 +112,7 @@ export class GenericDataHandler implements IDataHandler {
           return name.constructor.name;
         }
         return "'opaque'";
+      }
     }
   }
 
@@ -131,10 +132,22 @@ export class GenericDataHandler implements IDataHandler {
    * diagnostic code only needs its source span.
    */
   setCurrentCallLocation(start: number, end: number): void {
+    const source = this.currentSource;
+    if (!source || start < 0 || end < start || end > source.length) {
+      this.currentCall = undefined;
+      return;
+    }
+    const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+    const line = source.slice(0, lineStart).split("\n").length;
     this.currentCall = {
-      startToken: { indexInSource: start },
-      endToken: { indexInSource: end, lexeme: "" },
-    } as ExprNS.Call;
+      startToken: { indexInSource: start, line, column: start - lineStart, lexeme: source[start] },
+      endToken: {
+        indexInSource: Math.max(start, end - 1),
+        line,
+        column: Math.max(0, end - 1 - lineStart),
+        lexeme: source.slice(Math.max(start, end - 1), end),
+      },
+    } as unknown as ExprNS.Call;
   }
 
   setCurrentSource(source: string | undefined): void {
@@ -389,7 +402,7 @@ export class GenericDataHandler implements IDataHandler {
     if (closure === undefined) {
       throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
-    if (!closure.isVararg && args.length !== closure.sig.args.length) {
+    if (args.length < closure.sig.args.length || (!closure.isVararg && args.length > closure.sig.args.length)) {
       throw new InvalidArityError(
         this.currentCall,
         this.currentSource,

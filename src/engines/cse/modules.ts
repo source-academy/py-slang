@@ -148,6 +148,8 @@ export async function pythonToModule(
           args: Array(arity).fill(DataType.ANY),
         },
         closureFunc,
+        undefined,
+        value.closure.node.parameters.some(p => p.isStarred),
       );
     case "complex":
     case "multi_lambda":

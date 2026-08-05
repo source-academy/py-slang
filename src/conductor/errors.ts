@@ -18,7 +18,7 @@ export class EvaluatorError extends ConductorError {
         : undefined;
     super(typeof errorLike?.message === "string" ? errorLike.message : String(e));
     this.name = typeof errorLike?.name === "string" ? errorLike.name : "Error";
-    const se = e as { location?: { start?: { line: number; column: number } } };
+    const se = errorLike as { location?: { start?: { line: number; column: number } } };
     if (se.location?.start) {
       this.line = se.location.start.line;
       this.column = se.location.start.column;
@@ -62,8 +62,8 @@ export abstract class ModuleInterfaceError extends RuntimeSourceError {
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const offset = fullLine.indexOf(snippet);
-    const adjustedOffset = offset >= 0 ? offset : 0;
+    const lineStart = source.lastIndexOf("\n", index - 1) + 1;
+    const adjustedOffset = index >= lineStart ? index - lineStart : 0;
     const errorPos = node.endToken.indexInSource - node.startToken.indexInSource;
     const indicator = createErrorIndicator(snippet, errorPos);
 
