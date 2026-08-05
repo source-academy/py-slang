@@ -233,7 +233,7 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
  * `@Validate` decorator (e.g. `str`, `error`, the async `display`) defaults
  * to CSE's own `minArgMap.get(builtin) || 0` fallback.
  */
-const PRIMITIVE_MIN_ARGS: Map<number, number> = new Map(
+export const PRIMITIVE_MIN_ARGS: Map<number, number> = new Map(
   [...PRIMITIVE_FUNCTIONS.entries()].map(([name, index]) => [index, minArgMap.get(name) || 0]),
 );
 

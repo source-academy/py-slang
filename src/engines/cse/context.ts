@@ -1,8 +1,8 @@
 import { ConductorError } from "@sourceacademy/conductor/common";
 import { IRunnerPlugin } from "@sourceacademy/conductor/runner";
-import { IDataHandler } from "@sourceacademy/conductor/types";
 import { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
 import { StmtNS } from "../../ast-types";
+import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import { RuntimeSourceError } from "../../errors";
 import { NativeStorage } from "../../types";
 import { Control } from "./control";
@@ -21,7 +21,7 @@ export class Context {
   public stash: Stash;
 
   public conductor: IRunnerPlugin | null = null;
-  public evaluator: IDataHandler | null = null;
+  public evaluator: GenericDataHandler | null = null;
   /** Set by the evaluator when a data-visualizer runner is registered (§2+); the `draw_data`
    * builtin sends through this. Typed against the external abstract base, not the local concrete
    * `PythonDataVisualizerRunnerPlugin` subclass, matching how `conductor`/`evaluator` above are

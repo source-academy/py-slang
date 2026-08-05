@@ -10,6 +10,25 @@ import {
   PairIdentifier,
   TypedValue,
 } from "@sourceacademy/conductor/types";
+import { isSameType } from "@sourceacademy/conductor/util";
+import { ExprNS } from "../ast-types";
+import {
+  InvalidArityError,
+  InvalidArrayCreationError,
+  InvalidIdentifierError,
+  InvalidIndexError,
+  InvalidLengthError,
+  InvalidOpaqueUpdateError,
+  InvalidTypeError,
+} from "./errors";
+const DEFAULT_VALUES = {
+  [DataType.NUMBER]: { type: DataType.NUMBER, value: 0 },
+  [DataType.CONST_STRING]: { type: DataType.CONST_STRING, value: "" },
+  [DataType.BOOLEAN]: { type: DataType.BOOLEAN, value: false },
+  [DataType.VOID]: { type: DataType.VOID, value: undefined },
+  [DataType.EMPTY_LIST]: { type: DataType.EMPTY_LIST, value: null },
+  [DataType.INTEGER]: { type: DataType.INTEGER, value: 0n },
+};
 
 /**
  * A conductor `IDataHandler` implementation with no engine-specific logic:
@@ -25,7 +44,7 @@ import {
  * extracted so every evaluator that talks to conductor modules (CSE, py2js,
  * and eventually WASM/PVML) shares one implementation instead of
  * re-deriving the same identifier-table bookkeeping per engine. An evaluator
- * holds one instance (`private dataHandler = new GenericDataHandler()`) and
+ * holds one instance (`private dataHandler = new GenericDataHandler(variant)`) and
  * hands it to both `context.evaluator` (or the engine's equivalent) and
  * `conductor.registerPlugin(ModuleLoaderRunnerPlugin, conductor, dataHandler)`.
  */
@@ -36,8 +55,7 @@ export class GenericDataHandler implements IDataHandler {
     { head: TypedValue<DataType>; tail: TypedValue<DataType> }
   >();
   private arrayMap = new Map<
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ArrayIdentifier<any>,
+    ArrayIdentifier<DataType>,
     { type: DataType; elements: TypedValue<DataType>[] }
   >();
   private closureMap = new Map<
@@ -54,6 +72,92 @@ export class GenericDataHandler implements IDataHandler {
   >();
   private opaqueMap = new Map<OpaqueIdentifier, { value: unknown; immutable: boolean }>();
   private uniqueId = 0;
+
+  private currentCall: ExprNS.Call | undefined = undefined;
+  private currentSource: string | undefined = undefined;
+
+  private getTypeName<T extends DataType>(type: T, value?: TypedValue<T>): string {
+    switch (type) {
+      case DataType.NUMBER:
+        return "'int' or 'float'";
+      case DataType.CONST_STRING:
+        return "'str'";
+      case DataType.BOOLEAN:
+        return "'bool'";
+      case DataType.VOID:
+      case DataType.EMPTY_LIST:
+        return "'NoneType'";
+      case DataType.INTEGER:
+        return "'int'";
+      case DataType.ARRAY:
+        return this.variant >= 3 ? "'list'" : "'pair'";
+      case DataType.LIST:
+        return "'llist'";
+      case DataType.PAIR:
+        return "'pair'";
+      case DataType.CLOSURE:
+        return "'function'";
+      case DataType.ANY:
+        return "'any'";
+      case DataType.OPAQUE: {
+        if (value === undefined) {
+          return "'opaque'";
+        }
+        const opaque = this.opaqueMap.get(value.value as OpaqueIdentifier);
+        if (!opaque) {
+          return "'opaque'";
+        }
+        const name = opaque.value;
+        if (typeof name === "object" && name !== null && name.constructor.name !== "Object") {
+          return name.constructor.name;
+        }
+        return "'opaque'";
+      }
+    }
+  }
+
+  constructor(public readonly variant: number) {}
+
+  getCurrentModuleName(): string | undefined {
+    return undefined;
+  }
+
+  setCurrentCall(call: ExprNS.Call | undefined): void {
+    this.currentCall = call;
+  }
+
+  /**
+   * Records a generated evaluator's call site.  Unlike the CSE evaluator,
+   * compiled evaluators cannot retain the AST object at runtime, but the
+   * diagnostic code only needs its source span.
+   */
+  setCurrentCallLocation(start: number, end: number): void {
+    const source = this.currentSource;
+    if (!source || start < 0 || end < start || end > source.length) {
+      this.currentCall = undefined;
+      return;
+    }
+    const lineStart = source.lastIndexOf("\n", start - 1) + 1;
+    const line = source.slice(0, lineStart).split("\n").length;
+    this.currentCall = {
+      startToken: { indexInSource: start, line, column: start - lineStart, lexeme: source[start] },
+      endToken: {
+        indexInSource: Math.max(start, end - 1),
+        line,
+        column: Math.max(0, end - 1 - lineStart),
+        lexeme: source.slice(Math.max(start, end - 1), end),
+      },
+    } as unknown as ExprNS.Call;
+  }
+
+  setCurrentSource(source: string | undefined): void {
+    this.currentSource = source;
+    // A call node is meaningful only within the source it came from.  In
+    // persistent evaluators, retaining it across chunks/files would point a
+    // later module-loading error at an unrelated earlier program.
+    this.currentCall = undefined;
+  }
+
   pair_make(
     head: TypedValue<DataType>,
     tail: TypedValue<DataType>,
@@ -78,13 +182,19 @@ export class GenericDataHandler implements IDataHandler {
     if ((p.type as DataType) === DataType.ARRAY) {
       const array = this.arrayMap.get(p.value as unknown as ArrayIdentifier<DataType>);
       if (!array || array.elements.length < 2) {
-        throw new Error(`Invalid pair identifier: ${p.value}`);
+        throw new InvalidIdentifierError(
+          this.currentCall,
+          this.currentSource,
+
+          p.value,
+          "pair",
+        );
       }
       return { kind: "array", array, head: array.elements[0], tail: array.elements[1] };
     }
     const pair = this.pairMap.get(p.value);
     if (!pair) {
-      throw new Error(`Invalid pair identifier: ${p.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, p.value, "pair");
     }
     return { kind: "pair", pair, head: pair.head, tail: pair.tail };
   }
@@ -119,10 +229,22 @@ export class GenericDataHandler implements IDataHandler {
   ): Promise<void> {
     const { head, tail } = this.resolvePairView(p);
     if (headType && head.type !== headType) {
-      throw new Error(`Expected head of type ${headType}, got ${head.type}`);
+      throw new InvalidTypeError(
+        this.currentCall,
+        this.currentSource,
+        "head of",
+        this.getTypeName(headType),
+        this.getTypeName(head.type, head),
+      );
     }
     if (tailType && tail.type !== tailType) {
-      throw new Error(`Expected tail of type ${tailType}, got ${tail.type}`);
+      throw new InvalidTypeError(
+        this.currentCall,
+        this.currentSource,
+        "tail of",
+        this.getTypeName(tailType),
+        this.getTypeName(tail.type, tail),
+      );
     }
     return Promise.resolve();
   }
@@ -131,12 +253,17 @@ export class GenericDataHandler implements IDataHandler {
     len: number,
     init?: TypedValue<NoInfer<T>>,
   ): Promise<TypedValue<DataType.ARRAY, NoInfer<T>>> {
-    const elements = new Array(len).fill(init ?? { type: t, value: undefined }) as TypedValue<
-      NoInfer<T>
-    >[];
+    if (init === undefined && !(t in DEFAULT_VALUES)) {
+      throw new InvalidArrayCreationError(
+        this.currentCall,
+        this.currentSource,
+        this.getTypeName(t),
+      );
+    }
+    const elements = new Array(len).fill(init ?? DEFAULT_VALUES[t as keyof typeof DEFAULT_VALUES]);
     const arrayValue: TypedValue<DataType.ARRAY, NoInfer<T>> = {
       type: DataType.ARRAY,
-      value: this.uniqueId++ as ArrayIdentifier<typeof t>,
+      value: this.uniqueId++ as ArrayIdentifier<T>,
     };
     this.arrayMap.set(arrayValue.value, { type: t, elements });
     return Promise.resolve(arrayValue);
@@ -144,7 +271,7 @@ export class GenericDataHandler implements IDataHandler {
   array_length(a: TypedValue<DataType.ARRAY>): Promise<number> {
     const array = this.arrayMap.get(a.value);
     if (!array) {
-      throw new Error(`Invalid array identifier: ${a.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     return Promise.resolve(array.elements.length);
   }
@@ -159,18 +286,14 @@ export class GenericDataHandler implements IDataHandler {
     const array = this.arrayMap.get(a.value);
 
     if (!array) {
-      throw new Error(`Invalid array identifier: ${a.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
 
     if (idx < 0 || idx >= array.elements.length) {
-      throw new Error(`Index out of bounds: ${idx}`);
+      throw new InvalidIndexError(this.currentCall, this.currentSource, idx, array.elements.length);
     }
 
     const value = array.elements[idx];
-
-    if (!value) {
-      throw new Error(`Missing element at index ${idx}`);
-    }
 
     return Promise.resolve(value);
   }
@@ -178,7 +301,7 @@ export class GenericDataHandler implements IDataHandler {
   array_type<T extends DataType>(a: TypedValue<DataType.ARRAY, T>): Promise<NoInfer<T>> {
     const array = this.arrayMap.get(a.value);
     if (array === undefined) {
-      throw new Error(`Invalid array identifier: ${a.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     return Promise.resolve(array.type as NoInfer<T>);
   }
@@ -192,16 +315,30 @@ export class GenericDataHandler implements IDataHandler {
     idx: number,
     tv: TypedValue<NoInfer<T>>,
   ): Promise<void> {
-    const array = this.arrayMap.get(a.value) as
-      | { type: T; elements: TypedValue<NoInfer<T>>[] }
-      | undefined;
+    const array = this.arrayMap.get(a.value);
 
     if (!array) {
-      throw new Error(`Invalid array identifier: ${a.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
 
     if (idx < 0 || idx >= array.elements.length) {
-      throw new Error(`Index out of bounds: ${idx}`);
+      throw new InvalidIndexError(
+        this.currentCall,
+        this.currentSource,
+        idx,
+        array.elements.length,
+        true,
+      );
+    }
+
+    if (tv.type !== array.type && array.type !== DataType.ANY) {
+      throw new InvalidTypeError(
+        this.currentCall,
+        this.currentSource,
+        `element at index ${idx}'s`,
+        this.getTypeName(array.type),
+        this.getTypeName(tv.type, tv),
+      );
     }
 
     array.elements[idx] = tv;
@@ -215,13 +352,25 @@ export class GenericDataHandler implements IDataHandler {
   ): Promise<void> {
     const array = this.arrayMap.get(a.value);
     if (!array) {
-      throw new Error(`Invalid array identifier: ${a.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, a.value, "array");
     }
     if (type !== undefined && array.type !== type) {
-      throw new Error(`Expected array of type ${type}, got ${array.type}`);
+      throw new InvalidTypeError(
+        this.currentCall,
+        this.currentSource,
+        `array`,
+        this.getTypeName(type),
+        this.getTypeName(array.type),
+      );
     }
     if (length !== undefined && array.elements.length !== length) {
-      throw new Error(`Expected array of length ${length}, got ${array.elements.length}`);
+      throw new InvalidLengthError(
+        this.currentCall,
+        this.currentSource,
+        "array",
+        length,
+        array.elements.length,
+      );
     }
     return Promise.resolve();
   }
@@ -229,12 +378,13 @@ export class GenericDataHandler implements IDataHandler {
     sig: IFunctionSignature<Arg, Ret>,
     func: ExternCallable<Arg, Ret>,
     dependsOn?: (TypedValue<DataType> | null)[],
+    isVararg?: boolean,
   ): Promise<TypedValue<DataType.CLOSURE, Ret>> {
     const closureValue: TypedValue<DataType.CLOSURE, Ret> = {
       type: DataType.CLOSURE,
       value: this.uniqueId++ as ClosureIdentifier<Ret>,
     };
-    this.closureMap.set(closureValue.value, { sig, func, dependsOn });
+    this.closureMap.set(closureValue.value, { sig, func, dependsOn, isVararg });
     return Promise.resolve(closureValue);
   }
   closure_is_vararg(c: TypedValue<DataType.CLOSURE>): Promise<boolean> {
@@ -243,29 +393,82 @@ export class GenericDataHandler implements IDataHandler {
   closure_arity(c: TypedValue<DataType.CLOSURE>): Promise<number> {
     return Promise.resolve(this.closureMap.get(c.value)?.sig.args.length ?? 0);
   }
-  closure_call<T extends DataType>(
+  async *closure_call<T extends DataType>(
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
     returnType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     const closure = this.closureMap.get(c.value);
     if (closure === undefined) {
-      throw new Error(`Invalid closure identifier: ${c.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
-    if (closure.sig.returnType !== returnType) {
-      throw new Error(`Expected return type ${returnType}, got ${closure.sig.returnType}`);
+    if (
+      args.length < closure.sig.args.length ||
+      (!closure.isVararg && args.length > closure.sig.args.length)
+    ) {
+      throw new InvalidArityError(
+        this.currentCall,
+        this.currentSource,
+        closure.sig.args.length,
+        args.length,
+      );
     }
-    return closure.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
+    for (const [i, arg] of args.entries()) {
+      if (i >= closure.sig.args.length) {
+        break;
+      }
+      if (closure.sig.args[i] === DataType.ANY) {
+        continue;
+      }
+      // If the argument is a pair or list type and the return type is an array (or vice-versa), skip for now till we remove the pair type.
+      if (
+        (closure.sig.args[i] === DataType.PAIR || closure.sig.args[i] === DataType.LIST) &&
+        arg.type === DataType.ARRAY
+      ) {
+        continue;
+      }
+      if (closure.sig.args[i] === DataType.ARRAY && arg.type == DataType.PAIR) {
+        continue;
+      }
+      if (!isSameType(arg.type, closure.sig.args[i])) {
+        throw new InvalidTypeError(
+          this.currentCall,
+          this.currentSource,
+          `argument ${i}`,
+          this.getTypeName(closure.sig.args[i]),
+          this.getTypeName(arg.type, arg),
+        );
+      }
+    }
+    const result = yield* closure.func(...args);
+    if (
+      result.type !== returnType &&
+      returnType !== DataType.ANY &&
+      !(
+        (returnType === DataType.PAIR || returnType === DataType.LIST) &&
+        result.type === DataType.ARRAY
+      ) &&
+      !(returnType === DataType.ARRAY && result.type === DataType.PAIR)
+    ) {
+      throw new InvalidTypeError(
+        this.currentCall,
+        this.currentSource,
+        "return",
+        this.getTypeName(returnType),
+        this.getTypeName(result.type, result),
+      );
+    }
+    return result as TypedValue<NoInfer<T>>;
   }
-  closure_call_unchecked<T extends DataType>(
+  async *closure_call_unchecked<T extends DataType>(
     c: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     const closure = this.closureMap.get(c.value);
     if (closure === undefined) {
-      throw new Error(`Invalid closure identifier: ${c.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
-    return closure.func(...args) as AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined>;
+    return (yield* closure.func(...args)) as TypedValue<NoInfer<T>>;
   }
   /**
    * Fast path for a closure that provably never needs to leave the current
@@ -300,10 +503,15 @@ export class GenericDataHandler implements IDataHandler {
   closure_arity_assert(c: TypedValue<DataType.CLOSURE>, arity: number): Promise<void> {
     const closure = this.closureMap.get(c.value);
     if (!closure) {
-      throw new Error(`Invalid closure identifier: ${c.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, c.value, "closure");
     }
     if (closure.sig.args.length !== arity && !closure.isVararg) {
-      throw new Error(`Expected closure of arity ${arity}, got ${closure.sig.args.length}`);
+      throw new InvalidArityError(
+        this.currentCall,
+        this.currentSource,
+        arity,
+        closure.sig.args.length,
+      );
     }
     return Promise.resolve();
   }
@@ -318,17 +526,17 @@ export class GenericDataHandler implements IDataHandler {
   opaque_get(o: TypedValue<DataType.OPAQUE>): Promise<unknown> {
     const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
-      throw new Error(`Invalid opaque identifier: ${o.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, o.value, "opaque");
     }
     return Promise.resolve(opaque.value);
   }
   opaque_update(o: TypedValue<DataType.OPAQUE>, v: unknown): Promise<void> {
     const opaque = this.opaqueMap.get(o.value);
     if (!opaque) {
-      throw new Error(`Invalid opaque identifier: ${o.value}`);
+      throw new InvalidIdentifierError(this.currentCall, this.currentSource, o.value, "opaque");
     }
     if (opaque.immutable) {
-      throw new Error(`Cannot update immutable opaque value with identifier: ${o.value}`);
+      throw new InvalidOpaqueUpdateError(this.currentCall, this.currentSource, o.value);
     }
     opaque.value = v;
     return Promise.resolve();
@@ -364,7 +572,13 @@ export class GenericDataHandler implements IDataHandler {
     if (xs.type === DataType.ARRAY) {
       const array = this.arrayMap.get(xs.value);
       if (!array) {
-        throw new Error(`Invalid array identifier: ${xs.value}`);
+        throw new InvalidIdentifierError(
+          this.currentCall,
+          this.currentSource,
+
+          xs.value,
+          "array",
+        );
       }
       return array.elements;
     }
@@ -372,11 +586,24 @@ export class GenericDataHandler implements IDataHandler {
     let current: TypedValue<DataType> = xs;
     while (current.type !== DataType.EMPTY_LIST) {
       if (current.type !== DataType.PAIR) {
-        throw new Error(`Expected a list, got type ${current.type}`);
+        throw new InvalidTypeError(
+          this.currentCall,
+          this.currentSource,
+
+          "a list",
+          this.getTypeName(DataType.LIST),
+          this.getTypeName(current.type, current),
+        );
       }
       const pair = this.pairMap.get(current.value);
       if (!pair) {
-        throw new Error(`Invalid pair identifier: ${current.value}`);
+        throw new InvalidIdentifierError(
+          this.currentCall,
+          this.currentSource,
+
+          current.value,
+          "pair",
+        );
       }
       result.push(pair.head);
       current = pair.tail;
@@ -398,15 +625,15 @@ export class GenericDataHandler implements IDataHandler {
       return Promise.reject(e);
     }
   }
-  async *accumulate<T extends Exclude<DataType, DataType.VOID>>(
+  async *accumulate<T extends DataType>(
     op: TypedValue<DataType.CLOSURE, T>,
     initial: TypedValue<T>,
     sequence: TypedValue<DataType.LIST>,
-    _resultType: T,
+    resultType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     let acc = initial;
     for (const element of this.readListElements(sequence)) {
-      acc = yield* this.closure_call_unchecked(op, [acc, element]);
+      acc = yield* this.closure_call(op, [acc, element], resultType);
     }
     return acc;
   }

@@ -663,7 +663,7 @@ const cmdEvaluators: CmdEvaluators = {
   Call: function (
     _code: string,
     callNode: ExprNS.Call,
-    _context: Context,
+    context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
@@ -1190,6 +1190,10 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    // This is the point at which the call is actually applied.  Recording it
+    // while merely scheduling its children made a nested argument call leak
+    // into the outer call's module-interface error.
+    context.evaluator?.setCurrentCall(instr.srcNode);
     // Tail-Call Optimisation
     const topElement = control.peek();
     let shouldPushEnvInstr = true;
@@ -1311,7 +1315,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (idx < -length || idx >= length) {
       handleRuntimeError(
         context,
-        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, length, false),
+        new error.IndexError(code, instr.srcNode as ExprNS.Expr, idx, length, false),
       );
     }
     const wrappedIdx = idx < 0 ? idx + length : idx;

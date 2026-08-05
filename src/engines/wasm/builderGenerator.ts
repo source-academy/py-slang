@@ -356,7 +356,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         wasm
           .import("modules", "call")
           .func("$_host_module_call")
-          .params(i32, i32, i32)
+          .params(i32, i32, i32, i32, i32)
           .results(i32, i64),
       )
       .globals(
@@ -704,6 +704,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       ),
 
       /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
+      i32.const(expr.startToken.indexInSource),
+      i32.const(expr.endToken.indexInSource + expr.endToken.lexeme.length),
     );
   }
 

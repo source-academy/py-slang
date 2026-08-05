@@ -51,11 +51,11 @@
  * through callSync — see compiler.ts's mode documentation.
  */
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
-import { numericCompare, pythonMod } from "../cse/utils";
-import type { ListValue, Value } from "../cse/stash";
 import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 import { stringify } from "../../utils/stringify";
+import type { ListValue, Value } from "../cse/stash";
+import { numericCompare, pythonMod } from "../cse/utils";
 
 export type PyValue =
   | bigint
@@ -546,6 +546,14 @@ export class Py2JsRuntime {
    * sites are unaffected; index.ts passes `variant >= 3` explicitly.
    */
   constructor(public readonly universalEquality: boolean = false) {}
+
+  /** Installed by Py2JsSession so generated code can report its active call
+   * site to the shared module data handler. */
+  onCurrentCall?: (start: number, end: number) => void;
+
+  setCurrentCall(start: number, end: number): void {
+    this.onCurrentCall?.(start, end);
+  }
 
   /**
    * True while `setupRuntime` (index.ts) is executing a stdlib group's

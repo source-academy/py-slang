@@ -13,9 +13,10 @@
  * python_typing_back.tex), pinned against the CSE machine by
  * src/tests/operator-conformance-py2js.test.ts.
  */
-import { IDataHandler } from "@sourceacademy/conductor/types";
 import type { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
+import { StmtNS } from "../../ast-types";
 import { GenericDataHandler } from "../../conductor/GenericDataHandler";
+import { bundleLocalImports } from "../../modules/localImports";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
 import linkedList from "../../stdlib/linked-list";
@@ -27,8 +28,6 @@ import parser from "../../stdlib/parser";
 import stream from "../../stdlib/stream";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
-import { StmtNS } from "../../ast-types";
-import { bundleLocalImports } from "../../modules/localImports";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
 import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
@@ -420,7 +419,7 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * and the ModuleLoaderRunnerPlugin registration (they must be the same
    * object — see PyCseEvaluatorBase for the identical requirement).
    */
-  dataHandler?: IDataHandler;
+  dataHandler?: GenericDataHandler;
   /**
    * Resolves one input() call with what the user typed — forwarded to
    * Py2JsRuntime.requestInput (see runtime.ts's doc comment on the field).
@@ -470,7 +469,7 @@ export class Py2JsSession {
   readonly rt: Py2JsRuntime;
   private readonly variant: number;
   private readonly groups: Group[];
-  private readonly dataHandler: IDataHandler;
+  private readonly dataHandler: GenericDataHandler;
   /** Every chunk this session runs is resolved as if it were this path's own
    * content, for the purposes of relative-import resolution (what directory
    * "." means). Mutable: the conductor evaluator doesn't learn the real
@@ -496,10 +495,11 @@ export class Py2JsSession {
     }
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
-    this.dataHandler = options.dataHandler ?? new GenericDataHandler();
+    this.dataHandler = options.dataHandler ?? new GenericDataHandler(variant);
     this.entrypointFilePath = options.entrypointFilePath ?? "/main.py";
     this.fileGetter = toFileGetter(options);
     this.rt = new Py2JsRuntime(variant >= 3);
+    this.rt.onCurrentCall = (start, end) => this.dataHandler.setCurrentCallLocation(start, end);
     this.rt.onOutput = options.onOutput;
     this.rt.onPendingWorkChange = options.onPendingWorkChange;
     this.rt.requestInput = options.requestInput;
@@ -582,6 +582,11 @@ export class Py2JsSession {
       );
       ast = parse(script);
     }
+
+    // Local imports may have expanded this into a different source string.
+    // The active call spans below are offsets into this final script, not the
+    // entry file's original text.
+    this.dataHandler.setCurrentSource(script);
 
     // __program__ is simply "the single string Python program that gets
     // compiled to JS" — set here, unconditionally, from whatever that

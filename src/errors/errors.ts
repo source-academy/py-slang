@@ -128,7 +128,6 @@ export class IndexError extends RuntimeSourceError {
   constructor(
     source: string,
     node: ExprNS.Expr | StmtNS.Stmt,
-    context: Context,
     index: number,
     length: number,
     isAssignment = false,
