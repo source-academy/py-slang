@@ -122,6 +122,18 @@ function hasLocalImports(statements: StmtNS.Stmt[]): boolean {
   return statements.some(s => s.kind === "FromImport" && (s as StmtNS.FromImport).level > 0);
 }
 
+/** Formats a caught error for Py2JsRunError's message: `${e.name}: ${e.message}`, except
+ * a Py2JsRuntimeError's own .message already starts with its own kind as a literal string
+ * (stdlibBridge.ts's error-kind prefixing, py-slang#397) — re-adding e.name in front of an
+ * already-prefixed message would double it ("TypeError: TypeError: ..."). Detected from the
+ * message's own text (any leading "Word: "), not by comparing against e.name — e.name is
+ * ultimately sourced from e.constructor.name (stdlibBridge.ts), which a minified production
+ * build mangles, while the literal "TypeError: " etc. baked into the message text survives. */
+function formatCaughtError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  return /^[A-Za-z]+: /.test(e.message) ? e.message : `${e.name}: ${e.message}`;
+}
+
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
   ...args: string[]
 ) => (rt: Py2JsRuntime) => Promise<void>;
@@ -235,13 +247,16 @@ function setupRuntime(
     .join("\n");
   if (preludeText.trim()) {
     const preludeJs = compileScript(rt, preludeText + "\n", variant, "sync");
+    // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — lets a
+    // bridged builtin's error name the predefined function it happened inside of
+    // (py-slang#397), e.g. tail() failing inside map()'s own _map helper.
+    rt.compilingPrelude = true;
     try {
       new Function("__py", preludeJs)(rt);
     } catch (e: unknown) {
-      throw new Py2JsRunError(
-        "runtime",
-        e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-      );
+      throw new Py2JsRunError("runtime", formatCaughtError(e));
+    } finally {
+      rt.compilingPrelude = false;
     }
   }
 
@@ -353,7 +368,7 @@ export function runCodePy2Js(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
     );
   }
   return { output: rt.output.join("") };
@@ -377,7 +392,7 @@ export async function runCodePy2JsDual(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
     );
   }
   return { output: rt.output.join("") };
@@ -530,7 +545,19 @@ export class Py2JsSession {
         .map(g => g.prelude ?? "")
         .filter(p => p.trim())
         .join("\n");
-      if (preludeText.trim()) await this.runChunkInternal(preludeText);
+      if (preludeText.trim()) {
+        // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — the
+        // Py2JsSession analogue of setupRuntime's identical wrapping around its own,
+        // separate prelude-loading call above. Without this, a bridged builtin's error
+        // can never name the predefined function it happened inside of (py-slang#397)
+        // for any conductor-evaluator session, since that's the only path they use.
+        this.rt.compilingPrelude = true;
+        try {
+          await this.runChunkInternal(preludeText);
+        } finally {
+          this.rt.compilingPrelude = false;
+        }
+      }
     }
     await this.runChunkInternal(code);
   }

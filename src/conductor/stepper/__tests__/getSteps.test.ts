@@ -288,9 +288,108 @@ describe("Python stepper — built-in functions and constants", () => {
     expect((await explanations("math_sqrt")).pop()).toBe("Evaluation complete");
   });
 
-  test("unsupported/interactive builtins stay stuck", async () => {
-    // random_random / time_time / input are intentionally not modelled by the stepper.
+  test("unsupported interactive builtins stay stuck", async () => {
+    // random_random / time_time are intentionally not modelled by the stepper — unlike input()
+    // (py-slang#191, see the "input()" describe block below), there's no real host capability for
+    // "the current time"/"a random number" to round-trip through, so these stay genuinely absent
+    // rather than degrading gracefully for a missing capability.
     expect((await explanations("random_random()")).pop()).toBe("Evaluation stuck");
+  });
+
+  test("input() with no requestInput wired up degrades to stuck, not a hard error", async () => {
+    // Mirrors an unresolved ModuleFunction call with no evaluator: the name resolves fine (input is
+    // in the preprocessing vocabulary — see getAvailableBuiltinNames), but actually placing the call
+    // has nothing to round-trip through, so it simply doesn't finish — the same honest degrade as
+    // the interactive builtins above, not the hard "not defined" error a missing module import gets
+    // (an import is always resolvable in principle; a host with no requestInput wired up is a real,
+    // if unusual, configuration, not a student mistake).
+    expect((await explanations('input("name? ")')).pop()).toBe("Evaluation stuck");
+  });
+
+  test("a bare 'input' name is a value (complete, not stuck)", async () => {
+    expect((await explanations("input")).pop()).toBe("Evaluation complete");
+  });
+});
+
+describe("Python stepper — input() (py-slang#191)", () => {
+  test("resolves the mocked answer as a Python string, and evaluation completes", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("Ada"));
+    const ast = parse('input("Write your string here: ")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(allSteps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+    expect(requestInput).toHaveBeenCalledWith("Write your string here: ");
+  });
+
+  test("the answer is usable like any other string — printed, concatenated", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("Ada"));
+    const ast = parse('print(input("Write your string here: "))\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    // Output is cumulative (see "cumulative print output per step" above), so the prompt itself is
+    // still there ahead of the print's own output.
+    expect((allSteps.at(-1) as { output?: string } | undefined)?.output).toBe(
+      "Write your string here: Ada\n",
+    );
+  });
+
+  test("the prompt appears as this call's own output, with no trailing newline (unlike print)", async () => {
+    // Matches CPython's input(prompt): the prompt is written to stdout exactly as given, with no
+    // newline appended — the answer that follows is expected on the same line in a real terminal.
+    // Mirrors the CSE machine's own displayOutput(context, prompt) call — see streams.ts.
+    const requestInput = jest.fn(() => Promise.resolve("answer"));
+    const ast = parse('input("Name: ")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    const ranStep = allSteps.find(s => s.markers?.[0]?.explanation === "Ran input");
+    expect(ranStep).toBeDefined();
+    expect((ranStep as unknown as { output?: string }).output).toBe("Name: ");
+  });
+
+  test("input() with no argument writes nothing and calls requestInput with undefined", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("hi"));
+    const ast = parse("input()\n");
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(requestInput).toHaveBeenCalledWith(undefined);
+    expect(allSteps.some(s => (s as { output?: string }).output)).toBe(false);
+  });
+
+  test("a non-string prompt is converted via str() before being sent", async () => {
+    const requestInput = jest.fn(() => Promise.resolve(""));
+    await getPythonSteps(parse("input(5)\n"), undefined, { requestInput });
+    expect(requestInput).toHaveBeenCalledWith("5");
+  });
+
+  test("multiple input() calls are answered in program order, one prompt per call", async () => {
+    const answers = ["Ada", "Grace"];
+    const requestInput = jest.fn(() => Promise.resolve(answers.shift()!));
+    const ast = parse('x = input("first: ")\ny = input("second: ")\nx + y\n');
+    expect(await evaluatePython(ast, undefined, { requestInput })).toBe("'AdaGrace'");
+    expect(requestInput).toHaveBeenNthCalledWith(1, "first: ");
+    expect(requestInput).toHaveBeenNthCalledWith(2, "second: ");
+  });
+
+  test("wrong arity is a proper TypeError, and never reaches requestInput", async () => {
+    const requestInput = jest.fn();
+    const ast = parse('input("a", "b")\n');
+    const allSteps = await getPythonSteps(ast, undefined, { requestInput });
+    expect(allSteps.at(-2)?.markers?.[0]?.explanation).toBe(
+      "TypeError: input() takes 0 to 1 argument(s) but 2 were given",
+    );
+    expect(allSteps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+    expect(requestInput).not.toHaveBeenCalled();
+  });
+
+  test("aliasing works, like every other built-in: p = input; p(...)", async () => {
+    const requestInput = jest.fn(() => Promise.resolve("aliased"));
+    const ast = parse('p = input\np("prompt")\n');
+    expect(await evaluatePython(ast, undefined, { requestInput })).toBe("'aliased'");
+    expect(requestInput).toHaveBeenCalledWith("prompt");
+  });
+
+  test("arity(input) is 0 (an optional prompt, like print's own optional arguments)", async () => {
+    expect(await evaluatePython(parse("arity(input)\n"))).toBe("0");
+  });
+
+  test("is_function(input) is True", async () => {
+    expect(await evaluatePython(parse("is_function(input)\n"))).toBe("True");
   });
 });
 
@@ -1877,7 +1976,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       physics: [{ symbol: "GRAVITY", value: { type: DataType.NUMBER, value: 9.8 } }],
     });
     const ast = parse("from physics import GRAVITY\nGRAVITY * 2\n");
-    expect(await evaluatePython(ast, dh)).toBe("19.6");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("19.6");
   });
 
   test("a function export is called through, sync-fast-path or not, and its result is usable", async () => {
@@ -1894,7 +1993,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
     const ast = parse("from mathmod import double\ndouble(21) + 1\n");
-    expect(await evaluatePython(ast, dh)).toBe("43.0");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("43.0");
   });
 
   test("an opaque return value completes the program (renders as its label, never inspected)", async () => {
@@ -1913,14 +2012,14 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     // getPythonSteps directly here, as every test in this describe block does, is what actually wires
     // `dh` in.
     const ast = parse("from visualmod import make_thing\nmake_thing()\n");
-    const stepped = await getPythonSteps(ast, undefined, dh);
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
     expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
     const last = stepped.at(-1)!.ast as unknown as { body: unknown[] };
     expect(last.body).toEqual([]); // the opaque value was discarded like any other statement value
 
     // A *used* opaque value (assigned, not just created-and-discarded) renders as its label.
     const usedAst = parse("from visualmod import make_thing\nx = make_thing()\nx\n");
-    const usedSteps = await getPythonSteps(usedAst, undefined, dh);
+    const usedSteps = await getPythonSteps(usedAst, undefined, { evaluator: dh });
     const withOpaque = usedSteps.find(s => findNode(s.ast, (n: any) => n.type === "Opaque"));
     expect(withOpaque).toBeDefined();
     const opaqueNode = findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
@@ -1962,7 +2061,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const ast = parse(
       "from visualmod import make_thing, is_same_thing\nis_same_thing(make_thing())\n",
     );
-    expect(await evaluatePython(ast, dh)).toBe("True");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("True");
 
     // Bound to a name first, not nested directly as a call argument: `x`'s value substitutes into
     // `is_same_thing(x)` via `substitute`'s Identifier case, which — unlike the direct-nesting form
@@ -1975,7 +2074,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const boundAst = parse(
       "from visualmod import make_thing, is_same_thing\nx = make_thing()\nis_same_thing(x)\n",
     );
-    expect(await evaluatePython(boundAst, dh)).toBe("True");
+    expect(await evaluatePython(boundAst, undefined, { evaluator: dh })).toBe("True");
   });
 
   test("arity() reports an imported function's real parameter count", async () => {
@@ -1990,7 +2089,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "add", value: add }] });
     const ast = parse("from mathmod import add\narity(add)\n");
-    expect(await evaluatePython(ast, dh)).toBe("2");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("2");
   });
 
   test("calling an imported function with the wrong arity is a Python-style TypeError, not a native crash", async () => {
@@ -2005,7 +2104,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
     const ast = parse("from mathmod import double\ndouble(1, 2)\n");
-    const steps = await getPythonSteps(ast, undefined, dh);
+    const steps = await getPythonSteps(ast, undefined, { evaluator: dh });
     const secondLast = steps.at(-2);
     expect(secondLast?.markers?.[0]?.explanation).toBe(
       "TypeError: double() takes 1 argument(s) but 2 were given",
@@ -2028,7 +2127,7 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
     const ast = parse("from hofmod import apply\napply(lambda x: x)\n");
-    const steppedResult = await getPythonSteps(ast, undefined, dh);
+    const steppedResult = await getPythonSteps(ast, undefined, { evaluator: dh });
     expect(steppedResult.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
   });
 
@@ -2036,13 +2135,13 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const dh = new GenericDataHandler();
     installFakeModule({});
     const ast = parse("from nosuchmodule import x\nx\n");
-    await expect(getPythonSteps(ast, undefined, dh)).rejects.toThrow(/not found/i);
+    await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(/not found/i);
 
     // The loader's own rejection reason survives as `cause`, not just the generic "not found" text —
     // see moduleInterop.ts's resolveImports.
     let caught: unknown;
     try {
-      await getPythonSteps(parse("from nosuchmodule import x\nx\n"), undefined, dh);
+      await getPythonSteps(parse("from nosuchmodule import x\nx\n"), undefined, { evaluator: dh });
     } catch (error) {
       caught = error;
     }
@@ -2058,6 +2157,8 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       mathmod: [{ symbol: "double", value: { type: DataType.NUMBER, value: 1 } }],
     });
     const ast = parse("from mathmod import triple\ntriple\n");
-    await expect(getPythonSteps(ast, undefined, dh)).rejects.toThrow(/cannot import name 'triple'/);
+    await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(
+      /cannot import name 'triple'/,
+    );
   });
 });
