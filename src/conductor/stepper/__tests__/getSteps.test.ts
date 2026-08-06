@@ -2058,16 +2058,17 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(opaqueNode.dataUrl).toBe("data:image/png;base64,AAAA");
   });
 
-  test("a thumbnail hook that throws or resolves to a non-string degrades to no dataUrl, not a stepper fault", async () => {
+  /** Runs a program returning a single opaque `Broken` value whose thumbnail hook is `hookImpl`,
+   * and returns the resulting `Opaque` step node — shared by the "throws" and "non-string result"
+   * cases below, which differ only in `hookImpl`. */
+  async function stepBrokenOpaqueHook(hookImpl: () => unknown) {
     const dh = new GenericDataHandler(2);
     class Broken {}
     async function* makeBrokenFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
       const broken = new Broken();
       Object.defineProperty(broken, RENDER_THUMBNAIL_SYMBOL, {
-        value: () => {
-          throw new Error("rendering failed");
-        },
+        value: hookImpl,
         enumerable: false,
         configurable: true,
       });
@@ -2081,7 +2082,19 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     const ast = parse("from visualmod import make_broken\nx = make_broken()\nx\n");
     const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
     const withOpaque = stepped.find(s => findNode(s.ast, (n: any) => n.type === "Opaque"));
-    const opaqueNode = findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
+    return findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
+  }
+
+  test("a thumbnail hook that throws degrades to no dataUrl, not a stepper fault", async () => {
+    const opaqueNode = await stepBrokenOpaqueHook(() => {
+      throw new Error("rendering failed");
+    });
+    expect(opaqueNode.label).toBe("Broken");
+    expect(opaqueNode.dataUrl).toBeUndefined();
+  });
+
+  test("a thumbnail hook that resolves to a non-string degrades to no dataUrl, not a stepper fault", async () => {
+    const opaqueNode = await stepBrokenOpaqueHook(() => Promise.resolve(42));
     expect(opaqueNode.label).toBe("Broken");
     expect(opaqueNode.dataUrl).toBeUndefined();
   });

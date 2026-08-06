@@ -83,9 +83,11 @@ const RENDER_THUMBNAIL_SYMBOL = Symbol.for("source-academy.stepper.renderThumbna
  */
 async function renderThumbnail(payload: unknown): Promise<string | undefined> {
   if (payload === null || typeof payload !== "object") return undefined;
-  const hook = (payload as Record<symbol, unknown>)[RENDER_THUMBNAIL_SYMBOL];
-  if (typeof hook !== "function") return undefined;
   try {
+    // The property read itself, not just the call, is inside the try: a throwing getter or Proxy
+    // trap on this key is just as much "a broken thumbnail" as a throwing hook function.
+    const hook = (payload as Record<symbol, unknown>)[RENDER_THUMBNAIL_SYMBOL];
+    if (typeof hook !== "function") return undefined;
     const result = await (hook as () => unknown)();
     return typeof result === "string" ? result : undefined;
   } catch {
