@@ -978,6 +978,23 @@ describe("Python stepper — a built-in used as a bare value displays as Builtin
       s.some(step => findNode(step.ast, n => n.type === "FunctionDeclaration" && n.name === "print")),
     ).toBe(true);
   });
+
+  test("a later sibling statement referencing a not-yet-declared shadowing name is never mislabelled, even at step 0", async () => {
+    // At "Start of evaluation" nothing has been substituted yet, so a generic child-by-child walk would
+    // have no way to know the second statement's `print` is about to be shadowed by the first — see
+    // markBuiltins's doc comment on why Program/BlockStatement are walked left to right instead.
+    const s = await steps("def print(x):\n  return is_function(print)\nprint(1)");
+    expect(s[0].markers?.[0]?.explanation).toBe("Start of evaluation");
+    expect(findNode(s[0].ast, n => n.type === "Builtin" && n.name === "print")).toBeUndefined();
+  });
+
+  test("a VariableDeclaration's own declared name is never mislabelled, even before its declaring statement is processed", async () => {
+    // Two distinct risks in one program: `print` shadowed by a local assignment (not a `def`), and that
+    // shadowing happening *inside* a function body, both checked at step 0 (nothing substituted yet).
+    const s = await steps("def f():\n  print = 5\n  return print\nf()");
+    expect(s[0].markers?.[0]?.explanation).toBe("Start of evaluation");
+    expect(findNode(s[0].ast, n => n.type === "Builtin" && n.name === "print")).toBeUndefined();
+  });
 });
 
 describe("Python stepper — pairs and linked lists (Python §2)", () => {

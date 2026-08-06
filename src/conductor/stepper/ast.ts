@@ -374,6 +374,18 @@ export interface MarkedBuiltins {
  * resolved by live substitution before any step is ever displayed — see the module doc comment on
  * `getSteps.ts`), a function value's body is opaque, un-substituted cargo until the function is actually
  * called, so a name shadowed there is not yet resolved away the way a top-level binding already is.
+ *
+ * The same forward-looking care applies *within* a single, still-unreduced statement list: at the very
+ * first ("Start of evaluation") step, `def print(x): ...\nprint(1)` has not been touched by any
+ * substitution yet, so nothing has *removed* the later `print(1)` from view the way it eventually will.
+ * A generic child-by-child walk (as `mapChildren`'s default case does for every other node type) would
+ * treat that `print` exactly like any free `Identifier`, unaware that the sibling statement two lines up
+ * is about to shadow it — the same walk correctly leaves the *def's own* self-reference alone (that's
+ * `bound`, above) but has no way to know a *sibling* statement changes anything, since siblings are
+ * mapped independently. `Program`/`BlockStatement` are special-cased below to walk their `body` array
+ * left to right, adding each statement's own declared name (a `def`'s name, or a `x = ...` target) to
+ * `bound` *before* walking the statements after it — simulating, for display, the same shadowing
+ * `stepHead`'s actual declare-and-substitute step will produce once reduction actually gets there.
  */
 export function markBuiltins(
   node: StepNode,
@@ -406,12 +418,48 @@ export function markBuiltins(
         const body = walk(node.body as StepNode, inner);
         return record(body === node.body ? node : { ...node, body });
       }
+      case "VariableDeclaration": {
+        // Mirrors `substitute`'s own "VariableDeclarator" case: only `init` is a reference position —
+        // `id` is the declaration's own target, never something to relabel (matching how a
+        // `FunctionDeclaration`'s `id` is likewise never walked, just above).
+        const decl = (node.declarations as StepNode[])[0];
+        const init = walk(decl.init as StepNode, bound);
+        if (init === decl.init) return record(node);
+        return record({ ...node, declarations: [{ ...decl, init }] });
+      }
+      case "Program":
+      case "BlockStatement": {
+        const scoped = new Set(bound);
+        let changed = false;
+        const newBody = (node.body as StepNode[]).map(stmt => {
+          const walked = walk(stmt, scoped);
+          if (walked !== stmt) changed = true;
+          const declared = declaredNameOf(stmt);
+          if (declared !== undefined) scoped.add(declared);
+          return walked;
+        });
+        return record(changed ? { ...node, body: newBody } : node);
+      }
       default:
         return record(mapChildren(node, child => walk(child, bound)));
     }
   };
 
   return { ast: walk(node, new Set()), correspondence };
+}
+
+/** The name a statement introduces that becomes visible to *later* statements in the same
+ * `Program`/`BlockStatement` — a `def`'s own name, or a `x = ...` assignment's target — for
+ * {@link markBuiltins}'s `Program`/`BlockStatement` case. `undefined` for anything else (an expression
+ * statement, `if`, `pass`, `return`, `import` — an import is already fully resolved throughout the whole
+ * program before stepping begins, see `getSteps.ts`'s `resolveImports`, so it never reaches here). */
+function declaredNameOf(stmt: StepNode): string | undefined {
+  if (stmt.type === "FunctionDeclaration") return String((stmt.id as StepNode).name);
+  if (stmt.type === "VariableDeclaration") {
+    const id = (stmt.declarations as StepNode[])[0].id as StepNode;
+    if (id.type === "Identifier") return String(id.name);
+  }
+  return undefined;
 }
 
 /* -------------------------------------------------------------------------- */
