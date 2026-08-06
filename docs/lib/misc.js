@@ -158,9 +158,9 @@ function is_number(x) { }
 function is_string(x) { }
 
 /**
- * Return the length of an object <CODE>s</CODE>, where <CODE>s</CODE> is a container for a finite number of values (e.g., a string).
+ * Return the length of <CODE>s</CODE>, where <CODE>s</CODE> is a list or a string.
  *
- * @param {string | list} <CODE>s</CODE> - a container object whose length is to be computed
+ * @param {string | list} <CODE>s</CODE> - a list or a string whose length is to be computed
  * @returns {int} the length of <CODE>s</CODE>
  */
 function len(s) { }
