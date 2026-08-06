@@ -145,17 +145,16 @@ async function drive(
     // Apply this contraction's output (only a `print` produces any) so the after step and everything
     // after it show it, while the before ("Running print") step above still shows the prior total.
     if (result.output !== undefined) output += result.output;
-    pushStep(
-      // `postNode` (set by a contraction that discards a finished value — see its doc comment on
-      // `ReduceResult`) is the tree to *display* here; `current` still advances via `result.node` below,
-      // regardless, so the discarded statement is actually gone by the next contraction.
-      result.postNode ?? result.node,
-      [
-        result.postRedex
-          ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
-          : { redexType: "afterMarker", explanation: result.explanation },
-      ],
-    );
+    // The after step's tree is always `result.node` — identical to the next iteration's `current`
+    // (pushed above as its own before step) — see `ReduceResult.node`'s doc comment on this invariant.
+    // `postRedex` only highlights something when the redex was replaced in place by a surviving value;
+    // a contraction that discards its redex outright (see `ReduceResult.postRedex`'s doc comment)
+    // leaves it unset, so the after step shows the tree with no highlight at all.
+    pushStep(result.node, [
+      result.postRedex
+        ? { redex: result.postRedex, redexType: "afterMarker", explanation: result.explanation }
+        : { redexType: "afterMarker", explanation: result.explanation },
+    ]);
 
     current = result.node;
     if (i === contractionLimit - 1) {
