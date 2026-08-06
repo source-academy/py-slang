@@ -2024,6 +2024,66 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(withOpaque).toBeDefined();
     const opaqueNode = findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
     expect(opaqueNode.label).toBe("Thing");
+    // No thumbnail hook attached — `dataUrl` stays unset so the host falls back to `<label>`.
+    expect(opaqueNode.dataUrl).toBeUndefined();
+  });
+
+  // The global-registry symbol a module attaches a stepper-thumbnail render hook under — mirrors
+  // `moduleInterop.ts`'s own `RENDER_THUMBNAIL_SYMBOL` (and modules-lib's, which defines the actual
+  // cross-repo convention); redeclared here, not imported, for the same reason `moduleInterop.ts`
+  // hardcodes it — see source-academy/modules's
+  // `docs/src/modules/5-advanced/conductor-interop/6-opaque-thumbnails.md`.
+  const RENDER_THUMBNAIL_SYMBOL = Symbol.for("source-academy.stepper.renderThumbnail");
+
+  test("an opaque value with a thumbnail hook renders with its dataUrl set", async () => {
+    const dh = new GenericDataHandler(2);
+    class Rune {}
+    async function* makeRuneFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      const rune = new Rune();
+      Object.defineProperty(rune, RENDER_THUMBNAIL_SYMBOL, {
+        value: () => Promise.resolve("data:image/png;base64,AAAA"),
+        enumerable: false,
+        configurable: true,
+      });
+      return dh.opaque_make(rune);
+    }
+    const makeRune = await dh.closure_make({ returnType: DataType.OPAQUE, args: [] }, makeRuneFunc);
+    installFakeModule({ visualmod: [{ symbol: "make_rune", value: makeRune }] });
+    const ast = parse("from visualmod import make_rune\nx = make_rune()\nx\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    const withOpaque = stepped.find(s => findNode(s.ast, (n: any) => n.type === "Opaque"));
+    const opaqueNode = findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
+    expect(opaqueNode.label).toBe("Rune");
+    expect(opaqueNode.dataUrl).toBe("data:image/png;base64,AAAA");
+  });
+
+  test("a thumbnail hook that throws or resolves to a non-string degrades to no dataUrl, not a stepper fault", async () => {
+    const dh = new GenericDataHandler(2);
+    class Broken {}
+    async function* makeBrokenFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      const broken = new Broken();
+      Object.defineProperty(broken, RENDER_THUMBNAIL_SYMBOL, {
+        value: () => {
+          throw new Error("rendering failed");
+        },
+        enumerable: false,
+        configurable: true,
+      });
+      return dh.opaque_make(broken);
+    }
+    const makeBroken = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [] },
+      makeBrokenFunc,
+    );
+    installFakeModule({ visualmod: [{ symbol: "make_broken", value: makeBroken }] });
+    const ast = parse("from visualmod import make_broken\nx = make_broken()\nx\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    const withOpaque = stepped.find(s => findNode(s.ast, (n: any) => n.type === "Opaque"));
+    const opaqueNode = findNode(withOpaque!.ast, (n: any) => n.type === "Opaque");
+    expect(opaqueNode.label).toBe("Broken");
+    expect(opaqueNode.dataUrl).toBeUndefined();
   });
 
   test("an opaque value round-trips: one module call's result passed into another", async () => {

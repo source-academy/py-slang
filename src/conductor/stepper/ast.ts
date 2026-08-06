@@ -40,9 +40,10 @@ export function literal(value: unknown, raw: string, pyFloat = false): StepNode 
  * `"Rune"`; `"opaque"` if that isn't available) shown as `<label>` — see {@link unparse}'s `"Opaque"`
  * case. `handle` is the underlying `TypedValue<DataType.OPAQUE>` (kept as `unknown` here so `ast.ts`
  * stays free of any conductor-specific type — `moduleInterop.ts` does the casting). `dataUrl` is an
- * optional rendered thumbnail a module may supply (see source-academy/modules#879); unset until a
- * module opts into that convention, and not yet rendered by the host — reserved here so the field
- * survives `substitute`/`clone` (both copy unknown fields structurally) once host rendering catches up.
+ * optional rendered thumbnail a module may supply (see `moduleInterop.ts`'s `renderThumbnail`, and
+ * source-academy/modules's `docs/src/modules/5-advanced/conductor-interop/6-opaque-thumbnails.md`);
+ * absent when the payload carries no thumbnail hook, or the hook produced nothing. `syntaxProfile.ts`'s
+ * `"Opaque"` template renders it as an inline image when present, falling back to `<label>` otherwise.
  */
 export function opaqueValue(label: string, handle: unknown, dataUrl?: string): StepNode {
   const node: StepNode = { type: "Opaque", label, handle };

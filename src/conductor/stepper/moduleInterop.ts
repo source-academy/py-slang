@@ -60,6 +60,39 @@ export class ModuleImportError extends Error {
  * other runtime fault the reducer raises — never allowed to escape as an unhandled rejection. */
 class ModuleInteropUnsupportedError extends Error {}
 
+/**
+ * The global-registry key a module may attach a zero-argument stepper-thumbnail render hook under,
+ * on the object it passes to `opaque_make` (e.g. `rune`'s `attachThumbnailHook`) — see
+ * source-academy/modules's `docs/src/modules/5-advanced/conductor-interop/6-opaque-thumbnails.md`.
+ * Hardcoded here, rather than imported from that convention's defining package
+ * (`@sourceacademy/modules-lib`), because that package is private to the modules repo's own
+ * workspace and never published — per the convention, only this string (not the export) is the
+ * actual cross-repo contract: `Symbol.for` returns the identical symbol for any two packages that
+ * call it with the same string, so a module and this stepper agree on the key without sharing an
+ * import.
+ */
+const RENDER_THUMBNAIL_SYMBOL = Symbol.for("source-academy.stepper.renderThumbnail");
+
+/**
+ * Calls an opaque payload's stepper-thumbnail hook, if it carries one — see
+ * `RENDER_THUMBNAIL_SYMBOL`. Resolves to `undefined` (never rejects) whenever a thumbnail isn't
+ * available: no hook attached, the hook itself resolves to `undefined` (rendering wasn't possible in
+ * the module's realm), or — defensively, since the hook is a convention rather than a typed
+ * interface — it throws or resolves to a non-string. A broken/misbehaving thumbnail must never
+ * surface as a stepper fault, only as the existing `<label>` fallback.
+ */
+async function renderThumbnail(payload: unknown): Promise<string | undefined> {
+  if (payload === null || typeof payload !== "object") return undefined;
+  const hook = (payload as Record<symbol, unknown>)[RENDER_THUMBNAIL_SYMBOL];
+  if (typeof hook !== "function") return undefined;
+  try {
+    const result = await (hook as () => unknown)();
+    return typeof result === "string" ? result : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A genuine Python-authored callable — the one value shape `stepNodeToModule` declines to forward
  * into a module call. See the module doc comment. */
 function isPythonCallable(node: StepNode): boolean {
@@ -167,7 +200,8 @@ export async function moduleToStepNode(
         payload !== null && typeof payload === "object"
           ? (payload as { constructor?: { name?: string } }).constructor?.name
           : undefined;
-      return opaqueValue(ctorName ?? "opaque", value);
+      const dataUrl = await renderThumbnail(payload);
+      return opaqueValue(ctorName ?? "opaque", value, dataUrl);
     }
     case DataType.CLOSURE: {
       const [minArgs, isVararg] = await Promise.all([
