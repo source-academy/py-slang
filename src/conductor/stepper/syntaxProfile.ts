@@ -13,7 +13,7 @@
  * (`when`). The precedence maps let the host insert parentheses generically (e.g. `(1 + 2) * 3`).
  */
 
-import type { SyntaxProfile } from "@sourceacademy/common-stepper";
+import type { SyntaxProfile, SyntaxTemplatePart } from "@sourceacademy/common-stepper";
 
 export const pythonSyntaxProfile: SyntaxProfile = {
   templates: {
@@ -87,10 +87,21 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { child: "body" },
     ],
     ArrayExpression: ["[", { list: "elements", sep: ", " }, "]"],
-    // An opaque module value (e.g. a `rune` Rune) — no structure to render, just its label. See
-    // `ast.ts`'s `opaqueValue`; `dataUrl` (a rendered thumbnail, source-academy/modules#879) isn't
-    // rendered by the host yet.
-    Opaque: [{ token: "<", cls: "identifier" }, { prop: "label", cls: "identifier" }, ">"],
+    // An opaque module value (e.g. a `rune` Rune) — see `ast.ts`'s `opaqueValue`. Rendered as its
+    // thumbnail (`dataUrl`, an inline image, DrRacket-style) when the underlying module attached one
+    // (source-academy/modules#879), falling back to `<label>` text otherwise.
+    //
+    // The `image`/`unless` template-part kinds this uses are implemented in
+    // `@sourceacademy/common-stepper`/`web-stepper` (source-academy/plugins) but not yet in the
+    // version this package depends on — the cast below can be dropped once that version ships and
+    // the dependency is bumped.
+    Opaque: [
+      { image: "dataUrl", altProp: "label" },
+      {
+        unless: "dataUrl",
+        parts: [{ token: "<", cls: "identifier" }, { prop: "label", cls: "identifier" }, ">"],
+      },
+    ] as unknown as SyntaxTemplatePart[],
   },
 
   // Parenthesisation precedence (higher binds tighter). Mirrors Python's grammar; the host wraps a
