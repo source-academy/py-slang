@@ -1000,6 +1000,75 @@ describe("Python stepper — a built-in used as a bare value displays as Builtin
   });
 });
 
+describe("Python stepper — a §2 library function used as a value gets a real Function definition popup (py-slang#405)", () => {
+  // Unlike a true native builtin (`print`, `head`, `pair`, …), a §2 pre-declared list-library function
+  // (`map`, `_map`, `llist_ref`, …) has a real Python-level body (see `lists.ts`'s `library`), so it
+  // must NOT get the opaque `Builtin`+hoverText treatment #404 gives true builtins — it should collapse
+  // to a mu-term with the *actual* "Function definition" hover popover a user-defined function gets.
+  // `applyLibrary`'s existing one-step-per-call expansion (i.e. how these functions actually evaluate)
+  // is untouched by any of this — only their display when referenced as a bare value changes.
+
+  test("llist_ref passed around as a value is a real ArrowFunctionExpression mu-term, not Builtin", async () => {
+    const s = await steps("is_function(llist_ref)");
+    const arg = findNode(s[0].ast, n => n.name === "llist_ref");
+    expect(arg).toMatchObject({ type: "ArrowFunctionExpression", name: "llist_ref" });
+    // It has a real body to hover, unlike a Builtin node.
+    expect(arg.body).toBeDefined();
+    expect(findNode(s[0].ast, n => n.type === "Builtin" && n.name === "llist_ref")).toBeUndefined();
+  });
+
+  test("llist_ref's own recursive self-reference stays a plain Identifier (no infinite/duplicate mu-term)", async () => {
+    const s = await steps("is_function(llist_ref)");
+    const value = findNode(s[0].ast, n => n.type === "ArrowFunctionExpression" && n.name === "llist_ref");
+    // The self-call inside its own body is left as an ordinary Identifier — the host's own existing
+    // recursive-mu-term rendering (matching an Identifier's name against the enclosing function's own
+    // name) handles it from here, exactly like any other recursive user-defined function.
+    const selfRef = findNode(value.body, n => n.name === "llist_ref");
+    expect(selfRef.type).toBe("Identifier");
+  });
+
+  test("a private helper (_map) referenced only inside map's own body is also a real, independently hoverable mu-term", async () => {
+    const s = await steps("is_function(map)");
+    const mapValue = findNode(s[0].ast, n => n.type === "ArrowFunctionExpression" && n.name === "map");
+    const helperRef = findNode(mapValue.body, n => n.name === "_map");
+    expect(helperRef).toMatchObject({ type: "ArrowFunctionExpression", name: "_map" });
+    expect(helperRef.body).toBeDefined();
+  });
+
+  test("a called library function's callee is also the real mu-term (not Builtin)", async () => {
+    const s = await steps("llist_ref(llist(1, 2, 3), 1)");
+    const callee = findNode(s[0].ast, n => n.type === "CallExpression").callee;
+    expect(callee).toMatchObject({ type: "ArrowFunctionExpression", name: "llist_ref" });
+  });
+
+  test("shadowing a library name with a local def hides the library function, not just its name", async () => {
+    const s = await steps("def llist_ref(xs, n):\n  return is_function(llist_ref)\nllist_ref(1, 1)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation ===
+        "Declared and substituted llist_ref into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+    for (const step of s.slice(i)) {
+      expect(
+        findNode(step.ast, n => n.name === "llist_ref" && n.type === "ArrowFunctionExpression"),
+      ).toBeUndefined();
+    }
+    // The shadowing local def's own FunctionDeclaration mu-term is what actually renders instead.
+    expect(
+      s.some(step =>
+        findNode(step.ast, n => n.type === "FunctionDeclaration" && n.name === "llist_ref"),
+      ),
+    ).toBe(true);
+  });
+
+  test("a true native primitive (pair/head/tail/llist) still gets the Builtin treatment, not a library popup", async () => {
+    const s = await steps("is_function(llist)");
+    const arg = findNode(s[0].ast, n => n.name === "llist");
+    expect(arg).toMatchObject({ type: "Builtin", hoverText: "built-in function llist" });
+  });
+});
+
 describe("Python stepper — pairs and linked lists (Python §2)", () => {
   // A pair renders in box-and-pointer notation `[head, tail]`, like Source; the empty list is `None`.
   test("pair construction and accessors", async () => {

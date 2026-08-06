@@ -346,14 +346,30 @@ export interface MarkedBuiltins {
   correspondence: Map<StepNode, StepNode>;
 }
 
+/** Whether `node` is a named-value-able function shape — the two cases `functionValues`
+ * (`syntaxProfile.ts`) already knows how to collapse to a mu-term with a hover popover. */
+function isFunctionValueShape(node: StepNode): boolean {
+  return node.type === "ArrowFunctionExpression" || node.type === "FunctionDeclaration";
+}
+
 /**
- * Relabels every bare `Identifier` node whose name is a built-in value (per `isBuiltinValueName` — the
- * stepper's own `isBuiltinFunctionValueName`, injected rather than imported to avoid a cycle with
- * `builtins.ts`, which already imports from this module) as a `Builtin` node carrying `hoverText`, so
- * the host has something structurally distinct to hang a hover popover off (see `syntaxProfile.ts`'s
- * `hoverText` rule, py-slang#404). Reduction (`reduce.ts`) never sees this distinction — it keeps
- * reducing a built-in name as a plain `Identifier` throughout; this is purely a final, display-facing
- * relabeling `getSteps.ts` applies to each step's tree just before serialization.
+ * Relabels every bare `Identifier` node whose name is a built-in value (per `resolveDisplayValue` — the
+ * stepper's own `resolveBuiltinDisplayValue`, injected rather than imported to avoid a cycle with
+ * `builtins.ts`, which already imports from this module) with whatever it should display as, so the
+ * host has something to hang a hover popover off. Two different outcomes, both driven entirely by what
+ * `resolveDisplayValue` returns for a given name:
+ *  - A §2 pre-declared list-library function (`map`, `_map`, `llist_ref`, …) resolves to its own real
+ *    `lambda`/`def` template (see `lists.ts`'s `library`): this walk tags it with a `name` marker and
+ *    recurses into *its* body too (own params/name added to `bound`, exactly like the
+ *    `ArrowFunctionExpression`/`FunctionDeclaration` cases below), so it collapses to a mu-term with the
+ *    same "Function definition" hover popover a user-defined function gets, and any *other* library name
+ *    it references becomes its own, independently hoverable, nested mu-term the same way (py-slang#405).
+ *  - Anything else built-in (`print`, `abs`, `is_function`, …) resolves to a `Builtin` node instead —
+ *    there's no body to walk into, so it's returned as-is (py-slang#404).
+ *
+ * Reduction (`reduce.ts`) never sees any of this — it keeps reducing every built-in/library name as a
+ * plain `Identifier` throughout, dispatching by name exactly as it does today; this is purely a final,
+ * display-facing relabeling `getSteps.ts` applies to each step's tree just before serialization.
  *
  * Unlike `substitute` — which runs *before* a contraction's `preRedex`/`postRedex` are ever captured, so
  * those markers are drawn from the already-substituted tree and match it by construction — this runs
@@ -366,14 +382,17 @@ export interface MarkedBuiltins {
  * before assigning its `redexId`, so the highlight still lands on the right (now relabeled) node instead
  * of silently failing to resolve.
  *
- * `bound` mirrors `substitute`'s own shadowing check — the parameters and (for a `def`, or a `lambda`
- * already bound to a name) own name of every enclosing, not-yet-invoked function value — so an
- * identifier that will resolve to a *recursive self-reference* once that function is actually called is
- * never mislabelled a builtin just because it currently still reads the same as one. This matters
- * specifically for a function value's own body: unlike the rest of a step's tree (already fully
- * resolved by live substitution before any step is ever displayed — see the module doc comment on
- * `getSteps.ts`), a function value's body is opaque, un-substituted cargo until the function is actually
- * called, so a name shadowed there is not yet resolved away the way a top-level binding already is.
+ * `bound` mirrors `substitute`'s own shadowing check — the parameters and own name of every enclosing,
+ * not-yet-invoked function value (whether written by the student or, now, a library template resolved
+ * mid-walk) — so a name that will resolve to a *recursive self-reference* once that function is actually
+ * called is never mislabelled a builtin/library value just because it currently still reads the same as
+ * one. This matters specifically for a function value's own body: unlike the rest of a step's tree
+ * (already fully resolved by live substitution before any step is ever displayed — see the module doc
+ * comment on `getSteps.ts`), a function value's body is opaque, un-substituted cargo until the function
+ * is actually called, so a name shadowed there is not yet resolved away the way a top-level binding
+ * already is. Leaving such an occurrence as a plain `Identifier` also lets the host's own existing
+ * recursive-mu-term rendering (matching an `Identifier` inside a popover's content against the enclosing
+ * function's own name) keep working unchanged, instead of competing with a second, independent mu-term.
  *
  * The same forward-looking care applies *within* a single, still-unreduced statement list: at the very
  * first ("Start of evaluation") step, `def print(x): ...\nprint(1)` has not been touched by any
@@ -389,9 +408,24 @@ export interface MarkedBuiltins {
  */
 export function markBuiltins(
   node: StepNode,
-  isBuiltinValueName: (name: string) => boolean,
+  resolveDisplayValue: (name: string) => StepNode | undefined,
 ): MarkedBuiltins {
   const correspondence = new Map<StepNode, StepNode>();
+
+  // The bound-name set for descending into a named function value's own body: its own parameters, plus
+  // its own name (a `FunctionDeclaration`'s `id.name`; an `ArrowFunctionExpression`'s `.name` marker, if
+  // bound to one; a library template's own registered name) — see the doc comment above on why this
+  // must be more conservative than `substitute`'s identical check, which skips `.name` entirely.
+  const innerBound = (
+    fn: StepNode,
+    ownName: string | undefined,
+    bound: ReadonlySet<string>,
+  ): Set<string> => {
+    const inner = new Set(bound);
+    paramNames(fn).forEach(p => inner.add(p));
+    if (ownName !== undefined) inner.add(ownName);
+    return inner;
+  };
 
   const walk = (node: StepNode, bound: ReadonlySet<string>): StepNode => {
     const record = (result: StepNode): StepNode => {
@@ -401,20 +435,21 @@ export function markBuiltins(
     switch (node.type) {
       case "Identifier": {
         const name = String(node.name);
-        if (bound.has(name) || !isBuiltinValueName(name)) return record(node);
-        return record({ type: "Builtin", name, hoverText: `built-in function ${name}` });
+        if (bound.has(name)) return record(node);
+        const resolved = resolveDisplayValue(name);
+        if (resolved === undefined) return record(node);
+        if (!isFunctionValueShape(resolved)) return record(resolved);
+        const inner = innerBound(resolved, name, bound);
+        const body = walk(resolved.body as StepNode, inner);
+        return record({ ...resolved, name, body });
       }
       case "ArrowFunctionExpression": {
-        const inner = new Set(bound);
-        paramNames(node).forEach(p => inner.add(p));
-        if (typeof node.name === "string") inner.add(node.name);
+        const inner = innerBound(node, typeof node.name === "string" ? node.name : undefined, bound);
         const body = walk(node.body as StepNode, inner);
         return record(body === node.body ? node : { ...node, body });
       }
       case "FunctionDeclaration": {
-        const inner = new Set(bound);
-        inner.add(String((node.id as StepNode).name));
-        paramNames(node).forEach(p => inner.add(p));
+        const inner = innerBound(node, String((node.id as StepNode).name), bound);
         const body = walk(node.body as StepNode, inner);
         return record(body === node.body ? node : { ...node, body });
       }

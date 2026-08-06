@@ -7,10 +7,12 @@
  * step (the post-reduction tree with the result highlighted). The host's slider treats even-numbered
  * steps as "what evaluates next" (yellow) and odd-numbered steps as "the result" (green).
  *
- * Serialization also relabels a bare built-in-named `Identifier` (e.g. `print` used as a value, not
- * called) as a `Builtin` node, purely for display — see `ast.ts`'s `markBuiltins` for why doing this
- * here, after reduction, rather than at translation time, is what keeps it correct when the name is
- * locally shadowed (py-slang#404).
+ * Serialization also relabels a bare built-in/library-named `Identifier` (e.g. `print` or `llist_ref`
+ * used as a value, not called) for display — a plain built-in becomes a `Builtin` node (py-slang#404); a
+ * §2 pre-declared list-library function becomes its own real template, tagged as a mu-term, so it gets
+ * the same "Function definition" hover popover a user-defined function does (py-slang#405). See
+ * `ast.ts`'s `markBuiltins` for why doing this here, after reduction, rather than at translation time,
+ * is what keeps it correct when the name is locally shadowed.
  */
 
 import type {
@@ -21,7 +23,7 @@ import type {
 
 import type { StmtNS } from "../../ast-types";
 import { markBuiltins, type StepNode, unparse } from "./ast";
-import { isBuiltinFunctionValueName, isStepperValue, substituteBuiltinConstants } from "./builtins";
+import { isStepperValue, resolveBuiltinDisplayValue, substituteBuiltinConstants } from "./builtins";
 import type { StepperContext } from "./context";
 import { resolveImports } from "./moduleInterop";
 import { reduceProgram } from "./reduce";
@@ -224,9 +226,10 @@ function serializeStep(step: Step): SerializedStep {
     return out;
   };
 
-  // Relabel built-in-named Identifiers for display before assigning nodeIds, so a Builtin node gets one
-  // like any other (see `ast.ts`'s `markBuiltins` for why this must happen per-step, after reduction).
-  const { ast: markedAst, correspondence } = markBuiltins(step.ast, isBuiltinFunctionValueName);
+  // Relabel built-in/library-named Identifiers for display before assigning nodeIds, so a relabeled
+  // node gets one like any other (see `ast.ts`'s `markBuiltins` for why this must happen per-step,
+  // after reduction).
+  const { ast: markedAst, correspondence } = markBuiltins(step.ast, resolveBuiltinDisplayValue);
   const ast = serializeNode(markedAst);
 
   const serializeMarker = (marker: Marker): SerializedMarker => {

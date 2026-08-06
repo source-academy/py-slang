@@ -35,7 +35,7 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import { listArities, listBuiltins } from "./lists";
+import { getListLibraryTemplate, listArities, listBuiltins } from "./lists";
 
 /* -------------------------------------------------------------------------- */
 /*                                 Constants                                   */
@@ -585,10 +585,31 @@ export function applyBuiltin(name: string, args: StepNode[]): StepNode {
 
 /** Whether `name` is a built-in *function* value — either a `BUILTIN_FUNCTIONS` entry or a special
  * form (currently just `input`) — the two name sets a bare `Identifier` is checked against wherever
- * "this name refers to some built-in function" matters (call contraction, `isStepperValue` below, and
- * `getSteps.ts`'s builtin-value display decoration). */
+ * "this name refers to some built-in function" matters (call contraction and `isStepperValue` below). */
 export function isBuiltinFunctionValueName(name: string): boolean {
   return isBuiltinFunctionName(name) || isSpecialFormName(name);
+}
+
+/**
+ * What a bare `Identifier` named `name` should be relabeled as for display (see `ast.ts`'s
+ * `markBuiltins`), or `undefined` if `name` isn't a built-in value at all. Two different kinds:
+ *  - A §2 pre-declared list-library function (`map`, `_map`, `llist_ref`, …) has a real Python-level
+ *    body (see `lists.ts`'s `library`) — this returns that raw template, which `markBuiltins` tags with
+ *    a `name` marker and walks recursively, so it renders as a mu-term with the same "Function
+ *    definition" hover popover a user-defined function gets (py-slang#405).
+ *  - Anything else built-in (`print`, `abs`, `is_function`, …) has no body to show — this returns a
+ *    `Builtin` node carrying a fixed `hoverText` line instead (py-slang#404).
+ * `markBuiltins` never needs to know which case it got: it recognises a function-value shape
+ * (`ArrowFunctionExpression`/`FunctionDeclaration`) structurally and treats everything else (e.g. this
+ * `Builtin` node) as already-final.
+ */
+export function resolveBuiltinDisplayValue(name: string): StepNode | undefined {
+  const template = getListLibraryTemplate(name);
+  if (template) return template;
+  if (isBuiltinFunctionValueName(name)) {
+    return { type: "Builtin", name, hoverText: `built-in function ${name}` };
+  }
+  return undefined;
 }
 
 /**
