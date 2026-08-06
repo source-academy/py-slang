@@ -610,17 +610,18 @@ describe("Python stepper — step structure", () => {
 
   test("the final line's value disappears before completion (a program yields no value)", async () => {
     // Unlike Source/js-slang, a Python program has no value: the last line's value is discarded just
-    // like every other line's, so the run ends on an *empty* program rather than lingering on it. It is
-    // shown highlighted green (still present) one last time — the discard step's *after* step — before
-    // that happens; see "green flash before discard" below for the fully worked-out step sequence.
+    // like every other line's, so the run ends on an *empty* program rather than lingering on it. The
+    // discard step's own after-step already shows it gone — matching the following (terminal) step, per
+    // the after == next-before invariant (see `ReduceResult.node`'s doc comment); see "a discard's after
+    // step already shows the redex gone" below for the fully worked-out step sequence.
     const e = await explanations("1 + 1");
     expect(e[e.length - 1]).toBe("Evaluation complete");
-    expect(e[e.length - 2]).toBe("Evaluated 2"); // the discard step's after (green) step, as for any statement
-    expect(e[e.length - 3]).toBe("Evaluating 2"); // ...and its before (red) step
+    expect(e[e.length - 2]).toBe("Evaluated 2"); // the discard step's after step
+    expect(e[e.length - 3]).toBe("Evaluating 2"); // ...and its before step
 
     const s = await steps("1 + 1");
-    const lastVisible = s[s.length - 2].ast as any; // the green "2" step, one before the terminal step
-    expect(lastVisible.body).toHaveLength(1); // "2" is still there, not yet discarded
+    const lastVisible = s[s.length - 2].ast as any; // the "Evaluated 2" after step
+    expect(lastVisible.body).toHaveLength(0); // "2" is already gone, same as the terminal step
     const terminal = s[s.length - 1].ast as any;
     expect(terminal.type).toBe("Program");
     expect(terminal.body).toHaveLength(0); // nothing rendered at completion
@@ -629,17 +630,17 @@ describe("Python stepper — step structure", () => {
     const assign = await steps("x = 1");
     expect((assign[assign.length - 1].ast as any).body).toHaveLength(0);
 
-    // The REPL still echoes the final value, even though the stepper no longer lingers on it.
+    // The REPL still echoes the final value, even though the stepper never lingers on it.
     expect(await result("1 + 1")).toBe("2");
   });
 
-  test("green flash before discard: a finished value is shown green once before it disappears", async () => {
-    // The user-facing spec this implements: every contraction's before-step reads "… evaluating"
-    // (about to happen) and its after-step reads "… evaluated" (just happened, dropping the old
-    // "finished evaluating" wording) — and a contraction that discards a whole finished statement
-    // (an evaluated expression, a name binding, `pass`, an inlined `if` branch) shows it highlighted
-    // green, still present in the tree, on its after-step; only the *next* contraction's before-step
-    // shows it actually gone. Worked out fully for "1 + 1\n1 + 2\n" (ten steps total).
+  test("a discard's after step already shows the redex gone", async () => {
+    // The user-facing spec this implements: every contraction's before-step reads "… evaluating" (about
+    // to happen) and its after-step reads "… evaluated" (just happened) — and a contraction that
+    // discards a whole finished statement (an evaluated expression, a name binding, `pass`, an inlined
+    // `if` branch) shows it *already gone* on its own after-step, identical to the following
+    // contraction's before-step; only the highlighted redex (and its color) differs between the two.
+    // Worked out fully for "1 + 1\n1 + 2\n" (ten steps total).
     const e = await explanations("1 + 1\n1 + 2");
     expect(e).toEqual([
       "Start of evaluation",
@@ -656,9 +657,10 @@ describe("Python stepper — step structure", () => {
 
     const s = await steps("1 + 1\n1 + 2");
     const bodyLengths = s.map(step => (step.ast as any).body.length);
-    // Step 5 (index 4, the "Evaluated 2" green step) still has both statements — "2" has not yet been
-    // discarded — and step 9 (index 8, "Evaluated 3") still has its one statement, for the same reason.
-    expect(bodyLengths).toEqual([2, 2, 2, 2, 2, 1, 1, 1, 1, 0]);
+    // Step 5 (index 4, the "Evaluated 2" after step) already has just the one remaining statement — "2"
+    // is discarded on its own step, not the next — and step 9 (index 8, "Evaluated 3") is already empty
+    // for the same reason, matching the terminal step right after it.
+    expect(bodyLengths).toEqual([2, 2, 2, 2, 1, 1, 1, 1, 0, 0]);
   });
 });
 
@@ -819,15 +821,15 @@ describe("Python stepper — function values render as mu-terms (not inline bodi
   });
 });
 
-describe("Python stepper — a binding's substitution is visible on its own step, not the next", () => {
-  // A name binding (`VariableDeclaration`/`FunctionDeclaration`) substitutes its value into the rest
-  // of the block on the *same* contraction that declares it — matching how a call expression's
-  // argument substitution is already visible on its own "Substituted ..." step (`contractCall`), rather
-  // than only becoming visible one (unrelated) step later. The declaration itself still lingers one
-  // more step, highlighted green, before actually disappearing — the same "green flash before discard"
-  // `pass` gets — but that lingering must not delay the substitution's effect on the rest of the tree.
+describe("Python stepper — a binding's substitution is visible on its own step, and the binding is already gone", () => {
+  // A name binding (`VariableDeclaration`/`FunctionDeclaration`) substitutes its value into the rest of
+  // the block *and* disappears on the same contraction that declares it — matching how a call
+  // expression's argument substitution is already visible on its own "Substituted ..." step
+  // (`contractCall`), and how every other statement-discarding contraction (`pass`, an inlined `if`
+  // branch, a finished top-level expression) leaves nothing lingering on its own after-step (see
+  // `ReduceResult.node`'s doc comment on the after == next-before invariant).
 
-  test("a variable's bound value already appears in the rest on its own 'Declared and substituted' step", async () => {
+  test("a variable's bound value already appears in the rest, and the declaration is already gone, on its own 'Declared and substituted' step", async () => {
     const s = await steps("x = 5\nx + 1");
     const i = s.findIndex(
       step =>
@@ -835,17 +837,17 @@ describe("Python stepper — a binding's substitution is visible on its own step
     );
     expect(i).toBeGreaterThan(-1);
 
-    // The declaration is still present (green flash, like `pass`)...
-    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
-    // ...but the rest's binary expression already has the literal substituted in, not a reference.
+    // The declaration is already gone on this same after-step...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+    // ...and the rest's binary expression already has the literal substituted in, not a reference.
     const bin = findNode(s[i].ast, n => n.type === "BinaryExpression");
     expect(bin.left).toMatchObject({ type: "Literal", raw: "5" });
 
-    // Only the *next* step is where the declaration is actually gone.
-    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+    // The following before-step shows the identical (declaration-free) tree — only the highlight moves.
+    expect(s[i + 1].ast).toEqual(s[i].ast);
   });
 
-  test("a def's mu-term already appears in the rest on its own 'Declared and substituted' step", async () => {
+  test("a def's mu-term already appears in the rest, and the declaration is already gone, on its own 'Declared and substituted' step", async () => {
     const s = await steps("def square(n):\n  return n * n\nsquare(4)");
     const i = s.findIndex(
       step =>
@@ -854,18 +856,16 @@ describe("Python stepper — a binding's substitution is visible on its own step
     );
     expect(i).toBeGreaterThan(-1);
 
-    // The declaration site is still present, in its full (un-named) form...
+    // The declaration site (its full, un-named form) is already gone on this same after-step...
     expect(
       findNode(s[i].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
-    ).toBeDefined();
-    // ...but the call in the rest already shows `square` substituted as the named mu-term value.
+    ).toBeUndefined();
+    // ...and the call in the rest already shows `square` substituted as the named mu-term value.
     const call = findNode(s[i].ast, n => n.type === "CallExpression");
     expect(call.callee).toMatchObject({ type: "FunctionDeclaration", name: "square" });
 
-    // Only the *next* step is where the declaration site is actually gone (just the mu-term remains).
-    expect(
-      findNode(s[i + 1].ast, n => n.type === "FunctionDeclaration" && n.name === undefined),
-    ).toBeUndefined();
+    // The following before-step shows the identical (declaration-free) tree — only the highlight moves.
+    expect(s[i + 1].ast).toEqual(s[i].ast);
   });
 
   test("a local binding inside a function body substitutes into the rest on the same step", async () => {
@@ -880,14 +880,14 @@ describe("Python stepper — a binding's substitution is visible on its own step
     );
     expect(i).toBeGreaterThan(-1);
 
-    // `y`'s declaration (`y = 2`) still lingers...
-    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeDefined();
-    // ...but `return` already shows the substituted value, not a leftover `y` reference.
+    // `y`'s declaration is already gone on this same after-step...
+    expect(findNode(s[i].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+    // ...and `return` already shows the substituted value, not a leftover `y` reference.
     const ret = findNode(s[i].ast, n => n.type === "ReturnStatement");
     expect(ret.argument).toMatchObject({ type: "Literal", raw: "2" });
 
-    // Only the *next* step is where the declaration is actually gone.
-    expect(findNode(s[i + 1].ast, n => n.type === "VariableDeclaration")).toBeUndefined();
+    // The following before-step shows the identical (declaration-free) tree — only the highlight moves.
+    expect(s[i + 1].ast).toEqual(s[i].ast);
   });
 });
 
@@ -1650,10 +1650,10 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
     expect(after?.markers?.[0]?.redexNodeType).toBeUndefined();
   });
 
-  test("green flash before discard: the statement is shown highlighted green on the after step, like pass", async () => {
-    // Like `pass`, the after step ("Evaluated breakpoint statement") keeps the statement present and
-    // highlights it green (an afterMarker whose redexId resolves to the call still in the tree); only
-    // the *next* contraction's before step shows it actually gone.
+  test("a discard's after step already shows the statement gone, like pass", async () => {
+    // Like `pass`, the after step ("Evaluated breakpoint statement") already shows the call gone — no
+    // redex survives to highlight, so the afterMarker carries no redexId — matching the following
+    // before step exactly (see `ReduceResult.node`'s doc comment on the after == next-before invariant).
     const s = await steps("breakpoint()\n1 + 1");
     const beforeIdx = s.findIndex(
       step => step.markers?.[0]?.explanation === "Evaluating breakpoint statement",
@@ -1662,19 +1662,19 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
     const after = s[beforeIdx + 1];
     expect(after.markers?.[0]?.explanation).toBe("Evaluated breakpoint statement");
 
-    // Before (red) and after (green) both still contain the breakpoint call, highlighted via a
-    // resolvable redexId — an ordinary ExpressionStatement/CallExpression, not a dedicated node type
-    // (see reduce.ts's stepHead).
+    // Before (red) still contains the breakpoint call, highlighted via a resolvable redexId — an
+    // ordinary ExpressionStatement/CallExpression, not a dedicated node type (see reduce.ts's stepHead).
     expect((before.ast as any).body[0].type).toBe("ExpressionStatement");
     expect(before.markers?.[0]?.redexType).toBe("beforeMarker");
     expect(nodeIds(before.ast).has(before.markers![0].redexId!)).toBe(true);
 
-    expect((after.ast as any).body[0].type).toBe("ExpressionStatement"); // still present (green flash)
+    // After (green) already shows only `1 + 1` — the breakpoint call is gone, no redexId to resolve.
+    expect((after.ast as any).body[0].expression).toMatchObject({ operator: "+" });
     expect(after.markers?.[0]?.redexType).toBe("afterMarker");
-    expect(nodeIds(after.ast).has(after.markers![0].redexId!)).toBe(true);
+    expect(after.markers?.[0]?.redexId).toBeUndefined();
 
-    // The next step (the following before step) is where it is finally gone; `1 + 1` is now the head.
-    expect((s[beforeIdx + 2].ast as any).body[0].type).toBe("ExpressionStatement");
+    // The following before step shows the identical (already-discarded) tree.
+    expect(s[beforeIdx + 2].ast).toEqual(after.ast);
   });
 
   test("renders as the breakpoint() call the student typed (an ordinary CallExpression)", async () => {

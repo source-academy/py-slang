@@ -59,32 +59,28 @@ import { formatPrintLlistOutput } from "./lists";
 import { callModuleFunction } from "./moduleInterop";
 
 export interface ReduceResult {
-  /** The program/expression after this single contraction — becomes `current` for the next step. */
+  /**
+   * The program/expression after this single contraction. This is *also* exactly what the after step
+   * displays: the after step's tree is always identical to the following before step's tree — only the
+   * highlighted redex and its color (red before, green after, none once a whole statement is consumed
+   * rather than replaced in place) differ between them. A contraction never fabricates an intermediate
+   * "about to vanish, still here" tree — see `preRedex`/`postRedex` below for how a statement that is
+   * removed outright (a binding substituted away, a `pass`/import dropped, an `if`'s branch inlined)
+   * still gets a meaningful *before* highlight without needing one after.
+   */
   node: StepNode;
   /** The node in the *before* tree that was contracted (highlighted before the step). */
   preRedex: StepNode;
-  /** The node in the *after* tree that is the contraction's result (highlighted after the step). */
-  postRedex?: StepNode;
   /**
-   * The tree the *after* step displays, if different from `node`. A contraction that discards an
-   * already-finished value — dropping a completed expression statement, binding a name into the rest
-   * of the program, removing a `pass`, inlining an `if`'s chosen branch — replaces or removes the
-   * redex's containing statement outright, so with no override the value would jump straight from
-   * "about to be discarded" (red) to "already gone", never appearing "just finished" (green). Such a
-   * contraction sets `postNode` to a tree with the redex still present (marked via `postRedex`) so the
-   * after step shows the value highlighted green one last time before it disappears on the next
-   * contraction; `node` (with the statement actually gone) still becomes the next contraction's start.
-   * This is usually exactly the pre-contraction tree — the one exception is a name binding
-   * (`VariableDeclaration`/`FunctionDeclaration` in `stepHead`), where `postNode` already carries the
-   * bound value substituted into the rest of the block, so that substitution is visible from this same
-   * "Declared and substituted" step rather than only from the next one (matching how a call
-   * expression's argument substitution is already visible on its own "Substituted ..." step — see
-   * `contractCall` — rather than one step later).
-   * Defaults to `node` — most contractions (binary/unary/logical/conditional/call/`return`/falling off
-   * the end of a function — anything whose result is a value that visibly *replaces* the redex in
-   * place, rather than removing its containing statement) need no override.
+   * The node in `node` that is the contraction's result (highlighted after the step). Set only when the
+   * redex is visibly replaced in place by a value that survives into `node` (an operator's result, a
+   * call's return value, an argument substituted into a function body). Left `undefined` when the whole
+   * redex is consumed without leaving a replacement in place (a `VariableDeclaration`/`FunctionDeclaration`
+   * substituted into the rest of the block, a dropped `pass`/import, a finished top-level expression
+   * statement discarded) — the after step then shows `node` with no highlight at all, past tense
+   * explanation only.
    */
-  postNode?: StepNode;
+  postRedex?: StepNode;
   /** A human-readable description shown on the *after* step, past tense ("… evaluated"). */
   explanation: string;
   /** The same description shown on the *before* step, present-continuous ("… evaluating") — the same
@@ -765,16 +761,9 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
 /*                          One-step expression reducer                       */
 /* -------------------------------------------------------------------------- */
 
-/** Rewraps `child`'s result one level up, into `parent[key]`. `postNode` (if the child set one — see
- * its doc comment) must be rewrapped the same way as `node`, or a nested discard (e.g. a multi-
- * statement function body reducing in expression position, several levels inside a larger expression)
- * would display just its own isolated `postNode` instead of that value in its full surrounding tree. */
+/** Rewraps `child`'s result one level up, into `parent[key]`. */
 function rebuild(parent: StepNode, key: string, child: ReduceResult): ReduceResult {
-  return {
-    ...child,
-    node: { ...parent, [key]: child.node },
-    postNode: child.postNode ? { ...parent, [key]: child.postNode } : undefined,
-  };
+  return { ...child, node: { ...parent, [key]: child.node } };
 }
 
 function rebuildIndex(
@@ -785,13 +774,7 @@ function rebuildIndex(
 ): ReduceResult {
   const arr = (parent[key] as StepNode[]).slice();
   arr[index] = child.node;
-  let postNode: StepNode | undefined;
-  if (child.postNode) {
-    const postArr = (parent[key] as StepNode[]).slice();
-    postArr[index] = child.postNode;
-    postNode = { ...parent, [key]: postArr };
-  }
-  return { ...child, node: { ...parent, [key]: arr }, postNode };
+  return { ...child, node: { ...parent, [key]: arr } };
 }
 
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
@@ -872,14 +855,13 @@ type HeadOutcome =
   | {
       // The head (or a binding it introduces) was reduced one step; `newBody` is the resulting list.
       kind: "step";
+      // The statement list the after step displays — always this same list, never `[head, ...]` — see
+      // `ReduceResult.node`'s doc comment on the after == next-before invariant.
       newBody: StepNode[];
       preRedex: StepNode;
+      // Unset when this step discards the *whole* head statement (a binding substituted away, a dropped
+      // `pass`/import, an inlined `if` branch) — see `ReduceResult.postRedex`'s doc comment.
       postRedex?: StepNode;
-      // The statement list the *after* step displays, if different from `newBody` — the `HeadOutcome`
-      // analogue of `ReduceResult.postNode` (see its doc comment): set when this step discards the
-      // *whole* head statement (a binding, a dropped `pass`, an inlined `if` branch) rather than taking
-      // one more step inside it, so the after step can show it highlighted green before it is gone.
-      postNewBody?: StepNode[];
       explanation: string;
       beforeExplanation: string;
       // Text this step writes to the program's output (only a `print(...)` reduced inside the head
@@ -932,8 +914,6 @@ async function stepHead(
           kind: "step",
           newBody: rest,
           preRedex: head,
-          postRedex: head,
-          postNewBody: [head, ...rest],
           explanation: "Evaluated breakpoint statement",
           beforeExplanation: "Evaluating breakpoint statement",
           isBreakpoint: true,
@@ -952,9 +932,6 @@ async function stepHead(
           newBody: [{ ...head, expression: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
-          postNewBody: reduced.postNode
-            ? [{ ...head, expression: reduced.postNode, hasBreakpoint: false }, ...rest]
-            : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
@@ -980,16 +957,6 @@ async function stepHead(
             ],
             preRedex: reduced.preRedex,
             postRedex: reduced.postRedex,
-            postNewBody: reduced.postNode
-              ? [
-                  {
-                    ...head,
-                    declarations: [{ ...decl, init: reduced.postNode }],
-                    hasBreakpoint: false,
-                  },
-                  ...rest,
-                ]
-              : undefined,
             explanation: reduced.explanation,
             beforeExplanation: reduced.beforeExplanation,
             output: reduced.output,
@@ -998,7 +965,10 @@ async function stepHead(
         }
         return { kind: "irreducible" };
       }
-      // The initializer is a value: bind the name by substituting it into the rest of the list.
+      // The initializer is a value: bind the name by substituting it into the rest of the list. Like a
+      // `FunctionDeclaration` below, this has no value of its own to highlight on the after step (the
+      // binding is gone, substituted into every use in `rest`) — see `ReduceResult.postRedex`'s doc
+      // comment.
       const name = String((decl.id as StepNode).name);
       // Naming an (anonymous) function value makes its uses render as a mu-term `name`, like Source's
       // `const f = x => ...`; any other value is substituted unchanged.
@@ -1006,17 +976,11 @@ async function stepHead(
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
-      // Substituted eagerly, not deferred to `node` alone: `postNewBody` (the after step's displayed
-      // tree) reuses this same substituted rest, so the substitution is already visible on this step's
-      // "Declared and substituted" (green) tree rather than only on the next, unrelated step — see the
-      // `postNode` doc comment on `ReduceResult` above.
       const substitutedRest = rest.map(stmt => substitute(stmt, name, boundValue));
       return {
         kind: "step",
         newBody: substitutedRest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
@@ -1027,15 +991,11 @@ async function stepHead(
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      // See the identical substitutedRest/postNewBody note in the VariableDeclaration case above:
-      // this makes the substitution visible already on this step's after tree, not only the next one.
       const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
       return {
         kind: "step",
         newBody: substitutedRest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
@@ -1045,8 +1005,6 @@ async function stepHead(
         kind: "step",
         newBody: rest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...rest],
         explanation: "Evaluated pass statement",
         beforeExplanation: "Evaluating pass statement",
       };
@@ -1059,8 +1017,6 @@ async function stepHead(
         kind: "step",
         newBody: rest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...rest],
         explanation: "Evaluated import statement",
         beforeExplanation: "Evaluating import statement",
       };
@@ -1073,9 +1029,6 @@ async function stepHead(
           newBody: [{ ...head, test: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
-          postNewBody: reduced.postNode
-            ? [{ ...head, test: reduced.postNode, hasBreakpoint: false }, ...rest]
-            : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
@@ -1086,12 +1039,13 @@ async function stepHead(
       const branch = (truthy ? head.consequent : head.alternate) as StepNode | null;
       const branchBody = branch ? (branch.body as StepNode[]) : [];
       const branchName = truthy ? "if" : "else";
+      // The chosen branch is already inlined into `newBody` here, on this same step — the after step
+      // shows the branch's statements in place, no separate lingering step needed (see
+      // `ReduceResult.node`'s doc comment).
       return {
         kind: "step",
         newBody: [...branchBody, ...rest],
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...rest],
         explanation: `Evaluated if statement, condition ${truthy ? "true" : "false"}, will proceed to ${branchName} block`,
         beforeExplanation: `Evaluating if statement`,
       };
@@ -1131,7 +1085,6 @@ export async function reduceProgram(
         node: { ...prog, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
-        postNode: outcome.postNewBody ? { ...prog, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
@@ -1139,19 +1092,15 @@ export async function reduceProgram(
       };
     case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
-      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So
-      // we drop it even when it is the last statement: the final line's value then disappears via the
-      // same step as every other line's, and the run ends on an empty program that `drive` reports as
-      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.) The
-      // after step shows the value highlighted green one last time (`postNode`/`postRedex` = the
-      // unchanged pre-contraction tree/statement) before it actually disappears on the *next*
-      // contraction — see `ReduceResult.postNode`'s doc comment.
+      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So we
+      // drop it even when it is the last statement: the final line's value then disappears via the same
+      // step as every other line's, and the run ends on an empty program that `drive` reports as
+      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.) No
+      // `postRedex`: the value leaves nothing behind to highlight, so the after step shows `rest` plain.
       const text = unparse(head.expression as StepNode);
       return {
         node: { ...prog, body: rest },
         preRedex: head,
-        postRedex: head,
-        postNode: prog,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
         isBreakpoint: headBreakpoint,
@@ -1199,7 +1148,6 @@ async function reduceBlock(node: StepNode, context: StepperContext): Promise<Red
         node: { ...node, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
-        postNode: outcome.postNewBody ? { ...node, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
@@ -1219,17 +1167,14 @@ async function reduceBlock(node: StepNode, context: StepperContext): Promise<Red
       };
     }
     case "finished-expression": {
-      // A bare expression value in a function body is not the function's result: discard it; if it
-      // was the last statement, the function fell off the end → None. As in `reduceProgram`'s
-      // "finished-expression" case, the after step shows the value green once more (`postNode`) before
-      // it disappears on the next contraction.
+      // A bare expression value in a function body is not the function's result: discard it; if it was
+      // the last statement, the function fell off the end → None. As in `reduceProgram`'s
+      // "finished-expression" case, no `postRedex`: the value leaves nothing behind to highlight.
       if (rest.length === 0) return fallOff(head, headBreakpoint);
       const text = unparse(head.expression as StepNode);
       return {
         node: { ...node, body: rest },
         preRedex: head,
-        postRedex: head,
-        postNode: node,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
         isBreakpoint: headBreakpoint,
