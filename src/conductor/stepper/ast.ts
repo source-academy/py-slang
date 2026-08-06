@@ -338,6 +338,82 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
   }
 }
 
+/** The relabeled tree plus a lookup from every node in the *original* tree to its counterpart in `ast`
+ * (identity, for a node {@link markBuiltins} didn't need to change). See {@link markBuiltins}'s doc
+ * comment for why `getSteps.ts` needs `correspondence` at all. */
+export interface MarkedBuiltins {
+  ast: StepNode;
+  correspondence: Map<StepNode, StepNode>;
+}
+
+/**
+ * Relabels every bare `Identifier` node whose name is a built-in value (per `isBuiltinValueName` — the
+ * stepper's own `isBuiltinFunctionValueName`, injected rather than imported to avoid a cycle with
+ * `builtins.ts`, which already imports from this module) as a `Builtin` node carrying `hoverText`, so
+ * the host has something structurally distinct to hang a hover popover off (see `syntaxProfile.ts`'s
+ * `hoverText` rule, py-slang#404). Reduction (`reduce.ts`) never sees this distinction — it keeps
+ * reducing a built-in name as a plain `Identifier` throughout; this is purely a final, display-facing
+ * relabeling `getSteps.ts` applies to each step's tree just before serialization.
+ *
+ * Unlike `substitute` — which runs *before* a contraction's `preRedex`/`postRedex` are ever captured, so
+ * those markers are drawn from the already-substituted tree and match it by construction — this runs
+ * *after*: it retroactively relabels a step's tree whose markers were already captured against — and so
+ * reference by identity — the very objects being walked here (`mapChildren`'s unconditional fresh copy
+ * at every level means even an untouched ancestor gets a new object). So this returns not just the
+ * relabeled tree but a `correspondence` map from every original node to its counterpart in that tree,
+ * including the redex itself when *it* is what got relabeled (e.g. `breakpoint()`'s own callee is both
+ * the highlighted redex and a builtin). `getSteps.ts` looks a marker's `redex` up in `correspondence`
+ * before assigning its `redexId`, so the highlight still lands on the right (now relabeled) node instead
+ * of silently failing to resolve.
+ *
+ * `bound` mirrors `substitute`'s own shadowing check — the parameters and (for a `def`, or a `lambda`
+ * already bound to a name) own name of every enclosing, not-yet-invoked function value — so an
+ * identifier that will resolve to a *recursive self-reference* once that function is actually called is
+ * never mislabelled a builtin just because it currently still reads the same as one. This matters
+ * specifically for a function value's own body: unlike the rest of a step's tree (already fully
+ * resolved by live substitution before any step is ever displayed — see the module doc comment on
+ * `getSteps.ts`), a function value's body is opaque, un-substituted cargo until the function is actually
+ * called, so a name shadowed there is not yet resolved away the way a top-level binding already is.
+ */
+export function markBuiltins(
+  node: StepNode,
+  isBuiltinValueName: (name: string) => boolean,
+): MarkedBuiltins {
+  const correspondence = new Map<StepNode, StepNode>();
+
+  const walk = (node: StepNode, bound: ReadonlySet<string>): StepNode => {
+    const record = (result: StepNode): StepNode => {
+      correspondence.set(node, result);
+      return result;
+    };
+    switch (node.type) {
+      case "Identifier": {
+        const name = String(node.name);
+        if (bound.has(name) || !isBuiltinValueName(name)) return record(node);
+        return record({ type: "Builtin", name, hoverText: `built-in function ${name}` });
+      }
+      case "ArrowFunctionExpression": {
+        const inner = new Set(bound);
+        paramNames(node).forEach(p => inner.add(p));
+        if (typeof node.name === "string") inner.add(node.name);
+        const body = walk(node.body as StepNode, inner);
+        return record(body === node.body ? node : { ...node, body });
+      }
+      case "FunctionDeclaration": {
+        const inner = new Set(bound);
+        inner.add(String((node.id as StepNode).name));
+        paramNames(node).forEach(p => inner.add(p));
+        const body = walk(node.body as StepNode, inner);
+        return record(body === node.body ? node : { ...node, body });
+      }
+      default:
+        return record(mapChildren(node, child => walk(child, bound)));
+    }
+  };
+
+  return { ast: walk(node, new Set()), correspondence };
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              Unparsing                                      */
 /* -------------------------------------------------------------------------- */

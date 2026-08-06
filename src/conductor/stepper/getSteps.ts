@@ -6,6 +6,11 @@
  * contraction a *before* step (the pre-reduction tree with the redex highlighted) and an *after*
  * step (the post-reduction tree with the result highlighted). The host's slider treats even-numbered
  * steps as "what evaluates next" (yellow) and odd-numbered steps as "the result" (green).
+ *
+ * Serialization also relabels a bare built-in-named `Identifier` (e.g. `print` used as a value, not
+ * called) as a `Builtin` node, purely for display — see `ast.ts`'s `markBuiltins` for why doing this
+ * here, after reduction, rather than at translation time, is what keeps it correct when the name is
+ * locally shadowed (py-slang#404).
  */
 
 import type {
@@ -15,8 +20,8 @@ import type {
 } from "@sourceacademy/common-stepper";
 
 import type { StmtNS } from "../../ast-types";
-import { type StepNode, unparse } from "./ast";
-import { isStepperValue, substituteBuiltinConstants } from "./builtins";
+import { markBuiltins, type StepNode, unparse } from "./ast";
+import { isBuiltinFunctionValueName, isStepperValue, substituteBuiltinConstants } from "./builtins";
 import type { StepperContext } from "./context";
 import { resolveImports } from "./moduleInterop";
 import { reduceProgram } from "./reduce";
@@ -219,12 +224,20 @@ function serializeStep(step: Step): SerializedStep {
     return out;
   };
 
-  const ast = serializeNode(step.ast);
+  // Relabel built-in-named Identifiers for display before assigning nodeIds, so a Builtin node gets one
+  // like any other (see `ast.ts`'s `markBuiltins` for why this must happen per-step, after reduction).
+  const { ast: markedAst, correspondence } = markBuiltins(step.ast, isBuiltinFunctionValueName);
+  const ast = serializeNode(markedAst);
 
   const serializeMarker = (marker: Marker): SerializedMarker => {
     const out: SerializedMarker = {};
     if (marker.redex) {
-      const redexId = ids.get(marker.redex);
+      // `marker.redex` was captured against the *original* (pre-`markBuiltins`) tree; translate it
+      // through `correspondence` first so a redex that itself got relabeled (e.g. `breakpoint()`'s own
+      // callee — both the highlighted redex and a builtin) still resolves to the node actually present
+      // in `ast` — see `markBuiltins`'s doc comment.
+      const redex = correspondence.get(marker.redex) ?? marker.redex;
+      const redexId = ids.get(redex);
       if (redexId !== undefined) out.redexId = redexId;
       // `redexNodeType` drives the host's breakpoint navigation (the double-arrow jumps to a marker
       // whose type is "DebuggerStatement"), so it belongs on the before marker only — an after marker
@@ -236,7 +249,7 @@ function serializeStep(step: Step): SerializedStep {
       // by resolved identity, not a dedicated node type, so aliasing like `bp = breakpoint; bp()` still
       // matches), so `isBreakpoint` overrides what would otherwise be the redex's real node type.
       if (marker.redexType === "beforeMarker") {
-        out.redexNodeType = marker.isBreakpoint ? "DebuggerStatement" : marker.redex.type;
+        out.redexNodeType = marker.isBreakpoint ? "DebuggerStatement" : redex.type;
       }
     }
     if (marker.redexType !== undefined) out.redexType = marker.redexType;

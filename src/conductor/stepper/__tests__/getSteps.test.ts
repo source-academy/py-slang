@@ -924,6 +924,62 @@ describe("Python stepper — explanations mirror Source phrasing", () => {
   });
 });
 
+describe("Python stepper — a built-in used as a bare value displays as Builtin (py-slang#404)", () => {
+  // `reduce.ts` never sees this distinction — it keeps reducing a built-in name as a plain "Identifier"
+  // throughout, exactly as before; only `getSteps.ts`'s serialization relabels a *surviving* one
+  // "Builtin" for display, giving the host a node it can hang a hover popover off (see
+  // syntaxProfile.ts's `hoverText` rule) without changing anything about how the program evaluates.
+
+  test("a built-in passed around as a value (not called) is a Builtin node with hover text", async () => {
+    const s = await steps("is_function(print)");
+    const printArg = findNode(s[0].ast, n => n.type === "Builtin" && n.name === "print");
+    expect(printArg).toBeDefined();
+    expect(printArg.hoverText).toBe("built-in function print");
+
+    // The call's own callee (`is_function`) is exactly the same kind of node, for the same reason.
+    const callee = findNode(s[0].ast, n => n.type === "Builtin" && n.name === "is_function");
+    expect(callee).toBeDefined();
+    expect(callee.hoverText).toBe("built-in function is_function");
+  });
+
+  test("a called built-in's callee is also a Builtin node (not just a bare-value reference)", async () => {
+    const s = await steps("print(1)");
+    const callee = findNode(s[0].ast, n => n.type === "CallExpression").callee;
+    expect(callee).toMatchObject({ type: "Builtin", name: "print" });
+  });
+
+  test("a program never using a built-in name has no Builtin nodes at all", async () => {
+    const s = await steps("x = 1\nx + 2");
+    for (const step of s) {
+      expect(findNode(step.ast, n => n.type === "Builtin")).toBeUndefined();
+    }
+  });
+
+  test("shadowing a built-in name with a local def hides the builtin, not just its name", async () => {
+    // Once the local `print` has been declared-and-substituted, every remaining occurrence of the name
+    // `print` in the rest of the program is that local FunctionDeclaration/mu-term, not the builtin —
+    // so it should never again display as "Builtin" (see the describe block's shadowing-safety note).
+    // `is_function` is a different, unshadowed name and legitimately keeps displaying as "Builtin" once
+    // the local `print` is actually called and its body is substituted in — this test only asserts about
+    // the shadowed name itself, not about every "Builtin" node in these steps.
+    const s = await steps("def print(x):\n  return is_function(print)\nprint(1)");
+    const i = s.findIndex(
+      step =>
+        step.markers?.[0]?.explanation === "Declared and substituted print into the rest of the block",
+    );
+    expect(i).toBeGreaterThan(-1);
+    for (const step of s.slice(i)) {
+      expect(findNode(step.ast, n => n.type === "Builtin" && n.name === "print")).toBeUndefined();
+    }
+    // Somewhere in the run, the recursive `print` inside the body renders as the mu-term (a
+    // FunctionDeclaration value) — confirming it really did get substituted, not just left as a plain
+    // Identifier that happened to dodge relabeling.
+    expect(
+      s.some(step => findNode(step.ast, n => n.type === "FunctionDeclaration" && n.name === "print")),
+    ).toBe(true);
+  });
+});
+
 describe("Python stepper — pairs and linked lists (Python §2)", () => {
   // A pair renders in box-and-pointer notation `[head, tail]`, like Source; the empty list is `None`.
   test("pair construction and accessors", async () => {
@@ -1679,11 +1735,13 @@ describe("Python stepper — breakpoint() marks a debugger breakpoint (#188)", (
 
   test("renders as the breakpoint() call the student typed (an ordinary CallExpression)", async () => {
     // No dedicated node type: `breakpoint()` translates to a plain CallExpression (see translate.ts)
-    // and renders through the same Identifier/CallExpression templates as any other built-in call.
+    // and renders through the same CallExpression template as any other built-in call. Its callee is a
+    // genuine `BUILTIN_FUNCTIONS` entry (see builtins.ts), so — like `print`/`is_function` (py-slang#404)
+    // — it displays as "Builtin", not "Identifier", picking up the same built-in hover popover.
     const stmt = ((await steps("breakpoint()\n1"))[0].ast as any).body[0];
     expect(stmt.type).toBe("ExpressionStatement");
     expect(stmt.expression.type).toBe("CallExpression");
-    expect(stmt.expression.callee.type).toBe("Identifier");
+    expect(stmt.expression.callee.type).toBe("Builtin");
     expect(stmt.expression.callee.name).toBe("breakpoint");
     expect(stmt.expression.arguments).toEqual([]);
   });
