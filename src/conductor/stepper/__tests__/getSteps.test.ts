@@ -2610,23 +2610,101 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(value).toContain("list index out of range");
   });
 
-  test("a Python closure argument is declined — the call stays stuck, not silently wrong", async () => {
-    // See moduleInterop.ts's module doc comment: forwarding a Python-authored callable into a module
-    // call would need the module to call back into Python, which this design explicitly doesn't
-    // support yet — an honest "Evaluation stuck", the same degrade `input()` already gets.
+  test("a Python callable argument is forwarded — the module can genuinely call it back (py-slang#423)", async () => {
+    // The issue's own repro: a module function (rune's connect_ends) samples a Python-authored curve
+    // function, whose own body calls a *second* module function (make_point) — a real, nested
+    // call-back-into-Python-then-back-into-the-module round trip, not just a bare forward.
     const dh = new GenericDataHandler(2);
-    async function* applyFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    async function* makePointFunc(
+      x: TypedValue<DataType>,
+      y: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
-      throw new Error("should never be invoked — the call must stay stuck before reaching here");
+      return {
+        type: DataType.NUMBER,
+        value: (x as TypedValue<DataType.NUMBER>).value + (y as TypedValue<DataType.NUMBER>).value,
+      };
+    }
+    const makePoint = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER, DataType.NUMBER] },
+      makePointFunc,
+    );
+    async function* connectEndsFunc(
+      f: TypedValue<DataType>,
+      g: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      const r1 = yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 1 },
+      ]);
+      const r2 = yield* dh.closure_call_unchecked(g as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 2 },
+      ]);
+      return {
+        type: DataType.NUMBER,
+        value:
+          (r1 as TypedValue<DataType.NUMBER>).value + (r2 as TypedValue<DataType.NUMBER>).value,
+      };
+    }
+    const connectEnds = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.ANY, DataType.ANY] },
+      connectEndsFunc,
+    );
+    installFakeModule({
+      curve: [
+        { symbol: "connect_ends", value: connectEnds },
+        { symbol: "make_point", value: makePoint },
+      ],
+    });
+    const ast = parse(
+      "from curve import connect_ends, make_point\n" +
+        "def diagonal(t):\n" +
+        "    return make_point(t, t)\n" +
+        "connected_1 = connect_ends(diagonal, diagonal)\n" +
+        "connected_1\n",
+    );
+    const value = await evaluatePython(ast, undefined, { evaluator: dh });
+    // f(1) -> diagonal(1) -> make_point(1, 1) -> 2; g(2) -> diagonal(2) -> make_point(2, 2) -> 4.
+    expect(value).toBe("6.0");
+  });
+
+  test("a lambda works as a module callback too, not just a named def", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* applyFunc(
+      f: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      return yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 21 },
+      ]);
     }
     const apply = await dh.closure_make(
       { returnType: DataType.NUMBER, args: [DataType.ANY] },
       applyFunc,
     );
     installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
-    const ast = parse("from hofmod import apply\napply(lambda x: x)\n");
-    const steppedResult = await getPythonSteps(ast, undefined, { evaluator: dh });
-    expect(steppedResult.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+    const ast = parse("from hofmod import apply\napply(lambda x: x * 2)\n");
+    expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("42.0");
+  });
+
+  test("a Python-level error inside a module callback surfaces normally, not as a native crash", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* applyFunc(
+      f: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      return yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 0 },
+      ]);
+    }
+    const apply = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.ANY] },
+      applyFunc,
+    );
+    installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
+    const ast = parse(
+      "from hofmod import apply\ndef blow_up(x):\n    return 1 / x\napply(blow_up)\n",
+    );
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+    expect(stepped.at(-2)?.markers?.[0]?.explanation).toBe("ZeroDivisionError: division by zero");
   });
 
   test("a missing module is a clear error, not a silent unbound name", async () => {

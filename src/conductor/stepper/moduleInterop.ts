@@ -8,16 +8,20 @@
  * as the engine calling it has an `async` path of its own to await from (see `reduce.ts`'s
  * `contractCall`, which is what this module is called from).
  *
- * Scope, deliberately narrower than the other two engines: a Python-authored callable (a `lambda`/
- * `def`, or a bare reference to a static built-in) is never converted into a module argument — see
- * `isPythonCallable`. Forwarding one would require the module to call back into Python mid-call,
- * which (unlike CSE's `modules.ts`, whose `"closure"` case re-enters its own control/stash loop, or
- * py2js's, which recurses into its own async interpreter entry point) the substitution reducer has no
- * way to do without re-entering its own step machinery — out of scope for this pass. A call shaped
- * that way simply doesn't reduce (irreducible → "Evaluation stuck"), the same honest degrade
- * `builtins.ts` already documents for `input()`/`time_time()`. A `ModuleFunction` value (an *already*
- * module-owned closure — see `ast.ts`) is fine to forward: passing it back never re-enters Python,
- * only the module's own native call machinery.
+ * A genuine Python-authored callable (a `lambda`/`def`, or a bare reference to a static built-in —
+ * see `isPythonCallable`) *can* be forwarded into a module call (py-slang#423, e.g. `rune`'s
+ * `connect_ends` sampling a Python-authored curve function): `pythonCallableToModule` wraps it in a
+ * module closure whose body re-enters the substitution reducer for real, via `applyPythonCallable` —
+ * a callback threaded in from `reduce.ts`'s `contractCall` (not imported directly, to avoid a
+ * circular `reduce.ts` ⇄ `moduleInterop.ts` dependency) that fully reduces `fn(...args)` to a value
+ * using the exact same `reduceExpr` loop the outer step sequence itself runs on, just scoped to one
+ * call expression and producing no visible steps of its own. This is a much lighter mechanism than
+ * CSE's `modules.ts` (whose `"closure"` case re-enters its own control/stash loop) or py2js's (which
+ * recurses into its own async interpreter entry point) need, precisely because the substitution
+ * model's "apply and get the result" already *is* just more reduction — there is no separate
+ * environment/continuation to re-enter. A `ModuleFunction` value (an *already* module-owned closure —
+ * see `ast.ts`) is forwarded even more simply: passing it back never re-enters Python at all, only the
+ * module's own native call machinery.
  *
  * `callModuleFunction` tries `IDataHandler.closure_call_sync` first (a genuinely synchronous escape
  * hatch a module's exported closure may opt into — see `GenericDataHandler.closure_call_sync`'s doc
@@ -40,7 +44,7 @@ import {
   type StepNode,
   stringLiteral,
 } from "./ast";
-import { isBuiltinFunctionName } from "./builtins";
+import { applyBuiltin, isBuiltinFunctionName } from "./builtins";
 
 /** Thrown for a student-actionable import problem (module not found, name not exported, a relative
  * import) — surfaced by `getSteps.ts`'s callers the same way a preprocessing error is, rather than
@@ -95,8 +99,9 @@ async function renderThumbnail(payload: unknown): Promise<string | undefined> {
   }
 }
 
-/** A genuine Python-authored callable — the one value shape `stepNodeToModule` declines to forward
- * into a module call. See the module doc comment. */
+/** A genuine Python-authored callable — a `lambda`/`def`, or a bare reference to a static built-in —
+ * the one value shape `stepNodeToModule` needs `applyPythonCallable` to forward into a module call.
+ * See the module doc comment. */
 function isPythonCallable(node: StepNode): boolean {
   return (
     node.type === "ArrowFunctionExpression" ||
@@ -105,17 +110,52 @@ function isPythonCallable(node: StepNode): boolean {
   );
 }
 
+/** Fully reduces `fn(...args)` to a value — `reduce.ts`'s own `applyPythonCallable`, bound to the
+ * current `StepperContext`, threaded in as a plain callback rather than imported directly so this
+ * module never needs to import from `reduce.ts` (which already imports from here). See the module
+ * doc comment. */
+export type ApplyPythonCallable = (fn: StepNode, args: StepNode[]) => Promise<StepNode>;
+
+/**
+ * Wraps a genuine Python-authored callable (`node`, satisfying {@link isPythonCallable}) as a module
+ * closure, so a module can call it back for real (py-slang#423). Arity is read the same way `arity()`
+ * itself reports it (`applyBuiltin("arity", ...)`, which already handles a `def`/`lambda`'s exact
+ * parameter count and a builtin's own `minArgs` uniformly) — `IDataHandler.closure_make`'s public
+ * contract has no way to additionally mark the result vararg (unlike `moduleFunction`'s own
+ * `isVararg` flag, set by the *module* side, not this one), so a wrapped bare builtin reference is
+ * only ever callable with exactly its reported `minArgs`; a `def`/`lambda` is unaffected, since the
+ * stepper's own chapters 1-2 forbid `*args` in the first place (`NoRestParamsValidator`) — its
+ * parameter count is already exact.
+ */
+async function pythonCallableToModule(
+  evaluator: IDataHandler,
+  node: StepNode,
+  applyPythonCallable: ApplyPythonCallable,
+): Promise<TypedValue<DataType.CLOSURE>> {
+  const arity = Number(applyBuiltin("arity", [node]).value as bigint);
+  async function* pyCallbackFunc(
+    ...args: TypedValue<DataType>[]
+  ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+    const argNodes = await Promise.all(args.map(a => moduleToStepNode(evaluator, a)));
+    const result = await applyPythonCallable(node, argNodes);
+    return stepNodeToModule(evaluator, result, applyPythonCallable);
+  }
+  return evaluator.closure_make<DataType[], DataType>(
+    { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
+    pyCallbackFunc,
+  );
+}
+
 /** Converts a stepper value into a conductor `TypedValue`, for passing into a module call as an
- * argument. Mirrors `pythonToModule` in `src/engines/cse/modules.ts`, restricted per the module doc
- * comment above. Throws `ModuleInteropUnsupportedError` for anything it cannot convert. */
+ * argument. Mirrors `pythonToModule` in `src/engines/cse/modules.ts`. Throws
+ * `ModuleInteropUnsupportedError` for anything it cannot convert. */
 export async function stepNodeToModule(
   evaluator: IDataHandler,
   node: StepNode,
+  applyPythonCallable: ApplyPythonCallable,
 ): Promise<TypedValue<DataType>> {
   if (isPythonCallable(node)) {
-    throw new ModuleInteropUnsupportedError(
-      "a Python function value cannot be passed to an imported module function here",
-    );
+    return pythonCallableToModule(evaluator, node, applyPythonCallable);
   }
   switch (node.type) {
     case "Literal": {
@@ -131,7 +171,9 @@ export async function stepNodeToModule(
     }
     case "ArrayExpression": {
       const elements = await Promise.all(
-        (node.elements as StepNode[]).map(el => stepNodeToModule(evaluator, el)),
+        (node.elements as StepNode[]).map(el =>
+          stepNodeToModule(evaluator, el, applyPythonCallable),
+        ),
       );
       const array = await evaluator.array_make(DataType.ANY, elements.length, {
         type: DataType.VOID,
@@ -285,8 +327,11 @@ export async function callModuleFunction(
   closure: TypedValue<DataType.CLOSURE>,
   name: string,
   args: StepNode[],
+  applyPythonCallable: ApplyPythonCallable,
 ): Promise<StepNode> {
-  const moduleArgs = await Promise.all(args.map(a => stepNodeToModule(evaluator, a)));
+  const moduleArgs = await Promise.all(
+    args.map(a => stepNodeToModule(evaluator, a, applyPythonCallable)),
+  );
   const syncCall = (
     evaluator as IDataHandler & {
       closure_call_sync?: (
