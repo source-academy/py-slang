@@ -56,7 +56,11 @@ export const pythonSyntaxProfile = {
     Identifier: [{ prop: "name" }],
     // A callable imported from a module (see ast.ts's `moduleFunction`) — always just its name, like
     // Identifier; there's no inline/expanded form to collapse from (unlike a bound def/lambda — see
-    // `functionValues` below), since it has no Python body.
+    // `functionValues` below), since it has no Python body. Gets a `Builtin`-style fixed-text hover
+    // popover instead (see `hoverText` below, py-slang#406) — its `hoverText` property is already set
+    // when the node is built (`ast.ts`'s `moduleFunction`), not relabelled at display time the way a
+    // bare built-in `Identifier` is, since it's already a fully-formed value from the moment it's
+    // substituted in.
     ModuleFunction: [{ prop: "name" }],
     // A bare Identifier relabelled at display time when its name is a built-in (see `getSteps.ts`'s
     // `serializeStep`) — rendered exactly like Identifier; the only difference is the `hoverText` rule
@@ -158,13 +162,17 @@ export const pythonSyntaxProfile = {
     { type: "FunctionDeclaration", nameProp: "name" },
   ],
 
-  // A `Builtin` node (see `getSteps.ts`'s display-time relabeling) shows a fixed-text hover popover —
-  // `<built-in function print>`-style — reading its already-formatted text from the node's own
-  // `hoverText` property (set alongside the relabeling). Unlike `functionValues` this doesn't collapse
-  // or replace the inline rendering (there's no body to collapse to begin with); it's added on top.
+  // A `Builtin` node (see `getSteps.ts`'s display-time relabeling) or a `ModuleFunction` node (see
+  // `ast.ts`'s `moduleFunction`) shows a fixed-text hover popover — `built-in function print`- or
+  // `module function heart`-style — reading its already-formatted text from the node's own `hoverText`
+  // property. Unlike `functionValues` this doesn't collapse or replace the inline rendering (there's no
+  // body to collapse to begin with); it's added on top.
   //
   // `hoverText` is implemented in `@sourceacademy/common-stepper`/`web-stepper` (source-academy/plugins)
   // but not yet in the version this package depends on — the cast below can be dropped once that
   // version ships and the dependency is bumped (see `Opaque`'s identical note above).
-  hoverText: [{ type: "Builtin", textProp: "hoverText" }],
+  hoverText: [
+    { type: "Builtin", textProp: "hoverText" },
+    { type: "ModuleFunction", textProp: "hoverText" },
+  ],
 } as unknown as SyntaxProfile;
