@@ -965,7 +965,8 @@ describe("Python stepper — a built-in used as a bare value displays as Builtin
     const s = await steps("def print(x):\n  return is_function(print)\nprint(1)");
     const i = s.findIndex(
       step =>
-        step.markers?.[0]?.explanation === "Declared and substituted print into the rest of the block",
+        step.markers?.[0]?.explanation ===
+        "Declared and substituted print into the rest of the block",
     );
     expect(i).toBeGreaterThan(-1);
     for (const step of s.slice(i)) {
@@ -975,7 +976,9 @@ describe("Python stepper — a built-in used as a bare value displays as Builtin
     // FunctionDeclaration value) — confirming it really did get substituted, not just left as a plain
     // Identifier that happened to dodge relabeling.
     expect(
-      s.some(step => findNode(step.ast, n => n.type === "FunctionDeclaration" && n.name === "print")),
+      s.some(step =>
+        findNode(step.ast, n => n.type === "FunctionDeclaration" && n.name === "print"),
+      ),
     ).toBe(true);
   });
 
