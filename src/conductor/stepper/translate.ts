@@ -199,19 +199,33 @@ function translateStmtInner(stmt: StmtNS.Stmt): StepNode {
     }
     case "Pass":
       return { type: "PassStatement" };
-    case "FromImport":
-      return { type: "ImportStatement", raw: importText(stmt as StmtNS.FromImport) };
+    case "FromImport": {
+      const s = stmt as StmtNS.FromImport;
+      return {
+        type: "ImportStatement",
+        raw: importText(s),
+        // The names this statement binds, purely syntactically — known from the parse alone, so
+        // markBuiltins/substitute's shadowing walks (ast.ts's declaredNamesOf) can treat them as
+        // "about to be declared" even before `resolveImports` ever runs (or if it can't: no module
+        // loader wired up, a module that fails to load, ...). Otherwise a name that happens to collide
+        // with a builtin (`from mymod import print`) would flash its *builtin* hover popover for as
+        // long as this import statement is still present in the body, since nothing would tell
+        // markBuiltins a shadowing binding is coming (py-slang#415/#417). Resolved *values* (once
+        // available) are attached separately, as `bindings` — see resolveImports.
+        names: s.names.map(({ name, alias }) => (alias ?? name).lexeme),
+      };
+    }
     default:
       return { type: "ExpressionStatement", expression: identifier(`<${stmt.kind}>`) };
   }
 }
 
 /** Reconstructs `from X import Y [as Z], ...` (or its relative `from .X import ...` form) as display
- * text for {@link translateStmtInner}'s `"FromImport"` case. The statement itself never reduces (see
- * `reduce.ts`'s `"ImportStatement"` case) — imported names are resolved and bound before stepping
- * begins (see `../getSteps`), mirroring how the CSE machine's own `FromImport` evaluator is a no-op
- * once its own upfront `evaluateImports` pass has run — so this text is purely what the student's
- * source reads like on this step, not something the reducer interprets. */
+ * text for {@link translateStmtInner}'s `"FromImport"` case — purely what the student's source reads
+ * like on this step; the reducer never interprets it. What each name actually binds to is resolved
+ * ahead of stepping (`moduleInterop.ts`'s `resolveImports`) but not *substituted in* until this
+ * statement's own step is reached (`reduce.ts`'s `"ImportStatement"` case, off the node's `bindings`
+ * field — attached by `resolveImports`, not set here), py-slang#417. */
 function importText(stmt: StmtNS.FromImport): string {
   const module = ".".repeat(stmt.level) + stmt.module.lexeme;
   const names = stmt.names

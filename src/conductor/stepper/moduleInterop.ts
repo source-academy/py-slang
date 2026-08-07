@@ -39,7 +39,6 @@ import {
   opaqueValue,
   type StepNode,
   stringLiteral,
-  substitute,
 } from "./ast";
 import { isBuiltinFunctionName } from "./builtins";
 
@@ -308,24 +307,41 @@ export async function callModuleFunction(
   return disambiguateGeneratedFunctions(await moduleToStepNode(evaluator, step.value, name, true));
 }
 
+/** A single `from X import Y [as Z]` binding, resolved to its stepper value — attached to the
+ * corresponding `ImportStatement` node's `bindings` field by {@link resolveImports} for `reduce.ts`'s
+ * `"ImportStatement"` case to actually substitute in, once that statement's own step is reached. */
+export interface ImportBinding {
+  name: string;
+  value: StepNode;
+}
+
 /**
- * Resolves and binds every `FromImport` a program uses, before stepping begins — mirroring
+ * Resolves every `FromImport` a program uses, before stepping begins — mirroring
  * `src/engines/cse/modules.ts`'s `loadModules`/`evaluateImports` (module loading happens once, ahead
  * of running/stepping the program itself, matching every other py-slang evaluator's two-phase model).
- * Each imported name is substituted directly into `program` (exactly like `substituteBuiltinConstants`
- * substitutes a built-in constant) rather than looked up by name at call time, so nothing needs
- * threading through the reducer beyond the one `evaluator` parameter `contractCall` needs to actually
- * place a call.
+ * Resolving is *not* the same as binding, though (py-slang#417): each import statement's resolved
+ * {@link ImportBinding}s are attached to its own translated `ImportStatement` node (`program.body[i]`,
+ * matching `fileInput.statements[i]` 1:1 — `translateProgram` preserves that correspondence) rather
+ * than substituted into the program immediately. `reduce.ts`'s `"ImportStatement"` case is what
+ * actually performs the substitution, once — and only once — that statement's own step is reached,
+ * exactly like a `def`/assignment's own `stepHead` contraction. Before this fix, substituting
+ * everywhere up front meant a name a program imports showed its resolved value (and hover popover)
+ * from the very first step, even *before* the import statement's own "Evaluating import statement"
+ * step had run — Chapters 1-2's substitution model promises that nothing is bound until the statement
+ * that binds it actually executes; an import is no exception.
  *
  * `evaluator` is `undefined` when no module loader is wired up (e.g. a bare `getPythonSteps()` call in
  * a test, or `PyStepperEvaluatorBase` in a host that hasn't registered `ModuleLoaderRunnerPlugin`) —
- * every imported name is then simply left unbound, exactly matching this file's absence: a program
- * that never uses the name still reaches "Evaluation complete" (`translate.ts`'s `FromImport` → a
- * no-op statement), one that does gets stuck at the point of use, not here. A relative import, a
- * missing module, or a name a module doesn't export are all *student-actionable* mistakes, though, so
- * once an evaluator genuinely is available those throw `ModuleImportError` rather than degrading —
- * mirrors how CSE (`RelativeImportNotSupportedError`/`ModuleNotFoundError`) and py2js
- * (`loadChunkImports`) both treat the identical cases as hard errors, not silent no-ops.
+ * every imported name is then simply left unbound (no `ImportStatement` node gets a `bindings` field
+ * at all), exactly matching this file's absence: a program that never uses the name still reaches
+ * "Evaluation complete" (`translate.ts`'s `FromImport` → a no-op statement), one that does gets stuck
+ * at the point of use, not here. A relative import, a missing module, or a name a module doesn't
+ * export are all *student-actionable* mistakes, though, so once an evaluator genuinely is available
+ * those throw `ModuleImportError` rather than degrading — mirrors how CSE
+ * (`RelativeImportNotSupportedError`/`ModuleNotFoundError`) and py2js (`loadChunkImports`) both treat
+ * the identical cases as hard errors, not silent no-ops. This still happens entirely up front, unlike
+ * the binding itself: a program-wide "can this even load" check belongs to preprocessing, not to
+ * however far the student has stepped when a given import statement happens to run.
  */
 export async function resolveImports(
   fileInput: StmtNS.FileInput,
@@ -363,14 +379,20 @@ export async function resolveImports(
     plugins.set(moduleName, outcome.value);
   }
 
-  // Binding runs sequentially in source order (not concurrently) so two imports binding the same
-  // name resolve deterministically — last one in source order wins, matching plain reassignment —
-  // rather than racing on whichever conversion happens to finish last; mirrors py2js's
-  // `loadChunkImports`' identical ordering rationale.
-  let result = program;
-  for (const stmt of imports) {
+  // Each statement's own bindings are still computed sequentially in source order (not concurrently),
+  // so a value that needs an extra microtask hop to convert (see moduleToStepNode's DataType.CLOSURE
+  // case) can't finish out of order relative to a plainer one from a later import — mirrors py2js's
+  // `loadChunkImports`' identical ordering rationale. Program-order "last import wins" itself no
+  // longer depends on this, though: once attached, each ImportStatement's bindings are substituted in
+  // by reduce.ts strictly in the order statements actually step, which is program order by
+  // construction.
+  const body = (program.body as StepNode[]).slice();
+  for (let i = 0; i < fileInput.statements.length; i++) {
+    if (fileInput.statements[i].kind !== "FromImport") continue;
+    const stmt = fileInput.statements[i] as StmtNS.FromImport;
     const moduleName = stmt.module.lexeme;
     const exportsByName = new Map(plugins.get(moduleName)!.exports.map(e => [e.symbol, e.value]));
+    const bindings: ImportBinding[] = [];
     for (const spec of stmt.names) {
       const exportValue = exportsByName.get(spec.name.lexeme);
       if (exportValue === undefined) {
@@ -378,10 +400,11 @@ export async function resolveImports(
           `cannot import name '${spec.name.lexeme}' from '${moduleName}'`,
         );
       }
-      const bound = (spec.alias ?? spec.name).lexeme;
+      const name = (spec.alias ?? spec.name).lexeme;
       const value = await moduleToStepNode(evaluator, exportValue, spec.name.lexeme);
-      result = substitute(result, bound, value);
+      bindings.push({ name, value });
     }
+    body[i] = { ...body[i], bindings };
   }
-  return result;
+  return { ...program, body };
 }

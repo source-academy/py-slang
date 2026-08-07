@@ -2200,19 +2200,110 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     );
     installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
 
-    // Referenced as a bare value (not called): already a fully-formed ModuleFunction node — see
-    // ast.ts's moduleFunction — with hoverText set from the moment resolveImports substitutes it in,
-    // unlike a built-in Identifier, which only gets relabelled at display time (py-slang#404).
+    // Referenced as a bare value (not called): a ModuleFunction node with hoverText set — see
+    // ast.ts's moduleFunction — unlike a built-in Identifier, which only gets relabelled at display
+    // time (py-slang#404). But only *once the import statement has actually run* (py-slang#417):
+    // resolveImports resolves the value ahead of stepping, but doesn't substitute it in until the
+    // import statement's own step is reached, exactly like a def/assignment's own contraction — so
+    // step 0 (before that step) must still show a plain, unresolved Identifier, not the popover.
+    //
+    // Assertions below locate the *call*'s own argument/callee specifically (via the unique
+    // CallExpression, which the ImportStatement's own bookkeeping can never contain) rather than
+    // searching the whole tree for a bare "ModuleFunction"/"Identifier" node: the ImportStatement node
+    // always internally carries its already-resolved value as `bindings` (read by reduce.ts's own
+    // "ImportStatement" case once its step fires) — invisible to the host's own render template (see
+    // syntaxProfile.ts's "ImportStatement" entry, which only ever reads `raw`) but very much still
+    // *findable* by a generic whole-tree walk like `findNode`, which would otherwise give a false
+    // "already resolved" positive at step 0.
     const ast = parse("from mathmod import double\nis_function(double)\n");
     const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
-    const doubleNode = findNode(stepped[0].ast, (n: any) => n.type === "ModuleFunction");
-    expect(doubleNode).toMatchObject({ name: "double", hoverText: "module function double" });
+    const argOf = (step: { ast: unknown }) =>
+      (findNode(step.ast, (n: any) => n.type === "CallExpression") as { arguments: unknown[] })
+        .arguments[0];
+    expect(argOf(stepped[0])).toMatchObject({ type: "Identifier", name: "double" });
 
-    // The import statement's own callee (before the call contracts) is the exact same node.
+    const withDouble = stepped.find(s => (argOf(s) as { type?: string }).type === "ModuleFunction");
+    expect(withDouble).toBeDefined();
+    expect(argOf(withDouble!)).toMatchObject({
+      name: "double",
+      hoverText: "module function double",
+    });
+
+    // The import statement's own callee (before the call contracts) is the exact same node, again
+    // only once the import has actually run — step 0 still shows a bare Identifier callee.
     const called = parse("from mathmod import double\ndouble(21)\n");
     const calledSteps = await getPythonSteps(called, undefined, { evaluator: dh });
-    const callee = findNode(calledSteps[0].ast, (n: any) => n.type === "CallExpression").callee;
+    expect(
+      findNode(calledSteps[0].ast, (n: any) => n.type === "CallExpression").callee,
+    ).toMatchObject({ type: "Identifier", name: "double" });
+    const withCallee = calledSteps.find(s => {
+      const call = findNode(s.ast, (n: any) => n.type === "CallExpression");
+      return call !== undefined && (call.callee as { type: string }).type === "ModuleFunction";
+    });
+    expect(withCallee).toBeDefined();
+    const callee = findNode(withCallee!.ast, (n: any) => n.type === "CallExpression").callee;
     expect(callee).toMatchObject({ type: "ModuleFunction", hoverText: "module function double" });
+  });
+
+  test("an import whose name collides with a builtin hides the builtin, not just at the import line (py-slang#415, py-slang#417)", async () => {
+    const dh = new GenericDataHandler(2);
+    // A fake `print` that just echoes its argument back (no output written) — clearly distinguishable
+    // from the real built-in `print`, which writes to the output panel and returns None.
+    async function* fakePrintFunc(
+      x: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return x;
+    }
+    const fakePrint = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      fakePrintFunc,
+    );
+    installFakeModule({ mymod: [{ symbol: "print", value: fakePrint }] });
+
+    const ast = parse("from mymod import print\nprint(1)\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+
+    // Step 0: the import hasn't run yet (it's the very first thing to step), but `print` must never
+    // flash the real builtin's own hover popover — it's about to be shadowed by the import, exactly
+    // like the existing "not-yet-declared shadowing name" tests already guarantee for a local `def`
+    // shadowing `print` (see the describe block below), just for an import instead of a `def`.
+    // declaredNamesOf (ast.ts) is what markBuiltins reads to know this — translate.ts's "FromImport"
+    // case records the bound names up front, independent of whether resolveImports ever resolves
+    // real values for them.
+    const calleeOf = (step: { ast: unknown }) =>
+      (findNode(step.ast, (n: any) => n.type === "CallExpression") as { callee: unknown }).callee;
+    expect(calleeOf(stepped[0])).toMatchObject({ type: "Identifier", name: "print" });
+    expect(
+      findNode(stepped[0].ast, (n: any) => n.type === "Builtin" && n.name === "print"),
+    ).toBeUndefined();
+
+    // Once the import has actually run, `print(1)` calls the imported closure (no output written),
+    // not the real built-in print (which would have written "1\n").
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+    expect((stepped.at(-1) as { output?: string } | undefined)?.output ?? "").toBe("");
+  });
+
+  test("a local def shadows an earlier import, even though resolveImports substitutes it up front (py-slang#413)", async () => {
+    const dh = new GenericDataHandler(2);
+    // The *real* imported red expects an opaque handle (like rune's actual red(rune)); it must never
+    // actually be called here — a bug that fails to shadow it would instead try to route a plain
+    // Python int into this closure and blow up with a conductor-level "Invalid opaque identifier"
+    // error, not a Python-level one.
+    async function* realRedFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      throw new Error("the imported rune red should never actually be called here");
+    }
+    const realRed = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [DataType.OPAQUE] },
+      realRedFunc,
+    );
+    installFakeModule({ rune: [{ symbol: "red", value: realRed }] });
+
+    const ast = parse("from rune import red\ndef red(x):\n  return x\nprint(red(4))\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+    expect((stepped.at(-1) as { output?: string } | undefined)?.output).toBe("4\n");
   });
 
   test("a module function's returned closure is module-generated, not the import itself (py-slang#407)", async () => {
