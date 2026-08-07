@@ -43,6 +43,7 @@ import {
   paramNames,
   stringLiteral,
   substitute,
+  substituteRest,
   unparse,
 } from "./ast";
 import {
@@ -56,7 +57,7 @@ import {
 } from "./builtins";
 import type { StepperContext } from "./context";
 import { formatPrintLlistOutput } from "./lists";
-import { callModuleFunction } from "./moduleInterop";
+import { callModuleFunction, type ImportBinding } from "./moduleInterop";
 
 export interface ReduceResult {
   /**
@@ -976,7 +977,7 @@ async function stepHead(
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
-      const substitutedRest = rest.map(stmt => substitute(stmt, name, boundValue));
+      const substitutedRest = substituteRest(rest, name, boundValue);
       return {
         kind: "step",
         newBody: substitutedRest,
@@ -991,7 +992,7 @@ async function stepHead(
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
+      const substitutedRest = substituteRest(rest, name, value);
       return {
         kind: "step",
         newBody: substitutedRest,
@@ -1008,18 +1009,26 @@ async function stepHead(
         explanation: "Evaluated pass statement",
         beforeExplanation: "Evaluating pass statement",
       };
-    case "ImportStatement":
-      // A no-op, like `PassStatement` above: imported names are resolved and bound before stepping
-      // begins (see `../getSteps`), mirroring the CSE machine's own `FromImport` evaluator, which is a
-      // no-op for the identical reason (its own `evaluateImports` pass already ran). By the time this
-      // statement is reached there is nothing left to do.
+    case "ImportStatement": {
+      // Like a def/assignment's own contraction above, not actually a no-op once an evaluator is
+      // wired up: `moduleInterop.ts`'s `resolveImports` resolves every import's value ahead of
+      // stepping but defers substituting it in until the corresponding import statement's own step is
+      // reached (py-slang#417) — exactly here. `bindings` is absent (or empty) when no module loader
+      // was available at all, in which case this genuinely is a no-op, matching the CSE machine's own
+      // `FromImport` evaluator once its `evaluateImports` pass has run.
+      const bindings = (head.bindings as ImportBinding[] | undefined) ?? [];
+      let substitutedRest = rest;
+      for (const { name, value } of bindings) {
+        substitutedRest = substituteRest(substitutedRest, name, value);
+      }
       return {
         kind: "step",
-        newBody: rest,
+        newBody: substitutedRest,
         preRedex: head,
         explanation: "Evaluated import statement",
         beforeExplanation: "Evaluating import statement",
       };
+    }
     case "IfStatement": {
       const reduced = await reduceExpr(head.test as StepNode, context);
       if (reduced) {
