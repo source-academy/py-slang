@@ -271,4 +271,40 @@ print(outer())
       }
     });
   });
+
+  describe("redefining an imported name is a reassignment (py-slang#413)", () => {
+    // Chapters 1-2 are deliberately single-assignment so that substitution alone is a complete
+    // explanation of what a program does (see ast.ts's substitute doc comment) — a `def red`
+    // silently shadowing an earlier `from rune import red` would break exactly that guarantee, the
+    // same as reassigning any other name would. Before this fix, `from rune import red` was invisible
+    // to createNoReassignmentValidator (it only checked Assign/AnnAssign/FunctionDef targets), so this
+    // sailed through preprocessing and only surfaced, confusingly, as a conductor-level crash once the
+    // substitution stepper actually tried to call the (never-actually-shadowed) imported red.
+    const code = "from rune import (red, heart)\ndef red(x): return x\nprint(red(4))";
+
+    test("a def redeclaring an imported name is rejected under chapter 1", () => {
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("a def redeclaring an imported name is rejected under chapter 2", () => {
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("chapter 3+ allows it, same as any other reassignment there", () => {
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(code, 4)).toMatchObject({});
+    });
+
+    test("two imports binding the same name don't collide, even under chapter 1 — that's still allowed", () => {
+      // Not this fix's concern: `moduleInterop.ts`'s `resolveImports` deliberately supports "last
+      // import wins" for two imports of the same name (see `src/tests/py2js-from-import.test.ts`'s
+      // "two imports binding the same name resolve in source order, last one wins", which exercises
+      // exactly this under chapter 1). The grammar itself (`python.ne`) already guarantees every
+      // import precedes every other statement, so this asymmetry (imports never collide with an
+      // *earlier* binding, but do count as "already declared" for a *later* def/assign) is safe.
+      expect(toPythonAstAndResolve("from rune import red\nfrom rune import red", 1)).toMatchObject(
+        {},
+      );
+    });
+  });
 });
