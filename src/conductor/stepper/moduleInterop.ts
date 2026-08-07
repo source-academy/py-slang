@@ -34,6 +34,7 @@ import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import {
   literal,
   moduleFunction,
+  moduleGeneratedFunction,
   numberLiteral,
   opaqueValue,
   type StepNode,
@@ -174,11 +175,19 @@ async function readCompoundElements(
  * program, or a module function's return value. Mirrors `moduleToPython` in
  * `src/engines/cse/modules.ts`. `name` labels a `DataType.CLOSURE` result (the display name calls to
  * it render as); defaults to a generic label for one reached indirectly (e.g. a module function
- * returning another as its result). */
+ * returning another as its result). `fromCall` distinguishes a value bound directly by a
+ * `from X import Y` statement (`false`, the default — see `resolveImports` below) from one produced
+ * by actually *calling* a module function (`true` — see `callModuleFunction` below): only in the
+ * latter case does a nested `DataType.CLOSURE` get {@link moduleGeneratedFunction}'s
+ * `_from_`-prefixed name and distinct hover text rather than {@link moduleFunction}'s plain one
+ * (py-slang#407). Threaded through the `DataType.PAIR`/`DataType.ARRAY` recursion below so a closure
+ * nested inside a call's result (e.g. `make_sound`'s `(wave, duration)` pair) is marked
+ * module-generated too, not just one returned bare. */
 export async function moduleToStepNode(
   evaluator: IDataHandler,
   value: TypedValue<DataType>,
   name = "<module function>",
+  fromCall = false,
 ): Promise<StepNode> {
   switch (value.type) {
     case DataType.NUMBER:
@@ -210,7 +219,9 @@ export async function moduleToStepNode(
         evaluator.closure_arity(value),
         evaluator.closure_is_vararg(value),
       ]);
-      return moduleFunction(name, value, minArgs, isVararg);
+      return fromCall
+        ? moduleGeneratedFunction(name, value, minArgs, isVararg)
+        : moduleFunction(name, value, minArgs, isVararg);
     }
     case DataType.PAIR:
     case DataType.ARRAY: {
@@ -218,11 +229,50 @@ export async function moduleToStepNode(
       // between a PAIR and an ARRAY (e.g. sound's Sound is a (wave, duration) dotted pair).
       const elements = await readCompoundElements(evaluator, value);
       const converted = await Promise.all(
-        elements.map(el => moduleToStepNode(evaluator, el, name)),
+        elements.map(el => moduleToStepNode(evaluator, el, name, fromCall)),
       );
       return { type: "ArrayExpression", elements: converted };
     }
   }
+}
+
+/**
+ * Collects every {@link moduleGeneratedFunction} node in `node`'s subtree, left to right — the only
+ * `ModuleFunction`-typed nodes a call result's own tree can contain, since a call result is built
+ * with `fromCall: true` throughout (see `moduleToStepNode`) and the only other node type its
+ * `ArrayExpression` wrapping recurses through is itself. Used by `disambiguateGeneratedFunctions`
+ * below.
+ */
+function collectGeneratedFunctions(node: StepNode, out: StepNode[]): void {
+  if (node.type === "ModuleFunction") {
+    out.push(node);
+  } else if (node.type === "ArrayExpression") {
+    for (const el of node.elements as StepNode[]) collectGeneratedFunctions(el, out);
+  }
+}
+
+/**
+ * A single module call can return more than one closure at once (e.g. `rune`'s `make_sound` handing
+ * back a `(wave, duration)` pair where `wave` is itself callable) — `moduleToStepNode` names every one
+ * of them identically (`_from_${name}`, since none of them individually knows about its siblings).
+ * Distinguishes same-call siblings by appending a `_1`, `_2`, ... suffix (in left-to-right tree order)
+ * once more than one is found; a lone generated function is left exactly as `moduleToStepNode` named
+ * it. Mutates the fresh nodes in place (safe: `result`'s tree is newly built by this same call, not
+ * shared with anything else yet) and returns `result` for chaining. The hover text — read separately
+ * off `hoverText`, not `name` — already names the generator itself (see `ast.ts`'s
+ * `moduleGeneratedFunction`), so it stays identical and unsuffixed across every sibling (py-slang#407):
+ * the `name` suffix exists only to tell the *values* apart on screen, not to claim they came from
+ * differently-named generators.
+ */
+function disambiguateGeneratedFunctions(result: StepNode): StepNode {
+  const generated: StepNode[] = [];
+  collectGeneratedFunctions(result, generated);
+  if (generated.length > 1) {
+    generated.forEach((node, i) => {
+      node.name = `${node.name}_${i + 1}`;
+    });
+  }
+  return result;
 }
 
 /**
@@ -248,12 +298,14 @@ export async function callModuleFunction(
   ).closure_call_sync?.bind(evaluator);
   const syncResult = syncCall?.(closure, moduleArgs);
   if (syncResult !== undefined) {
-    return moduleToStepNode(evaluator, syncResult, name);
+    return disambiguateGeneratedFunctions(
+      await moduleToStepNode(evaluator, syncResult, name, true),
+    );
   }
   const gen = evaluator.closure_call_unchecked(closure, moduleArgs);
   let step = await gen.next();
   while (!step.done) step = await gen.next();
-  return moduleToStepNode(evaluator, step.value, name);
+  return disambiguateGeneratedFunctions(await moduleToStepNode(evaluator, step.value, name, true));
 }
 
 /**
