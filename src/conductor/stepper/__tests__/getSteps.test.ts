@@ -2186,6 +2186,35 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(await evaluatePython(ast, undefined, { evaluator: dh })).toBe("43.0");
   });
 
+  test("an imported function gets a module-function hover popover (py-slang#406)", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* doubleFunc(
+      a: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: (a as TypedValue<DataType.NUMBER>).value * 2 };
+    }
+    const double = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      doubleFunc,
+    );
+    installFakeModule({ mathmod: [{ symbol: "double", value: double }] });
+
+    // Referenced as a bare value (not called): already a fully-formed ModuleFunction node — see
+    // ast.ts's moduleFunction — with hoverText set from the moment resolveImports substitutes it in,
+    // unlike a built-in Identifier, which only gets relabelled at display time (py-slang#404).
+    const ast = parse("from mathmod import double\nis_function(double)\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    const doubleNode = findNode(stepped[0].ast, (n: any) => n.type === "ModuleFunction");
+    expect(doubleNode).toMatchObject({ name: "double", hoverText: "module function double" });
+
+    // The import statement's own callee (before the call contracts) is the exact same node.
+    const called = parse("from mathmod import double\ndouble(21)\n");
+    const calledSteps = await getPythonSteps(called, undefined, { evaluator: dh });
+    const callee = findNode(calledSteps[0].ast, (n: any) => n.type === "CallExpression").callee;
+    expect(callee).toMatchObject({ type: "ModuleFunction", hoverText: "module function double" });
+  });
+
   test("an opaque return value completes the program (renders as its label, never inspected)", async () => {
     const dh = new GenericDataHandler(2);
     class Thing {}

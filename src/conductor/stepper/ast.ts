@@ -64,6 +64,13 @@ export function opaqueValue(label: string, handle: unknown, dataUrl?: string): S
  * `resolveImports`), exactly like a built-in constant or a bound `def` — never looked up by name at
  * call time, so nothing needs threading through the reducer beyond the one `evaluator` parameter
  * `contractCall` needs to actually place the call.
+ *
+ * `hoverText` gives it the same fixed-text hover popover a true native builtin gets (see
+ * `builtins.ts`'s `resolveBuiltinDisplayValue`/`Builtin`, py-slang#404) rather than a body-revealing
+ * mu-term — there is, likewise, no body to reveal — reusing `syntaxProfile.ts`'s `hoverText` rule
+ * directly on this node type; unlike a bare built-in `Identifier`, a `ModuleFunction` is already a
+ * fully-formed value from the moment `resolveImports` substitutes it in, so no display-time relabeling
+ * pass (`ast.ts`'s `markBuiltins`) is needed to reach it (py-slang#406).
  */
 export function moduleFunction(
   name: string,
@@ -71,7 +78,14 @@ export function moduleFunction(
   minArgs: number,
   isVararg: boolean,
 ): StepNode {
-  return { type: "ModuleFunction", name, closure, minArgs, isVararg };
+  return {
+    type: "ModuleFunction",
+    name,
+    closure,
+    minArgs,
+    isVararg,
+    hoverText: `module function ${name}`,
+  };
 }
 
 /** Whether `node` is an opaque module value. See {@link opaqueValue}. */
