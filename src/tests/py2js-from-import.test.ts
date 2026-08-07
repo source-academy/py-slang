@@ -38,9 +38,12 @@ afterEach(() => {
   ModuleLoaderRunnerPlugin.instance = null;
 });
 
-function makeSession(dh: GenericDataHandler) {
+function makeSession(dh: GenericDataHandler, variant = 1) {
   const outputs: string[] = [];
-  const session = new Py2JsSession(1, { onOutput: line => outputs.push(line), dataHandler: dh });
+  const session = new Py2JsSession(variant, {
+    onOutput: line => outputs.push(line),
+    dataHandler: dh,
+  });
   return { session, outputs };
 }
 
@@ -84,7 +87,14 @@ test("two imports binding the same name resolve in source order, last one wins",
   // slower one) would always win — backwards from Python's last-assignment-
   // wins semantics. Binding sequentially in source order fixes that: `fast`
   // (the textually-last import) must win here.
-  const dh = new GenericDataHandler(4);
+  //
+  // Chapter 3, not the file's usual chapter 1 default: two modules declaring the same name is a
+  // reassignment, same as any other (py-slang#413), and chapters 1-2 forbid that outright — this
+  // scenario is only legal where reassignment is legal at all. `dh` uses the same variant as the
+  // session below (`makeSession(dh, 3)`) for consistency, even though GenericDataHandler's own
+  // `variant` only affects DataType.ARRAY's error-message wording ('list' vs 'pair', see
+  // GenericDataHandler.ts's `getTypeName`) — never exercised by this test, which hits no error path.
+  const dh = new GenericDataHandler(3);
   async function* neverCalled(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
     await Promise.resolve();
     throw new Error("should never be invoked by this test");
@@ -95,7 +105,7 @@ test("two imports binding the same name resolve in source order, last one wins",
     fastmod: [{ symbol: "x", value: { type: DataType.NUMBER, value: 42 } }],
   });
 
-  const { session, outputs } = makeSession(dh);
+  const { session, outputs } = makeSession(dh, 3);
   await session.runChunk("from slowmod import x\nfrom fastmod import x\nprint(x)\n");
 
   expect(outputs).toEqual(["42.0"]);

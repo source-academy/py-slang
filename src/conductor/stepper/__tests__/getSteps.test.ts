@@ -2215,6 +2215,28 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(callee).toMatchObject({ type: "ModuleFunction", hoverText: "module function double" });
   });
 
+  test("a local def shadows an earlier import, even though resolveImports substitutes it up front (py-slang#413)", async () => {
+    const dh = new GenericDataHandler(2);
+    // The *real* imported red expects an opaque handle (like rune's actual red(rune)); it must never
+    // actually be called here — a bug that fails to shadow it would instead try to route a plain
+    // Python int into this closure and blow up with a conductor-level "Invalid opaque identifier"
+    // error, not a Python-level one.
+    async function* realRedFunc(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      throw new Error("the imported rune red should never actually be called here");
+    }
+    const realRed = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [DataType.OPAQUE] },
+      realRedFunc,
+    );
+    installFakeModule({ rune: [{ symbol: "red", value: realRed }] });
+
+    const ast = parse("from rune import red\ndef red(x):\n  return x\nprint(red(4))\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+    expect((stepped.at(-1) as { output?: string } | undefined)?.output).toBe("4\n");
+  });
+
   test("a module function's returned closure is module-generated, not the import itself (py-slang#407)", async () => {
     const dh = new GenericDataHandler(2);
     // sine_wave() returns a further function — a fresh closure minted at call time, never bound by any

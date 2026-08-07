@@ -271,4 +271,50 @@ print(outer())
       }
     });
   });
+
+  describe("redefining an imported name is a reassignment (py-slang#413)", () => {
+    // Chapters 1-2 are deliberately single-assignment so that substitution alone is a complete
+    // explanation of what a program does (see ast.ts's substitute doc comment) — a `def red`
+    // silently shadowing an earlier `from rune import red` would break exactly that guarantee, the
+    // same as reassigning any other name would. Before this fix, `from rune import red` was invisible
+    // to createNoReassignmentValidator (it only checked Assign/AnnAssign/FunctionDef targets), so this
+    // sailed through preprocessing and only surfaced, confusingly, as a conductor-level crash once the
+    // substitution stepper actually tried to call the (never-actually-shadowed) imported red.
+    const code = "from rune import (red, heart)\ndef red(x): return x\nprint(red(4))";
+
+    test("a def redeclaring an imported name is rejected under chapter 1", () => {
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("a def redeclaring an imported name is rejected under chapter 2", () => {
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("chapter 3+ allows it, same as any other reassignment there", () => {
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(code, 4)).toMatchObject({});
+    });
+
+    test("two modules declaring the same name is a reassignment too, rejected under chapters 1-2", () => {
+      // Same reasoning as a def shadowing an import: two modules both binding `red` is just as much a
+      // reassignment as `def red` after `from rune import red` is — chapters 1-2 reject it uniformly,
+      // regardless of which two statements (import/import, import/def, def/def, ...) are colliding.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(() => toPythonAstAndResolve(twoImports, 1)).toThrow(
+        ResolverErrors.NameReassignmentError,
+      );
+      expect(() => toPythonAstAndResolve(twoImports, 2)).toThrow(
+        ResolverErrors.NameReassignmentError,
+      );
+    });
+
+    test("chapter 3+ allows two modules declaring the same name too, same as any other reassignment", () => {
+      // `moduleInterop.ts`'s `resolveImports` supports "last import wins" for two imports of the same
+      // name (see `src/tests/py2js-from-import.test.ts`'s "two imports binding the same name resolve
+      // in source order, last one wins") — legal only where reassignment in general is legal.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(toPythonAstAndResolve(twoImports, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(twoImports, 4)).toMatchObject({});
+    });
+  });
 });
