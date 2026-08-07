@@ -90,8 +90,11 @@ test("two imports binding the same name resolve in source order, last one wins",
   //
   // Chapter 3, not the file's usual chapter 1 default: two modules declaring the same name is a
   // reassignment, same as any other (py-slang#413), and chapters 1-2 forbid that outright — this
-  // scenario is only legal where reassignment is legal at all.
-  const dh = new GenericDataHandler(4);
+  // scenario is only legal where reassignment is legal at all. `dh` uses the same variant as the
+  // session below (`makeSession(dh, 3)`) for consistency, even though GenericDataHandler's own
+  // `variant` only affects DataType.ARRAY's error-message wording ('list' vs 'pair', see
+  // GenericDataHandler.ts's `getTypeName`) — never exercised by this test, which hits no error path.
+  const dh = new GenericDataHandler(3);
   async function* neverCalled(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
     await Promise.resolve();
     throw new Error("should never be invoked by this test");
