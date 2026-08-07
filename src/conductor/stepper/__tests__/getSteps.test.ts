@@ -1041,6 +1041,21 @@ describe("Python stepper — a §2 library function used as a value gets a real 
     expect(helperRef.body).toBeDefined();
   });
 
+  test("a caller's local parameter of the same name as a library helper does not leak into the library template's own (lexically independent) scope", async () => {
+    // `f`'s own parameter `_map` has nothing to do with the library's `_map` cross-referenced *inside*
+    // `map`'s body once resolved — a library template is a global definition, not nested within
+    // whatever local scope happened to be in effect at the call site that referenced it.
+    const s = await steps("def f(_map):\n  return is_function(map)\nf(1)");
+    const mapValue = findNode(
+      s[0].ast,
+      n => n.type === "ArrowFunctionExpression" && n.name === "map",
+    );
+    expect(mapValue).toBeDefined();
+    const helperRef = findNode(mapValue.body, n => n.name === "_map");
+    expect(helperRef).toMatchObject({ type: "ArrowFunctionExpression", name: "_map" });
+    expect(helperRef.body).toBeDefined();
+  });
+
   test("a called library function's callee is also the real mu-term (not Builtin)", async () => {
     const s = await steps("llist_ref(llist(1, 2, 3), 1)");
     const callee = findNode(s[0].ast, n => n.type === "CallExpression").callee;

@@ -383,16 +383,16 @@ function isFunctionValueShape(node: StepNode): boolean {
  * of silently failing to resolve.
  *
  * `bound` mirrors `substitute`'s own shadowing check — the parameters and own name of every enclosing,
- * not-yet-invoked function value (whether written by the student or, now, a library template resolved
- * mid-walk) — so a name that will resolve to a *recursive self-reference* once that function is actually
- * called is never mislabelled a builtin/library value just because it currently still reads the same as
- * one. This matters specifically for a function value's own body: unlike the rest of a step's tree
- * (already fully resolved by live substitution before any step is ever displayed — see the module doc
- * comment on `getSteps.ts`), a function value's body is opaque, un-substituted cargo until the function
- * is actually called, so a name shadowed there is not yet resolved away the way a top-level binding
- * already is. Leaving such an occurrence as a plain `Identifier` also lets the host's own existing
- * recursive-mu-term rendering (matching an `Identifier` inside a popover's content against the enclosing
- * function's own name) keep working unchanged, instead of competing with a second, independent mu-term.
+ * not-yet-invoked function value the student actually wrote — so a name that will resolve to a
+ * *recursive self-reference* once that function is actually called is never mislabelled a builtin/
+ * library value just because it currently still reads the same as one. This matters specifically for a
+ * function value's own body: unlike the rest of a step's tree (already fully resolved by live
+ * substitution before any step is ever displayed — see the module doc comment on `getSteps.ts`), a
+ * function value's body is opaque, un-substituted cargo until the function is actually called, so a name
+ * shadowed there is not yet resolved away the way a top-level binding already is. Leaving such an
+ * occurrence as a plain `Identifier` also lets the host's own existing recursive-mu-term rendering
+ * (matching an `Identifier` inside a popover's content against the enclosing function's own name) keep
+ * working unchanged, instead of competing with a second, independent mu-term.
  *
  * The same forward-looking care applies *within* a single, still-unreduced statement list: at the very
  * first ("Start of evaluation") step, `def print(x): ...\nprint(1)` has not been touched by any
@@ -405,6 +405,17 @@ function isFunctionValueShape(node: StepNode): boolean {
  * left to right, adding each statement's own declared name (a `def`'s name, or a `x = ...` target) to
  * `bound` *before* walking the statements after it — simulating, for display, the same shadowing
  * `stepHead`'s actual declare-and-substitute step will produce once reduction actually gets there.
+ *
+ * A resolved library template's own body is walked with a **fresh** `bound` (just its own params/name),
+ * never the caller's — `libraryPath` (a *separate* set, tracking only library names currently being
+ * expanded on this path) is what it inherits instead. A library template is a global definition,
+ * lexically independent of whatever local scope happened to be in effect at the call site that
+ * referenced it — a strict lexical reading of `def f(_map): return is_function(map)`, for instance,
+ * still means the very same global `_map` cross-referenced *inside* `map`'s own body once resolved, not
+ * `f`'s unrelated parameter of the same name; letting `f`'s `bound` leak in would wrongly leave that
+ * `_map` an un-relabelled `Identifier`, denying it a popup it should have. `libraryPath` exists so a
+ * library template that (perhaps only indirectly, via some future addition) calls back into one of its
+ * own ancestors on this path still terminates instead of expanding forever.
  */
 export function markBuiltins(
   node: StepNode,
@@ -412,10 +423,10 @@ export function markBuiltins(
 ): MarkedBuiltins {
   const correspondence = new Map<StepNode, StepNode>();
 
-  // The bound-name set for descending into a named function value's own body: its own parameters, plus
-  // its own name (a `FunctionDeclaration`'s `id.name`; an `ArrowFunctionExpression`'s `.name` marker, if
-  // bound to one; a library template's own registered name) — see the doc comment above on why this
-  // must be more conservative than `substitute`'s identical check, which skips `.name` entirely.
+  // The bound-name set for descending into a *student-written* named function value's own body: its own
+  // parameters, plus its own name (a `FunctionDeclaration`'s `id.name`; an `ArrowFunctionExpression`'s
+  // `.name` marker, if bound to one) — more conservative than `substitute`'s identical check, which
+  // skips `.name` entirely; see the doc comment above.
   const innerBound = (
     fn: StepNode,
     ownName: string | undefined,
@@ -427,7 +438,11 @@ export function markBuiltins(
     return inner;
   };
 
-  const walk = (node: StepNode, bound: ReadonlySet<string>): StepNode => {
+  const walk = (
+    node: StepNode,
+    bound: ReadonlySet<string>,
+    libraryPath: ReadonlySet<string>,
+  ): StepNode => {
     const record = (result: StepNode): StepNode => {
       correspondence.set(node, result);
       return result;
@@ -435,12 +450,16 @@ export function markBuiltins(
     switch (node.type) {
       case "Identifier": {
         const name = String(node.name);
-        if (bound.has(name)) return record(node);
+        if (bound.has(name) || libraryPath.has(name)) return record(node);
         const resolved = resolveDisplayValue(name);
         if (resolved === undefined) return record(node);
         if (!isFunctionValueShape(resolved)) return record(resolved);
-        const inner = innerBound(resolved, name, bound);
-        const body = walk(resolved.body as StepNode, inner);
+        // See the doc comment above: a library template's own body starts a fresh lexical scope (just
+        // its own params/name, not the caller's `bound`), inheriting only the library recursion guard.
+        const inner = innerBound(resolved, name, new Set());
+        const innerLibraryPath = new Set(libraryPath);
+        innerLibraryPath.add(name);
+        const body = walk(resolved.body as StepNode, inner, innerLibraryPath);
         return record({ ...resolved, name, body });
       }
       case "ArrowFunctionExpression": {
@@ -449,12 +468,12 @@ export function markBuiltins(
           typeof node.name === "string" ? node.name : undefined,
           bound,
         );
-        const body = walk(node.body as StepNode, inner);
+        const body = walk(node.body as StepNode, inner, libraryPath);
         return record(body === node.body ? node : { ...node, body });
       }
       case "FunctionDeclaration": {
         const inner = innerBound(node, String((node.id as StepNode).name), bound);
-        const body = walk(node.body as StepNode, inner);
+        const body = walk(node.body as StepNode, inner, libraryPath);
         return record(body === node.body ? node : { ...node, body });
       }
       case "VariableDeclaration": {
@@ -462,7 +481,7 @@ export function markBuiltins(
         // `id` is the declaration's own target, never something to relabel (matching how a
         // `FunctionDeclaration`'s `id` is likewise never walked, just above).
         const decl = (node.declarations as StepNode[])[0];
-        const init = walk(decl.init as StepNode, bound);
+        const init = walk(decl.init as StepNode, bound, libraryPath);
         if (init === decl.init) return record(node);
         return record({ ...node, declarations: [{ ...decl, init }] });
       }
@@ -471,7 +490,7 @@ export function markBuiltins(
         const scoped = new Set(bound);
         let changed = false;
         const newBody = (node.body as StepNode[]).map(stmt => {
-          const walked = walk(stmt, scoped);
+          const walked = walk(stmt, scoped, libraryPath);
           if (walked !== stmt) changed = true;
           const declared = declaredNameOf(stmt);
           if (declared !== undefined) scoped.add(declared);
@@ -480,11 +499,11 @@ export function markBuiltins(
         return record(changed ? { ...node, body: newBody } : node);
       }
       default:
-        return record(mapChildren(node, child => walk(child, bound)));
+        return record(mapChildren(node, child => walk(child, bound, libraryPath)));
     }
   };
 
-  return { ast: walk(node, new Set()), correspondence };
+  return { ast: walk(node, new Set(), new Set()), correspondence };
 }
 
 /** The name a statement introduces that becomes visible to *later* statements in the same
