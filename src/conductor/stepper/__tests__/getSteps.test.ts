@@ -1019,7 +1019,10 @@ describe("Python stepper — a §2 library function used as a value gets a real 
 
   test("llist_ref's own recursive self-reference stays a plain Identifier (no infinite/duplicate mu-term)", async () => {
     const s = await steps("is_function(llist_ref)");
-    const value = findNode(s[0].ast, n => n.type === "ArrowFunctionExpression" && n.name === "llist_ref");
+    const value = findNode(
+      s[0].ast,
+      n => n.type === "ArrowFunctionExpression" && n.name === "llist_ref",
+    );
     // The self-call inside its own body is left as an ordinary Identifier — the host's own existing
     // recursive-mu-term rendering (matching an Identifier's name against the enclosing function's own
     // name) handles it from here, exactly like any other recursive user-defined function.
@@ -1029,7 +1032,10 @@ describe("Python stepper — a §2 library function used as a value gets a real 
 
   test("a private helper (_map) referenced only inside map's own body is also a real, independently hoverable mu-term", async () => {
     const s = await steps("is_function(map)");
-    const mapValue = findNode(s[0].ast, n => n.type === "ArrowFunctionExpression" && n.name === "map");
+    const mapValue = findNode(
+      s[0].ast,
+      n => n.type === "ArrowFunctionExpression" && n.name === "map",
+    );
     const helperRef = findNode(mapValue.body, n => n.name === "_map");
     expect(helperRef).toMatchObject({ type: "ArrowFunctionExpression", name: "_map" });
     expect(helperRef.body).toBeDefined();
@@ -1042,7 +1048,9 @@ describe("Python stepper — a §2 library function used as a value gets a real 
   });
 
   test("shadowing a library name with a local def hides the library function, not just its name", async () => {
-    const s = await steps("def llist_ref(xs, n):\n  return is_function(llist_ref)\nllist_ref(1, 1)");
+    const s = await steps(
+      "def llist_ref(xs, n):\n  return is_function(llist_ref)\nllist_ref(1, 1)",
+    );
     const i = s.findIndex(
       step =>
         step.markers?.[0]?.explanation ===

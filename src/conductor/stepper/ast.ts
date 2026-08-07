@@ -444,7 +444,11 @@ export function markBuiltins(
         return record({ ...resolved, name, body });
       }
       case "ArrowFunctionExpression": {
-        const inner = innerBound(node, typeof node.name === "string" ? node.name : undefined, bound);
+        const inner = innerBound(
+          node,
+          typeof node.name === "string" ? node.name : undefined,
+          bound,
+        );
         const body = walk(node.body as StepNode, inner);
         return record(body === node.body ? node : { ...node, body });
       }
