@@ -1056,6 +1056,26 @@ describe("Python stepper — a §2 library function used as a value gets a real 
     expect(helperRef.body).toBeDefined();
   });
 
+  test("a public library function calling another public one (map -> _map -> reverse) resolves the whole chain", async () => {
+    // `_map`'s body calls `reverse` (another *public* library function, not a `_`-prefixed helper) —
+    // confirms the mu-term chain keeps resolving across a public-to-public cross-reference too, not
+    // just public-to-private, and that evaluation itself (which goes through `reverse` for real) is
+    // completely unaffected by this purely-for-display relabeling.
+    const s = await steps("is_function(map)");
+    const mapValue = findNode(
+      s[0].ast,
+      n => n.type === "ArrowFunctionExpression" && n.name === "map",
+    );
+    const mapHelper = findNode(mapValue.body, n => n.name === "_map");
+    const reverseValue = findNode(mapHelper.body, n => n.name === "reverse");
+    expect(reverseValue).toMatchObject({ type: "ArrowFunctionExpression", name: "reverse" });
+    expect(reverseValue.body).toBeDefined();
+
+    expect(await result("llist_to_string(map(lambda x: x + 1, llist(1, 2, 3)))")).toBe(
+      "'[2, [3, [4, None]]]'",
+    );
+  });
+
   test("a called library function's callee is also the real mu-term (not Builtin)", async () => {
     const s = await steps("llist_ref(llist(1, 2, 3), 1)");
     const callee = findNode(s[0].ast, n => n.type === "CallExpression").callee;
