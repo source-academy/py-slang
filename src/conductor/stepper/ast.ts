@@ -363,6 +363,18 @@ export function paramNames(node: StepNode): string[] {
  * own name), so inner bindings correctly shadow the outer one. Shared by the reducer (function
  * application, statement-level bindings) and the linked-list library (binding a library function's
  * parameters to its value arguments).
+ *
+ * A `Program`/`BlockStatement` is also shadowing-aware *sequentially*: once a statement redeclares
+ * `name` (a `def name(...)` or `name = ...` — see `declaredNameOf`), every statement *after* it is
+ * left untouched, exactly mirroring `markBuiltins`'s identical `scoped`-set walk below. Without this,
+ * a caller that substitutes a binding across an entire already-existing program in one shot — as
+ * `moduleInterop.ts`'s `resolveImports` does for an import, and `builtins.ts`'s
+ * `substituteBuiltinConstants` does for a math constant — would incorrectly bake that binding into a
+ * later statement that's actually meant to be shadowed by a `def`/assignment of the same name still to
+ * come in program order (py-slang#413): that later redeclaration's own `stepHead` contraction
+ * (`reduce.ts`) substitutes into *its* `rest` correctly, but only if the occurrence it's looking for is
+ * still a plain `Identifier` there for it to find, not something an earlier, order-blind pass already
+ * replaced.
  */
 export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
   switch (node.type) {
@@ -376,6 +388,17 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
       return { ...node, body: substitute(node.body as StepNode, name, value) };
     case "VariableDeclarator":
       return { ...node, init: substitute(node.init as StepNode, name, value) };
+    case "Program":
+    case "BlockStatement": {
+      let shadowed = false;
+      const newBody = (node.body as StepNode[]).map(stmt => {
+        if (shadowed) return stmt;
+        const substituted = substitute(stmt, name, value);
+        if (declaredNameOf(stmt) === name) shadowed = true;
+        return substituted;
+      });
+      return { ...node, body: newBody };
+    }
     default:
       return mapChildren(node, child => substitute(child, name, value));
   }
@@ -550,10 +573,13 @@ export function markBuiltins(
 }
 
 /** The name a statement introduces that becomes visible to *later* statements in the same
- * `Program`/`BlockStatement` — a `def`'s own name, or a `x = ...` assignment's target — for
- * {@link markBuiltins}'s `Program`/`BlockStatement` case. `undefined` for anything else (an expression
- * statement, `if`, `pass`, `return`, `import` — an import is already fully resolved throughout the whole
- * program before stepping begins, see `getSteps.ts`'s `resolveImports`, so it never reaches here). */
+ * `Program`/`BlockStatement` — a `def`'s own name, or a `x = ...` assignment's target. Shared by
+ * {@link markBuiltins}'s `Program`/`BlockStatement` case and {@link substitute}'s identical one (the
+ * latter is what makes a redeclaration shadow an already-substituted import or math constant, not just
+ * an ordinary earlier binding — py-slang#413). `undefined` for anything else (an expression statement,
+ * `if`, `pass`, `return`, an import — `FromImport` never itself declares a name this way; a program's
+ * *own* copy of it is a plain no-op node, per `translate.ts`, and the name it binds is instead
+ * substituted in directly by `moduleInterop.ts`'s `resolveImports`). */
 function declaredNameOf(stmt: StepNode): string | undefined {
   if (stmt.type === "FunctionDeclaration") return String((stmt.id as StepNode).name);
   if (stmt.type === "VariableDeclaration") {
