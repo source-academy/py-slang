@@ -122,8 +122,12 @@ const mangle = (name: string) => "$" + name;
  * instead, so every read of a guardable binding compiles to an inline
  * `=== undefined` check; undefined is not a PyValue (None is null), so the
  * check is exact, and it costs one perfectly-predicted comparison. Parameters
- * are always bound and skip the guard; REPL-mode module names go through
- * gref, which performs the same check inside the runtime.
+ * are always bound and skip the guard; a module-level name additionally falls
+ * back to the true builtin of the same name (if the chunk's own binding
+ * hasn't executed yet — py-slang#415) via gref (REPL mode) or pgref (program
+ * mode), rather than raising NameError outright the way a function-local
+ * read's unboundErr does; see both helpers' doc comments in runtime.ts for
+ * why module scope, uniquely, needs this.
  */
 function emitName(name: string, ctx: EmitCtx, write: boolean): string {
   const j = JSON.stringify(name);
@@ -139,7 +143,7 @@ function emitName(name: string, ctx: EmitCtx, write: boolean): string {
   }
   if (ctx.programGlobals?.has(name)) {
     const m = mangle(name);
-    return write ? m : `(${m} === undefined ? __py.nameErr(${j}) : ${m})`;
+    return write ? m : `__py.pgref(${m}, ${j})`;
   }
   return mangle(name);
 }
