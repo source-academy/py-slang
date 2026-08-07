@@ -365,16 +365,20 @@ export function paramNames(node: StepNode): string[] {
  * parameters to its value arguments).
  *
  * A `Program`/`BlockStatement` is also shadowing-aware *sequentially*: once a statement redeclares
- * `name` (a `def name(...)` or `name = ...` — see `declaredNameOf`), every statement *after* it is
- * left untouched, exactly mirroring `markBuiltins`'s identical `scoped`-set walk below. Without this,
- * a caller that substitutes a binding across an entire already-existing program in one shot — as
- * `moduleInterop.ts`'s `resolveImports` does for an import, and `builtins.ts`'s
- * `substituteBuiltinConstants` does for a math constant — would incorrectly bake that binding into a
- * later statement that's actually meant to be shadowed by a `def`/assignment of the same name still to
- * come in program order (py-slang#413): that later redeclaration's own `stepHead` contraction
- * (`reduce.ts`) substitutes into *its* `rest` correctly, but only if the occurrence it's looking for is
- * still a plain `Identifier` there for it to find, not something an earlier, order-blind pass already
- * replaced.
+ * `name` (a `def name(...)`, `name = ...`, or `from X import name` — see `declaredNamesOf`), every
+ * statement *after* it is left untouched, exactly mirroring `markBuiltins`'s identical `scoped`-set
+ * walk below. Without this, a caller that substitutes a binding across an entire already-existing
+ * program in one shot — as `builtins.ts`'s `substituteBuiltinConstants` does for a math constant —
+ * would incorrectly bake that binding into a later statement that's actually meant to be shadowed by a
+ * `def`/assignment of the same name still to come in program order (py-slang#413): that later
+ * redeclaration's own `stepHead` contraction (`reduce.ts`, via {@link substituteRest} below) substitutes
+ * into *its* `rest` correctly, but only if the occurrence it's looking for is still a plain `Identifier`
+ * there for it to find, not something an earlier, order-blind pass already replaced. (An import's own
+ * binding no longer works this way at all, as of py-slang#417 — `moduleInterop.ts`'s `resolveImports`
+ * only *resolves* an import's value ahead of time now, deferring the actual substitution to that
+ * statement's own `stepHead` step, exactly like a `def`/assignment — so this paragraph's original
+ * motivating case no longer applies to imports specifically, but the general hazard it describes,
+ * and the fix, both still do.)
  */
 export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
   switch (node.type) {
