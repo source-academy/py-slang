@@ -121,9 +121,11 @@ async function drive(
   // Shared with reduce.ts's applyPythonCallable (via `runContext`) so a module calling back into a
   // Python function (py-slang#423) draws from — and can exhaust — the same budget this loop's own
   // top-level contractions do, rather than looping unbounded entirely inside one contraction; see
-  // StepperContext's `contractionBudget` doc comment.
+  // StepperContext's `contractionBudget` doc comment. `pendingOutput` is the identical arrangement for
+  // a `print` call inside such a callback — see its own doc comment.
   const budget = { remaining: contractionLimit };
-  const runContext: StepperContext = { ...context, contractionBudget: budget };
+  const pendingOutput = { text: "" };
+  const runContext: StepperContext = { ...context, contractionBudget: budget, pendingOutput };
 
   let current = prog;
   while (budget.remaining > 0) {
@@ -160,6 +162,14 @@ async function drive(
     // Apply this contraction's output (only a `print` produces any) so the after step and everything
     // after it show it, while the before ("Running print") step above still shows the prior total.
     if (result.output !== undefined) output += result.output;
+    // Any `print` calls a module callback made *during* this contraction (py-slang#423) — folded in
+    // right alongside the contraction's own direct output, then cleared for the next one. The two are
+    // mutually exclusive in practice (a module-call contraction, the only kind that can have run a
+    // callback, never sets `result.output` itself), but there's no need to assume that here.
+    if (pendingOutput.text !== "") {
+      output += pendingOutput.text;
+      pendingOutput.text = "";
+    }
     // The after step's tree is always `result.node` — identical to the next iteration's `current`
     // (pushed above as its own before step) — see `ReduceResult.node`'s doc comment on this invariant.
     // `postRedex` only highlights something when the redex was replaced in place by a surviving value;

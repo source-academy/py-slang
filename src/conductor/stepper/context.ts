@@ -36,4 +36,17 @@ export interface StepperContext {
    * this field existed.
    */
   contractionBudget?: { remaining: number };
+  /**
+   * Text a `print`/`print_llist` contraction has written *during a module callback* (py-slang#423)
+   * but hasn't been folded into `drive`'s own cumulative output yet — shared mutable state for the
+   * same reason `contractionBudget` is: a nested `reduceExpr` loop inside `applyPythonCallable`
+   * happens entirely *inside* one top-level contraction, so its own `print` calls never reach
+   * `drive`'s loop the normal way (reading `ReduceResult.output` off that one top-level call) — that
+   * top-level `ReduceResult` is the *module call's* own result, which never sets `output` itself.
+   * `applyPythonCallable` appends here instead; `drive`/`evaluatePython` drain and clear it once per
+   * top-level contraction, right alongside that contraction's own direct `output`. Optional and
+   * absent-safe like `contractionBudget`: without a host wired up to accumulate output at all, a
+   * callback's `print` output is simply not collected, same as before this field existed.
+   */
+  pendingOutput?: { text: string };
 }

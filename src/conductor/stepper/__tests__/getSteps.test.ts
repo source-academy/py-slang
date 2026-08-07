@@ -2765,6 +2765,32 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
   });
 
+  test("print() inside a module callback's own body appears in the stepper's output panel (py-slang#423)", async () => {
+    // applyPythonCallable's nested reduceExpr loop happens entirely *inside* one top-level
+    // contraction (the module call this callback answers), so a print() call in there never reaches
+    // drive()'s normal "read the top-level ReduceResult's output" path — that outer contraction is
+    // the module call itself, which never sets `output`. StepperContext.pendingOutput is the shared
+    // channel that carries it out anyway.
+    const dh = new GenericDataHandler(2);
+    async function* applyFunc(
+      f: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      return yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 42 },
+      ]);
+    }
+    const apply = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.ANY] },
+      applyFunc,
+    );
+    installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
+    const ast = parse(
+      "from hofmod import apply\ndef announce(x):\n    print(x)\n    return x\napply(announce)\n",
+    );
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    expect((stepped.at(-1) as { output?: string } | undefined)?.output).toBe("42.0\n");
+  });
+
   test("a missing module is a clear error, not a silent unbound name", async () => {
     const dh = new GenericDataHandler(2);
     installFakeModule({});

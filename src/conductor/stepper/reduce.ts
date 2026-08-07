@@ -622,6 +622,14 @@ export async function applyPythonCallable(
     }
     const step = await reduceExpr(current, context);
     if (step === null) break;
+    // A print()/print_llist() call inside the callback's own body: this contraction's ReduceResult
+    // is the only place that text ever appears, and it would otherwise be lost — the *outer*
+    // contraction (the module call this callback is answering) never sets `output` itself, so
+    // `drive`/`evaluatePython`'s normal "read the top-level ReduceResult's output" never sees it. See
+    // `StepperContext.pendingOutput`'s doc comment.
+    if (step.output !== undefined && context.pendingOutput !== undefined) {
+      context.pendingOutput.text += step.output;
+    }
     current = step.node;
   }
   if (!isValue(current)) {
