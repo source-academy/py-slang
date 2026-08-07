@@ -652,19 +652,41 @@ export class Py2JsRuntime {
    */
   readonly globals: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
 
-  /** Guarded read of a module-level binding: a name whose binding statement
-   * never executed (e.g. defined only in a not-taken branch) is a NameError,
-   * as in Python — undefined is not a PyValue, so the check is exact. */
+  /** Guarded read of a module-level binding — falling back to the true
+   * builtin of the same name, if any, before raising NameError (py-slang#415):
+   * CPython resolves a module-level name dynamically, at the point of the
+   * read, checking globals() first and *then* builtins — never statically,
+   * ahead of time. `compileProgram`'s builtin preamble (compiler.ts) skips a
+   * `const $name = __py.builtins[name]` binding for any name this chunk
+   * assigns anywhere at module level (so a later reassignment can shadow the
+   * builtin, once it actually runs), which left an *earlier* read — before
+   * that assignment executes — with nothing to fall back to but NameError,
+   * even though the real builtin is genuinely still what CPython would use
+   * at that point. undefined is not a PyValue, so both checks are exact. */
   gref(name: string): PyValue {
-    const v = this.globals[name];
-    if (v === undefined) {
-      this.nameErr(name);
-    }
-    return v;
+    return this.moduleRead(this.globals[name], name);
   }
 
-  /** A module-level name whose binding never executed (compiled reads guard
-   * with `=== undefined`; see emitName in compiler.ts). */
+  /** Same guarded-read-with-builtin-fallback as {@link gref}, for a program-
+   * mode (non-REPL) module-level name: compiled as an inline read of the
+   * chunk's own hoisted `let` (see emitName's `programGlobals` branch in
+   * compiler.ts) rather than an indexed lookup into `globals`, so the
+   * "current value so far" has to be passed in rather than looked up here. */
+  pgref(value: PyValue | undefined, name: string): PyValue {
+    return this.moduleRead(value, name);
+  }
+
+  private moduleRead(value: PyValue | undefined, name: string): PyValue {
+    if (value !== undefined) return value;
+    const builtin = this.builtins[name];
+    if (builtin !== undefined) return builtin;
+    this.nameErr(name);
+  }
+
+  /** A module-level name whose binding never executed, and which isn't a
+   * builtin either (compiled reads guard with `=== undefined`, then fall
+   * back to `this.builtins` — see `moduleRead` above; `emitName` in
+   * compiler.ts). */
   nameErr(name: string): never {
     throw new Py2JsRuntimeError("NameError", `name '${name}' is not defined`);
   }
