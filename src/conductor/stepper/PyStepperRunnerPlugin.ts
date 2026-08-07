@@ -23,14 +23,11 @@ const DEFAULT_STEP_LIMIT = 1000;
  * `context` (see `context.ts`) is what `getPythonSteps` uses to resolve a program's `FromImport`s and
  * `input()` calls, if any — see `moduleInterop.ts`'s `resolveImports` and `reduce.ts`'s `contractCall`.
  * `PyStepperEvaluatorBase` builds it once (its own `GenericDataHandler`, plus a `requestInput` that
- * records real answers — see `InputRecorder`) and passes it in at registration.
+ * round-trips through the host for real) and passes it in at registration.
  */
 export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.FileInput> {
   private readonly context: StepperContext;
-  /** Public so `PyStepperEvaluatorBase.runChunk` can pass the exact same value to its own separate
-   * `evaluatePython` call — see that function's `stepLimit` doc comment for why the two passes must
-   * agree, not just default to the same number. */
-  readonly stepLimit: number;
+  private readonly stepLimit: number;
 
   constructor(
     conduit: IConduit,

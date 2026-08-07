@@ -9,63 +9,27 @@ import { parse } from "../parser";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 import { fetchRunConfig } from "./runConfig";
-import { evaluatePython } from "./stepper/getSteps";
 import { preprocessPython } from "./stepper/preprocess";
 import { PythonStepperRunnerPlugin } from "./stepper/PyStepperRunnerPlugin";
-
-/**
- * Records real `requestInput` answers as they're given during one pass over a program (always the
- * Stepper tab's own `sendSteps`, driven through {@link InputRecorder.recording} below), so a second,
- * *separate* pass over the identical program (`evaluatePython`'s own re-derivation of the REPL's
- * echoed value, in `runChunk`) can {@link InputRecorder.replaying} the same answers instead of
- * asking the student a second time for what is, from their perspective, the exact same `input()`
- * call — see py-slang#191. Both passes reduce the same AST from the same starting substitutions, so
- * the Nth `input()` call reached by either pass is always the Nth recorded answer.
- *
- * One instance survives across every `runChunk` call over `PyStepperEvaluatorBase`'s lifetime (the
- * same way `PyCseEvaluatorBase`'s own `this.context` does — see its doc comment), so {@link reset}
- * must run at the start of each `runChunk`, before `sendSteps`, or a run would replay a *previous*
- * run's leftover answers.
- */
-class InputRecorder {
-  private log: string[] = [];
-  private replayIndex = 0;
-
-  constructor(private readonly real: (prompt?: string) => Promise<string>) {}
-
-  /** Clears the log — call once per `runChunk`, before the recording pass. */
-  reset(): void {
-    this.log = [];
-    this.replayIndex = 0;
-  }
-
-  /** The real, host-round-tripping requester. Wire this into whichever pass runs first. */
-  recording = async (prompt?: string): Promise<string> => {
-    const answer = await this.real(prompt);
-    this.log.push(answer);
-    return answer;
-  };
-
-  /** Consumes the recorded log in order. Wire this into any later pass re-deriving the same run.
-   * Falls back to a real request past the end of the log (the two passes took different paths —
-   * shouldn't happen given they reduce the same AST, but a real answer beats fabricating a wrong
-   * one). */
-  replaying = async (prompt?: string): Promise<string> => {
-    if (this.replayIndex < this.log.length) return this.log[this.replayIndex++];
-    return this.recording(prompt);
-  };
-}
 
 /**
  * A Conductor evaluator for Python that drives the stepper.
  *
  * On construction it registers the {@link PythonStepperRunnerPlugin} (so steps can be produced) and
  * asks the host to load the stepper's web plugin. Each run parses the program, pushes the evaluation
- * steps to the host (for the Stepper tab), reduces the program to its final value for the REPL, and
- * emits the status updates the host needs to stop the run spinner and finish the run.
+ * steps to the host (for the Stepper tab), and emits the status updates the host needs to stop the
+ * run spinner and finish the run.
  *
- * This mirrors js-slang's `SourceStepperEvaluator`; only parsing and step production are
- * Python-specific.
+ * `sendResult` is always called with `undefined`, exactly like `Py2JsEvaluator`/`PyodideEvaluator`'s
+ * own exec-mode runs: a Python program run as a script never produces a value the way a REPL
+ * expression does (py-slang#421) — the Stepper tab's own step sequence already shows the program's
+ * final state, so there is nothing further to echo to the host's REPL. This evaluator used to
+ * separately re-derive and send the text of the program's *last expression statement*, mirroring
+ * js-slang's `SourceStepperEvaluator` — appropriate there, since Source is expression-oriented and a
+ * program's last expression's value genuinely is "the result", but not for Python's exec model, where
+ * no other evaluator here treats a script's tail expression as a value to report; the "3" that string
+ * produced also outlived the Stepper tab itself, showing up as a stale REPL result even after
+ * switching to a different evaluator without re-running anything.
  *
  * Module loading (`from X import y`, py-slang#385): a `GenericDataHandler` — the same engine-agnostic
  * `IDataHandler` implementation `PyCseEvaluatorBase`/`Py2JsEvaluatorBase` use — is registered with
@@ -73,19 +37,13 @@ class InputRecorder {
  * reachable from the stepper module for resolving a program's imports before stepping begins.
  *
  * `input()` (py-slang#191) round-trips through `this.conductor.requestInput`, the same real host
- * capability the CSE machine and py2js already use, via an {@link InputRecorder} — see its own doc
- * comment for why a *recording* requester goes to the Stepper tab's pass and a *replaying* one to the
- * REPL-value pass, not the real thing twice.
- *
- * Both capabilities are bundled into one `StepperContext` (see `context.ts`) handed to
- * `PythonStepperRunnerPlugin` at registration below, which threads it into `getPythonSteps` for the
- * Stepper tab's steps; `runChunk` builds a second one (same `evaluator`, replaying `requestInput`) for
- * `evaluatePython`'s separate REPL-value pass.
+ * capability the CSE machine and py2js already use — a single, genuine round-trip per call, since
+ * `sendSteps` below is now the program's only run (no second pass to keep answers consistent with,
+ * unlike before py-slang#421's fix).
  */
 abstract class PyStepperEvaluatorBase extends BasicEvaluator {
   private readonly stepper: PythonStepperRunnerPlugin;
   private readonly dataHandler: GenericDataHandler;
-  private readonly inputRecorder = new InputRecorder(prompt => this.conductor.requestInput(prompt));
   /** The selected SICPy sublanguage (1–4). Gates which built-ins preprocessing accepts, so e.g. a
    * §1 program cannot use the §2 list library — see {@link preprocessPython}. */
   private readonly chapter: number;
@@ -98,7 +56,7 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
     // Register the language-agnostic stepper runner (Python binding) and load its host (web) half.
     this.stepper = conductor.registerPlugin(PythonStepperRunnerPlugin, {
       evaluator: this.dataHandler,
-      requestInput: this.inputRecorder.recording,
+      requestInput: prompt => this.conductor.requestInput(prompt),
     });
     conductor.hostLoadPlugin(STEPPER_DIRECTORY_ID);
     this.conductor.registerPlugin(
@@ -146,21 +104,11 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
         throw new EvaluatorSyntaxError(preprocessError);
       }
 
-      // Push evaluation steps to the host for the Stepper tab. Any `input()` call this pass reaches
-      // triggers a real requestInput round-trip, recorded as it happens.
-      this.inputRecorder.reset();
+      // Push evaluation steps to the host for the Stepper tab — this program's one and only run.
       await this.stepper.sendSteps(ast);
 
-      // Reduce to the final value for the REPL. We send a string (never `undefined`) so the result
-      // survives the channel and does not break the host's result saga. Replays whatever `input()`
-      // answers the pass above already recorded — see `InputRecorder`'s doc comment — rather than
-      // prompting the student a second time for the same input.
-      this.conductor.sendResult(
-        await evaluatePython(ast, this.stepper.stepLimit, {
-          evaluator: this.dataHandler,
-          requestInput: this.inputRecorder.replaying,
-        }),
-      );
+      // A Python script has no REPL value to report (py-slang#421) — see the class doc comment.
+      this.conductor.sendResult(undefined);
     } catch (error) {
       this.conductor.sendError(
         error instanceof SyntaxError
