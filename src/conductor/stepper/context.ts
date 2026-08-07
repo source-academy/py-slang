@@ -20,8 +20,6 @@ export interface StepperContext {
   evaluator?: IDataHandler;
   /** Requests one line of input from the student, echoing `prompt` first — see `reduce.ts`'s
    * `contractCall`, `"input"` case. A real implementation is a genuine host round-trip (matching
-   * `IRunnerPlugin.requestInput`'s own contract): one prompt in, one line back, in program order —
-   * see `PyStepperEvaluator.ts`'s `InputRecorder` for why the same recorded answers, not a second
-   * live round-trip, must back the stepper's separate REPL-echo pass. */
+   * `IRunnerPlugin.requestInput`'s own contract): one prompt in, one line back, in program order. */
   requestInput?: (prompt?: string) => Promise<string>;
 }
