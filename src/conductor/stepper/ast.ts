@@ -394,7 +394,7 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
       const newBody = (node.body as StepNode[]).map(stmt => {
         if (shadowed) return stmt;
         const substituted = substitute(stmt, name, value);
-        if (declaredNameOf(stmt) === name) shadowed = true;
+        if (declaredNamesOf(stmt).includes(name)) shadowed = true;
         return substituted;
       });
       return { ...node, body: newBody };
@@ -402,6 +402,22 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
     default:
       return mapChildren(node, child => substitute(child, name, value));
   }
+}
+
+/**
+ * Substitutes `name` with `value` across `rest` — the sibling statements *after* the current point in
+ * a `Program`/`BlockStatement`'s body, as `reduce.ts`'s `stepHead` binds a `def`/assignment/import into
+ * (its "declare and substitute into the rest of the block" contraction). Shares {@link substitute}'s
+ * own `Program`/`BlockStatement` case (by wrapping `rest` as one) rather than independently `.map`-ing
+ * `substitute` over each statement, so a *later* statement within `rest` that itself redeclares `name`
+ * correctly stops this substitution from reaching anything after it — that later statement's own
+ * contraction is what substitutes for everything past it, not this call (py-slang#417; the bug this
+ * fixes is general to every `stepHead` case with this shape, not specific to imports — two `def`s of
+ * the same name back to back, e.g., had it too, just unreachable through the resolver-validated
+ * chapters where that could otherwise matter).
+ */
+export function substituteRest(rest: StepNode[], name: string, value: StepNode): StepNode[] {
+  return substitute({ type: "Program", body: rest }, name, value).body as StepNode[];
 }
 
 /** The relabeled tree plus a lookup from every node in the *original* tree to its counterpart in `ast`
@@ -558,8 +574,7 @@ export function markBuiltins(
         const newBody = (node.body as StepNode[]).map(stmt => {
           const walked = walk(stmt, scoped, libraryPath);
           if (walked !== stmt) changed = true;
-          const declared = declaredNameOf(stmt);
-          if (declared !== undefined) scoped.add(declared);
+          for (const declared of declaredNamesOf(stmt)) scoped.add(declared);
           return walked;
         });
         return record(changed ? { ...node, body: newBody } : node);
@@ -572,21 +587,28 @@ export function markBuiltins(
   return { ast: walk(node, new Set(), new Set()), correspondence };
 }
 
-/** The name a statement introduces that becomes visible to *later* statements in the same
- * `Program`/`BlockStatement` — a `def`'s own name, or a `x = ...` assignment's target. Shared by
- * {@link markBuiltins}'s `Program`/`BlockStatement` case and {@link substitute}'s identical one (the
- * latter is what makes a redeclaration shadow an already-substituted import or math constant, not just
- * an ordinary earlier binding — py-slang#413). `undefined` for anything else (an expression statement,
- * `if`, `pass`, `return`, an import — `FromImport` never itself declares a name this way; a program's
- * *own* copy of it is a plain no-op node, per `translate.ts`, and the name it binds is instead
- * substituted in directly by `moduleInterop.ts`'s `resolveImports`). */
-function declaredNameOf(stmt: StepNode): string | undefined {
-  if (stmt.type === "FunctionDeclaration") return String((stmt.id as StepNode).name);
+/** The names a statement introduces that become visible to *later* statements in the same
+ * `Program`/`BlockStatement` — a `def`'s own name, a `x = ...` assignment's target (each exactly one
+ * name), or every name a `from X import Y, Z` statement binds (`translate.ts`'s `"FromImport"` case
+ * records these from the parse alone, so they're known even before — or without — `resolveImports`
+ * ever resolving actual values for them; see its `names` field). Shared by {@link markBuiltins}'s
+ * `Program`/`BlockStatement` case and {@link substitute}'s identical one — the latter is what makes a
+ * redeclaration shadow an already-substituted import or math constant, not just an ordinary earlier
+ * binding (py-slang#413); the former is what stops a name a later import is about to bind — including
+ * one that collides with a genuine builtin, e.g. `from mymod import print` — from flashing that
+ * builtin's own hover popover while the import statement is still present in the body (py-slang#415,
+ * py-slang#417). Empty for anything else (an expression statement, `if`, `pass`, `return`, ...). */
+function declaredNamesOf(stmt: StepNode): string[] {
+  if (stmt.type === "FunctionDeclaration") return [String((stmt.id as StepNode).name)];
   if (stmt.type === "VariableDeclaration") {
     const id = (stmt.declarations as StepNode[])[0].id as StepNode;
-    if (id.type === "Identifier") return String(id.name);
+    if (id.type === "Identifier") return [String(id.name)];
+    return [];
   }
-  return undefined;
+  if (stmt.type === "ImportStatement") {
+    return (stmt.names as string[] | undefined) ?? [];
+  }
+  return [];
 }
 
 /* -------------------------------------------------------------------------- */

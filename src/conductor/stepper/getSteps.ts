@@ -293,7 +293,9 @@ export async function getPythonSteps(
   const contractionLimit = contractionLimitFor(stepLimit);
   // Built-in constants (math_pi, …) are substituted in up front so they render as their value from
   // the first step, matching js-slang's stepper — see {@link substituteBuiltinConstants}. Imported
-  // names are resolved and substituted the same way, immediately after — see `resolveImports`.
+  // names are only *resolved* up front, immediately after (a real module-loading round trip, done
+  // once) — each one is *substituted in* later, as its own import statement's own step, not here (see
+  // `resolveImports`'s doc comment, py-slang#417).
   const translated = substituteBuiltinConstants(translateProgram(fileInput));
   const program = await resolveImports(fileInput, context.evaluator, translated);
   return (await drive(program, contractionLimit, context)).map(serializeStep);
