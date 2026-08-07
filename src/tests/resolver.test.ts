@@ -295,16 +295,26 @@ print(outer())
       expect(toPythonAstAndResolve(code, 4)).toMatchObject({});
     });
 
-    test("two imports binding the same name don't collide, even under chapter 1 — that's still allowed", () => {
-      // Not this fix's concern: `moduleInterop.ts`'s `resolveImports` deliberately supports "last
-      // import wins" for two imports of the same name (see `src/tests/py2js-from-import.test.ts`'s
-      // "two imports binding the same name resolve in source order, last one wins", which exercises
-      // exactly this under chapter 1). The grammar itself (`python.ne`) already guarantees every
-      // import precedes every other statement, so this asymmetry (imports never collide with an
-      // *earlier* binding, but do count as "already declared" for a *later* def/assign) is safe.
-      expect(toPythonAstAndResolve("from rune import red\nfrom rune import red", 1)).toMatchObject(
-        {},
+    test("two modules declaring the same name is a reassignment too, rejected under chapters 1-2", () => {
+      // Same reasoning as a def shadowing an import: two modules both binding `red` is just as much a
+      // reassignment as `def red` after `from rune import red` is — chapters 1-2 reject it uniformly,
+      // regardless of which two statements (import/import, import/def, def/def, ...) are colliding.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(() => toPythonAstAndResolve(twoImports, 1)).toThrow(
+        ResolverErrors.NameReassignmentError,
       );
+      expect(() => toPythonAstAndResolve(twoImports, 2)).toThrow(
+        ResolverErrors.NameReassignmentError,
+      );
+    });
+
+    test("chapter 3+ allows two modules declaring the same name too, same as any other reassignment", () => {
+      // `moduleInterop.ts`'s `resolveImports` supports "last import wins" for two imports of the same
+      // name (see `src/tests/py2js-from-import.test.ts`'s "two imports binding the same name resolve
+      // in source order, last one wins") — legal only where reassignment in general is legal.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(toPythonAstAndResolve(twoImports, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(twoImports, 4)).toMatchObject({});
     });
   });
 });
