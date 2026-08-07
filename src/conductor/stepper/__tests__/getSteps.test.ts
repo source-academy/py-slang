@@ -2707,6 +2707,64 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(stepped.at(-2)?.markers?.[0]?.explanation).toBe("ZeroDivisionError: division by zero");
   });
 
+  test("a non-terminating module callback is stopped by the step limit, not left to hang (py-slang#423)", async () => {
+    // applyPythonCallable's own reduceExpr loop draws from the same shared StepperContext.
+    // contractionBudget the outer drive() loop does — without that, infinite recursion inside a
+    // callback's own body would never return control to drive() at all, so the outer stepLimit could
+    // never stop it.
+    const dh = new GenericDataHandler(2);
+    async function* applyFunc(
+      f: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      return yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+        { type: DataType.NUMBER, value: 1 },
+      ]);
+    }
+    const apply = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.ANY] },
+      applyFunc,
+    );
+    installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
+    const ast = parse(
+      "from hofmod import apply\ndef loop_forever(x):\n    return loop_forever(x)\napply(loop_forever)\n",
+    );
+    // A small step limit keeps this test fast and deterministic — the point is that the callback's own
+    // unbounded recursion is caught by the shared budget, not that it runs for a realistic number of
+    // steps first.
+    const stepped = await getPythonSteps(ast, 20, { evaluator: dh });
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
+    expect(stepped.at(-2)?.markers?.[0]?.explanation).toBe("Maximum number of steps exceeded");
+  });
+
+  test("a bare variadic builtin reference passed to a module still accepts extra arguments (py-slang#423)", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* applyFunc(
+      f: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      // The *checked* closure_call (unlike closure_call_unchecked, used by every other test in this
+      // file) enforces isVararg before invoking — this is what actually exercises the fix: print is
+      // genuinely variadic, so calling it with more arguments than its own reported minArgs must not
+      // raise a spurious InvalidArityError.
+      return yield* dh.closure_call(
+        f as TypedValue<DataType.CLOSURE>,
+        [
+          { type: DataType.NUMBER, value: 1 },
+          { type: DataType.NUMBER, value: 2 },
+          { type: DataType.NUMBER, value: 3 },
+        ],
+        DataType.ANY,
+      );
+    }
+    const apply = await dh.closure_make(
+      { returnType: DataType.ANY, args: [DataType.ANY] },
+      applyFunc,
+    );
+    installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
+    const ast = parse("from hofmod import apply\napply(print)\n");
+    const stepped = await getPythonSteps(ast, undefined, { evaluator: dh });
+    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+  });
+
   test("a missing module is a clear error, not a silent unbound name", async () => {
     const dh = new GenericDataHandler(2);
     installFakeModule({});

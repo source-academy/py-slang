@@ -120,12 +120,18 @@ export type ApplyPythonCallable = (fn: StepNode, args: StepNode[]) => Promise<St
  * Wraps a genuine Python-authored callable (`node`, satisfying {@link isPythonCallable}) as a module
  * closure, so a module can call it back for real (py-slang#423). Arity is read the same way `arity()`
  * itself reports it (`applyBuiltin("arity", ...)`, which already handles a `def`/`lambda`'s exact
- * parameter count and a builtin's own `minArgs` uniformly) — `IDataHandler.closure_make`'s public
- * contract has no way to additionally mark the result vararg (unlike `moduleFunction`'s own
- * `isVararg` flag, set by the *module* side, not this one), so a wrapped bare builtin reference is
- * only ever callable with exactly its reported `minArgs`; a `def`/`lambda` is unaffected, since the
- * stepper's own chapters 1-2 forbid `*args` in the first place (`NoRestParamsValidator`) — its
- * parameter count is already exact.
+ * parameter count and a builtin's own `minArgs` uniformly).
+ *
+ * A bare builtin reference (`print`, `min`, `max`, `round`, ...) is often genuinely variadic — `arity`
+ * above is only its *minimum* argument count — so it's reported to `closure_make` as vararg via a
+ * fourth argument `IDataHandler`'s own public contract doesn't declare (every concrete implementation
+ * in this codebase, `GenericDataHandler`, accepts it anyway — the same escape hatch
+ * `callModuleFunction`'s `closure_call_sync` cast below uses for an equally undeclared method), so a
+ * module calling the wrapped builtin through the *checked* `closure_call` (which enforces `isVararg`
+ * before invoking, unlike `closure_call_unchecked`) still accepts extra arguments instead of raising a
+ * spurious `InvalidArityError`. A `def`/`lambda`'s own parameter count is always exact regardless of
+ * this, since the stepper's own chapters 1-2 forbid `*args` in the first place
+ * (`NoRestParamsValidator`) — `isVararg: false` there is simply correct, not a limitation.
  */
 async function pythonCallableToModule(
   evaluator: IDataHandler,
@@ -140,9 +146,21 @@ async function pythonCallableToModule(
     const result = await applyPythonCallable(node, argNodes);
     return stepNodeToModule(evaluator, result, applyPythonCallable);
   }
-  return evaluator.closure_make<DataType[], DataType>(
+  const isVararg = node.type === "Identifier";
+  return (
+    evaluator as IDataHandler & {
+      closure_make: (
+        sig: { returnType: DataType; args: DataType[] },
+        func: typeof pyCallbackFunc,
+        dependsOn: undefined,
+        isVararg: boolean,
+      ) => Promise<TypedValue<DataType.CLOSURE>>;
+    }
+  ).closure_make(
     { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
     pyCallbackFunc,
+    undefined,
+    isVararg,
   );
 }
 

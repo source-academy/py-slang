@@ -606,10 +606,23 @@ export async function applyPythonCallable(
   context: StepperContext,
 ): Promise<StepNode> {
   let current: StepNode = { type: "CallExpression", callee: fn, arguments: args };
-  let step = await reduceExpr(current, context);
-  while (step !== null) {
+  const budget = context.contractionBudget;
+  for (;;) {
+    // Draws from the same shared budget `drive`/`evaluatePython`'s own top-level loop does (see
+    // `StepperContext.contractionBudget`'s doc comment) — without this, a non-terminating callback
+    // (infinite recursion inside its own body, say) would loop here forever, never returning control
+    // to the outer loop that would otherwise have enforced the step limit. Absent (no host wired up
+    // at all, only reachable via a caller driving `reduceExpr`/`contractCall` directly, bypassing
+    // `drive`/`evaluatePython`) means genuinely unbounded, same as before this budget existed.
+    if (budget !== undefined) {
+      if (budget.remaining <= 0) {
+        throw new Error("Maximum number of steps exceeded");
+      }
+      budget.remaining--;
+    }
+    const step = await reduceExpr(current, context);
+    if (step === null) break;
     current = step.node;
-    step = await reduceExpr(current, context);
   }
   if (!isValue(current)) {
     throw new Error("Evaluation stuck");

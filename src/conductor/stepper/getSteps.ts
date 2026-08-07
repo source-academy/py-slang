@@ -118,11 +118,19 @@ async function drive(
 
   pushStep(prog, [{ explanation: "Start of evaluation" }]);
 
+  // Shared with reduce.ts's applyPythonCallable (via `runContext`) so a module calling back into a
+  // Python function (py-slang#423) draws from — and can exhaust — the same budget this loop's own
+  // top-level contractions do, rather than looping unbounded entirely inside one contraction; see
+  // StepperContext's `contractionBudget` doc comment.
+  const budget = { remaining: contractionLimit };
+  const runContext: StepperContext = { ...context, contractionBudget: budget };
+
   let current = prog;
-  for (let i = 0; i < contractionLimit; i++) {
+  while (budget.remaining > 0) {
+    budget.remaining--;
     let result: Awaited<ReturnType<typeof reduceProgram>>;
     try {
-      result = await reduceProgram(current, context);
+      result = await reduceProgram(current, runContext);
     } catch (error) {
       // A runtime error during reduction (e.g. ZeroDivisionError): evaluation is stuck. Show the
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
@@ -164,7 +172,7 @@ async function drive(
     ]);
 
     current = result.node;
-    if (i === contractionLimit - 1) {
+    if (budget.remaining === 0) {
       pushStep(current, [{ explanation: "Maximum number of steps exceeded" }]);
     }
   }
@@ -336,8 +344,13 @@ export async function evaluatePython(
   // ZeroDivisionError) is below.
   let current = await resolveImports(fileInput, context.evaluator, translated);
   let resultRepr = "";
+  // See `drive`'s identical budget — shared with reduce.ts's applyPythonCallable (py-slang#423) so a
+  // non-terminating module callback can't loop unbounded here either.
+  const budget = { remaining: contractionLimit };
+  const runContext: StepperContext = { ...context, contractionBudget: budget };
   try {
-    for (let i = 0; i < contractionLimit; i++) {
+    while (budget.remaining > 0) {
+      budget.remaining--;
       // Remember the final expression's text before the next contraction discards it. A trailing
       // non-expression statement (e.g. an assignment) contributes no value, so `resultRepr` keeps the
       // last expression seen — or stays "" if the program never ends on one.
@@ -347,7 +360,7 @@ export async function evaluatePython(
         const expr = last.expression as StepNode;
         resultRepr = expr.type === "Literal" ? String(expr.raw ?? expr.value) : unparse(expr);
       }
-      const result = await reduceProgram(current, context);
+      const result = await reduceProgram(current, runContext);
       if (result === null) break;
       current = result.node;
     }
