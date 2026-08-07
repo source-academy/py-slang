@@ -583,6 +583,14 @@ export function applyBuiltin(name: string, args: StepNode[]): StepNode {
   return fn(args);
 }
 
+/** Whether `name` is a built-in *function* value — either a `BUILTIN_FUNCTIONS` entry or a special
+ * form (currently just `input`) — the two name sets a bare `Identifier` is checked against wherever
+ * "this name refers to some built-in function" matters (call contraction, `isStepperValue` below, and
+ * `getSteps.ts`'s builtin-value display decoration). */
+export function isBuiltinFunctionValueName(name: string): boolean {
+  return isBuiltinFunctionName(name) || isSpecialFormName(name);
+}
+
 /**
  * Whether `node` is a value the stepper may end on. Extends `isResultValue` (which excludes a bare
  * `Identifier`) to also accept a built-in *function* name — `abs`, `math_sqrt`, … are first-class
@@ -591,7 +599,6 @@ export function applyBuiltin(name: string, args: StepNode[]): StepNode {
 export function isStepperValue(node: StepNode): boolean {
   return (
     isResultValue(node) ||
-    (node.type === "Identifier" &&
-      (isBuiltinFunctionName(String(node.name)) || isSpecialFormName(String(node.name))))
+    (node.type === "Identifier" && isBuiltinFunctionValueName(String(node.name)))
   );
 }

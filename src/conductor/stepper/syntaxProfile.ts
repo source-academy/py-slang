@@ -15,7 +15,11 @@
 
 import type { SyntaxProfile, SyntaxTemplatePart } from "@sourceacademy/common-stepper";
 
-export const pythonSyntaxProfile: SyntaxProfile = {
+// `hoverText` (see below) is a whole extra top-level `SyntaxProfile` field the currently-installed
+// `@sourceacademy/common-stepper` doesn't know about yet, so this object is typed by inference here and
+// only asserted to `SyntaxProfile` at the end — an explicit `: SyntaxProfile` annotation on this
+// declaration would make TypeScript's excess-property check reject `hoverText` outright.
+export const pythonSyntaxProfile = {
   templates: {
     // Program / statements
     Program: [{ lines: "body" }],
@@ -54,6 +58,10 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     // Identifier; there's no inline/expanded form to collapse from (unlike a bound def/lambda — see
     // `functionValues` below), since it has no Python body.
     ModuleFunction: [{ prop: "name" }],
+    // A bare Identifier relabelled at display time when its name is a built-in (see `getSteps.ts`'s
+    // `serializeStep`) — rendered exactly like Identifier; the only difference is the `hoverText` rule
+    // below, which adds a popover on top (py-slang#404).
+    Builtin: [{ prop: "name" }],
 
     // Expressions
     BinaryExpression: [
@@ -128,6 +136,7 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     ArrayExpression: 20,
     Opaque: 20,
     ModuleFunction: 20,
+    Builtin: 20,
     Literal: 18,
     CallExpression: 18,
     UnaryExpression: 15,
@@ -148,4 +157,14 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     { type: "ArrowFunctionExpression", nameProp: "name" },
     { type: "FunctionDeclaration", nameProp: "name" },
   ],
-};
+
+  // A `Builtin` node (see `getSteps.ts`'s display-time relabeling) shows a fixed-text hover popover —
+  // `<built-in function print>`-style — reading its already-formatted text from the node's own
+  // `hoverText` property (set alongside the relabeling). Unlike `functionValues` this doesn't collapse
+  // or replace the inline rendering (there's no body to collapse to begin with); it's added on top.
+  //
+  // `hoverText` is implemented in `@sourceacademy/common-stepper`/`web-stepper` (source-academy/plugins)
+  // but not yet in the version this package depends on — the cast below can be dropped once that
+  // version ships and the dependency is bumped (see `Opaque`'s identical note above).
+  hoverText: [{ type: "Builtin", textProp: "hoverText" }],
+} as unknown as SyntaxProfile;
