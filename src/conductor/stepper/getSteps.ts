@@ -118,11 +118,10 @@ async function drive(
 
   pushStep(prog, [{ explanation: "Start of evaluation" }]);
 
-  // Shared with reduce.ts's applyPythonCallable (via `runContext`) so a module calling back into a
-  // Python function (py-slang#423) draws from — and can exhaust — the same budget this loop's own
-  // top-level contractions do, rather than looping unbounded entirely inside one contraction; see
-  // StepperContext's `contractionBudget` doc comment. `pendingOutput` is the identical arrangement for
-  // a `print` call inside such a callback — see its own doc comment.
+  // `reduce.ts`'s `applyPythonCallable` (a module calling back into a Python function, py-slang#423)
+  // deliberately does not draw from this budget — see `StepperContext.contractionBudget`'s doc
+  // comment. `pendingOutput` (via `runContext`) is the shared-mutable-state arrangement for a `print`
+  // call inside such a callback — see its own doc comment.
   const budget = { remaining: contractionLimit };
   const pendingOutput = { text: "" };
   const runContext: StepperContext = { ...context, contractionBudget: budget, pendingOutput };
@@ -354,8 +353,6 @@ export async function evaluatePython(
   // ZeroDivisionError) is below.
   let current = await resolveImports(fileInput, context.evaluator, translated);
   let resultRepr = "";
-  // See `drive`'s identical budget — shared with reduce.ts's applyPythonCallable (py-slang#423) so a
-  // non-terminating module callback can't loop unbounded here either.
   const budget = { remaining: contractionLimit };
   const runContext: StepperContext = { ...context, contractionBudget: budget };
   try {

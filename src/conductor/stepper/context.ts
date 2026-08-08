@@ -23,17 +23,22 @@ export interface StepperContext {
    * `IRunnerPlugin.requestInput`'s own contract): one prompt in, one line back, in program order. */
   requestInput?: (prompt?: string) => Promise<string>;
   /**
-   * The remaining contraction budget for the *entire* run, shared mutable state rather than a plain
-   * number so every consumer sees the same live count. `getSteps.ts`'s `drive`/`evaluatePython` own
-   * it — each creates one and decrements it once per top-level contraction, exactly as their own
-   * `contractionLimit` loop bound already did before this field existed. `reduce.ts`'s
-   * `applyPythonCallable` is the only other reader/writer: a module calling back into a Python
-   * function (py-slang#423) drives its own nested `reduceExpr` loop to a value, entirely *inside* one
-   * outer contraction, so without this the outer budget would never see — let alone stop — a
-   * non-terminating callback (one that never returns control to the outer loop at all). Optional and
-   * absent-safe like the other fields: a caller driving `reduceExpr`/`contractCall` directly, without
-   * going through `drive`/`evaluatePython`, simply gets an unbounded callback loop, same as before
-   * this field existed.
+   * The remaining contraction budget for the outer, *visible* step sequence, shared mutable state
+   * rather than a plain number so every consumer sees the same live count. `getSteps.ts`'s
+   * `drive`/`evaluatePython` own it — each creates one and decrements it once per top-level
+   * contraction, exactly as their own `contractionLimit` loop bound already did before this field
+   * existed. `reduce.ts`'s `applyPythonCallable` (a module calling back into a Python function,
+   * py-slang#423) deliberately does *not* draw from this: it runs its own nested `reduceExpr` loop
+   * to a value, entirely *inside* one outer contraction, and can legitimately need far more
+   * contractions than any reasonable visible step count would ever show a student — e.g. `sound`'s
+   * `play` sampling a student-authored wave function at 44.1kHz needs tens of thousands of callback
+   * calls to render even one second of audio (py-slang#427). A genuinely non-terminating callback
+   * (infinite recursion in a student's own callback body, say) is instead the host's problem to stop —
+   * the evaluator runs inside its own Worker, and the frontend's existing "Stop" control kills that
+   * Worker outright, which works regardless of what it's doing internally. Optional and absent-safe
+   * like the other fields: a caller driving `reduceExpr`/`contractCall` directly, without going
+   * through `drive`/`evaluatePython`, simply gets an unbounded top-level loop too, same as before this
+   * field existed.
    */
   contractionBudget?: { remaining: number };
   /**
