@@ -105,7 +105,7 @@ describe("PyStepperEvaluator1", () => {
 
     const stepsMessage = sent.find(m => m.type === "steps") as { steps: { markers: unknown[] }[] };
     const explanations = stepsMessage.steps.flatMap(s =>
-      (s.markers as { explanation?: string }[]).map(m => m.explanation),
+      ((s.markers ?? []) as { explanation?: string }[]).map(m => m.explanation),
     );
     expect(explanations).toContain("Maximum number of steps exceeded");
     // A stepLimit of 3 must produce far fewer steps than the 1000 default would for the same
