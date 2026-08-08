@@ -594,11 +594,18 @@ function contractConditional(node: StepNode): ReduceResult {
  * exactly what the outer step sequence itself does (`getSteps.ts`'s `drive`) — so this is that same
  * `reduceExpr` loop, just scoped to one call expression instead of a whole program, and producing no
  * visible steps of its own (this call happens entirely *inside* one contraction of the outer
- * sequence, e.g. the module call this callback is answering). A thrown error (a genuine Python-level
- * fault, e.g. TypeError) propagates unchanged, surfacing exactly like any other runtime fault inside
- * a module call already does; a body that gets stuck without erroring (an unbound name, say) has no
- * valid partial outcome to hand back to the module either, so that's an error here too, not a silent
- * "stuck" the caller would have no way to represent.
+ * sequence, e.g. the module call this callback is answering). Deliberately unbounded, unlike the outer
+ * sequence's own `contractionBudget`: a module calling back into a Python function can legitimately
+ * need far more contractions than any reasonable *visible* step count would ever show a student — e.g.
+ * `sound`'s `play` sampling a student-authored wave function at 44.1kHz needs tens of thousands of
+ * callback calls to render even one second of audio (py-slang#427). A genuinely non-terminating
+ * callback is the host's problem to stop, not this loop's: the evaluator runs inside its own Worker,
+ * and the frontend's "Stop" control kills that Worker outright regardless of what it's doing
+ * internally, same as it already does for a non-terminating top-level program. A thrown error (a
+ * genuine Python-level fault, e.g. TypeError) propagates unchanged, surfacing exactly like any other
+ * runtime fault inside a module call already does; a body that gets stuck without erroring (an unbound
+ * name, say) has no valid partial outcome to hand back to the module either, so that's an error here
+ * too, not a silent "stuck" the caller would have no way to represent.
  */
 export async function applyPythonCallable(
   fn: StepNode,
@@ -606,20 +613,7 @@ export async function applyPythonCallable(
   context: StepperContext,
 ): Promise<StepNode> {
   let current: StepNode = { type: "CallExpression", callee: fn, arguments: args };
-  const budget = context.contractionBudget;
   for (;;) {
-    // Draws from the same shared budget `drive`/`evaluatePython`'s own top-level loop does (see
-    // `StepperContext.contractionBudget`'s doc comment) — without this, a non-terminating callback
-    // (infinite recursion inside its own body, say) would loop here forever, never returning control
-    // to the outer loop that would otherwise have enforced the step limit. Absent (no host wired up
-    // at all, only reachable via a caller driving `reduceExpr`/`contractCall` directly, bypassing
-    // `drive`/`evaluatePython`) means genuinely unbounded, same as before this budget existed.
-    if (budget !== undefined) {
-      if (budget.remaining <= 0) {
-        throw new Error("Maximum number of steps exceeded");
-      }
-      budget.remaining--;
-    }
     const step = await reduceExpr(current, context);
     if (step === null) break;
     // A print()/print_llist() call inside the callback's own body: this contraction's ReduceResult

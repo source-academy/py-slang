@@ -2707,33 +2707,38 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(stepped.at(-2)?.markers?.[0]?.explanation).toBe("ZeroDivisionError: division by zero");
   });
 
-  test("a non-terminating module callback is stopped by the step limit, not left to hang (py-slang#423)", async () => {
-    // applyPythonCallable's own reduceExpr loop draws from the same shared StepperContext.
-    // contractionBudget the outer drive() loop does — without that, infinite recursion inside a
-    // callback's own body would never return control to drive() at all, so the outer stepLimit could
-    // never stop it.
+  test("a module sampling a callback thousands of times (e.g. sound's play) isn't capped by the visible step budget (py-slang#427)", async () => {
+    // Regression test for py-slang#427: `sound`'s `play` samples a wave function at 44.1kHz, so even a
+    // short sound needs far more than DEFAULT_CONTRACTION_LIMIT (500) callback invocations to finish.
+    // Before the fix, applyPythonCallable drew from the same contractionBudget the outer, stepLimit-
+    // sized loop did, so a single module call sampling its callback this many times always failed with
+    // "Maximum number of steps exceeded" - regardless of stepLimit - long before doing any real work.
+    // applyPythonCallable's own reduceExpr loop is now unbounded (a genuinely non-terminating callback
+    // is the host's problem to stop, by killing the evaluator's Worker - see its doc comment).
+    const SAMPLE_COUNT = 5000;
     const dh = new GenericDataHandler(2);
-    async function* applyFunc(
+    async function* sampleFunc(
       f: TypedValue<DataType>,
     ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
-      return yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
-        { type: DataType.NUMBER, value: 1 },
-      ]);
+      let total = 0;
+      for (let i = 0; i < SAMPLE_COUNT; i++) {
+        const sample = yield* dh.closure_call_unchecked(f as TypedValue<DataType.CLOSURE>, [
+          { type: DataType.NUMBER, value: i },
+        ]);
+        total += (sample as TypedValue<DataType.NUMBER>).value;
+      }
+      return { type: DataType.NUMBER, value: total };
     }
-    const apply = await dh.closure_make(
+    const sample = await dh.closure_make(
       { returnType: DataType.NUMBER, args: [DataType.ANY] },
-      applyFunc,
+      sampleFunc,
     );
-    installFakeModule({ hofmod: [{ symbol: "apply", value: apply }] });
-    const ast = parse(
-      "from hofmod import apply\ndef loop_forever(x):\n    return loop_forever(x)\napply(loop_forever)\n",
-    );
-    // A small step limit keeps this test fast and deterministic — the point is that the callback's own
-    // unbounded recursion is caught by the shared budget, not that it runs for a realistic number of
-    // steps first.
-    const stepped = await getPythonSteps(ast, 20, { evaluator: dh });
-    expect(stepped.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation stuck");
-    expect(stepped.at(-2)?.markers?.[0]?.explanation).toBe("Maximum number of steps exceeded");
+    installFakeModule({ soundmod: [{ symbol: "sample", value: sample }] });
+    const ast = parse("from soundmod import sample\nsample(lambda x: 1)\n");
+    // Default stepLimit — a handful of visible steps for the module call itself — proves the fix
+    // doesn't need an inflated stepLimit to accommodate a callback-heavy module call.
+    const value = await evaluatePython(ast, undefined, { evaluator: dh });
+    expect(value).toBe(`${SAMPLE_COUNT}.0`);
   });
 
   test("a bare variadic builtin reference passed to a module still accepts extra arguments (py-slang#423)", async () => {
