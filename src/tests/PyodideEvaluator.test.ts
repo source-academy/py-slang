@@ -29,8 +29,11 @@ const KNOWN_SICP_GAPS = new Set<string>(["parse", "tokenize", "set_timeout", "cl
 
 /** Minimal IRunnerPlugin mock, mirroring Py2JsEvaluator.test.ts's: the evaluator calls
  * sendResult/sendError/sendOutput, plus registerPlugin/hostLoadPlugin once at construction
- * time (registerAutoCompletePlugin) — but never registers a module-loader plugin (pyodide
- * can't reach conductor's module protocol at all — see PyodideEvaluator.ts). */
+ * time (registerAutoCompletePlugin). `registerPlugin` here always returns `undefined`, so a
+ * chunk that does try to import a conductor module fails over to micropip (see
+ * PyodideEvaluator.ts's tryRegisterConductorModule) exactly like a real conductor with no
+ * module support would — none of the chunks below import anything, so this never comes up;
+ * see pyodide-modules.test.ts for a mock conductor that actually serves a module. */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: { name: string; message: string }[] = [];
