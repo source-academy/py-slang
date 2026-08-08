@@ -6,7 +6,9 @@ import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
  * no dedicated message type for either of these in `@sourceacademy/conductor`).
  */
 export interface RunConfig {
-  /** Snapshot cap for the CSE machine tab. Default: 1000 (see `PyCseEvaluator.ts`). */
+  /** User-configured step limit (the frontend's "Step Limit" control), applied as the CSE
+   * machine tab's snapshot cap (see `PyCseEvaluator.ts`) and the Stepper tab's step budget (see
+   * `PyStepperEvaluator.ts`/`PyStepperRunnerPlugin.ts`). Default: 1000. */
   stepLimit?: number;
   /**
    * Lines the host's gutter-click breakpoints (the ace editor's red dots) currently sit on, for
