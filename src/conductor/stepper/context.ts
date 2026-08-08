@@ -4,11 +4,11 @@
  * reduction core (`reduceExpr`/`stepHead`/`contractCall`/`reduceBlock`/`reduceProgram`) and
  * `getSteps.ts`'s entry points (`drive`/`getPythonSteps`/`evaluatePython`).
  *
- * Both fields are optional and independently absent-safe: a contraction that needs one but finds
- * it `undefined` (no host wired up — e.g. a bare `getPythonSteps(fileInput)` test call, or a
- * program that never imports/reads input at all) simply stays irreducible, the same honest
- * "Evaluation stuck" degrade already documented for `input`/`time_time`/`random_random` in
- * `builtins.ts`. Bundled into one object (rather than two positional parameters) so the reducer's
+ * `evaluator` and `requestInput` are optional and independently absent-safe: a contraction that
+ * needs one but finds it `undefined` (no host wired up — e.g. a bare `getPythonSteps(fileInput)`
+ * test call, or a program that never imports/reads input at all) simply stays irreducible, the same
+ * honest "Evaluation stuck" degrade already documented for `input`/`time_time`/`random_random` in
+ * `builtins.ts`. Bundled into one object (rather than positional parameters) so the reducer's
  * signatures don't grow a new parameter every time a new capability shows up — see py-slang#191.
  */
 
@@ -22,4 +22,31 @@ export interface StepperContext {
    * `contractCall`, `"input"` case. A real implementation is a genuine host round-trip (matching
    * `IRunnerPlugin.requestInput`'s own contract): one prompt in, one line back, in program order. */
   requestInput?: (prompt?: string) => Promise<string>;
+  /**
+   * The remaining contraction budget for the *entire* run, shared mutable state rather than a plain
+   * number so every consumer sees the same live count. `getSteps.ts`'s `drive`/`evaluatePython` own
+   * it — each creates one and decrements it once per top-level contraction, exactly as their own
+   * `contractionLimit` loop bound already did before this field existed. `reduce.ts`'s
+   * `applyPythonCallable` is the only other reader/writer: a module calling back into a Python
+   * function (py-slang#423) drives its own nested `reduceExpr` loop to a value, entirely *inside* one
+   * outer contraction, so without this the outer budget would never see — let alone stop — a
+   * non-terminating callback (one that never returns control to the outer loop at all). Optional and
+   * absent-safe like the other fields: a caller driving `reduceExpr`/`contractCall` directly, without
+   * going through `drive`/`evaluatePython`, simply gets an unbounded callback loop, same as before
+   * this field existed.
+   */
+  contractionBudget?: { remaining: number };
+  /**
+   * Text a `print`/`print_llist` contraction has written *during a module callback* (py-slang#423)
+   * but hasn't been folded into `drive`'s own cumulative output yet — shared mutable state for the
+   * same reason `contractionBudget` is: a nested `reduceExpr` loop inside `applyPythonCallable`
+   * happens entirely *inside* one top-level contraction, so its own `print` calls never reach
+   * `drive`'s loop the normal way (reading `ReduceResult.output` off that one top-level call) — that
+   * top-level `ReduceResult` is the *module call's* own result, which never sets `output` itself.
+   * `applyPythonCallable` appends here instead; `drive`/`evaluatePython` drain and clear it once per
+   * top-level contraction, right alongside that contraction's own direct `output`. Optional and
+   * absent-safe like `contractionBudget`: without a host wired up to accumulate output at all, a
+   * callback's `print` output is simply not collected, same as before this field existed.
+   */
+  pendingOutput?: { text: string };
 }

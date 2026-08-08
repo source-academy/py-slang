@@ -581,6 +581,63 @@ function contractConditional(node: StepNode): ReduceResult {
   };
 }
 
+/**
+ * Fully reduces `fn(...args)` to a value — the substitution stepper's own answer to "a module calls
+ * back into a Python function it was handed" (py-slang#423, e.g. `rune`'s `connect_ends` sampling a
+ * Python-authored curve function). `fn` is already a Python-authored callable value
+ * (`moduleInterop.ts`'s `isPythonCallable`); `args` are already-converted argument values, never
+ * needing further reduction themselves.
+ *
+ * There is no separate "apply and get the result" primitive to reach for here, unlike CSE's
+ * control/stash machine or py2js's compiled JS functions: the substitution model's *only* notion of
+ * "run this to completion" is repeatedly contracting one step at a time until nothing's left to do,
+ * exactly what the outer step sequence itself does (`getSteps.ts`'s `drive`) — so this is that same
+ * `reduceExpr` loop, just scoped to one call expression instead of a whole program, and producing no
+ * visible steps of its own (this call happens entirely *inside* one contraction of the outer
+ * sequence, e.g. the module call this callback is answering). A thrown error (a genuine Python-level
+ * fault, e.g. TypeError) propagates unchanged, surfacing exactly like any other runtime fault inside
+ * a module call already does; a body that gets stuck without erroring (an unbound name, say) has no
+ * valid partial outcome to hand back to the module either, so that's an error here too, not a silent
+ * "stuck" the caller would have no way to represent.
+ */
+export async function applyPythonCallable(
+  fn: StepNode,
+  args: StepNode[],
+  context: StepperContext,
+): Promise<StepNode> {
+  let current: StepNode = { type: "CallExpression", callee: fn, arguments: args };
+  const budget = context.contractionBudget;
+  for (;;) {
+    // Draws from the same shared budget `drive`/`evaluatePython`'s own top-level loop does (see
+    // `StepperContext.contractionBudget`'s doc comment) — without this, a non-terminating callback
+    // (infinite recursion inside its own body, say) would loop here forever, never returning control
+    // to the outer loop that would otherwise have enforced the step limit. Absent (no host wired up
+    // at all, only reachable via a caller driving `reduceExpr`/`contractCall` directly, bypassing
+    // `drive`/`evaluatePython`) means genuinely unbounded, same as before this budget existed.
+    if (budget !== undefined) {
+      if (budget.remaining <= 0) {
+        throw new Error("Maximum number of steps exceeded");
+      }
+      budget.remaining--;
+    }
+    const step = await reduceExpr(current, context);
+    if (step === null) break;
+    // A print()/print_llist() call inside the callback's own body: this contraction's ReduceResult
+    // is the only place that text ever appears, and it would otherwise be lost — the *outer*
+    // contraction (the module call this callback is answering) never sets `output` itself, so
+    // `drive`/`evaluatePython`'s normal "read the top-level ReduceResult's output" never sees it. See
+    // `StepperContext.pendingOutput`'s doc comment.
+    if (step.output !== undefined && context.pendingOutput !== undefined) {
+      context.pendingOutput.text += step.output;
+    }
+    current = step.node;
+  }
+  if (!isValue(current)) {
+    throw new Error("Evaluation stuck");
+  }
+  return current;
+}
+
 async function contractCall(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const callee = node.callee as StepNode;
   const args = node.arguments as StepNode[];
@@ -642,6 +699,7 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
       callee.closure as TypedValue<DataType.CLOSURE>,
       name,
       args,
+      (fn, callArgs) => applyPythonCallable(fn, callArgs, context),
     );
     return {
       node: result,
