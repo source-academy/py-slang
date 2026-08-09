@@ -27,7 +27,7 @@ const DEFAULT_STEP_LIMIT = 1000;
  */
 export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.FileInput> {
   private readonly context: StepperContext;
-  private readonly stepLimit: number;
+  private stepLimit: number;
 
   constructor(
     conduit: IConduit,
@@ -37,6 +37,12 @@ export class PythonStepperRunnerPlugin extends BaseStepperRunnerPlugin<StmtNS.Fi
   ) {
     super(conduit, channels);
     this.context = context;
+    this.stepLimit = stepLimit;
+  }
+
+  /** Overrides the step limit baked in at construction — used to apply the host-configured
+   * `/__cse_config__` value (see `runConfig.ts`), which isn't known until the first run. */
+  setStepLimit(stepLimit: number): void {
     this.stepLimit = stepLimit;
   }
 

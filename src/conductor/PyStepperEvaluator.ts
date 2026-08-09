@@ -94,6 +94,9 @@ abstract class PyStepperEvaluatorBase extends BasicEvaluator {
 
       const config = await fetchRunConfig(this.conductor);
       markBreakpoints(ast, config.breakpointLines ?? []);
+      if (config.stepLimit !== undefined) {
+        this.stepper.setStepLimit(config.stepLimit);
+      }
 
       // Preprocessing: reject an undefined variable as a (preprocessing) error and do NOT run the
       // stepper — a free name has no meaning in the substitution model. Mirrors Source's
