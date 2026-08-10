@@ -60,7 +60,7 @@ describe("runCodePvml", () => {
 });
 
 // "PVML-in-browser": PVMLInterpreter (pure TS, no native binary), the same
-// engine PyPvmlEvaluator1..4 use — see repl.ts's --engine pvml-browser.
+// engine PyPvmlEvaluator1..4 use — see repl.ts's --engine pvml.
 describe("runCodePvmlInterpreter / runCodePvmlInterpreterDetailed", () => {
   test("returns program output on success", async () => {
     const output = await runCodePvmlInterpreter('print("hello")\n', 4);
