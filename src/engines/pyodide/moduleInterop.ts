@@ -509,7 +509,18 @@ export async function pythonToModule(
   }
 
   if (typeof proxy === "function") {
-    const fn = proxy as unknown as (...args: unknown[]) => unknown;
+    // `proxy` is borrowed: pyodide auto-destroys it once the JS call it was
+    // passed into (this whole pythonToModule call, invoked from an async
+    // Python->JS boundary - e.g. inside run_sync) resolves. pyCallbackFunc
+    // below is stashed in dh via closure_make and may be invoked much later
+    // (e.g. by a closure this module function returns, called from a
+    // separate top-level statement) - by then the borrowed proxy is already
+    // dead, surfacing as pyodide's own "This borrowed proxy was
+    // automatically destroyed..." JsException. `.copy()` makes an
+    // independent proxy to the same Python callable, unaffected by the
+    // original being destroyed - confirmed empirically against the "repeat"
+    // pattern (a function returning a new closure over a captured callback).
+    const fn = (proxy as unknown as PyProxy).copy() as unknown as (...args: unknown[]) => unknown;
     async function* pyCallbackFunc(
       ...args: TypedValue<DataType>[]
     ): AsyncGenerator<void, TypedValue<DataType>, undefined> {

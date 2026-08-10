@@ -135,6 +135,32 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Higher-order: returns a NEW closure that calls back into `f` only once
+  // INVOKED LATER, after make_repeated itself has already returned - unlike
+  // apply_twice above, which calls its callback during its own call. This is
+  // the shape that caught the "borrowed proxy... automatically destroyed"
+  // bug: pyodide destroys a Python callable argument's proxy once the JS
+  // async call it was passed into (here, make_repeated's own call) resolves,
+  // so a callback captured for a later, separate call needs an explicit,
+  // non-borrowed copy (see pythonToModule's `proxy.copy()` in
+  // moduleInterop.ts) or it's a dead reference by the time it's used.
+  const makeRepeated = await dh.closure_make(
+    { returnType: DataType.CLOSURE, args: [DataType.CLOSURE, DataType.NUMBER] },
+    async function* (f: TypedValue<DataType.CLOSURE>, n: TypedValue<DataType.NUMBER>) {
+      const times = n.value;
+      return dh.closure_make(
+        { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+        async function* (x: TypedValue<DataType.NUMBER>) {
+          let result: TypedValue<DataType> = x;
+          for (let i = 0; i < times; i++) {
+            result = yield* dh.closure_call(f, [result], DataType.NUMBER);
+          }
+          return result as TypedValue<DataType.NUMBER>;
+        },
+      );
+    },
+  );
+
   return {
     exports: [
       { symbol: "answer", value: num(42) },
@@ -144,6 +170,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
       { symbol: "head_of", value: headOf },
+      { symbol: "make_repeated", value: makeRepeated },
     ],
   } as unknown as IModulePlugin;
 }
@@ -223,6 +250,29 @@ describe("PyodideEvaluator module imports", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["5"]);
+    },
+    PYODIDE_TIMEOUT,
+  );
+
+  jspiTest(
+    "a callback captured by a returned closure still works after the call that captured it returns",
+    async () => {
+      // Regression: `f = make_repeated(square, 4); print(f(3))`, mirroring
+      // SICP's `repeated` - square, captured while crossing into make_repeated's
+      // own call, must still be callable from a LATER, separate call (f(3)).
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyodideEvaluator3(conductor);
+
+      await evaluator.evaluateChunk(
+        "from testmod import make_repeated\n" +
+          "def square(x):\n" +
+          "    return x * x\n" +
+          "f = make_repeated(square, 4)\n" +
+          "print(f(3))\n",
+      );
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["43046721"]); // 3 ** (2 ** 4)
     },
     PYODIDE_TIMEOUT,
   );
