@@ -1,7 +1,11 @@
 /**
  * Rollup config for the standalone CLI (dist/repl.cjs).
  * Unlike the evaluator bundles, this targets Node.js (no browser polyfills,
- * no IIFE wrapper) and marks node built-ins as external.
+ * no IIFE wrapper) and marks node built-ins as external. All npm
+ * dependencies (including commander) are bundled in, so dist/repl.cjs runs
+ * as a single self-contained executable with no node_modules alongside it —
+ * this is required for headless deployments (e.g. Ed Snippets Course Files)
+ * that only accept a single file.
  */
 import nodeResolve from "@rollup/plugin-node-resolve";
 import typescript from "@rollup/plugin-typescript";
@@ -48,8 +52,6 @@ export default {
   },
   external: [
     ...NODE_BUILTINS,
-    // Keep commander external so its help output works correctly.
-    "commander",
     // Inquirer prompts are only needed for the interactive build script.
     "@inquirer/prompts",
   ],
