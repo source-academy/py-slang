@@ -520,9 +520,7 @@ export async function pythonToModule(
     // independent proxy to the same Python callable, unaffected by the
     // original being destroyed - confirmed empirically against the "repeat"
     // pattern (a function returning a new closure over a captured callback).
-    const fn = (proxy as unknown as PyProxy).copy() as unknown as (
-      ...args: unknown[]
-    ) => unknown;
+    const fn = (proxy as unknown as PyProxy).copy() as unknown as (...args: unknown[]) => unknown;
     async function* pyCallbackFunc(
       ...args: TypedValue<DataType>[]
     ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
