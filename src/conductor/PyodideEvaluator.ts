@@ -267,12 +267,20 @@ abstract class PyodideEvaluatorBase extends BasicEvaluator {
   private async tryRegisterConductorModule(
     pyodide: PyodideInterface,
     root: string,
+    loaderErrors: Map<string, unknown>,
   ): Promise<boolean> {
     if (this.registeredModules.has(root)) return true;
     let exportsList;
     try {
       exportsList = (await this.getModuleLoader().requestModule(root)).exports;
-    } catch {
+    } catch (e) {
+      // Not necessarily "root isn't a Source Academy module" - could just as
+      // well be a transport failure or an error inside the module's own
+      // init. Either way installMissingImports falls back to micropip next;
+      // stashing the real cause here means that fallback's own failure (the
+      // common case for a root that *was* a real SA module) can report it
+      // instead of only a misleading "not found on PyPI".
+      loaderErrors.set(root, e);
       return false;
     }
     await registerModule(pyodide, this.dataHandler, root, exportsList);
@@ -291,13 +299,28 @@ abstract class PyodideEvaluatorBase extends BasicEvaluator {
     const candidates = [...roots].filter(root => !this.resolvedRoots.has(root));
     if (candidates.length === 0) return;
 
+    // Resolution-only: NOT importlib.import_module, which would fully import
+    // (and execute) each candidate just to answer "does this exist" - a
+    // heavy package would pay its import cost before the chunk even reaches
+    // the statement, its own module-level output/errors would appear
+    // detached from the student's code, and a candidate whose body raises
+    // ModuleNotFoundError for its own missing transitive dependency would be
+    // misclassified as "root not found" (sending it needlessly to micropip).
+    // sys.modules is checked first so a conductor module already registered
+    // by tryRegisterConductorModule still counts as present even though it's
+    // a manually-built types.ModuleType with __spec__ set to None - which is
+    // exactly the case find_spec itself can't handle (raises ValueError).
     const checkCode = `
-import importlib
+import importlib.util
+import sys
 _sa_missing = []
 for _sa_mod in ${JSON.stringify(candidates)}:
+    if _sa_mod in sys.modules:
+        continue
     try:
-        importlib.import_module(_sa_mod)
-    except ModuleNotFoundError:
+        if importlib.util.find_spec(_sa_mod) is None:
+            _sa_missing.append(_sa_mod)
+    except (ImportError, ValueError):
         _sa_missing.append(_sa_mod)
 _sa_missing
 `;
@@ -305,18 +328,38 @@ _sa_missing
       await pyodide.runPythonAsync(checkCode, { globals: this.getInternalNamespace(pyodide) })
     ).toJs() as string[];
 
+    const loaderErrors = new Map<string, unknown>();
     const stillMissing: string[] = [];
     for (const root of notYetImportable) {
-      if (!(await this.tryRegisterConductorModule(pyodide, root))) {
+      if (!(await this.tryRegisterConductorModule(pyodide, root, loaderErrors))) {
         stillMissing.push(root);
       }
     }
 
     if (stillMissing.length > 0) {
-      await pyodide.runPythonAsync(
-        `import micropip\nawait micropip.install(${JSON.stringify(stillMissing)})\n`,
-        { globals: this.getInternalNamespace(pyodide) },
-      );
+      try {
+        await pyodide.runPythonAsync(
+          `import micropip\nawait micropip.install(${JSON.stringify(stillMissing)})\n`,
+          { globals: this.getInternalNamespace(pyodide) },
+        );
+      } catch (installError) {
+        // stillMissing's roots that DID reach the module loader (as opposed
+        // to never being recognised as an SA module at all) had their real
+        // failure reason swallowed above in favour of trying micropip - now
+        // that micropip has ALSO failed, surface those original errors
+        // rather than only micropip's "package not found", which is
+        // misleading for a root that actually was a real SA module.
+        const causes = stillMissing
+          .map(root => loaderErrors.get(root))
+          .filter((err): err is unknown => err !== undefined);
+        if (causes.length === 0) throw installError;
+        const detail = causes
+          .map(err => (err instanceof Error ? err.message : String(err)))
+          .join("; ");
+        throw new Error(
+          `${installError instanceof Error ? installError.message : String(installError)} (module loader also failed: ${detail})`,
+        );
+      }
     }
 
     candidates.forEach(root => this.resolvedRoots.add(root));
@@ -341,7 +384,12 @@ _sa_missing
       const ns = this.getInternalNamespace(pyodide);
       this.chunkRunner = pyodide
         .runPythonAsync(
-          'async def _sa_chunk_runner(source, globals_dict):\n    exec(compile(source, "<chunk>", "exec"), globals_dict)\n',
+          // ast.PyCF_ALLOW_TOP_LEVEL_AWAIT matches the flag runPythonAsync
+          // itself compiles with - without it, a chunk using top-level
+          // `await` could succeed before this evaluator's first module
+          // import (plain runPythonAsync path) and fail afterwards (this
+          // wrapper's plain compile()), on the very same evaluator.
+          'import ast\nasync def _sa_chunk_runner(source, globals_dict):\n    exec(compile(source, "<chunk>", "exec", flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT), globals_dict)\n',
           { globals: ns },
         )
         .then(() => ns.get("_sa_chunk_runner") as PyProxy);

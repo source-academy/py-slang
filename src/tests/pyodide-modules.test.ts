@@ -6,13 +6,21 @@
  *
  * The `run_sync`/JSPI bridge (see src/engines/pyodide/moduleInterop.ts) is
  * only available under `node --experimental-wasm-jspi` (or a JSPI-capable
- * browser) — not the default `npm test` environment. Rather than requiring
- * that flag to pass at all, the tests that exercise a module function with no
- * `.sync` twin check `isJspiAvailable` themselves and assert the behaviour
- * that's actually correct for whichever environment is running them: a real
- * result when JSPI is there, the same clean "stack switching not supported"
- * error `run_sync` itself raises when it isn't. Both branches are meaningful
- * — this is not a skip.
+ * browser) — not the default `npm test` environment.
+ *
+ * The one test that exercises a module function with no `.sync` twin (no
+ * fast path to fall back on) checks `isJspiAvailable` itself and asserts the
+ * behaviour that's actually correct for whichever environment is running it:
+ * a real result when JSPI is there, the same clean "stack switching not
+ * supported" error `run_sync` itself raises when it isn't. Both branches are
+ * meaningful there — that one is not a skip.
+ *
+ * The other JSPI-dependent tests below (`jspiTest`) have no such fallback
+ * assertion to make when JSPI is unavailable, so they're registered as an
+ * actual Jest skip in that case instead of `return`ing before any `expect` —
+ * a bare early return would report as a false "passed" with zero assertions,
+ * which would hide a real regression in the `run_sync` path on a CI run that
+ * (as of writing) has no JSPI flag at all.
  */
 import type { IModulePlugin } from "@sourceacademy/conductor/module";
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
@@ -23,32 +31,33 @@ import { loadPyodideGeneric } from "../engines/pyodide/loadPyodide";
 
 const PYODIDE_TIMEOUT = 60_000;
 
+/** Computed once at module scope (real ESM here — see jest.config.js's
+ * testPathIgnorePatterns comment — so top-level await works) rather than
+ * per-test: JSPI support can't change mid-session, and every affected test
+ * below needs the same answer either to pick its assertion branch or to
+ * decide whether to run at all. */
+const jspiAvailable = await isJspiAvailable(await loadPyodideGeneric());
+const jspiTest = jspiAvailable ? test : test.skip;
+
 /** Minimal IRunnerPlugin mock, mirroring wasm-modules.test.ts's: a
  * registerPlugin that hands PyodideEvaluatorBase a fake module loader bound
- * to the registering evaluator's own dataHandler. `withModuleLoader: false`
- * omits registerPlugin's module-loader override entirely, so
- * tryRegisterConductorModule's `requestModule` call throws and every import
- * falls back to micropip — already covered by PyodideEvaluator.test.ts's
+ * to the registering evaluator's own dataHandler. The no-module-loader case
+ * (tryRegisterConductorModule's `requestModule` throwing, every import
+ * falling back to micropip) is already covered by PyodideEvaluator.test.ts's
  * "never eagerly installed" test, not duplicated here. */
-function makeMockConductor(withModuleLoader: boolean = true) {
+function makeMockConductor() {
   const results: unknown[] = [];
   const errors: { name: string; message: string }[] = [];
   const outputs: string[] = [];
-  let dataHandler: IDataHandler | undefined;
   const conductor = {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e as { name: string; message: string }),
     sendOutput: (m: string) => outputs.push(m),
-    registerPlugin: () => undefined,
     hostLoadPlugin: () => Promise.resolve(),
-    ...(withModuleLoader && {
-      registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
-        dataHandler = evaluator;
-        return makeFakeLoader(evaluator);
-      },
-    }),
+    registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) =>
+      makeFakeLoader(evaluator),
   } as unknown as IRunnerPlugin;
-  return { conductor, results, errors, outputs, getDataHandler: () => dataHandler! };
+  return { conductor, results, errors, outputs };
 }
 
 /** Builds a fake conductor module ("testmod") exercising every DataType
@@ -168,15 +177,12 @@ describe("PyodideEvaluator module imports", () => {
   test(
     "calls a module function with no .sync twin, correctly for this environment's JSPI support",
     async () => {
-      const pyodide = await loadPyodideGeneric();
-      const jspi = await isJspiAvailable(pyodide);
-
       const { conductor, errors, outputs } = makeMockConductor();
       const evaluator = new PyodideEvaluator3(conductor);
 
       await evaluator.evaluateChunk("from testmod import double\nprint(double(5))\n");
 
-      if (jspi) {
+      if (jspiAvailable) {
         expect(errors).toEqual([]);
         expect(outputs).toEqual(["10"]);
       } else {
@@ -204,13 +210,10 @@ describe("PyodideEvaluator module imports", () => {
     PYODIDE_TIMEOUT,
   );
 
-  test(
+  jspiTest(
     "a module calling back into a Python closure through the CHECKED dh.closure_call",
     async () => {
-      const pyodide = await loadPyodideGeneric();
-      const jspi = await isJspiAvailable(pyodide);
-      if (!jspi) return; // needs run_sync (no .sync twin on apply_twice) - see file doc.
-
+      // needs run_sync (no .sync twin on apply_twice) - see file doc.
       const { conductor, errors, outputs } = makeMockConductor();
       const evaluator = new PyodideEvaluator3(conductor);
 
@@ -224,13 +227,9 @@ describe("PyodideEvaluator module imports", () => {
     PYODIDE_TIMEOUT,
   );
 
-  test(
+  jspiTest(
     "an opaque value round-trips through two module calls",
     async () => {
-      const pyodide = await loadPyodideGeneric();
-      const jspi = await isJspiAvailable(pyodide);
-      if (!jspi) return;
-
       const { conductor, errors, outputs } = makeMockConductor();
       const evaluator = new PyodideEvaluator3(conductor);
 
@@ -244,13 +243,9 @@ describe("PyodideEvaluator module imports", () => {
     PYODIDE_TIMEOUT,
   );
 
-  test(
+  jspiTest(
     "a real Python pair, built with the bridged sicp pair(), round-trips through a module call",
     async () => {
-      const pyodide = await loadPyodideGeneric();
-      const jspi = await isJspiAvailable(pyodide);
-      if (!jspi) return;
-
       const { conductor, errors, outputs } = makeMockConductor();
       const evaluator = new PyodideEvaluator3(conductor);
 

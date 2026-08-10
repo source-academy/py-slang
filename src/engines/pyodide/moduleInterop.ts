@@ -179,6 +179,9 @@ def _sa_pair_head(x):
 
 def _sa_pair_tail(x):
     return _sa_ll.tail(x)
+
+def _sa_set_attr(obj, name, value):
+    setattr(obj, name, value)
 `;
 
 /** One namespace per pyodide instance, shared by both scripts below (each
@@ -190,6 +193,20 @@ let jspiProbeReady = new WeakSet<PyodideInterface>();
 let moduleHelperReady = new WeakSet<PyodideInterface>();
 let jspiAvailable = new WeakMap<PyodideInterface, boolean>();
 
+interface PairHelpers {
+  makePair: PyProxy & ((head: unknown, tail: unknown) => unknown);
+  isPair: PyProxy & ((x: unknown) => boolean);
+  pairHead: PyProxy & ((x: unknown) => unknown);
+  pairTail: PyProxy & ((x: unknown) => unknown);
+}
+
+/** `_sa_make_pair`/`_sa_is_pair`/`_sa_pair_head`/`_sa_pair_tail`, fetched via
+ * `ns.get` once per pyodide instance rather than on every PAIR conversion -
+ * `moduleToPython`'s PAIR case recurses per pair node, so a long list was
+ * re-fetching (and implicitly re-creating) all four PyProxy wrappers once
+ * per element. */
+let pairHelpers = new WeakMap<PyodideInterface, PairHelpers>();
+
 /** Test-only: forget every namespace/JSPI-probe result this module has
  * cached, mirroring importAnalyzer.ts's identical resetHelperState. */
 export function resetModuleInteropState(): void {
@@ -197,6 +214,7 @@ export function resetModuleInteropState(): void {
   jspiProbeReady = new WeakSet();
   moduleHelperReady = new WeakSet();
   jspiAvailable = new WeakMap();
+  pairHelpers = new WeakMap();
 }
 
 function getNamespace(pyodide: PyodideInterface): PyProxy {
@@ -228,6 +246,21 @@ async function ensureHelper(pyodide: PyodideInterface): Promise<PyProxy> {
   return ns;
 }
 
+async function getPairHelpers(pyodide: PyodideInterface): Promise<PairHelpers> {
+  let helpers = pairHelpers.get(pyodide);
+  if (!helpers) {
+    const ns = await ensureHelper(pyodide);
+    helpers = {
+      makePair: ns.get("_sa_make_pair") as PyProxy & ((h: unknown, t: unknown) => unknown),
+      isPair: ns.get("_sa_is_pair") as PyProxy & ((x: unknown) => boolean),
+      pairHead: ns.get("_sa_pair_head") as PyProxy & ((x: unknown) => unknown),
+      pairTail: ns.get("_sa_pair_tail") as PyProxy & ((x: unknown) => unknown),
+    };
+    pairHelpers.set(pyodide, helpers);
+  }
+  return helpers;
+}
+
 /** Probes, once per pyodide instance, whether this JS engine can actually
  * run a `callPromising()`-invoked coroutine at all (independent of whether
  * that coroutine ever calls run_sync — see the class doc: callPromising
@@ -256,6 +289,15 @@ export async function isJspiAvailable(pyodide: PyodideInterface): Promise<boolea
  * (Python's own `_SA_NO_SYNC` sentinel plays the identical role on the other
  * side of the boundary). */
 const NO_SYNC_MARKER = Symbol("no-sync");
+
+/** pyodide converts a Python `int` outside JS's safe integer range to a JS
+ * `BigInt` rather than `Number` (see type-conversions.html) - `typeof` on
+ * that value is `"bigint"`, a third numeric primitive `pythonToModule`'s
+ * number/boolean/string switch doesn't cover, which used to fall through
+ * to the PyProxy checks below and end up misreported as "complex values
+ * are not supported". */
+const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
 
 /** Restricted, scalar-only synchronous counterpart to moduleToPython, used
  * only by pythonToModule's CLOSURE `.sync` fast path below — mirrors
@@ -350,7 +392,7 @@ export async function moduleToPython(
       return makeOpaque(value.type, value.value as unknown as number);
     }
     case DataType.PAIR: {
-      const makePair = ns.get("_sa_make_pair") as PyProxy & ((h: unknown, t: unknown) => unknown);
+      const { makePair } = await getPairHelpers(pyodide);
       const head = await moduleToPython(pyodide, dh, await dh.pair_head(value), name);
       const tail = await moduleToPython(pyodide, dh, await dh.pair_tail(value), name);
       return makePair(head, tail);
@@ -440,6 +482,13 @@ export async function pythonToModule(
       return { type: DataType.BOOLEAN, value };
     case "string":
       return { type: DataType.CONST_STRING, value };
+    case "bigint":
+      if (value >= MIN_SAFE_BIGINT && value <= MAX_SAFE_BIGINT) {
+        return { type: DataType.NUMBER, value: Number(value) };
+      }
+      throw new Error(
+        `integer ${value} is outside the range module interop can represent (must fit within Number.MAX_SAFE_INTEGER)`,
+      );
   }
   const proxy = value as PyProxy & Record<string, unknown>;
   const ns = await ensureHelper(pyodide);
@@ -491,13 +540,11 @@ export async function pythonToModule(
     );
   }
 
-  const isPair = ns.get("_sa_is_pair") as PyProxy & ((x: unknown) => boolean);
+  const { isPair, pairHead, pairTail } = await getPairHelpers(pyodide);
   if (isPair(proxy)) {
-    const head = ns.get("_sa_pair_head") as PyProxy & ((x: unknown) => unknown);
-    const tail = ns.get("_sa_pair_tail") as PyProxy & ((x: unknown) => unknown);
     return dh.pair_make(
-      await pythonToModule(pyodide, dh, head(proxy)),
-      await pythonToModule(pyodide, dh, tail(proxy)),
+      await pythonToModule(pyodide, dh, pairHead(proxy)),
+      await pythonToModule(pyodide, dh, pairTail(proxy)),
     );
   }
 
@@ -522,16 +569,19 @@ export async function registerModule(
   // moduleToPython below calls ensureHelper itself (cached, so this doesn't
   // duplicate the work) - the helper classes/functions must exist before any
   // export can be converted, which is what makes this await meaningful here.
-  await ensureHelper(pyodide);
+  const ns = await ensureHelper(pyodide);
   const moduleObj = pyodide.pyimport("types").ModuleType(moduleName) as PyProxy &
     Record<string, unknown>;
+  // Assigned through _sa_set_attr's real Python `setattr`, NOT a plain JS
+  // property set on the PyProxy: pyodide's PyProxy gives its own built-in
+  // methods (copy/destroy/toJs/type/...) priority over same-named Python
+  // attributes, so a module exporting e.g. a function called `copy` would
+  // otherwise silently overwrite the proxy's own method instead of landing
+  // in the module's actual namespace.
+  const setAttr = ns.get("_sa_set_attr") as PyProxy &
+    ((obj: unknown, name: string, value: unknown) => void);
   for (const { symbol, value } of exportsList) {
-    (moduleObj as unknown as { [key: string]: unknown })[symbol] = await moduleToPython(
-      pyodide,
-      dh,
-      value,
-      symbol,
-    );
+    setAttr(moduleObj, symbol, await moduleToPython(pyodide, dh, value, symbol));
   }
   const sys = pyodide.pyimport("sys") as PyProxy & {
     modules: PyProxy & { set(name: string, mod: unknown): void };
