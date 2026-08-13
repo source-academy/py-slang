@@ -1326,6 +1326,9 @@ const cmdEvaluators: CmdEvaluators = {
     }
   },
 
+  // Used by both `if`/`elif` and the conditional expression. Applies isFalsy's general any-type
+  // truthiness — py2js and the stepper were tightened to require a genuine bool here instead
+  // (py-slang#439); this instruction has not been tightened yet (py-slang#436).
   [InstrType.BRANCH]: function (
     _code: string,
     instr: BranchInstr,

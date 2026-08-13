@@ -962,9 +962,10 @@ export class Py2JsRuntime {
   }
 
   /**
-   * Python truthiness, as the CSE machine's BRANCH instruction applies it to
-   * `if` and ternary conditions (its WHILE instruction demands bool, but
-   * chapter 1 has no loops). Mirrors isFalsy in cse/operators.ts.
+   * Python truthiness. Only `assert` (assertCheck, below) still accepts any type here — `if`/`elif`
+   * and conditional expressions used to as well, but now go through condBool instead (see its doc
+   * comment). Mirrors isFalsy in cse/operators.ts, which the CSE machine's BRANCH instruction still
+   * applies unconditionally (py-slang#436 tracks tightening it to match).
    */
   truth(v: PyValue): boolean {
     switch (typeof v) {
@@ -995,6 +996,25 @@ export class Py2JsRuntime {
   boolLeft(v: PyValue, op: string): boolean {
     if (typeof v !== "boolean")
       unsupported(op, v, undefined, !this.universalEquality, this.enclosingPreludeFunction());
+    return v;
+  }
+
+  /**
+   * `if`/`elif` condition, and conditional-expression (`x if p else y`) condition: like
+   * `whileCond` below, a bare bool is required. docs/specs/python_typing.tex:56-57 states this
+   * explicitly for `if`/`elif`: "Following if and elif, Python §x only allows boolean
+   * expressions." The conditional expression isn't separately named there, but docs/md/README_1.md
+   * and up present it as the same feature, under the same "Conditional statements and conditional
+   * expressions" heading, so its predicate is held to the identical rule here. `where` names the
+   * construct for the error message.
+   */
+  condBool(v: PyValue, where: "if" | "conditional expression"): boolean {
+    if (typeof v !== "boolean") {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `${where} condition must be bool, not '${pyTypeName(v, !this.universalEquality)}'`,
+      );
+    }
     return v;
   }
 
