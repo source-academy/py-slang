@@ -7,6 +7,11 @@
  * same "Conditional statements and conditional expressions" heading.) This file pins the newly-added
  * enforcement (runtime.ts's condBool, compiler.ts's "If"/"Ternary" cases).
  *
+ * Both constructs share one message, `predicate type must be 'bool', not '<type>'` — SICP's term
+ * for the condition, reused instead of "if condition"/"conditional expression condition" (which
+ * read like two different checks rather than one shared rule), and phrased like an ordinary
+ * operand-type error (`unsupported operand type(s) for -: 'int' and 'str'`).
+ *
  * The CSE machine's BRANCH instruction does not enforce this yet (py-slang#436) — `cseErrors` below
  * documents the current divergence rather than asserting parity, matching py2js-loops.test.ts's own
  * `cseErrors` helper.
@@ -33,7 +38,7 @@ function py2jsOutcome(code: string): { error: string } | { output: string } {
   }
 }
 
-describe("if/elif condition must be bool", () => {
+describe("if/elif predicate must be bool", () => {
   test.each([
     ["if 1:\n    print(1)\nelse:\n    print(2)", "int"],
     ["if 0.0:\n    print(1)\nelse:\n    print(2)", "float"],
@@ -49,7 +54,7 @@ describe("if/elif condition must be bool", () => {
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain("TypeError");
     expect((outcome as { error: string }).error).toContain(
-      `if condition must be bool, not '${typeName}'`,
+      `predicate type must be 'bool', not '${typeName}'`,
     );
   });
 
@@ -58,7 +63,9 @@ describe("if/elif condition must be bool", () => {
     expect(await cseErrors(code)).toBe(false);
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
-    expect((outcome as { error: string }).error).toContain("if condition must be bool, not 'int'");
+    expect((outcome as { error: string }).error).toContain(
+      "predicate type must be 'bool', not 'int'",
+    );
   });
 
   test.each([
@@ -69,7 +76,7 @@ describe("if/elif condition must be bool", () => {
   });
 });
 
-describe("conditional expression (`x if p else y`) condition must be bool", () => {
+describe("conditional expression (`x if p else y`) predicate must be bool", () => {
   test.each([
     ["print(1 if 5 else 2)", "int"],
     ["print(1 if 'x' else 2)", "str"],
@@ -79,7 +86,7 @@ describe("conditional expression (`x if p else y`) condition must be bool", () =
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain(
-      `conditional expression condition must be bool, not '${typeName}'`,
+      `predicate type must be 'bool', not '${typeName}'`,
     );
   });
 
@@ -94,7 +101,7 @@ describe("conditional expression (`x if p else y`) condition must be bool", () =
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain(
-      `conditional expression condition must be bool, not 'int'`,
+      `predicate type must be 'bool', not 'int'`,
     );
   });
 });
