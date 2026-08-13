@@ -16,15 +16,17 @@
  * expression directly and renders it via the runtime's own log_* host
  * imports, without needing a print()-wrapping trick.
  *
- * Comparison is *value*-aware, not raw-text: the runtime's log_float host
- * import renders whole-number floats via plain JS Number#toString (e.g.
- * "2"), not toPythonFloat's Python-style "2.0" -- and log_complex renders
- * "re + imj" instead of toPythonString's "(re+imj)". Both are display-format
- * differences, not value differences, so float/complex results are compared
- * numerically instead of as exact text (ints/bools/strings, which the
- * runtime already renders in Python-compatible form, are still compared as
- * exact text). See the two-run investigation in this file's originating
- * conversation for the concrete "2" vs "2.0" / "1 + 2j" vs "(1+2j)" cases.
+ * Comparison is *value*-aware for complex, not raw-text: log_complex renders
+ * "re + imj" instead of toPythonString's "(re+imj)" -- a display-format
+ * difference, not a value difference, so complex results are compared
+ * numerically instead of as exact text (ints/bools/strings/floats, which the
+ * runtime renders in Python-compatible form via the same toPythonFloat CSE
+ * itself uses -- see hostImports.ts's log_float -- are compared as exact
+ * text). See the two-run investigation in this file's originating
+ * conversation for the concrete "1 + 2j" vs "(1+2j)" case (an earlier
+ * revision of this file also worked around a log_float formatting bug,
+ * fixed for py-slang#323: it used to render whole-number floats via plain
+ * JS Number#toString, e.g. "2" instead of "2.0").
  *
  * The WASM engine's group set per chapter mirrors PyWasmEvaluator1..4 (see
  * conductor/PyWasmEvaluator.ts) rather than runner.ts's VARIANT_GROUPS: WASM
@@ -158,11 +160,7 @@ function expectMatch(wanted: CseOutcome, actual: WasmOutcome): void {
   expect(actual.kind).toBe("value");
   if (actual.kind !== "value") return;
 
-  if (wanted.type === "number") {
-    // Ignores the runtime's missing toPythonFloat-style ".0" suffix on
-    // whole-number floats -- see file header.
-    expect(Number(actual.text)).toBe(wanted.value as number);
-  } else if (wanted.type === "complex") {
+  if (wanted.type === "complex") {
     const expected = wanted.value as PyComplexNumber;
     const parsed = parseWasmComplex(actual.text);
     expect(parsed.real).toBeCloseTo(expected.real);

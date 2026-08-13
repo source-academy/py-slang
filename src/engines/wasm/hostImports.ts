@@ -3,9 +3,30 @@ import pythonLexer from "../../parser/lexer";
 import { toAstToken } from "../../parser/token-bridge";
 import { pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types/value-types";
+import { escape, toPythonFloat } from "../../stdlib/utils";
 import { MetacircularGenerator } from "./metacircularGenerator";
 import { ARITHMETIC_OP_TAG, ERROR_MAP, GC_OBJECT_HEADER_SIZE, TYPE_TAG } from "./runtime";
 import type { WasmExports } from "./types";
+
+/** Encodes `text` as UTF-8 into freshly `malloc`'d WASM memory and tags it
+ * as a string value — the allocation half of what `str()`/`repr()` (see the
+ * `stringify` host imports below) and `tokenize` both need: computing text
+ * on the JS side, then handing a real WASM value back to the caller.
+ * Mirrors `tokenize`'s own inline version of this exact sequence. */
+function allocateWasmString(
+  wasmExports: WasmExports,
+  memory: WebAssembly.Memory,
+  text: string,
+): [number, bigint] {
+  const bytes = new TextEncoder().encode(text);
+  const heapPointer = wasmExports.malloc(bytes.length + GC_OBJECT_HEADER_SIZE);
+  const dataView = new DataView(memory.buffer);
+  for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
+    dataView.setUint8(heapPointer + i, 0);
+  }
+  bytes.forEach((byte, i) => dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte));
+  return wasmExports.makeString(heapPointer, bytes.length);
+}
 
 /** Decodes a (tag, val) operand pair into the JS numeric representation
  * arith.ext's host-side computation works with: an int stays a bigint, a
@@ -65,7 +86,8 @@ export function createHostImports(
 
   return {
     console: {
-      log: (value: bigint) => capture(value.toString()),
+      log_int: (value: bigint) => capture(value.toString()),
+      log_float: (value: number) => capture(toPythonFloat(value)),
       log_complex: (real: number, imag: number) =>
         capture(real === 0 ? `${imag}j` : `${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
       log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
@@ -102,30 +124,44 @@ export function createHostImports(
       log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
       log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
     },
+    stringify: {
+      /**
+       * str()/repr(): reuses LOG_FX's own formatting the same way log_list
+       * reuses it for element rendering above -- call back into the exported
+       * `log`, pop the text it pushed into runtime.output, then (repr only,
+       * string values only) apply Python's repr quoting via `escape` before
+       * allocating the result as a real WASM string (same malloc/encode/
+       * write/makeString sequence `tokenize` below uses to hand text
+       * computed in JS back to WASM as a value).
+       */
+      to_str: (tag: number, value: bigint): [number, bigint] => {
+        if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
+        runtime.wasmExports.log(tag, value);
+        const rendered = runtime.output.pop();
+        if (rendered === undefined) throw new Error("str() logging did not produce rendered text");
+        return allocateWasmString(runtime.wasmExports, memory, rendered);
+      },
+      to_repr: (tag: number, value: bigint): [number, bigint] => {
+        if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
+        runtime.wasmExports.log(tag, value);
+        const rendered = runtime.output.pop();
+        if (rendered === undefined) throw new Error("repr() logging did not produce rendered text");
+        const text = tag === TYPE_TAG.STRING ? escape(rendered) : rendered;
+        return allocateWasmString(runtime.wasmExports, memory, text);
+      },
+    },
     metacircular: {
       tokenize: (offset: number, length: number) => {
         if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
-        const { malloc, makeString, makePair, makeNone } = runtime.wasmExports;
+        const { makePair, makeNone } = runtime.wasmExports;
 
         pythonLexer.reset(
           new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length)),
         );
-        const encoder = new TextEncoder();
-        const dataView = new DataView(memory.buffer);
 
         return Array.from(pythonLexer)
           .map(t => toAstToken(t))
-          .map(({ lexeme }) => {
-            const bytes = encoder.encode(lexeme);
-            const heapPointer = malloc(bytes.length + GC_OBJECT_HEADER_SIZE);
-            for (let i = 0; i < GC_OBJECT_HEADER_SIZE; i++) {
-              dataView.setUint8(heapPointer + i, 0);
-            }
-            bytes.forEach((byte, i) =>
-              dataView.setUint8(heapPointer + GC_OBJECT_HEADER_SIZE + i, byte),
-            );
-            return makeString(heapPointer, bytes.length);
-          })
+          .map(({ lexeme }) => allocateWasmString(runtime.wasmExports!, memory, lexeme))
           .reduceRight((tail, [tag, value]) => makePair(tag, value, tail[0], tail[1]), makeNone());
       },
 
