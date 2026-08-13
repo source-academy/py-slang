@@ -1430,6 +1430,51 @@ describe("Python stepper — and/or/not require a strict bool operand", () => {
   });
 });
 
+describe("Python stepper — if/elif and conditional-expression conditions require a strict bool", () => {
+  // Every spec doc (docs/md/README_1.md and up) says, under "Conditional statements and conditional
+  // expressions": "Following if and elif, Python §x only allows boolean expressions." Unlike native
+  // Python's truthiness, `if`/`elif`/`x if p else y` all require a genuine `bool` condition here now —
+  // matching the and/or/not treatment just above. The CSE machine's BRANCH instruction does not
+  // enforce this yet (py-slang#436).
+  test("if/elif take the bool-condition branch normally", async () => {
+    expect(await result("1 if True else 2")).toBe("1");
+    expect(await result("1 if False else 2")).toBe("2");
+    expect(await result("if True:\n    1\nelse:\n    2")).toBe("1");
+    expect(await result("if False:\n    1\nelif True:\n    2\nelse:\n    3")).toBe("2");
+  });
+
+  test("a non-bool conditional-expression condition is a TypeError (stuck), not truthy-evaluated", async () => {
+    for (const src of ["1 if 1 else 2", "1 if 0 else 2", "1 if None else 2", "1 if '' else 2"]) {
+      expect((await explanations(src)).pop()).toBe("Evaluation stuck");
+    }
+    expect(await result("1 if 5 else 2")).toBe(
+      "TypeError: conditional expression condition must be bool, not 'int'",
+    );
+    expect(await result("1 if None else 2")).toBe(
+      "TypeError: conditional expression condition must be bool, not 'NoneType'",
+    );
+  });
+
+  test("a non-bool if condition is a TypeError (stuck), not truthy-evaluated", async () => {
+    for (const src of [
+      "if 1:\n    1\nelse:\n    2",
+      "if '':\n    1\nelse:\n    2",
+      "if None:\n    1\nelse:\n    2",
+    ]) {
+      expect((await explanations(src)).pop()).toBe("Evaluation stuck");
+    }
+    expect(await result("if 5:\n    1\nelse:\n    2")).toBe(
+      "TypeError: if condition must be bool, not 'int'",
+    );
+  });
+
+  test("a non-bool elif condition is also a TypeError (elif is a nested if in the alternate)", async () => {
+    expect(await result("if False:\n    1\nelif 5:\n    2\nelse:\n    3")).toBe(
+      "TypeError: if condition must be bool, not 'int'",
+    );
+  });
+});
+
 describe("Python stepper — the rest of the math library", () => {
   test("binary math functions compute on two arguments", async () => {
     expect(await result("math_pow(2, 10)")).toBe("1024.0");
