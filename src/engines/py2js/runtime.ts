@@ -1001,9 +1001,12 @@ export class Py2JsRuntime {
 
   /**
    * `if`/`elif` condition, and conditional-expression (`x if p else y`) condition: like
-   * `whileCond` below, a bare bool is required — every spec doc (docs/md/README_1.md and up)
-   * says so under "Conditional statements and conditional expressions": "Following if and elif,
-   * Python §x only allows boolean expressions." `where` names the construct for the error message.
+   * `whileCond` below, a bare bool is required. docs/specs/python_typing.tex:56-57 states this
+   * explicitly for `if`/`elif`: "Following if and elif, Python §x only allows boolean
+   * expressions." The conditional expression isn't separately named there, but docs/md/README_1.md
+   * and up present it as the same feature, under the same "Conditional statements and conditional
+   * expressions" heading, so its predicate is held to the identical rule here. `where` names the
+   * construct for the error message.
    */
   condBool(v: PyValue, where: "if" | "conditional expression"): boolean {
     if (typeof v !== "boolean") {

@@ -1,9 +1,11 @@
 /**
- * Every spec doc (docs/md/README_1.md and up) says, under "Conditional statements and conditional
- * expressions": "Following if and elif, Python §x only allows boolean expressions." Until now that
- * was only enforced for `while` (runtime.ts's whileCond) — `if`/`elif` and the conditional expression
- * `x if p else y` went through `truth()`, which accepts any type, same as native Python. This file
- * pins the newly-added enforcement (runtime.ts's condBool, compiler.ts's "If"/"Ternary" cases).
+ * docs/specs/python_typing.tex:56-57: "Following if and elif, Python §x only allows boolean
+ * expressions." Until now that was only enforced for `while` (runtime.ts's whileCond) — `if`/`elif`
+ * and the conditional expression `x if p else y` went through `truth()`, which accepts any type,
+ * same as native Python. (The tex rule names only `if`/`elif`; the conditional expression is held
+ * to the same rule here because docs/md/README_1.md and up present it as the same feature, under the
+ * same "Conditional statements and conditional expressions" heading.) This file pins the newly-added
+ * enforcement (runtime.ts's condBool, compiler.ts's "If"/"Ternary" cases).
  *
  * The CSE machine's BRANCH instruction does not enforce this yet (py-slang#436) — `cseErrors` below
  * documents the current divergence rather than asserting parity, matching py2js-loops.test.ts's own

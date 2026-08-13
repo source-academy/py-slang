@@ -484,6 +484,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     } else throw new Error(`Unsupported boolean binary operator: ${type}`);
   }
 
+  // Same gap as visitIfStmt above (BOOLISE_FX truthiness instead of a strict-bool check) —
+  // py-slang#437.
   visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
     const consequent = this.visit(expr.consequent);
     const alternative = this.visit(expr.alternative);
@@ -745,6 +747,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     return wasm.nop();
   }
 
+  // Spec-wise this condition should require a genuine bool, like `and`/`or`'s left operand
+  // (CHECK_BOOL_FX) does, not the general any-type BOOLISE_FX truthiness used here — py2js and the
+  // stepper were tightened to that stricter reading (py-slang#439); WASM has not been yet
+  // (py-slang#437). `src/tests/wasm/wasm-control-flow.spec.ts`'s "if condition uses truthiness"
+  // tests currently pin today's any-type behavior and will need updating alongside a fix.
   visitIfStmt(stmt: StmtNS.If): WasmInstruction {
     const condition = this.visit(stmt.condition);
     const body = stmt.body.map(b => this.visit(b));

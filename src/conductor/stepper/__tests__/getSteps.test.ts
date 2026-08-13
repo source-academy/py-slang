@@ -1431,9 +1431,11 @@ describe("Python stepper — and/or/not require a strict bool operand", () => {
 });
 
 describe("Python stepper — if/elif and conditional-expression conditions require a strict bool", () => {
-  // Every spec doc (docs/md/README_1.md and up) says, under "Conditional statements and conditional
-  // expressions": "Following if and elif, Python §x only allows boolean expressions." Unlike native
-  // Python's truthiness, `if`/`elif`/`x if p else y` all require a genuine `bool` condition here now —
+  // docs/specs/python_typing.tex:56-57: "Following if and elif, Python §x only allows boolean
+  // expressions." (That rule names only `if`/`elif`; the conditional expression is held to the same
+  // rule here because docs/md/README_1.md and up present it as the same feature, under the same
+  // "Conditional statements and conditional expressions" heading.) Unlike native Python's
+  // truthiness, `if`/`elif`/`x if p else y` all require a genuine `bool` condition here now —
   // matching the and/or/not treatment just above. The CSE machine's BRANCH instruction does not
   // enforce this yet (py-slang#436).
   test("if/elif take the bool-condition branch normally", async () => {
