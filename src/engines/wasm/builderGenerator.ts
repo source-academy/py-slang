@@ -484,7 +484,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     } else throw new Error(`Unsupported boolean binary operator: ${type}`);
   }
 
-  // Same gap as visitIfStmt above (BOOLISE_FX truthiness instead of a strict-bool check) —
+  // Same gap as visitIfStmt below (BOOLISE_FX truthiness instead of a strict-bool check) —
   // py-slang#437.
   visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
     const consequent = this.visit(expr.consequent);
