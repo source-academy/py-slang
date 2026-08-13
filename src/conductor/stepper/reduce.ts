@@ -570,17 +570,16 @@ function contractLogical(node: StepNode): ReduceResult | null {
 function contractConditional(node: StepNode): ReduceResult | null {
   const test = node.test as StepNode;
   if (!isBoolNode(test)) {
-    // Unlike native Python's truthiness, a conditional expression's (`x if p else y`) condition
-    // requires a genuine `bool` in this dialect. docs/specs/python_typing.tex:56-57 states this
-    // explicitly for `if`/`elif` ("Following if and elif, Python §x only allows boolean
-    // expressions"); docs/md/README_1.md and up present the conditional expression as the same
-    // feature under that same heading, so its predicate is held to the identical rule here. A
-    // non-bool *value* is a TypeError; a test not yet reduced to a value stays a graceful "stuck"
-    // (matches `contractLogical`'s identical shape for `and`/`or`).
+    // Unlike native Python's truthiness, a conditional expression's (`x if p else y`) predicate —
+    // SICP's term for this, reused in the error message below — requires a genuine `bool` in this
+    // dialect. docs/specs/python_typing.tex:56-57 states this explicitly for `if`/`elif`
+    // ("Following if and elif, Python §x only allows boolean expressions"); docs/md/README_1.md and
+    // up present the conditional expression as the same feature under that same heading, so its
+    // predicate is held to the identical rule here. A non-bool *value* is a TypeError; a test not
+    // yet reduced to a value stays a graceful "stuck" (matches `contractLogical`'s identical shape
+    // for `and`/`or`).
     if (!isStepperValue(test)) return null;
-    throw new Error(
-      `TypeError: conditional expression condition must be bool, not '${operandTypeName(test)}'`,
-    );
+    throw new Error(`TypeError: predicate type must be 'bool', not '${operandTypeName(test)}'`);
   }
   const truthy = test.value === true;
   const chosen = clone((truthy ? node.consequent : node.alternate) as StepNode);
@@ -1111,14 +1110,14 @@ async function stepHead(
       }
       const test = head.test as StepNode;
       if (!isBoolNode(test)) {
-        // Unlike native Python's truthiness, an `if`/`elif` condition requires a genuine `bool` in
-        // this dialect (an `elif` is a nested `IfStatement` in `head.alternate`, so this one
-        // check-site covers both). docs/specs/python_typing.tex:56-57: "Following if and elif,
-        // Python §x only allows boolean expressions." A non-bool *value* is a TypeError; a test not
-        // yet reduced to a value stays irreducible (matches `contractLogical`'s identical shape for
-        // `and`/`or`).
+        // Unlike native Python's truthiness, an `if`/`elif` predicate — SICP's term for this, reused
+        // in the error message below — requires a genuine `bool` in this dialect (an `elif` is a
+        // nested `IfStatement` in `head.alternate`, so this one check-site covers both).
+        // docs/specs/python_typing.tex:56-57: "Following if and elif, Python §x only allows boolean
+        // expressions." A non-bool *value* is a TypeError; a test not yet reduced to a value stays
+        // irreducible (matches `contractLogical`'s identical shape for `and`/`or`).
         if (!isStepperValue(test)) return { kind: "irreducible" };
-        throw new Error(`TypeError: if condition must be bool, not '${operandTypeName(test)}'`);
+        throw new Error(`TypeError: predicate type must be 'bool', not '${operandTypeName(test)}'`);
       }
       const truthy = test.value === true;
       const branch = (truthy ? head.consequent : head.alternate) as StepNode | null;

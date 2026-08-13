@@ -240,7 +240,7 @@ function emitExpr(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
     }
     case "Ternary": {
       const t = e as ExprNS.Ternary;
-      return `(__py.condBool(${emitExpr(t.predicate, a, ctx)}, "conditional expression") ? ${emitExpr(t.consequent, a, ctx)} : ${emitExpr(t.alternative, a, ctx)})`;
+      return `(__py.condBool(${emitExpr(t.predicate, a, ctx)}) ? ${emitExpr(t.consequent, a, ctx)} : ${emitExpr(t.alternative, a, ctx)})`;
     }
     case "Call":
       return emitCall(e as ExprNS.Call, a, ctx);
@@ -285,7 +285,7 @@ function emitTailPosition(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
       return `(${emitTailPosition((e as ExprNS.Grouping).expression, a, ctx)})`;
     case "Ternary": {
       const t = e as ExprNS.Ternary;
-      return `(__py.condBool(${emitExpr(t.predicate, a, ctx)}, "conditional expression") ? ${emitTailPosition(t.consequent, a, ctx)} : ${emitTailPosition(t.alternative, a, ctx)})`;
+      return `(__py.condBool(${emitExpr(t.predicate, a, ctx)}) ? ${emitTailPosition(t.consequent, a, ctx)} : ${emitTailPosition(t.alternative, a, ctx)})`;
     }
     case "BoolOp": {
       const b = e as ExprNS.BoolOp;
@@ -456,7 +456,7 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
       // condBool demands a literal bool — Python §x only allows boolean expressions following `if`
       // and `elif` (an `elif` is a nested If here, in `elseBlock`, so this one check-site covers
       // both). See runtime.ts's condBool doc comment.
-      const head = `${indent}if (__py.condBool(${emitExpr(i.condition, a, ctx)}, "if")) {\n${emitStmts(i.body, indent + "  ", a, ctx)}${indent}}`;
+      const head = `${indent}if (__py.condBool(${emitExpr(i.condition, a, ctx)})) {\n${emitStmts(i.body, indent + "  ", a, ctx)}${indent}}`;
       if (i.elseBlock === null) return head + "\n";
       return `${head} else {\n${emitStmts(i.elseBlock, indent + "  ", a, ctx)}${indent}}\n`;
     }

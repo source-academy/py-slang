@@ -1000,19 +1000,20 @@ export class Py2JsRuntime {
   }
 
   /**
-   * `if`/`elif` condition, and conditional-expression (`x if p else y`) condition: like
-   * `whileCond` below, a bare bool is required. docs/specs/python_typing.tex:56-57 states this
-   * explicitly for `if`/`elif`: "Following if and elif, Python §x only allows boolean
-   * expressions." The conditional expression isn't separately named there, but docs/md/README_1.md
-   * and up present it as the same feature, under the same "Conditional statements and conditional
-   * expressions" heading, so its predicate is held to the identical rule here. `where` names the
-   * construct for the error message.
+   * `if`/`elif` condition, and conditional-expression (`x if p else y`) condition — SICP calls both
+   * of these a *predicate*: like `whileCond` below, a bare bool is required.
+   * docs/specs/python_typing.tex:56-57 states this explicitly for `if`/`elif`: "Following if and
+   * elif, Python §x only allows boolean expressions." The conditional expression isn't separately
+   * named there, but docs/md/README_1.md and up present it as the same feature, under the same
+   * "Conditional statements and conditional expressions" heading, so its predicate is held to the
+   * identical rule here. One message for both constructs, matching the wording of an ordinary
+   * operand-type error (e.g. `unsupported operand type(s) for -: 'int' and 'str'`).
    */
-  condBool(v: PyValue, where: "if" | "conditional expression"): boolean {
+  condBool(v: PyValue): boolean {
     if (typeof v !== "boolean") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `${where} condition must be bool, not '${pyTypeName(v, !this.universalEquality)}'`,
+        `predicate type must be 'bool', not '${pyTypeName(v, !this.universalEquality)}'`,
       );
     }
     return v;
