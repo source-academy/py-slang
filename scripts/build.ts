@@ -2,7 +2,15 @@
 import { select } from "@inquirer/prompts";
 import { spawn } from "child_process";
 import { Command } from "commander";
+import { createRequire } from "module";
 import { cpus } from "os";
+
+// Run rollup through its own JS entry instead of spawning the name "rollup".
+// On Windows only rollup.CMD is on PATH and spawn() won't do the PATHEXT lookup
+// needed to find it, so the bare name is an ENOENT. Pointing at the .CMD
+// directly is no good either — Node refuses to spawn batch files without a
+// shell (CVE-2024-27980) — and shell: true would mean the DEP0190 warning.
+const rollupBin = createRequire(import.meta.url).resolve("rollup/dist/bin/rollup");
 
 // Keep in sync with src/conductor/index.ts exports.
 const allTargets = [
@@ -37,7 +45,7 @@ type EvaluatorName = (typeof allTargets)[number];
 function buildTarget(target: EvaluatorName, extraArgs: string[] = []): Promise<void> {
   console.log(`\nBuilding ${target}...\n`);
   return new Promise((resolve, reject) => {
-    const child = spawn("rollup", ["-c", "rollup.config.mjs", ...extraArgs], {
+    const child = spawn(process.execPath, [rollupBin, "-c", "rollup.config.mjs", ...extraArgs], {
       env: { ...process.env, EVALUATOR: target },
       stdio: "inherit",
     });
@@ -78,7 +86,7 @@ async function runWithConcurrencyLimit<T>(
 
 function watchTarget(target: EvaluatorName) {
   console.log(`\nWatching ${target}...\n`);
-  const child = spawn("rollup", ["-c", "rollup.config.mjs", "--watch"], {
+  const child = spawn(process.execPath, [rollupBin, "-c", "rollup.config.mjs", "--watch"], {
     env: { ...process.env, EVALUATOR: target },
     stdio: "inherit",
   });
