@@ -6,6 +6,16 @@ import { createErrorIndicator, getFullLine, RuntimeSourceError } from "../errors
 /**
  * Wraps any caught value as a ConductorError suitable for conductor.sendError().
  * Preserves name, message, and source-location when available.
+ *
+ * Location is read from two different shapes because the errors this wraps come from two
+ * different hierarchies that were never reconciled: RuntimeSourceError (src/errors/errors.ts)
+ * implements the SourceError interface and carries `location.start.{line,column}`, but
+ * BaseResolverError (src/resolver/errors.ts) - used for NameNotFoundError,
+ * NameReassignmentError, etc. - extends the native SyntaxError and carries flat `line`/`col`
+ * instead. Without the fallback, every resolver error silently loses its line/column here (they
+ * don't have `.location` at all), which also breaks the frontend's prepend-line-offset
+ * correction downstream (source-academy/frontend#4244) since that only has a number to shift
+ * when `EvaluatorError.line` is actually populated.
  */
 export class EvaluatorError extends ConductorError {
   line?: number;
@@ -18,10 +28,19 @@ export class EvaluatorError extends ConductorError {
         : undefined;
     super(typeof errorLike?.message === "string" ? errorLike.message : String(e));
     this.name = typeof errorLike?.name === "string" ? errorLike.name : "Error";
-    const se = errorLike as { location?: { start?: { line: number; column: number } } };
+    const se = errorLike as {
+      location?: { start?: { line: number; column: number } };
+      line?: unknown;
+      col?: unknown;
+    };
     if (se.location?.start) {
       this.line = se.location.start.line;
       this.column = se.location.start.column;
+    } else if (typeof se.line === "number") {
+      this.line = se.line;
+      if (typeof se.col === "number") {
+        this.column = se.col;
+      }
     }
   }
 }
