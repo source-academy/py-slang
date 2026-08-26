@@ -817,7 +817,9 @@ describe("Python stepper — a def-local reassignment shadows the whole function
 
   test("the reassignment still shadows the outer name from inside a nested if/else", async () => {
     expect(
-      await errorStep("z = 2\ndef f():\n  print(z)\n  if True:\n    z = 3\n  else:\n    z = 4\nf()"),
+      await errorStep(
+        "z = 2\ndef f():\n  print(z)\n  if True:\n    z = 3\n  else:\n    z = 4\nf()",
+      ),
     ).toBe(
       "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
     );
@@ -825,6 +827,25 @@ describe("Python stepper — a def-local reassignment shadows the whole function
 
   test("a same-named parameter is unaffected — the parameter, not the outer binding, is what's local", async () => {
     expect(await result("z = 2\ndef f(z):\n  return z\nf(9)")).toBe("9");
+  });
+
+  test("a function that reassigns its own name shadows the recursive self-reference too", async () => {
+    // `f` is normally bound to the function value itself inside its own body (so recursive calls
+    // resolve), but a `def` that reassigns its own name makes that name local to itself, exactly like
+    // any other name — so an early read of `f` must not resolve to the function value either.
+    expect(await errorStep("def f():\n  print(f)\n  f = 3\nf()")).toBe(
+      "UnboundLocalError: cannot access local variable 'f' where it is not associated with a value",
+    );
+  });
+
+  test("a name never bound anywhere is a NameError, not an UnboundLocalError", async () => {
+    // Distinct from every case above: `missing` is never assigned anywhere in the program, so nothing
+    // makes it local to `f` — real Python reports NameError here. (Ordinarily caught earlier, at
+    // preprocessing — `steps()`/`result()` skip that step, exercising the reducer's own fallback.)
+    expect(await errorStep("print(missing)")).toBe("NameError: name 'missing' is not defined");
+    expect(await errorStep("def f():\n  return missing\nf()")).toBe(
+      "NameError: name 'missing' is not defined",
+    );
   });
 });
 

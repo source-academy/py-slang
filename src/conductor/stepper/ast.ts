@@ -371,35 +371,64 @@ export function paramNames(node: StepNode): string[] {
  * and the fix, both still do.)
  */
 export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
+  return substituteOrTag(node, name, value, false);
+}
+
+/**
+ * Tags every free occurrence of `name` in `node` with `unboundLocal: true` instead of substituting a
+ * value in for it — used exactly where {@link substitute}'s `FunctionDeclaration` case (and
+ * `reduce.ts`'s identical own-name/`selfName` case in `contractCall`) finds that `name` is assigned
+ * somewhere later in the very body being skipped, so an outer binding must not be substituted in at
+ * all. A read of such a name is a genuine Python `UnboundLocalError` once the function actually runs
+ * (py-slang#447) — distinct from a name that is never bound *anywhere* in the program, which is a
+ * `NameError` instead. Both surface as a bare, unsubstituted `Identifier` by the time `reduce.ts`'s
+ * `reduceExpr` has to evaluate one; this tag is how it tells the two apart (see its `Identifier` case)
+ * without any environment/scope tracking of its own — respecting the exact same shadowing rules as
+ * `substitute` (nested function/param boundaries, sequential block redeclaration) so it tags precisely
+ * the occurrences a real substitution pass would otherwise have left untouched for the same reason.
+ */
+export function markUnboundLocal(node: StepNode, name: string): StepNode {
+  return substituteOrTag(node, name, { type: "Identifier", name }, true);
+}
+
+function substituteOrTag(
+  node: StepNode,
+  name: string,
+  value: StepNode,
+  tagOnly: boolean,
+): StepNode {
   switch (node.type) {
     case "Identifier":
-      return node.name === name ? clone(value) : node;
+      if (node.name !== name) return node;
+      return tagOnly ? { ...node, unboundLocal: true } : clone(value);
     case "ArrowFunctionExpression":
       if (paramNames(node).includes(name)) return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
+      return { ...node, body: substituteOrTag(node.body as StepNode, name, value, tagOnly) };
     case "FunctionDeclaration":
-      if (
-        (node.id as StepNode).name === name ||
-        paramNames(node).includes(name) ||
-        assignedNamesOf(node.body as StepNode).has(name)
-      )
-        return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
+      if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
+      if (!tagOnly && assignedNamesOf(node.body as StepNode).has(name)) {
+        // `name` is reassigned somewhere later in this very body: it's local to the *whole* function
+        // (Python's own rule), so the outer `value` must not be substituted in here at all — but reads
+        // of it before that later assignment are real, so tag them `unboundLocal` instead of leaving
+        // them indistinguishable from a name that's never bound anywhere.
+        return { ...node, body: markUnboundLocal(node.body as StepNode, name) };
+      }
+      return { ...node, body: substituteOrTag(node.body as StepNode, name, value, tagOnly) };
     case "VariableDeclarator":
-      return { ...node, init: substitute(node.init as StepNode, name, value) };
+      return { ...node, init: substituteOrTag(node.init as StepNode, name, value, tagOnly) };
     case "Program":
     case "BlockStatement": {
       let shadowed = false;
       const newBody = (node.body as StepNode[]).map(stmt => {
         if (shadowed) return stmt;
-        const substituted = substitute(stmt, name, value);
+        const substituted = substituteOrTag(stmt, name, value, tagOnly);
         if (declaredNamesOf(stmt).includes(name)) shadowed = true;
         return substituted;
       });
       return { ...node, body: newBody };
     }
     default:
-      return mapChildren(node, child => substitute(child, name, value));
+      return mapChildren(node, child => substituteOrTag(child, name, value, tagOnly));
   }
 }
 
@@ -620,7 +649,7 @@ function declaredNamesOf(stmt: StepNode): string[] {
  * only has to walk `if` and plain statement blocks, reusing {@link declaredNamesOf} per statement —
  * unlike that function's own single-statement, non-recursive use in shadowing sequential siblings.
  */
-function assignedNamesOf(node: StepNode): Set<string> {
+export function assignedNamesOf(node: StepNode): Set<string> {
   const names = new Set<string>();
   const walk = (stmt: StepNode): void => {
     for (const declared of declaredNamesOf(stmt)) names.add(declared);

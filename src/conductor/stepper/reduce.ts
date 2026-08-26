@@ -30,6 +30,7 @@ import type { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import {
   type ComplexValue,
   type StepNode,
+  assignedNamesOf,
   clone,
   complexLiteral,
   isComplexValue,
@@ -40,6 +41,7 @@ import {
   isResultValue,
   isValue,
   literal,
+  markUnboundLocal,
   numberLiteral,
   paramNames,
   stringLiteral,
@@ -804,7 +806,13 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
         ? callee.name
         : undefined;
   if (selfName !== undefined && !params.includes(selfName)) {
-    result = substitute(result, selfName, callee);
+    // Mirrors `substitute`'s (`./ast.ts`) own `FunctionDeclaration` shadowing rule, applied here to the
+    // function's *own* name instead of an outer binding of it: if the body reassigns `selfName` itself
+    // (`def f(): print(f); f = 3`), `f` is local to `f`'s own call, so the early read must not resolve
+    // to the function value — tag it `unboundLocal` instead (py-slang#447).
+    result = assignedNamesOf(result).has(selfName)
+      ? markUnboundLocal(result, selfName)
+      : substitute(result, selfName, callee);
   }
   params.forEach((p, i) => {
     result = substitute(result, p, args[i]);
@@ -852,18 +860,25 @@ export async function reduceExpr(
 ): Promise<ReduceResult | null> {
   switch (node.type) {
     case "Identifier": {
-      // A leftover name is an atom: either a built-in function name (never substituted away, so it's a
-      // legitimate irreducible value — e.g. `print` in `p = print`), or a name `substitute` (`./ast.ts`)
-      // deliberately left behind because the enclosing `def` assigns it later in its own body — Python
-      // treats such a name as local to the *whole* function, so a read before that assignment is a
-      // genuine runtime fault, not a value (py-slang#447). Built-in *constants* (math_pi, …) never reach
-      // here — they are substituted with their value before stepping (see `substituteBuiltinConstants`),
-      // so they render as the value from the first step rather than contracting mid-run.
+      // A leftover name is either a built-in function name (never substituted away, so it's a
+      // legitimate irreducible value — e.g. `print` in `p = print`) or a genuine runtime fault, not a
+      // value. Two different faults, told apart by `unboundLocal` (set by `./ast.ts`'s
+      // `markUnboundLocal`): a name the enclosing `def` assigns later in its own body is local to the
+      // *whole* function, so a read before that assignment is `UnboundLocalError`, exactly like real
+      // Python; anything else reaching here was never bound *anywhere* in the program at all — a
+      // `NameError` (py-slang#447; ordinarily caught earlier, at preprocessing — see `./preprocess.ts`
+      // — so reaching this branch means preprocessing was skipped or a program is stepped standalone).
+      // Built-in *constants* (math_pi, …) never reach here — they are substituted with their value
+      // before stepping (see `substituteBuiltinConstants`), so they render as the value from the first
+      // step rather than contracting mid-run.
       const name = String(node.name);
       if (isBuiltinFunctionValueName(name)) return null;
-      throw new Error(
-        `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`,
-      );
+      if (node.unboundLocal === true) {
+        throw new Error(
+          `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`,
+        );
+      }
+      throw new Error(`NameError: name '${name}' is not defined`);
     }
     case "BinaryExpression": {
       const left = await reduceExpr(node.left as StepNode, context);
