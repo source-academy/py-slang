@@ -17,8 +17,10 @@
  *
  * Known limitations (acceptable for a teaching stepper): integers use JS `bigint` (exact, but large
  * exponents may be slow); float arithmetic uses JS `number` (IEEE 754); a local binding inside a
- * function body that shadows a parameter is not alpha-renamed; re-binding an already-substituted name
- * in a later statement is not tracked.
+ * function body that shadows a parameter is not alpha-renamed. A `def` that reassigns a name is
+ * treated as making it local to the *whole* function (Python's own rule), so a read of it before that
+ * assignment does not fall back to an enclosing/global value — it is an `UnboundLocalError`, exactly
+ * like real Python (py-slang#447; see `./ast.ts`'s `substitute`).
  * Recursion works (a function's name is re-bound in its body on each application) but, like Source, is
  * bounded only by the step limit — a non-terminating recursion stops at "Maximum number of steps".
  */
@@ -28,6 +30,7 @@ import type { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import {
   type ComplexValue,
   type StepNode,
+  assignedNamesOf,
   clone,
   complexLiteral,
   isComplexValue,
@@ -38,6 +41,7 @@ import {
   isResultValue,
   isValue,
   literal,
+  markUnboundLocal,
   numberLiteral,
   paramNames,
   stringLiteral,
@@ -50,6 +54,7 @@ import {
   checkArity,
   formatPrintOutput,
   isBuiltinFunctionName,
+  isBuiltinFunctionValueName,
   isSpecialFormName,
   isStepperValue,
   pyStr,
@@ -801,7 +806,13 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
         ? callee.name
         : undefined;
   if (selfName !== undefined && !params.includes(selfName)) {
-    result = substitute(result, selfName, callee);
+    // Mirrors `substitute`'s (`./ast.ts`) own `FunctionDeclaration` shadowing rule, applied here to the
+    // function's *own* name instead of an outer binding of it: if the body reassigns `selfName` itself
+    // (`def f(): print(f); f = 3`), `f` is local to `f`'s own call, so the early read must not resolve
+    // to the function value — tag it `unboundLocal` instead (py-slang#447).
+    result = assignedNamesOf(result).has(selfName)
+      ? markUnboundLocal(result, selfName)
+      : substitute(result, selfName, callee);
   }
   params.forEach((p, i) => {
     result = substitute(result, p, args[i]);
@@ -848,12 +859,27 @@ export async function reduceExpr(
   context: StepperContext,
 ): Promise<ReduceResult | null> {
   switch (node.type) {
-    case "Identifier":
-      // A leftover name is an atom: a built-in function name, or an unbound name that does not reduce
-      // on its own. Built-in *constants* (math_pi, …) never reach here — they are substituted with
-      // their value before stepping (see `substituteBuiltinConstants`), so they render as the value
-      // from the first step rather than contracting mid-run.
-      return null;
+    case "Identifier": {
+      // A leftover name is either a built-in function name (never substituted away, so it's a
+      // legitimate irreducible value — e.g. `print` in `p = print`) or a genuine runtime fault, not a
+      // value. Two different faults, told apart by `unboundLocal` (set by `./ast.ts`'s
+      // `markUnboundLocal`): a name the enclosing `def` assigns later in its own body is local to the
+      // *whole* function, so a read before that assignment is `UnboundLocalError`, exactly like real
+      // Python; anything else reaching here was never bound *anywhere* in the program at all — a
+      // `NameError` (py-slang#447; ordinarily caught earlier, at preprocessing — see `./preprocess.ts`
+      // — so reaching this branch means preprocessing was skipped or a program is stepped standalone).
+      // Built-in *constants* (math_pi, …) never reach here — they are substituted with their value
+      // before stepping (see `substituteBuiltinConstants`), so they render as the value from the first
+      // step rather than contracting mid-run.
+      const name = String(node.name);
+      if (isBuiltinFunctionValueName(name)) return null;
+      if (node.unboundLocal === true) {
+        throw new Error(
+          `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`,
+        );
+      }
+      throw new Error(`NameError: name '${name}' is not defined`);
+    }
     case "BinaryExpression": {
       const left = await reduceExpr(node.left as StepNode, context);
       if (left) return rebuild(node, "left", left);
@@ -908,6 +934,20 @@ export async function reduceExpr(
 
 function declaratorOf(stmt: StepNode): StepNode {
   return (stmt.declarations as StepNode[])[0];
+}
+
+/**
+ * Whether `node` is ready to bind as an assignment's right-hand side without a further reduction step.
+ * Same as {@link isValue} except a non-builtin bare `Identifier` is never actually a finished value —
+ * `substitute` (`./ast.ts`) leaves one behind specifically when it's a name the enclosing `def`
+ * reassigns later in its own body, so a read of it this early is an `UnboundLocalError`
+ * (py-slang#447) — so treating it as an already-good value here (as plain `isValue` would) would bind
+ * the assignment's target to that same unresolved name instead of forcing the reduction step that
+ * raises the error (`reduceExpr`'s own `Identifier` case, below).
+ */
+function isReadyValue(node: StepNode): boolean {
+  if (node.type === "Identifier") return isBuiltinFunctionValueName(String(node.name));
+  return isValue(node);
 }
 
 /**
@@ -1010,7 +1050,7 @@ async function stepHead(
     case "VariableDeclaration": {
       const decl = declaratorOf(head);
       const init = decl.init as StepNode;
-      if (!isValue(init)) {
+      if (!isReadyValue(init)) {
         const reduced = await reduceExpr(init, context);
         if (reduced) {
           // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
