@@ -342,9 +342,17 @@ export function paramNames(node: StepNode): string[] {
 /**
  * Capture-avoiding-by-shadowing substitution of `name` with `value` throughout `node`. Substitution
  * does not descend into a function that binds `name` as a parameter (or, for a named `def`, as its
- * own name), so inner bindings correctly shadow the outer one. Shared by the reducer (function
- * application, statement-level bindings) and the linked-list library (binding a library function's
- * parameters to its value arguments).
+ * own name), so inner bindings correctly shadow the outer one. It also does not descend into a `def`
+ * whose body *assigns* to `name` anywhere (see {@link assignedNamesOf}) — Python decides a name is
+ * local to a function statically, from every assignment in its body, not just the ones textually
+ * before a given read, so a `def` that reassigns `name` shadows an outer binding of it throughout the
+ * *whole* function, including reads that appear earlier in the body (py-slang#447). Left as a bare,
+ * unsubstituted `Identifier`, such a read is caught at reduction time instead: `reduce.ts`'s
+ * `reduceExpr` rejects a non-builtin `Identifier` it must evaluate as `UnboundLocalError`, which is
+ * exactly what that read is until the function's own later assignment substitutes a real value in for
+ * the rest of its body ({@link substituteRest}, driven by `reduce.ts`'s `stepHead`). Shared by the
+ * reducer (function application, statement-level bindings) and the linked-list library (binding a
+ * library function's parameters to its value arguments).
  *
  * A `Program`/`BlockStatement` is also shadowing-aware *sequentially*: once a statement redeclares
  * `name` (a `def name(...)`, `name = ...`, or `from X import name` — see `declaredNamesOf`), every
@@ -370,7 +378,12 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
       if (paramNames(node).includes(name)) return node;
       return { ...node, body: substitute(node.body as StepNode, name, value) };
     case "FunctionDeclaration":
-      if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
+      if (
+        (node.id as StepNode).name === name ||
+        paramNames(node).includes(name) ||
+        assignedNamesOf(node.body as StepNode).has(name)
+      )
+        return node;
       return { ...node, body: substitute(node.body as StepNode, name, value) };
     case "VariableDeclarator":
       return { ...node, init: substitute(node.init as StepNode, name, value) };
@@ -595,6 +608,31 @@ function declaredNamesOf(stmt: StepNode): string[] {
     return (stmt.names as string[] | undefined) ?? [];
   }
   return [];
+}
+
+/**
+ * Every name a function body assigns anywhere within it — a `def`'s own name, an `x = ...` target, or
+ * a nested `def`'s own name — found recursively through `if`/block nesting but *not* inside a nested
+ * function's own body (that's a separate scope with its own assignments). Mirrors Python's rule that
+ * any assignment to a name anywhere in a function makes that name local to the *whole* function,
+ * including reads that appear earlier in the body (see {@link substitute}'s `FunctionDeclaration`
+ * case, py-slang#447). SICPy's chapter 1/2 sublanguage has no `global`/`nonlocal` and no loops, so this
+ * only has to walk `if` and plain statement blocks, reusing {@link declaredNamesOf} per statement —
+ * unlike that function's own single-statement, non-recursive use in shadowing sequential siblings.
+ */
+function assignedNamesOf(node: StepNode): Set<string> {
+  const names = new Set<string>();
+  const walk = (stmt: StepNode): void => {
+    for (const declared of declaredNamesOf(stmt)) names.add(declared);
+    if (stmt.type === "BlockStatement") {
+      (stmt.body as StepNode[]).forEach(walk);
+    } else if (stmt.type === "IfStatement") {
+      walk(stmt.consequent as StepNode);
+      if (stmt.alternate) walk(stmt.alternate as StepNode);
+    }
+  };
+  walk(node);
+  return names;
 }
 
 /* -------------------------------------------------------------------------- */
