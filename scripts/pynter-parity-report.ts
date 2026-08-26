@@ -11,8 +11,13 @@
  */
 import { spawnSync } from "child_process";
 import { Command } from "commander";
+import { createRequire } from "module";
 
 const TAG = "[pvml/pynter]";
+
+// Same problem as the rollup call in scripts/build.ts: "npx" doesn't resolve on
+// Windows, so go straight to jest's entry point.
+const jestBin = createRequire(import.meta.url).resolve("jest/bin/jest");
 
 interface AssertionResult {
   ancestorTitles: string[];
@@ -44,7 +49,7 @@ function runJest(): JestJson {
   // as "pending" rather than excluding them, which would be indistinguishable
   // from a genuine (e.g. complex-number) skip. Filter by ancestor title below
   // instead, over the full (unfiltered) result set.
-  const result = spawnSync("npx", ["jest", "--json"], {
+  const result = spawnSync(process.execPath, [jestBin, "--json"], {
     encoding: "utf-8",
     maxBuffer: 1024 * 1024 * 100,
     env: process.env,
