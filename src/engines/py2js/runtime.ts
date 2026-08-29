@@ -322,7 +322,7 @@ export const isPairShaped = (v: PyValue): v is [PyValue, PyValue] =>
  * recursive: JS engines don't guarantee TCO, so a long list would otherwise
  * risk a stack overflow — the same failure mode printLlist's own outer
  * list-walking `while` loop below already avoids. */
-function isProperList(v: PyValue): boolean {
+export function isProperList(v: PyValue): boolean {
   let current = v;
   while (isPairShaped(current)) {
     current = current[1];
