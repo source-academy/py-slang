@@ -139,7 +139,7 @@ function llistLeafRepr(node: StepNode): string {
  * below calls this once per *distinct* tail-chain suffix it renders (see its own doc comment), so a
  * recursive version here would make the whole walk O(N^2) on a long chain, and risk a stack
  * overflow on a long chain by itself regardless. */
-function isProperLlist(node: StepNode): boolean {
+export function isProperLlist(node: StepNode): boolean {
   let current = node;
   while (isPairNode(current)) {
     current = (current.elements as StepNode[])[1];

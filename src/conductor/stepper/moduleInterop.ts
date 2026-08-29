@@ -36,6 +36,7 @@ import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import type { StmtNS } from "../../ast-types";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import {
+  isPairNode,
   literal,
   moduleFunction,
   moduleGeneratedFunction,
@@ -45,6 +46,7 @@ import {
   stringLiteral,
 } from "./ast";
 import { applyBuiltin, isBuiltinFunctionName } from "./builtins";
+import { isProperLlist } from "./lists";
 
 /** Thrown for a student-actionable import problem (module not found, name not exported, a relative
  * import) — surfaced by `getSteps.ts`'s callers the same way a preprocessing error is, rather than
@@ -164,6 +166,20 @@ async function pythonCallableToModule(
   );
 }
 
+/** Walks a proper pair()/llist() chain (already confirmed via isProperLlist) into its actual
+ * elements - e.g. ArrayExpression[a, ArrayExpression[b, None]] becomes [a, b] - so
+ * stepNodeToModule's "ArrayExpression" case can convert a chain the same way it would a flat
+ * literal of the same elements. */
+function flattenProperLlist(node: StepNode): StepNode[] {
+  const result: StepNode[] = [];
+  let current = node;
+  while (isPairNode(current)) {
+    result.push((current.elements as StepNode[])[0]);
+    current = (current.elements as StepNode[])[1];
+  }
+  return result;
+}
+
 /** Converts a stepper value into a conductor `TypedValue`, for passing into a module call as an
  * argument. Mirrors `pythonToModule` in `src/engines/cse/modules.ts`. Throws
  * `ModuleInteropUnsupportedError` for anything it cannot convert. */
@@ -188,10 +204,18 @@ export async function stepNodeToModule(
       throw new ModuleInteropUnsupportedError("complex values are not supported in module interop");
     }
     case "ArrayExpression": {
+      // A pair()/llist() chain is nested 2-element ArrayExpression nodes - llist(a, b) is
+      // ArrayExpression[a, ArrayExpression[b, None]], not the flat ArrayExpression[a, b] a literal
+      // [a, b] produces (both are ArrayExpression nodes - see isPairNode). Mapping node.elements
+      // directly here would turn element 1 of a chain into a nested sub-list instead of the list's
+      // real second element. isProperLlist (true only for a chain that actually terminates in
+      // None) tells that case apart from a raw 2-element list like [1, 2], which falls through
+      // unchanged below.
+      const flatElements = isProperLlist(node)
+        ? flattenProperLlist(node)
+        : (node.elements as StepNode[]);
       const elements = await Promise.all(
-        (node.elements as StepNode[]).map(el =>
-          stepNodeToModule(evaluator, el, applyPythonCallable),
-        ),
+        flatElements.map(el => stepNodeToModule(evaluator, el, applyPythonCallable)),
       );
       const array = await evaluator.array_make(DataType.ANY, elements.length, {
         type: DataType.VOID,
