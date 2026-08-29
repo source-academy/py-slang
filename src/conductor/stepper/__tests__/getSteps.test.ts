@@ -2946,4 +2946,37 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
       /cannot import name 'triple'/,
     );
   });
+
+  // Regression: modules#931 - stepNodeToModule's "ArrayExpression" case used to map a pair()/
+  // llist() chain's nodes 1:1 instead of flattening it first, so a module declaring a LIST/ARRAY
+  // argument received a nested sub-list as its second element instead of the list's real elements
+  // (e.g. sound's consecutively(llist(a, b)) got [a, [b, EMPTY_LIST]] instead of [a, b]).
+  test("llist(...) crosses into a module as a genuine flat list, not a nested one (modules#931)", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* sumFunc(
+      xs: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      const elements = await dh.list_to_vec(xs as TypedValue<DataType.LIST>);
+      const total = elements.reduce(
+        (acc, el) => acc + (el as TypedValue<DataType.NUMBER>).value,
+        0,
+      );
+      return { type: DataType.NUMBER, value: total };
+    }
+    const sumAll = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.LIST] },
+      sumFunc,
+    );
+    installFakeModule({ listmod: [{ symbol: "sum_all", value: sumAll }] });
+
+    const twoElements = parse("from listmod import sum_all\nsum_all(llist(1, 2))\n");
+    expect(await evaluatePython(twoElements, undefined, { evaluator: dh })).toBe("3.0");
+
+    const fourElements = parse("from listmod import sum_all\nsum_all(llist(1, 2, 3, 4))\n");
+    expect(await evaluatePython(fourElements, undefined, { evaluator: dh })).toBe("10.0");
+
+    // A flat list literal must still work exactly as before - unaffected by the fix.
+    const literal = parse("from listmod import sum_all\nsum_all([1, 2, 3])\n");
+    expect(await evaluatePython(literal, undefined, { evaluator: dh })).toBe("6.0");
+  });
 });
