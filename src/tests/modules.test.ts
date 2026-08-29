@@ -340,9 +340,12 @@ describe("module interop conversions", () => {
       // LinkedListBuiltins.llist in src/stdlib/linked-list.ts). Mirrors that shape directly rather
       // than calling the builtin, to keep this file's own fixture self-contained.
       function pyLlist(...elements: Value[]): Value {
-        return elements.reduceRight<Value>((tail, head) => ({ type: "list", value: [head, tail] }), {
-          type: "none",
-        });
+        return elements.reduceRight<Value>(
+          (tail, head) => ({ type: "list", value: [head, tail] }),
+          {
+            type: "none",
+          },
+        );
       }
 
       test("llist(a, b) - the reported repro's exact shape - flattens to a flat 2-element ARRAY, not a nested one", async () => {

@@ -60,7 +60,14 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
-import { isPairShaped, isProperList, Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
+import {
+  isPairShaped,
+  isProperList,
+  Py2JsRuntime,
+  Py2JsRuntimeError,
+  PyOpaque,
+  PyValue,
+} from "./runtime";
 
 /**
  * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
