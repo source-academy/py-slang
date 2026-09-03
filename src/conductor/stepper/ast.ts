@@ -342,9 +342,17 @@ export function paramNames(node: StepNode): string[] {
 /**
  * Capture-avoiding-by-shadowing substitution of `name` with `value` throughout `node`. Substitution
  * does not descend into a function that binds `name` as a parameter (or, for a named `def`, as its
- * own name), so inner bindings correctly shadow the outer one. Shared by the reducer (function
- * application, statement-level bindings) and the linked-list library (binding a library function's
- * parameters to its value arguments).
+ * own name), so inner bindings correctly shadow the outer one. It also does not descend into a `def`
+ * whose body *assigns* to `name` anywhere (see {@link assignedNamesOf}) — Python decides a name is
+ * local to a function statically, from every assignment in its body, not just the ones textually
+ * before a given read, so a `def` that reassigns `name` shadows an outer binding of it throughout the
+ * *whole* function, including reads that appear earlier in the body (py-slang#447). Left as a bare,
+ * unsubstituted `Identifier`, such a read is caught at reduction time instead: `reduce.ts`'s
+ * `reduceExpr` rejects a non-builtin `Identifier` it must evaluate as `UnboundLocalError`, which is
+ * exactly what that read is until the function's own later assignment substitutes a real value in for
+ * the rest of its body ({@link substituteRest}, driven by `reduce.ts`'s `stepHead`). Shared by the
+ * reducer (function application, statement-level bindings) and the linked-list library (binding a
+ * library function's parameters to its value arguments).
  *
  * A `Program`/`BlockStatement` is also shadowing-aware *sequentially*: once a statement redeclares
  * `name` (a `def name(...)`, `name = ...`, or `from X import name` — see `declaredNamesOf`), every
@@ -363,30 +371,234 @@ export function paramNames(node: StepNode): string[] {
  * and the fix, both still do.)
  */
 export function substitute(node: StepNode, name: string, value: StepNode): StepNode {
+  return substituteOrTag(node, name, value, false);
+}
+
+/**
+ * Tags every free occurrence of `name` in `node` with `unboundLocal: true` instead of substituting a
+ * value in for it — used exactly where {@link substitute}'s `FunctionDeclaration` case (and
+ * `reduce.ts`'s identical own-name/`selfName` case in `contractCall`) finds that `name` is assigned
+ * somewhere later in the very body being skipped, so an outer binding must not be substituted in at
+ * all. A read of such a name is a genuine Python `UnboundLocalError` once the function actually runs
+ * (py-slang#447) — distinct from a name that is never bound *anywhere* in the program, which is a
+ * `NameError` instead. Both surface as a bare, unsubstituted `Identifier` by the time `reduce.ts`'s
+ * `reduceExpr` has to evaluate one; this tag is how it tells the two apart (see its `Identifier` case)
+ * without any environment/scope tracking of its own — respecting the exact same shadowing rules as
+ * `substitute` (nested function/param boundaries, sequential block redeclaration) so it tags precisely
+ * the occurrences a real substitution pass would otherwise have left untouched for the same reason.
+ */
+export function markUnboundLocal(node: StepNode, name: string): StepNode {
+  return substituteOrTag(node, name, { type: "Identifier", name }, true);
+}
+
+/**
+ * Identifier names read freely within `node` — not bound by an enclosing `lambda`/`def` parameter,
+ * nor (for a `def`) a name its own body assigns anywhere (see {@link assignedNamesOf}). Used by
+ * {@link avoidCapture} to tell whether inserting `node` (a substitution's `value`) under some other
+ * binder could accidentally fall under one of *that* binder's own names.
+ */
+function freeNames(node: StepNode): Set<string> {
   switch (node.type) {
     case "Identifier":
-      return node.name === name ? clone(value) : node;
+      return new Set([String(node.name)]);
+    case "ArrowFunctionExpression": {
+      const names = freeNames(node.body as StepNode);
+      paramNames(node).forEach(p => names.delete(p));
+      return names;
+    }
+    case "FunctionDeclaration": {
+      const names = freeNames(node.body as StepNode);
+      paramNames(node).forEach(p => names.delete(p));
+      assignedNamesOf(node.body as StepNode).forEach(n => names.delete(n));
+      return names;
+    }
+    default: {
+      const names = new Set<string>();
+      const collect = (value: unknown): void => {
+        if (Array.isArray(value)) {
+          value.forEach(collect);
+        } else if (
+          value !== null &&
+          typeof value === "object" &&
+          typeof (value as StepNode).type === "string"
+        ) {
+          freeNames(value as StepNode).forEach(n => names.add(n));
+        }
+      };
+      Object.keys(node).forEach(key => collect(node[key]));
+      return names;
+    }
+  }
+}
+
+/** Every identifier name spelled anywhere in `node` — bound or free, including parameter and `def`
+ * names. Deliberately not scope-aware (unlike {@link freeNames}): used only to pick a rename target
+ * guaranteed not to collide with *anything* already present, so over-including names here just means
+ * a rename occasionally skips ahead to a higher `_N` suffix, never an incorrect one. */
+function allIdentifierNames(node: StepNode): Set<string> {
+  const names = new Set<string>();
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (value === null || typeof value !== "object") return;
+    const n = value as StepNode;
+    if (typeof n.type !== "string") return;
+    if (n.type === "Identifier" && typeof n.name === "string") names.add(n.name);
+    Object.keys(n).forEach(key => walk(n[key]));
+  };
+  walk(node);
+  return names;
+}
+
+/** A name derived from `base` that isn't in `used` — `y` becomes `y_1`, a further collision bumps
+ * the trailing `_N` (`y_1` -> `y_2`), mirroring js-slang's stepper (`getFreshName` in its
+ * `stepper/utils.ts`) so a renamed parameter reads the same way in both steppers. */
+function freshName(base: string, used: ReadonlySet<string>): string {
+  const match = /^(.*)_(\d+)$/.exec(base);
+  const stem = match ? match[1] : base;
+  // BigInt, not Number: a name like `y_9007199254740992` (already at/beyond
+  // Number.MAX_SAFE_INTEGER) would otherwise round-trip through `+ 1` right
+  // back to itself (IEEE 754 double precision loss), leaving `candidate`
+  // stuck on a value `used` already has and this loop spinning forever.
+  // BigInt string parsing and arithmetic are exact at any size, so `n` keeps
+  // strictly increasing every iteration regardless of how large a suffix a
+  // (pathological, but user-suppliable via a crafted identifier) collision
+  // set already contains.
+  let n = match ? BigInt(match[2]) + 1n : 1n;
+  let candidate = `${stem}_${n}`;
+  while (used.has(candidate)) {
+    n += 1n;
+    candidate = `${stem}_${n}`;
+  }
+  return candidate;
+}
+
+/**
+ * Renames `node`'s own binding of `before` (one of its parameters, or for a `def`, its own name or a
+ * name its body assigns anywhere) to `after`, throughout `node` — including the binding occurrence(s)
+ * themselves (a parameter, a `def`'s own `id`, an assignment target), not just reads. Delegates to
+ * {@link renameShadowAware} for the body, which stops at any nested `lambda`/`def` boundary that
+ * reintroduces `before` as its own, independently-scoped binding (an unrelated variable that merely
+ * happens to share the name, left untouched) — the same shadow rule {@link substituteOrTag} itself
+ * already applies. Used by {@link avoidCapture}.
+ */
+function renameOwnBinding(node: StepNode, before: string, after: string): StepNode {
+  const params = ((node.params as StepNode[]) ?? []).map(p =>
+    p.name === before ? { ...p, name: after } : p,
+  );
+  const id =
+    node.type === "FunctionDeclaration" && (node.id as StepNode).name === before
+      ? { ...(node.id as StepNode), name: after }
+      : node.id;
+  return { ...node, params, id, body: renameShadowAware(node.body as StepNode, before, after) };
+}
+
+/** The scope-respecting recursive half of {@link renameOwnBinding}. Unlike {@link substituteOrTag},
+ * this touches binding occurrences too (a `VariableDeclarator`'s `id`, a nested `def`'s `id`) — not
+ * just reads — since renaming a bound variable must relabel its own declaration site along with every
+ * reference to it. Mirrors `SICPy`'s chapter 1/2 scoping exactly like {@link assignedNamesOf} does: no
+ * `global`/`nonlocal` and no loops, so a `lambda`/`def` boundary is the only place a name can be
+ * independently re-bound. */
+function renameShadowAware(node: StepNode, before: string, after: string): StepNode {
+  switch (node.type) {
+    case "Identifier":
+      return node.name === before ? { ...node, name: after } : node;
     case "ArrowFunctionExpression":
-      if (paramNames(node).includes(name)) return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
+      if (paramNames(node).includes(before)) return node;
+      return mapChildren(node, child => renameShadowAware(child, before, after));
     case "FunctionDeclaration":
+      if (
+        (node.id as StepNode).name === before ||
+        paramNames(node).includes(before) ||
+        assignedNamesOf(node.body as StepNode).has(before)
+      ) {
+        return node;
+      }
+      return mapChildren(node, child => renameShadowAware(child, before, after));
+    default:
+      return mapChildren(node, child => renameShadowAware(child, before, after));
+  }
+}
+
+/**
+ * If substituting `value` into `node` (a `lambda`/`def` about to be descended into) would let one of
+ * `value`'s free names fall under a name `node` binds itself — a parameter, or for a `def`, any name
+ * its body assigns anywhere ({@link assignedNamesOf}, Python's own whole-function locality rule) —
+ * alpha-renames every such colliding name to a fresh one throughout `node` first, so the later
+ * substitution cannot capture it by accident. Returns `node` unchanged when there's no collision.
+ *
+ * Mirrors js-slang's stepper (`ArrowFunctionExpression.substitute`/`BlockStatement.substitute` in
+ * `src/stepper/nodes/...`), which already does this — this port had dropped it, so a lambda/def
+ * parameter (or a reassigned local) that happened to share a name free in the value being substituted
+ * in silently captured it instead of shadowing it correctly (py-slang#454). For example:
+ * ```python
+ * f = lambda x: y
+ * y = 1
+ * g = lambda y: f(y)
+ * print(g(2))  # must print 1 (f's free `y` is the module-level one) — printed 2 before this fix,
+ *              # because `g`'s own parameter `y` silently captured it once `f` was substituted in.
+ * ```
+ */
+function avoidCapture(node: StepNode, value: StepNode): StepNode {
+  const bound =
+    node.type === "FunctionDeclaration"
+      ? new Set([...paramNames(node), ...assignedNamesOf(node.body as StepNode)])
+      : new Set(paramNames(node));
+  const captured = Array.from(freeNames(value)).filter(n => bound.has(n));
+  if (captured.length === 0) return node;
+
+  const used = new Set([...allIdentifierNames(node), ...freeNames(value)]);
+  return captured.reduce((current, before) => {
+    const after = freshName(before, used);
+    used.add(after);
+    return renameOwnBinding(current, before, after);
+  }, node);
+}
+
+function substituteOrTag(
+  node: StepNode,
+  name: string,
+  value: StepNode,
+  tagOnly: boolean,
+): StepNode {
+  switch (node.type) {
+    case "Identifier":
+      if (node.name !== name) return node;
+      return tagOnly ? { ...node, unboundLocal: true } : clone(value);
+    case "ArrowFunctionExpression": {
+      if (paramNames(node).includes(name)) return node;
+      const avoided = avoidCapture(node, value);
+      return { ...avoided, body: substituteOrTag(avoided.body as StepNode, name, value, tagOnly) };
+    }
+    case "FunctionDeclaration": {
       if ((node.id as StepNode).name === name || paramNames(node).includes(name)) return node;
-      return { ...node, body: substitute(node.body as StepNode, name, value) };
+      if (!tagOnly && assignedNamesOf(node.body as StepNode).has(name)) {
+        // `name` is reassigned somewhere later in this very body: it's local to the *whole* function
+        // (Python's own rule), so the outer `value` must not be substituted in here at all — but reads
+        // of it before that later assignment are real, so tag them `unboundLocal` instead of leaving
+        // them indistinguishable from a name that's never bound anywhere.
+        return { ...node, body: markUnboundLocal(node.body as StepNode, name) };
+      }
+      const avoided = avoidCapture(node, value);
+      return { ...avoided, body: substituteOrTag(avoided.body as StepNode, name, value, tagOnly) };
+    }
     case "VariableDeclarator":
-      return { ...node, init: substitute(node.init as StepNode, name, value) };
+      return { ...node, init: substituteOrTag(node.init as StepNode, name, value, tagOnly) };
     case "Program":
     case "BlockStatement": {
       let shadowed = false;
       const newBody = (node.body as StepNode[]).map(stmt => {
         if (shadowed) return stmt;
-        const substituted = substitute(stmt, name, value);
+        const substituted = substituteOrTag(stmt, name, value, tagOnly);
         if (declaredNamesOf(stmt).includes(name)) shadowed = true;
         return substituted;
       });
       return { ...node, body: newBody };
     }
     default:
-      return mapChildren(node, child => substitute(child, name, value));
+      return mapChildren(node, child => substituteOrTag(child, name, value, tagOnly));
   }
 }
 
@@ -595,6 +807,31 @@ function declaredNamesOf(stmt: StepNode): string[] {
     return (stmt.names as string[] | undefined) ?? [];
   }
   return [];
+}
+
+/**
+ * Every name a function body assigns anywhere within it — a `def`'s own name, an `x = ...` target, or
+ * a nested `def`'s own name — found recursively through `if`/block nesting but *not* inside a nested
+ * function's own body (that's a separate scope with its own assignments). Mirrors Python's rule that
+ * any assignment to a name anywhere in a function makes that name local to the *whole* function,
+ * including reads that appear earlier in the body (see {@link substitute}'s `FunctionDeclaration`
+ * case, py-slang#447). SICPy's chapter 1/2 sublanguage has no `global`/`nonlocal` and no loops, so this
+ * only has to walk `if` and plain statement blocks, reusing {@link declaredNamesOf} per statement —
+ * unlike that function's own single-statement, non-recursive use in shadowing sequential siblings.
+ */
+export function assignedNamesOf(node: StepNode): Set<string> {
+  const names = new Set<string>();
+  const walk = (stmt: StepNode): void => {
+    for (const declared of declaredNamesOf(stmt)) names.add(declared);
+    if (stmt.type === "BlockStatement") {
+      (stmt.body as StepNode[]).forEach(walk);
+    } else if (stmt.type === "IfStatement") {
+      walk(stmt.consequent as StepNode);
+      if (stmt.alternate) walk(stmt.alternate as StepNode);
+    }
+  };
+  walk(node);
+  return names;
 }
 
 /* -------------------------------------------------------------------------- */

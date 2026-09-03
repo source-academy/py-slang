@@ -9,7 +9,7 @@
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { moduleToPython, pythonToModule } from "../engines/py2js/moduleInterop";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque } from "../engines/py2js/runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "../engines/py2js/runtime";
 
 function makeRt() {
   return new Py2JsRuntime();
@@ -108,6 +108,93 @@ describe("pythonToModule", () => {
 
     expect(() => dh.closure_call_sync(typed, [])).toThrow(Py2JsRuntimeError);
     expect(callCount).toBe(1);
+  });
+
+  describe("pair()/llist() chains (regression: modules#931)", () => {
+    // llist(a, b, c, ...) builds nested cons cells - a raw JS array [a, [b, null]] for
+    // llist(a, b) - not the flat [a, b] a literal [a, b] produces (see LinkedListBuiltins.llist's
+    // py2js analogue - pair()/llist() always produce this shape, per moduleInterop.ts's own doc
+    // comment). Mirrors that shape directly to keep this fixture self-contained.
+    function pyLlist(...elements: PyValue[]): PyValue {
+      return elements.reduceRight<PyValue>((tail, head) => [head, tail], null);
+    }
+
+    test("llist(a, b) - the reported repro's exact shape - flattens to a flat 2-element ARRAY, not a nested one", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(60, 64);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 60 },
+        { type: DataType.NUMBER, value: 64 },
+      ]);
+    });
+
+    test("llist(a) - a single-element chain - flattens to a 1-element ARRAY", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(1);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+      ]);
+    });
+
+    test("llist(a, b, c, d) - a longer chain - flattens to a 4-element ARRAY in order", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(1, 2, 3, 4);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+        { type: DataType.NUMBER, value: 3 },
+        { type: DataType.NUMBER, value: 4 },
+      ]);
+    });
+
+    test("a chain element that is itself an llist chain is recursively flattened too", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const inner = pyLlist(1, 2);
+      const outer = pyLlist(inner, 3);
+
+      const typed = await pythonToModule(rt, dh, outer);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      const elements = await dh.list_to_vec(typed as TypedValue<DataType.LIST>);
+      expect(elements[1]).toEqual({ type: DataType.NUMBER, value: 3 });
+      expect(elements[0].type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(elements[0] as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+      ]);
+    });
+
+    test("a raw 2-element list that ISN'T a proper chain (e.g. pair(1, 2)) is unaffected - still a flat ARRAY", async () => {
+      // isProperList(pair(1, 2)) is false (its tail, 2, isn't itself a pair or None) - this must
+      // take the exact same path as before the fix, not be mistaken for an llist chain.
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const rawPair = [1, 2];
+
+      const typed = await pythonToModule(rt, dh, rawPair);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+      ]);
+    });
   });
 });
 

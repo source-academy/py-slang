@@ -779,6 +779,190 @@ describe("Python stepper — a runtime error is named in the step before the stu
   });
 });
 
+describe("Python stepper — a def-local reassignment shadows the whole function body (py-slang#447)", () => {
+  // Python decides a name is local to a function from *every* assignment in its body, not just the
+  // ones textually before a given read — so a read before that assignment must not fall back to an
+  // outer/global value of the same name; it's an UnboundLocalError, exactly like real Python.
+  const errorStep = async (src: string): Promise<string | undefined> => {
+    const e = await explanations(src);
+    expect(e[e.length - 1]).toBe("Evaluation stuck");
+    return e[e.length - 2];
+  };
+
+  test("a read before the function's own later assignment is UnboundLocalError, not the outer value", async () => {
+    expect(await errorStep("z = 2\ndef f():\n  print(z)\n  z = 3\nf()")).toBe(
+      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+    );
+  });
+
+  test("reported the same way when the outer value is read as an expression result", async () => {
+    expect(await errorStep("z = 2\ndef f():\n  y = z\n  z = 3\n  return y\nf()")).toBe(
+      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+    );
+  });
+
+  test("a read after the local assignment uses the local value, not the outer one", async () => {
+    expect(await result("z = 2\ndef f():\n  z = 3\n  return z\nf()")).toBe("3");
+  });
+
+  test("a function that never reassigns the name still reads the outer value", async () => {
+    expect(await result("z = 2\ndef f():\n  return z\nf()")).toBe("2");
+  });
+
+  test("the local shadow is scoped to that function only — a sibling call still sees the outer value", async () => {
+    expect(
+      await result("z = 2\ndef f():\n  z = 3\n  return z\ndef g():\n  return z\nf()\ng()"),
+    ).toBe("2");
+  });
+
+  test("the reassignment still shadows the outer name from inside a nested if/else", async () => {
+    expect(
+      await errorStep(
+        "z = 2\ndef f():\n  print(z)\n  if True:\n    z = 3\n  else:\n    z = 4\nf()",
+      ),
+    ).toBe(
+      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+    );
+  });
+
+  test("a same-named parameter is unaffected — the parameter, not the outer binding, is what's local", async () => {
+    expect(await result("z = 2\ndef f(z):\n  return z\nf(9)")).toBe("9");
+  });
+
+  test("a function that reassigns its own name shadows the recursive self-reference too", async () => {
+    // `f` is normally bound to the function value itself inside its own body (so recursive calls
+    // resolve), but a `def` that reassigns its own name makes that name local to itself, exactly like
+    // any other name — so an early read of `f` must not resolve to the function value either.
+    expect(await errorStep("def f():\n  print(f)\n  f = 3\nf()")).toBe(
+      "UnboundLocalError: cannot access local variable 'f' where it is not associated with a value",
+    );
+  });
+
+  test("a name never bound anywhere is a NameError, not an UnboundLocalError", async () => {
+    // Distinct from every case above: `missing` is never assigned anywhere in the program, so nothing
+    // makes it local to `f` — real Python reports NameError here. (Ordinarily caught earlier, at
+    // preprocessing — `steps()`/`result()` skip that step, exercising the reducer's own fallback.)
+    expect(await errorStep("print(missing)")).toBe("NameError: name 'missing' is not defined");
+    expect(await errorStep("def f():\n  return missing\nf()")).toBe(
+      "NameError: name 'missing' is not defined",
+    );
+  });
+});
+
+describe("Python stepper — a substituted value's free variable is not captured by a same-named parameter or local (py-slang#454)", () => {
+  // The reported regression: `g`'s own parameter `y` must not capture `f`'s *free* `y` (the
+  // module-level one) once `f`'s definition is substituted into `g`'s body — it must be alpha-renamed
+  // out of the way first, exactly like the old (non-conductor) JS stepper already does for the
+  // equivalent Source program (`const g = y => f(y);` steps to `const g = y_1 => f(y_1);` before `f`
+  // is substituted in).
+  test("a lambda parameter does not capture a same-named free variable from a substituted function", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ng = lambda y: f(y)\ng(2)")).toBe("1");
+  });
+
+  test("same bug, no lambda parameter involved — a def-local reassignment doesn't capture it either", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ndef h():\n  y = 2\n  return f(0)\nh()")).toBe("1");
+  });
+
+  test("a def parameter does not capture a same-named free variable from a substituted function", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ndef g(y):\n  return f(y)\ng(2)")).toBe("1");
+  });
+
+  test("the renamed parameter is visible in an intermediate step, matching the old stepper's y -> y_1", async () => {
+    const texts = await explanations("f = lambda x: y\ny = 1\ng = lambda y: f(y)\ng(2)");
+    expect(texts.some(e => e.includes("y_1"))).toBe(true);
+  });
+
+  test("a nested lambda's own, independently-scoped same-named parameter is untouched (no over-renaming)", async () => {
+    // The inner `lambda y: y` is a wholly separate `y` from `g`'s own parameter — it must still just
+    // return whatever it's applied to (here, f(y)'s result, 1), not be renamed along with the outer one.
+    expect(await result("f = lambda x: y\ny = 1\ng = lambda y: (lambda y: y)(f(y))\ng(2)")).toBe(
+      "1",
+    );
+  });
+
+  test("a nested def's own, independently-scoped same-named parameter is untouched (no over-renaming)", async () => {
+    // Same as the nested-lambda case above, but for a nested `def` reshadowing via its own
+    // parameter - renameShadowAware's FunctionDeclaration case has its own separate shadow check
+    // (id/params/assignedNamesOf), not shared code with the ArrowFunctionExpression case, so this
+    // needs its own coverage: `inner`'s `y` is independently scoped and must stay untouched, while
+    // `f(y)` in `g`'s own body still needs the rename to avoid capture.
+    expect(
+      await result(
+        "f = lambda x: y\n" +
+          "y = 1\n" +
+          "def g(y):\n" +
+          "  def inner(y):\n" +
+          "    return y\n" +
+          "  return f(y) + inner(3)\n" +
+          "g(2)",
+      ),
+    ).toBe("4");
+  });
+
+  test("renaming correctly descends into a nested lambda/def that does NOT reshadow the colliding name", async () => {
+    // The previous test covers a nested binder that *does* reshadow `before` (renameShadowAware
+    // must stop there, untouched). This is the complementary case: `inner`'s own `def` and the
+    // lambda nested inside it neither one rebinds `y`, so renaming must actually recurse into both
+    // rather than stopping early - `f(y)` inside them needs to end up referring to the *renamed*
+    // `y`, not the original (now-shadowed) one, or this would silently reintroduce py-slang#454.
+    expect(
+      await result(
+        "f = lambda x: y\n" +
+          "y = 1\n" +
+          "def g(y):\n" +
+          "  def inner(z):\n" +
+          "    return (lambda w: f(y) + w)(z)\n" +
+          "  return inner(0)\n" +
+          "g(2)",
+      ),
+    ).toBe("1");
+  });
+
+  test("recursion still resolves correctly (the self-reference mu-term is unaffected)", async () => {
+    expect(
+      await result(
+        "def fact(n):\n  if n == 0:\n    return 1\n  else:\n    return n * fact(n - 1)\nfact(5)",
+      ),
+    ).toBe("120");
+  });
+
+  test("two colliding names in the same substitution both get distinct fresh names", async () => {
+    expect(
+      await result("f = lambda a: x + y\nx = 1\ny = 2\ng = lambda x, y: f(0)\ng(100, 200)"),
+    ).toBe("3");
+  });
+
+  test("no false-positive renaming when there is no actual collision", async () => {
+    // A parameter that shares no name with anything free in the substituted value must be left alone.
+    expect(await result("f = lambda x: x + 1\ng = lambda z: f(z)\ng(4)")).toBe("5");
+  });
+
+  test("a colliding name's suffix at Number.MAX_SAFE_INTEGER still gets a correctly-incremented fresh name", async () => {
+    // freshName used to compute the next suffix via `parseInt(...) + 1` (a plain JS Number) - once
+    // the existing suffix reached 2**53 (9007199254740992, itself exactly representable), adding 1
+    // rounds right back down to the same value (IEEE 754 double precision, 2**53 + 1 isn't
+    // representable), so the candidate never actually changes and `while (used.has(candidate))`
+    // spins forever.
+    //
+    // `y_9007199254740993` is referenced inside `g`'s own body (not just bound at module level) so
+    // it lands in avoidCapture's `used` set (built from allIdentifierNames(node) - g's own subtree -
+    // union'd with the substituted value's free names, not the whole program): freshName's first
+    // candidate is exactly that name, already taken, so a correct fix must actually enter the while
+    // loop and bump to `y_9007199254740994` - not just stop looping without genuinely walking the
+    // suffix space (which a fix that special-cased "the very first candidate" without fixing the
+    // increment itself could still get wrong).
+    expect(
+      await result(
+        "f = lambda x: y_9007199254740992\n" +
+          "y_9007199254740992 = 1\n" +
+          "y_9007199254740993 = 2\n" +
+          "g = lambda y_9007199254740992: f(y_9007199254740992) + y_9007199254740993 * 0\n" +
+          "g(0)",
+      ),
+    ).toBe("1");
+  });
+});
+
 describe("Python stepper — function values render as mu-terms (not inline bodies)", () => {
   // A substituted `def` must NOT expand its whole body at every use: it is substituted as a *named*
   // value (the `name` marker) so the host collapses it to a hoverable mu-term, exactly like Source.
@@ -2875,5 +3059,38 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     await expect(getPythonSteps(ast, undefined, { evaluator: dh })).rejects.toThrow(
       /cannot import name 'triple'/,
     );
+  });
+
+  // Regression: modules#931 - stepNodeToModule's "ArrayExpression" case used to map a pair()/
+  // llist() chain's nodes 1:1 instead of flattening it first, so a module declaring a LIST/ARRAY
+  // argument received a nested sub-list as its second element instead of the list's real elements
+  // (e.g. sound's consecutively(llist(a, b)) got [a, [b, EMPTY_LIST]] instead of [a, b]).
+  test("llist(...) crosses into a module as a genuine flat list, not a nested one (modules#931)", async () => {
+    const dh = new GenericDataHandler(2);
+    async function* sumFunc(
+      xs: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      const elements = await dh.list_to_vec(xs as TypedValue<DataType.LIST>);
+      const total = elements.reduce(
+        (acc, el) => acc + (el as TypedValue<DataType.NUMBER>).value,
+        0,
+      );
+      return { type: DataType.NUMBER, value: total };
+    }
+    const sumAll = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.LIST] },
+      sumFunc,
+    );
+    installFakeModule({ listmod: [{ symbol: "sum_all", value: sumAll }] });
+
+    const twoElements = parse("from listmod import sum_all\nsum_all(llist(1, 2))\n");
+    expect(await evaluatePython(twoElements, undefined, { evaluator: dh })).toBe("3.0");
+
+    const fourElements = parse("from listmod import sum_all\nsum_all(llist(1, 2, 3, 4))\n");
+    expect(await evaluatePython(fourElements, undefined, { evaluator: dh })).toBe("10.0");
+
+    // A flat list literal must still work exactly as before - unaffected by the fix.
+    const literal = parse("from listmod import sum_all\nsum_all([1, 2, 3])\n");
+    expect(await evaluatePython(literal, undefined, { evaluator: dh })).toBe("6.0");
   });
 });

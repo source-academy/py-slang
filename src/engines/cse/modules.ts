@@ -7,6 +7,7 @@ import {
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { ExprNS, StmtNS } from "../../ast-types";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE, RuntimeSourceError } from "../../errors";
+import { isProperList } from "../../stdlib/linked-list";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
@@ -50,6 +51,19 @@ export async function loadModules(context: Context, moduleNames: string[]): Prom
   );
 }
 
+/** Walks a proper pair()/llist() chain (already confirmed via isProperList) into its actual
+ * elements - e.g. { list: [a, { list: [b, { none }] }] } becomes [a, b] - so pythonToModule's
+ * "list" case can convert a chain the same way it would a flat literal of the same elements. */
+function flattenProperList(value: Value): Value[] {
+  const result: Value[] = [];
+  let current = value;
+  while (current.type === "list") {
+    result.push(current.value[0]);
+    current = current.value[1];
+  }
+  return result;
+}
+
 export async function pythonToModule(
   context: Context,
   code: string,
@@ -82,8 +96,16 @@ export async function pythonToModule(
       // collide on the way back out - exactly the kind of ambiguity this whole redesign exists to
       // remove. A genuine 0-length ARRAY round-trips back through moduleToPython's ARRAY case as a
       // real [], not None.
+      //
+      // A pair()/llist() chain is nested cons cells - llist(a, b) is
+      // { list: [a, { list: [b, { none }] }] }, not the flat { list: [a, b] } a literal [a, b]
+      // produces - so mapping value.value directly here would turn element 1 of the chain into a
+      // nested sub-list instead of the list's real second element. isProperList (true only for a
+      // chain that actually terminates in None) tells that case apart from a raw 2-element list
+      // like [1, 2] or a module PAIR round-tripped back in, which fall through unchanged below.
+      const flatElements = isProperList(value) ? flattenProperList(value) : value.value;
       const elements = await Promise.all(
-        value.value.map(el => pythonToModule(context, code, command, el)),
+        flatElements.map(el => pythonToModule(context, code, command, el)),
       );
       const array = await context.evaluator.array_make(DataType.ANY, elements.length, {
         type: DataType.VOID,
