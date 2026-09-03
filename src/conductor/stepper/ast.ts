@@ -458,10 +458,18 @@ function allIdentifierNames(node: StepNode): Set<string> {
 function freshName(base: string, used: ReadonlySet<string>): string {
   const match = /^(.*)_(\d+)$/.exec(base);
   const stem = match ? match[1] : base;
-  let n = match ? parseInt(match[2], 10) + 1 : 1;
+  // BigInt, not Number: a name like `y_9007199254740992` (already at/beyond
+  // Number.MAX_SAFE_INTEGER) would otherwise round-trip through `+ 1` right
+  // back to itself (IEEE 754 double precision loss), leaving `candidate`
+  // stuck on a value `used` already has and this loop spinning forever.
+  // BigInt string parsing and arithmetic are exact at any size, so `n` keeps
+  // strictly increasing every iteration regardless of how large a suffix a
+  // (pathological, but user-suppliable via a crafted identifier) collision
+  // set already contains.
+  let n = match ? BigInt(match[2]) + 1n : 1n;
   let candidate = `${stem}_${n}`;
   while (used.has(candidate)) {
-    n += 1;
+    n += 1n;
     candidate = `${stem}_${n}`;
   }
   return candidate;

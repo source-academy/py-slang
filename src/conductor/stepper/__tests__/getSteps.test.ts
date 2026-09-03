@@ -880,6 +880,44 @@ describe("Python stepper — a substituted value's free variable is not captured
     );
   });
 
+  test("a nested def's own, independently-scoped same-named parameter is untouched (no over-renaming)", async () => {
+    // Same as the nested-lambda case above, but for a nested `def` reshadowing via its own
+    // parameter - renameShadowAware's FunctionDeclaration case has its own separate shadow check
+    // (id/params/assignedNamesOf), not shared code with the ArrowFunctionExpression case, so this
+    // needs its own coverage: `inner`'s `y` is independently scoped and must stay untouched, while
+    // `f(y)` in `g`'s own body still needs the rename to avoid capture.
+    expect(
+      await result(
+        "f = lambda x: y\n" +
+          "y = 1\n" +
+          "def g(y):\n" +
+          "  def inner(y):\n" +
+          "    return y\n" +
+          "  return f(y) + inner(3)\n" +
+          "g(2)",
+      ),
+    ).toBe("4");
+  });
+
+  test("renaming correctly descends into a nested lambda/def that does NOT reshadow the colliding name", async () => {
+    // The previous test covers a nested binder that *does* reshadow `before` (renameShadowAware
+    // must stop there, untouched). This is the complementary case: `inner`'s own `def` and the
+    // lambda nested inside it neither one rebinds `y`, so renaming must actually recurse into both
+    // rather than stopping early - `f(y)` inside them needs to end up referring to the *renamed*
+    // `y`, not the original (now-shadowed) one, or this would silently reintroduce py-slang#454.
+    expect(
+      await result(
+        "f = lambda x: y\n" +
+          "y = 1\n" +
+          "def g(y):\n" +
+          "  def inner(z):\n" +
+          "    return (lambda w: f(y) + w)(z)\n" +
+          "  return inner(0)\n" +
+          "g(2)",
+      ),
+    ).toBe("1");
+  });
+
   test("recursion still resolves correctly (the self-reference mu-term is unaffected)", async () => {
     expect(
       await result(
@@ -897,6 +935,31 @@ describe("Python stepper — a substituted value's free variable is not captured
   test("no false-positive renaming when there is no actual collision", async () => {
     // A parameter that shares no name with anything free in the substituted value must be left alone.
     expect(await result("f = lambda x: x + 1\ng = lambda z: f(z)\ng(4)")).toBe("5");
+  });
+
+  test("a colliding name's suffix at Number.MAX_SAFE_INTEGER still gets a correctly-incremented fresh name", async () => {
+    // freshName used to compute the next suffix via `parseInt(...) + 1` (a plain JS Number) - once
+    // the existing suffix reached 2**53 (9007199254740992, itself exactly representable), adding 1
+    // rounds right back down to the same value (IEEE 754 double precision, 2**53 + 1 isn't
+    // representable), so the candidate never actually changes and `while (used.has(candidate))`
+    // spins forever.
+    //
+    // `y_9007199254740993` is referenced inside `g`'s own body (not just bound at module level) so
+    // it lands in avoidCapture's `used` set (built from allIdentifierNames(node) - g's own subtree -
+    // union'd with the substituted value's free names, not the whole program): freshName's first
+    // candidate is exactly that name, already taken, so a correct fix must actually enter the while
+    // loop and bump to `y_9007199254740994` - not just stop looping without genuinely walking the
+    // suffix space (which a fix that special-cased "the very first candidate" without fixing the
+    // increment itself could still get wrong).
+    expect(
+      await result(
+        "f = lambda x: y_9007199254740992\n" +
+          "y_9007199254740992 = 1\n" +
+          "y_9007199254740993 = 2\n" +
+          "g = lambda y_9007199254740992: f(y_9007199254740992) + y_9007199254740993 * 0\n" +
+          "g(0)",
+      ),
+    ).toBe("1");
   });
 });
 
