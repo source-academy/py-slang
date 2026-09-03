@@ -849,6 +849,57 @@ describe("Python stepper — a def-local reassignment shadows the whole function
   });
 });
 
+describe("Python stepper — a substituted value's free variable is not captured by a same-named parameter or local (py-slang#454)", () => {
+  // The reported regression: `g`'s own parameter `y` must not capture `f`'s *free* `y` (the
+  // module-level one) once `f`'s definition is substituted into `g`'s body — it must be alpha-renamed
+  // out of the way first, exactly like the old (non-conductor) JS stepper already does for the
+  // equivalent Source program (`const g = y => f(y);` steps to `const g = y_1 => f(y_1);` before `f`
+  // is substituted in).
+  test("a lambda parameter does not capture a same-named free variable from a substituted function", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ng = lambda y: f(y)\ng(2)")).toBe("1");
+  });
+
+  test("same bug, no lambda parameter involved — a def-local reassignment doesn't capture it either", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ndef h():\n  y = 2\n  return f(0)\nh()")).toBe("1");
+  });
+
+  test("a def parameter does not capture a same-named free variable from a substituted function", async () => {
+    expect(await result("f = lambda x: y\ny = 1\ndef g(y):\n  return f(y)\ng(2)")).toBe("1");
+  });
+
+  test("the renamed parameter is visible in an intermediate step, matching the old stepper's y -> y_1", async () => {
+    const texts = await explanations("f = lambda x: y\ny = 1\ng = lambda y: f(y)\ng(2)");
+    expect(texts.some(e => e.includes("y_1"))).toBe(true);
+  });
+
+  test("a nested lambda's own, independently-scoped same-named parameter is untouched (no over-renaming)", async () => {
+    // The inner `lambda y: y` is a wholly separate `y` from `g`'s own parameter — it must still just
+    // return whatever it's applied to (here, f(y)'s result, 1), not be renamed along with the outer one.
+    expect(await result("f = lambda x: y\ny = 1\ng = lambda y: (lambda y: y)(f(y))\ng(2)")).toBe(
+      "1",
+    );
+  });
+
+  test("recursion still resolves correctly (the self-reference mu-term is unaffected)", async () => {
+    expect(
+      await result(
+        "def fact(n):\n  if n == 0:\n    return 1\n  else:\n    return n * fact(n - 1)\nfact(5)",
+      ),
+    ).toBe("120");
+  });
+
+  test("two colliding names in the same substitution both get distinct fresh names", async () => {
+    expect(
+      await result("f = lambda a: x + y\nx = 1\ny = 2\ng = lambda x, y: f(0)\ng(100, 200)"),
+    ).toBe("3");
+  });
+
+  test("no false-positive renaming when there is no actual collision", async () => {
+    // A parameter that shares no name with anything free in the substituted value must be left alone.
+    expect(await result("f = lambda x: x + 1\ng = lambda z: f(z)\ng(4)")).toBe("5");
+  });
+});
+
 describe("Python stepper — function values render as mu-terms (not inline bodies)", () => {
   // A substituted `def` must NOT expand its whole body at every use: it is substituted as a *named*
   // value (the `name` marker) so the host collapses it to a hoverable mu-term, exactly like Source.
