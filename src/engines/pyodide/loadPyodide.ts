@@ -43,7 +43,13 @@ async function ensureLocalPyodideAssets(baseUrl: string): Promise<string> {
     // Write next to the final path, then rename into place — an interrupted
     // fetch/write leaves only the .tmp file behind, never a truncated `dest`
     // that a later run's fs.access check would mistake for a valid cache hit.
-    const tmpDest = `${dest}.tmp`;
+    // The tmp name is unique per call (pid + random suffix) so concurrent
+    // callers — e.g. several Jest workers racing a cold cache — never share
+    // one tmp path: two callers renaming their own tmp file onto the same
+    // `dest` just have the second's rename silently overwrite the first's
+    // (identical content, fetched from the same URL) instead of one of them
+    // finding its tmp file already gone.
+    const tmpDest = `${dest}.tmp.${process.pid}.${Math.random().toString(36).slice(2)}`;
     await fs.writeFile(tmpDest, data);
     await fs.rename(tmpDest, dest);
   }

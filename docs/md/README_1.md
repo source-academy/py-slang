@@ -80,7 +80,7 @@ Sometimes, it's not necessary to give a name to a function: You may
 want to create a function only to pass it to some other function as argument.
 For that, Python §
 supports lambda expressions. For example
-<PRE><CODE>(lambda x: x * x)(3) // returns 9</CODE>
+<PRE><CODE>(lambda x: x * x)(3)  # returns 9</CODE>
 </PRE>
 creates a square function just like the function declaration above,
 but does not give it a name.
