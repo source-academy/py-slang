@@ -36,9 +36,9 @@ these groups:
 Variables can be assigned to with identical syntax to variable declaration:
 
 <PRE><CODE>x = 1
-print(x) // x is 1
+print(x)  # x is 1
 x = x + 1
-print(x)  // now x is 2
+print(x)  # now x is 2
 </CODE></PRE>
 
 The difference from variable declaration is that in assignments, the variable must
@@ -93,7 +93,7 @@ For loops are not covered in the textbook.
 
 Lists are created using literal list expressions, as follows:
 
-<CODE>my_list = [10, 20, 30];</CODE>
+<CODE>my_list = [10, 20, 30]</CODE>
 
 The constant `my_list` now refers to a list with three elements.
 The elements in such a literal list expressions have implicit
@@ -103,12 +103,12 @@ has key 2 and so on.
 A list can be accessed using list access expressions, with
 a given key:
 
-<CODE>my_list[0] + my_list[1] + my_list[2]; // 60</CODE>
+<CODE>my_list[0] + my_list[1] + my_list[2]  # 60</CODE>
 
-Like pairs, lists can be changed in Source §3. This is done
+Like pairs, lists can be changed in Python §3. This is done
 using list assignment:
 
-<CODE>my_list[1] = 200;</CODE>
+<CODE>my_list[1] = 200</CODE>
 
 List assignment and list access in Python §3 are restricted
 to integers (numbers with no fractional component) larger than or
@@ -118,7 +118,7 @@ Accessing a list at a list index that has not been assigned yet (using a
 literal list expression or a list assignment) will result in an error. For
 example, the following will result in an error:
 
-<CODE>my_list[3]; // error: list index out of range</CODE>
+<CODE>my_list[3]  # error: list index out of range</CODE>
 
 Lists are not covered in the textbook.
 
