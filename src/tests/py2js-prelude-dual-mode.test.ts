@@ -26,7 +26,13 @@
  * dispatch, `__py.call` unchanged when reduce is invoked synchronously
  * (e.g. via callSync from a TS module, matching def2's existing contract).
  */
-import { PyValue, runCodePy2Js, runCodePy2JsDual, Py2JsRuntime, Py2JsSession } from "../engines/py2js";
+import {
+  PyValue,
+  runCodePy2Js,
+  runCodePy2JsDual,
+  Py2JsRuntime,
+  Py2JsSession,
+} from "../engines/py2js";
 
 test("a callback passed through reduce can still reach an async-only builtin (one-shot API)", async () => {
   const code = `def combine(a, b):
@@ -35,7 +41,9 @@ print(reduce(combine, 0, llist(1, 2, 3)))`;
 
   const { output } = await runCodePy2JsDual(code, 2, {
     extraBuiltins: (_rt: Py2JsRuntime) => {
-      const slowThing = (() => Promise.resolve(10n)) as unknown as PyValue & { asyncOnly?: boolean };
+      const slowThing = (() => Promise.resolve(10n)) as unknown as PyValue & {
+        asyncOnly?: boolean;
+      };
       slowThing.asyncOnly = true;
       return { slow_thing: slowThing as unknown as PyValue };
     },
@@ -74,7 +82,9 @@ print(reduce(combine, 0, llist(1, 2, 3)))`;
 
   const { output } = await runCodePy2JsDual(code, 2, {
     extraBuiltins: (_rt: Py2JsRuntime) => {
-      const slowThing = (() => Promise.resolve(10n)) as unknown as PyValue & { asyncOnly?: boolean };
+      const slowThing = (() => Promise.resolve(10n)) as unknown as PyValue & {
+        asyncOnly?: boolean;
+      };
       slowThing.asyncOnly = true;
       return { slow_thing: slowThing as unknown as PyValue };
     },
