@@ -588,7 +588,7 @@ function contractConditional(node: StepNode): ReduceResult | null {
   }
   const truthy = test.value === true;
   const chosen = clone((truthy ? node.consequent : node.alternate) as StepNode);
-  const branch = truthy ? "consequent" : "alternate";
+  const branch = truthy ? "consequent" : "alternative";
   return {
     node: chosen,
     preRedex: node,

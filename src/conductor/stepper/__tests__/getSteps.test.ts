@@ -1105,6 +1105,11 @@ describe("Python stepper — explanations mirror Source phrasing", () => {
     expect(await explanations("1 if 2 > 1 else 9")).toContain(
       "Evaluated conditional expression, condition is true, will evaluate consequent",
     );
+    // py-slang#445: says "alternative", not "alternate" - the latter reads as a false-friend verb
+    // ("to alternate between") rather than the intended noun ("the alternative branch").
+    expect(await explanations("1 if 2 < 1 else 9")).toContain(
+      "Evaluated conditional expression, condition is false, will evaluate alternative",
+    );
   });
 });
 
