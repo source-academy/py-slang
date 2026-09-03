@@ -60,7 +60,14 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "./runtime";
+import {
+  isPairShaped,
+  isProperList,
+  Py2JsRuntime,
+  Py2JsRuntimeError,
+  PyOpaque,
+  PyValue,
+} from "./runtime";
 
 /**
  * Synchronous, scalar-only counterparts to moduleToPython/pythonToModule -
@@ -113,6 +120,19 @@ function pythonToModuleSync(value: PyValue): TypedValue<DataType> | undefined {
     default:
       return undefined;
   }
+}
+
+/** Walks a proper pair()/llist() chain (already confirmed via isProperList) into its actual
+ * elements - e.g. [a, [b, null]] becomes [a, b] - so pythonToModule's Array.isArray case can
+ * convert a chain the same way it would a flat literal of the same elements. */
+function flattenProperList(value: PyValue[]): PyValue[] {
+  const result: PyValue[] = [];
+  let current: PyValue = value;
+  while (isPairShaped(current)) {
+    result.push(current[0]);
+    current = current[1];
+  }
+  return result;
 }
 
 /** Converts a py2js native value into a conductor TypedValue, for passing
@@ -225,7 +245,15 @@ export async function pythonToModule(
         // None collide on the way back out - exactly the kind of ambiguity this whole redesign
         // exists to remove. A genuine 0-length ARRAY round-trips back through moduleToPython's
         // ARRAY case as a real [], not None.
-        const elements = await Promise.all(value.map(el => pythonToModule(rt, dh, el)));
+        //
+        // A pair()/llist() chain is nested cons cells - llist(a, b) is [a, [b, null]], not the
+        // flat [a, b] a literal [a, b] produces - so mapping `value` directly here would turn
+        // element 1 of the chain into a nested sub-list instead of the list's real second
+        // element. isProperList (true only for a chain that actually terminates in None) tells
+        // that case apart from a raw 2-element list like [1, 2] or a module PAIR round-tripped
+        // back in, which fall through unchanged below.
+        const flatElements = isProperList(value) ? flattenProperList(value) : value;
+        const elements = await Promise.all(flatElements.map(el => pythonToModule(rt, dh, el)));
         const array = await dh.array_make(DataType.ANY, elements.length, {
           type: DataType.VOID,
           value: undefined,
