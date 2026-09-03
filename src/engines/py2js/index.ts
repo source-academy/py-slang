@@ -237,15 +237,22 @@ function setupRuntime(
 
   // Group preludes (SICPy source defining higher-level functions in terms of
   // the group's own primitives — e.g. linked-list.prelude.ts's map/filter/
-  // reduce) run once, always in sync mode: nothing at chapter 1-2 imports
-  // anything, so there is no reason for the prelude itself to need the async
-  // spine even when the main script below is compiled in dual mode.
+  // reduce) run once, always compiled in dual mode: the prelude text itself
+  // never imports anything or calls input(), but its higher-order functions
+  // call a caller-supplied callback that might need the async spine even
+  // when the prelude function's own body doesn't. A sync-compiled prelude
+  // function's calls (including that callback call) always compile to
+  // `__py.call`, pinning the callback onto the synchronous trampoline
+  // regardless of how the *caller* of the prelude function was itself
+  // invoked — see Py2JsSession.runChunkInternal's identical fix (and its
+  // longer doc comment) for the full story, including the motivating case
+  // (source-academy/modules#944).
   const preludeText = groups
     .map(g => g.prelude ?? "")
     .filter(p => p.trim())
     .join("\n");
   if (preludeText.trim()) {
-    const preludeJs = compileScript(rt, preludeText + "\n", variant, "sync");
+    const preludeJs = compileScript(rt, preludeText + "\n", variant, "dual");
     // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — lets a
     // bridged builtin's error name the predefined function it happened inside of
     // (py-slang#397), e.g. tail() failing inside map()'s own _map helper.
@@ -627,7 +634,27 @@ export class Py2JsSession {
     // spine even with no imports of its own. referencedNames already saw
     // every such reference during the resolve() call above (including
     // inside nested function bodies), so this needs no second AST walk.
-    if (imports || resolver.referencedNames.has("input")) {
+    //
+    // compilingPrelude also forces dual mode, for a different reason: the
+    // prelude text itself never imports anything or calls input(), but its
+    // higher-order functions (reduce/_reduce, map/_map, filter/_filter, ...)
+    // call a caller-supplied callback that might. A sync-compiled prelude
+    // function's own calls - including that callback call - always compile
+    // to `__py.call` (compiler.ts's mode doc), regardless of how the
+    // *caller* of the prelude function was itself invoked; that pins the
+    // callback (and everything it calls, e.g. a module accessor) onto the
+    // synchronous trampoline even when the surrounding program is running on
+    // the async spine, throwing "needs a frontend round-trip" for a call
+    // that would have been perfectly fine had the prelude function been
+    // dual-compiled like the code calling it (source-academy/modules#944's
+    // motivating case: `reduce(f, initial, xs)` calling `f`, which itself
+    // calls a sound-module accessor). Dual-compiling the prelude fixes this
+    // the same way dual-compiling any other chunk does: its callback call
+    // now compiles to `await __py.acall`, so it correctly rides the async
+    // spine when invoked from one, while still working identically via
+    // `__py.call` when invoked from a sync context (def2's sync body is
+    // exactly this same compiled function, unaffected either way).
+    if (imports || resolver.referencedNames.has("input") || this.rt.compilingPrelude) {
       const js = compileProgram(ast, Object.keys(this.rt.builtins), {
         mode: "dual",
         repl: { priorGlobals },
