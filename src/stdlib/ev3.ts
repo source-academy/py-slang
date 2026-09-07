@@ -31,212 +31,422 @@ const ev3Builtins = new Map<string, BuiltinValue>();
  */
 export class Ev3Builtins {
   @Validate(1, 1, "ev3_pause", true)
-  static ev3_pause(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_pause(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_connected", true)
-  static ev3_connected(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_connected(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_motorA", true)
-  static ev3_motorA(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorA(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_motorB", true)
-  static ev3_motorB(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorB(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_motorC", true)
-  static ev3_motorC(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorC(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_motorD", true)
-  static ev3_motorD(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorD(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_motorGetSpeed", true)
-  static ev3_motorGetSpeed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorGetSpeed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(2, 2, "ev3_motorSetSpeed", true)
-  static ev3_motorSetSpeed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorSetSpeed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_motorStart", true)
-  static ev3_motorStart(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorStart(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_motorStop", true)
-  static ev3_motorStop(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorStop(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(2, 2, "ev3_motorSetStopAction", true)
-  static ev3_motorSetStopAction(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorSetStopAction(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_motorGetPosition", true)
-  static ev3_motorGetPosition(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_motorGetPosition(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(3, 3, "ev3_runForTime", true)
-  static ev3_runForTime(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_runForTime(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(3, 3, "ev3_runToAbsolutePosition", true)
-  static ev3_runToAbsolutePosition(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_runToAbsolutePosition(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(3, 3, "ev3_runToRelativePosition", true)
-  static ev3_runToRelativePosition(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_runToRelativePosition(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_colorSensor", true)
-  static ev3_colorSensor(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_colorSensor(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_colorSensorRed", true)
-  static ev3_colorSensorRed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_colorSensorRed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_colorSensorGreen", true)
-  static ev3_colorSensorGreen(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_colorSensorGreen(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_colorSensorBlue", true)
-  static ev3_colorSensorBlue(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_colorSensorBlue(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_reflectedLightIntensity", true)
-  static ev3_reflectedLightIntensity(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_reflectedLightIntensity(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ambientLightIntensity", true)
-  static ev3_ambientLightIntensity(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ambientLightIntensity(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_colorSensorGetColor", true)
-  static ev3_colorSensorGetColor(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_colorSensorGetColor(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_ultrasonicSensor", true)
-  static ev3_ultrasonicSensor(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ultrasonicSensor(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ultrasonicSensorDistance", true)
-  static ev3_ultrasonicSensorDistance(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ultrasonicSensorDistance(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_gyroSensor", true)
-  static ev3_gyroSensor(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_gyroSensor(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_gyroSensorAngle", true)
-  static ev3_gyroSensorAngle(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_gyroSensorAngle(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_gyroSensorRate", true)
-  static ev3_gyroSensorRate(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_gyroSensorRate(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_touchSensor1", true)
-  static ev3_touchSensor1(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_touchSensor1(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_touchSensor2", true)
-  static ev3_touchSensor2(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_touchSensor2(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_touchSensor3", true)
-  static ev3_touchSensor3(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_touchSensor3(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_touchSensor4", true)
-  static ev3_touchSensor4(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_touchSensor4(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_touchSensorPressed", true)
-  static ev3_touchSensorPressed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_touchSensorPressed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_hello", true)
-  static ev3_hello(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_hello(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(0, 0, "ev3_waitForButtonPress", true)
-  static ev3_waitForButtonPress(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_waitForButtonPress(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_speak", true)
-  static ev3_speak(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_speak(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_playSequence", true)
-  static ev3_playSequence(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_playSequence(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ledLeftGreen", true)
-  static ev3_ledLeftGreen(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledLeftGreen(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ledLeftRed", true)
-  static ev3_ledLeftRed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledLeftRed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ledRightGreen", true)
-  static ev3_ledRightGreen(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledRightGreen(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ledRightRed", true)
-  static ev3_ledRightRed(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledRightRed(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(1, 1, "ev3_ledGetBrightness", true)
-  static ev3_ledGetBrightness(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledGetBrightness(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 
   @Validate(2, 2, "ev3_ledSetBrightness", true)
-  static ev3_ledSetBrightness(_args: Value[], _source: string, _command: ExprNS.Call, _context: Context): NoneValue {
+  static ev3_ledSetBrightness(
+    _args: Value[],
+    _source: string,
+    _command: ExprNS.Call,
+    _context: Context,
+  ): NoneValue {
     return { type: "none" };
   }
 }

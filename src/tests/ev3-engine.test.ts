@@ -106,7 +106,7 @@ describe("EV3 engine", () => {
 
     test("multiple ev3_* calls in one program each resolve to their own correct device index", () => {
       const { opcodes, arg1s, arg2s } = compileEv3EntryInstructions(
-        "ev3_pause(50)\nev3_motorA()\nev3_speak(\"hi\")\n",
+        'ev3_pause(50)\nev3_motorA()\nev3_speak("hi")\n',
       );
       const callIndices = opcodes
         .map((op, i) => (op === OpCodes.CALLV ? i : -1))
