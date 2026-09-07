@@ -14,31 +14,20 @@ const ev3Builtins = new Map<string, BuiltinValue>();
  *  - `EV3Engine`/`Ev3Evaluator` (engines/ev3, conductor/Ev3Evaluator.ts): a program is *compiled*
  *    (not interpreted) to PVML bytecode that runs on the physical robot, so a call to e.g.
  *    `ev3_motorA()` never reaches this stub's body at all — the compiler resolves the call by
- *    name at compile time and needs to emit device-call bytecode for it, not invoke this
- *    TypeScript function. See PVMLCompiler's getTokenAnnotation (pvml-compiler.ts): today it only
- *    recognises two kinds of root-level names, `PRIMITIVE_FUNCTIONS` (native Pynter's fixed C
- *    dispatch table) and `PRIMITIVE_CONSTANTS` — anything else, `ev3_*` included, throws
- *    `Primitive function ${name} not implemented` at compile time — for ANY load of the name, not
- *    only a call, since getTokenAnnotation throws as soon as the name is looked up at all. The
- *    bytecode format already
- *    reserves CALLV/CALLTV opcodes (opcodes.ts) that look purpose-built for exactly this (a
- *    "vm-internal function" call distinct from CALLP's native-primitive call), but nothing in the
- *    compiler emits them yet — wiring a real "device function" annotation kind through
- *    getTokenAnnotation/compileCallExpr to emit CALLV, and agreeing the resulting index table with
- *    whatever the on-device VM/firmware (ev3-source repo) actually expects at each index, is real,
- *    separate, un-derisked follow-up work. Until then, any program that actually *calls* an
- *    `ev3_*` function fails to compile with that clean, structured error (see EV3Engine's own
- *    tests) rather than compiling into silently-wrong bytecode.
+ *    name at compile time and emits a CALLV/CALLTV "vm-internal function" call instead (see
+ *    PVMLCompiler's `internalFunctions` constructor param / EV3_INTERNAL_FUNCTIONS below), never
+ *    a CALLP native-primitive call.
  *  - Any tree-walking evaluator (e.g. the CSE machine, if `ev3` is ever added to a
  *    `VARIANT_GROUPS` entry) would actually invoke these stub bodies directly and get `None` back
  *    — harmless for now, since there is no simulated device behind this group the way
  *    `robot_simulation` (the modules repo) provides for the browser-only simulation track.
  *
  * Minimum/maximum arities below are fixed per the real device API (not left at the placeholder
- * 0/0 an earlier, now-stale draft of this file used) because arity is load-bearing here: once
- * CALLV emission exists, the compiler will need exactly this arity information to validate calls
- * and size the emitted instruction, the same way every other builtin group's `@Validate` already
- * drives `PRIMITIVE_MIN_ARGS` for PVML (see builtins.ts).
+ * 0/0 an earlier, now-stale draft of this file used) because callers rely on them for validation
+ * on the tree-walking path, the same way every other builtin group's `@Validate` already drives
+ * `PRIMITIVE_MIN_ARGS` for PVML (see builtins.ts). CALLV/CALLTV emission itself trusts the
+ * compile-time call-site arg count as written — it does not re-derive or check arity from these
+ * decorators.
  */
 export class Ev3Builtins {
   @Validate(1, 1, "ev3_pause", true)
@@ -265,6 +254,72 @@ for (const builtin of Object.getOwnPropertyNames(Ev3Builtins)) {
     });
   }
 }
+
+/**
+ * The device-side function index table: position in this array IS the
+ * `id` byte a CALLV/CALLTV instruction (opcodes.ts) carries for the
+ * corresponding `ev3_*` name, and it is byte-for-byte identical, in the
+ * same order, to pynter's own `devices/ev3/src/ev3_functions.c`
+ * `internals[]` C array — the array `sivmfn_vminternals` is pointed at on
+ * an EV3 build, and what pynter/vm/src/vm.c's `do_internal_function`
+ * indexes into for a non-primitive (`is_primitive = false`) call. This
+ * ordering is NOT derived from `Ev3Builtins`' own class-member declaration
+ * order (relying on JS enumeration order to encode a wire-protocol index
+ * would be fragile to an innocuous reordering/rename in this file) — it is
+ * listed out explicitly and must only ever be changed in lockstep with a
+ * corresponding pynter release.
+ */
+export const EV3_FUNCTIONS: readonly string[] = [
+  "ev3_pause",
+  "ev3_connected",
+  "ev3_motorA",
+  "ev3_motorB",
+  "ev3_motorC",
+  "ev3_motorD",
+  "ev3_motorGetSpeed",
+  "ev3_motorSetSpeed",
+  "ev3_motorStart",
+  "ev3_motorStop",
+  "ev3_motorSetStopAction",
+  "ev3_motorGetPosition",
+  "ev3_runForTime",
+  "ev3_runToAbsolutePosition",
+  "ev3_runToRelativePosition",
+  "ev3_colorSensor",
+  "ev3_colorSensorRed",
+  "ev3_colorSensorGreen",
+  "ev3_colorSensorBlue",
+  "ev3_reflectedLightIntensity",
+  "ev3_ambientLightIntensity",
+  "ev3_colorSensorGetColor",
+  "ev3_ultrasonicSensor",
+  "ev3_ultrasonicSensorDistance",
+  "ev3_gyroSensor",
+  "ev3_gyroSensorAngle",
+  "ev3_gyroSensorRate",
+  "ev3_touchSensor1",
+  "ev3_touchSensor2",
+  "ev3_touchSensor3",
+  "ev3_touchSensor4",
+  "ev3_touchSensorPressed",
+  "ev3_hello",
+  "ev3_waitForButtonPress",
+  "ev3_speak",
+  "ev3_playSequence",
+  "ev3_ledLeftGreen",
+  "ev3_ledLeftRed",
+  "ev3_ledRightGreen",
+  "ev3_ledRightRed",
+  "ev3_ledGetBrightness",
+  "ev3_ledSetBrightness",
+];
+
+/** `ev3_*` name -> CALLV/CALLTV device-function index, per EV3_FUNCTIONS above. Passed to
+ * PVMLCompiler.fromProgram's `internalFunctions` param by EV3Engine/Ev3Evaluator so calls to
+ * these names compile to CALLV/CALLTV instead of failing as an unrecognised primitive. */
+export const EV3_INTERNAL_FUNCTIONS: ReadonlyMap<string, number> = new Map(
+  EV3_FUNCTIONS.map((name, i) => [name, i]),
+);
 
 export default {
   name: GroupName.EV3,

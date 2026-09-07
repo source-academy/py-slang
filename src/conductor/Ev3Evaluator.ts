@@ -6,7 +6,7 @@ import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { runNativePynter } from "../engines/pvml/pynter/native-pynter";
 import { parse } from "../parser/parser-adapter";
 import { Resolver } from "../resolver";
-import ev3 from "../stdlib/ev3";
+import ev3, { EV3_INTERNAL_FUNCTIONS } from "../stdlib/ev3";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
@@ -72,8 +72,10 @@ function nativeResultToJs(resultType: string, resultValue: string): unknown {
  * local-development/testing counterpart to the real on-device pipeline (EV3Engine +
  * Ev3ExecutionPlugin compile bytecode for a physical robot over sling; this runs it right here via
  * child_process instead), useful for exercising EV3-flavoured Python without hardware attached.
- * Calls to actual `ev3_*` functions still fail to compile today — see stdlib/ev3.ts's doc comment
- * — so this only actually runs programs that don't call the EV3 API yet.
+ * Calls to `ev3_*` functions compile to CALLV/CALLTV (see stdlib/ev3.ts's EV3_INTERNAL_FUNCTIONS),
+ * but actually *running* one against the local native pynter binary still depends on that binary
+ * having real EV3 device support built in — a no-op/stub build will fault on the unresolved
+ * `sivmfn_vminternals` index.
  */
 export class Ev3Evaluator extends BasicEvaluator {
   private readonly remoteExecutionPlugin: RemoteExecutionPlugin;
@@ -96,7 +98,14 @@ export class Ev3Evaluator extends BasicEvaluator {
 
       // targetsPynter=true: native pynter's fixed-width value representation can't carry LGCBI's
       // arbitrary-precision bigint constants — see PVMLCompiler's `targetsPynter` doc comment.
-      const compiler = PVMLCompiler.fromProgram(ast, 0, environments, false, true);
+      const compiler = PVMLCompiler.fromProgram(
+        ast,
+        0,
+        environments,
+        false,
+        true,
+        EV3_INTERNAL_FUNCTIONS,
+      );
       const program = compiler.compileProgram(ast);
       const binary = assemble(program, PYNTER_OPCODE_MAX);
 
