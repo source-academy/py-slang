@@ -12,9 +12,11 @@
  * read like two different checks rather than one shared rule), and phrased like an ordinary
  * operand-type error (`unsupported operand type(s) for -: 'int' and 'str'`).
  *
- * The CSE machine's BRANCH instruction does not enforce this yet (py-slang#436) — `cseErrors` below
- * documents the current divergence rather than asserting parity, matching py2js-loops.test.ts's own
- * `cseErrors` helper.
+ * The CSE machine's BRANCH instruction now enforces this too (py-slang#436, via a new
+ * ConditionNotBoolError — "if condition"/"conditional expression condition must be bool, not
+ * <type>", CSE's own friendly-type-name phrasing rather than py2js's quoted-Python-type-name one)
+ * — `cseErrors` below now pins parity rather than documenting a divergence, matching
+ * py2js-loops.test.ts's own `cseErrors` helper.
  */
 import { Py2JsRunError, runCodePy2Js } from "../engines/py2js";
 import { RunError, runCode } from "../runner";
@@ -47,9 +49,7 @@ describe("if/elif predicate must be bool", () => {
     ["if None:\n    print(1)\nelse:\n    print(2)", "NoneType"],
     ["if print:\n    print(1)\nelse:\n    print(2)", "function"],
   ])("a non-bool condition is a TypeError: %s", async (code, typeName) => {
-    // CSE currently takes the (any-truthy) if-branch instead of erroring — the divergence this file's
-    // header documents.
-    expect(await cseErrors(code)).toBe(false);
+    expect(await cseErrors(code)).toBe(true);
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain("TypeError");
@@ -60,7 +60,7 @@ describe("if/elif predicate must be bool", () => {
 
   test("a non-bool elif condition is also a TypeError (elif desugars to a nested if)", async () => {
     const code = "if False:\n    print(1)\nelif 5:\n    print(2)\nelse:\n    print(3)";
-    expect(await cseErrors(code)).toBe(false);
+    expect(await cseErrors(code)).toBe(true);
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain(
@@ -82,7 +82,7 @@ describe("conditional expression (`x if p else y`) predicate must be bool", () =
     ["print(1 if 'x' else 2)", "str"],
     ["print(1 if None else 2)", "NoneType"],
   ])("a non-bool condition is a TypeError: %s", async (code, typeName) => {
-    expect(await cseErrors(code)).toBe(false);
+    expect(await cseErrors(code)).toBe(true);
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain(
@@ -97,11 +97,26 @@ describe("conditional expression (`x if p else y`) predicate must be bool", () =
 
   test("a non-bool condition in tail position is also a TypeError (emitTailPosition's Ternary case)", async () => {
     const code = "def f():\n    return 1 if 5 else 2\nprint(f())";
-    expect(await cseErrors(code)).toBe(false);
+    expect(await cseErrors(code)).toBe(true);
     const outcome = py2jsOutcome(code);
     expect(outcome).toHaveProperty("error");
     expect((outcome as { error: string }).error).toContain(
       `predicate type must be 'bool', not 'int'`,
     );
+  });
+});
+
+// CSE-only: ConditionNotBoolError's message formatting (errors.ts), not covered by the
+// cseErrors()-vs-py2jsOutcome() parity checks above (those only assert *that* CSE errors, not the
+// exact rendered message). A condition expression that itself spans multiple lines is the one case
+// where fullLine.indexOf(snippet) can't find the (necessarily single-line) fullLine's own snippet
+// inside it, falling back to an offset of 0 -- otherwise-untested since every other case here has a
+// single-line condition.
+describe("CSE's ConditionNotBoolError message formatting", () => {
+  test("a condition expression spanning multiple lines still renders (indicator falls back to offset 0)", async () => {
+    const code = "if (1 +\n    2):\n    print('yes')\n";
+    await expect(runCode(code, 1)).rejects.toMatchObject({
+      message: expect.stringContaining("if condition must be bool, not integer"),
+    });
   });
 });

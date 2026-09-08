@@ -224,6 +224,42 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
   }
 }
 
+/**
+ * An `if`/`elif` condition, or a conditional expression's (`x if p else y`)
+ * predicate, that isn't a bool — py-slang#436: docs/specs/python_typing_back.tex's
+ * "Following if and elif, Python §x only allows boolean expressions" applies to
+ * both (see the BRANCH instruction, which both compile to). `contextLabel`
+ * (`"if condition"` / `"conditional expression condition"`) lets one error class
+ * serve both call sites, matching py2js's shared condBool/the stepper's shared
+ * contractConditional — just with CSE's own "friendly type name, no chained
+ * operand" phrasing (UnsupportedOperandTypeError's style) instead of their
+ * `'quoted-python-type-name'` one.
+ */
+export class ConditionNotBoolError extends RuntimeSourceError {
+  constructor(
+    source: string,
+    node: ExprNS.Expr,
+    context: Context,
+    originalType: string,
+    contextLabel: string,
+  ) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    const offset = fullLine.indexOf(snippet);
+    const adjustedOffset = offset >= 0 ? offset : 0;
+    const indicator = createErrorIndicator(snippet, 0);
+    const hint = `TypeError: ${contextLabel} must be bool, not ${typeStr}`;
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
+  }
+}
+
 export class MissingRequiredPositionalError extends RuntimeSourceError {
   private functionName: string;
   private missingParamCnt: number;
