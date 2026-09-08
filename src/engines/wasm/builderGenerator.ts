@@ -484,13 +484,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     } else throw new Error(`Unsupported boolean binary operator: ${type}`);
   }
 
-  // Same gap as visitIfStmt below (BOOLISE_FX truthiness instead of a strict-bool check) —
-  // py-slang#437.
+  // Spec-wise this condition requires a genuine bool, like `and`/`or`'s left operand
+  // (docs/specs/python_typing_back.tex) — same CHECK_BOOL_FX-then-BOOLISE_FX composition
+  // visitBoolOpExpr uses above (py-slang#437, fixed alongside visitIfStmt below).
   visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
     const consequent = this.visit(expr.consequent);
     const alternative = this.visit(expr.alternative);
 
-    const predicate = this.visit(expr.predicate);
+    const predicate = wasm.call(CHECK_BOOL_FX).args(this.visit(expr.predicate));
 
     return wasm
       .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(predicate)))
@@ -747,13 +748,13 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     return wasm.nop();
   }
 
-  // Spec-wise this condition should require a genuine bool, like `and`/`or`'s left operand
-  // (CHECK_BOOL_FX) does, not the general any-type BOOLISE_FX truthiness used here — py2js and the
-  // stepper were tightened to that stricter reading (py-slang#439); WASM has not been yet
-  // (py-slang#437). `src/tests/wasm/wasm-control-flow.spec.ts`'s "if condition uses truthiness"
-  // tests currently pin today's any-type behavior and will need updating alongside a fix.
+  // Spec-wise this condition requires a genuine bool, like `and`/`or`'s left operand
+  // (docs/specs/python_typing_back.tex) — py2js and the stepper were already tightened to that
+  // stricter reading (py-slang#439); this brings WASM to parity (py-slang#437). `while`'s
+  // identical condition (visitWhileStmt below) is a deliberately separate, still-open gap —
+  // out of scope for #437, matching the companion py2js/stepper fix's own scoping.
   visitIfStmt(stmt: StmtNS.If): WasmInstruction {
-    const condition = this.visit(stmt.condition);
+    const condition = wasm.call(CHECK_BOOL_FX).args(this.visit(stmt.condition));
     const body = stmt.body.map(b => this.visit(b));
     const elseBody = stmt.elseBlock?.map(e => this.visit(e));
 

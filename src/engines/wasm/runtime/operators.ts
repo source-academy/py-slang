@@ -1026,15 +1026,19 @@ export const LIST_STRUCT_EQ_FX = wasm
   );
 
 /**
- * `not`'s sole operand, and `and`/`or`'s *left* operand specifically, must be
- * an actual bool -- see docs/specs/python_typing_back.tex: `and`/`or`/`not`
- * are all typed `bool, any -> any` / `bool -> bool` (only the right operand
- * of `and`/`or` is `any`). Passes the (tag,val) pair through unchanged so
- * callers can use this as a transparent wrapper around the operand
- * expression, matching CSE's evaluateUnaryExpression / BOOL_OP instruction
- * handler, which reject a non-bool operand here outright (not a truthiness
- * shortcut like BOOLISE_FX, which is for contexts -- if/while conditions,
- * and/or's *right* operand's short-circuit test -- that spec any x truthy).
+ * `not`'s sole operand, `and`/`or`'s *left* operand, and an `if`/`elif`
+ * condition or conditional-expression (ternary) predicate must all be an
+ * actual bool -- see docs/specs/python_typing_back.tex (`and`/`or`/`not` are
+ * typed `bool, any -> any` / `bool -> bool`, only the right operand of
+ * `and`/`or` is `any`) and the spec docs' "Following if and elif, Python §x
+ * only allows boolean expressions." Passes the (tag,val) pair through
+ * unchanged so callers can use this as a transparent wrapper around the
+ * operand/condition expression, matching CSE's evaluateUnaryExpression /
+ * BOOL_OP / BRANCH instruction handlers, which reject a non-bool value here
+ * outright (not a truthiness shortcut like BOOLISE_FX, which is for
+ * contexts -- `while`'s condition (py-slang#437 leaves this one as-is,
+ * deliberately out of scope), and/or's *right* operand's short-circuit test
+ * -- that spec any x truthy).
  */
 export const CHECK_BOOL_FX = wasm
   .func("$_check_bool")
