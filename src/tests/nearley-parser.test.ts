@@ -1000,7 +1000,7 @@ describe("Compound comparison operators", () => {
     ["x is y is z", "chained is"],
     ["1 in [2] in [3]", "chained in"],
     ["1 < 2 == 3", "mixed comparison operators"],
-  ])("%s is rejected (%s)", (src) => {
+  ])("%s is rejected (%s)", src => {
     expect(() => parseExpr(src)).toThrow();
   });
 });
