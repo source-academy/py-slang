@@ -946,10 +946,12 @@ describe("Left-associativity", () => {
     expect(expr.left).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("comparison is left-associative: 1 < 2 < 3 = (1 < 2) < 3", () => {
-    const expr = parseExpr("1 < 2 < 3") as ExprNS.Compare;
-    expect(expr.operator.lexeme).toBe("<");
-    expect(expr.left).toBeInstanceOf(ExprNS.Compare);
+  test("comparison operators are non-associative: 1 < 2 < 3 is a syntax error", () => {
+    // Unlike full Python (where this is sugar for 1 < 2 and 2 < 3), chaining
+    // is deliberately excluded from this sublanguage rather than given
+    // different (silently wrong, or chapter-dependent) behavior - see
+    // docs/specs/python_precedence.tex.
+    expect(() => parseExpr("1 < 2 < 3")).toThrow();
   });
 
   test("mixed operators: 10 - 3 + 2 = (10 - 3) + 2", () => {
@@ -987,6 +989,19 @@ describe("Compound comparison operators", () => {
     const expr = parseExpr("x is None") as ExprNS.Compare;
     expect(expr).toBeInstanceOf(ExprNS.Compare);
     expect(expr.operator.lexeme).toBe("is");
+  });
+
+  // Comparison, membership, and identity operators are all non-associative:
+  // each takes exactly two operands, so chaining any of them - even mixed
+  // ones - is a syntax error rather than left-associating like +/-/* do.
+  // See docs/specs/python_precedence.tex.
+  test.each([
+    ["1 == 2 == 3", "chained =="],
+    ["x is y is z", "chained is"],
+    ["1 in [2] in [3]", "chained in"],
+    ["1 < 2 == 3", "mixed comparison operators"],
+  ])("%s is rejected (%s)", (src) => {
+    expect(() => parseExpr(src)).toThrow();
   });
 });
 
@@ -1156,10 +1171,8 @@ describe("Complex expressions (no ambiguity)", () => {
     expect(expr).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("chained comparisons: 1 < 2 < 3 < 4", () => {
-    const expr = parseExpr("1 < 2 < 3 < 4") as ExprNS.Compare;
-    expect(expr).toBeInstanceOf(ExprNS.Compare);
-    expect(expr.left).toBeInstanceOf(ExprNS.Compare);
+  test("chained comparisons are rejected: 1 < 2 < 3 < 4", () => {
+    expect(() => parseExpr("1 < 2 < 3 < 4")).toThrow();
   });
 
   test("mixed bool ops: a and b or c and d", () => {

@@ -17,7 +17,7 @@ parentheses to override the default grouping.
     \texttt{\textbf{+}}\ \texttt{\textbf{-}} & unary plus, unary minus & n/a \\
     \texttt{\textbf{*}}\ \texttt{\textbf{/}}\ \texttt{\textbf{\%}} & multiplication, division, modulo & left to right \\
     \texttt{\textbf{+}}\ \texttt{\textbf{-}} & addition, subtraction & left to right \\
-    \texttt{\textbf{<}}\ \texttt{\textbf{>}}\ \texttt{\textbf{==}}\ \texttt{\textbf{!=}}\ \texttt{\textbf{>=}}\ \texttt{\textbf{<=}} & comparison & left to right \\
+    \texttt{\textbf{<}}\ \texttt{\textbf{>}}\ \texttt{\textbf{==}}\ \texttt{\textbf{!=}}\ \texttt{\textbf{>=}}\ \texttt{\textbf{<=}} & comparison & n/a \\
     \textbf{\texttt{not}} & logical negation & n/a \\
     \textbf{\texttt{and}} & logical conjunction & left to right \\
     \textbf{\texttt{or}} & logical disjunction & left to right \\
@@ -32,20 +32,21 @@ Notes:
   \texttt{\textbf{+}}/\texttt{\textbf{-}}, the expression
   \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}, not
   \texttt{\textbf{(-2) ** 2}}.
-\item Comparison operators do not chain: \texttt{\textbf{a < b < c}} is
-  parsed as \texttt{\textbf{(a < b) < c}}, not as a combined test of
-  \texttt{\textbf{a < b}} and \texttt{\textbf{b < c}} as in full Python.
-  Since \texttt{\textbf{a < b}} evaluates to a \textbf{\texttt{bool}},
-  and ordering comparisons at this chapter only accept
-  \texttt{\textbf{int}}/\texttt{\textbf{float}} operands (see ``Dynamic
-  Type Checking'' below), such an expression always raises a
-  \texttt{\textbf{TypeError}} rather than silently returning an
-  unintended value.
+\item Comparison operators are non-associative: unlike full Python,
+  where \texttt{\textbf{a < b < c}} is equivalent to
+  \texttt{\textbf{a < b and b < c}} (evaluating \texttt{\textbf{b}} once
+  and short-circuiting before \texttt{\textbf{c}} is reached), this
+  grammar gives every comparison exactly two operands. Chaining, as in
+  \texttt{\textbf{a < b < c}}, is therefore rejected outright as a
+  syntax error --- a deliberate sublanguage restriction, rather than
+  giving chained comparisons some other, non-standard meaning.
 \item Unary \texttt{\textbf{+}}/\texttt{\textbf{-}}, \textbf{\texttt{not}}
   and \textbf{\texttt{lambda}} take a single operand to their right, so
   stacking two of them has only one possible grouping (e.g.\
   \texttt{\textbf{- -x}} always means \texttt{\textbf{-(-x)}});
-  associativity does not apply and is marked ``n/a''.
+  associativity does not apply and is marked ``n/a'' for a different
+  reason than for comparison operators above: here nothing is excluded,
+  there is simply no choice to make.
 \item The conditional expression and \textbf{\texttt{lambda}} have the
   lowest precedence and extend as far to the right as possible; a
   \textbf{\texttt{lambda}} body or the \textbf{\texttt{else}} branch of a
