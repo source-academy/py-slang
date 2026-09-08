@@ -3,29 +3,45 @@
 Python supports three numeric types: integers (\texttt{int}), floats
 (\texttt{float}), and complex numbers (\texttt{complex}).
 
+A numeric literal never includes a leading sign: a \texttt{+} or
+\texttt{-} written before a number, as in \texttt{-2} or
+\texttt{-3.14}, is unary-operator application (see ``Operator
+Precedence and Associativity'' above), not part of the literal itself.
+This is why \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}
+(i.e.\ $-4$) rather than \texttt{\textbf{(-2) ** 2}} (i.e.\ $4$): the
+sign is applied only after \texttt{\textbf{**}} has already bound the
+unsigned literal \texttt{\textbf{2}} to its exponent.
+
 \subsubsection*{Integers}
 
-Integers can be represented in decimal notation, optionally prefixed
-with a sign (\texttt{+} or \texttt{-}). Additional base notations are
-supported, such as binary (\texttt{0b1010} or \texttt{0B1010}), octal
-(\texttt{0o777} or \texttt{0O777}), and hexadecimal (\texttt{0x1A3F}
-or \texttt{0X1A3F}). Underscores (\verb|_|) may be used for
-readability (e.g., \verb|1_000_000|). Examples include \texttt{42},
-\texttt{-0b1101}, and \verb|0x_FF_00|.
+Integers can be represented in decimal notation. Additional base
+notations are supported, such as binary (\texttt{0b1010} or
+\texttt{0B1010}), octal (\texttt{0o777} or \texttt{0O777}), and
+hexadecimal (\texttt{0x1A3F} or \texttt{0X1A3F}). Underscores
+(\verb|_|) may be used for readability (e.g., \verb|1_000_000|).
+Examples include \texttt{42}, \texttt{0b1101} (and, with a unary
+minus applied, \texttt{-0b1101}), and \verb|0x_FF_00|.
 
 \subsubsection*{Floats}
 Floats use decimal notation with an optional decimal dot. Scientific
 notation (multiplying the number by $10^x$) is indicated with the
 letter \texttt{e} or \texttt{E}, followed by the exponent \texttt{x}.
 Special values inf (infinity), -inf, and nan (not a number) are allowed.
-Examples include \texttt{3.14}, \texttt{-0.001e+05}, and \texttt{6.022E23}.
+Examples include \texttt{3.14}, \texttt{0.001e+05} (and, with a unary
+minus applied, \texttt{-0.001e+05}), and \texttt{6.022E23}.
 
 \subsubsection*{Complex Numbers}
-Complex numbers are written as \texttt{<real>±<imag>j}, where
-\texttt{j} (or \texttt{J}) denotes the imaginary unit. Both the real
-and imaginary parts are stored as floats. The imaginary
-part is mandatory (e.g., \texttt{5j}, \texttt{0j}, and \texttt{0+3j} is valid,
-\texttt{5} alone is real).
+A complex literal consists of a real part and an imaginary part,
+written \texttt{<real>±<imag>j}, where \texttt{j} (or \texttt{J})
+denotes the imaginary unit. Both parts are stored as floats. The
+imaginary part is mandatory (e.g., \texttt{5j}, \texttt{0j}, and
+\texttt{0+3j} is valid, \texttt{5} alone is real).
+As with the sign of a real number, the \texttt{±} between the real and
+imaginary parts is not part of a single token: only \texttt{<imag>j}
+(e.g., \texttt{3j}) is a numeric literal, so \texttt{2+3j} parses as
+the real literal \texttt{2} combined with the imaginary literal
+\texttt{3j} by binary \texttt{+}, and \texttt{-4.5j} as unary
+\texttt{-} applied to the imaginary literal \texttt{4.5j}.
 
 Examples include \texttt{2+3j}, \texttt{-4.5J}, \texttt{0j}, and
 \texttt{1e3-6.2E2J}.

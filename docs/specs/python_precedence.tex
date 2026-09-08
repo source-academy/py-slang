@@ -1,0 +1,49 @@
+\subsection*{Operator Precedence and Associativity}
+
+When an expression combines several operators, \emph{precedence} decides
+which operator binds first, and \emph{associativity} decides the order in
+which two operators of the same precedence group are applied. The table
+below lists the operators, function application, the conditional
+expression (\textbf{\texttt{if}} / \textbf{\texttt{else}}), and
+\textbf{\texttt{lambda}} from the grammar above, in decreasing order of
+precedence: an entry binds more tightly than every entry below it. Use
+parentheses to override the default grouping.
+
+\begin{center}
+  \begin{tabular}{l|l|c}
+    Operators & Description & Associativity \\ \hline
+    \texttt{\textbf{( )}} & function application & left to right \\
+    \texttt{\textbf{**}} & exponentiation & right to left \\
+    \texttt{\textbf{+}}\ \texttt{\textbf{-}} & unary plus, unary minus & n/a \\
+    \texttt{\textbf{*}}\ \texttt{\textbf{/}}\ \texttt{\textbf{\%}} & multiplication, division, modulo & left to right \\
+    \texttt{\textbf{+}}\ \texttt{\textbf{-}} & addition, subtraction & left to right \\
+    \texttt{\textbf{<}}\ \texttt{\textbf{>}}\ \texttt{\textbf{==}}\ \texttt{\textbf{!=}}\ \texttt{\textbf{>=}}\ \texttt{\textbf{<=}} & comparison & left to right \\
+    \textbf{\texttt{not}} & logical negation & n/a \\
+    \textbf{\texttt{and}} & logical conjunction & left to right \\
+    \textbf{\texttt{or}} & logical disjunction & left to right \\
+    \textbf{\texttt{if}} / \textbf{\texttt{else}} & conditional expression & right to left \\
+    \textbf{\texttt{lambda}} & lambda expression & n/a \\
+  \end{tabular}
+\end{center}
+
+Notes:
+\begin{itemize}
+\item Since \texttt{\textbf{**}} binds more tightly than unary
+  \texttt{\textbf{+}}/\texttt{\textbf{-}}, the expression
+  \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}, not
+  \texttt{\textbf{(-2) ** 2}}.
+\item Comparison operators do not chain: \texttt{\textbf{a < b < c}}
+  parses as \texttt{\textbf{(a < b) < c}}, i.e.\ the result of
+  \texttt{\textbf{a < b}} is compared against \texttt{\textbf{c}}, unlike
+  full Python's chained comparisons.
+\item Unary \texttt{\textbf{+}}/\texttt{\textbf{-}}, \textbf{\texttt{not}}
+  and \textbf{\texttt{lambda}} take a single operand to their right, so
+  stacking two of them has only one possible grouping (e.g.\
+  \texttt{\textbf{- -x}} always means \texttt{\textbf{-(-x)}});
+  associativity does not apply and is marked ``n/a''.
+\item The conditional expression and \textbf{\texttt{lambda}} have the
+  lowest precedence and extend as far to the right as possible; a
+  \textbf{\texttt{lambda}} body or the \textbf{\texttt{else}} branch of a
+  conditional expression may itself be another conditional expression or
+  \textbf{\texttt{lambda}}.
+\end{itemize}
