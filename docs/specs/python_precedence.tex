@@ -32,10 +32,15 @@ Notes:
   \texttt{\textbf{+}}/\texttt{\textbf{-}}, the expression
   \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}, not
   \texttt{\textbf{(-2) ** 2}}.
-\item Comparison operators do not chain: \texttt{\textbf{a < b < c}}
-  parses as \texttt{\textbf{(a < b) < c}}, i.e.\ the result of
-  \texttt{\textbf{a < b}} is compared against \texttt{\textbf{c}}, unlike
-  full Python's chained comparisons.
+\item Comparison operators do not chain: \texttt{\textbf{a < b < c}} is
+  parsed as \texttt{\textbf{(a < b) < c}}, not as a combined test of
+  \texttt{\textbf{a < b}} and \texttt{\textbf{b < c}} as in full Python.
+  Since \texttt{\textbf{a < b}} evaluates to a \textbf{\texttt{bool}},
+  and ordering comparisons at this chapter only accept
+  \texttt{\textbf{int}}/\texttt{\textbf{float}} operands (see ``Dynamic
+  Type Checking'' below), such an expression always raises a
+  \texttt{\textbf{TypeError}} rather than silently returning an
+  unintended value.
 \item Unary \texttt{\textbf{+}}/\texttt{\textbf{-}}, \textbf{\texttt{not}}
   and \textbf{\texttt{lambda}} take a single operand to their right, so
   stacking two of them has only one possible grouping (e.g.\

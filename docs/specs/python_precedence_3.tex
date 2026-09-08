@@ -34,9 +34,17 @@ Notes:
   \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}, not
   \texttt{\textbf{(-2) ** 2}}.
 \item Comparison, membership and identity tests do not chain:
-  \texttt{\textbf{a < b < c}} parses as \texttt{\textbf{(a < b) < c}},
-  i.e.\ the result of \texttt{\textbf{a < b}} is compared against
-  \texttt{\textbf{c}}, unlike full Python's chained comparisons.
+  \texttt{\textbf{a < b < c}} is parsed as \texttt{\textbf{(a < b) < c}},
+  not as a combined test of \texttt{\textbf{a < b}} and
+  \texttt{\textbf{b < c}} as in full Python. At this chapter,
+  \textbf{\texttt{bool}} operands are accepted by ordering comparisons
+  (coerced to \texttt{\textbf{int}}, as in full Python; see ``Dynamic
+  Type Checking'' below), so this does not raise an error --- it
+  silently computes something different from full Python's chained
+  reading. For example, \texttt{\textbf{1 < 3 < 2}} evaluates here to
+  \texttt{\textbf{True}} (\texttt{\textbf{(1 < 3) < 2}} is
+  \texttt{\textbf{True < 2}} is \texttt{\textbf{True}}), whereas full
+  Python's \texttt{\textbf{1 < 3 and 3 < 2}} is \texttt{\textbf{False}}.
 \item Unary \texttt{\textbf{+}}/\texttt{\textbf{-}}, \textbf{\texttt{not}}
   and \textbf{\texttt{lambda}} take a single operand to their right, so
   stacking two of them has only one possible grouping (e.g.\
