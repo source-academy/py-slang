@@ -963,6 +963,33 @@ describe("Python stepper — a substituted value's free variable is not captured
   });
 });
 
+describe("Python stepper — a recursive function's own name is bound, not free (py-slang#469)", () => {
+  // `freeNames`'s `FunctionDeclaration` case removed a def's params and any name its own body
+  // reassigns, but never the def's *own* name — so a self-recursive `def cp(...): ... cp(...) ...`
+  // looked like it had a free reference to `cp`. Once such a closure is actually called at least once
+  // (`contractCall`'s own `selfName` substitution re-substitutes the closure for its own name on every
+  // call, not just once at declaration), that leaked "free `cp`" starts riding along inside the
+  // now-returned value, indistinguishable from a genuine free variable. If it's later substituted
+  // through an unrelated, differently-scoped function that also happens to have its own local `cp`,
+  // `avoidCapture` "protects" that unrelated `cp` from a collision that was never real, alpha-renaming
+  // it to `cp_1` — but only at its call sites, not its own `def` line, so the renamed closure ends up
+  // calling a name that was never declared: `NameError: name 'cp_1' is not defined`.
+  test("two unrelated, differently-scoped recursive locals sharing a name don't spuriously collide", async () => {
+    const texts = await explanations(
+      "def subllist(llist, n):\n" +
+        "    def cp(l, n, c):\n" +
+        "        return c(None) if n == 0 else cp(tail(l), n-1, lambda x: c(pair(head(l), x)))\n" +
+        "    return cp(llist, n, lambda x:x)\n" +
+        "def merge_sort(l):\n" +
+        "    def cp(l, c):\n" +
+        "        return c(None) if l == None else cp(subllist(l, 1), lambda x1: cp(l, lambda x2:c(x1)))\n" +
+        "    return cp(l, lambda x:x)\n" +
+        "print(merge_sort(pair(0, None)))",
+    );
+    expect(texts.some(t => /NameError/.test(t))).toBe(false);
+  });
+});
+
 describe("Python stepper — function values render as mu-terms (not inline bodies)", () => {
   // A substituted `def` must NOT expand its whole body at every use: it is substituted as a *named*
   // value (the `name` marker) so the host collapses it to a hoverable mu-term, exactly like Source.
