@@ -434,7 +434,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    global x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[['name', ['f', None]], [None, [['global_statement', [['x', None], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['global_statement', [[['name', ['x', None]], None], None]], None]]]]",
         ],
       ],
     ],
@@ -443,7 +443,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    global x, y\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['global_statement', [['x', ['y', None]], None]], None]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'global_statement',\n  [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\nNone]]]]",
         ],
       ],
     ],
@@ -452,7 +452,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    def g():\\n        nonlocal x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [None, [['nonlocal_statement', [['x', None], None]], None]]]],\n      None]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [None, [['nonlocal_statement', [[['name', ['x', None]], None], None]], None]]]],\n      None]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -461,7 +461,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    y = 2\\n    def g():\\n        nonlocal x, y\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [None, [['nonlocal_statement', [['x', ['y', None]], None]], None]]]],\n      None]]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [ None,\n        [ [ 'nonlocal_statement',\n          [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\n        None]]]],\n      None]]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],

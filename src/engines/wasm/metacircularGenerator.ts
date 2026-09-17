@@ -353,7 +353,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   visitNonLocalStmt(stmt: StmtNS.NonLocal): [number, bigint] {
     return this.list(
       this.string("nonlocal_declaration"),
-      this.list(...stmt.names.map(n => this.dynamicString(`"${n.lexeme}"`))),
+      this.list(
+        ...stmt.names.map(n => this.list(this.string("name"), this.dynamicString(`"${n.lexeme}"`))),
+      ),
     );
   }
 
