@@ -324,8 +324,15 @@ expressionNot ->
     "not" expressionNot                          {% astUnary %}
   | expressionCmp                                  {% id %}
 
+
+# Non-associative: unlike full Python (where x < y < z is sugar for
+# x < y and y < z, evaluating y once and short-circuiting before z), this
+# grammar treats comparison/membership/identity operators as taking exactly
+# two operands. `expressionAdd` (not `expressionCmp`) on both sides means
+# `x < y < z` cannot be built at all - it's a syntax error, not a silently
+# different parse. See docs/specs/python_precedence.tex.
 expressionCmp ->
-    expressionCmp expressionCmpOp expressionAdd  {% astCompare %}
+    expressionAdd expressionCmpOp expressionAdd  {% astCompare %}
   | expressionAdd                                  {% id %}
 
 expressionCmpOp ->

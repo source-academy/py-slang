@@ -584,7 +584,7 @@ const ParserRules = [
   { name: "expressionNot", symbols: ["expressionCmp"], postprocess: id },
   {
     name: "expressionCmp",
-    symbols: ["expressionCmp", "expressionCmpOp", "expressionAdd"],
+    symbols: ["expressionAdd", "expressionCmpOp", "expressionAdd"],
     postprocess: astCompare,
   },
   { name: "expressionCmp", symbols: ["expressionAdd"], postprocess: id },
