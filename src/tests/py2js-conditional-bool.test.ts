@@ -109,14 +109,19 @@ describe("conditional expression (`x if p else y`) predicate must be bool", () =
 // CSE-only: ConditionNotBoolError's message formatting (errors.ts), not covered by the
 // cseErrors()-vs-py2jsOutcome() parity checks above (those only assert *that* CSE errors, not the
 // exact rendered message). A condition expression that itself spans multiple lines is the one case
-// where fullLine.indexOf(snippet) can't find the (necessarily single-line) fullLine's own snippet
-// inside it, falling back to an offset of 0 -- otherwise-untested since every other case here has a
-// single-line condition.
+// where the old `fullLine.indexOf(snippet)` approach could never find a match — `snippet` spans the
+// whole (multiline) condition, but `fullLine` is only the condition's first line — silently falling
+// back to column 0 and an indicator sized to the whole multiline snippet (py-slang#467's Codex
+// review). getFullLine's own `lineStart` gives the real column directly instead, and the indicator
+// is now built from just the condition's first line, so it lands under the condition's actual start
+// and doesn't run past the end of the one line it's printed under.
 describe("CSE's ConditionNotBoolError message formatting", () => {
-  test("a condition expression spanning multiple lines still renders (indicator falls back to offset 0)", async () => {
+  test("a condition expression spanning multiple lines still points at the condition, not column 0", async () => {
     const code = "if (1 +\n    2):\n    print('yes')\n";
     await expect(runCode(code, 1)).rejects.toMatchObject({
-      message: expect.stringContaining("if condition must be bool, not integer"),
+      message: expect.stringContaining(
+        "    if (1 +\n        ^~~\nTypeError: if condition must be bool, not integer",
+      ),
     });
   });
 });

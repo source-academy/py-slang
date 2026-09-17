@@ -96,7 +96,7 @@ export class RuntimeSourceError implements SourceError {
 export function getFullLine(
   source: string,
   current: number,
-): { lineIndex: number; fullLine: string } {
+): { lineIndex: number; fullLine: string; lineStart: number } {
   let back: number = current;
   let forward: number = current;
 
@@ -113,7 +113,10 @@ export function getFullLine(
   const lineIndex = source.slice(0, back).split("\n").length;
   const fullLine = source.slice(back, forward);
 
-  return { lineIndex, fullLine };
+  // `back` is `current`'s own line's start index in `source` — callers whose node may span
+  // multiple lines (py-slang#467's Codex review) use it to place an indicator by column instead
+  // of `fullLine.indexOf(someMultilineSnippet)`, which can never match (see ConditionNotBoolError).
+  return { lineIndex, fullLine, lineStart: back };
 }
 
 export function createErrorIndicator(snippet: string, errorPos: number): string {
@@ -247,14 +250,21 @@ export class ConditionNotBoolError extends RuntimeSourceError {
     this.type = ErrorType.TYPE;
     const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
     const index = node.startToken.indexInSource;
-    const { lineIndex, fullLine } = getFullLine(source, index);
+    const { lineIndex, fullLine, lineStart } = getFullLine(source, index);
+    // The condition's own column on its line — not `fullLine.indexOf(snippet)`: for a condition
+    // spanning multiple lines, `snippet` (below) contains newlines that can never occur inside
+    // `fullLine` (only the condition's first line), so that search always failed and fell back to
+    // column 0 (py-slang#467 review).
+    const adjustedOffset = index - lineStart;
     const snippet = source.substring(
       node.startToken.indexInSource,
       node.endToken.indexInSource + node.endToken.lexeme.length,
     );
-    const offset = fullLine.indexOf(snippet);
-    const adjustedOffset = offset >= 0 ? offset : 0;
-    const indicator = createErrorIndicator(snippet, 0);
+    // Only the portion of a multiline condition that's visible on its first displayed line —
+    // the full (possibly multiline) snippet would otherwise make the indicator run past the end
+    // of that single printed line.
+    const snippetOnLine = snippet.split("\n")[0];
+    const indicator = createErrorIndicator(snippetOnLine, 0);
     const hint = `TypeError: ${contextLabel} must be bool, not ${typeStr}`;
     this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
   }
