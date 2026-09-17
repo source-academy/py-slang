@@ -457,6 +457,25 @@ print(f())
         ["local"],
       ],
     ],
+
+  "nonlocal — a single statement can declare multiple names, each bound independently": [
+    [
+      `
+def outer():
+    a = 1
+    b = 2
+    def inner():
+        nonlocal a, b
+        a = a + 1
+        b = b + 1
+    inner()
+    return a + b
+outer()
+`,
+      5n,
+      null,
+    ],
+  ],
 };
 
 generateTestCases(nonlocalTests, 3, ch3);
@@ -537,6 +556,19 @@ def outer():
     inner(5)
 `;
     expect(() => toPythonAstAndResolve(code, 4)).toThrow(SyntaxError);
+  });
+
+  test("in `nonlocal a, b`, a conflict on the second name is still caught even though the first is fine (#179)", () => {
+    const code = `
+def outer():
+    a = 1
+    b = 2
+    def inner(b):
+        nonlocal a, b
+        return a
+    inner(5)
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(/'b' is parameter and nonlocal/);
   });
 });
 
@@ -736,6 +768,17 @@ def f():
 `;
     expect(() => toPythonAstAndResolve(code, 4)).toThrow(SyntaxError);
   });
+
+  test("in `global x, y`, an order violation on the second name is still caught even though the first is fine (#181)", () => {
+    const code = `
+def f():
+    y = 1
+    global x, y
+`;
+    expect(() => toPythonAstAndResolve(code, 3)).toThrow(
+      /'y' is assigned to before global declaration/,
+    );
+  });
 });
 
 // `nonlocal x` must resolve against the enclosing function's *whole* body (any binding
@@ -864,5 +907,25 @@ outer()
     }
     expect(error?.message).toMatch(/no binding for nonlocal 'x' found/);
     expect(error?.message).not.toMatch(/Perhaps you meant/);
+  });
+
+  test("a single `nonlocal a, z` checks each name independently — an unresolvable second name is rejected even though the first is fine", () => {
+    const code = `
+def outer():
+    a = 1
+    def inner():
+        nonlocal a, z
+        return a
+    inner()
+outer()
+`;
+    let error: Error | undefined;
+    try {
+      toPythonAstAndResolve(code, 3);
+    } catch (e) {
+      error = e as Error;
+    }
+    expect(error?.message).toMatch(/no binding for nonlocal 'z' found/);
+    expect(error?.message).not.toMatch(/'a'/);
   });
 });

@@ -275,12 +275,26 @@ export function transform(
     case "Global":
       return vector_to_llist([
         { type: "string", value: "global_statement" },
-        { type: "string", value: (node as StmtNS.Global).name.lexeme },
+        vector_to_llist(
+          (node as StmtNS.Global).names.map(n =>
+            vector_to_llist([
+              { type: "string", value: "name" },
+              { type: "string", value: n.lexeme },
+            ]),
+          ),
+        ),
       ]);
     case "NonLocal":
       return vector_to_llist([
         { type: "string", value: "nonlocal_statement" },
-        { type: "string", value: (node as StmtNS.NonLocal).name.lexeme },
+        vector_to_llist(
+          (node as StmtNS.NonLocal).names.map(n =>
+            vector_to_llist([
+              { type: "string", value: "name" },
+              { type: "string", value: n.lexeme },
+            ]),
+          ),
+        ),
       ]);
     case "Assert":
       return vector_to_llist([

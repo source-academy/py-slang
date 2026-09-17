@@ -1084,12 +1084,27 @@ describe("Global and nonlocal statements", () => {
   test("global statement", () => {
     const stmts = parseStmts("global x");
     expect(stmts[0]).toBeInstanceOf(StmtNS.Global);
+    expect((stmts[0] as StmtNS.Global).names.map(n => n.lexeme)).toEqual(["x"]);
+  });
+
+  test("global statement with multiple names", () => {
+    const stmts = parseStmts("global x, y, z");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.Global);
+    expect((stmts[0] as StmtNS.Global).names.map(n => n.lexeme)).toEqual(["x", "y", "z"]);
   });
 
   test("nonlocal statement", () => {
     const stmts = parseStmts("def f():\n  nonlocal x\n  x = 1");
     const body = (stmts[0] as StmtNS.FunctionDef).body;
     expect(body[0]).toBeInstanceOf(StmtNS.NonLocal);
+    expect((body[0] as StmtNS.NonLocal).names.map(n => n.lexeme)).toEqual(["x"]);
+  });
+
+  test("nonlocal statement with multiple names", () => {
+    const stmts = parseStmts("def f():\n  nonlocal x, y\n  x = 1");
+    const body = (stmts[0] as StmtNS.FunctionDef).body;
+    expect(body[0]).toBeInstanceOf(StmtNS.NonLocal);
+    expect((body[0] as StmtNS.NonLocal).names.map(n => n.lexeme)).toEqual(["x", "y"]);
   });
 });
 
