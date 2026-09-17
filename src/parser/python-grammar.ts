@@ -349,15 +349,15 @@ const ParserRules = [
   },
   {
     name: "statementGlobal",
-    symbols: [{ literal: "global" }, { type: "name" }],
-    postprocess: ([kw, n]: [moo.Token, moo.Token]) =>
-      new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)),
+    symbols: [{ literal: "global" }, "names"],
+    postprocess: ([kw, ns]: [moo.Token, Token[]]) =>
+      new StmtNS.Global(toAstToken(kw), ns[ns.length - 1], ns),
   },
   {
     name: "statementNonlocal",
-    symbols: [{ literal: "nonlocal" }, { type: "name" }],
-    postprocess: ([kw, n]: [moo.Token, moo.Token]) =>
-      new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)),
+    symbols: [{ literal: "nonlocal" }, "names"],
+    postprocess: ([kw, ns]: [moo.Token, Token[]]) =>
+      new StmtNS.NonLocal(toAstToken(kw), ns[ns.length - 1], ns),
   },
   {
     name: "statementAssert",

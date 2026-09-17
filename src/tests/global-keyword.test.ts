@@ -287,6 +287,23 @@ print(count)
       ["2"],
     ],
   ],
+
+  "global keyword — a single statement can declare multiple names, each bound independently": [
+    [
+      `
+a = 1
+b = 2
+def f():
+    global a, b
+    a = a + 10
+    b = b + 20
+f()
+a + b
+`,
+      33n,
+      null,
+    ],
+  ],
 };
 
 generateTestCases(globalKeywordTests, 3, ch3);

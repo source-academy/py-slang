@@ -205,7 +205,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     statements
       .filter(s => s instanceof StmtNS.NonLocal)
-      .map(s => s.name.lexeme)
+      .flatMap(s => s.names.map(n => n.lexeme))
       .forEach(l => {
         // cannot declare parameter name as nonlocal
         if (parameters && parameters.map(p => p.lexeme).includes(l)) {
@@ -738,10 +738,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // no effect
 
     const currFrame = this.environment.at(-1);
-    const bindingIndex = currFrame?.findIndex(binding => binding.name === stmt.name.lexeme);
-
-    if (bindingIndex != null) {
-      currFrame?.splice(bindingIndex, 1);
+    for (const name of stmt.names) {
+      const bindingIndex = currFrame?.findIndex(binding => binding.name === name.lexeme);
+      if (bindingIndex != null && bindingIndex !== -1) {
+        currFrame?.splice(bindingIndex, 1);
+      }
     }
 
     return wasm.nop();
