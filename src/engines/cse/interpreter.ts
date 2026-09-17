@@ -9,7 +9,11 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
-import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
+import {
+  BuiltinReassignmentError,
+  ConditionNotBoolError,
+  UnsupportedOperandTypeError,
+} from "../../errors/errors";
 import { Group } from "../../stdlib/utils";
 import { Token, TokenType } from "../../tokenizer";
 import { CSEBreak, RecursivePartial, Result } from "../../types";
@@ -1326,18 +1330,32 @@ const cmdEvaluators: CmdEvaluators = {
     }
   },
 
-  // Used by both `if`/`elif` and the conditional expression. Applies isFalsy's general any-type
-  // truthiness — py2js and the stepper were tightened to require a genuine bool here instead
-  // (py-slang#439); this instruction has not been tightened yet (py-slang#436).
+  // Used by both `if`/`elif` and the conditional expression -- one check-site covers both,
+  // matching py2js's shared condBool / the stepper's shared contractConditional (py-slang#439).
+  // Requires a genuine bool (docs/specs/python_typing_back.tex: "Following if and elif, Python
+  // §x only allows boolean expressions") rather than isFalsy's general any-type truthiness,
+  // mirroring BOOL_OP's identical check on and/or's left operand above (py-slang#436).
   [InstrType.BRANCH]: function (
-    _code: string,
+    code: string,
     instr: BranchInstr,
-    _context: Context,
+    context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
     const condition = stash.pop();
+
+    if (condition && condition.type !== "bool") {
+      const srcNode = instr.srcNode;
+      const [conditionNode, contextLabel] =
+        srcNode instanceof StmtNS.If
+          ? [srcNode.condition, "if condition"]
+          : [(srcNode as ExprNS.Ternary).predicate, "conditional expression condition"];
+      handleRuntimeError(
+        context,
+        new ConditionNotBoolError(code, conditionNode, context, condition.type, contextLabel),
+      );
+    }
 
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;
