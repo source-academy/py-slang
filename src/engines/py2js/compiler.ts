@@ -345,7 +345,7 @@ function scanScopeDeclarations(stmts: StmtNS.Stmt[], kind: "Global" | "NonLocal"
   const visit = (body: StmtNS.Stmt[]): void => {
     for (const s of body) {
       if (s.kind === kind) {
-        names.add((s as StmtNS.Global | StmtNS.NonLocal).name.lexeme);
+        (s as StmtNS.Global | StmtNS.NonLocal).names.forEach(n => names.add(n.lexeme));
       } else if (s.kind === "If") {
         visit((s as StmtNS.If).body);
         const elseBlock = (s as StmtNS.If).elseBlock;
@@ -377,7 +377,7 @@ function scanScopeDeclarations(stmts: StmtNS.Stmt[], kind: "Global" | "NonLocal"
 function collectAllGlobalDecls(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<string> {
   for (const s of stmts) {
     if (s.kind === "Global") {
-      into.add((s as StmtNS.Global).name.lexeme);
+      (s as StmtNS.Global).names.forEach(n => into.add(n.lexeme));
     } else if (s.kind === "If") {
       collectAllGlobalDecls((s as StmtNS.If).body, into);
       const elseBlock = (s as StmtNS.If).elseBlock;

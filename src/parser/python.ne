@@ -209,11 +209,11 @@ statementBreak -> "break"
 statementContinue -> "continue"
   {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
 
-statementGlobal -> "global" %name
-  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+statementGlobal -> "global" names
+  {% ([kw, ns]: [moo.Token, Token[]]) => new StmtNS.Global(toAstToken(kw), ns[ns.length - 1], ns) %}
 
-statementNonlocal -> "nonlocal" %name
-  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+statementNonlocal -> "nonlocal" names
+  {% ([kw, ns]: [moo.Token, Token[]]) => new StmtNS.NonLocal(toAstToken(kw), ns[ns.length - 1], ns) %}
 
 statementAssert -> "assert" expression
   {% ([kw, e]: [moo.Token, ExprNS.Expr]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}

@@ -51,8 +51,10 @@ at the time when ``Run'' was last pressed.
                                                             && \texttt{linked\_list("break\_statement")}                                                                                                                                     \\
   &&                       && |   &\quad && \textbf{\texttt{continue}}
                                                             && \texttt{linked\_list("continue\_statement")}                                                                                                                                  \\
-  &&                       && |   &\quad && \textbf{\texttt{nonlocal}}
-                                                            && \texttt{linked\_list("nonlocal\_statement")}                                                                                                                                  \\
+  &&                       && |   &\quad && \textbf{\texttt{global}}\ \textit{names}
+                                                            && \texttt{linked\_list("global\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                          \\
+  &&                       && |   &\quad && \textbf{\texttt{nonlocal}}\ \textit{names}
+                                                            && \texttt{linked\_list("nonlocal\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                        \\
   &&                       && |   &\quad && \textit{block}
                                                             && \textrm{see below}                                                                                                                                                            \\
   &&                       && |   &\quad && \textit{expression}
