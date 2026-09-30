@@ -98,9 +98,14 @@ export class Ev3Evaluator extends BasicEvaluator {
 
       // targetsPynter=true: native pynter's fixed-width value representation can't carry LGCBI's
       // arbitrary-precision bigint constants — see PVMLCompiler's `targetsPynter` doc comment.
+      //
+      // variant=3 (Python §3), not 0/§1-§2 - see EV3Engine.ts's identical fix for why: variant <= 2
+      // emits the restricted §1/§2 comparison opcodes (e.g. LTG12), which are all above
+      // PYNTER_OPCODE_MAX and get rejected by assemble() below, breaking any EV3 program with an
+      // ordinary comparison.
       const compiler = PVMLCompiler.fromProgram(
         ast,
-        0,
+        3,
         environments,
         false,
         true,

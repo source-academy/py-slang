@@ -50,9 +50,18 @@ export class EV3Engine {
       // targetsPynter=true: this compiles to a fixed-width binary shipped to a physical device,
       // so `int` literals must use LGCI/LGCF64 (int32-range or float), never LGCBI's
       // arbitrary-precision bigint pool — see PVMLCompiler's `targetsPynter` doc comment.
+      //
+      // variant=3 (Python §3), not 0/§1-§2: comparison operators compile differently per chapter
+      // (see PVMLCompiler's getCompareOpCode - variant <= 2 emits the restricted §1/§2 opcode
+      // family, e.g. LTG12 for `<`). Those opcodes are all above PYNTER_OPCODE_MAX and get
+      // rejected by assemble() below, so passing anything <= 2 here means ANY EV3 program with an
+      // ordinary comparison (`distance < 10`, a sensor threshold, a loop condition) fails to
+      // compile before it ever reaches the robot. The device-side ev3_* stdlib and CALLV/CALLTV
+      // dispatch already assume full Python semantics, matching what students actually select
+      // (Python §3/§4) when running EV3 code - never §1/§2.
       const compiler = PVMLCompiler.fromProgram(
         ast,
-        0,
+        3,
         environments,
         false,
         true,
