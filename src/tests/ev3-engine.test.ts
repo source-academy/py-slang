@@ -50,6 +50,17 @@ describe("EV3 engine", () => {
       expect(result.status).toBe("finished");
     });
 
+    // Regression test for a real bug: PVMLCompiler.fromProgram was called with variant=0
+    // (Python §1/§2), which emits the restricted §1/§2 comparison opcode family (e.g. LTG12 for
+    // `<`) - all of which are above PYNTER_OPCODE_MAX and get rejected by assemble(), so ANY EV3
+    // program with an ordinary comparison failed to compile. Fixed by passing variant=3. None of
+    // the other tests in this file exercise a comparison operator, which is why this went
+    // uncaught originally.
+    test("a program with a comparison operator compiles successfully", async () => {
+      const result = await runEV3("distance = 10\nif distance < 20:\n    distance\n");
+      expect(result.status).toBe("finished");
+    });
+
     test("for-loop program compiles successfully", async () => {
       const result = await runEV3("for i in range(3):\n    i\n");
       expect(result.status).toBe("finished");
