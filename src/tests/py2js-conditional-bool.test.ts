@@ -120,7 +120,7 @@ describe("CSE's ConditionNotBoolError message formatting", () => {
     const code = "if (1 +\n    2):\n    print('yes')\n";
     await expect(runCode(code, 1)).rejects.toMatchObject({
       message: expect.stringContaining(
-        "    if (1 +\n        ^~~\nTypeError: if condition must be bool, not integer",
+        "    if (1 +\n       ^~~~\nTypeError: if condition must be bool, not integer",
       ),
     });
   });

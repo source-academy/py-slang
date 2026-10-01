@@ -673,8 +673,8 @@ const ParserRules = [
   {
     name: "atom",
     symbols: [{ literal: "(" }, "expression", { literal: ")" }],
-    postprocess: ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) =>
-      new ExprNS.Grouping(e.startToken, e.endToken, e),
+    postprocess: ([lparen, e, rparen]: [moo.Token, ExprNS.Expr, moo.Token]) =>
+      new ExprNS.Grouping(toAstToken(lparen), toAstToken(rparen), e),
   },
   {
     name: "atom",
