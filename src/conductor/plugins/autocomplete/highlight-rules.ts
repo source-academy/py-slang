@@ -29,6 +29,10 @@
  */
 
 import type { AceRules } from "@sourceacademy/common-autocomplete";
+import linkedListJSON from "./builtins/linked_list.json";
+import listJSON from "./builtins/list.json";
+import pairmutatorJSON from "./builtins/pairmutator.json";
+import streamJSON from "./builtins/stream.json";
 import math from "../../../stdlib/math";
 import misc from "../../../stdlib/misc";
 import { getIllegalKeywords, getKeywords } from "./keywords";
@@ -47,12 +51,20 @@ export default (variant: number) => {
     ...[...stdlibBuiltins.keys()].filter(x => stdlibBuiltins.get(x)?.type !== "builtin"),
   ].join("|");
 
-  let builtinFunctions = [...stdlibBuiltins.keys()]
-    .filter(x => stdlibBuiltins.get(x)?.type === "builtin")
-    .join("|");
-  if (variant >= 3) {
-    builtinFunctions += "|range";
-  }
+  // The linked-list, list, pair-mutator and stream libraries (several defined in the Python
+  // prelude, so absent from any `builtins` map) come from the same JSDoc-generated data, and
+  // with the same chapter gating, as the autocomplete resolver.
+  const libraryEntries = [
+    ...(variant >= 2 ? linkedListJSON : []),
+    ...(variant >= 3 ? [...listJSON, ...pairmutatorJSON, ...streamJSON] : []),
+  ];
+  const builtinFunctions = [
+    ...new Set([
+      ...[...stdlibBuiltins.keys()].filter(x => stdlibBuiltins.get(x)?.type === "builtin"),
+      ...libraryEntries.filter(e => e.meta === "func").map(e => e.name),
+      ...(variant >= 3 ? ["range"] : []),
+    ]),
+  ].join("|");
 
   //var futureReserved = "";
   const keywordMapper = {
