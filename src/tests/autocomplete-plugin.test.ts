@@ -187,6 +187,27 @@ describe("AutoCompletePlugin Conductor channels", () => {
     );
   });
 
+  test("highlights library functions from the chapter that introduces them", () => {
+    const functionsOf = (variant: number) =>
+      requestMode(makePlugin(variant).webSyntax)
+        ?.highlightRules.constants.find(isKeywordMapperRule)
+        ?.token.map["support.function"].split("|");
+
+    const chapter1 = functionsOf(1);
+    const chapter2 = functionsOf(2);
+    const chapter3 = functionsOf(3);
+
+    expect(chapter1).toContain("abs");
+    expect(chapter1).not.toContain("pair");
+    for (const name of ["pair", "head", "llist", "map", "llist_to_string", "print_llist"]) {
+      expect(chapter2).toContain(name);
+    }
+    expect(chapter2).not.toContain("set_head");
+    expect(chapter3).toEqual(
+      expect.arrayContaining(["print_llist", "set_head", "stream", "range"]),
+    );
+  });
+
   test("'as' is a legal keyword, not highlighted as invalid, in every chapter", () => {
     const chapter1 = makePlugin(1);
     const chapter1Mode = requestMode(chapter1.webSyntax);
