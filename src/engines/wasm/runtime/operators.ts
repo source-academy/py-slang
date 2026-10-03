@@ -427,6 +427,15 @@ export const ARITHMETIC_OP_FX = wasm
       ),
       // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
       [
+        // test the components, not the denominator: c*c + d*d underflows to 0 for tiny nonzero c, d
+        wasm
+          .if(
+            i32.and(
+              f64.eq(local.get("$c"), f64.const(0)),
+              f64.eq(local.get("$d"), f64.const(0)),
+            ),
+          )
+          .then(...raiseZeroDivision()),
         local.set(
           "$denom",
           f64.add(
@@ -434,7 +443,6 @@ export const ARITHMETIC_OP_FX = wasm
             f64.mul(local.get("$d"), local.get("$d")),
           ),
         ),
-        wasm.if(f64.eq(local.get("$denom"), f64.const(0))).then(...raiseZeroDivision()),
         wasm.return(
           wasm
             .call(MAKE_COMPLEX_FX)

@@ -113,6 +113,11 @@ describe("True division by zero", () => {
     const { renderedResult } = await compileToWasmAndRun("(4+2j) / (1+1j)", true);
     expect(renderedResult).toBe("3 - 1j");
   });
+
+  it("does not mistake a tiny non-zero complex divisor for zero", async () => {
+    const { renderedResult } = await compileToWasmAndRun("(1+0j) / (1e-200+0j)", true);
+    expect(renderedResult).not.toMatch(/ZeroDivision/);
+  });
 });
 
 // `and`/`or`'s *left* operand, and `not`'s sole operand, must be an actual
