@@ -74,7 +74,13 @@ export function makeEvaluatorTestHarness(
       if (args.length >= 3) {
         dataHandler = args[2] as IDataHandler;
       }
-      return { sendSnapshots: () => undefined };
+      return {
+        sendSnapshots: () => undefined,
+        // Chapter 2+ evaluators also register the data visualizer plugin.
+        resetRun: () => undefined,
+        sendRun: () => undefined,
+        drawData: () => undefined,
+      };
     },
   } as unknown as IRunnerPlugin;
 

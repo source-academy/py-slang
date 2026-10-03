@@ -3,6 +3,7 @@ import { assemble } from "../pvml/pvml-assembler";
 import { PVMLCompiler } from "../pvml/pvml-compiler";
 import { parse } from "../../parser/parser-adapter";
 import { Resolver } from "../../resolver";
+import { makeChapter3Validators } from "../../validator";
 import ev3, { EV3_INTERNAL_FUNCTIONS } from "../../stdlib/ev3";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
@@ -41,7 +42,7 @@ export class EV3Engine {
       const script = code + "\n";
       const ast = parse(script);
 
-      const resolver = new Resolver("", ast, [], [misc, math, ev3]);
+      const resolver = new Resolver("", ast, makeChapter3Validators(), [misc, math, ev3]);
       const environments = resolver.resolveEnvironments(ast);
       if (resolver.errors.length > 0) {
         throw resolver.errors[0];

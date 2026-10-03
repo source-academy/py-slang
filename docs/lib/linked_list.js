@@ -116,6 +116,17 @@ function for_each(fun, xs) {}
 function llist_to_string(xs) {}
 
 /**
+ * PRIMITIVE
+ * Prints linked list xs using the text-based box-and-pointer notation: a linked list is
+ * printed as <CODE>llist(...)</CODE> and any other pair as <CODE>[head, tail]</CODE>.
+ * For example, <CODE>print_llist(llist(1, 2, 3))</CODE> prints <CODE>llist(1, 2, 3)</CODE>.
+ *
+ * @param {linked_list} <CODE>xs</CODE> - given linked list
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function print_llist(xs) {}
+
+/**
  * Returns linked list xs in reverse order.
  *
  * @param {linked_list} <CODE>xs</CODE> - given linked list
