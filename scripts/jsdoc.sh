@@ -62,8 +62,8 @@ run() {
   # LINKED LISTS
   run_jsdoc "LINKED LISTS" "README_LINKED LISTS.md" "LINKED LISTS" "$LIB/linked_list.js" &
 
-  # PAIR MUTATOR
-  run_jsdoc "PAIR MUTATOR" "README_PAIR MUTATOR.md" "PAIR MUTATOR" "$LIB/pairmutator.js" &
+  # PAIR MUTATORS (plural, like LINKED LISTS and STREAMS: README_3.md and README_4.md link to this folder)
+  run_jsdoc "PAIR MUTATORS" "README_PAIR MUTATORS.md" "PAIR MUTATORS" "$LIB/pairmutator.js" &
 
   # LISTS
   run_jsdoc "LISTS" "README_LISTS.md" "LISTS" "$LIB/list.js" &
