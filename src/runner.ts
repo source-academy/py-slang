@@ -36,6 +36,8 @@ export class RunError extends Error {
   constructor(
     public readonly kind: "parse" | "analysis" | "runtime",
     message: string,
+    /** What the program printed before a runtime error, so callers can still show it. */
+    public readonly output: string = "",
   ) {
     super(message);
     this.name = "RunError";
@@ -179,7 +181,11 @@ export async function runCode(
       // proper message from context.errors; otherwise (a genuinely unrecorded throw) wrap
       // the escaping value directly, same as the parse()-error catch above.
       if (context.errors.length === 0) {
-        throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+        throw new RunError(
+          "runtime",
+          String((e as { message?: string })?.message ?? e),
+          output.join(""),
+        );
       }
     }
 
@@ -189,6 +195,7 @@ export async function runCode(
         errors.join("\n") ||
           context.errors.map(e => e.message).join("\n") ||
           "Unknown runtime error",
+        output.join(""),
       );
     }
   } finally {

@@ -332,7 +332,11 @@ function runCodePvmlInterpreterSync(
       interpreter.execute();
       return { globalEnv: interpreter.getGlobalEnv() };
     } catch (e: unknown) {
-      throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+      throw new RunError(
+        "runtime",
+        String((e as { message?: string })?.message ?? e),
+        outputs.join(""),
+      );
     }
   };
 

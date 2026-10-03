@@ -55,6 +55,8 @@ export class Py2JsRunError extends Error {
   constructor(
     public readonly kind: "parse" | "analysis" | "runtime",
     message: string,
+    /** What the program printed before a runtime error, so callers can still show it. */
+    public readonly output: string = "",
   ) {
     super(message);
     this.name = "Py2JsRunError";
@@ -375,6 +377,7 @@ export function runCodePy2Js(
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
       formatCaughtError(e),
+      rt.output.join(""),
     );
   }
   return { output: rt.output.join("") };
@@ -399,6 +402,7 @@ export async function runCodePy2JsDual(
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
       formatCaughtError(e),
+      rt.output.join(""),
     );
   }
   return { output: rt.output.join("") };
