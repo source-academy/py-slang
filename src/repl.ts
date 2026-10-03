@@ -79,10 +79,11 @@ async function runWasm(code: string, variant: number): Promise<string> {
     process.exit(1);
   }
   const { errors, prints } = await compileToWasmAndRun(code, false, { chapter: variant, groups });
+  const output = prints.map(p => p + "\n").join("");
   if (errors.length > 0) {
-    throw new Error(errors.map(e => e.message).join("\n"));
+    throw Object.assign(new Error(errors.map(e => e.message).join("\n")), { output });
   }
-  return prints.map(p => p + "\n").join("");
+  return output;
 }
 
 async function runFile(filename: string, opts: ReplOptions): Promise<void> {
@@ -125,6 +126,9 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
               : await runCode(code, variant);
     process.stdout.write(output);
   } catch (e) {
+    // Show what the program printed before it failed, then the error.
+    const partial = (e as { output?: unknown })?.output;
+    if (typeof partial === "string") process.stdout.write(partial);
     process.stderr.write((e instanceof Error ? e.message : String(e)) + "\n");
     process.exit(1);
   }
