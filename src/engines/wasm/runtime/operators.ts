@@ -429,12 +429,7 @@ export const ARITHMETIC_OP_FX = wasm
       [
         // test the components, not the denominator: c*c + d*d underflows to 0 for tiny nonzero c, d
         wasm
-          .if(
-            i32.and(
-              f64.eq(local.get("$c"), f64.const(0)),
-              f64.eq(local.get("$d"), f64.const(0)),
-            ),
-          )
+          .if(i32.and(f64.eq(local.get("$c"), f64.const(0)), f64.eq(local.get("$d"), f64.const(0))))
           .then(...raiseZeroDivision()),
         local.set(
           "$denom",
