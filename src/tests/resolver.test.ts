@@ -318,3 +318,65 @@ print(outer())
     });
   });
 });
+
+/**
+ * Splits a resolver error's message into the echoed source line and its caret line, and returns
+ * where the carets start and what they underline (py-slang#475: carets were one column too far
+ * right).
+ */
+function underlinedText(error: Error): { sourceLine: string; caretColumn: number; carets: string } {
+  const lines = error.message.split("\n");
+  // "<Name> at line N", a whitespace-only line, the source line, then the caret line.
+  const sourceLine = lines[2];
+  const caretLine = lines[3];
+  const caretColumn = caretLine.indexOf("^");
+  const carets = caretLine.slice(caretColumn).match(/^\^+/)![0];
+  return { sourceLine, caretColumn, carets };
+}
+
+function resolveError(code: string, chapter: number): Error {
+  try {
+    toPythonAstAndResolve(code, chapter);
+  } catch (e) {
+    return e as Error;
+  }
+  throw new Error(`expected an error for: ${code}`);
+}
+
+describe("Resolver error carets underline the offending name", () => {
+  const cases: [string, string, number, string][] = [
+    ["a name at the start of a line", "equal", 3, "equal"],
+    ["a name inside a call", "x = 1\nprint(equal)", 3, "equal"],
+    ["a name at the start of a call", "equal(1, 2)", 3, "equal"],
+    ["an indented name", "def f():\n    return foo", 3, "foo"],
+    ["a name on a later line", "x = 1\ny = 2\nz = 3 + unknown_name", 3, "unknown_name"],
+    ["a reassigned variable", "x = 1\nx = 2", 1, "x"],
+    ["a reassigned function name", "def f(x):\n    return 1\ndef f(y):\n    return 2", 1, "f"],
+    ["a reassigned name inside a function", "def f():\n    y = 1\n    y = 2", 1, "y"],
+  ];
+
+  test.each(cases)("%s", (_label, code, chapter, name) => {
+    const error = resolveError(code, chapter);
+    const { sourceLine, caretColumn, carets } = underlinedText(error);
+    // The carets start exactly under the (last) occurrence of the name on the echoed line, and are
+    // as long as it.
+    expect(caretColumn).toBe(sourceLine.lastIndexOf(name));
+    expect(carets).toBe("^".repeat(name.length));
+  });
+
+  test("the suggestion line is aligned with the message text", () => {
+    const error = resolveError("x = 1\nprint(equal)", 3);
+    const lines = error.message.split("\n");
+    expect(lines[4].indexOf("Perhaps")).toBe(lines[3].indexOf("This name"));
+  });
+
+  test("scope-conflict errors underline the name too", () => {
+    const error = resolveError(
+      "def f():\n    x = 1\n    def g():\n        global x\n        nonlocal x\n",
+      3,
+    );
+    const { sourceLine, caretColumn, carets } = underlinedText(error);
+    expect(caretColumn).toBe(sourceLine.lastIndexOf("x"));
+    expect(carets).toBe("^");
+  });
+});
