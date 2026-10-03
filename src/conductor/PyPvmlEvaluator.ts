@@ -8,6 +8,7 @@ import { PVMLBoxType } from "../engines/pvml/types";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import dataVisualizer from "../stdlib/dataVisualizer";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -218,19 +219,28 @@ export class PyPvmlEvaluator1 extends PyPvmlEvaluatorBase {
 
 export class PyPvmlEvaluator2 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList]);
+    super(conductor, 2, [misc, math, linkedList, dataVisualizer]);
   }
 }
 
 export class PyPvmlEvaluator3 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream, dataVisualizer]);
   }
 }
 
 export class PyPvmlEvaluator4 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+    super(conductor, 4, [
+      misc,
+      math,
+      linkedList,
+      list,
+      pairmutator,
+      stream,
+      parser,
+      dataVisualizer,
+    ]);
   }
 }
 
