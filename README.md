@@ -120,13 +120,7 @@ yarn repl <path to python file> --engine pynter --pynter ../pynter/build/runner/
 
 The bytecode format itself — currently identical to SVML, the format [Sinter](https://github.com/source-academy/sinter) executes — is documented in the [py-slang wiki](https://github.com/source-academy/py-slang/wiki), forked from the [js-slang SVML wiki](https://github.com/source-academy/js-slang/wiki/SVML-Specification) so it can be edited to describe PVML (py-slang's own bytecode target) without touching the canonical SVML docs. See [PVML-Specification](https://github.com/source-academy/py-slang/wiki/PVML-Specification) for the wire format and [PVML-Instruction-Set](https://github.com/source-academy/py-slang/wiki/PVML-Instruction-Set) for the opcode reference — the latter also documents a known mismatch between py-slang's primitive-function index table and the one built into Sinter/Pynter today.
 
-#### Tail-call optimization
-
-Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
-
-### Headless runs: design decisions
-
-"Headless" means running a program without a Source Academy frontend attached: the standalone CLI above (all five engines) and the library runners (`runCode`, `runCodePvmlInterpreter`, `runCodePvml`, `runCodePy2Js`). There is no Conductor host, so no data visualizer, no module loader and no interactive input.
+**Headless design decisions.** "Headless" means running a program without a Source Academy frontend attached: the standalone CLI above (all five engines) and the library runners (`runCode`, `runCodePvmlInterpreter`, `runCodePvml`, `runCodePy2Js`). There is no Conductor host, so no data visualizer, no module loader and no interactive input.
 
 The guiding rule: **a program that runs in the browser should also run headless and print the same output**, so functions that exist only to talk to the user interface degrade gracefully instead of being undefined or failing. Where that is impossible, the function is documented here as unsupported.
 
@@ -145,6 +139,10 @@ Where this lives in the code:
 - `VARIANT_GROUPS` (`src/runner.ts`), which the CLI and the PVML runners default to, includes the `dataVisualizer` group from §2, mirroring `PyCseEvaluator2..4`. The `dataVisualizer` builtin only calls the visualizer when one is attached (`context.dataVisualizer`).
 - The PVML primitives are numbered to match native Pynter's `sivmfn_primitives[]` table: `draw_data` is Pynter's own slot 6, and `breakpoint`, `set_timeout` and `clear_all_timeout` are slots 132-134 (`PRIMITIVE_FUNCTIONS` in `src/engines/pvml/builtins.ts`). Changing one side means changing the other.
 - `src/tests/headless-draw-data.test.ts` and `src/tests/dataVisualizer.test.ts` pin these behaviors; the latter also runs on native Pynter when `PYNTER_RUNNER_PATH` is set.
+
+#### Tail-call optimization
+
+Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
 
 ### Running the test suite
 
