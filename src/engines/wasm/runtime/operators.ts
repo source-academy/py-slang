@@ -71,6 +71,16 @@ export const NEG_FX = wasm
     wasm.unreachable(),
   );
 
+/**
+ * Raises ZeroDivisionError from inside generated wasm: log the error by its static index, then trap.
+ * Used by true division (`/`), the only arithmetic operator not delegated to the host helper
+ * `arith.ext`, which does the equivalent check for `//`, `%` and `**` (see hostImports.ts).
+ */
+const raiseZeroDivision = (): WasmInstruction[] => [
+  wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ZERO_DIVISION))),
+  wasm.unreachable(),
+];
+
 export const ARITHMETIC_OP_TAG = {
   ADD: 0,
   SUB: 1,
@@ -283,16 +293,19 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(
             wasm.call(MAKE_INT_FX).args(i64.mul(local.get("$x_val"), local.get("$y_val"))),
           ),
-          wasm.return(
-            wasm
-              .call(MAKE_FLOAT_FX)
-              .args(
-                f64.div(
-                  f64.convert_i64_s(local.get("$x_val")),
-                  f64.convert_i64_s(local.get("$y_val")),
+          [
+            wasm.if(i64.eqz(local.get("$y_val"))).then(...raiseZeroDivision()),
+            wasm.return(
+              wasm
+                .call(MAKE_FLOAT_FX)
+                .args(
+                  f64.div(
+                    f64.convert_i64_s(local.get("$x_val")),
+                    f64.convert_i64_s(local.get("$y_val")),
+                  ),
                 ),
-              ),
-          ),
+            ),
+          ],
         ),
       ),
 
@@ -327,7 +340,10 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.add(local.get("$a"), local.get("$c")))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.sub(local.get("$a"), local.get("$c")))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.mul(local.get("$a"), local.get("$c")))),
-          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c")))),
+          [
+            wasm.if(f64.eq(local.get("$c"), f64.const(0))).then(...raiseZeroDivision()),
+            wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c")))),
+          ],
         ),
       ),
 
@@ -411,6 +427,10 @@ export const ARITHMETIC_OP_FX = wasm
       ),
       // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
       [
+        // test the components, not the denominator: c*c + d*d underflows to 0 for tiny nonzero c, d
+        wasm
+          .if(i32.and(f64.eq(local.get("$c"), f64.const(0)), f64.eq(local.get("$d"), f64.const(0))))
+          .then(...raiseZeroDivision()),
         local.set(
           "$denom",
           f64.add(

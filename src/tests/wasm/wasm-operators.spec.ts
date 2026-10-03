@@ -67,6 +67,59 @@ describe("Named error messages", () => {
   });
 });
 
+// True division by zero must raise ZeroDivisionError for every numeric operand type, as `//`, `%`
+// and `**` do and as every other engine does (py-slang#493): int/int and float/float compile to
+// inline f64.div, int/float mixes convert first, and complex division has its own formula.
+describe("True division by zero", () => {
+  it.each([
+    ["int / int", "1 / 0"],
+    ["int zero numerator", "0 / 0"],
+    ["float / int", "1.5 / 0"],
+    ["int / float", "1 / 0.0"],
+    ["float / float", "1.5 / 0.0"],
+    ["a negative zero divisor", "1.5 / -0.0"],
+    ["complex / int", "(1+2j) / 0"],
+    ["complex / float", "(1+2j) / 0.0"],
+    ["complex / complex zero", "(1+2j) / (0+0j)"],
+    ["int / complex zero", "1 / (0+0j)"],
+    ["a computed zero divisor", "x = 3 - 3\n1 / x"],
+  ])("%s raises ZeroDivisionError", async (_label, code) => {
+    await expect(compileToWasmAndRun(code, true)).rejects.toThrow(
+      new Error(ERROR_MAP.ZERO_DIVISION),
+    );
+  });
+
+  it("is also reported (with the prints before it) in file mode", async () => {
+    const result = await compileToWasmAndRun("print(1)\nprint(2)\nprint(1 / 0)\n", false);
+    expect(result.prints).toEqual(["1", "2"]);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe(ERROR_MAP.ZERO_DIVISION);
+  });
+
+  // Compared as numbers: wasm renders a whole-number float without its ".0" ("6" for 6.0), a
+  // separate print-formatting problem (#332) these tests shouldn't pin down either way.
+  it.each([
+    ["int / int", "7 / 2", 3.5],
+    ["float / int", "1.5 / 2", 0.75],
+    ["int / float", "3 / 0.5", 6],
+    ["a zero numerator", "0 / 5", 0],
+    ["a negative divisor", "7 / -2", -3.5],
+  ])("still divides by a non-zero value: %s", async (_label, code, expected) => {
+    const { renderedResult } = await compileToWasmAndRun(code, true);
+    expect(Number(renderedResult)).toBe(expected);
+  });
+
+  it("still divides complex numbers by a non-zero complex number", async () => {
+    const { renderedResult } = await compileToWasmAndRun("(4+2j) / (1+1j)", true);
+    expect(renderedResult).toBe("3 - 1j");
+  });
+
+  it("does not mistake a tiny non-zero complex divisor for zero", async () => {
+    const { renderedResult } = await compileToWasmAndRun("(1+0j) / (1e-200+0j)", true);
+    expect(renderedResult).not.toMatch(/ZeroDivision/);
+  });
+});
+
 // `and`/`or`'s *left* operand, and `not`'s sole operand, must be an actual
 // bool -- see docs/specs/python_typing_back.tex: `and`/`or` are typed
 // `bool, any -> any` (only the *right* operand of `and`/`or` is `any`), and
