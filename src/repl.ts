@@ -130,7 +130,8 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
     const partial = (e as { output?: unknown })?.output;
     if (typeof partial === "string") process.stdout.write(partial);
     process.stderr.write((e instanceof Error ? e.message : String(e)) + "\n");
-    process.exit(1);
+    // Not process.exit(): it can truncate pending piped stdout, i.e. the partial output above.
+    process.exitCode = 1;
   }
 }
 
