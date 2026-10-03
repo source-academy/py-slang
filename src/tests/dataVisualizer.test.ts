@@ -38,6 +38,14 @@ describe("Data Visualizer Tests", () => {
       ["clear_all_timeout()\n1", 1n, null],
       ["set_timeout(lambda: print(2), 10)\nprint(1)", null, ["1"]],
     ],
+    // They still check their arity (set_timeout takes exactly 2 arguments, clear_all_timeout none),
+    // like the CSE machine and py2js do.
+    "no-op functions check their arity": [
+      ["set_timeout()", MissingRequiredPositionalError, null],
+      ["set_timeout(lambda: 1)", MissingRequiredPositionalError, null],
+      ["set_timeout(lambda: 1, 10, 20)", MissingRequiredPositionalError, null],
+      ["clear_all_timeout(1)", MissingRequiredPositionalError, null],
+    ],
   };
   generatePvmlInBrowserTestCases(noopTests, 3);
   generateNativePynterTestCases(noopTests, 3);

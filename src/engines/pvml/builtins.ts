@@ -1325,8 +1325,21 @@ export function executePrimitive(
       return Date.now() / 1000;
 
     case 132: // breakpoint — a no-op without a debugger attached.
-    case 133: // set_timeout — a no-op: there is no event loop here to run the callback on.
-    case 134: // clear_all_timeout — nothing is ever scheduled, so nothing to clear.
+      return undefined;
+
+    case 133: // set_timeout — a no-op: there is no event loop here to run the callback on. Still
+      // checks its arity (exactly 2, like CSE's and py2js's), so a malformed call fails the same way.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError(
+          `set_timeout() takes exactly 2 arguments (${args.length} given)`,
+        );
+      return undefined;
+
+    case 134: // clear_all_timeout — nothing is ever scheduled, so nothing to clear. Exactly 0 arguments.
+      if (args.length !== 0)
+        throw new MissingRequiredPositionalError(
+          `clear_all_timeout() takes exactly 0 arguments (${args.length} given)`,
+        );
       return undefined;
 
     case 6: // draw_data — there is no drawing canvas; the identity on its first argument.
