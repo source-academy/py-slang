@@ -1,3 +1,5 @@
+import { Ev3Evaluator } from "../conductor/Ev3Evaluator";
+import { EV3Engine } from "../engines/ev3";
 import { compileScriptToWasmBinary } from "../engines/wasm/compiler";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
@@ -95,6 +97,35 @@ describe("range is reserved in chapters 3 and 4", () => {
         const script = code + "\n";
         const { errors } = analyzeWithEnvironments(parse(script), script, chapter, [misc, math]);
         expect(errors[0]).toBeInstanceOf(ResolverErrors.ReservedNameError);
+      });
+    });
+
+    // EV3 compilation paths: they build their own Resolver (they compile as Python §3 regardless of
+    // a chapter setting), so they need the §3 validators passed explicitly.
+    describe("EV3", () => {
+      test.each(REDECLARATIONS)("EV3Engine rejects %s", async (_label, code) => {
+        const result = await new EV3Engine().execute(code + "\n");
+        expect(result.status).toBe("error");
+        expect(result).toHaveProperty("error", expect.stringContaining("'range' is reserved"));
+      });
+
+      test.each(REDECLARATIONS)("Ev3Evaluator rejects %s", async (_label, code) => {
+        const errors: { message: string }[] = [];
+        const conductor = {
+          sendError: (error: { message: string }) => errors.push(error),
+          sendResult: () => undefined,
+          sendOutput: () => undefined,
+          hostLoadPlugin: () => undefined,
+          registerPlugin: () => ({}),
+        };
+        await new Ev3Evaluator(conductor as never).evaluateChunk(code);
+        expect(errors).toHaveLength(1);
+        expect(errors[0].message).toContain("'range' is reserved");
+      });
+
+      test("EV3Engine still compiles a for-loop over range", async () => {
+        const result = await new EV3Engine().execute("for i in range(3):\n    pass\n");
+        expect(result.status).toBe("finished");
       });
     });
 
