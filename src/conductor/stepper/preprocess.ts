@@ -65,9 +65,16 @@ export function findUnsupportedOperator(program: StepNode): string | null {
 }
 
 /**
+ * The highest SICPy chapter the stepper supports. The substitution model explains programs with no
+ * mutation and no loops, which is exactly Python §1 and §2: chapter 3 adds assignment, loops and
+ * lists, none of which it can step.
+ */
+export const MAX_STEPPER_CHAPTER = 2;
+
+/**
  * The stepper's preprocessing pass for a parsed Python program: returns an error message if it must
  * not run — an unsupported operator (`is`/`is not`/`in`/`not in`), an undefined name, or a feature the
- * selected chapter forbids — or `null` if it is clear to step. `source` is the program text (needed by
+ * selected chapter forbids, or a chapter above §2, which has no stepper — or `null` if it is clear to step. `source` is the program text (needed by
  * the analyzer for diagnostics); `chapter` is the selected SICPy sublanguage (1–4), which both gates
  * the available built-ins and selects the feature validators, so e.g. a §2 list-library name used in a
  * §1 program does not resolve and is reported as a `NameNotFoundError`.
@@ -82,6 +89,13 @@ export function preprocessPython(
   source: string,
   chapter: number,
 ): string | null {
+  // The stepper only exists for Python §1 and §2. No stepper evaluator is built for a higher chapter,
+  // but this is the one place every caller goes through, so refuse it here rather than validating a
+  // chapter-3/4 program (reassignment, loops, lists, ...) as though it could be stepped.
+  if (chapter > MAX_STEPPER_CHAPTER) {
+    return `The stepper is only available in Python §1 and §2, not Python §${chapter}.`;
+  }
+
   // Stepper-specific: reject identity/membership operators the substitution model cannot represent.
   // Run first so this construct is reported regardless of its operands' definedness.
   const operator = findUnsupportedOperator(translateProgram(fileInput));
