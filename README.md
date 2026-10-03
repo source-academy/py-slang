@@ -142,7 +142,7 @@ Where this lives in the code:
 
 #### Proper tail calls
 
-Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
+Both the CSE machine and the PVML compiler implement proper tail-calls: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
 
 ### Running the test suite
 
