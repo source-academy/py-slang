@@ -353,6 +353,14 @@ describe("Resolver error carets underline the offending name", () => {
     ["a reassigned variable", "x = 1\nx = 2", 1, "x"],
     ["a reassigned function name", "def f(x):\n    return 1\ndef f(y):\n    return 2", 1, "f"],
     ["a reassigned name inside a function", "def f():\n    y = 1\n    y = 2", 1, "y"],
+    ["a reserved name", "range = 5", 3, "range"],
+    [
+      "a reserved name after other code",
+      "x = 1\nprint(x)\ndef range(n):\n    return n",
+      3,
+      "range",
+    ],
+    ["a reserved parameter", "def f(a, range):\n    return a", 3, "range"],
   ];
 
   test.each(cases)("%s", (_label, code, chapter, name) => {

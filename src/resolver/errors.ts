@@ -83,11 +83,12 @@ export namespace ResolverErrors {
       start: number,
       current: number,
     ) {
-      const { lineIndex, fullLine } = getFullLine(source, start);
-      let hint = ` '${name}' is reserved and cannot be redefined.`;
-      const diff = current - start;
-      hint = hint.padStart(hint.length + diff - MAGIC_OFFSET + 1, "^");
-      hint = hint.padStart(hint.length + col - diff, " ");
+      const { lineIndex, fullLine, hint } = underline(
+        source,
+        start,
+        current,
+        `'${name}' is reserved and cannot be redefined.`,
+      );
       const errorName = "SyntaxError";
       super(errorName, "\n" + fullLine + "\n" + hint, lineIndex, col);
       this.name = errorName;
