@@ -215,6 +215,13 @@ describe("str() and repr()", () => {
     expect(renderedResult).toBe(expected);
   };
 
+  const expectRenderedWithPairs = async (pythonCode: string, expected: string) => {
+    const { renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
+    expect(renderedResult).toBe(expected);
+  };
+
   it("str() formats each type the same way print() does", async () => {
     await expectRendered(`str(5)`, "5");
     await expectRendered(`str(5.0)`, "5.0");
@@ -233,6 +240,23 @@ describe("str() and repr()", () => {
 
   it("repr() prefers single quotes, switching to double quotes when the string contains one", async () => {
     await expectRendered(`repr("it's")`, `"it's"`);
+  });
+
+  it("strings inside a collection are quoted, for str(), repr() and print() alike", async () => {
+    // CSE: str(pair("hi", 2)) == "['hi', 2]" -- elements always show with repr quoting.
+    await expectRenderedWithPairs(`str(pair("hi", 2))`, "['hi', 2]");
+    await expectRenderedWithPairs(`repr(pair("hi", 2))`, "['hi', 2]");
+    await expectRenderedWithPairs(`pair("hi", 2)`, "['hi', 2]");
+    await expectRenderedWithPairs(`repr(pair("it's", pair("x", None)))`, `["it's", ['x', None]]`);
+    await expectRenderedWithPairs(`str(pair(1, 2.0))`, "[1, 2.0]");
+  });
+
+  it("complex numbers render like CSE: (3+4j), or 4j when the real part is zero", async () => {
+    await expectRendered(`str(3+4j)`, "(3+4j)");
+    await expectRendered(`repr(3-4j)`, "(3-4j)");
+    await expectRendered(`str(4j)`, "4j");
+    await expectRendered(`3+4j`, "(3+4j)");
+    await expectRenderedWithPairs(`str(pair(1+2j, 1))`, "[(1+2j), 1]");
   });
 
   it("str()/repr() results can be concatenated with other strings", async () => {

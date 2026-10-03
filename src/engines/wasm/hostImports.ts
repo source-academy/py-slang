@@ -88,8 +88,9 @@ export function createHostImports(
     console: {
       log_int: (value: bigint) => capture(value.toString()),
       log_float: (value: number) => capture(toPythonFloat(value)),
+      // Same text as CSE: `(3+4j)`, or `4j` when the real part is zero.
       log_complex: (real: number, imag: number) =>
-        capture(real === 0 ? `${imag}j` : `${real} ${imag >= 0 ? "+" : "-"} ${Math.abs(imag)}j`),
+        capture(new PyComplexNumber(real, imag).toString()),
       log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
       log_string: (offset: number, length: number) =>
         capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
@@ -116,7 +117,9 @@ export function createHostImports(
           if (renderedItem === undefined) {
             throw new Error("List item logging did not produce a rendered value");
           }
-          renderedItems.push(renderedItem);
+          // Elements are shown with repr semantics (`['hi', 2]`), as in CSE, for print, str
+          // and repr alike; nested lists recurse through this same function.
+          renderedItems.push(itemTag === TYPE_TAG.STRING ? escape(renderedItem) : renderedItem);
         }
 
         capture(`[${renderedItems.join(", ")}]`);
