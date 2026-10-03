@@ -453,6 +453,33 @@ describe("Python stepper — undefined variables are a preprocessing error", () 
   });
 });
 
+describe("Python stepper — only Python §1 and §2 have a stepper", () => {
+  test.each([3, 4])("chapter %i is rejected, whatever the program", chapter => {
+    const message = `The stepper is only available in Python §1 and §2, not Python §${chapter}.`;
+    expect(preprocess("1 + 2", chapter)).toBe(message);
+    // Programs the §3/§4 sublanguage allows but the substitution model cannot step.
+    expect(preprocess("x = 1\nx = 2", chapter)).toBe(message);
+    expect(preprocess("for i in range(3):\n    pass", chapter)).toBe(message);
+    expect(preprocess("def f(*args):\n    return args\nf(1)", chapter)).toBe(message);
+  });
+
+  test("Full Python (an unbounded variant) is rejected too", () => {
+    expect(preprocess("1 + 2", Infinity)).toBe(
+      "The stepper is only available in Python §1 and §2, not Python §Infinity.",
+    );
+  });
+
+  test("the guard comes first, so a chapter above §2 reports it even with an undefined name", () => {
+    expect(preprocess("undefined_name", 3)).toBe(
+      "The stepper is only available in Python §1 and §2, not Python §3.",
+    );
+  });
+
+  test.each([1, 2])("chapter %i is still allowed", chapter => {
+    expect(preprocess("1 + 2", chapter)).toBeNull();
+  });
+});
+
 describe("Python stepper — Python §2 features are unavailable in Python §1 (chapter gating)", () => {
   // The stepper is a teaching tool: a student on the Python §1 sublanguage must not reach §2 features
   // (the pair / linked-list library) before they are taught. A §2 name used in a §1 program resolves

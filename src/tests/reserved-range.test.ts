@@ -4,7 +4,6 @@ import { compileScriptToWasmBinary } from "../engines/wasm/compiler";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
 import { ResolverErrors } from "../resolver/errors";
-import { preprocessPython } from "../conductor/stepper/preprocess";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import {
@@ -79,14 +78,6 @@ describe("range is reserved in chapters 3 and 4", () => {
           expect(harness.errors).toEqual([]);
           expect(harness.outputs.join("")).toContain("2");
         });
-      });
-    });
-
-    // Substitution stepper.
-    describe.each([3, 4])("stepper, chapter %i", chapter => {
-      test.each(REDECLARATIONS)("rejects %s", (_label, code) => {
-        const script = code + "\n";
-        expect(preprocessPython(parse(script), script, chapter)).toContain("'range' is reserved");
       });
     });
 
