@@ -147,6 +147,55 @@ describe("py2js dual mode (a program that imports a module)", () => {
   });
 });
 
+describe("py2js rest functions called back by a module", () => {
+  // A module invokes a Python callback through the data handler's checked closure_call, which
+  // rejects surplus arguments unless the closure was registered vararg (as CSE and PVML do).
+  async function callbackProgram(engine: EvaluatorEngine, call: number[], def: string) {
+    const harness = makeEvaluatorTestHarness(engine, 3);
+    const dh = harness.dataHandler;
+    const num = (value: number): TypedValue<DataType.NUMBER> => ({ type: DataType.NUMBER, value });
+    const callWith = await dh.closure_make(
+      { returnType: DataType.ANY, args: [DataType.CLOSURE] },
+      async function* (f: TypedValue<DataType.CLOSURE>) {
+        return yield* dh.closure_call(f, call.map(num), DataType.ANY);
+      },
+    );
+    harness.installModule("m", [{ symbol: "call_with", value: callWith }]);
+    await harness.evaluate(`from m import call_with\n${def}\nprint(call_with(f))\n`);
+    return {
+      errors: harness.errors.map(e => e.message),
+      output: harness.outputs.flatMap(c => c.replace(/\n$/, "").split("\n")),
+    };
+  }
+
+  test.each<EvaluatorEngine>(["pycse", "py2js"])(
+    "%s: the module can pass more arguments than the fixed parameters",
+    async engine => {
+      const result = await callbackProgram(
+        engine,
+        [1, 2, 3],
+        "def f(a, *rest):\n    return a + len(rest)",
+      );
+      expect(result.errors).toEqual([]);
+      expect(result.output).toEqual(["3.0"]);
+    },
+  );
+
+  test.each<EvaluatorEngine>(["pycse", "py2js"])(
+    "%s: a rest function with no fixed parameters collects every argument",
+    async engine => {
+      const result = await callbackProgram(engine, [4, 5], "def f(*all):\n    return len(all)");
+      expect(result.errors).toEqual([]);
+      expect(result.output).toEqual(["2.0"]);
+    },
+  );
+
+  test("py2js: too few arguments from the module is still an arity error", async () => {
+    const result = await callbackProgram("py2js", [], "def f(a, *rest):\n    return a");
+    expect(result.errors).toHaveLength(1);
+  });
+});
+
 describe("py2js error wording", () => {
   test("too few arguments names the lower bound", async () => {
     const result = await run("py2js", 3, "def f(a, b, *r):\n    return a\nf(1)");

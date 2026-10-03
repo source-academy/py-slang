@@ -60,6 +60,7 @@
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../../ast-types";
+import { GenericDataHandler } from "../../conductor/GenericDataHandler";
 import {
   isPairShaped,
   isProperList,
@@ -140,7 +141,9 @@ function flattenProperList(value: PyValue[]): PyValue[] {
  * receiving it. Mirrors pythonToModule in src/engines/cse/modules.ts. */
 export async function pythonToModule(
   rt: Py2JsRuntime,
-  dh: IDataHandler,
+  // Not the bare `IDataHandler`: `closure_make`'s `isVararg` argument (needed for a rest function)
+  // is a `GenericDataHandler` extension, which the engine always supplies.
+  dh: GenericDataHandler,
   value: PyValue,
 ): Promise<TypedValue<DataType>> {
   switch (typeof value) {
@@ -222,11 +225,16 @@ export async function pythonToModule(
         }
         return converted;
       };
-      // A variadic function (`def f(a, *rest)`) crosses with just its fixed parameters.
+      // A variadic function (`def f(a, *rest)`) crosses with just its fixed parameters, flagged
+      // vararg so that the declared arity is only a minimum: without the flag the checked
+      // `closure_call` rejects any surplus argument before `pyClosureFunc` can collect it into the
+      // rest list. The CSE and PVML bridges do the same.
       const arity = fn.pyRest ? (fn.pyMinArgs ?? 0) : Math.max(0, fn.pyArity);
       return dh.closure_make(
         { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
         pyClosureFunc,
+        undefined,
+        fn.pyRest === true,
       );
     }
     case "object":
@@ -307,7 +315,7 @@ async function readCompoundElements(
  */
 export async function moduleToPython(
   rt: Py2JsRuntime,
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   value: TypedValue<DataType>,
   name = "<module function>",
 ): Promise<PyValue> {
@@ -451,7 +459,7 @@ export function hasImports(statements: StmtNS.Stmt[]): boolean {
  */
 export async function loadChunkImports(
   rt: Py2JsRuntime,
-  dh: IDataHandler,
+  dh: GenericDataHandler,
   statements: StmtNS.Stmt[],
 ): Promise<Record<string, PyValue>> {
   const imports = statements.filter((s): s is StmtNS.FromImport => s.kind === "FromImport");
