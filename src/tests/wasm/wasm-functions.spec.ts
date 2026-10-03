@@ -111,8 +111,13 @@ def f(x):
     return x
 f(5)
 `;
+    // The parameter/nonlocal conflict (#179) — this was incidentally also collecting a
+    // NameNotFoundError before #187's fix, since `x` (already invalid as a parameter declared
+    // nonlocal) also has no enclosing-scope binding to resolve to; that fallback is now the more
+    // specific ScopeConflictError ("no binding for nonlocal 'x' found", matching CPython's own
+    // wording), not a NameNotFoundError.
     expect((await compileToWasmAndRun(pythonCode, true)).errors).toContainEqual(
-      expect.any(ResolverErrors.NameNotFoundError),
+      expect.any(ResolverErrors.ScopeConflictError),
     );
   });
 

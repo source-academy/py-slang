@@ -1,0 +1,11 @@
+The functions in STREAM provide useful functions for stream processing,
+as introduced on
+<a href="https://sourceacademy.org/sicpy/3.5">section
+3.5 Stream Processing</a>
+of the textbook
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
+
+On the right, you see all predeclared STREAM functions,
+in alphabetical
+order. Click on a name to see how it is defined and used.

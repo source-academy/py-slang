@@ -167,6 +167,8 @@ export class PVMLInterpreter {
    * so an extern call reaching it throws; and plain `execute()` refuses
    * extern calls up front via `allowExtern`). */
   private pendingExtern?: { extern: PVMLExtern; args: PVMLBoxType[] };
+  private currentCallLocation?: { start: number; end: number };
+  private readonly onCallLocation?: (start: number, end: number) => void;
   /** True only while `executeAsync`'s driver loop is running — the only
    * context able to await a pendingExtern. See PVMLExtern's doc comment. */
   private allowExtern = false;
@@ -196,6 +198,8 @@ export class PVMLInterpreter {
       programText?: string;
       /** The chapter `program` was compiled for — see `variant` above. */
       variant?: number;
+      /** Receives a source span immediately before a dynamic call dispatch. */
+      onCallLocation?: (start: number, end: number) => void;
       /**
        * Set only when `program` was compiled with `targetsPynter: true` (see
        * PVMLCompiler's `targetsPynter` field doc) — e.g. via the assembler's
@@ -225,6 +229,7 @@ export class PVMLInterpreter {
     }
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
+    this.onCallLocation = options?.onCallLocation;
     this.legacyArraySemantics = options?.legacyArraySemantics ?? false;
 
     if (options) {
@@ -365,6 +370,7 @@ export class PVMLInterpreter {
     const op = ir.opcodes[pc];
     const a1 = ir.arg1s[pc];
     const a2 = ir.arg2s[pc];
+    this.currentCallLocation = ir.callLocations[pc];
 
     if (__DEBUG__)
       debug(
@@ -1608,6 +1614,9 @@ export class PVMLInterpreter {
     // have pushed it (tail calls included — the compiler's trailing RETG
     // returns it, same as for a tail-called primitive).
     if (isPVMLObject(func) && func.type === "extern") {
+      if (this.currentCallLocation) {
+        this.onCallLocation?.(this.currentCallLocation.start, this.currentCallLocation.end);
+      }
       if (!this.allowExtern) {
         throw new PVMLInterpreterError(
           `RuntimeError: imported module function '${func.name}' can only be called under ` +

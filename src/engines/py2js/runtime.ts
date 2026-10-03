@@ -51,11 +51,11 @@
  * through callSync — see compiler.ts's mode documentation.
  */
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
-import { numericCompare, pythonMod } from "../cse/utils";
-import type { Value } from "../cse/stash";
 import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 import { stringify } from "../../utils/stringify";
+import type { ListValue, Value } from "../cse/stash";
+import { numericCompare, pythonMod } from "../cse/utils";
 
 export type PyValue =
   | bigint
@@ -97,12 +97,36 @@ export interface PyFunction {
   pyArity: number;
   pyBuiltin?: boolean;
   /**
+   * True for a function compiled from a stdlib group's own SICPy prelude
+   * source (e.g. linked-list.prelude.ts's map/filter/reduce), set by `def`
+   * while `compilingPrelude` is on — see that field and
+   * `enclosingPreludeFunction` (py-slang#397). Unset for both native/bridged
+   * builtins and the user's own compiled functions.
+   */
+  pyPrelude?: boolean;
+  /**
+   * True for a native/bridged builtin (set by `builtin()` and
+   * `bridgeBuiltin`) — a leaf operation that is never itself "user code" or
+   * "library code" and so, unlike pyPrelude/plain user functions, must not
+   * become its own boundary when computing `enclosingPreludeFunction`
+   * (py-slang#397): it transparently passes its caller's origin through
+   * rather than resetting or claiming it.
+   */
+  pyNative?: boolean;
+  /**
    * For bridged stdlib builtins: the CSE-side minArgs, reported by the
    * native arity() builtin so both engines answer arity questions
    * identically (bridged functions run with pyArity -1, leaving argument
    * count validation to the stdlib's own @Validate wrappers).
    */
   pyMinArgs?: number;
+  /**
+   * True for a compiled `def`/`lambda` whose last parameter is a rest parameter (`*args`), which
+   * collects every surplus argument into a list. Such a function has `pyArity` -1 (any number of
+   * arguments may be passed) and `pyMinArgs` set to its number of fixed parameters, which both
+   * `arity()` reports and `checkCallable` enforces as a lower bound.
+   */
+  pyRest?: boolean;
   /**
    * Dual compilation: the async twin of this (sync) body, sharing the same
    * closure environment. Present on every user function compiled in dual
@@ -183,11 +207,33 @@ export function pyTypeName(v: PyValue, sayPair = false): string {
   }
 }
 
-function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): never {
+/**
+ * Prefixes `detail` with "in predefined function 'X': " when `enclosing` is set — the
+ * predefined (prelude) function whose own code is what tripped over a bad argument
+ * (py-slang#397), e.g. llist_ref(xs, False) fails because llist_ref's own `n == 0`
+ * comparison rejects a bool, not because of anything in a callback the student wrote.
+ * A free function, not a Py2JsRuntime method, since operator-error call sites like
+ * pyEquals/pyOrder/complexBinop below have no `this` to call enclosingPreludeFunction
+ * on themselves — their caller (binop, a method) computes it once and passes it down.
+ */
+function withEnclosingPredefinedFunction(detail: string, enclosing: string | undefined): string {
+  return enclosing ? `in predefined function '${enclosing}': ${detail}` : detail;
+}
+
+function unsupported(
+  op: string,
+  l: PyValue,
+  r?: PyValue,
+  sayPair = false,
+  enclosing?: string,
+): never {
   const rhs = r === undefined ? "" : ` and '${pyTypeName(r, sayPair)}'`;
   throw new Py2JsRuntimeError(
     "UnsupportedOperandTypeError",
-    `unsupported operand type(s) for ${op}: '${pyTypeName(l, sayPair)}'${rhs}`,
+    withEnclosingPredefinedFunction(
+      `unsupported operand type(s) for ${op}: '${pyTypeName(l, sayPair)}'${rhs}`,
+      enclosing,
+    ),
   );
 }
 
@@ -198,8 +244,18 @@ function unsupported(op: string, l: PyValue, r?: PyValue, sayPair = false): neve
  * structured print — by reusing the actual algorithm, not a second
  * hand-written copy that could quietly drift. Only reached for pairs (and
  * whatever they contain); every other pyStr case keeps its own fast path.
+ *
+ * `memo` maps a PyList already being converted to its (still being filled
+ * in) ListValue, keyed by identity and populated *before* recursing into the
+ * list's elements — a chapter-3 `a[0] = a` self-reference is a real cyclic
+ * JS array, and without this a naive `v.map(toDisplayValue)` recurses
+ * forever (issue #341). Populating the memo before descending means a
+ * PyList reachable from itself converts to a ListValue reachable from
+ * itself — the same cyclic-graph shape stringify.ts's own ancestor
+ * tracking already knows how to render (as CPython does) without
+ * stringify needing to know anything py2js-specific.
  */
-function toDisplayValue(v: PyValue): Value {
+function toDisplayValue(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
   if (v === null) return { type: "none" };
   switch (typeof v) {
     case "bigint":
@@ -218,7 +274,12 @@ function toDisplayValue(v: PyValue): Value {
       ) as Value;
     default:
       if (Array.isArray(v)) {
-        return { type: "list", value: v.map(toDisplayValue) };
+        const memoized = memo.get(v);
+        if (memoized !== undefined) return memoized;
+        const listValue: ListValue = { type: "list", value: [] };
+        memo.set(v, listValue);
+        listValue.value = v.map(elem => toDisplayValue(elem, memo));
+        return listValue;
       }
       // stringify()'s convert() has no dedicated "opaque" case — it falls to
       // the generic `<${type} object>` fallback, matching pyStr's own
@@ -268,7 +329,7 @@ export const isPairShaped = (v: PyValue): v is [PyValue, PyValue] =>
  * recursive: JS engines don't guarantee TCO, so a long list would otherwise
  * risk a stack overflow — the same failure mode printLlist's own outer
  * list-walking `while` loop below already avoids. */
-function isProperList(v: PyValue): boolean {
+export function isProperList(v: PyValue): boolean {
   let current = v;
   while (isPairShaped(current)) {
     current = current[1];
@@ -338,12 +399,12 @@ function isNaNValue(v: PyValue): boolean {
  * threading in src/engines/cse/operators.ts, re-checked at every level of
  * list/pair recursion, not just the top level.
  */
-function pyEquals(l: PyValue, r: PyValue, restrict: boolean): boolean {
+function pyEquals(l: PyValue, r: PyValue, restrict: boolean, enclosing?: string): boolean {
   if (restrict && (typeof l === "boolean" || typeof l === "function")) {
-    unsupported("==", l, r, restrict);
+    unsupported("==", l, r, restrict, enclosing);
   }
   if (restrict && (typeof r === "boolean" || typeof r === "function")) {
-    unsupported("==", l, r, restrict);
+    unsupported("==", l, r, restrict, enclosing);
   }
   // At chapter 3+, booleans compare as the ints they are (True == 1, False ==
   // 0.0) — mirrors asIntIfBool's use in CSE's structuralEquals. At chapter
@@ -400,7 +461,13 @@ function pyIdentical(l: PyValue, r: PyValue): boolean {
  * asIntIfBool's use in evaluateBinaryExpression). NaN is unordered: every
  * comparison is False.
  */
-function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolean {
+function pyOrder(
+  op: string,
+  l: PyValue,
+  r: PyValue,
+  universal: boolean,
+  enclosing?: string,
+): boolean {
   // Gated on both operands already being bool-or-numeric — as in CSE — so an
   // unsupported comparison against some other type (e.g. `True < 'abc'`)
   // still reports 'bool', not 'int', in its error message below.
@@ -421,7 +488,7 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
         return l >= r;
     }
   }
-  if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal);
+  if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal, enclosing);
   if ((typeof l === "number" && Number.isNaN(l)) || (typeof r === "number" && Number.isNaN(r))) {
     return false;
   }
@@ -438,8 +505,15 @@ function pyOrder(op: string, l: PyValue, r: PyValue, universal: boolean): boolea
   }
 }
 
-function complexBinop(op: string, l: PyValue, r: PyValue, sayPair: boolean): PyComplexNumber {
-  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r)) unsupported(op, l, r, sayPair);
+function complexBinop(
+  op: string,
+  l: PyValue,
+  r: PyValue,
+  sayPair: boolean,
+  enclosing?: string,
+): PyComplexNumber {
+  if (!isCoercibleToComplex(l) || !isCoercibleToComplex(r))
+    unsupported(op, l, r, sayPair, enclosing);
   const a = toComplex(l);
   const b = toComplex(r);
   switch (op) {
@@ -466,7 +540,7 @@ function complexBinop(op: string, l: PyValue, r: PyValue, sayPair: boolean): PyC
       }
     default:
       // %, // and every ordering operator are unsupported on complex operands
-      unsupported(op, l, r, sayPair);
+      unsupported(op, l, r, sayPair, enclosing);
   }
 }
 
@@ -480,6 +554,71 @@ export class Py2JsRuntime {
    */
   constructor(public readonly universalEquality: boolean = false) {}
 
+  /** Installed by Py2JsSession so generated code can report its active call
+   * site to the shared module data handler. */
+  onCurrentCall?: (start: number, end: number) => void;
+
+  setCurrentCall(start: number, end: number): void {
+    this.onCurrentCall?.(start, end);
+  }
+
+  /**
+   * True while `setupRuntime` (index.ts) is executing a stdlib group's
+   * compiled prelude script — `def`/`def2` tag every function created during
+   * that window `pyPrelude: true` (py-slang#397). Never true for anything
+   * else: native/bridged builtins are `def`'d directly from TS, and the
+   * user's own script always compiles and runs in a separate call, outside
+   * this window.
+   */
+  compilingPrelude = false;
+
+  /**
+   * Parallel to the call stack, one entry per currently-executing frame: the name of
+   * the outermost predefined (prelude) function that frame is logically running
+   * inside of, or undefined if it isn't (and isn't nested within one). Lets
+   * `enclosingPreludeFunction` (py-slang#397) find which predefined function, if any,
+   * a bridged builtin's error occurred inside of — e.g. `tail()` failing partway
+   * through `map()`'s own `_map` helper should name `map`, the function the user
+   * actually called, not `_map`, an implementation detail they never wrote.
+   *
+   * Set once by `call`/`acall` when a frame is genuinely pushed, and deliberately
+   * left untouched across a tail-call bounce: TCO means "the same logical frame, a
+   * different function now running in it" (map tail-calling into _map is exactly
+   * this), so the frame's already-resolved origin must survive the bounce rather
+   * than being recomputed from whatever function it bounces into.
+   */
+  private readonly preludeOrigin: (string | undefined)[] = [];
+
+  /**
+   * The origin a *new* frame for `fn` should record when genuinely pushed (not
+   * bounced into):
+   *  - prelude code: its own name if entered fresh, or the caller's inherited
+   *    origin if already nested inside prelude code (a deeper prelude helper
+   *    doesn't override the outer one the user actually called).
+   *  - a native/bridged builtin: transparently passes the caller's origin
+   *    through unchanged — it's a leaf operation, never itself a boundary,
+   *    so it inherits "still inside map" from a prelude caller just as much
+   *    as it inherits "not inside anything" from a top-level one.
+   *  - anything else (a genuine user-defined function): always undefined,
+   *    a hard boundary — an error inside code the user actually wrote must
+   *    never be attributed to a predefined function, even if that function
+   *    was itself invoked as a callback passed into one (e.g. map(f, xs)).
+   */
+  private originForNewFrame(fn: PyFunction): string | undefined {
+    const callerOrigin = this.preludeOrigin[this.preludeOrigin.length - 1];
+    if (fn.pyPrelude) return callerOrigin ?? fn.pyName;
+    if (fn.pyNative) return callerOrigin;
+    return undefined;
+  }
+
+  /** The predefined function, if any, the currently executing frame is running
+   * inside of — undefined when it isn't nested within prelude code at all (e.g. a
+   * builtin called directly at the top level, or from inside a user-defined
+   * function that was itself called from prelude code). */
+  enclosingPreludeFunction(): string | undefined {
+    return this.preludeOrigin[this.preludeOrigin.length - 1];
+  }
+
   output: string[] = [];
 
   /**
@@ -488,6 +627,27 @@ export class Py2JsRuntime {
    * `output` above still accumulates regardless.
    */
   onOutput?: (line: string) => void;
+
+  /**
+   * Reports a scheduled set_timeout callback beginning (+1) or ending/being
+   * cancelled (-1) — the conductor evaluator forwards these to
+   * BasicEvaluator's beginPendingWork()/endPendingWork() (source-academy/
+   * conductor), which keeps the host from tearing down this runtime (and any
+   * real setTimeout still pending in it) the instant the top-level chunk's
+   * own evaluateChunk() call resolves. See set_timeout's own doc comment for
+   * why that race exists at all.
+   */
+  onPendingWorkChange?: (delta: 1 | -1) => void;
+
+  /**
+   * Requests one line of input, resolving with what the user typed —
+   * the conductor evaluator wires this to conductor.requestInput, the same
+   * contract the CSE machine's createInputStream/receiveInput use (see
+   * src/engines/cse/streams.ts). Absent when running standalone
+   * (runCodePy2Js/runCodePy2JsDual with no conductor), in which case
+   * input() raises RuntimeError instead of hanging forever.
+   */
+  requestInput?: (prompt?: string) => Promise<string>;
 
   /**
    * Persistent module-level bindings for REPL-mode chunks (see compiler.ts's
@@ -499,19 +659,41 @@ export class Py2JsRuntime {
    */
   readonly globals: Record<string, PyValue> = Object.create(null) as Record<string, PyValue>;
 
-  /** Guarded read of a module-level binding: a name whose binding statement
-   * never executed (e.g. defined only in a not-taken branch) is a NameError,
-   * as in Python — undefined is not a PyValue, so the check is exact. */
+  /** Guarded read of a module-level binding — falling back to the true
+   * builtin of the same name, if any, before raising NameError (py-slang#415):
+   * CPython resolves a module-level name dynamically, at the point of the
+   * read, checking globals() first and *then* builtins — never statically,
+   * ahead of time. `compileProgram`'s builtin preamble (compiler.ts) skips a
+   * `const $name = __py.builtins[name]` binding for any name this chunk
+   * assigns anywhere at module level (so a later reassignment can shadow the
+   * builtin, once it actually runs), which left an *earlier* read — before
+   * that assignment executes — with nothing to fall back to but NameError,
+   * even though the real builtin is genuinely still what CPython would use
+   * at that point. undefined is not a PyValue, so both checks are exact. */
   gref(name: string): PyValue {
-    const v = this.globals[name];
-    if (v === undefined) {
-      this.nameErr(name);
-    }
-    return v;
+    return this.moduleRead(this.globals[name], name);
   }
 
-  /** A module-level name whose binding never executed (compiled reads guard
-   * with `=== undefined`; see emitName in compiler.ts). */
+  /** Same guarded-read-with-builtin-fallback as {@link gref}, for a program-
+   * mode (non-REPL) module-level name: compiled as an inline read of the
+   * chunk's own hoisted `let` (see emitName's `programGlobals` branch in
+   * compiler.ts) rather than an indexed lookup into `globals`, so the
+   * "current value so far" has to be passed in rather than looked up here. */
+  pgref(value: PyValue | undefined, name: string): PyValue {
+    return this.moduleRead(value, name);
+  }
+
+  private moduleRead(value: PyValue | undefined, name: string): PyValue {
+    if (value !== undefined) return value;
+    const builtin = this.builtins[name];
+    if (builtin !== undefined) return builtin;
+    this.nameErr(name);
+  }
+
+  /** A module-level name whose binding never executed, and which isn't a
+   * builtin either (compiled reads guard with `=== undefined`, then fall
+   * back to `this.builtins` — see `moduleRead` above; `emitName` in
+   * compiler.ts). */
   nameErr(name: string): never {
     throw new Py2JsRuntimeError("NameError", `name '${name}' is not defined`);
   }
@@ -603,25 +785,30 @@ export class Py2JsRuntime {
       }
     }
 
+    // Computed once, up front — passed down through every unsupported()-reaching
+    // path below (see that function's doc comment for why the free helpers it
+    // calls need this threaded in rather than looked up via `this`).
+    const enclosing = this.enclosingPreludeFunction();
+
     // Same dispatch order as evaluateBinaryExpression (cse/operators.ts):
     // equality first (it is total over the non-excluded §1 universe), then
     // ordering, then the complex branch, then None/string, then numerics.
     switch (op) {
       case "==":
-        return pyEquals(l, r, !this.universalEquality);
+        return pyEquals(l, r, !this.universalEquality, enclosing);
       case "!=":
-        return !pyEquals(l, r, !this.universalEquality);
+        return !pyEquals(l, r, !this.universalEquality, enclosing);
       case "<":
       case "<=":
       case ">":
       case ">=":
-        return pyOrder(op, l, r, this.universalEquality);
+        return pyOrder(op, l, r, this.universalEquality, enclosing);
       case "is":
       case "is not":
         // NoIsOperatorValidator (the resolver) already rejects this operator
         // at chapter 1-2; universalEquality false here is an independent
         // runtime backstop, matching the CSE machine's own variant gate.
-        if (!this.universalEquality) unsupported(op, l, r, !this.universalEquality);
+        if (!this.universalEquality) unsupported(op, l, r, !this.universalEquality, enclosing);
         return (op === "is not") !== pyIdentical(l, r);
     }
 
@@ -649,16 +836,16 @@ export class Py2JsRuntime {
     }
 
     if (isComplex(l) || isComplex(r)) {
-      return complexBinop(op, l, r, !this.universalEquality);
+      return complexBinop(op, l, r, !this.universalEquality, enclosing);
     }
 
     // String concatenation: str + str only.
     if (typeof l === "string" || typeof r === "string") {
       if (op === "+" && typeof l === "string" && typeof r === "string") return l + r;
-      unsupported(op, l, r, !this.universalEquality);
+      unsupported(op, l, r, !this.universalEquality, enclosing);
     }
 
-    if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !this.universalEquality);
+    if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !this.universalEquality, enclosing);
 
     // Mixed int/float (or float/float) arithmetic: coerce to float, as the CSE
     // machine does (with the same potential precision loss on huge ints).
@@ -689,25 +876,26 @@ export class Py2JsRuntime {
           );
         return a ** b;
       default:
-        unsupported(op, l, r, !this.universalEquality);
+        unsupported(op, l, r, !this.universalEquality, enclosing);
     }
   }
 
   unop(op: string, v: PyValue): PyValue {
     const sayPair = !this.universalEquality;
+    const enclosing = this.enclosingPreludeFunction();
     switch (op) {
       case "not":
-        if (typeof v !== "boolean") unsupported("not", v, undefined, sayPair);
+        if (typeof v !== "boolean") unsupported("not", v, undefined, sayPair, enclosing);
         return !v;
       case "-":
         if (typeof v === "bigint") return -v;
         if (typeof v === "number") return -v;
         if (isComplex(v)) return new PyComplexNumber(-v.real, -v.imag);
-        unsupported("-", v, undefined, sayPair);
+        unsupported("-", v, undefined, sayPair, enclosing);
         break;
       case "+":
         if (isNum(v) || isComplex(v)) return v;
-        unsupported("+", v, undefined, sayPair);
+        unsupported("+", v, undefined, sayPair, enclosing);
     }
     throw new Py2JsRuntimeError("UnsupportedOperandTypeError", `bad unary operator ${op}`);
   }
@@ -781,9 +969,10 @@ export class Py2JsRuntime {
   }
 
   /**
-   * Python truthiness, as the CSE machine's BRANCH instruction applies it to
-   * `if` and ternary conditions (its WHILE instruction demands bool, but
-   * chapter 1 has no loops). Mirrors isFalsy in cse/operators.ts.
+   * Python truthiness. Only `assert` (assertCheck, below) still accepts any type here — `if`/`elif`
+   * and conditional expressions used to as well, but now go through condBool instead (see its doc
+   * comment). Mirrors isFalsy in cse/operators.ts, which the CSE machine's BRANCH instruction still
+   * applies unconditionally (py-slang#436 tracks tightening it to match).
    */
   truth(v: PyValue): boolean {
     switch (typeof v) {
@@ -812,7 +1001,28 @@ export class Py2JsRuntime {
 
   /** Left operand of and/or must be bool (mirrors the CSE BOOL_OP instruction). */
   boolLeft(v: PyValue, op: string): boolean {
-    if (typeof v !== "boolean") unsupported(op, v, undefined, !this.universalEquality);
+    if (typeof v !== "boolean")
+      unsupported(op, v, undefined, !this.universalEquality, this.enclosingPreludeFunction());
+    return v;
+  }
+
+  /**
+   * `if`/`elif` condition, and conditional-expression (`x if p else y`) condition — SICP calls both
+   * of these a *predicate*: like `whileCond` below, a bare bool is required.
+   * docs/specs/python_typing.tex:56-57 states this explicitly for `if`/`elif`: "Following if and
+   * elif, Python §x only allows boolean expressions." The conditional expression isn't separately
+   * named there, but docs/md/README_1.md and up present it as the same feature, under the same
+   * "Conditional statements and conditional expressions" heading, so its predicate is held to the
+   * identical rule here. One message for both constructs, matching the wording of an ordinary
+   * operand-type error (e.g. `unsupported operand type(s) for -: 'int' and 'str'`).
+   */
+  condBool(v: PyValue): boolean {
+    if (typeof v !== "boolean") {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `predicate type must be 'bool', not '${pyTypeName(v, !this.universalEquality)}'`,
+      );
+    }
     return v;
   }
 
@@ -852,23 +1062,50 @@ export class Py2JsRuntime {
     }
   }
 
+  /**
+   * The enclosing-function naming below (py-slang#397) is called before the attempted
+   * call's own frame is pushed, so the current top of preludeOrigin is already the
+   * caller's — e.g. reduce(1, 2, xs) fails because reduce itself tries to call its
+   * non-callable first argument; the student never called anything literally named
+   * "reduce" wrongly, reduce did. Unlike stdlibBridge.ts's equivalent (which reads one
+   * frame later, from inside the already-pushed, already-failing call itself).
+   */
   private checkCallable(f: PyValue, nArgs: number, sync: boolean): PyFunction {
+    const enclosing = this.enclosingPreludeFunction();
     if (typeof f !== "function") {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+        withEnclosingPredefinedFunction(
+          `'${pyTypeName(f, !this.universalEquality)}' object is not callable`,
+          enclosing,
+        ),
+      );
+    }
+    if (f.pyRest && nArgs < f.pyMinArgs!) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        withEnclosingPredefinedFunction(
+          `${f.pyName}() takes at least ${f.pyMinArgs} argument${f.pyMinArgs === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+          enclosing,
+        ),
       );
     }
     if (f.pyArity >= 0 && f.pyArity !== nArgs) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `${f.pyName}() takes ${f.pyArity} argument${f.pyArity === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+        withEnclosingPredefinedFunction(
+          `${f.pyName}() takes ${f.pyArity} argument${f.pyArity === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+          enclosing,
+        ),
       );
     }
     if (sync && f.asyncOnly) {
       throw new Py2JsRuntimeError(
         "TypeError",
-        `${f.pyName}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+        withEnclosingPredefinedFunction(
+          `${f.pyName}() needs a frontend round-trip and cannot be called from a synchronous module callback`,
+          enclosing,
+        ),
       );
     }
     return f;
@@ -876,12 +1113,25 @@ export class Py2JsRuntime {
 
   /** Non-tail call: run the trampoline until a real value comes back. */
   call(f: PyValue, args: PyValue[]): PyValue {
-    let result = this.checkCallable(f, args.length, true)(...args);
-    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
-      const t = result as TailCall;
-      result = this.checkCallable(t.f, t.args.length, true)(...t.args);
+    let fn = this.checkCallable(f, args.length, true);
+    this.preludeOrigin.push(this.originForNewFrame(fn));
+    try {
+      let result = fn(...args);
+      while (
+        result !== null &&
+        typeof result === "object" &&
+        (result as TailCall).__tail === true
+      ) {
+        const t = result as TailCall;
+        fn = this.checkCallable(t.f, t.args.length, true);
+        // A tail call bounces on the *same* logical frame — preludeOrigin is
+        // deliberately not touched here; see its own doc comment for why.
+        result = fn(...t.args);
+      }
+      return result === undefined ? null : (result as PyValue);
+    } finally {
+      this.preludeOrigin.pop();
     }
-    return result === undefined ? null : (result as PyValue);
   }
 
   /**
@@ -892,13 +1142,36 @@ export class Py2JsRuntime {
    */
   async acall(f: PyValue, args: PyValue[]): Promise<PyValue> {
     let fn = this.checkCallable(f, args.length, false);
-    let result = await (fn.asyncBody ?? fn)(...args);
-    while (result !== null && typeof result === "object" && (result as TailCall).__tail === true) {
-      const t = result as TailCall;
-      fn = this.checkCallable(t.f, t.args.length, false);
-      result = await (fn.asyncBody ?? fn)(...t.args);
+    this.preludeOrigin.push(this.originForNewFrame(fn));
+    try {
+      let result = await (fn.asyncBody ?? fn)(...args);
+      while (
+        result !== null &&
+        typeof result === "object" &&
+        (result as TailCall).__tail === true
+      ) {
+        const t = result as TailCall;
+        fn = this.checkCallable(t.f, t.args.length, false);
+        result = await (fn.asyncBody ?? fn)(...t.args);
+      }
+      return result === undefined ? null : (result as PyValue);
+    } finally {
+      this.preludeOrigin.pop();
     }
-    return result === undefined ? null : (result as PyValue);
+  }
+
+  /**
+   * The arguments a call's `*xs` expands to. Like the CSE machine, only a list may be spread (not
+   * a string or any other iterable); the result is a copy, so the callee can't alias `xs`.
+   */
+  spread(v: PyValue): PyValue[] {
+    if (!Array.isArray(v)) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `argument after * must be a list, not '${pyTypeName(v, !this.universalEquality)}'`,
+      );
+    }
+    return [...v];
   }
 
   /** Tail call marker: bounced on the caller's trampoline instead of growing the stack. */
@@ -906,11 +1179,26 @@ export class Py2JsRuntime {
     return { __tail: true, f, args };
   }
 
-  /** Wrap a compiled function body with its metadata. */
-  def(name: string, arity: number, fn: (...args: PyValue[]) => PyValue | TailCall): PyFunction {
+  /**
+   * Wrap a compiled function body with its metadata. `arity` is the number of fixed parameters;
+   * `rest` marks a function whose body also takes a trailing rest parameter, making it variadic.
+   */
+  def(
+    name: string,
+    arity: number,
+    fn: (...args: PyValue[]) => PyValue | TailCall,
+    rest = false,
+  ): PyFunction {
     const f = fn as PyFunction;
     f.pyName = name;
-    f.pyArity = arity;
+    if (rest) {
+      f.pyArity = -1;
+      f.pyMinArgs = arity;
+      f.pyRest = true;
+    } else {
+      f.pyArity = arity;
+    }
+    if (this.compilingPrelude) f.pyPrelude = true;
     return f;
   }
 
@@ -925,8 +1213,9 @@ export class Py2JsRuntime {
     arity: number,
     syncFn: (...args: PyValue[]) => PyValue | TailCall,
     asyncFn: (...args: PyValue[]) => Promise<PyValue | TailCall>,
+    rest = false,
   ): PyFunction {
-    const f = this.def(name, arity, syncFn);
+    const f = this.def(name, arity, syncFn, rest);
     f.asyncBody = asyncFn;
     return f;
   }
@@ -947,6 +1236,7 @@ export class Py2JsRuntime {
   private builtin(name: string, arity: number, fn: (...args: PyValue[]) => PyValue): PyFunction {
     const f = this.def(name, arity, fn);
     f.pyBuiltin = true;
+    f.pyNative = true;
     return f;
   }
 
@@ -962,12 +1252,20 @@ export class Py2JsRuntime {
   /**
    * The native builtin core: the few builtins that cannot go through the
    * stdlib bridge (see stdlibBridge.ts, which supplies everything else from
-   * the real src/stdlib groups). print and input are async/stream-based in
-   * the stdlib; arity inspects CSE closures, which py2js functions are not;
-   * set_timeout/clear_all_timeout (source-academy/py-slang#311) need a live
-   * reference to this runtime to call back into Python later — see the doc
-   * comment on set_timeout below for why py2js, uniquely among the engines,
-   * needs no special re-entry support to do this.
+   * the real src/stdlib groups). print is fire-and-forget sync; input needs
+   * the async spine (like an imported module function — see moduleInterop.ts)
+   * to await a real frontend round-trip, so it is dual-bodied (def2) and
+   * marked asyncOnly, exactly like an asyncOnly module closure: the sync body
+   * only exists as a defensive backstop (checkCallable's asyncOnly guard
+   * already rejects a sync call before it would run), the real logic lives in
+   * asyncBody. index.ts's Py2JsSession forces dual-mode compilation for any
+   * REPL chunk that references `input` (Resolver.referencedNames), the same
+   * way it already does for a chunk with an import. arity inspects CSE
+   * closures, which py2js functions are not; set_timeout/clear_all_timeout
+   * (source-academy/py-slang#311) need a live reference to this runtime to
+   * call back into Python later — see the doc comment on set_timeout below
+   * for why py2js, uniquely among the engines, needs no special re-entry
+   * support to do this.
    */
   readonly builtins: Record<string, PyValue> = {
     print: this.builtin("print", -1, (...args) => {
@@ -978,12 +1276,48 @@ export class Py2JsRuntime {
       this.onOutput?.(line);
       return null;
     }),
-    input: this.builtin("input", -1, () => {
-      throw new Py2JsRuntimeError(
-        "RuntimeError",
-        "input() is not supported by the py2js engine yet",
+    input: (() => {
+      const f = this.def2(
+        "input",
+        -1,
+        () => {
+          throw new Py2JsRuntimeError(
+            "TypeError",
+            "input() needs a frontend round-trip and cannot be called from a synchronous module callback",
+          );
+        },
+        async (...args: PyValue[]) => {
+          // Same 0-or-1-argument gate as the stdlib's @Validate(0, 1, "input",
+          // true) (src/stdlib/misc.ts) — reproduced by hand rather than
+          // bridged, since bridgeBuiltin's generic path rejects any builtin
+          // that returns a Promise (stdlibBridge.ts).
+          if (args.length > 1) {
+            throw new Py2JsRuntimeError(
+              "TypeError",
+              `input() takes at most 1 argument (${args.length} given)`,
+            );
+          }
+          // Matches CPython: input(prompt) writes the prompt to stdout (no
+          // trailing newline) before blocking on stdin.
+          const prompt = args.length > 0 ? pyStr(args[0]) : undefined;
+          if (prompt !== undefined) {
+            this.output.push(prompt);
+            this.onOutput?.(prompt);
+          }
+          if (!this.requestInput) {
+            throw new Py2JsRuntimeError(
+              "RuntimeError",
+              "input() is not supported in this context (no input source configured)",
+            );
+          }
+          return this.requestInput(prompt);
+        },
       );
-    }),
+      f.pyBuiltin = true;
+      f.pyNative = true;
+      f.asyncOnly = true;
+      return f;
+    })(),
     // Native rather than bridged: CSE's print_llist (stdlib/linked-list.ts)
     // is async (writes to the output stream directly), like print/input.
     print_llist: this.builtin("print_llist", 1, v => {
@@ -1038,6 +1372,13 @@ export class Py2JsRuntime {
      * evaluateChunk has already resolved/sent its result) — reported through
      * onOutput instead of being silently lost, matching how a real browser
      * reports an uncaught async error to the console rather than nowhere.
+     *
+     * onPendingWorkChange(+1) here and (-1) once f's call settles (or, below,
+     * once clear_all_timeout cancels it first) tells the conductor evaluator
+     * this callback may still run after evaluateChunk() itself has resolved —
+     * see that hook's own doc comment for why, without it, the host can (and
+     * did — this is source-academy/py-slang#329) tear the whole runtime down
+     * out from under a timer that hasn't fired yet.
      */
     set_timeout: this.builtin("set_timeout", 2, (f, delay) => {
       const sayPair = !this.universalEquality;
@@ -1055,24 +1396,33 @@ export class Py2JsRuntime {
       }
       const id = setTimeout(() => {
         this.pendingTimeouts.delete(id);
-        this.acall(f, []).catch((e: unknown) => {
-          const line =
-            e instanceof Py2JsRuntimeError
-              ? `${e.pyKind}: ${e.message}`
-              : e instanceof Error
-                ? `${e.name}: ${e.message}`
-                : String(e);
-          this.output.push(line + "\n");
-          this.onOutput?.(line);
-        });
+        this.acall(f, [])
+          .catch((e: unknown) => {
+            const line =
+              e instanceof Py2JsRuntimeError
+                ? `${e.pyKind}: ${e.message}`
+                : e instanceof Error
+                  ? `${e.name}: ${e.message}`
+                  : String(e);
+            this.output.push(line + "\n");
+            this.onOutput?.(line);
+          })
+          .finally(() => this.onPendingWorkChange?.(-1));
       }, Number(delay));
       this.pendingTimeouts.add(id);
+      this.onPendingWorkChange?.(1);
       return null;
     }),
     /** Cancels every set_timeout callback scheduled so far (on this runtime)
-     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). */
+     * that hasn't fired yet — mirrors sound_matrix's clear_all_timeout(). Each
+     * cancelled timer matches the +1 its own set_timeout call reported, same
+     * as if it had fired — it never will now, so the pending count must still
+     * settle back to what's actually still outstanding (nothing, typically). */
     clear_all_timeout: this.builtin("clear_all_timeout", 0, () => {
-      for (const id of this.pendingTimeouts) clearTimeout(id);
+      for (const id of this.pendingTimeouts) {
+        clearTimeout(id);
+        this.onPendingWorkChange?.(-1);
+      }
       this.pendingTimeouts.clear();
       return null;
     }),

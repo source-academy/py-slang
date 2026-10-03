@@ -67,6 +67,13 @@ def print_llist(xs):
     return None
 
 
+def draw_data(value1, *values):
+    # In Source Academy, draws its arguments as box-and-pointer diagrams. CPython has no
+    # drawing canvas, so this is the identity on its first argument -- which is also what the
+    # headless py-slang runners do.
+    return value1
+
+
 # --------------------------------------------------------------------------
 # Prelude (linked-list.prelude.ts) -- book-defined functions
 # --------------------------------------------------------------------------

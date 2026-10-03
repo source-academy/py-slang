@@ -114,6 +114,10 @@ function translateExpr(expr: ExprNS.Expr): StepNode {
         type: "CallExpression",
         callee: translateExpr(e.callee),
         arguments: e.args.map(translateExpr),
+        // Retained through substitution/rebuilding so an imported-module call
+        // can report the original Python call site to GenericDataHandler.
+        sourceStart: e.startToken.indexInSource,
+        sourceEnd: e.endToken.indexInSource + e.endToken.lexeme.length,
       };
     }
     case "List": {
@@ -131,6 +135,16 @@ function block(statements: StmtNS.Stmt[]): StepNode {
 }
 
 function translateStmt(stmt: StmtNS.Stmt): StepNode {
+  const node = translateStmtInner(stmt);
+  // `hasBreakpoint` is bolted onto the source statement by `markBreakpoints` (see
+  // `../../breakpoints.ts`); copy it across so `reduce.ts` can still see it once the statement
+  // has become an (estree-shaped, location-free) `StepNode` — mirrors how `breakpoint()` itself
+  // is detected structurally at reduction time rather than here at translation time (see below).
+  if ((stmt as StmtNS.Stmt & { hasBreakpoint?: boolean }).hasBreakpoint) node.hasBreakpoint = true;
+  return node;
+}
+
+function translateStmtInner(stmt: StmtNS.Stmt): StepNode {
   switch (stmt.kind) {
     case "SimpleExpr": {
       const expr = (stmt as StmtNS.SimpleExpr).expression;
@@ -185,9 +199,39 @@ function translateStmt(stmt: StmtNS.Stmt): StepNode {
     }
     case "Pass":
       return { type: "PassStatement" };
+    case "FromImport": {
+      const s = stmt as StmtNS.FromImport;
+      return {
+        type: "ImportStatement",
+        raw: importText(s),
+        // The names this statement binds, purely syntactically — known from the parse alone, so
+        // markBuiltins/substitute's shadowing walks (ast.ts's declaredNamesOf) can treat them as
+        // "about to be declared" even before `resolveImports` ever runs (or if it can't: no module
+        // loader wired up, a module that fails to load, ...). Otherwise a name that happens to collide
+        // with a builtin (`from mymod import print`) would flash its *builtin* hover popover for as
+        // long as this import statement is still present in the body, since nothing would tell
+        // markBuiltins a shadowing binding is coming (py-slang#415/#417). Resolved *values* (once
+        // available) are attached separately, as `bindings` — see resolveImports.
+        names: s.names.map(({ name, alias }) => (alias ?? name).lexeme),
+      };
+    }
     default:
       return { type: "ExpressionStatement", expression: identifier(`<${stmt.kind}>`) };
   }
+}
+
+/** Reconstructs `from X import Y [as Z], ...` (or its relative `from .X import ...` form) as display
+ * text for {@link translateStmtInner}'s `"FromImport"` case — purely what the student's source reads
+ * like on this step; the reducer never interprets it. What each name actually binds to is resolved
+ * ahead of stepping (`moduleInterop.ts`'s `resolveImports`) but not *substituted in* until this
+ * statement's own step is reached (`reduce.ts`'s `"ImportStatement"` case, off the node's `bindings`
+ * field — attached by `resolveImports`, not set here), py-slang#417. */
+function importText(stmt: StmtNS.FromImport): string {
+  const module = ".".repeat(stmt.level) + stmt.module.lexeme;
+  const names = stmt.names
+    .map(({ name, alias }) => (alias ? `${name.lexeme} as ${alias.lexeme}` : name.lexeme))
+    .join(", ");
+  return `from ${module} import ${names}`;
 }
 
 /** Translates a parsed Python file into the estree-shaped {@link program} root the stepper reduces. */

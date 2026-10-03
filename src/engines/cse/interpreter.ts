@@ -9,7 +9,11 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
-import { BuiltinReassignmentError, UnsupportedOperandTypeError } from "../../errors/errors";
+import {
+  BuiltinReassignmentError,
+  ConditionNotBoolError,
+  UnsupportedOperandTypeError,
+} from "../../errors/errors";
 import { Group } from "../../stdlib/utils";
 import { Token, TokenType } from "../../tokenizer";
 import { CSEBreak, RecursivePartial, Result } from "../../types";
@@ -26,7 +30,7 @@ import {
 } from "./environment";
 import { handleRuntimeError, UnknownEvaluatorError } from "./error";
 import * as instrCreator from "./instrCreator";
-import { loadModules, moduleToPython } from "./modules";
+import { loadModules, moduleToPython, RelativeImportNotSupportedError } from "./modules";
 import { evaluateBinaryExpression, evaluateUnaryExpression, isFalsy } from "./operators";
 import { Stash, Value } from "./stash";
 import { displayError } from "./streams";
@@ -73,7 +77,6 @@ import {
 export interface IOptions {
   isPrelude: boolean;
   groups: Group[];
-  envSteps: number;
   stepLimit: number;
   variant: number;
   recursionLimit: number;
@@ -128,7 +131,6 @@ export async function evaluate(
   const opts: IOptions = {
     isPrelude: false,
     groups: [],
-    envSteps: 100000,
     stepLimit: -1,
     recursionLimit: 1024,
     variant: 4,
@@ -157,7 +159,6 @@ export async function evaluate(
       context,
       context.control,
       context.stash,
-      opts.envSteps,
       opts.stepLimit,
       opts.recursionLimit,
       opts.variant,
@@ -205,6 +206,13 @@ async function evaluateImports(
     throw new Error("Context is not properly initialized with evaluator and conductor");
   }
 
+  for (const nodes of importNodeMap.values()) {
+    const offending = nodes.find(n => n.node.level > 0);
+    if (offending !== undefined) {
+      handleRuntimeError(context, new RelativeImportNotSupportedError(offending.node));
+    }
+  }
+
   await loadModules(context, [...importNodeMap.keys()]);
   for (const [moduleName, nodes] of importNodeMap) {
     for (const node of nodes) {
@@ -232,7 +240,6 @@ async function evaluateImports(
  * @param context The context to evaluate the program in.
  * @param control Points to the current Control stack.
  * @param stash Points to the current Stash.
- * @param envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -244,7 +251,6 @@ export async function runCSEMachine(
   context: Context,
   control: Control,
   stash: Stash,
-  envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
@@ -255,7 +261,6 @@ export async function runCSEMachine(
     context,
     control,
     stash,
-    envSteps,
     stepLimit,
     recursionLimit,
     variant,
@@ -278,7 +283,6 @@ export async function runCSEMachine(
  * @param context The context of the program.
  * @param control The control stack.
  * @param stash The stash storage.
- * @param _envSteps Number of environment steps to run.
  * @param stepLimit Maximum number of steps to execute.
  * @param recursionLimit Maximum depth of recursion allowed.
  * @param variant The language variant being executed.
@@ -290,7 +294,6 @@ export async function* generateCSEMachineStateStream(
   context: Context,
   control: Control,
   stash: Stash,
-  _envSteps: number,
   stepLimit: number,
   recursionLimit: number,
   variant: number,
@@ -322,12 +325,6 @@ export async function* generateCSEMachineStateStream(
     pyDefineVariable(context, "__program__", { type: "string", value: code }, globalEnvironment);
   }
   while (command) {
-    // Return to capture a snapshot of the control and stash after the target step count is reached
-    // if (!isPrelude && steps === envSteps) {
-    //   yield { stash, control, steps }
-    //   return
-    // }
-
     // Step limit reached, stop further evaluation
     if (!isPrelude && steps === stepLimit) {
       const node = isNode(command) ? command : command.srcNode;
@@ -341,18 +338,16 @@ export async function* generateCSEMachineStateStream(
       context.runtime.changepointSteps.push(steps + 1);
     }
 
-    // A zero-arg call resolving to the `breakpoint` builtin, detected by identity (not source
-    // text) so aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's
-    // breakpoint detection in reduce.ts. APPLICATION pops its callee off the stash itself, after
-    // popping `numOfArgs` args first; with zero args the callee is already on top of the stash,
-    // so it can be peeked here, before that instruction runs.
-    if (
-      !isPrelude &&
-      isInstr(command) &&
-      command.instrType === InstrType.APPLICATION &&
-      command.numOfArgs === 0
-    ) {
-      const callee = stash.peek();
+    // A call resolving to the `breakpoint` builtin, detected by identity (not source text) so
+    // aliasing (e.g. `bp = breakpoint; bp()`) is caught too — mirrors the stepper's breakpoint
+    // detection in reduce.ts. Real Python's `breakpoint(*args, **kws)` takes any number of
+    // arguments (forwarded to sys.breakpointhook, which this builtin already ignores either way —
+    // see stdlib/misc.ts), so this fires for any arity, not just zero. APPLICATION pops its callee
+    // off the stash itself, after popping `numOfArgs` args first — by the time this instruction is
+    // about to run, all `numOfArgs` args are already evaluated and sit on top of the callee, so
+    // peekAt(numOfArgs) reaches down past them to the callee, still before APPLICATION runs.
+    if (!isPrelude && isInstr(command) && command.instrType === InstrType.APPLICATION) {
+      const callee = stash.peekAt(command.numOfArgs);
       if (callee?.type === "builtin" && callee.name === "breakpoint") {
         // `steps` here is the count as of the end of the *previous* iteration — i.e. the
         // stepIndex (collectSnapshots stores `steps - 1` per yield) of the snapshot that has
@@ -361,6 +356,15 @@ export async function* generateCSEMachineStateStream(
         context.runtime.breakpointSteps.push(steps - 1);
         context.runtime.break = true;
       }
+    }
+
+    // A node flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
+    // statement — see `breakpoints.ts`) is treated exactly like an explicit `breakpoint()` call:
+    // recorded the moment it's about to be evaluated, using the same `steps - 1` step-index
+    // convention as the block above.
+    if (!isPrelude && isNode(command) && command.hasBreakpoint) {
+      context.runtime.breakpointSteps.push(steps - 1);
+      context.runtime.break = true;
     }
 
     control.pop();
@@ -663,7 +667,7 @@ const cmdEvaluators: CmdEvaluators = {
   Call: function (
     _code: string,
     callNode: ExprNS.Call,
-    _context: Context,
+    context: Context,
     control: Control,
     _stash: Stash,
     _isPrelude: boolean,
@@ -1123,13 +1127,12 @@ const cmdEvaluators: CmdEvaluators = {
   },
   [InstrType.FOR]: function (
     code: string,
-    command: ControlItem,
+    instr: ForInstr,
     context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const instr = command as ForInstr;
     const step = stash.pop();
     const end = stash.pop();
     const start = stash.pop();
@@ -1191,6 +1194,10 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
+    // This is the point at which the call is actually applied.  Recording it
+    // while merely scheduling its children made a nested argument call leak
+    // into the outer call's module-interface error.
+    context.evaluator?.setCurrentCall(instr.srcNode);
     // Tail-Call Optimisation
     const topElement = control.peek();
     let shouldPushEnvInstr = true;
@@ -1312,7 +1319,7 @@ const cmdEvaluators: CmdEvaluators = {
     if (idx < -length || idx >= length) {
       handleRuntimeError(
         context,
-        new error.IndexError(code, instr.srcNode as ExprNS.Expr, context, idx, length, false),
+        new error.IndexError(code, instr.srcNode as ExprNS.Expr, idx, length, false),
       );
     }
     const wrappedIdx = idx < 0 ? idx + length : idx;
@@ -1323,15 +1330,32 @@ const cmdEvaluators: CmdEvaluators = {
     }
   },
 
+  // Used by both `if`/`elif` and the conditional expression -- one check-site covers both,
+  // matching py2js's shared condBool / the stepper's shared contractConditional (py-slang#439).
+  // Requires a genuine bool (docs/specs/python_typing_back.tex: "Following if and elif, Python
+  // §x only allows boolean expressions") rather than isFalsy's general any-type truthiness,
+  // mirroring BOOL_OP's identical check on and/or's left operand above (py-slang#436).
   [InstrType.BRANCH]: function (
-    _code: string,
+    code: string,
     instr: BranchInstr,
-    _context: Context,
+    context: Context,
     control: Control,
     stash: Stash,
     _isPrelude: boolean,
   ) {
     const condition = stash.pop();
+
+    if (condition && condition.type !== "bool") {
+      const srcNode = instr.srcNode;
+      const [conditionNode, contextLabel] =
+        srcNode instanceof StmtNS.If
+          ? [srcNode.condition, "if condition"]
+          : [(srcNode as ExprNS.Ternary).predicate, "conditional expression condition"];
+      handleRuntimeError(
+        context,
+        new ConditionNotBoolError(code, conditionNode, context, condition.type, contextLabel),
+      );
+    }
 
     if (condition && !isFalsy(condition)) {
       const consequent = instr.consequent;

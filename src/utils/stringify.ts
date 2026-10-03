@@ -177,7 +177,11 @@ export function valueToStringDag(value: Value): StringDag {
     if (v.type === "none") {
       return [{ type: "terminal", str: "None", length: 4 }, false];
     } else if (ancestors.has(v)) {
-      return [{ type: "terminal", str: "...<circular>", length: 13 }, true];
+      // Mirrors CPython's Py_ReprEnter guard (Objects/listobject.c): a list
+      // reached again while already being rendered — a genuine ancestor
+      // cycle, not merely a value shared by two unrelated positions — repr's
+      // as the container's own placeholder rather than recursing forever.
+      return [{ type: "terminal", str: "[...]", length: 5 }, true];
     } else if (v.type === "bool") {
       const s = v.value ? "True" : "False";
       return [{ type: "terminal", str: s, length: s.length }, false];

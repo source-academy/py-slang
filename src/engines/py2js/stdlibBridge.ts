@@ -42,6 +42,8 @@
  * bridged builtins carry pyMinArgs so it reports the same numbers the CSE
  * machine does.
  */
+import type { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
+
 import { ExprNS } from "../../ast-types";
 import { RuntimeSourceError } from "../../errors";
 import { Token, TokenType } from "../../tokenizer";
@@ -49,7 +51,7 @@ import { GroupName } from "../../stdlib/utils";
 import type { Group } from "../../stdlib/utils";
 import { Context } from "../cse/context";
 import type { Environment } from "../cse/environment";
-import type { BuiltinValue, Value } from "../cse/stash";
+import type { BuiltinValue, ListValue, Value } from "../cse/stash";
 import {
   isPairShaped,
   Py2JsRuntime,
@@ -72,7 +74,20 @@ function syntheticCallNode(name: string): ExprNS.Call {
  * it stands in for — see the file header's note on lossless pass-through. */
 const functionOrigin = new WeakMap<object, PyFunction>();
 
-function toTagged(v: PyValue): Value {
+/**
+ * `memo` maps a PyList already being converted to its (still being filled
+ * in) tagged ListValue, keyed by identity and populated *before* recursing
+ * into the list's elements/spine — chapter 3's set_head/set_tail, or a
+ * literal-list subscript assignment (`a[0] = a`), can build a genuinely
+ * cyclic PyList (issue #341), and without this a bridged builtin's argument
+ * conversion recurses/loops forever converting it. Populating the memo
+ * before descending means a PyList reachable from itself converts to a
+ * ListValue reachable from itself, so whatever CSE builtin receives it sees
+ * the same kind of cyclic Value graph its own native (non-bridged) callers
+ * already have to cope with (e.g. stringify.ts's ancestor tracking) —
+ * cycle-handling stays the shared builtin's job, not this bridge's.
+ */
+function toTagged(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
   switch (typeof v) {
     case "bigint":
       return { type: "bigint", value: v };
@@ -118,7 +133,7 @@ function toTagged(v: PyValue): Value {
       // reproduces CSE's own is_list/list_length answers exactly, including
       // on a 2-element list (which CSE cannot tell apart from a pair
       // either — see runtime.ts's PyList doc comment).
-      if (Array.isArray(v)) return toTaggedList(v);
+      if (Array.isArray(v)) return toTaggedList(v, memo);
       // No chapter-1/2 stdlib builtin accepts an opaque module value as an
       // argument (abs/math_sqrt/etc. all type-check against "opaque" being
       // absent from their accepted types), so this just needs to produce
@@ -141,27 +156,49 @@ function toTagged(v: PyValue): Value {
  * tail-recursive the user's own Python is (its own tail calls go through
  * py2js's trampoline; this bridge conversion does not). The walk continues
  * exactly as long as the current node is itself a 2-element list (a chain
- * link); it stops — falling through to a plain `.map()` — the moment that
- * shape breaks, which correctly covers a flat N-element (N≠2) literal list
- * (zero iterations) and a pair whose tail isn't itself a pair (one
- * iteration) with no separate case needed for either. `heads[i]`/the final
- * tail are still converted via the ordinary (recursive) toTagged, since each
- * head is normally a scalar leaf; a list-of-lists nested arbitrarily deep
- * through a head position remains a (much rarer) recursion, same as before.
+ * link) not already seen this walk; it stops — falling through to the final
+ * tail conversion — the moment that shape breaks (a flat N-element (N≠2)
+ * literal list: zero iterations; a pair whose tail isn't itself a pair: one
+ * iteration) or the chain loops back on itself (chapter 3's set_tail, or an
+ * N-element list looping back into itself, e.g. `a[0] = a`). `heads[i]`/the
+ * final tail are still converted via the ordinary (recursive) toTagged,
+ * since each head is normally a scalar leaf; a list-of-lists nested
+ * arbitrarily deep through a head position remains a (much rarer)
+ * recursion, same as before.
+ *
+ * Each spine node gets its ListValue placeholder allocated (and memoized)
+ * before its tail is known, exactly like toTagged's memo contract — so
+ * closing a cycle back onto an earlier node just reuses that node's
+ * placeholder as the tail, producing a genuinely cyclic Value graph instead
+ * of looping forever building `heads`.
  */
-function toTaggedList(v: PyList): Value {
-  if (!isPairShaped(v)) return { type: "list", value: v.map(toTagged) };
-  const heads: PyValue[] = [];
+function toTaggedList(v: PyList, memo: Map<PyList, Value>): Value {
+  const memoized = memo.get(v);
+  if (memoized !== undefined) return memoized;
+  if (!isPairShaped(v)) {
+    const listValue: ListValue = { type: "list", value: [] };
+    memo.set(v, listValue);
+    listValue.value = v.map(elem => toTagged(elem, memo));
+    return listValue;
+  }
+  const nodes: PyList[] = [];
+  const placeholders: ListValue[] = [];
   let current: PyValue = v;
   while (isPairShaped(current)) {
-    heads.push(current[0]);
+    const seen = memo.get(current);
+    if (seen !== undefined) break;
+    const placeholder: ListValue = { type: "list", value: [] };
+    memo.set(current, placeholder);
+    nodes.push(current);
+    placeholders.push(placeholder);
     current = current[1];
   }
-  let tail = toTagged(current);
-  for (let i = heads.length - 1; i >= 0; i--) {
-    tail = { type: "list", value: [toTagged(heads[i]), tail] };
+  let tail = isPairShaped(current) ? memo.get(current)! : toTagged(current, memo);
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    placeholders[i].value = [toTagged(nodes[i][0], memo), tail];
+    tail = placeholders[i];
   }
-  return tail;
+  return memo.get(v)!;
 }
 
 function fromTagged(name: string, v: Value): PyValue {
@@ -240,7 +277,12 @@ function bridgeBuiltin(
   const f = rt.def(name, -1, (...args: PyValue[]) => {
     let result: Value | undefined | Promise<Value | undefined>;
     try {
-      result = call(args.map(toTagged), source, command, context);
+      result = call(
+        args.map(a => toTagged(a)),
+        source,
+        command,
+        context,
+      );
     } catch (e) {
       // handleRuntimeError (src/engines/cse/error.ts) throws a
       // RuntimeSourceError — a plain object implementing SourceError, not
@@ -257,7 +299,30 @@ function bridgeBuiltin(
       // displayError falls back to a generic "Error" name for the same
       // reason), so the constructor is the only reliable source for it.
       if (e instanceof RuntimeSourceError) {
-        throw new Py2JsRuntimeError(e.constructor.name, e.message);
+        // The builtin itself is named in e.message already ("...for tail: ...");
+        // this instead names the *enclosing* predefined function, if any — e.g. a
+        // student calling map() never wrote or sees _map, the internal helper that
+        // actually calls tail() (py-slang#397). Inserted right after the error-name
+        // prefix ("TypeError: ") rather than appended, so the most actionable fact —
+        // *which* call the student actually wrote led here — reads first, matching
+        // how a Python traceback lists the outer frame before the innermost error.
+        //
+        // Except error(): that's how a prelude author writes a fully custom message —
+        // llist_ref's own error("llist_ref: index out of bounds") already names itself,
+        // so attributing it too would say "llist_ref" twice.
+        const enclosing = name === "error" ? undefined : rt.enclosingPreludeFunction();
+        let message = e.message;
+        if (enclosing) {
+          // Detected from the message's own text ("TypeError: ...", "ValueError: ..."),
+          // not e.constructor.name — a minified production build mangles class names,
+          // but every RuntimeSourceError subclass bakes its own error-kind word as a
+          // literal string into the message itself, so this survives minification.
+          const match = message.match(/^([A-Za-z]+): /);
+          message = match
+            ? `${match[0]}in predefined function '${enclosing}': ${message.slice(match[0].length)}`
+            : `in predefined function '${enclosing}': ${message}`;
+        }
+        throw new Py2JsRuntimeError(e.constructor.name, message);
       }
       throw e;
     }
@@ -270,6 +335,7 @@ function bridgeBuiltin(
     return result === undefined ? null : fromTagged(name, result);
   });
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = builtin.minArgs;
   return f;
 }
@@ -299,6 +365,7 @@ function nativeSetPairSlot(name: string, index: 0 | 1, sayPair: boolean): PyFunc
   f.pyName = name;
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
 }
@@ -324,12 +391,14 @@ function nativeStream(rt: Py2JsRuntime): PyFunction {
     if (index >= args.length) return null;
     const tail = rt.def("anonymous stream", 0, () => build(args, index + 1));
     tail.pyBuiltin = true;
+    tail.pyNative = true;
     return [args[index], tail];
   };
   const f = ((...args: PyValue[]) => build(args, 0)) as PyFunction;
   f.pyName = "stream";
   f.pyArity = -1;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 0;
   return f;
 }
@@ -382,8 +451,98 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
   f.pyName = "apply_in_underlying_python";
   f.pyArity = 2;
   f.pyBuiltin = true;
+  f.pyNative = true;
   f.pyMinArgs = 2;
   return f;
+}
+
+/**
+ * draw_data(value1, *values) (bridged as part of the LINKED_LISTS group, alongside
+ * pair/llist/head/tail — available from chapter 2 onward, matching the documented signature
+ * (docs/lib/linked_list.py) and CSE's identical chapter gating). Reimplemented natively rather than
+ * through the generic bridge for two reasons:
+ *
+ *  - toTagged/toTaggedList (above) walk a pair/list's spine with no cycle guard — fine for every
+ *    other bridged builtin, none of which is ever handed a genuinely self-referential structure in
+ *    practice, but chapter 3+'s set_head/set_tail can build exactly that, and a user visualizing such
+ *    a structure is precisely the case draw_data exists to handle gracefully (a "ref" node, not a
+ *    hang). Passing the native args straight to the plugin's sendDrawing — which walks them via
+ *    toDataVisualizerNodePy2Js (conductor/dataVisualizer/), with its own refs-based cycle guard —
+ *    avoids that conversion entirely.
+ *  - sendDrawing is synchronous and fire-and-forget (a channel send), so there is no async result to
+ *    thread back through the generic bridge's Value round-trip in the first place.
+ *
+ * `plugin` is undefined below chapter 2 (bridgeStdlibGroups is never called with one there — see
+ * Py2JsEvaluator.ts) and in every standalone/test run (runCodePy2Js et al. pass no dataVisualizer
+ * option), in which case it draws nothing and just returns its first argument, exactly like
+ * context.dataVisualizer?.sendDrawing(...) on the CSE side when no host conductor is attached.
+ */
+function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefined): PyFunction {
+  const f = ((...args: PyValue[]) => {
+    if (args.length < 1) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `draw_data() takes at least 1 argument (${args.length} given)`,
+      );
+    }
+    plugin?.sendDrawing(args);
+    // The identity on its first argument (like Source's draw_data), whether or not there is a canvas.
+    return args[0];
+  }) as PyFunction;
+  f.pyName = "draw_data";
+  f.pyArity = -1;
+  f.pyBuiltin = true;
+  f.pyNative = true;
+  f.pyMinArgs = 1;
+  return f;
+}
+
+/**
+ * pair/llist/head/tail (chapter 2's linked-list group): return the caller's own PyValues rather
+ * than copies. The generic toTagged/fromTagged round-trip rebuilds every PyList it touches, so
+ * through it `head(p)` returned a fresh copy of p's head on every call, and `pair(x, x)` stored two
+ * copies of x. That broke everything that depends on identity: shared substructure (draw_data drew
+ * `pair(head(xs), pair(head(xs), ...))` as two separate lists), and chapter 3's set_head/set_tail
+ * (mutating `head(p)` changed a throwaway copy, not the list p holds).
+ *
+ * Only the well-formed call is handled here. Anything else (wrong argument count, a non-pair given
+ * to head/tail) falls through to `bridged`, the generic bridge of the same CSE builtin, so arity and
+ * type errors keep the CSE machine's exact messages.
+ */
+function nativeLinkedListPrimitive(
+  bridged: PyFunction,
+  fastPath: (args: PyValue[]) => { value: PyValue } | undefined,
+): PyFunction {
+  const f = ((...args: PyValue[]) => {
+    const result = fastPath(args);
+    return result === undefined ? bridged(...args) : result.value;
+  }) as PyFunction;
+  f.pyName = bridged.pyName;
+  f.pyArity = bridged.pyArity;
+  f.pyBuiltin = true;
+  f.pyNative = true;
+  f.pyMinArgs = bridged.pyMinArgs;
+  return f;
+}
+
+function nativeLinkedListPrimitives(out: Record<string, PyValue>): void {
+  const bridged = (name: string) => out[name] as PyFunction;
+  out.pair = nativeLinkedListPrimitive(bridged("pair"), args =>
+    args.length === 2 ? { value: [args[0], args[1]] } : undefined,
+  );
+  out.llist = nativeLinkedListPrimitive(bridged("llist"), args => {
+    let result: PyValue = null;
+    for (let i = args.length - 1; i >= 0; i--) {
+      result = [args[i], result];
+    }
+    return { value: result };
+  });
+  out.head = nativeLinkedListPrimitive(bridged("head"), args =>
+    args.length === 1 && isPairShaped(args[0]) ? { value: args[0][0] } : undefined,
+  );
+  out.tail = nativeLinkedListPrimitive(bridged("tail"), args =>
+    args.length === 1 && isPairShaped(args[0]) ? { value: args[0][1] } : undefined,
+  );
 }
 
 /**
@@ -396,6 +555,7 @@ export function bridgeStdlibGroups(
   groups: Group[],
   source: string,
   variant: number,
+  dataVisualizer?: BaseDataVisualizerRunnerPlugin<PyValue>,
 ): Record<string, PyValue> {
   const context = new Context();
   context.variant = variant;
@@ -407,9 +567,8 @@ export function bridgeStdlibGroups(
           ? bridgeBuiltin(rt, name, value, context, source)
           : fromTagged(name, value);
     }
-    // See nativeSetPairSlot/nativeStream's doc comments for why these two
-    // groups' primitives are reimplemented natively instead of left as the
-    // generic bridge produced above.
+    // See nativeSetPairSlot/nativeStream/nativeLinkedListPrimitive/nativeDrawData's doc comments for why these groups'
+    // primitives are reimplemented natively instead of left as the generic bridge produced above.
     if (group.name === GroupName.PAIRMUTATORS) {
       out.set_head = nativeSetPairSlot("set_head", 0, variant <= 2);
       out.set_tail = nativeSetPairSlot("set_tail", 1, variant <= 2);
@@ -419,6 +578,13 @@ export function bridgeStdlibGroups(
     }
     if (group.name === GroupName.MCE) {
       out.apply_in_underlying_python = nativeApplyInUnderlyingPython(rt);
+    }
+    // LINKED_LISTS (pair/llist/head/tail) is chapter 2's own "list library" — draw_data belongs
+    // alongside it rather than in its own group (unlike the CSE machine, which uses a dedicated
+    // DATA_VISUALIZER group), so it inherits the exact same chapter-2-onward availability.
+    if (group.name === GroupName.LINKED_LISTS) {
+      nativeLinkedListPrimitives(out);
+      out.draw_data = nativeDrawData(dataVisualizer);
     }
   }
   return out;

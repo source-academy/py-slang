@@ -79,12 +79,21 @@ const tokList       = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [t
 # program ::= import-stmt ... block              [python_1_bnf.tex line 18]
 #
 # Enforces: imports come before statements.  An import after a statement
-# is a parse error.
+# is a parse error. A leading run of blank lines/comments before an import
+# is not a statement and must not count as one (py-slang#393) — the lexer
+# already collapses any blank lines/comments between two real tokens into
+# a single `newline` token (see lexer.ts's processTokens), so each import
+# only ever needs at most one such leading token. The optional leading
+# `(%newline):*` is tied to (i.e. inside the same repetition as) its own
+# import_stmt, rather than factored out as a separate top-level group,
+# specifically so a bare leading newline with no import to follow can only
+# ever be matched by the trailing `(statement | %newline):*` group — a
+# factored-out version is ambiguous about which group consumes it.
 # ============================================================================
 
-program -> (import_stmt %newline):* (statement | %newline):*
-  {% ([imports, stmts]: [[StmtNS.FromImport, moo.Token][], ([StmtNS.Stmt] | [moo.Token])[]]) => {
-       const importNodes = imports.map(d => d[0]);
+program -> ((%newline):* import_stmt %newline):* (statement | %newline):*
+  {% ([imports, stmts]: [[moo.Token[], StmtNS.FromImport, moo.Token][], ([StmtNS.Stmt] | [moo.Token])[]]) => {
+       const importNodes = imports.map(d => d[1]);
        const stmtNodes = stmts.map(d => d[0]).filter(s => 'startToken' in s);
        const filtered = [...importNodes, ...stmtNodes];
        const start = filtered[0]
@@ -101,12 +110,19 @@ program -> (import_stmt %newline):* (statement | %newline):*
 # ============================================================================
 
 import_stmt ->
-    "from" dotted_name "import" import_clause
-      {% ([kw, mod,, names]: [moo.Token, Token, moo.Token, StmtNS.FromImport["names"]]) => {
+    "from" relative_module "import" import_clause
+      {% ([kw, mod,, names]: [moo.Token, { name: Token; level: number }, moo.Token, StmtNS.FromImport["names"]]) => {
            const last = names[names.length-1];
            const endTok = last.alias || last.name;
-           return new StmtNS.FromImport(toAstToken(kw), endTok, mod, names);
+           return new StmtNS.FromImport(toAstToken(kw), endTok, mod.name, names, mod.level);
          } %}
+
+# relative-module ::= "."... dotted-name   (leading dots address a local file
+# relative to the importing file's own directory - one dot per directory
+# level, mirroring CPython's relative-import syntax; a bare name with no
+# leading dots (level 0) keeps meaning a Source Academy module, as today.)
+relative_module -> ("."):* dotted_name
+  {% ([dots, name]: [moo.Token[], Token]) => ({ level: dots.length, name }) %}
 
 # dotted-name ::= name ( . name )...                     [python_1_bnf.tex line 20]
 dotted_name -> %name ("." %name):*
@@ -193,11 +209,11 @@ statementBreak -> "break"
 statementContinue -> "continue"
   {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Continue(tok, tok); } %}
 
-statementGlobal -> "global" %name
-  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.Global(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+statementGlobal -> "global" names
+  {% ([kw, ns]: [moo.Token, Token[]]) => new StmtNS.Global(toAstToken(kw), ns[ns.length - 1], ns) %}
 
-statementNonlocal -> "nonlocal" %name
-  {% ([kw, n]: [moo.Token, moo.Token]) => new StmtNS.NonLocal(toAstToken(kw), toAstToken(n), toAstToken(n)) %}
+statementNonlocal -> "nonlocal" names
+  {% ([kw, ns]: [moo.Token, Token[]]) => new StmtNS.NonLocal(toAstToken(kw), ns[ns.length - 1], ns) %}
 
 statementAssert -> "assert" expression
   {% ([kw, e]: [moo.Token, ExprNS.Expr]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
@@ -308,8 +324,15 @@ expressionNot ->
     "not" expressionNot                          {% astUnary %}
   | expressionCmp                                  {% id %}
 
+
+# Non-associative: unlike full Python (where x < y < z is sugar for
+# x < y and y < z, evaluating y once and short-circuiting before z), this
+# grammar treats comparison/membership/identity operators as taking exactly
+# two operands. `expressionAdd` (not `expressionCmp`) on both sides means
+# `x < y < z` cannot be built at all - it's a syntax error, not a silently
+# different parse. See docs/specs/python_precedence.tex.
 expressionCmp ->
-    expressionCmp expressionCmpOp expressionAdd  {% astCompare %}
+    expressionAdd expressionCmpOp expressionAdd  {% astCompare %}
   | expressionAdd                                  {% id %}
 
 expressionCmpOp ->

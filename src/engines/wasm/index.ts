@@ -34,6 +34,9 @@ function splitLeadingImports(code: string): { imports: string; rest: string } {
   return { imports: lines.slice(0, i).join("\n"), rest: lines.slice(i).join("\n") };
 }
 
+/** A runtime error from an interactive run, with the output printed before it. */
+export type WasmRuntimeError = Error & { prints?: string[] };
+
 export async function compileToWasmAndRun(
   code: string,
   interactiveMode?: false,
@@ -66,6 +69,14 @@ export async function compileToWasmAndRun(
   let debugFunctions: Pick<WasmExports, "peekShadowStack" | "getListElement"> | null = null;
 
   const prepared = options.moduleBindings;
+  // Module calls are compiled against `script`, which has the standard
+  // library prelude inserted between leading imports and the user's first
+  // executable statement. Diagnostics, however, use the original user
+  // source held by PyWasmEvaluator. Preserve the coordinate transform for
+  // the module-call host import.
+  if (prepared) {
+    prepared.sourceOffset = prelude.length + 1;
+  }
   const jspi = getJspi();
 
   try {
@@ -148,7 +159,15 @@ export async function compileToWasmAndRun(
     };
   }
 
-  const rawResult = await runMain();
+  let rawResult: [number, bigint];
+  try {
+    rawResult = await runMain();
+  } catch (error) {
+    // Interactive runs throw, but whatever was printed before the error must
+    // still reach the user: carry it on the error for the evaluator to flush.
+    if (error instanceof Error) (error as WasmRuntimeError).prints = output;
+    throw error;
+  }
 
   wasmExports.log(rawResult[0], rawResult[1]);
   const renderedResult = output.pop();

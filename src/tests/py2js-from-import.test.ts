@@ -38,14 +38,17 @@ afterEach(() => {
   ModuleLoaderRunnerPlugin.instance = null;
 });
 
-function makeSession(dh: GenericDataHandler) {
+function makeSession(dh: GenericDataHandler, variant = 1) {
   const outputs: string[] = [];
-  const session = new Py2JsSession(1, { onOutput: line => outputs.push(line), dataHandler: dh });
+  const session = new Py2JsSession(variant, {
+    onOutput: line => outputs.push(line),
+    dataHandler: dh,
+  });
   return { session, outputs };
 }
 
 test("imports a scalar constant and a simple function", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   async function* addFunc(
     a: TypedValue<DataType>,
     b: TypedValue<DataType>,
@@ -84,7 +87,14 @@ test("two imports binding the same name resolve in source order, last one wins",
   // slower one) would always win — backwards from Python's last-assignment-
   // wins semantics. Binding sequentially in source order fixes that: `fast`
   // (the textually-last import) must win here.
-  const dh = new GenericDataHandler();
+  //
+  // Chapter 3, not the file's usual chapter 1 default: two modules declaring the same name is a
+  // reassignment, same as any other (py-slang#413), and chapters 1-2 forbid that outright — this
+  // scenario is only legal where reassignment is legal at all. `dh` uses the same variant as the
+  // session below (`makeSession(dh, 3)`) for consistency, even though GenericDataHandler's own
+  // `variant` only affects DataType.ARRAY's error-message wording ('list' vs 'pair', see
+  // GenericDataHandler.ts's `getTypeName`) — never exercised by this test, which hits no error path.
+  const dh = new GenericDataHandler(3);
   async function* neverCalled(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
     await Promise.resolve();
     throw new Error("should never be invoked by this test");
@@ -95,14 +105,14 @@ test("two imports binding the same name resolve in source order, last one wins",
     fastmod: [{ symbol: "x", value: { type: DataType.NUMBER, value: 42 } }],
   });
 
-  const { session, outputs } = makeSession(dh);
+  const { session, outputs } = makeSession(dh, 3);
   await session.runChunk("from slowmod import x\nfrom fastmod import x\nprint(x)\n");
 
   expect(outputs).toEqual(["42.0"]);
 });
 
 test("import with an alias binds under the aliased name", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   installFakeModule({
     physics: [{ symbol: "gravity", value: { type: DataType.NUMBER, value: 9.8 } }],
   });
@@ -114,14 +124,14 @@ test("import with an alias binds under the aliased name", async () => {
 });
 
 test("a chunk with no imports still runs on the fast sync path", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   const { session, outputs } = makeSession(dh);
   await session.runChunk("print(1 + 1)\n");
   expect(outputs).toEqual(["2"]);
 });
 
 test("an imported binding persists to later chunks", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   installFakeModule({
     physics: [{ symbol: "gravity", value: { type: DataType.NUMBER, value: 9.8 } }],
   });
@@ -134,14 +144,14 @@ test("an imported binding persists to later chunks", async () => {
 });
 
 test("importing from an unknown module raises ModuleNotFoundError", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   installFakeModule({});
   const { session } = makeSession(dh);
   await expect(session.runChunk("from nonexistent import x\n")).rejects.toThrow(/not found/);
 });
 
 test("importing an unknown name raises with the CPython ImportError wording", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   installFakeModule({
     physics: [{ symbol: "gravity", value: { type: DataType.NUMBER, value: 9.8 } }],
   });
@@ -152,7 +162,7 @@ test("importing an unknown name raises with the CPython ImportError wording", as
 });
 
 test("calling an imported function needing a round-trip works on the async spine", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   async function* slowDouble(
     x: TypedValue<DataType>,
   ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
@@ -172,7 +182,7 @@ test("calling an imported function needing a round-trip works on the async spine
 });
 
 test("the sound-module scenario: a module samples a Python-defined function via conductor's generic closure protocol", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
 
   // The fake module's own implementation of play(wave, n): calls wave(i)
   // for i in 0..n through dh.closure_call_unchecked — the same generic,
@@ -187,7 +197,7 @@ test("the sound-module scenario: a module samples a Python-defined function via 
     const n = (nArg as TypedValue<DataType.NUMBER>).value;
     let total = 0;
     for (let i = 0; i < n; i++) {
-      const gen = dh.closure_call_unchecked(wave, [{ type: DataType.NUMBER, value: i }]);
+      const gen = dh.closure_call(wave, [{ type: DataType.NUMBER, value: i }], DataType.NUMBER);
       let step = await gen.next();
       while (!step.done) step = await gen.next();
       total += (step.value as TypedValue<DataType.NUMBER>).value;
@@ -212,14 +222,14 @@ test("the sound-module scenario: a module samples a Python-defined function via 
   expect(outputs).toEqual(["6.0"]);
 });
 
-test("a synchronously-sampled Python callback cannot itself call an import needing a round-trip", async () => {
-  const dh = new GenericDataHandler();
+test("a Python callback invoked by a module can itself call another import needing a round-trip (source-academy/py-slang#348)", async () => {
+  const dh = new GenericDataHandler(4);
 
   async function* playFunc(
     waveArg: TypedValue<DataType>,
   ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
     const wave = waveArg as TypedValue<DataType.CLOSURE>;
-    const gen = dh.closure_call_unchecked(wave, [{ type: DataType.NUMBER, value: 0 }]);
+    const gen = dh.closure_call(wave, [{ type: DataType.NUMBER, value: 0 }], DataType.NUMBER);
     let step = await gen.next();
     while (!step.done) step = await gen.next();
     return step.value;
@@ -247,19 +257,27 @@ test("a synchronously-sampled Python callback cannot itself call an import needi
     ],
   });
 
-  const { session } = makeSession(dh);
-  await expect(
-    session.runChunk(
-      "from audio import play, slow_helper\n" +
-        "def wave(t):\n" +
-        "    return slow_helper(t)\n" +
-        "print(play(wave))\n",
-    ),
-  ).rejects.toThrow(/needs a frontend round-trip/);
+  const { session, outputs } = makeSession(dh);
+  // play calls back into wave(0) via closure_call_unchecked (never
+  // closure_call_sync - wave isn't scalar-in/scalar-out-provable here), and
+  // wave's own body calls slow_helper, an asyncOnly import in its own right.
+  // Regression test for #348: this used to throw "needs a frontend
+  // round-trip" because the callback wrapper ran wave's *sync* body
+  // (rt.callSync) regardless of how the module invoked it, so a nested
+  // asyncOnly call inside wave could never await. It now runs wave's async
+  // body instead, so the nested round-trip actually completes.
+  await session.runChunk(
+    "from audio import play, slow_helper\n" +
+      "def wave(t):\n" +
+      "    return slow_helper(t)\n" +
+      "print(play(wave))\n",
+  );
+
+  expect(outputs).toEqual(["0.0"]);
 });
 
 test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
 
   // sine_sound(freq, duration) returns a Sound: a dotted (frequency,
   // duration) pair - a real module value crossing the boundary as
@@ -312,7 +330,7 @@ test("a module PAIR (a Sound-shaped value) round-trips through sine_sound/play",
 });
 
 test("a module closure round-trips through a pair back into a second module call (the real sine_sound/play shape)", async () => {
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
 
   // sine_sound(freq, duration) returns a Sound: (wave closure, duration),
   // where wave is a closure *created by the module itself* (never a Python
@@ -359,7 +377,7 @@ test("a module closure round-trips through a pair back into a second module call
     const wave = (await dh.pair_head(sound)) as TypedValue<DataType.CLOSURE>;
     let total = 0;
     for (let t = 0; t < 3; t++) {
-      const gen = dh.closure_call_unchecked(wave, [{ type: DataType.NUMBER, value: t }]);
+      const gen = dh.closure_call(wave, [{ type: DataType.NUMBER, value: t }], DataType.NUMBER);
       let step = await gen.next();
       while (!step.done) step = await gen.next();
       total += (step.value as TypedValue<DataType.NUMBER>).value;

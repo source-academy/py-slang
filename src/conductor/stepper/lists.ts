@@ -139,7 +139,7 @@ function llistLeafRepr(node: StepNode): string {
  * below calls this once per *distinct* tail-chain suffix it renders (see its own doc comment), so a
  * recursive version here would make the whole walk O(N^2) on a long chain, and risk a stack
  * overflow on a long chain by itself regardless. */
-function isProperLlist(node: StepNode): boolean {
+export function isProperLlist(node: StepNode): boolean {
   let current = node;
   while (isPairNode(current)) {
     current = (current.elements as StepNode[])[1];
@@ -512,6 +512,22 @@ function applyLibrary(name: string, fn: StepNode, args: StepNode[]): StepNode {
 export const listBuiltins: Record<string, BuiltinFn> = { ...primitives };
 for (const [name, fn] of Object.entries(library)) {
   listBuiltins[name] = args => applyLibrary(name, fn, args);
+}
+
+/**
+ * The raw `lambda`/`def` template for a pre-declared function (`map`, `_map`, `llist_ref`, …), for
+ * `getSteps.ts`'s display-time relabeling (py-slang#405) — a bare reference to one of these names, or a
+ * cross-reference to it from *inside* another pre-declared function's own body, becomes this template
+ * tagged with a `name` marker, so it renders as a mu-term with a "Function definition" hover popover
+ * exactly like a user-defined function, instead of the opaque `<built-in function …>` text popover a
+ * true native primitive (`pair`/`head`/…) gets. `undefined` for any name not in `library` (including
+ * every `primitives` name — those have no Python-level body to show at all).
+ *
+ * `applyLibrary`'s one-step-per-call expansion (used by `listBuiltins`, i.e. actual evaluation) is
+ * unaffected: this is consulted only by the display-time relabeling pass, never by the reducer.
+ */
+export function getListLibraryTemplate(name: string): StepNode | undefined {
+  return library[name];
 }
 
 /** Parameter counts of the public list functions, for the `arity` built-in. */

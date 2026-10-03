@@ -59,7 +59,7 @@ function is_llist(xs) {}
  * Given n values, returns a linked list of length n. The elements of
  * the linked list are the given values in the given order.
  *
- * @param {value} <CODE>value1, value2, ...values</CODE> - given values
+ * @param {value} <CODE>values</CODE> - given values (value1, value2, ...)
  * @returns {linked_list} linked list containing all values
  */
 function llist(...values) {}
@@ -67,9 +67,11 @@ function llist(...values) {}
 /**
  * PRIMITIVE
  * Visualizes the arguments in a separate drawing area in the Source
- * Academy using box-and-pointer diagrams.
+ * Academy using box-and-pointer diagrams. Where there is no drawing area
+ * (for example, when running from the command line), nothing is drawn.
  *
- * @param {value} <CODE>value1, value2, ...values</CODE> - given values
+ * @param {value} <CODE>values</CODE> - given values (value1, value2, ...)
+ * @returns {value} the first of the given values
  */
 function draw_data(...values) {}
 
@@ -114,6 +116,17 @@ function for_each(fun, xs) {}
  * @returns {string} string that represents xs using box-and-pointer notation
  */
 function llist_to_string(xs) {}
+
+/**
+ * PRIMITIVE
+ * Prints linked list xs using the text-based box-and-pointer notation: a linked list is
+ * printed as <CODE>llist(...)</CODE> and any other pair as <CODE>[head, tail]</CODE>.
+ * For example, <CODE>print_llist(llist(1, 2, 3))</CODE> prints <CODE>llist(1, 2, 3)</CODE>.
+ *
+ * @param {linked_list} <CODE>xs</CODE> - given linked list
+ * @returns {NoneType} the <CODE>None</CODE> value
+ */
+function print_llist(xs) {}
 
 /**
  * Returns linked list xs in reverse order.

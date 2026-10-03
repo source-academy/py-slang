@@ -365,15 +365,18 @@ export namespace StmtNS {
     readonly kind = "FromImport";
     module: Token;
     names: { name: Token; alias: Token | null }[];
+    level: number;
     constructor(
       startToken: Token,
       endToken: Token,
       module: Token,
       names: { name: Token; alias: Token | null }[],
+      level: number,
     ) {
       super(startToken, endToken);
       this.module = module;
       this.names = names;
+      this.level = level;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitFromImportStmt(this);
@@ -381,10 +384,10 @@ export namespace StmtNS {
   }
   export class Global extends Stmt {
     readonly kind = "Global";
-    name: Token;
-    constructor(startToken: Token, endToken: Token, name: Token) {
+    names: Token[];
+    constructor(startToken: Token, endToken: Token, names: Token[]) {
       super(startToken, endToken);
-      this.name = name;
+      this.names = names;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitGlobalStmt(this);
@@ -392,10 +395,10 @@ export namespace StmtNS {
   }
   export class NonLocal extends Stmt {
     readonly kind = "NonLocal";
-    name: Token;
-    constructor(startToken: Token, endToken: Token, name: Token) {
+    names: Token[];
+    constructor(startToken: Token, endToken: Token, names: Token[]) {
       super(startToken, endToken);
-      this.name = name;
+      this.names = names;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitNonLocalStmt(this);

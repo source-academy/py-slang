@@ -5,8 +5,9 @@ import {
   TypedValue,
 } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
-import { ExprNS } from "../../ast-types";
-import { RuntimeSourceError } from "../../errors";
+import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE, RuntimeSourceError } from "../../errors";
+import { isProperList } from "../../stdlib/linked-list";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { appInstr } from "./instrCreator";
@@ -17,6 +18,18 @@ export class ModuleNotFoundError extends RuntimeSourceError {
   constructor(public readonly moduleName: string) {
     super();
     this.message = `Module "${moduleName}" not found.`;
+  }
+}
+
+/** `from .foo import x` / `from ..pkg.foo import x` (level > 0): local-file
+ * imports are not implemented on the CSE machine yet (see py2js for the
+ * supported engine) — reject explicitly rather than treating the dotted
+ * path as a conductor module name, which would either 404 confusingly or,
+ * worse, collide with an unrelated real module of the same bare name. */
+export class RelativeImportNotSupportedError extends RuntimeSourceError {
+  constructor(node?: StmtNS.FromImport) {
+    super(node);
+    this.message = RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE;
   }
 }
 
@@ -36,6 +49,19 @@ export async function loadModules(context: Context, moduleNames: string[]): Prom
       }
     }),
   );
+}
+
+/** Walks a proper pair()/llist() chain (already confirmed via isProperList) into its actual
+ * elements - e.g. { list: [a, { list: [b, { none }] }] } becomes [a, b] - so pythonToModule's
+ * "list" case can convert a chain the same way it would a flat literal of the same elements. */
+function flattenProperList(value: Value): Value[] {
+  const result: Value[] = [];
+  let current = value;
+  while (current.type === "list") {
+    result.push(current.value[0]);
+    current = current.value[1];
+  }
+  return result;
 }
 
 export async function pythonToModule(
@@ -70,8 +96,16 @@ export async function pythonToModule(
       // collide on the way back out - exactly the kind of ambiguity this whole redesign exists to
       // remove. A genuine 0-length ARRAY round-trips back through moduleToPython's ARRAY case as a
       // real [], not None.
+      //
+      // A pair()/llist() chain is nested cons cells - llist(a, b) is
+      // { list: [a, { list: [b, { none }] }] }, not the flat { list: [a, b] } a literal [a, b]
+      // produces - so mapping value.value directly here would turn element 1 of the chain into a
+      // nested sub-list instead of the list's real second element. isProperList (true only for a
+      // chain that actually terminates in None) tells that case apart from a raw 2-element list
+      // like [1, 2] or a module PAIR round-tripped back in, which fall through unchanged below.
+      const flatElements = isProperList(value) ? flattenProperList(value) : value.value;
       const elements = await Promise.all(
-        value.value.map(el => pythonToModule(context, code, command, el)),
+        flatElements.map(el => pythonToModule(context, code, command, el)),
       );
       const array = await context.evaluator.array_make(DataType.ANY, elements.length, {
         type: DataType.VOID,
@@ -109,8 +143,10 @@ export async function pythonToModule(
       }
 
       return context.evaluator.closure_make<DataType[], DataType>(
-        { returnType: DataType.VOID, args: Array(value.minArgs).fill(DataType.VOID) },
+        { returnType: DataType.ANY, args: Array(value.minArgs).fill(DataType.ANY) },
         builtinFunc,
+        undefined,
+        true,
       );
     case "bigint":
       return { type: DataType.NUMBER, value: Number(value.value) };
@@ -130,10 +166,12 @@ export async function pythonToModule(
           value.closure.node.parameters.length + 1) - 1;
       return context.evaluator.closure_make<DataType[], DataType>(
         {
-          returnType: DataType.VOID,
-          args: Array(arity).fill(DataType.VOID),
+          returnType: DataType.ANY,
+          args: Array(arity).fill(DataType.ANY),
         },
         closureFunc,
+        undefined,
+        value.closure.node.parameters.some(p => p.isStarred),
       );
     case "complex":
     case "multi_lambda":
@@ -206,11 +244,12 @@ export async function moduleToPython(
         command: ExprNS.Call,
         context: Context,
       ): ModuleFunctionGenerator {
-        const result = await context.evaluator!.closure_call_unchecked(
+        const result = yield* context.evaluator!.closure_call(
           value as TypedValue<DataType.CLOSURE>,
           await Promise.all(args.map(arg => pythonToModule(context, code, command, arg))),
+          DataType.ANY,
         );
-        return yield* result;
+        return result;
       }
       builtinGenerator.id = value.value;
       return {

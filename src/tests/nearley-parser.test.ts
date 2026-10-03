@@ -772,6 +772,26 @@ describe("Import statement", () => {
     expect(imp.module.lexeme).toBe("math");
     expect(imp.names[0].name.lexeme).toBe("sqrt");
     expect(imp.names[0].alias).toBeNull();
+    expect(imp.level).toBe(0);
+  });
+
+  test("relative import: from .utils import foo has level 1", () => {
+    const stmts = parseStmts("from .utils import foo");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(1);
+    expect(imp.module.lexeme).toBe("utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+  });
+
+  test("relative import: from ..pkg.utils import foo as bar has level 2", () => {
+    const stmts = parseStmts("from ..pkg.utils import foo as bar");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+    const imp = stmts[0] as StmtNS.FromImport;
+    expect(imp.level).toBe(2);
+    expect(imp.module.lexeme).toBe("pkg.utils");
+    expect(imp.names[0].name.lexeme).toBe("foo");
+    expect(imp.names[0].alias!.lexeme).toBe("bar");
   });
 
   test("from x import (a, b, c) produces FromImport with multiple names", () => {
@@ -807,6 +827,28 @@ describe("Import statement", () => {
     expect(imp.module.lexeme).toBe("foo.bar");
     expect(imp.names).toHaveLength(2);
   });
+
+  // py-slang#393: a leading blank line or comment isn't a statement, and
+  // must not count as one — it shouldn't be able to knock a `from` import
+  // out of the program's import-prefix section. Blank lines/comments
+  // *between* imports already worked (the lexer collapses each into a
+  // single `newline` token that already pairs with the previous import),
+  // so those aren't regression-tested here, only the previously-broken
+  // leading case.
+  test("a leading blank line before the first import still parses it as an import", () => {
+    const stmts = parseStmts("\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("a leading comment before the first import still parses it as an import", () => {
+    const stmts = parseStmts("# a comment\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
+
+  test("several leading blank/comment lines before the first import still parse it as an import", () => {
+    const stmts = parseStmts("# one\n\n# two\n\nfrom math import sqrt");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.FromImport);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -840,6 +882,23 @@ describe("Token tracking", () => {
   test("startToken.lexeme is the first token of the expression", () => {
     const expr = parseExpr("1 + 2") as ExprNS.Binary;
     expect(expr.startToken.lexeme).toBe("1");
+  });
+
+  // py-slang#394: the triple-quoted string tokens were missing moo's
+  // `lineBreaks: true`, so moo's own line/col counters silently stopped
+  // advancing across the string's embedded newlines — every token after a
+  // multi-line triple-quoted string reported the wrong line/column.
+  test("line tracking survives a multi-line triple-quoted string", () => {
+    const stmts = parseStmts("x = '''\nline2\nline3\n'''\ny = 1");
+    expect(stmts[0].startToken.line).toBe(1);
+    expect(stmts[1].startToken.line).toBe(5);
+  });
+
+  test("a syntax error after a multi-line triple-quoted string reports the right line (py-slang#394 repro)", () => {
+    // Mirrors the issue's exact repro: an invalid `&` token six lines below
+    // a multi-line triple-quoted string used to be reported against a line
+    // inside the string instead of its own line.
+    expect(() => parseStmts("1 + 2\n'''\na\nb\n'''\n&\n4 + 5")).toThrow(/line 6 col 1/);
   });
 });
 
@@ -887,10 +946,12 @@ describe("Left-associativity", () => {
     expect(expr.left).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("comparison is left-associative: 1 < 2 < 3 = (1 < 2) < 3", () => {
-    const expr = parseExpr("1 < 2 < 3") as ExprNS.Compare;
-    expect(expr.operator.lexeme).toBe("<");
-    expect(expr.left).toBeInstanceOf(ExprNS.Compare);
+  test("comparison operators are non-associative: 1 < 2 < 3 is a syntax error", () => {
+    // Unlike full Python (where this is sugar for 1 < 2 and 2 < 3), chaining
+    // is deliberately excluded from this sublanguage rather than given
+    // different (silently wrong, or chapter-dependent) behavior - see
+    // docs/specs/python_precedence.tex.
+    expect(() => parseExpr("1 < 2 < 3")).toThrow();
   });
 
   test("mixed operators: 10 - 3 + 2 = (10 - 3) + 2", () => {
@@ -928,6 +989,19 @@ describe("Compound comparison operators", () => {
     const expr = parseExpr("x is None") as ExprNS.Compare;
     expect(expr).toBeInstanceOf(ExprNS.Compare);
     expect(expr.operator.lexeme).toBe("is");
+  });
+
+  // Comparison, membership, and identity operators are all non-associative:
+  // each takes exactly two operands, so chaining any of them - even mixed
+  // ones - is a syntax error rather than left-associating like +/-/* do.
+  // See docs/specs/python_precedence.tex.
+  test.each([
+    ["1 == 2 == 3", "chained =="],
+    ["x is y is z", "chained is"],
+    ["1 in [2] in [3]", "chained in"],
+    ["1 < 2 == 3", "mixed comparison operators"],
+  ])("%s is rejected (%s)", src => {
+    expect(() => parseExpr(src)).toThrow();
   });
 });
 
@@ -1010,12 +1084,27 @@ describe("Global and nonlocal statements", () => {
   test("global statement", () => {
     const stmts = parseStmts("global x");
     expect(stmts[0]).toBeInstanceOf(StmtNS.Global);
+    expect((stmts[0] as StmtNS.Global).names.map(n => n.lexeme)).toEqual(["x"]);
+  });
+
+  test("global statement with multiple names", () => {
+    const stmts = parseStmts("global x, y, z");
+    expect(stmts[0]).toBeInstanceOf(StmtNS.Global);
+    expect((stmts[0] as StmtNS.Global).names.map(n => n.lexeme)).toEqual(["x", "y", "z"]);
   });
 
   test("nonlocal statement", () => {
     const stmts = parseStmts("def f():\n  nonlocal x\n  x = 1");
     const body = (stmts[0] as StmtNS.FunctionDef).body;
     expect(body[0]).toBeInstanceOf(StmtNS.NonLocal);
+    expect((body[0] as StmtNS.NonLocal).names.map(n => n.lexeme)).toEqual(["x"]);
+  });
+
+  test("nonlocal statement with multiple names", () => {
+    const stmts = parseStmts("def f():\n  nonlocal x, y\n  x = 1");
+    const body = (stmts[0] as StmtNS.FunctionDef).body;
+    expect(body[0]).toBeInstanceOf(StmtNS.NonLocal);
+    expect((body[0] as StmtNS.NonLocal).names.map(n => n.lexeme)).toEqual(["x", "y"]);
   });
 });
 
@@ -1097,10 +1186,8 @@ describe("Complex expressions (no ambiguity)", () => {
     expect(expr).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("chained comparisons: 1 < 2 < 3 < 4", () => {
-    const expr = parseExpr("1 < 2 < 3 < 4") as ExprNS.Compare;
-    expect(expr).toBeInstanceOf(ExprNS.Compare);
-    expect(expr.left).toBeInstanceOf(ExprNS.Compare);
+  test("chained comparisons are rejected: 1 < 2 < 3 < 4", () => {
+    expect(() => parseExpr("1 < 2 < 3 < 4")).toThrow();
   });
 
   test("mixed bool ops: a and b or c and d", () => {

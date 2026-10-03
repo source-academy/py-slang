@@ -1,11 +1,11 @@
 import {
   DataType,
   type ExternCallable,
-  type IDataHandler,
   type IFunctionSignature,
   type TypedValue,
 } from "@sourceacademy/conductor/types";
 import { ExprNS, StmtNS } from "../ast-types";
+import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { Closure } from "../engines/cse/closure";
 import { Context } from "../engines/cse/context";
 import { moduleToPython, pythonToModule } from "../engines/cse/modules";
@@ -32,6 +32,10 @@ class TestDataHandler {
   private closures = new Map<TypedValue<DataType.CLOSURE>, StoredClosure>();
   private opaques = new Map<TypedValue<DataType.OPAQUE>, { value: unknown; immutable: boolean }>();
 
+  private currentCall?: ExprNS.Call;
+  setCurrentCall(call: ExprNS.Call | undefined): void {
+    this.currentCall = call;
+  }
   pair_make(
     head: TypedValue<DataType>,
     tail: TypedValue<DataType>,
@@ -119,9 +123,10 @@ class TestDataHandler {
     return Promise.resolve(this.getClosure(closure).sig.args.length);
   }
 
-  closure_call_unchecked<T extends DataType>(
+  closure_call<T extends DataType>(
     closure: TypedValue<DataType.CLOSURE, T>,
     args: TypedValue<DataType>[],
+    _returnType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     return this.getClosure(closure).func(...args) as AsyncGenerator<
       void,
@@ -188,7 +193,7 @@ class TestDataHandler {
 function makeContext(): { context: Context; evaluator: TestDataHandler } {
   const context = new Context();
   const evaluator = new TestDataHandler();
-  context.evaluator = evaluator as unknown as IDataHandler;
+  context.evaluator = evaluator as unknown as GenericDataHandler;
   return { context, evaluator };
 }
 
@@ -329,6 +334,112 @@ describe("module interop conversions", () => {
       ]);
     });
 
+    describe("pair()/llist() chains (regression: modules#931)", () => {
+      // llist(a, b, c, ...) builds nested cons cells - { list: [a, { list: [b, { none }] }] } for
+      // llist(a, b) - not the flat { list: [a, b] } a literal [a, b] produces (see
+      // LinkedListBuiltins.llist in src/stdlib/linked-list.ts). Mirrors that shape directly rather
+      // than calling the builtin, to keep this file's own fixture self-contained.
+      function pyLlist(...elements: Value[]): Value {
+        return elements.reduceRight<Value>(
+          (tail, head) => ({ type: "list", value: [head, tail] }),
+          {
+            type: "none",
+          },
+        );
+      }
+
+      test("llist(a, b) - the reported repro's exact shape - flattens to a flat 2-element ARRAY, not a nested one", async () => {
+        const { context, evaluator } = makeContext();
+        const chain = pyLlist({ type: "number", value: 60 }, { type: "number", value: 64 });
+
+        const moduleList = await pythonToModule(context, "", undefined, chain);
+
+        expect(moduleList.type).toBe(DataType.ARRAY);
+        await expect(
+          readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>),
+        ).resolves.toEqual([
+          { type: DataType.NUMBER, value: 60 },
+          { type: DataType.NUMBER, value: 64 },
+        ]);
+      });
+
+      test("llist(a) - a single-element chain - flattens to a 1-element ARRAY", async () => {
+        const { context, evaluator } = makeContext();
+        const chain = pyLlist({ type: "number", value: 1 });
+
+        const moduleList = await pythonToModule(context, "", undefined, chain);
+
+        expect(moduleList.type).toBe(DataType.ARRAY);
+        await expect(
+          readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>),
+        ).resolves.toEqual([{ type: DataType.NUMBER, value: 1 }]);
+      });
+
+      test("llist(a, b, c, d) - a longer chain - flattens to a 4-element ARRAY in order", async () => {
+        const { context, evaluator } = makeContext();
+        const chain = pyLlist(
+          { type: "number", value: 1 },
+          { type: "number", value: 2 },
+          { type: "number", value: 3 },
+          { type: "number", value: 4 },
+        );
+
+        const moduleList = await pythonToModule(context, "", undefined, chain);
+
+        expect(moduleList.type).toBe(DataType.ARRAY);
+        await expect(
+          readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>),
+        ).resolves.toEqual([
+          { type: DataType.NUMBER, value: 1 },
+          { type: DataType.NUMBER, value: 2 },
+          { type: DataType.NUMBER, value: 3 },
+          { type: DataType.NUMBER, value: 4 },
+        ]);
+      });
+
+      test("a chain element that is itself an llist chain is recursively flattened too", async () => {
+        const { context, evaluator } = makeContext();
+        const inner = pyLlist({ type: "number", value: 1 }, { type: "number", value: 2 });
+        const outer = pyLlist(inner, { type: "number", value: 3 });
+
+        const moduleList = await pythonToModule(context, "", undefined, outer);
+
+        expect(moduleList.type).toBe(DataType.ARRAY);
+        const elements = await readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>);
+        expect(elements[1]).toEqual({ type: DataType.NUMBER, value: 3 });
+        expect(elements[0].type).toBe(DataType.ARRAY);
+        await expect(
+          readArray(evaluator, elements[0] as TypedValue<DataType.ARRAY>),
+        ).resolves.toEqual([
+          { type: DataType.NUMBER, value: 1 },
+          { type: DataType.NUMBER, value: 2 },
+        ]);
+      });
+
+      test("a raw 2-element list that ISN'T a proper chain (e.g. pair(1, 2)) is unaffected - still a flat ARRAY", async () => {
+        // isProperList(pair(1, 2)) is false (its tail, 2, isn't itself a pair or None) - this must
+        // take the exact same path as before the fix, not be mistaken for an llist chain.
+        const { context, evaluator } = makeContext();
+        const rawPair: Value = {
+          type: "list",
+          value: [
+            { type: "number", value: 1 },
+            { type: "number", value: 2 },
+          ],
+        };
+
+        const moduleList = await pythonToModule(context, "", undefined, rawPair);
+
+        expect(moduleList.type).toBe(DataType.ARRAY);
+        await expect(
+          readArray(evaluator, moduleList as TypedValue<DataType.ARRAY>),
+        ).resolves.toEqual([
+          { type: DataType.NUMBER, value: 1 },
+          { type: DataType.NUMBER, value: 2 },
+        ]);
+      });
+    });
+
     test("wraps Python builtins as module closures", async () => {
       const { context, evaluator } = makeContext();
       const add: BuiltinValue = {
@@ -346,10 +457,14 @@ describe("module interop conversions", () => {
 
       const closure = await pythonToModule(context, "", undefined, add);
       const result = await drainGenerator(
-        evaluator.closure_call_unchecked(closure as TypedValue<DataType.CLOSURE>, [
-          { type: DataType.NUMBER, value: 2 },
-          { type: DataType.NUMBER, value: 3 },
-        ]),
+        evaluator.closure_call(
+          closure as TypedValue<DataType.CLOSURE>,
+          [
+            { type: DataType.NUMBER, value: 2 },
+            { type: DataType.NUMBER, value: 3 },
+          ],
+          DataType.NUMBER,
+        ),
       );
 
       expect(await evaluator.closure_arity(closure as TypedValue<DataType.CLOSURE>)).toBe(2);
@@ -421,8 +536,8 @@ describe("module interop conversions", () => {
       const { context, evaluator } = makeContext();
       const closure = await evaluator.closure_make(
         { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+        // eslint-disable-next-line @typescript-eslint/require-await
         async function* (arg) {
-          await Promise.resolve();
           return { type: DataType.NUMBER, value: arg.value * 2 };
         },
       );

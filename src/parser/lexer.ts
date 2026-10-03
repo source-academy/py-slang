@@ -63,8 +63,12 @@ const mooLexer = moo.compile({
   number_bin: /0[bB][01]+/,
   number_int: /\d+/,
 
-  string_triple_double: /"""(?:[^\\]|\\.)*?"""/,
-  string_triple_single: /'''(?:[^\\]|\\.)*?'''/,
+  // `lineBreaks: true` is required so moo's own line/col counters advance
+  // across embedded newlines in the matched text (py-slang#394) — without
+  // it, moo silently under-counts, and every token after a multi-line
+  // triple-quoted string reports the wrong line/column.
+  string_triple_double: { match: /"""(?:[^\\]|\\.)*?"""/, lineBreaks: true },
+  string_triple_single: { match: /'''(?:[^\\]|\\.)*?'''/, lineBreaks: true },
   string_double: /"(?:[^"\\]|\\.)*"/,
   string_single: /'(?:[^'\\]|\\.)*'/,
 

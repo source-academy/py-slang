@@ -130,3 +130,33 @@ print(b())
 `;
   expect(runCodePy2Js(code, 3).output).toBe("1\n2\n1\n");
 });
+
+test("a single `nonlocal a, b` excludes both names from the function's hoisted locals", () => {
+  const code = `
+def outer():
+    a = 1
+    b = 2
+    def inner():
+        nonlocal a, b
+        a = a + 1
+        b = b + 1
+    inner()
+    print(a, b)
+outer()
+`;
+  expect(runCodePy2Js(code, 3).output).toBe("2 3\n");
+});
+
+test("a single `global a, b` excludes both names from the module's hoisted locals", () => {
+  const code = `
+a = 1
+b = 2
+def f():
+    global a, b
+    a = a + 10
+    b = b + 20
+f()
+print(a, b)
+`;
+  expect(runCodePy2Js(code, 3).output).toBe("11 22\n");
+});

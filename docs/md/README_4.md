@@ -1,7 +1,7 @@
 Python §4 is a small programming language, designed for the fourth chapter
 of the textbook
-<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
 
 ## What names are predeclared in Python §4?
 
@@ -16,16 +16,16 @@ these groups:
       <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
     </li>
     <li>
-      <a href="../LINKED LISTS/index.html">LINKED LISTS</a>: Support for linked lists
+      <a href="../LINKED LIST/index.html">LINKED LIST</a>: Support for linked lists
     </li>
     <li>
-      <a href="../PAIR MUTATORS/index.html">PAIR MUTATORS</a>: Mutating pairs
+      <a href="../PAIR MUTATOR/index.html">PAIR MUTATOR</a>: Mutating pairs
     </li>
     <li>
-      <a href="../LISTS/index.html">LISTS</a>: Support for lists
+      <a href="../LIST/index.html">LIST</a>: Support for lists
     </li>
     <li>
-      <a href="../STREAMS/index.html">STREAM</a>: Support for streams
+      <a href="../STREAM/index.html">STREAM</a>: Support for streams
     </li>
     <li>
       <a href="../MCE/index.html">MCE</a>: Support for the meta-circular evaluator
@@ -37,7 +37,7 @@ these groups:
 You can use all features of
 <a href="../python_3/">Python §3</a> and 
 the three functions that are introduced in chapter 4
-<a href="https://sourceacademy.org/sicpjs">of the textbook</a>,
+<a href="https://sourceacademy.org/sicpy">of the textbook</a>,
 given in  <a href="../MCE/index.html">MCE</a>.
 
 ## You want the definitive specs?

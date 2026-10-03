@@ -13,6 +13,7 @@ import {
   type WasmRaw,
 } from "@sourceacademy/wasm-util";
 import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { TokenType } from "../../tokenizer";
 import { LibFuncType } from "./library";
 import {
@@ -204,7 +205,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
 
     statements
       .filter(s => s instanceof StmtNS.NonLocal)
-      .map(s => s.name.lexeme)
+      .flatMap(s => s.names.map(n => n.lexeme))
       .forEach(l => {
         // cannot declare parameter name as nonlocal
         if (parameters && parameters.map(p => p.lexeme).includes(l)) {
@@ -361,7 +362,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
         wasm
           .import("modules", "call")
           .func("$_host_module_call")
-          .params(i32, i32, i32)
+          .params(i32, i32, i32, i32, i32)
           .results(i32, i64),
       )
       .globals(
@@ -489,11 +490,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     } else throw new Error(`Unsupported boolean binary operator: ${type}`);
   }
 
+  // Spec-wise this condition requires a genuine bool, like `and`/`or`'s left operand
+  // (docs/specs/python_typing_back.tex) — same CHECK_BOOL_FX-then-BOOLISE_FX composition
+  // visitBoolOpExpr uses above (py-slang#437, fixed alongside visitIfStmt below).
   visitTernaryExpr(expr: ExprNS.Ternary): WasmNumeric {
     const consequent = this.visit(expr.consequent);
     const alternative = this.visit(expr.alternative);
 
-    const predicate = this.visit(expr.predicate);
+    const predicate = wasm.call(CHECK_BOOL_FX).args(this.visit(expr.predicate));
 
     return wasm
       .if(i32.wrap_i64(wasm.call(BOOLISE_FX).args(predicate)))
@@ -709,6 +713,8 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       ),
 
       /* ! */ i32.const(args.length), // the only actual argument to APPLY, the rest are set up on the shadow stack
+      i32.const(expr.startToken.indexInSource),
+      i32.const(expr.endToken.indexInSource + expr.endToken.lexeme.length),
     );
   }
 
@@ -739,17 +745,23 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     // no effect
 
     const currFrame = this.environment.at(-1);
-    const bindingIndex = currFrame?.findIndex(binding => binding.name === stmt.name.lexeme);
-
-    if (bindingIndex != null) {
-      currFrame?.splice(bindingIndex, 1);
+    for (const name of stmt.names) {
+      const bindingIndex = currFrame?.findIndex(binding => binding.name === name.lexeme);
+      if (bindingIndex != null && bindingIndex !== -1) {
+        currFrame?.splice(bindingIndex, 1);
+      }
     }
 
     return wasm.nop();
   }
 
+  // Spec-wise this condition requires a genuine bool, like `and`/`or`'s left operand
+  // (docs/specs/python_typing_back.tex) — py2js and the stepper were already tightened to that
+  // stricter reading (py-slang#439); this brings WASM to parity (py-slang#437). `while`'s
+  // identical condition (visitWhileStmt below) is a deliberately separate, still-open gap —
+  // out of scope for #437, matching the companion py2js/stepper fix's own scoping.
   visitIfStmt(stmt: StmtNS.If): WasmInstruction {
-    const condition = this.visit(stmt.condition);
+    const condition = wasm.call(CHECK_BOOL_FX).args(this.visit(stmt.condition));
     const body = stmt.body.map(b => this.visit(b));
     const elseBody = stmt.elseBlock?.map(e => this.visit(e));
 
@@ -986,6 +998,14 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
    * also why it must run during main() rather than at instantiation time
    * (heap/shadow-stack globals are only live inside main). */
   visitFromImportStmt(stmt: StmtNS.FromImport): WasmInstruction {
+    if (stmt.level > 0) {
+      // Local-file imports (leading dots) aren't implemented on the WASM
+      // engine yet — reject explicitly rather than treating the dotted path
+      // as a conductor module name (see PyWasmEvaluator.ts's loadImports,
+      // which already rejects this earlier for the conductor entrypoint;
+      // this is the same guard for any direct, non-conductor caller).
+      throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+    }
     return wasm.raw`${stmt.names.map(spec => {
       const boundName = (spec.alias ?? spec.name).lexeme;
       const bindingIndex = this.moduleBindingIndices.get(boundName);

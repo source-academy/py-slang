@@ -17,6 +17,7 @@ export class PVMLIRBuilder {
   private strings: string[] = [];
   private bigints: bigint[] = [];
   private complexes: PyComplexNumber[] = [];
+  private callLocations: Array<{ start: number; end: number } | undefined> = [];
 
   // Fast label tracking with numeric IDs
   private labelPositions: number[] = []; // sparse array: labelId -> instruction index
@@ -70,10 +71,11 @@ export class PVMLIRBuilder {
     return res.sort((a, b) => a.getFunctionIndex() - b.getFunctionIndex());
   }
 
-  emitNullary(opcode: number): void {
+  emitNullary(opcode: number, location?: { start: number; end: number }): void {
     this.ops.push(opcode);
     this.a1s.push(0);
     this.a2s.push(0);
+    this.callLocations.push(location);
     this.updateStackDepth(opcode);
   }
 
@@ -92,6 +94,7 @@ export class PVMLIRBuilder {
       this.a1s.push(arg1 as number);
     }
     this.a2s.push(0);
+    this.callLocations.push(undefined);
     this.updateStackDepth(opcode);
   }
 
@@ -99,6 +102,7 @@ export class PVMLIRBuilder {
     this.ops.push(opcode);
     this.a1s.push(arg1 as number);
     this.a2s.push(arg2 as number);
+    this.callLocations.push(undefined);
     this.updateStackDepth(opcode);
   }
 
@@ -116,6 +120,7 @@ export class PVMLIRBuilder {
     this.ops.push(opcode);
     this.a1s.push(0); // placeholder
     this.a2s.push(0);
+    this.callLocations.push(undefined);
     this.updateStackDepth(opcode);
     return labelId;
   }
@@ -132,6 +137,7 @@ export class PVMLIRBuilder {
     this.ops.push(opcode);
     this.a1s.push(primitiveIndex);
     this.a2s.push(numArgs);
+    this.callLocations.push(undefined);
     // Primitive calls: -numArgs + 1 (args consumed, result produced)
     this.currentStackDepth = this.currentStackDepth - numArgs + 1;
     if (this.currentStackDepth > this.maxStackDepth) {
@@ -139,10 +145,11 @@ export class PVMLIRBuilder {
     }
   }
 
-  emitCall(opcode: number, numArgs: number): void {
+  emitCall(opcode: number, numArgs: number, location?: { start: number; end: number }): void {
     this.ops.push(opcode);
     this.a1s.push(numArgs);
     this.a2s.push(0);
+    this.callLocations.push(location);
     // User calls: -(numArgs + 1) + 1 = -numArgs (function + args consumed, result produced)
     this.currentStackDepth = this.currentStackDepth - numArgs;
     if (this.currentStackDepth > this.maxStackDepth) {
@@ -214,6 +221,7 @@ export class PVMLIRBuilder {
       this.functionName,
       this.complexes.slice(), // copy for builder reuse
       this.hasRestParam,
+      this.callLocations.slice(),
     );
   }
 }

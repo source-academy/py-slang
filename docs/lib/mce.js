@@ -3,8 +3,8 @@
  * the string <CODE>str</CODE> as a Python program. The format
  * of the parse tree is described in chapter 4 of
  * the textbook
- * in <a href="https://sourceacademy.org/sicpjs/">Structure and
- * Interpretation of Computer Programs, JavaScript Adaptation</a> (SICP).
+ * in <a href="https://sourceacademy.org/sicpy/">Structure and
+ * Interpretation of Computer Programs, Python Adaptation</a> (SICPy).
  * @param {str} x - given program as a string
  * @returns {value} parse tree
  */

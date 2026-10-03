@@ -22,19 +22,22 @@ import list from "./stdlib/list";
 import pairmutator from "./stdlib/pairmutator";
 import stream from "./stdlib/stream";
 import parser from "./stdlib/parser";
+import dataVisualizer from "./stdlib/dataVisualizer";
 import type { Group } from "./stdlib/utils";
 
 export const VARIANT_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
-  2: [misc, math, linkedList],
-  3: [misc, math, linkedList, list, pairmutator, stream],
-  4: [misc, math, linkedList, list, pairmutator, stream, parser],
+  2: [misc, math, linkedList, dataVisualizer],
+  3: [misc, math, linkedList, list, pairmutator, stream, dataVisualizer],
+  4: [misc, math, linkedList, list, pairmutator, stream, parser, dataVisualizer],
 };
 
 export class RunError extends Error {
   constructor(
     public readonly kind: "parse" | "analysis" | "runtime",
     message: string,
+    /** What the program printed before a runtime error, so callers can still show it. */
+    public readonly output: string = "",
   ) {
     super(message);
     this.name = "RunError";
@@ -42,8 +45,6 @@ export class RunError extends Error {
 }
 
 export interface RunOptions {
-  /** Maximum number of environment steps before stopping. Default: 100000. */
-  envSteps?: number;
   /** Hard step limit (-1 = unlimited). Default: -1. */
   stepLimit?: number;
 }
@@ -89,7 +90,7 @@ export async function runCode(
   variant: number,
   options: RunOptions = {},
 ): Promise<string> {
-  const { envSteps = 100000, stepLimit = -1 } = options;
+  const { stepLimit = -1 } = options;
 
   const groups = VARIANT_GROUPS[variant];
   if (!groups) throw new RunError("parse", `Invalid variant: ${variant}. Expected 1–4.`);
@@ -117,7 +118,6 @@ export async function runCode(
         context,
         new Control(preludeAst),
         new Stash(),
-        envSteps,
         stepLimit,
         variant,
         preludeText + "\n",
@@ -172,7 +172,7 @@ export async function runCode(
     context.stash = stash;
 
     try {
-      await collectSnapshots(context, control, stash, envSteps, stepLimit, variant, script, 0);
+      await collectSnapshots(context, control, stash, stepLimit, variant, script, 0);
     } catch (e: unknown) {
       // handleRuntimeError (src/engines/cse/error.ts) both records the error on
       // context.errors *and* throws it, so a runtime error escapes right past the
@@ -181,7 +181,11 @@ export async function runCode(
       // proper message from context.errors; otherwise (a genuinely unrecorded throw) wrap
       // the escaping value directly, same as the parse()-error catch above.
       if (context.errors.length === 0) {
-        throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+        throw new RunError(
+          "runtime",
+          String((e as { message?: string })?.message ?? e),
+          output.join(""),
+        );
       }
     }
 
@@ -191,6 +195,7 @@ export async function runCode(
         errors.join("\n") ||
           context.errors.map(e => e.message).join("\n") ||
           "Unknown runtime error",
+        output.join(""),
       );
     }
   } finally {

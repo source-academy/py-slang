@@ -6,7 +6,7 @@ SPECS = $(SPECSNUMS:%=python_%)
 
 PDFSPECS = $(SPECS:%=%.pdf)
 
-HELPERS = typing_front typing_middle_12 typing_middle_34 typing_back typing_tail_12 typing_tail_34 1_bnf 3_bnf
+HELPERS = typing_front typing_middle_12 typing_middle_34 typing_back typing_tail_12 typing_tail_34 1_bnf 3_bnf restrictions restrictions_common restrictions_3
 
 HELPERSTEX = $(HELPERS:%=python_%.tex)
 

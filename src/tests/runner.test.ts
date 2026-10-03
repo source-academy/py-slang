@@ -117,11 +117,9 @@ describe("runner.ts: runCode()", () => {
   });
 
   describe("RunOptions", () => {
-    // Not envSteps: generateCSEMachineStateStream's own envSteps check is commented out
-    // (src/engines/cse/interpreter.ts, ~line 326) -- the parameter is accepted but does
-    // nothing at the interpreter level today. stepLimit is the option that's actually wired
-    // up (steps === stepLimit triggers StepLimitExceededError), so it's the one that can
-    // actually stop a runaway loop here.
+    // stepLimit is the only option that actually bounds execution (steps === stepLimit
+    // triggers StepLimitExceededError) -- see py-slang#274 for the (now-removed) envSteps
+    // option, which never did anything.
     test("stepLimit stops a runaway loop and is reported as a runtime RunError", async () => {
       await expect(
         runCode("x = 0\nwhile True:\n  x = x + 1", 4, { stepLimit: 50 }),
@@ -133,11 +131,6 @@ describe("runner.ts: runCode()", () => {
         stepLimit: 100000,
       });
       expect(output).toBe("45\n");
-    });
-
-    test("passing envSteps is accepted without affecting execution (see comment above)", async () => {
-      const output = await runCode("print(1 + 1)", 4, { envSteps: 1 });
-      expect(output).toBe("2\n");
     });
   });
 });

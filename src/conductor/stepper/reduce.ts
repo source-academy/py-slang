@@ -17,61 +17,75 @@
  *
  * Known limitations (acceptable for a teaching stepper): integers use JS `bigint` (exact, but large
  * exponents may be slow); float arithmetic uses JS `number` (IEEE 754); a local binding inside a
- * function body that shadows a parameter is not alpha-renamed; re-binding an already-substituted name
- * in a later statement is not tracked.
+ * function body that shadows a parameter is not alpha-renamed. A `def` that reassigns a name is
+ * treated as making it local to the *whole* function (Python's own rule), so a read of it before that
+ * assignment does not fall back to an enclosing/global value — it is an `UnboundLocalError`, exactly
+ * like real Python (py-slang#447; see `./ast.ts`'s `substitute`).
  * Recursion works (a function's name is re-bound in its body on each application) but, like Source, is
  * bounded only by the step limit — a non-terminating recursion stops at "Maximum number of steps".
  */
 
+import type { DataType, TypedValue } from "@sourceacademy/conductor/types";
+
 import {
   type ComplexValue,
   type StepNode,
+  assignedNamesOf,
   clone,
   complexLiteral,
   isComplexValue,
   isEmptyList,
   isFunctionValue,
+  isModuleFunctionNode,
   isPairNode,
   isResultValue,
-  isTruthy,
   isValue,
   literal,
+  markUnboundLocal,
   numberLiteral,
   paramNames,
   stringLiteral,
   substitute,
+  substituteRest,
   unparse,
 } from "./ast";
-import { applyBuiltin, formatPrintOutput, isBuiltinFunctionName, isStepperValue } from "./builtins";
+import {
+  applyBuiltin,
+  checkArity,
+  formatPrintOutput,
+  isBuiltinFunctionName,
+  isBuiltinFunctionValueName,
+  isSpecialFormName,
+  isStepperValue,
+  pyStr,
+} from "./builtins";
+import type { StepperContext } from "./context";
 import { formatPrintLlistOutput } from "./lists";
+import { callModuleFunction, type ImportBinding } from "./moduleInterop";
 
 export interface ReduceResult {
-  /** The program/expression after this single contraction — becomes `current` for the next step. */
+  /**
+   * The program/expression after this single contraction. This is *also* exactly what the after step
+   * displays: the after step's tree is always identical to the following before step's tree — only the
+   * highlighted redex and its color (red before, green after, none once a whole statement is consumed
+   * rather than replaced in place) differ between them. A contraction never fabricates an intermediate
+   * "about to vanish, still here" tree — see `preRedex`/`postRedex` below for how a statement that is
+   * removed outright (a binding substituted away, a `pass`/import dropped, an `if`'s branch inlined)
+   * still gets a meaningful *before* highlight without needing one after.
+   */
   node: StepNode;
   /** The node in the *before* tree that was contracted (highlighted before the step). */
   preRedex: StepNode;
-  /** The node in the *after* tree that is the contraction's result (highlighted after the step). */
-  postRedex?: StepNode;
   /**
-   * The tree the *after* step displays, if different from `node`. A contraction that discards an
-   * already-finished value — dropping a completed expression statement, binding a name into the rest
-   * of the program, removing a `pass`, inlining an `if`'s chosen branch — replaces or removes the
-   * redex's containing statement outright, so with no override the value would jump straight from
-   * "about to be discarded" (red) to "already gone", never appearing "just finished" (green). Such a
-   * contraction sets `postNode` to a tree with the redex still present (marked via `postRedex`) so the
-   * after step shows the value highlighted green one last time before it disappears on the next
-   * contraction; `node` (with the statement actually gone) still becomes the next contraction's start.
-   * This is usually exactly the pre-contraction tree — the one exception is a name binding
-   * (`VariableDeclaration`/`FunctionDeclaration` in `stepHead`), where `postNode` already carries the
-   * bound value substituted into the rest of the block, so that substitution is visible from this same
-   * "Declared and substituted" step rather than only from the next one (matching how a call
-   * expression's argument substitution is already visible on its own "Substituted ..." step — see
-   * `contractCall` — rather than one step later).
-   * Defaults to `node` — most contractions (binary/unary/logical/conditional/call/`return`/falling off
-   * the end of a function — anything whose result is a value that visibly *replaces* the redex in
-   * place, rather than removing its containing statement) need no override.
+   * The node in `node` that is the contraction's result (highlighted after the step). Set only when the
+   * redex is visibly replaced in place by a value that survives into `node` (an operator's result, a
+   * call's return value, an argument substituted into a function body). Left `undefined` when the whole
+   * redex is consumed without leaving a replacement in place (a `VariableDeclaration`/`FunctionDeclaration`
+   * substituted into the rest of the block, a dropped `pass`/import, a finished top-level expression
+   * statement discarded) — the after step then shows `node` with no highlight at all, past tense
+   * explanation only.
    */
-  postNode?: StepNode;
+  postRedex?: StepNode;
   /** A human-readable description shown on the *after* step, past tense ("… evaluated"). */
   explanation: string;
   /** The same description shown on the *before* step, present-continuous ("… evaluating") — the same
@@ -558,10 +572,23 @@ function contractLogical(node: StepNode): ReduceResult | null {
   return { node: chosen, preRedex: node, postRedex: chosen, explanation, beforeExplanation };
 }
 
-function contractConditional(node: StepNode): ReduceResult {
-  const truthy = isTruthy(node.test as StepNode);
+function contractConditional(node: StepNode): ReduceResult | null {
+  const test = node.test as StepNode;
+  if (!isBoolNode(test)) {
+    // Unlike native Python's truthiness, a conditional expression's (`x if p else y`) predicate —
+    // SICP's term for this, reused in the error message below — requires a genuine `bool` in this
+    // dialect. docs/specs/python_typing.tex:56-57 states this explicitly for `if`/`elif`
+    // ("Following if and elif, Python §x only allows boolean expressions"); docs/md/README_1.md and
+    // up present the conditional expression as the same feature under that same heading, so its
+    // predicate is held to the identical rule here. A non-bool *value* is a TypeError; a test not
+    // yet reduced to a value stays a graceful "stuck" (matches `contractLogical`'s identical shape
+    // for `and`/`or`).
+    if (!isStepperValue(test)) return null;
+    throw new Error(`TypeError: predicate type must be 'bool', not '${operandTypeName(test)}'`);
+  }
+  const truthy = test.value === true;
   const chosen = clone((truthy ? node.consequent : node.alternate) as StepNode);
-  const branch = truthy ? "consequent" : "alternate";
+  const branch = truthy ? "consequent" : "alternative";
   return {
     node: chosen,
     preRedex: node,
@@ -571,7 +598,58 @@ function contractConditional(node: StepNode): ReduceResult {
   };
 }
 
-function contractCall(node: StepNode): ReduceResult | null {
+/**
+ * Fully reduces `fn(...args)` to a value — the substitution stepper's own answer to "a module calls
+ * back into a Python function it was handed" (py-slang#423, e.g. `rune`'s `connect_ends` sampling a
+ * Python-authored curve function). `fn` is already a Python-authored callable value
+ * (`moduleInterop.ts`'s `isPythonCallable`); `args` are already-converted argument values, never
+ * needing further reduction themselves.
+ *
+ * There is no separate "apply and get the result" primitive to reach for here, unlike CSE's
+ * control/stash machine or py2js's compiled JS functions: the substitution model's *only* notion of
+ * "run this to completion" is repeatedly contracting one step at a time until nothing's left to do,
+ * exactly what the outer step sequence itself does (`getSteps.ts`'s `drive`) — so this is that same
+ * `reduceExpr` loop, just scoped to one call expression instead of a whole program, and producing no
+ * visible steps of its own (this call happens entirely *inside* one contraction of the outer
+ * sequence, e.g. the module call this callback is answering). Deliberately unbounded, unlike the outer
+ * sequence's own `contractionBudget`: a module calling back into a Python function can legitimately
+ * need far more contractions than any reasonable *visible* step count would ever show a student — e.g.
+ * `sound`'s `play` sampling a student-authored wave function at 44.1kHz needs tens of thousands of
+ * callback calls to render even one second of audio (py-slang#427). A genuinely non-terminating
+ * callback is the host's problem to stop, not this loop's: the evaluator runs inside its own Worker,
+ * and the frontend's "Stop" control kills that Worker outright regardless of what it's doing
+ * internally, same as it already does for a non-terminating top-level program. A thrown error (a
+ * genuine Python-level fault, e.g. TypeError) propagates unchanged, surfacing exactly like any other
+ * runtime fault inside a module call already does; a body that gets stuck without erroring (an unbound
+ * name, say) has no valid partial outcome to hand back to the module either, so that's an error here
+ * too, not a silent "stuck" the caller would have no way to represent.
+ */
+export async function applyPythonCallable(
+  fn: StepNode,
+  args: StepNode[],
+  context: StepperContext,
+): Promise<StepNode> {
+  let current: StepNode = { type: "CallExpression", callee: fn, arguments: args };
+  for (;;) {
+    const step = await reduceExpr(current, context);
+    if (step === null) break;
+    // A print()/print_llist() call inside the callback's own body: this contraction's ReduceResult
+    // is the only place that text ever appears, and it would otherwise be lost — the *outer*
+    // contraction (the module call this callback is answering) never sets `output` itself, so
+    // `drive`/`evaluatePython`'s normal "read the top-level ReduceResult's output" never sees it. See
+    // `StepperContext.pendingOutput`'s doc comment.
+    if (step.output !== undefined && context.pendingOutput !== undefined) {
+      context.pendingOutput.text += step.output;
+    }
+    current = step.node;
+  }
+  if (!isValue(current)) {
+    throw new Error("Evaluation stuck");
+  }
+  return current;
+}
+
+async function contractCall(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const callee = node.callee as StepNode;
   const args = node.arguments as StepNode[];
 
@@ -597,6 +675,82 @@ function contractCall(node: StepNode): ReduceResult | null {
           : name === "print_llist"
             ? formatPrintLlistOutput(args)
             : undefined,
+    };
+  }
+
+  // A function imported from a module (`from rune import circle`, py-slang#385) — see
+  // `moduleInterop.ts`'s module doc comment for the scope this covers (no Python closure crossing
+  // into the call) and why it can't be represented as an ordinary `applyBuiltin` name lookup (the
+  // binding is per-program, substituted in by `getSteps.ts`'s `resolveImports`, not a fixed global
+  // table). `context.evaluator` is only absent when no module loader is wired up at all (see
+  // `resolveImports`'s doc comment), in which case no `ModuleFunction` node could exist in the tree
+  // in the first place — this branch is unreachable then, not a silent no-op.
+  if (isModuleFunctionNode(callee)) {
+    if (!args.every(isValue)) return null;
+    if (context.evaluator === undefined) {
+      throw new Error(`NameError: name '${String(callee.name)}' is not defined`);
+    }
+    const sourceStart = node.sourceStart;
+    const sourceEnd = node.sourceEnd;
+    if (typeof sourceStart === "number" && typeof sourceEnd === "number") {
+      (
+        context.evaluator as typeof context.evaluator & {
+          setCurrentCallLocation?: (start: number, end: number) => void;
+        }
+      ).setCurrentCallLocation?.(sourceStart, sourceEnd);
+    }
+    const name = String(callee.name);
+    const minArgs = callee.minArgs as number;
+    // Checked up front, like a static built-in's own `checkArity` call inside `applyBuiltin` — a
+    // wrong-arity call gets a proper Python-style TypeError instead of whatever native error falls
+    // out of spreading a mismatched argument list into the module's own closure.
+    checkArity(name, args, minArgs, callee.isVararg ? null : minArgs);
+    const result = await callModuleFunction(
+      context.evaluator,
+      callee.closure as TypedValue<DataType.CLOSURE>,
+      name,
+      args,
+      (fn, callArgs) => applyPythonCallable(fn, callArgs, context),
+    );
+    return {
+      node: result,
+      preRedex: node,
+      postRedex: result,
+      explanation: `Ran ${name}`,
+      beforeExplanation: `Running ${name}`,
+    };
+  }
+
+  // `input([prompt])` (py-slang#191) — a genuine host round-trip (`context.requestInput`, backed by
+  // `IRunnerPlugin.requestInput`), the interactive analogue of a module call: one real "ask the
+  // student, wait for their answer" exchange per call, in program order — see `context.ts`'s doc
+  // comment. Not a `BUILTIN_FUNCTIONS` entry (unlike every other static builtin) precisely because it
+  // needs this extra capability rather than being purely a function of its arguments; recognised here
+  // by name instead — see `isSpecialFormName`, also consulted by preprocessing (so the name resolves)
+  // and by `is_function`/`arity`'s dispatch (so aliasing — `p = input; p()` — and introspection work
+  // the same as every other builtin). `context.requestInput` is only absent when no host is wired up
+  // (mirrors `context.evaluator` above), which — like a call to `time_time()`/`random_random()` — is
+  // the one case this degrades to a graceful "Evaluation stuck" rather than a hard error: a program
+  // using `input()` is always valid Python, so refusing to even *start* reducing it (the way a missing
+  // module refuses to resolve) would be wrong; simply not being able to finish this one call is the
+  // honest outcome, exactly like the other interactive builtins' documented degrade in `builtins.ts`.
+  if (callee.type === "Identifier" && isSpecialFormName(String(callee.name))) {
+    if (!args.every(isValue)) return null;
+    if (context.requestInput === undefined) return null;
+    checkArity("input", args, 0, 1);
+    // Python's `input(prompt)` writes `str(prompt)` to stdout with no trailing newline (unlike
+    // `print`, which always adds one — see `formatPrintOutput`) before blocking; `input()` with no
+    // argument writes nothing at all.
+    const promptText = args.length > 0 ? pyStr(args[0], false) : undefined;
+    const answer = await context.requestInput(promptText);
+    const result = stringLiteral(answer);
+    return {
+      node: result,
+      preRedex: node,
+      postRedex: result,
+      explanation: `Ran input`,
+      beforeExplanation: `Running input`,
+      output: promptText,
     };
   }
 
@@ -652,7 +806,13 @@ function contractCall(node: StepNode): ReduceResult | null {
         ? callee.name
         : undefined;
   if (selfName !== undefined && !params.includes(selfName)) {
-    result = substitute(result, selfName, callee);
+    // Mirrors `substitute`'s (`./ast.ts`) own `FunctionDeclaration` shadowing rule, applied here to the
+    // function's *own* name instead of an outer binding of it: if the body reassigns `selfName` itself
+    // (`def f(): print(f); f = 3`), `f` is local to `f`'s own call, so the early read must not resolve
+    // to the function value — tag it `unboundLocal` instead (py-slang#447).
+    result = assignedNamesOf(result).has(selfName)
+      ? markUnboundLocal(result, selfName)
+      : substitute(result, selfName, callee);
   }
   params.forEach((p, i) => {
     result = substitute(result, p, args[i]);
@@ -677,16 +837,9 @@ function contractCall(node: StepNode): ReduceResult | null {
 /*                          One-step expression reducer                       */
 /* -------------------------------------------------------------------------- */
 
-/** Rewraps `child`'s result one level up, into `parent[key]`. `postNode` (if the child set one — see
- * its doc comment) must be rewrapped the same way as `node`, or a nested discard (e.g. a multi-
- * statement function body reducing in expression position, several levels inside a larger expression)
- * would display just its own isolated `postNode` instead of that value in its full surrounding tree. */
+/** Rewraps `child`'s result one level up, into `parent[key]`. */
 function rebuild(parent: StepNode, key: string, child: ReduceResult): ReduceResult {
-  return {
-    ...child,
-    node: { ...parent, [key]: child.node },
-    postNode: child.postNode ? { ...parent, [key]: child.postNode } : undefined,
-  };
+  return { ...child, node: { ...parent, [key]: child.node } };
 }
 
 function rebuildIndex(
@@ -697,67 +850,79 @@ function rebuildIndex(
 ): ReduceResult {
   const arr = (parent[key] as StepNode[]).slice();
   arr[index] = child.node;
-  let postNode: StepNode | undefined;
-  if (child.postNode) {
-    const postArr = (parent[key] as StepNode[]).slice();
-    postArr[index] = child.postNode;
-    postNode = { ...parent, [key]: postArr };
-  }
-  return { ...child, node: { ...parent, [key]: arr }, postNode };
+  return { ...child, node: { ...parent, [key]: arr } };
 }
 
 /** Reduces `node` by a single step, or returns `null` if it is already a value / irreducible. */
-export function reduceExpr(node: StepNode): ReduceResult | null {
+export async function reduceExpr(
+  node: StepNode,
+  context: StepperContext,
+): Promise<ReduceResult | null> {
   switch (node.type) {
-    case "Identifier":
-      // A leftover name is an atom: a built-in function name, or an unbound name that does not reduce
-      // on its own. Built-in *constants* (math_pi, …) never reach here — they are substituted with
-      // their value before stepping (see `substituteBuiltinConstants`), so they render as the value
-      // from the first step rather than contracting mid-run.
-      return null;
+    case "Identifier": {
+      // A leftover name is either a built-in function name (never substituted away, so it's a
+      // legitimate irreducible value — e.g. `print` in `p = print`) or a genuine runtime fault, not a
+      // value. Two different faults, told apart by `unboundLocal` (set by `./ast.ts`'s
+      // `markUnboundLocal`): a name the enclosing `def` assigns later in its own body is local to the
+      // *whole* function, so a read before that assignment is `UnboundLocalError`, exactly like real
+      // Python; anything else reaching here was never bound *anywhere* in the program at all — a
+      // `NameError` (py-slang#447; ordinarily caught earlier, at preprocessing — see `./preprocess.ts`
+      // — so reaching this branch means preprocessing was skipped or a program is stepped standalone).
+      // Built-in *constants* (math_pi, …) never reach here — they are substituted with their value
+      // before stepping (see `substituteBuiltinConstants`), so they render as the value from the first
+      // step rather than contracting mid-run.
+      const name = String(node.name);
+      if (isBuiltinFunctionValueName(name)) return null;
+      if (node.unboundLocal === true) {
+        throw new Error(
+          `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`,
+        );
+      }
+      throw new Error(`NameError: name '${name}' is not defined`);
+    }
     case "BinaryExpression": {
-      const left = reduceExpr(node.left as StepNode);
+      const left = await reduceExpr(node.left as StepNode, context);
       if (left) return rebuild(node, "left", left);
-      const right = reduceExpr(node.right as StepNode);
+      const right = await reduceExpr(node.right as StepNode, context);
       if (right) return rebuild(node, "right", right);
       return contractBinary(node);
     }
     case "LogicalExpression": {
-      const left = reduceExpr(node.left as StepNode);
+      const left = await reduceExpr(node.left as StepNode, context);
       if (left) return rebuild(node, "left", left);
       return contractLogical(node);
     }
     case "UnaryExpression": {
-      const arg = reduceExpr(node.argument as StepNode);
+      const arg = await reduceExpr(node.argument as StepNode, context);
       if (arg) return rebuild(node, "argument", arg);
       return contractUnary(node);
     }
     case "ConditionalExpression": {
-      const test = reduceExpr(node.test as StepNode);
+      const test = await reduceExpr(node.test as StepNode, context);
       if (test) return rebuild(node, "test", test);
       return contractConditional(node);
     }
     case "CallExpression": {
-      const callee = reduceExpr(node.callee as StepNode);
+      const callee = await reduceExpr(node.callee as StepNode, context);
       if (callee) return rebuild(node, "callee", callee);
       const args = node.arguments as StepNode[];
       for (let i = 0; i < args.length; i++) {
-        const reduced = reduceExpr(args[i]);
+        const reduced = await reduceExpr(args[i], context);
         if (reduced) return rebuildIndex(node, "arguments", i, reduced);
       }
-      return contractCall(node);
+      return contractCall(node, context);
     }
     case "ArrayExpression": {
       const elements = node.elements as StepNode[];
       for (let i = 0; i < elements.length; i++) {
-        const reduced = reduceExpr(elements[i]);
+        const reduced = await reduceExpr(elements[i], context);
         if (reduced) return rebuildIndex(node, "elements", i, reduced);
       }
       return null;
     }
     case "BlockStatement":
       // A function body in expression position (produced by applying a multi-statement `def`).
-      return reduceBlock(node);
+      return reduceBlock(node, context);
     default:
       return null;
   }
@@ -772,6 +937,20 @@ function declaratorOf(stmt: StepNode): StepNode {
 }
 
 /**
+ * Whether `node` is ready to bind as an assignment's right-hand side without a further reduction step.
+ * Same as {@link isValue} except a non-builtin bare `Identifier` is never actually a finished value —
+ * `substitute` (`./ast.ts`) leaves one behind specifically when it's a name the enclosing `def`
+ * reassigns later in its own body, so a read of it this early is an `UnboundLocalError`
+ * (py-slang#447) — so treating it as an already-good value here (as plain `isValue` would) would bind
+ * the assignment's target to that same unresolved name instead of forcing the reduction step that
+ * raises the error (`reduceExpr`'s own `Identifier` case, below).
+ */
+function isReadyValue(node: StepNode): boolean {
+  if (node.type === "Identifier") return isBuiltinFunctionValueName(String(node.name));
+  return isValue(node);
+}
+
+/**
  * The outcome of trying to reduce a statement list's leading statement, shared by the `Program`
  * reducer and the block-expression reducer (a function body in expression position). The two contexts
  * differ only at the boundaries (what a leftover value statement / a `return` / running out of
@@ -781,14 +960,13 @@ type HeadOutcome =
   | {
       // The head (or a binding it introduces) was reduced one step; `newBody` is the resulting list.
       kind: "step";
+      // The statement list the after step displays — always this same list, never `[head, ...]` — see
+      // `ReduceResult.node`'s doc comment on the after == next-before invariant.
       newBody: StepNode[];
       preRedex: StepNode;
+      // Unset when this step discards the *whole* head statement (a binding substituted away, a dropped
+      // `pass`/import, an inlined `if` branch) — see `ReduceResult.postRedex`'s doc comment.
       postRedex?: StepNode;
-      // The statement list the *after* step displays, if different from `newBody` — the `HeadOutcome`
-      // analogue of `ReduceResult.postNode` (see its doc comment): set when this step discards the
-      // *whole* head statement (a binding, a dropped `pass`, an inlined `if` branch) rather than taking
-      // one more step inside it, so the after step can show it highlighted green before it is gone.
-      postNewBody?: StepNode[];
       explanation: string;
       beforeExplanation: string;
       // Text this step writes to the program's output (only a `print(...)` reduced inside the head
@@ -808,47 +986,57 @@ type HeadOutcome =
  * branch; a `pass` is dropped. Boundary cases (`finished-expression`/`return`/`irreducible`) are
  * reported back for the caller to resolve.
  */
-function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
+async function stepHead(
+  head: StepNode,
+  rest: StepNode[],
+  context: StepperContext,
+): Promise<HeadOutcome> {
   switch (head.type) {
     case "ExpressionStatement": {
       const expr = head.expression as StepNode;
       // Python's `breakpoint()` is the stepper's analogue of JavaScript's `debugger;`: a no-op
       // statement (like `pass`) that also marks a step the host's breakpoint navigation (the
       // double-arrow) can jump to. Detected here against the *current*, already-substituted tree — a
-      // zero-arg call whose callee is (by now) literally the built-in identifier `breakpoint` —
-      // instead of the student's original syntax, so it behaves like every other built-in: reached
-      // directly (`breakpoint()`) or via aliasing (`bp = breakpoint; bp()`) is indistinguishable, just
-      // as `p = print; p(1)` already is. This only matches when the call is the *whole* of a bare
-      // statement; used any other way (`x = breakpoint()`, nested in a larger expression, passed
-      // around) it falls through to `reduceExpr` below and reduces as an ordinary built-in call
-      // yielding `None`, matching Python's real return value.
+      // call whose callee is (by now) literally the built-in identifier `breakpoint`, with every
+      // argument already reduced to a value — instead of the student's original syntax, so it behaves
+      // like every other built-in: reached directly (`breakpoint()`) or via aliasing
+      // (`bp = breakpoint; bp()`) is indistinguishable, just as `p = print; p(1)` already is. Real
+      // Python's `breakpoint(*args, **kws)` takes any number of arguments (forwarded to
+      // sys.breakpointhook, which the CSE/stepper's own no-op `breakpoint` already ignores either way —
+      // see stdlib/misc.ts), so this fires for any arity, not just zero — matching the point
+      // `contractCall` below would otherwise apply the builtin at (args not yet all values still takes
+      // an ordinary reduction step first, via `reduceExpr` below). This only matches when the call is
+      // the *whole* of a bare statement; used any other way (`x = breakpoint()`, nested in a larger
+      // expression, passed around) it falls through to `reduceExpr` below and reduces as an ordinary
+      // built-in call yielding `None`, matching Python's real return value.
       if (
         expr.type === "CallExpression" &&
         (expr.callee as StepNode).type === "Identifier" &&
         (expr.callee as StepNode).name === "breakpoint" &&
-        (expr.arguments as StepNode[]).length === 0
+        (expr.arguments as StepNode[]).every(isValue)
       ) {
         return {
           kind: "step",
           newBody: rest,
           preRedex: head,
-          postRedex: head,
-          postNewBody: [head, ...rest],
           explanation: "Evaluated breakpoint statement",
           beforeExplanation: "Evaluating breakpoint statement",
           isBreakpoint: true,
         };
       }
-      const reduced = reduceExpr(expr);
+      const reduced = await reduceExpr(expr, context);
       if (reduced) {
+        // `hasBreakpoint: false` on the carried-forward copy: `head` still has one more expression
+        // step to take, so it stays the head on the next call to this function with the *same*
+        // `hasBreakpoint` flag (plain object spread) — clearing it here is what makes a gutter
+        // breakpoint (see `headBreakpoint` in `reduceProgram`/`reduceBlock`) fire exactly once, on
+        // this first step reaching the statement, rather than on every subsequent expression step
+        // taken while still evaluating it.
         return {
           kind: "step",
-          newBody: [{ ...head, expression: reduced.node }, ...rest],
+          newBody: [{ ...head, expression: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
-          postNewBody: reduced.postNode
-            ? [{ ...head, expression: reduced.postNode }, ...rest]
-            : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
@@ -862,25 +1050,30 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
     case "VariableDeclaration": {
       const decl = declaratorOf(head);
       const init = decl.init as StepNode;
-      if (!isValue(init)) {
-        const reduced = reduceExpr(init);
+      if (!isReadyValue(init)) {
+        const reduced = await reduceExpr(init, context);
         if (reduced) {
+          // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
           return {
             kind: "step",
-            newBody: [{ ...head, declarations: [{ ...decl, init: reduced.node }] }, ...rest],
+            newBody: [
+              { ...head, declarations: [{ ...decl, init: reduced.node }], hasBreakpoint: false },
+              ...rest,
+            ],
             preRedex: reduced.preRedex,
             postRedex: reduced.postRedex,
-            postNewBody: reduced.postNode
-              ? [{ ...head, declarations: [{ ...decl, init: reduced.postNode }] }, ...rest]
-              : undefined,
             explanation: reduced.explanation,
             beforeExplanation: reduced.beforeExplanation,
             output: reduced.output,
+            isBreakpoint: reduced.isBreakpoint,
           };
         }
         return { kind: "irreducible" };
       }
-      // The initializer is a value: bind the name by substituting it into the rest of the list.
+      // The initializer is a value: bind the name by substituting it into the rest of the list. Like a
+      // `FunctionDeclaration` below, this has no value of its own to highlight on the after step (the
+      // binding is gone, substituted into every use in `rest`) — see `ReduceResult.postRedex`'s doc
+      // comment.
       const name = String((decl.id as StepNode).name);
       // Naming an (anonymous) function value makes its uses render as a mu-term `name`, like Source's
       // `const f = x => ...`; any other value is substituted unchanged.
@@ -888,17 +1081,11 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
-      // Substituted eagerly, not deferred to `node` alone: `postNewBody` (the after step's displayed
-      // tree) reuses this same substituted rest, so the substitution is already visible on this step's
-      // "Declared and substituted" (green) tree rather than only on the next, unrelated step — see the
-      // `postNode` doc comment on `ReduceResult` above.
-      const substitutedRest = rest.map(stmt => substitute(stmt, name, boundValue));
+      const substitutedRest = substituteRest(rest, name, boundValue);
       return {
         kind: "step",
         newBody: substitutedRest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
@@ -909,15 +1096,11 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
       // mu-term `name` you hover to reveal the body, instead of expanding the body inline. The
       // declaration site keeps its full `def` form (it carries no `name` marker). Mirrors Source.
       const value: StepNode = { ...head, name };
-      // See the identical substitutedRest/postNewBody note in the VariableDeclaration case above:
-      // this makes the substitution visible already on this step's after tree, not only the next one.
-      const substitutedRest = rest.map(stmt => substitute(stmt, name, value));
+      const substitutedRest = substituteRest(rest, name, value);
       return {
         kind: "step",
         newBody: substitutedRest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...substitutedRest],
         explanation: `Declared and substituted ${name} into the rest of the block`,
         beforeExplanation: `Declaring and substituting ${name} into the rest of the block`,
       };
@@ -927,38 +1110,66 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
         kind: "step",
         newBody: rest,
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...rest],
         explanation: "Evaluated pass statement",
         beforeExplanation: "Evaluating pass statement",
       };
+    case "ImportStatement": {
+      // Like a def/assignment's own contraction above, not actually a no-op once an evaluator is
+      // wired up: `moduleInterop.ts`'s `resolveImports` resolves every import's value ahead of
+      // stepping but defers substituting it in until the corresponding import statement's own step is
+      // reached (py-slang#417) — exactly here. `bindings` is absent (or empty) when no module loader
+      // was available at all, in which case this genuinely is a no-op, matching the CSE machine's own
+      // `FromImport` evaluator once its `evaluateImports` pass has run.
+      const bindings = (head.bindings as ImportBinding[] | undefined) ?? [];
+      let substitutedRest = rest;
+      for (const { name, value } of bindings) {
+        substitutedRest = substituteRest(substitutedRest, name, value);
+      }
+      return {
+        kind: "step",
+        newBody: substitutedRest,
+        preRedex: head,
+        explanation: "Evaluated import statement",
+        beforeExplanation: "Evaluating import statement",
+      };
+    }
     case "IfStatement": {
-      const reduced = reduceExpr(head.test as StepNode);
+      const reduced = await reduceExpr(head.test as StepNode, context);
       if (reduced) {
+        // See the identical `hasBreakpoint: false` note in the `ExpressionStatement` case above.
         return {
           kind: "step",
-          newBody: [{ ...head, test: reduced.node }, ...rest],
+          newBody: [{ ...head, test: reduced.node, hasBreakpoint: false }, ...rest],
           preRedex: reduced.preRedex,
           postRedex: reduced.postRedex,
-          postNewBody: reduced.postNode
-            ? [{ ...head, test: reduced.postNode }, ...rest]
-            : undefined,
           explanation: reduced.explanation,
           beforeExplanation: reduced.beforeExplanation,
           output: reduced.output,
           isBreakpoint: reduced.isBreakpoint,
         };
       }
-      const truthy = isTruthy(head.test as StepNode);
+      const test = head.test as StepNode;
+      if (!isBoolNode(test)) {
+        // Unlike native Python's truthiness, an `if`/`elif` predicate — SICP's term for this, reused
+        // in the error message below — requires a genuine `bool` in this dialect (an `elif` is a
+        // nested `IfStatement` in `head.alternate`, so this one check-site covers both).
+        // docs/specs/python_typing.tex:56-57: "Following if and elif, Python §x only allows boolean
+        // expressions." A non-bool *value* is a TypeError; a test not yet reduced to a value stays
+        // irreducible (matches `contractLogical`'s identical shape for `and`/`or`).
+        if (!isStepperValue(test)) return { kind: "irreducible" };
+        throw new Error(`TypeError: predicate type must be 'bool', not '${operandTypeName(test)}'`);
+      }
+      const truthy = test.value === true;
       const branch = (truthy ? head.consequent : head.alternate) as StepNode | null;
       const branchBody = branch ? (branch.body as StepNode[]) : [];
       const branchName = truthy ? "if" : "else";
+      // The chosen branch is already inlined into `newBody` here, on this same step — the after step
+      // shows the branch's statements in place, no separate lingering step needed (see
+      // `ReduceResult.node`'s doc comment).
       return {
         kind: "step",
         newBody: [...branchBody, ...rest],
         preRedex: head,
-        postRedex: head,
-        postNewBody: [head, ...rest],
         explanation: `Evaluated if statement, condition ${truthy ? "true" : "false"}, will proceed to ${branchName} block`,
         beforeExplanation: `Evaluating if statement`,
       };
@@ -975,13 +1186,22 @@ function stepHead(head: StepNode, rest: StepNode[]): HeadOutcome {
  * leading statement is a finished value statement that is last (the program's value), or nothing is
  * left to reduce.
  */
-export function reduceProgram(prog: StepNode): ReduceResult | null {
+export async function reduceProgram(
+  prog: StepNode,
+  context: StepperContext = {},
+): Promise<ReduceResult | null> {
   const body = prog.body as StepNode[];
   if (body.length === 0) return null;
 
   const head = body[0];
   const rest = body.slice(1);
-  const outcome = stepHead(head, rest);
+  const outcome = await stepHead(head, rest, context);
+  // A statement flagged by `markBreakpoints` (a gutter click resolved to its closest enclosing
+  // statement — see `../../breakpoints.ts`, propagated onto the `StepNode` by `translate.ts`) is
+  // treated exactly like an explicit `breakpoint()` call: computed once here, where `head` is in
+  // scope, and OR'd into every `ReduceResult` this function can return for it, rather than
+  // threading it through every `stepHead` arm individually.
+  const headBreakpoint = !!head.hasBreakpoint;
 
   switch (outcome.kind) {
     case "step":
@@ -989,29 +1209,25 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
         node: { ...prog, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
-        postNode: outcome.postNewBody ? { ...prog, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
-        isBreakpoint: outcome.isBreakpoint,
+        isBreakpoint: outcome.isBreakpoint || headBreakpoint,
       };
     case "finished-expression": {
       // A fully-evaluated top-level expression statement is a value to discard — a Python statement
-      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So
-      // we drop it even when it is the last statement: the final line's value then disappears via the
-      // same step as every other line's, and the run ends on an empty program that `drive` reports as
-      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.) The
-      // after step shows the value highlighted green one last time (`postNode`/`postRedex` = the
-      // unchanged pre-contraction tree/statement) before it actually disappears on the *next*
-      // contraction — see `ReduceResult.postNode`'s doc comment.
+      // yields no program value (unlike Source/js-slang, whose final expression *is* the result). So we
+      // drop it even when it is the last statement: the final line's value then disappears via the same
+      // step as every other line's, and the run ends on an empty program that `drive` reports as
+      // "Evaluation complete". (The REPL still echoes this value — captured in `evaluatePython`.) No
+      // `postRedex`: the value leaves nothing behind to highlight, so the after step shows `rest` plain.
       const text = unparse(head.expression as StepNode);
       return {
         node: { ...prog, body: rest },
         preRedex: head,
-        postRedex: head,
-        postNode: prog,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "return": // A `return` at the top level is not valid Python; treat the program as done.
@@ -1027,9 +1243,9 @@ export function reduceProgram(prog: StepNode): ReduceResult | null {
  * argument expression (which then reduces in place) — and falling off the end yields Python `None`.
  * Mirrors Source's `StepperBlockExpression`.
  */
-function reduceBlock(node: StepNode): ReduceResult | null {
+async function reduceBlock(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const none = (): StepNode => literal(null, "None");
-  const fallOff = (preRedex: StepNode): ReduceResult => {
+  const fallOff = (preRedex: StepNode, isBreakpoint = false): ReduceResult => {
     const result = none();
     return {
       node: result,
@@ -1037,6 +1253,7 @@ function reduceBlock(node: StepNode): ReduceResult | null {
       postRedex: result,
       explanation: "Function returned None",
       beforeExplanation: "Function returning None",
+      isBreakpoint,
     };
   };
 
@@ -1045,7 +1262,9 @@ function reduceBlock(node: StepNode): ReduceResult | null {
 
   const head = body[0];
   const rest = body.slice(1);
-  const outcome = stepHead(head, rest);
+  const outcome = await stepHead(head, rest, context);
+  // See the identical `headBreakpoint` note in `reduceProgram`.
+  const headBreakpoint = !!head.hasBreakpoint;
 
   switch (outcome.kind) {
     case "step":
@@ -1053,11 +1272,10 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         node: { ...node, body: outcome.newBody },
         preRedex: outcome.preRedex,
         postRedex: outcome.postRedex,
-        postNode: outcome.postNewBody ? { ...node, body: outcome.postNewBody } : undefined,
         explanation: outcome.explanation,
         beforeExplanation: outcome.beforeExplanation,
         output: outcome.output,
-        isBreakpoint: outcome.isBreakpoint,
+        isBreakpoint: outcome.isBreakpoint || headBreakpoint,
       };
     case "return": {
       // `return` exits the function: the block contracts to the return's argument (or `None` for a
@@ -1069,22 +1287,21 @@ function reduceBlock(node: StepNode): ReduceResult | null {
         postRedex: arg,
         explanation: `Returned ${unparse(arg)}`,
         beforeExplanation: `Returning ${unparse(arg)}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "finished-expression": {
-      // A bare expression value in a function body is not the function's result: discard it; if it
-      // was the last statement, the function fell off the end → None. As in `reduceProgram`'s
-      // "finished-expression" case, the after step shows the value green once more (`postNode`) before
-      // it disappears on the next contraction.
-      if (rest.length === 0) return fallOff(head);
+      // A bare expression value in a function body is not the function's result: discard it; if it was
+      // the last statement, the function fell off the end → None. As in `reduceProgram`'s
+      // "finished-expression" case, no `postRedex`: the value leaves nothing behind to highlight.
+      if (rest.length === 0) return fallOff(head, headBreakpoint);
       const text = unparse(head.expression as StepNode);
       return {
         node: { ...node, body: rest },
         preRedex: head,
-        postRedex: head,
-        postNode: node,
         explanation: `Evaluated ${text}`,
         beforeExplanation: `Evaluating ${text}`,
+        isBreakpoint: headBreakpoint,
       };
     }
     case "irreducible":
