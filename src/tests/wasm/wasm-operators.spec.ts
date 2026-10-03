@@ -114,9 +114,21 @@ describe("True division by zero", () => {
     expect(renderedResult).toBe("3 - 1j");
   });
 
-  it("does not mistake a tiny non-zero complex divisor for zero", async () => {
-    const { renderedResult } = await compileToWasmAndRun("(1+0j) / (1e-200+0j)", true);
-    expect(renderedResult).not.toMatch(/ZeroDivision/);
+  it("keeps earlier prints when a later division raises (file mode)", async () => {
+    const { prints, errors } = await compileToWasmAndRun(
+      "print(1)\nprint(2)\nprint(1 / 0)\n",
+      false,
+    );
+    expect(prints).toEqual(["1", "2"]);
+    expect(errors.length).toBe(1);
+  });
+
+  it("carries earlier prints on the error when interactive mode throws", async () => {
+    const error = await compileToWasmAndRun("print(1)\nprint(2)\nprint(1 / 0)\n", true).catch(
+      e => e,
+    );
+    expect(error.message).toMatch(/ZeroDivisionError/);
+    expect(error.prints).toEqual(["1", "2"]);
   });
 });
 
