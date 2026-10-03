@@ -203,3 +203,75 @@ y = 10
     expect((await compileToWasmAndRun(pythonCode, true)).errors).toEqual([]);
   });
 });
+
+// py-slang#323: str()/repr() didn't exist on WASM at all (repr() was a
+// print() copy that returned None, str() raised NameError). Also covers the
+// log_float host-import collision uncovered while fixing that (both
+// $_log_int and $_log_float were bound to the same "console"/"log" import
+// key, so print() silently mis-formatted every float -- see hostImports.ts).
+describe("str() and repr()", () => {
+  const expectRendered = async (pythonCode: string, expected: string) => {
+    const { renderedResult } = await compileToWasmAndRun(pythonCode, true);
+    expect(renderedResult).toBe(expected);
+  };
+
+  const expectRenderedWithPairs = async (pythonCode: string, expected: string) => {
+    const { renderedResult } = await compileToWasmAndRun(pythonCode, true, {
+      groups: [linkedList],
+    });
+    expect(renderedResult).toBe(expected);
+  };
+
+  it("str() formats each type the same way print() does", async () => {
+    await expectRendered(`str(5)`, "5");
+    await expectRendered(`str(5.0)`, "5.0");
+    await expectRendered(`str(True)`, "True");
+    await expectRendered(`str(None)`, "None");
+    await expectRendered(`str("hi")`, "hi");
+  });
+
+  it("repr() quotes strings but leaves other types unchanged", async () => {
+    await expectRendered(`repr("hi")`, "'hi'");
+    await expectRendered(`repr(5)`, "5");
+    await expectRendered(`repr(5.0)`, "5.0");
+    await expectRendered(`repr(True)`, "True");
+    await expectRendered(`repr(None)`, "None");
+  });
+
+  it("repr() prefers single quotes, switching to double quotes when the string contains one", async () => {
+    await expectRendered(`repr("it's")`, `"it's"`);
+  });
+
+  it("strings inside a collection are quoted, for str(), repr() and print() alike", async () => {
+    // CSE: str(pair("hi", 2)) == "['hi', 2]" -- elements always show with repr quoting.
+    await expectRenderedWithPairs(`str(pair("hi", 2))`, "['hi', 2]");
+    await expectRenderedWithPairs(`repr(pair("hi", 2))`, "['hi', 2]");
+    await expectRenderedWithPairs(`pair("hi", 2)`, "['hi', 2]");
+    await expectRenderedWithPairs(`repr(pair("it's", pair("x", None)))`, `["it's", ['x', None]]`);
+    await expectRenderedWithPairs(`str(pair(1, 2.0))`, "[1, 2.0]");
+  });
+
+  it("complex numbers render like CSE: (3+4j), or 4j when the real part is zero", async () => {
+    await expectRendered(`str(3+4j)`, "(3+4j)");
+    await expectRendered(`repr(3-4j)`, "(3-4j)");
+    await expectRendered(`str(4j)`, "4j");
+    await expectRendered(`3+4j`, "(3+4j)");
+    await expectRenderedWithPairs(`str(pair(1+2j, 1))`, "[(1+2j), 1]");
+  });
+
+  it("str()/repr() results can be concatenated with other strings", async () => {
+    // Regression: str()/repr()'s result used to leak a shadow-stack entry
+    // for its (GC'able) input, corrupting the very next GC'able-operand
+    // consumer -- here, the surrounding string-concatenation `+`.
+    await expectRendered(`str(5) + "!"`, "5!");
+    await expectRendered(`"[" + repr("hi") + "]"`, "['hi']");
+  });
+
+  it("print() formats floats the same way str()/repr() do", async () => {
+    const { prints: printsWhole } = await compileToWasmAndRun(`print(5.0)`, true);
+    expect(printsWhole).toEqual(["5.0"]);
+
+    const { prints: printsExp } = await compileToWasmAndRun(`print(1e20)`, true);
+    expect(printsExp).toEqual(["1e+20"]);
+  });
+});

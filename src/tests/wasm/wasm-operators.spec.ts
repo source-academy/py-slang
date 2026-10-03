@@ -31,7 +31,7 @@ describe("Arithmetic operator tests (int, float, complex, string)", () => {
     const pythonCode = `1-2j`;
     const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
     expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("1 - 2j");
+    expect(renderedResult).toBe("(1-2j)");
   });
 
   // --- STRING: UTF-8 ---
@@ -111,7 +111,7 @@ describe("True division by zero", () => {
 
   it("still divides complex numbers by a non-zero complex number", async () => {
     const { renderedResult } = await compileToWasmAndRun("(4+2j) / (1+1j)", true);
-    expect(renderedResult).toBe("3 - 1j");
+    expect(renderedResult).toBe("(3-1j)");
   });
 
   it("keeps earlier prints when a later division raises (file mode)", async () => {

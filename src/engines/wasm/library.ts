@@ -24,6 +24,8 @@ import {
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
   TOKENIZE_FX,
+  TO_REPR_FX,
+  TO_STR_FX,
 } from "./runtime";
 
 type TupleOf<T, N extends number, R extends unknown[] = []> = R["length"] extends N
@@ -66,7 +68,8 @@ const funcHelper = <Arity extends number, HasVarArgs extends boolean = false>(
 
 const miscLib: LibFuncType[] = [
   funcHelper("print", 1, true).body(x => wasm.call(LOG_FX).args(x)),
-  funcHelper("repr", 1, true).body(x => wasm.call(LOG_FX).args(x)),
+  funcHelper("str", 1).body(x => wasm.call(TO_STR_FX).args(x)),
+  funcHelper("repr", 1).body(x => wasm.call(TO_REPR_FX).args(x)),
   funcHelper("error", 1, true).body(x => [wasm.call(LOG_FX).args(x), wasm.unreachable()]),
   funcHelper("_gen_list", 1).body(x => wasm.call(GEN_LIST_FX).args(x)),
   funcHelper("arity", 1).body(x => wasm.call(ARITY_FX).args(x)),
