@@ -95,6 +95,20 @@ export namespace ResolverErrors {
     }
   }
 
+  export class RangeOutsideForHeaderError extends BaseResolverError {
+    constructor(line: number, col: number, source: string, start: number, current: number) {
+      const { lineIndex, fullLine, hint } = underline(
+        source,
+        start,
+        current,
+        `'range' can only be used in a for-loop header, as in 'for i in range(n):'.`,
+      );
+      const errorName = "SyntaxError";
+      super(errorName, "\n" + fullLine + "\n" + hint, lineIndex, col);
+      this.name = errorName;
+    }
+  }
+
   export class ScopeConflictError extends BaseResolverError {
     constructor(
       line: number,

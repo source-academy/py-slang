@@ -12,6 +12,7 @@ export { NoLoopsValidator } from "./features/no-loops";
 export { NoGlobalValidator } from "./features/no-global";
 export { NoNonlocalValidator } from "./features/no-nonlocal";
 export { NoRangeRedeclarationValidator } from "./features/no-range-redeclaration";
+export { createRangeOnlyInForHeaderValidator } from "./features/range-only-in-for-header";
 export { createNoReassignmentValidator, NoReassignmentValidator } from "./features/no-reassignment";
 export { NoRestParamsValidator } from "./features/no-rest-params";
 export {

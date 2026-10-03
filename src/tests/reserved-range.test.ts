@@ -68,7 +68,9 @@ describe("range is reserved in chapters 3 and 4", () => {
         test.each(REDECLARATIONS)("rejects %s", async (_label, code) => {
           const harness = makeEvaluatorTestHarness(engine, chapter);
           await harness.evaluate(code + "\n");
-          expect(harness.errors).toHaveLength(1);
+          // The reserved-name error comes first; a later *use* of the name (`return range`) may add
+          // a second one (see range-only-in-for-header.test.ts), which is fine.
+          expect(harness.errors.length).toBeGreaterThanOrEqual(1);
           expect(harness.errors[0].message).toContain("'range' is reserved");
         });
 
@@ -110,7 +112,7 @@ describe("range is reserved in chapters 3 and 4", () => {
           registerPlugin: () => ({}),
         };
         await new Ev3Evaluator(conductor as never).evaluateChunk(code);
-        expect(errors).toHaveLength(1);
+        expect(errors.length).toBeGreaterThanOrEqual(1);
         expect(errors[0].message).toContain("'range' is reserved");
       });
 
