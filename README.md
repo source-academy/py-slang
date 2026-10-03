@@ -140,7 +140,7 @@ Where this lives in the code:
 - The PVML primitives are numbered to match native Pynter's `sivmfn_primitives[]` table: `draw_data` is Pynter's own slot 6, and `breakpoint`, `set_timeout` and `clear_all_timeout` are slots 132-134 (`PRIMITIVE_FUNCTIONS` in `src/engines/pvml/builtins.ts`). Changing one side means changing the other.
 - `src/tests/headless-draw-data.test.ts` and `src/tests/dataVisualizer.test.ts` pin these behaviors; the latter also runs on native Pynter when `PYNTER_RUNNER_PATH` is set.
 
-#### Tail-call optimization
+#### Proper tail calls
 
 Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) â€” native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
 
@@ -170,7 +170,7 @@ A third, opt-in suite reruns test cases against a native Pynter binary instead â
 [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of `PVMLInterpreter`
 (see "Running the standalone CLI (repl)" above for background). It's skipped by default, since it
 needs a locally built Pynter binary that CI doesn't have. `src/tests/pvml-tco-pynter.test.ts` (see
-"Tail-call optimization" above) and `src/tests/operator-conformance-pynter.test.ts` are opt-in the
+"Proper tail calls" above) and `src/tests/operator-conformance-pynter.test.ts` are opt-in the
 same way, for the same reason.
 
 To run these, build `runner` from the Pynter repo (see its
