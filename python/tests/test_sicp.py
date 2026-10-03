@@ -16,6 +16,17 @@ def test_pairs_and_linked_lists():
     assert length(llist(1, 2, 3)) == 3
 
 
+def test_draw_data_returns_its_first_argument():
+    assert draw_data(5) == 5
+    assert draw_data(llist(1, 2), 3) == llist(1, 2)
+    try:
+        draw_data()
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("draw_data() needs at least one argument")
+
+
 def test_higher_order_linked_list_ops():
     assert map(lambda x: x * x, llist(1, 2, 3)) == llist(1, 4, 9)
     assert filter(lambda x: x % 2 == 1, llist(1, 2, 3, 4, 5)) == llist(1, 3, 5)

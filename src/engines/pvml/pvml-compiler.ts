@@ -1,4 +1,5 @@
 import { ExprNS, StmtNS } from "../../ast-types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { Environment, FunctionEnvironments, Resolver } from "../../resolver";
 import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
@@ -36,6 +37,13 @@ interface CompilerAnnotation {
    * primitive-function-call machinery entirely (a constant is never called). */
   isConstant?: boolean;
   constantValue?: number;
+  /** True for a name resolved against PVMLCompiler's `internalFunctions` table (e.g. an `ev3_*`
+   * name — see stdlib/ev3.ts's EV3_INTERNAL_FUNCTIONS) — a "VM-internal function" in native
+   * Pynter's terms, dispatched via CALLV/CALLTV/NEWCV rather than CALLP/CALLTP/NEWCP's
+   * PRIMITIVE_FUNCTIONS dispatch. `deviceFunctionIndex` is what gets emitted as the opcode's `id`
+   * operand. */
+  isDeviceFunction?: boolean;
+  deviceFunctionIndex?: number;
 }
 
 export type ExpressionResult = {
@@ -94,6 +102,12 @@ export class PVMLCompiler
    * own int/float (bigint/number) split. Threaded through to every child
    * compiler (fromFunctionNode), same as `variant`/`useGlobalMap`. */
   private readonly targetsPynter: boolean;
+  /** `ev3_*`-style "VM-internal function" name -> device-function index (see
+   * stdlib/ev3.ts's EV3_INTERNAL_FUNCTIONS). Empty by default — only EV3Engine/Ev3Evaluator pass
+   * a non-empty table today. A name found here resolves to a CALLV/CALLTV/NEWCV device-call
+   * annotation instead of falling through to the "Primitive function not implemented" error.
+   * Threaded through to every child compiler (fromFunctionNode), same as `variant`. */
+  private readonly internalFunctions: ReadonlyMap<string, number>;
 
   private tokenAnnotations: WeakMap<Token, CompilerAnnotation>;
   private envSlotCounters: WeakMap<Environment, number>;
@@ -130,6 +144,7 @@ export class PVMLCompiler
     envSlotCounters: WeakMap<Environment, number> = new WeakMap(),
     envSlotMaps: WeakMap<Environment, Map<string, number>> = new WeakMap(),
     envBuilders: WeakMap<Environment, PVMLIRBuilder> = new WeakMap(),
+    internalFunctions: ReadonlyMap<string, number> = new Map(),
   ) {
     this.builder = builder;
     this.currentEnvironment = currentEnvironment;
@@ -138,6 +153,7 @@ export class PVMLCompiler
     this.variant = variant;
     this.useGlobalMap = useGlobalMap;
     this.targetsPynter = targetsPynter;
+    this.internalFunctions = internalFunctions;
     this.tokenAnnotations = tokenAnnotations;
     this.envSlotCounters = envSlotCounters;
     this.envSlotMaps = envSlotMaps;
@@ -155,6 +171,7 @@ export class PVMLCompiler
     functionEnvironments?: FunctionEnvironments,
     useGlobalMap: boolean = false,
     targetsPynter: boolean = false,
+    internalFunctions: ReadonlyMap<string, number> = new Map(),
   ): PVMLCompiler {
     if (!functionEnvironments) {
       const resolver = new Resolver("", program, [], [misc, math]);
@@ -173,6 +190,11 @@ export class PVMLCompiler
       variant,
       useGlobalMap,
       targetsPynter,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      internalFunctions,
     );
   }
 
@@ -234,6 +256,7 @@ export class PVMLCompiler
       this.envSlotCounters,
       this.envSlotMaps,
       this.envBuilders,
+      this.internalFunctions,
     );
 
     const slotMap = new Map<string, number>();
@@ -310,15 +333,26 @@ export class PVMLCompiler
         };
       } else {
         const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
-        if (primitiveIndex === undefined) {
-          throw new Error(`Primitive function ${name} not implemented`);
+        if (primitiveIndex !== undefined) {
+          annotation = {
+            slot: primitiveIndex,
+            envLevel: 0,
+            isPrimitive: true,
+            primitiveIndex,
+          };
+        } else {
+          const deviceFunctionIndex = this.internalFunctions.get(name);
+          if (deviceFunctionIndex === undefined) {
+            throw new Error(`Primitive function ${name} not implemented`);
+          }
+          annotation = {
+            slot: -1,
+            envLevel: -1,
+            isPrimitive: false,
+            isDeviceFunction: true,
+            deviceFunctionIndex,
+          };
         }
-        annotation = {
-          slot: primitiveIndex,
-          envLevel: 0,
-          isPrimitive: true,
-          primitiveIndex,
-        };
       }
     } else if (isModuleLevelEnv) {
       annotation = {
@@ -390,6 +424,16 @@ export class PVMLCompiler
       this.builder.emitUnary(OpCodes.NEWCP, annotation.primitiveIndex);
       return { maxStackSize: 1 };
     }
+    if (annotation.isDeviceFunction) {
+      // Same idea as the isPrimitive/NEWCP case just above, for a VM-internal
+      // ("device") function referenced as a value rather than called
+      // directly (e.g. `f = ev3_hello; f()`) — NEWCV pushes a callable
+      // reference to it (native Pynter's op_new_c_v, 0x4F). A direct call
+      // never reaches this branch: emitFunctionCall emits CALLV/CALLTV
+      // straight from the device-function index instead.
+      this.builder.emitUnary(OpCodes.NEWCV, annotation.deviceFunctionIndex);
+      return { maxStackSize: 1 };
+    }
     if (annotation.isGlobal) {
       this.builder.emitUnary(OpCodes.LDGG, annotation.name);
       return { maxStackSize: 1 };
@@ -411,6 +455,9 @@ export class PVMLCompiler
     if (annotation.isPrimitive) {
       throw new Error(`Cannot assign to primitive symbol: ${token.lexeme}`);
     }
+    if (annotation.isDeviceFunction) {
+      throw new Error(`Cannot assign to device function symbol: ${token.lexeme}`);
+    }
 
     if (annotation.isGlobal) {
       this.builder.emitUnary(OpCodes.STGG, annotation.name);
@@ -424,15 +471,30 @@ export class PVMLCompiler
     }
   }
 
-  private emitFunctionCall(token: Token, numArgs: number, isTailCall: boolean): void {
+  private emitFunctionCall(
+    token: Token,
+    numArgs: number,
+    isTailCall: boolean,
+    location?: { start: number; end: number },
+  ): void {
     const annotation = this.getTokenAnnotation(token);
 
     if (annotation.isPrimitive) {
       const primitiveOpcode = isTailCall ? OpCodes.CALLTP : OpCodes.CALLP;
       this.builder.emitPrimitiveCall(primitiveOpcode, annotation.primitiveIndex!, numArgs);
+    } else if (annotation.isDeviceFunction) {
+      // Same encoding/calling-convention as CALLP/CALLTP just above (see
+      // emitPrimitiveCall's doc comment and opcodes.ts's CALLV/CALLTV entry):
+      // arguments are taken directly off the stack, no callee value involved
+      // — native Pynter's do_internal_function (vm.c) dispatches through
+      // `sivmfn_vminternals[id]` instead of `sivmfn_primitives[id]`, with
+      // every other detail (arg popping, tail-call frame reuse, wire layout
+      // {id, numArgs}) identical between the two opcode families.
+      const deviceOpcode = isTailCall ? OpCodes.CALLTV : OpCodes.CALLV;
+      this.builder.emitPrimitiveCall(deviceOpcode, annotation.deviceFunctionIndex!, numArgs);
     } else {
       const userOpcode = isTailCall ? OpCodes.CALLT : OpCodes.CALL;
-      this.builder.emitCall(userOpcode, numArgs);
+      this.builder.emitCall(userOpcode, numArgs, location);
     }
   }
 
@@ -771,20 +833,27 @@ export class PVMLCompiler
     if (expr.callee instanceof ExprNS.Variable) {
       const callee: ExprNS.Variable = expr.callee;
 
-      // CALLP/CALLTP (primitive calls) take their arguments directly off the
-      // stack with no function value involved (see callPrimitive) — only a
-      // non-primitive (closure) call needs its callee's value loaded first.
-      // Loading it here regardless would push a stray NEWCP value that CALLP
-      // never consumes, corrupting the stack for every primitive call.
-      const isPrimitiveCallee = this.getTokenAnnotation(callee.name).isPrimitive;
-      const functionStackEffect = isPrimitiveCallee
+      // CALLP/CALLTP (primitive calls) and CALLV/CALLTV (device/VM-internal
+      // calls) both take their arguments directly off the stack with no
+      // function value involved (see emitFunctionCall) — only a genuine
+      // non-primitive, non-device (closure) call needs its callee's value
+      // loaded first. Loading it here regardless would push a stray
+      // NEWCP/NEWCV value that CALLP/CALLV never consumes, corrupting the
+      // stack for every primitive/device call.
+      const calleeAnnotation = this.getTokenAnnotation(callee.name);
+      const isDirectDispatchCallee =
+        calleeAnnotation.isPrimitive || calleeAnnotation.isDeviceFunction;
+      const functionStackEffect = isDirectDispatchCallee
         ? 0
         : this.emitLoadSymbol(callee.name).maxStackSize;
 
       const maxArgStackSize = this.compileCallArgs(expr.args);
 
       const numArgs = expr.args.length;
-      this.emitFunctionCall(callee.name, numArgs, isTail);
+      this.emitFunctionCall(callee.name, numArgs, isTail, {
+        start: expr.startToken.indexInSource,
+        end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+      });
 
       return {
         maxStackSize: functionStackEffect + maxArgStackSize,
@@ -804,7 +873,10 @@ export class PVMLCompiler
 
     const numArgs = expr.args.length;
     const userOpcode = isTail ? OpCodes.CALLT : OpCodes.CALL;
-    this.builder.emitCall(userOpcode, numArgs);
+    this.builder.emitCall(userOpcode, numArgs, {
+      start: expr.startToken.indexInSource,
+      end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+    });
 
     return {
       maxStackSize: calleeResult.maxStackSize + maxArgStackSize,
@@ -850,7 +922,10 @@ export class PVMLCompiler
     this.builder.emitPrimitiveCall(OpCodes.CALLP, CONCAT_ARRAYS_PRIMITIVE_INDEX, expr.args.length);
 
     const userOpcode = isTail ? OpCodes.CALLTA : OpCodes.CALLA;
-    this.builder.emitNullary(userOpcode);
+    this.builder.emitNullary(userOpcode, {
+      start: expr.startToken.indexInSource,
+      end: expr.endToken.indexInSource + expr.endToken.lexeme.length,
+    });
 
     return {
       maxStackSize: calleeResult.maxStackSize + maxPieceStackSize,
@@ -1118,6 +1193,15 @@ export class PVMLCompiler
   }
 
   visitFromImportStmt(_stmt: StmtNS.FromImport): ExpressionResult {
+    if (_stmt.level > 0) {
+      // Local-file imports (leading dots) aren't implemented on PVML yet —
+      // reject explicitly rather than silently no-op'ing, which would leave
+      // the imported name unbound instead of raising a clear error (see
+      // PyPvmlEvaluator.ts's loadImports, which already rejects this earlier
+      // for the conductor entrypoint; this is the same guard for any direct,
+      // non-conductor caller).
+      throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+    }
     // A genuine no-op, matching the CSE machine's own FromImport handler
     // (src/engines/cse/interpreter.ts): SICPy has no real per-file module
     // system — every stdlib group's names are preloaded into the global

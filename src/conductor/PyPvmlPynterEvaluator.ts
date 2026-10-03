@@ -1,4 +1,4 @@
-import { BasicEvaluator } from "@sourceacademy/conductor/runner";
+import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { PYNTER_OPCODE_MAX } from "../engines/pvml/opcodes";
 import { assemble } from "../engines/pvml/pvml-assembler";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
@@ -8,6 +8,7 @@ import { analyzeWithEnvironments } from "../resolver";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 // siwasm_run (Pynter's devices/wasm/wasm/lib.c) printf's one of these two
 // trailers to stdout on every run, as a debugging aid for the WASM demo,
@@ -66,6 +67,11 @@ export class PyPvmlPynterEvaluator extends BasicEvaluator {
   // Set by the print callback below when the current run's fault trailer
   // goes by; read (and reset) by the catch block once runBinary rejects.
   private lastFault: string | undefined;
+
+  constructor(conductor: IRunnerPlugin) {
+    super(conductor);
+    registerAutoCompletePlugin(conductor, 3);
+  }
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {

@@ -308,8 +308,14 @@ boundary (matching the CSE converter's identical restrictions).
 
 - **Error source locations are not attached yet.** Errors carry the
   correct Python error-class name (matching the CSE machine) but not a
-  source position; the stdlib bridge's synthetic `command` nodes point at
-  the program start.
+  source position; the stdlib bridge's synthetic `command` nodes carry no
+  real position at all (py-slang#397: errors.ts skips the location header
+  entirely for a synthetic token, rather than printing a misleading one).
+  Where the failing builtin was called from inside a predefined (prelude)
+  function like `map`, the message names that function instead (e.g.
+  `unsupported argument type for tail: integer (in predefined function
+'map')` — see `Py2JsRuntime.enclosingPreludeFunction`), which is the
+  closest substitute for a real position until one exists.
 - **Negative list indexing (`xs[-1]`) is unsupported**, matching a gap in
   the CSE reference itself (`LIST_ACCESS` has no negative-index handling;
   `LIST_ASSIGNMENT`'s attempt is a JS `%`, not Python's modulo, and

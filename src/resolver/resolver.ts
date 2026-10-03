@@ -183,7 +183,6 @@ export class Environment {
         this.source,
         identifier.indexInSource,
         identifier.indexInSource + identifier.lexeme.length,
-        lookup,
       );
     }
     this.names.set(identifier.lexeme, RedefineableTokenSentinel);
@@ -375,12 +374,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     let curr = this.environment;
     while (curr !== this.functionScope) {
       if (curr !== null && curr.names.has(identifier.lexeme)) {
-        const token = curr.names.get(identifier.lexeme);
-        if (token === undefined) {
-          this.errors.push(new Error("placeholder error"));
-          return;
-        }
-
         this.errors.push(
           new ResolverErrors.NameReassignmentError(
             identifier.line,
@@ -388,7 +381,6 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
             this.source,
             identifier.indexInSource,
             identifier.indexInSource + identifier.lexeme.length,
-            token,
           ),
         );
         return;
@@ -523,8 +515,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const env = this.environment;
     const isModuleLevel =
       env !== null && env.enclosing !== null && env.enclosing.enclosing === null;
-    if (isModuleLevel && !env.names.has(stmt.name.lexeme)) {
-      env.names.set(stmt.name.lexeme, new Token(TokenType.NAME, stmt.name.lexeme, 0, 0, 0));
+    if (isModuleLevel) {
+      for (const name of stmt.names) {
+        if (!env.names.has(name.lexeme)) {
+          env.names.set(name.lexeme, new Token(TokenType.NAME, name.lexeme, 0, 0, 0));
+        }
+      }
     }
   }
 
@@ -535,7 +531,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const scan = (stmts: StmtNS.Stmt[]) => {
       for (const stmt of stmts) {
         if (stmt instanceof StmtNS.Global) {
-          globals.add(stmt.name.lexeme);
+          stmt.names.forEach(n => globals.add(n.lexeme));
         } else if (stmt instanceof StmtNS.If) {
           scan(stmt.body);
           if (Array.isArray(stmt.elseBlock)) {
@@ -562,7 +558,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const scan = (stmts: StmtNS.Stmt[]) => {
       for (const stmt of stmts) {
         if (stmt instanceof StmtNS.NonLocal) {
-          nonlocals.add(stmt.name.lexeme);
+          stmt.names.forEach(n => nonlocals.add(n.lexeme));
         } else if (stmt instanceof StmtNS.If) {
           scan(stmt.body);
           if (Array.isArray(stmt.elseBlock)) {
@@ -650,9 +646,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const scan = (stmts: StmtNS.Stmt[]) => {
       for (const stmt of stmts) {
         if (kind === "Global" && stmt instanceof StmtNS.Global) {
-          result.set(stmt.name.lexeme, stmt.name);
+          stmt.names.forEach(n => result.set(n.lexeme, n));
         } else if (kind === "NonLocal" && stmt instanceof StmtNS.NonLocal) {
-          result.set(stmt.name.lexeme, stmt.name);
+          stmt.names.forEach(n => result.set(n.lexeme, n));
         } else if (stmt instanceof StmtNS.If) {
           scan(stmt.body);
           if (Array.isArray(stmt.elseBlock)) {
@@ -727,35 +723,37 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     const scanBody = (stmts: StmtNS.Stmt[]) => {
       for (const stmt of stmts) {
         if (stmt instanceof StmtNS.Global || stmt instanceof StmtNS.NonLocal) {
-          const name = stmt.name.lexeme;
-          const prior = seen.get(name);
-          if (prior) {
-            const declKind = stmt instanceof StmtNS.Global ? "global" : "nonlocal";
-            const msg =
-              prior.kind === "assigned"
-                ? `name '${name}' is assigned to before ${declKind} declaration`
-                : `name '${name}' is used prior to ${declKind} declaration`;
-            this.errors.push(
-              new ResolverErrors.ScopeConflictError(
-                stmt.name.line,
-                stmt.name.col,
-                this.source,
-                stmt.name.indexInSource,
-                stmt.name.indexInSource + name.length,
-                msg,
-              ),
-            );
-          } else if (isModuleLevel && stmt instanceof StmtNS.NonLocal) {
-            this.errors.push(
-              new ResolverErrors.ScopeConflictError(
-                stmt.name.line,
-                stmt.name.col,
-                this.source,
-                stmt.name.indexInSource,
-                stmt.name.indexInSource + name.length,
-                "nonlocal declaration not allowed at module level",
-              ),
-            );
+          for (const nameToken of stmt.names) {
+            const name = nameToken.lexeme;
+            const prior = seen.get(name);
+            if (prior) {
+              const declKind = stmt instanceof StmtNS.Global ? "global" : "nonlocal";
+              const msg =
+                prior.kind === "assigned"
+                  ? `name '${name}' is assigned to before ${declKind} declaration`
+                  : `name '${name}' is used prior to ${declKind} declaration`;
+              this.errors.push(
+                new ResolverErrors.ScopeConflictError(
+                  nameToken.line,
+                  nameToken.col,
+                  this.source,
+                  nameToken.indexInSource,
+                  nameToken.indexInSource + name.length,
+                  msg,
+                ),
+              );
+            } else if (isModuleLevel && stmt instanceof StmtNS.NonLocal) {
+              this.errors.push(
+                new ResolverErrors.ScopeConflictError(
+                  nameToken.line,
+                  nameToken.col,
+                  this.source,
+                  nameToken.indexInSource,
+                  nameToken.indexInSource + name.length,
+                  "nonlocal declaration not allowed at module level",
+                ),
+              );
+            }
           }
         } else if (stmt instanceof StmtNS.FunctionDef) {
           // Record the function name as an assignment; don't recurse into its body.
@@ -871,21 +869,30 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
-    const name = stmt.name.lexeme;
     // Search enclosing FUNCTION scopes (never the module scope), innermost first,
     // skipping the current function itself (nonlocal can never bind to it).
-    const found = this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 2);
-    if (!found) {
-      this.errors.push(
-        new ResolverErrors.NameNotFoundError(
-          stmt.name.line,
-          stmt.name.col,
-          this.source,
-          stmt.name.indexInSource,
-          stmt.name.indexInSource + stmt.name.lexeme.length,
-          this.environment?.suggestName(stmt.name) ?? null,
-        ),
-      );
+    // Each name in `nonlocal a, b` is checked independently, matching CPython.
+    for (const nameToken of stmt.names) {
+      const name = nameToken.lexeme;
+      const found = this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 2);
+      if (!found) {
+        // A dedicated message matching CPython's own wording for this exact diagnostic (#187) —
+        // not the generic NameNotFoundError, whose "Perhaps you meant to type 'x'?" suggestion is
+        // actively misleading here: the closest Levenshtein match is often `name` itself (e.g. the
+        // very binding an intermediate `global name` is blocking resolution past), since a name
+        // reaching this point is, by definition, spelled correctly and simply unresolvable as
+        // nonlocal — there is nothing sensible to suggest instead.
+        this.errors.push(
+          new ResolverErrors.ScopeConflictError(
+            nameToken.line,
+            nameToken.col,
+            this.source,
+            nameToken.indexInSource,
+            nameToken.indexInSource + name.length,
+            `no binding for nonlocal '${name}' found`,
+          ),
+        );
+      }
     }
   }
 

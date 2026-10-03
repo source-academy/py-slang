@@ -93,38 +93,22 @@ function plugins() {
 /**
  * @type {import('rollup').RollupOptions}
  */
-const config = [
-  {
-    treeshake: {
-      moduleSideEffects: false,
-    },
-    input: "src/conductor/initialise.ts",
-    output: {
-      file: `dist/${EVALUATOR}.js`,
-      format: "iife",
-      name: "PySlangWorker",
-      sourcemap: true,
-      // pyodide's own loader uses a dynamic import() for a Node-only path;
-      // a single-file iife bundle can't code-split it out, so inline it.
-      inlineDynamicImports: true,
-      banner: NODE_MODULE_BROWSER_SHIM_BANNER,
-    },
-    plugins: plugins(),
+const config = {
+  treeshake: {
+    moduleSideEffects: false,
   },
-  {
-    treeshake: {
-      moduleSideEffects: false,
-    },
-    input: "src/conductor/evaluator.ts",
-    output: {
-      file: `dist/${EVALUATOR}.cjs`,
-      format: "cjs",
-      exports: "default",
-      sourcemap: true,
-      inlineDynamicImports: true,
-    },
-    plugins: plugins(),
+  input: "src/conductor/initialise.ts",
+  output: {
+    file: `dist/${EVALUATOR}.js`,
+    format: "iife",
+    name: "PySlangWorker",
+    sourcemap: true,
+    // pyodide's own loader uses a dynamic import() for a Node-only path;
+    // a single-file iife bundle can't code-split it out, so inline it.
+    inlineDynamicImports: true,
+    banner: NODE_MODULE_BROWSER_SHIM_BANNER,
   },
-];
+  plugins: plugins(),
+};
 
 export default config;

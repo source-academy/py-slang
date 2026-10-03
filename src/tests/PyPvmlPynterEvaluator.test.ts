@@ -5,8 +5,9 @@ import {
   PyPvmlPynterEvaluator,
 } from "../conductor/PyPvmlPynterEvaluator";
 
-/** Minimal IRunnerPlugin mock: PyPvmlPynterEvaluator only ever calls
- * sendResult/sendError/sendOutput on its `conductor`. */
+/** Minimal IRunnerPlugin mock: PyPvmlPynterEvaluator calls sendResult/
+ * sendError/sendOutput on its `conductor`, plus registerPlugin/hostLoadPlugin
+ * once at construction time (registerAutoCompletePlugin). */
 function makeMockConductor() {
   const results: unknown[] = [];
   const errors: unknown[] = [];
@@ -15,6 +16,8 @@ function makeMockConductor() {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
   } as unknown as IRunnerPlugin;
   return { conductor, results, errors, outputs };
 }

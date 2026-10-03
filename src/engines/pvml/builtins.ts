@@ -14,6 +14,7 @@ import "../../stdlib/linked-list";
 import "../../stdlib/list";
 import "../../stdlib/pairmutator";
 import "../../stdlib/stream";
+import "../../stdlib/dataVisualizer";
 import { PyComplexNumber } from "../../types";
 import { parse as parsePython } from "../../parser/parser-adapter";
 import pythonLexer from "../../parser/lexer";
@@ -221,6 +222,16 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["math_nextafter", 128],
   ["math_ulp", 129],
   ["input", 130],
+  // 132-134: py-slang additions just past the end of native Pynter's original table, where pynter now
+  // has matching entries too. `breakpoint`, `set_timeout` and `clear_all_timeout` are deliberate no-ops:
+  // a headless run has no debugger to stop in, and this synchronous interpreter has no event loop to
+  // schedule a callback on, so set_timeout's callback is never run.
+  ["breakpoint", 132],
+  ["set_timeout", 133],
+  ["clear_all_timeout", 134],
+  // `draw_data` is native Pynter's own slot 6 (inherited from Sinter, where it was a stub): it draws
+  // nothing (there is no canvas) and returns its first argument, like Source's.
+  ["draw_data", 6],
 ]);
 
 /**
@@ -233,7 +244,7 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
  * `@Validate` decorator (e.g. `str`, `error`, the async `display`) defaults
  * to CSE's own `minArgMap.get(builtin) || 0` fallback.
  */
-const PRIMITIVE_MIN_ARGS: Map<number, number> = new Map(
+export const PRIMITIVE_MIN_ARGS: Map<number, number> = new Map(
   [...PRIMITIVE_FUNCTIONS.entries()].map(([name, index]) => [index, minArgMap.get(name) || 0]),
 );
 
@@ -1312,6 +1323,29 @@ export function executePrimitive(
       // time.time() is documented as seconds since the epoch, not milliseconds — divide
       // Date.now()'s milliseconds down to match.
       return Date.now() / 1000;
+
+    case 132: // breakpoint — a no-op without a debugger attached.
+      return undefined;
+
+    case 133: // set_timeout — a no-op: there is no event loop here to run the callback on. Still
+      // checks its arity (exactly 2, like CSE's and py2js's), so a malformed call fails the same way.
+      if (args.length !== 2)
+        throw new MissingRequiredPositionalError(
+          `set_timeout() takes exactly 2 arguments (${args.length} given)`,
+        );
+      return undefined;
+
+    case 134: // clear_all_timeout — nothing is ever scheduled, so nothing to clear. Exactly 0 arguments.
+      if (args.length !== 0)
+        throw new MissingRequiredPositionalError(
+          `clear_all_timeout() takes exactly 0 arguments (${args.length} given)`,
+        );
+      return undefined;
+
+    case 6: // draw_data — there is no drawing canvas; the identity on its first argument.
+      if (args.length < 1)
+        throw new MissingRequiredPositionalError("draw_data() takes at least 1 argument");
+      return args[0];
 
     case 128: // math_nextafter — see PRIMITIVE_FUNCTIONS' doc comment: an unimplemented
       // stub on the CSE side too.

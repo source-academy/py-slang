@@ -24,6 +24,7 @@ function makeMockConductor(responses: string[]) {
     sendError: (e: unknown) => errors.push(e as { name: string; message: string }),
     sendOutput: (m: string) => outputs.push(m),
     registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
     requestInput: (prompt?: string) => {
       prompts.push(prompt);
       return Promise.resolve(responses[call++]);

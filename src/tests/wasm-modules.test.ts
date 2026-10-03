@@ -19,6 +19,10 @@ function makeMockConductor(withModuleLoader: boolean = true) {
     sendResult: (r: unknown) => results.push(r),
     sendError: (e: unknown) => errors.push(e),
     sendOutput: (m: string) => outputs.push(m),
+    // Both also called by registerAutoCompletePlugin at construction time, regardless of
+    // withModuleLoader - registerPlugin gets overridden below when the module loader is wanted.
+    registerPlugin: () => undefined,
+    hostLoadPlugin: () => Promise.resolve(),
     ...(withModuleLoader && {
       registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
         dataHandler = evaluator;
@@ -45,11 +49,19 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  const onlyNumber = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async function* (x: TypedValue<DataType.NUMBER>) {
+      return x;
+    },
+  );
+
   const applyTwice = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE, DataType.NUMBER] },
     async function* (f: TypedValue<DataType.CLOSURE>, x: TypedValue<DataType>) {
-      const once = yield* dh.closure_call_unchecked(f, [x]);
-      const twice = yield* dh.closure_call_unchecked(f, [once]);
+      const once = yield* dh.closure_call(f, [x], DataType.NUMBER);
+      const twice = yield* dh.closure_call(f, [once], DataType.NUMBER);
       return twice;
     },
   );
@@ -74,7 +86,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   const callWithThree = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.CLOSURE] },
     async function* (f: TypedValue<DataType.CLOSURE>) {
-      return yield* dh.closure_call_unchecked(f, [num(1), num(2), num(3)]);
+      return yield* dh.closure_call(f, [num(1), num(2), num(3)], DataType.NUMBER);
     },
   );
 
@@ -84,6 +96,7 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "flag", value: { type: DataType.BOOLEAN, value: true } },
       { symbol: "greeting", value: { type: DataType.CONST_STRING, value: "hello" } },
       { symbol: "double", value: double },
+      { symbol: "only_number", value: onlyNumber },
       { symbol: "apply_twice", value: applyTwice },
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
@@ -170,6 +183,19 @@ describe("PyWasmEvaluator module imports", () => {
     expect(errors.length).toBeGreaterThan(0);
   });
 
+  test("a relative import ('from .foo import x') is rejected, not silently treated as a conductor module", async () => {
+    // WASM doesn't implement local-file imports (see py2js) — this must
+    // reject explicitly rather than requesting a conductor module literally
+    // named "foo".
+    const { conductor, errors } = makeMockConductor(false);
+    const evaluator = new PyWasmEvaluator3(conductor);
+
+    await evaluator.evaluateChunk("from .foo import x\n");
+
+    expect(errors).toHaveLength(1);
+    expect(String(errors[0])).toMatch(/relative imports/);
+  });
+
   // Calling an imported module *function* requires JSPI (WebAssembly.Suspending/
   // promising) — absent on this runtime, it's supposed to fail loudly (see
   // index.ts) rather than hang or silently misbehave; present, the call must
@@ -183,6 +209,22 @@ describe("PyWasmEvaluator module imports", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["42", "None"]);
+    });
+
+    test("reports the Python source location for a module argument error", async () => {
+      const { conductor, errors } = makeMockConductor();
+      const evaluator = new PyWasmEvaluator3(conductor);
+
+      await evaluator.evaluateChunk(
+        'from testmod import only_number\nonly_number("not a number")\n',
+      );
+
+      expect(errors).toHaveLength(1);
+      expect(String(errors[0])).toContain("TypeError at line 2");
+      expect(String(errors[0])).toContain('only_number("not a number")');
+      expect(String(errors[0])).toContain(
+        "Expected argument 0 to have type 'int' or 'float', got 'str'",
+      );
     });
 
     test("a higher-order module function calls back into a Python closure", async () => {

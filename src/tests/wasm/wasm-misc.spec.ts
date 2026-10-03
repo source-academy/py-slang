@@ -1,5 +1,6 @@
 import { compileToWasmAndRun } from "../../engines/wasm";
 import { ERROR_MAP, TYPE_TAG } from "../../engines/wasm/runtime";
+import linkedList from "../../stdlib/linked-list";
 import { FeatureNotSupportedError } from "../../validator";
 
 it = it.concurrent;
@@ -188,5 +189,17 @@ y = 10
     const { rawResult, renderedResult } = await compileToWasmAndRun(``);
     expect(rawResult).toBeNull();
     expect(renderedResult).toBeNull();
+  });
+
+  it("Shadow stack-related regression test: comparison between a GCable and a non-GCable operand does not leak either operand", async () => {
+    const pythonCode = `print("asdf" == pair(1,2))`;
+    expect(
+      (await compileToWasmAndRun(pythonCode, true, { chapter: 4, groups: [linkedList] })).errors,
+    ).toEqual([]);
+  });
+
+  it("Shadow stack-related regression test: unary operator on GCable operand does not leak operand", async () => {
+    const pythonCode = `print(-(1+0j))`;
+    expect((await compileToWasmAndRun(pythonCode, true)).errors).toEqual([]);
   });
 });

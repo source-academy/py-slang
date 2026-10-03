@@ -6,8 +6,9 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
-import { compileToWasmAndRun } from "../engines/wasm";
-import { prepareModuleBindings, PreparedModuleBindings } from "../engines/wasm/moduleInterop";
+import { compileToWasmAndRun, WasmRuntimeError } from "../engines/wasm";
+import { PreparedModuleBindings, prepareModuleBindings } from "../engines/wasm/moduleInterop";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
@@ -16,6 +17,7 @@ import mce from "../stdlib/parser";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 /**
  * Compiles Python to a WASM module and runs it via compileToWasmAndRun.
@@ -43,15 +45,17 @@ class PyWasmEvaluator extends BasicEvaluator {
   private readonly chapter: number;
   private readonly groups: Group[];
   /** See PyPvmlEvaluatorBase's identical field doc comment. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, chapter: number, groups: Group[]) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, chapter);
     this.chapter = chapter;
     this.groups = groups;
+    this.dataHandler = new GenericDataHandler(chapter);
   }
 
   /** Finds every `from X import a, b as c` statement in `ast` and resolves
@@ -66,6 +70,13 @@ class PyWasmEvaluator extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on the WASM
+          // engine yet (see py2js for the supported engine) — reject
+          // explicitly rather than treating the dotted path as a conductor
+          // module name.
+          throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);
@@ -116,24 +127,31 @@ class PyWasmEvaluator extends BasicEvaluator {
   async evaluateChunk(chunk: string): Promise<void> {
     try {
       const source = chunk.endsWith("\n") ? chunk : chunk + "\n";
+      this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
+      if (moduleBindings) {
+        moduleBindings.onCallLocation = (start, end) =>
+          this.dataHandler.setCurrentCallLocation(start, end);
+      }
       const { errors, prints, renderedResult } = await compileToWasmAndRun(chunk, true, {
         chapter: this.chapter,
         groups: this.groups,
         moduleBindings,
       });
 
+      // Flush what was printed before a runtime error, then report the error.
+      prints.forEach(print => this.conductor.sendOutput(print));
       if (errors.length > 0) {
         errors.forEach(error => this.conductor.sendError(new EvaluatorError(error)));
         return;
       }
-
-      prints.forEach(print => this.conductor.sendOutput(print));
       if (renderedResult != null) {
         this.conductor.sendOutput(renderedResult);
       }
     } catch (error) {
+      // A runtime error aborts an interactive run; show what was printed first.
+      (error as WasmRuntimeError)?.prints?.forEach(print => this.conductor.sendOutput(print));
       this.conductor.sendError(new EvaluatorError(error));
     }
   }
@@ -141,20 +159,25 @@ class PyWasmEvaluator extends BasicEvaluator {
   async evaluateFile(fileName: string, fileContent: string): Promise<void> {
     try {
       const source = fileContent.endsWith("\n") ? fileContent : fileContent + "\n";
+      this.dataHandler.setCurrentSource(source);
       const ast = parse(source);
       const moduleBindings = await this.loadImports(ast);
+      if (moduleBindings) {
+        moduleBindings.onCallLocation = (start, end) =>
+          this.dataHandler.setCurrentCallLocation(start, end);
+      }
       const { errors, prints } = await compileToWasmAndRun(fileContent, false, {
         chapter: this.chapter,
         groups: this.groups,
         moduleBindings,
       });
 
+      // Flush what was printed before a runtime error, then report the error.
+      prints.forEach(print => this.conductor.sendOutput(print));
       if (errors.length > 0) {
         errors.forEach(error => this.conductor.sendError(new EvaluatorError(error)));
         return;
       }
-
-      prints.forEach(print => this.conductor.sendOutput(print));
     } catch (error) {
       this.conductor.sendError(new EvaluatorError(error));
     }

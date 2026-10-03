@@ -8,7 +8,7 @@ import {
   wasm,
   type WasmInstruction,
 } from "@sourceacademy/wasm-util";
-import { MALLOC_FX } from "./gc";
+import { IS_TAG_GCABLE, MALLOC_FX } from "./gc";
 import { LIST_REPEAT_FX, LIST_SLOT_TAG_LOAD_FX, LIST_SLOT_VAL_LOAD_FX } from "./list";
 import {
   CHAPTER,
@@ -18,7 +18,7 @@ import {
   TYPE_TAG,
   getErrorIndex,
 } from "./metadata";
-import { POP_SHADOW_STACK_FX } from "./shadowStack";
+import { POP_SHADOW_STACK_FX, SILENT_PUSH_SHADOW_STACK_FX } from "./shadowStack";
 import { BOOLISE_FX } from "./stdlib";
 import {
   MAKE_BOOL_FX,
@@ -56,6 +56,8 @@ export const NEG_FX = wasm
       .if(i32.eq(local.get("$x_tag"), i32.const(TYPE_TAG.COMPLEX)))
       .then(
         wasm.return(
+          wasm.call(POP_SHADOW_STACK_FX).args(),
+          wasm.raw`(local.set $x_val) (local.set $x_tag)`,
           wasm
             .call(MAKE_COMPLEX_FX)
             .args(
@@ -68,6 +70,16 @@ export const NEG_FX = wasm
     wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.NEG_NOT_SUPPORT))),
     wasm.unreachable(),
   );
+
+/**
+ * Raises ZeroDivisionError from inside generated wasm: log the error by its static index, then trap.
+ * Used by true division (`/`), the only arithmetic operator not delegated to the host helper
+ * `arith.ext`, which does the equivalent check for `//`, `%` and `**` (see hostImports.ts).
+ */
+const raiseZeroDivision = (): WasmInstruction[] => [
+  wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.ZERO_DIVISION))),
+  wasm.unreachable(),
+];
 
 export const ARITHMETIC_OP_TAG = {
   ADD: 0,
@@ -281,16 +293,19 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(
             wasm.call(MAKE_INT_FX).args(i64.mul(local.get("$x_val"), local.get("$y_val"))),
           ),
-          wasm.return(
-            wasm
-              .call(MAKE_FLOAT_FX)
-              .args(
-                f64.div(
-                  f64.convert_i64_s(local.get("$x_val")),
-                  f64.convert_i64_s(local.get("$y_val")),
+          [
+            wasm.if(i64.eqz(local.get("$y_val"))).then(...raiseZeroDivision()),
+            wasm.return(
+              wasm
+                .call(MAKE_FLOAT_FX)
+                .args(
+                  f64.div(
+                    f64.convert_i64_s(local.get("$x_val")),
+                    f64.convert_i64_s(local.get("$y_val")),
+                  ),
                 ),
-              ),
-          ),
+            ),
+          ],
         ),
       ),
 
@@ -325,7 +340,10 @@ export const ARITHMETIC_OP_FX = wasm
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.add(local.get("$a"), local.get("$c")))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.sub(local.get("$a"), local.get("$c")))),
           wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.mul(local.get("$a"), local.get("$c")))),
-          wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c")))),
+          [
+            wasm.if(f64.eq(local.get("$c"), f64.const(0))).then(...raiseZeroDivision()),
+            wasm.return(wasm.call(MAKE_FLOAT_FX).args(f64.div(local.get("$a"), local.get("$c")))),
+          ],
         ),
       ),
 
@@ -409,6 +427,10 @@ export const ARITHMETIC_OP_FX = wasm
       ),
       // (a+bi)/(c+di) = (ac+bd)/(c^2+d^2) + (bc-ad)/(c^2+d^2)i
       [
+        // test the components, not the denominator: c*c + d*d underflows to 0 for tiny nonzero c, d
+        wasm
+          .if(i32.and(f64.eq(local.get("$c"), f64.const(0)), f64.eq(local.get("$d"), f64.const(0))))
+          .then(...raiseZeroDivision()),
         local.set(
           "$denom",
           f64.add(
@@ -607,6 +629,14 @@ export const COMPARISON_OP_FX = wasm
   .results(i32, i64)
   .locals({ $a: f64, $b: f64, $c: f64, $d: f64, $is_result: i32, $eq_result: i32 })
   .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$y_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $y_val) (local.set $y_tag)`),
+
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$x_tag")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $x_val) (local.set $x_tag)`),
+
     wasm
       .if(
         i32.or(
@@ -980,6 +1010,17 @@ export const LIST_STRUCT_EQ_FX = wasm
       ),
 
       wasm
+        .if(wasm.call(IS_TAG_GCABLE).args(local.get("$ex_tag")))
+        .then(
+          wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$ex_tag"), local.get("$ex_val")),
+        ),
+      wasm
+        .if(wasm.call(IS_TAG_GCABLE).args(local.get("$ey_tag")))
+        .then(
+          wasm.call(SILENT_PUSH_SHADOW_STACK_FX).args(local.get("$ey_tag"), local.get("$ey_val")),
+        ),
+
+      wasm
         .call(COMPARISON_OP_FX)
         .args(
           local.get("$ex_tag"),
@@ -1005,15 +1046,19 @@ export const LIST_STRUCT_EQ_FX = wasm
   );
 
 /**
- * `not`'s sole operand, and `and`/`or`'s *left* operand specifically, must be
- * an actual bool -- see docs/specs/python_typing_back.tex: `and`/`or`/`not`
- * are all typed `bool, any -> any` / `bool -> bool` (only the right operand
- * of `and`/`or` is `any`). Passes the (tag,val) pair through unchanged so
- * callers can use this as a transparent wrapper around the operand
- * expression, matching CSE's evaluateUnaryExpression / BOOL_OP instruction
- * handler, which reject a non-bool operand here outright (not a truthiness
- * shortcut like BOOLISE_FX, which is for contexts -- if/while conditions,
- * and/or's *right* operand's short-circuit test -- that spec any x truthy).
+ * `not`'s sole operand, `and`/`or`'s *left* operand, and an `if`/`elif`
+ * condition or conditional-expression (ternary) predicate must all be an
+ * actual bool -- see docs/specs/python_typing_back.tex (`and`/`or`/`not` are
+ * typed `bool, any -> any` / `bool -> bool`, only the right operand of
+ * `and`/`or` is `any`) and the spec docs' "Following if and elif, Python §x
+ * only allows boolean expressions." Passes the (tag,val) pair through
+ * unchanged so callers can use this as a transparent wrapper around the
+ * operand/condition expression, matching CSE's evaluateUnaryExpression /
+ * BOOL_OP / BRANCH instruction handlers, which reject a non-bool value here
+ * outright (not a truthiness shortcut like BOOLISE_FX, which is for
+ * contexts -- `while`'s condition (py-slang#437 leaves this one as-is,
+ * deliberately out of scope), and/or's *right* operand's short-circuit test
+ * -- that spec any x truthy).
  */
 export const CHECK_BOOL_FX = wasm
   .func("$_check_bool")

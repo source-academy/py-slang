@@ -1,7 +1,7 @@
 Python §2 is a small programming language, designed for the second chapter
 of the textbook
-<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
 
 ## What names are predeclared in Python §2?
 
@@ -16,7 +16,7 @@ these groups:
       <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
     </li>
     <li>
-      <a href="../LINKED LISTS/index.html">LINKED LISTS</a>: Support for linked lists
+      <a href="../LINKED LIST/index.html">LINKED LIST</a>: Support for linked lists
     </li>
   </ul>
 
@@ -25,7 +25,7 @@ these groups:
 You can use all features of
 <a href="../python_1/">Python §1</a> and all
 features that are introduced in
-<a href="https://sourceacademy.org/sicpjs/2">chapter 2</a> of the
+<a href="https://sourceacademy.org/sicpy/2">chapter 2</a> of the
 textbook.
 Below are the features that Python §2 adds to Python §1.
 
@@ -36,7 +36,7 @@ Python §2 uses the predeclared name `None` to denote the empty linked list.
 ### The LINKED LIST functions
 
 To work with linked lists, you can use the functions in the
-<a href="../LINKED LISTS/index.html">LINKED LISTS</a> group of predeclared functions, already mentioned
+<a href="../LINKED LIST/index.html">LINKED LIST</a> group of predeclared functions, already mentioned
 above.
 
 ## You want the definitive specs?

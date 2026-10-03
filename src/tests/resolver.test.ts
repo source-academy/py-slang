@@ -256,4 +256,135 @@ print(outer())
       expect(() => toPythonAstAndResolve(code, 3)).not.toThrow();
     });
   });
+
+  describe("NameReassignmentError wording (#211)", () => {
+    test("describes the reassignment site as 'reassigned', not 'declared', and has no second message pointing at the original declaration", () => {
+      const code = "x = 1\nx = 2";
+      try {
+        toPythonAstAndResolve(code, 1);
+        throw new Error("did not throw");
+      } catch (e: any) {
+        expect(e).toBeInstanceOf(ResolverErrors.NameReassignmentError);
+        expect(e.message).toContain("A name has been reassigned here.");
+        expect(e.message).not.toContain("A name has been declared here.");
+        expect(e.message).not.toContain("already been declared");
+      }
+    });
+  });
+
+  describe("redefining an imported name is a reassignment (py-slang#413)", () => {
+    // Chapters 1-2 are deliberately single-assignment so that substitution alone is a complete
+    // explanation of what a program does (see ast.ts's substitute doc comment) — a `def red`
+    // silently shadowing an earlier `from rune import red` would break exactly that guarantee, the
+    // same as reassigning any other name would. Before this fix, `from rune import red` was invisible
+    // to createNoReassignmentValidator (it only checked Assign/AnnAssign/FunctionDef targets), so this
+    // sailed through preprocessing and only surfaced, confusingly, as a conductor-level crash once the
+    // substitution stepper actually tried to call the (never-actually-shadowed) imported red.
+    const code = "from rune import (red, heart)\ndef red(x): return x\nprint(red(4))";
+
+    test("a def redeclaring an imported name is rejected under chapter 1", () => {
+      expect(() => toPythonAstAndResolve(code, 1)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("a def redeclaring an imported name is rejected under chapter 2", () => {
+      expect(() => toPythonAstAndResolve(code, 2)).toThrow(ResolverErrors.NameReassignmentError);
+    });
+
+    test("chapter 3+ allows it, same as any other reassignment there", () => {
+      expect(toPythonAstAndResolve(code, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(code, 4)).toMatchObject({});
+    });
+
+    test("two modules declaring the same name is a reassignment too, rejected under chapters 1-2", () => {
+      // Same reasoning as a def shadowing an import: two modules both binding `red` is just as much a
+      // reassignment as `def red` after `from rune import red` is — chapters 1-2 reject it uniformly,
+      // regardless of which two statements (import/import, import/def, def/def, ...) are colliding.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(() => toPythonAstAndResolve(twoImports, 1)).toThrow(
+        ResolverErrors.NameReassignmentError,
+      );
+      expect(() => toPythonAstAndResolve(twoImports, 2)).toThrow(
+        ResolverErrors.NameReassignmentError,
+      );
+    });
+
+    test("chapter 3+ allows two modules declaring the same name too, same as any other reassignment", () => {
+      // `moduleInterop.ts`'s `resolveImports` supports "last import wins" for two imports of the same
+      // name (see `src/tests/py2js-from-import.test.ts`'s "two imports binding the same name resolve
+      // in source order, last one wins") — legal only where reassignment in general is legal.
+      const twoImports = "from rune import red\nfrom sound import red";
+      expect(toPythonAstAndResolve(twoImports, 3)).toMatchObject({});
+      expect(toPythonAstAndResolve(twoImports, 4)).toMatchObject({});
+    });
+  });
+});
+
+/**
+ * Splits a resolver error's message into the echoed source line and its caret line, and returns
+ * where the carets start and what they underline (py-slang#475: carets were one column too far
+ * right).
+ */
+function underlinedText(error: Error): { sourceLine: string; caretColumn: number; carets: string } {
+  const lines = error.message.split("\n");
+  // "<Name> at line N", a whitespace-only line, the source line, then the caret line.
+  const sourceLine = lines[2];
+  const caretLine = lines[3];
+  const caretColumn = caretLine.indexOf("^");
+  const carets = caretLine.slice(caretColumn).match(/^\^+/)![0];
+  return { sourceLine, caretColumn, carets };
+}
+
+function resolveError(code: string, chapter: number): Error {
+  try {
+    toPythonAstAndResolve(code, chapter);
+  } catch (e) {
+    return e as Error;
+  }
+  throw new Error(`expected an error for: ${code}`);
+}
+
+describe("Resolver error carets underline the offending name", () => {
+  const cases: [string, string, number, string][] = [
+    ["a name at the start of a line", "equal", 3, "equal"],
+    ["a name inside a call", "x = 1\nprint(equal)", 3, "equal"],
+    ["a name at the start of a call", "equal(1, 2)", 3, "equal"],
+    ["an indented name", "def f():\n    return foo", 3, "foo"],
+    ["a name on a later line", "x = 1\ny = 2\nz = 3 + unknown_name", 3, "unknown_name"],
+    ["a reassigned variable", "x = 1\nx = 2", 1, "x"],
+    ["a reassigned function name", "def f(x):\n    return 1\ndef f(y):\n    return 2", 1, "f"],
+    ["a reassigned name inside a function", "def f():\n    y = 1\n    y = 2", 1, "y"],
+    ["a reserved name", "range = 5", 3, "range"],
+    [
+      "a reserved name after other code",
+      "x = 1\nprint(x)\ndef range(n):\n    return n",
+      3,
+      "range",
+    ],
+    ["a reserved parameter", "def f(a, range):\n    return a", 3, "range"],
+  ];
+
+  test.each(cases)("%s", (_label, code, chapter, name) => {
+    const error = resolveError(code, chapter);
+    const { sourceLine, caretColumn, carets } = underlinedText(error);
+    // The carets start exactly under the (last) occurrence of the name on the echoed line, and are
+    // as long as it.
+    expect(caretColumn).toBe(sourceLine.lastIndexOf(name));
+    expect(carets).toBe("^".repeat(name.length));
+  });
+
+  test("the suggestion line is aligned with the message text", () => {
+    const error = resolveError("x = 1\nprint(equal)", 3);
+    const lines = error.message.split("\n");
+    expect(lines[4].indexOf("Perhaps")).toBe(lines[3].indexOf("This name"));
+  });
+
+  test("scope-conflict errors underline the name too", () => {
+    const error = resolveError(
+      "def f():\n    x = 1\n    def g():\n        global x\n        nonlocal x\n",
+      3,
+    );
+    const { sourceLine, caretColumn, carets } = underlinedText(error);
+    expect(caretColumn).toBe(sourceLine.lastIndexOf("x"));
+    expect(carets).toBe("^");
+  });
 });

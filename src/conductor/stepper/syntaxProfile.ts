@@ -13,9 +13,13 @@
  * (`when`). The precedence maps let the host insert parentheses generically (e.g. `(1 + 2) * 3`).
  */
 
-import type { SyntaxProfile } from "@sourceacademy/common-stepper";
+import type { SyntaxProfile, SyntaxTemplatePart } from "@sourceacademy/common-stepper";
 
-export const pythonSyntaxProfile: SyntaxProfile = {
+// `hoverText` (see below) is a whole extra top-level `SyntaxProfile` field the currently-installed
+// `@sourceacademy/common-stepper` doesn't know about yet, so this object is typed by inference here and
+// only asserted to `SyntaxProfile` at the end — an explicit `: SyntaxProfile` annotation on this
+// declaration would make TypeScript's excess-property check reject `hoverText` outright.
+export const pythonSyntaxProfile = {
   templates: {
     // Program / statements
     Program: [{ lines: "body" }],
@@ -41,12 +45,27 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { when: "alternate", parts: [{ token: "else:", cls: "identifier" }, { child: "alternate" }] },
     ],
     PassStatement: [{ token: "pass", cls: "identifier" }],
+    // Never reduces (see reduce.ts's "ImportStatement" case) — `raw` is display text reconstructed
+    // by translate.ts's `importText`, not something the host interprets structurally.
+    ImportStatement: [{ prop: "raw", cls: "identifier" }],
 
     // Atoms
     Literal: [{ prop: "raw", cls: "literal" }],
     // Plain names are uncoloured (white), like Source — only keywords/operators are coloured. A
     // function name shown as a value collapses to a bold mu-term (see `functionValues` below).
     Identifier: [{ prop: "name" }],
+    // A callable imported from a module (see ast.ts's `moduleFunction`) — always just its name, like
+    // Identifier; there's no inline/expanded form to collapse from (unlike a bound def/lambda — see
+    // `functionValues` below), since it has no Python body. Gets a `Builtin`-style fixed-text hover
+    // popover instead (see `hoverText` below, py-slang#406) — its `hoverText` property is already set
+    // when the node is built (`ast.ts`'s `moduleFunction`), not relabelled at display time the way a
+    // bare built-in `Identifier` is, since it's already a fully-formed value from the moment it's
+    // substituted in.
+    ModuleFunction: [{ prop: "name" }],
+    // A bare Identifier relabelled at display time when its name is a built-in (see `getSteps.ts`'s
+    // `serializeStep`) — rendered exactly like Identifier; the only difference is the `hoverText` rule
+    // below, which adds a popover on top (py-slang#404).
+    Builtin: [{ prop: "name" }],
 
     // Expressions
     BinaryExpression: [
@@ -80,6 +99,21 @@ export const pythonSyntaxProfile: SyntaxProfile = {
       { child: "body" },
     ],
     ArrayExpression: ["[", { list: "elements", sep: ", " }, "]"],
+    // An opaque module value (e.g. a `rune` Rune) — see `ast.ts`'s `opaqueValue`. Rendered as its
+    // thumbnail (`dataUrl`, an inline image, DrRacket-style) when the underlying module attached one
+    // (source-academy/modules#879), falling back to `<label>` text otherwise.
+    //
+    // The `image`/`unless` template-part kinds this uses are implemented in
+    // `@sourceacademy/common-stepper`/`web-stepper` (source-academy/plugins) but not yet in the
+    // version this package depends on — the cast below can be dropped once that version ships and
+    // the dependency is bumped.
+    Opaque: [
+      { image: "dataUrl", altProp: "label" },
+      {
+        unless: "dataUrl",
+        parts: [{ token: "<", cls: "identifier" }, { prop: "label", cls: "identifier" }, ">"],
+      },
+    ] as unknown as SyntaxTemplatePart[],
   },
 
   // Parenthesisation precedence (higher binds tighter). Mirrors Python's grammar; the host wraps a
@@ -104,6 +138,9 @@ export const pythonSyntaxProfile: SyntaxProfile = {
   expressionPrecedence: {
     Identifier: 20,
     ArrayExpression: 20,
+    Opaque: 20,
+    ModuleFunction: 20,
+    Builtin: 20,
     Literal: 18,
     CallExpression: 18,
     UnaryExpression: 15,
@@ -124,4 +161,18 @@ export const pythonSyntaxProfile: SyntaxProfile = {
     { type: "ArrowFunctionExpression", nameProp: "name" },
     { type: "FunctionDeclaration", nameProp: "name" },
   ],
-};
+
+  // A `Builtin` node (see `getSteps.ts`'s display-time relabeling) or a `ModuleFunction` node (see
+  // `ast.ts`'s `moduleFunction`) shows a fixed-text hover popover — `built-in function print`- or
+  // `module function heart`-style — reading its already-formatted text from the node's own `hoverText`
+  // property. Unlike `functionValues` this doesn't collapse or replace the inline rendering (there's no
+  // body to collapse to begin with); it's added on top.
+  //
+  // `hoverText` is implemented in `@sourceacademy/common-stepper`/`web-stepper` (source-academy/plugins)
+  // but not yet in the version this package depends on — the cast below can be dropped once that
+  // version ships and the dependency is bumped (see `Opaque`'s identical note above).
+  hoverText: [
+    { type: "Builtin", textProp: "hoverText" },
+    { type: "ModuleFunction", textProp: "hoverText" },
+  ],
+} as unknown as SyntaxProfile;

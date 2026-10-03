@@ -669,7 +669,7 @@ export function scanForGlobalDeclarations(node: Node | Node[]): Set<string> {
     if (!curNode || typeof curNode !== "object") return;
     const kind = (curNode as { kind?: string }).kind;
     if (kind === "Global") {
-      globals.add((curNode as unknown as StmtNS.Global).name.lexeme);
+      (curNode as unknown as StmtNS.Global).names.forEach(n => globals.add(n.lexeme));
       return;
     }
     if (kind === "FunctionDef" || kind === "Lambda") return;
@@ -704,7 +704,7 @@ export function scanForNonlocalDeclarations(node: Node | Node[]): Set<string> {
     if (!curNode || typeof curNode !== "object") return;
     const kind = (curNode as { kind?: string }).kind;
     if (kind === "NonLocal") {
-      nonlocals.add((curNode as unknown as StmtNS.NonLocal).name.lexeme);
+      (curNode as unknown as StmtNS.NonLocal).names.forEach(n => nonlocals.add(n.lexeme));
       return;
     }
     if (kind === "FunctionDef" || kind === "Lambda") return;
@@ -832,7 +832,7 @@ export function evaluateListAssignment(
   const intIndex = Number(index.value);
   const length = list.value.length;
   if (intIndex < -length || intIndex >= length) {
-    handleRuntimeError(context, new IndexError(code, assignNode, context, intIndex, length, true));
+    handleRuntimeError(context, new IndexError(code, assignNode, intIndex, length, true));
   }
   list.value[intIndex < 0 ? intIndex + length : intIndex] = value;
 }

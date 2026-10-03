@@ -16,6 +16,8 @@ module.exports = {
       "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/runner/index.js",
     "^@sourceacademy/conductor/types$":
       "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/types/index.js",
+    "^@sourceacademy/conductor/util$":
+      "<rootDir>/node_modules/@sourceacademy/conductor/dist/conductor/util/index.js",
   },
   transform: {
     "^.+\\.tsx?$": [
@@ -39,6 +41,9 @@ module.exports = {
             "@sourceacademy/conductor/types": [
               "node_modules/@sourceacademy/conductor/dist/conductor/types/index.d.ts",
             ],
+            "@sourceacademy/conductor/util": [
+              "node_modules/@sourceacademy/conductor/dist/conductor/util/index.d.ts",
+            ],
           },
         },
         diagnostics: {
@@ -53,13 +58,14 @@ module.exports = {
   // Pyodide's Node loader needs a dynamic import() that only works under
   // `node --experimental-vm-modules` — which in turn compiles every test
   // file as real ESM (no __dirname; see src/tests/utils.ts's CPYTHON_BATCH_RUNNER),
-  // incompatible with how the rest of the suite compiles. Run those two
-  // files only via `yarn test:pyodide`, which overrides this ignore list.
+  // incompatible with how the rest of the suite compiles. Run those files
+  // only via `yarn test:pyodide`, which overrides this ignore list.
   testPathIgnorePatterns: [
     "/node_modules/",
     "/dist/",
     "PyodideEvaluator\\.test\\.ts",
     "pyodide-import-analyzer\\.test\\.ts",
+    "pyodide-modules\\.test\\.ts",
   ],
   coverageReporters: ["lcov"],
 };

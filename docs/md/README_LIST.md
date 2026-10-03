@@ -1,0 +1,8 @@
+LIST provides two useful functions for list processing.
+Click on a name on the right to see how they are defined and used.
+
+Lists are not covered in 
+the textbook
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy),
+but they are included in Python §3.

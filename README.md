@@ -87,36 +87,62 @@ yarn wasm <path to python file>
 
 ### Running the standalone CLI (repl)
 
-`py-slang` can also be run as a standalone CLI, outside of Conductor, via `src/repl.ts`. It supports three engines, selected with `-e`/`--engine` (or the `PY_SLANG_ENGINE` environment variable — an explicit `--engine` flag takes precedence over it):
+`py-slang` can also be run as a standalone CLI, outside of Conductor, via `src/repl.ts`. It supports five engines, selected with `-e`/`--engine` (or the `PY_SLANG_ENGINE` environment variable — an explicit `--engine` flag takes precedence over it):
 
 ```shell
 yarn build:repl
-yarn repl <path to python file> [-v <1-4>]                       # cse (default): the tree-walking CSE machine
-yarn repl <path to python file> --engine pvml-browser [-v <1-4>] # PVML bytecode on PVMLInterpreter, pure TypeScript
-yarn repl <path to python file> --engine pvml --pynter <path> -v 3 # PVML bytecode on a native Pynter binary
+yarn repl <path to python file> [-v <1-4>]                            # cse (default): the tree-walking CSE machine
+yarn repl <path to python file> --engine pvml [-v <1-4>]              # PVML bytecode on PVMLInterpreter, pure TypeScript
+yarn repl <path to python file> --engine pynter --pynter <path> -v 3  # PVML bytecode on a native Pynter binary
+yarn repl <path to python file> --engine py2js [-v <1-4>]             # compiles to JavaScript and runs it directly
+yarn repl <path to python file> --engine wasm [-v <1-4>]              # compiles to an actual WebAssembly module and runs it
 ```
 
-`--engine pvml-browser` compiles the file to PVML bytecode and runs it directly on `PVMLInterpreter` — the same pure-TypeScript, no-native-binary-required VM `PyPvmlEvaluator1..4` use in the Conductor pathway (see the evaluator table above). It supports all four SICPy chapters, the same stdlib groups as the CSE machine at each chapter (`VARIANT_GROUPS` in `src/runner.ts`), and — like the other two engines — proper tail-call optimization (see below).
+`--engine pvml` compiles the file to PVML bytecode and runs it directly on `PVMLInterpreter` — the same pure-TypeScript, no-native-binary-required VM `PyPvmlEvaluator1..4` use in the Conductor pathway (see the evaluator table above). It supports all four SICPy chapters, the same stdlib groups as the CSE machine at each chapter (`VARIANT_GROUPS` in `src/runner.ts`), and — like the other engines below — proper tail-calls (see below).
 
-`--engine pvml` instead compiles the file to PVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary — the same compiler as `--engine pvml-browser`, but executed by a native C VM instead of the TypeScript interpreter. Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary, and only supports `-v 3` (SICPy §3) — the CLI exits with an error for any other variant, or if `--pynter` is omitted:
+`--engine pynter` instead compiles the file to PVML bytecode and runs it on a native [Pynter](https://github.com/source-academy/pynter) `runner` binary — the same compiler as `--engine pvml`, but executed by a native C VM instead of the TypeScript interpreter (the name assumes it's understood to be running under Node, unlike a browser-hosted engine). Pynter is a fork of [Sinter](https://github.com/source-academy/sinter), kept as a separate sister project so that giving the native VM Python-specific semantics doesn't risk destabilizing Sinter, which remains the fallback engine for the Source curriculum. This requires building `runner` from the Pynter repo separately (see its [build instructions](https://github.com/source-academy/pynter#build-locally)) and pointing `--pynter` at the resulting binary, and only supports `-v 3` (SICPy §3) — the CLI exits with an error for any other variant, or if `--pynter` is omitted:
 
 ```shell
-yarn repl <path to python file> --engine pvml --pynter <path to pynter's runner binary> -v 3
+yarn repl <path to python file> --engine pynter --pynter <path to pynter's runner binary> -v 3
 ```
 
 For example, if `pynter` is checked out as a sibling of `py-slang` (i.e. both under the same parent directory) and its `runner` has been built there per the instructions linked above, run from `py-slang`'s root:
 
 ```shell
-yarn repl <path to python file> --engine pvml --pynter ../pynter/build/runner/runner -v 3
+yarn repl <path to python file> --engine pynter --pynter ../pynter/build/runner/runner -v 3
 ```
 
-`src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine pvml`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage; see "Running the test suite" below.
+`src/tests/utils.ts`'s `generateNativePynterTestCases()` reruns the existing CSE test suite against `--engine pynter`-equivalent code when `PYNTER_RUNNER_PATH` is set to a built `runner` binary — a convenient way to see current pass/fail coverage; see "Running the test suite" below.
+
+`--engine py2js` compiles the file to JavaScript and runs it directly (`src/engines/py2js`) — the same engine `Py2JsEvaluator1..4` use in the Conductor pathway. It supports all four SICPy chapters. It runs in sync mode (`runCodePy2Js`), so a program with a local import (`from .foo import x`) isn't supported from this CLI path — only `Py2JsSession`'s dual/async mode handles those.
+
+`--engine wasm` compiles the file to an actual WebAssembly module — a different bytecode target than PVML — via `src/engines/wasm`, and runs it with Node's built-in WebAssembly support; the same compiler `PyWasmEvaluator1..4` use in the Conductor pathway. It supports all four SICPy chapters. **Known issue** ([#431](https://github.com/source-academy/py-slang/issues/431)): in this non-interactive/file mode, a top-level `print()` of a string that isn't the program's last statement corrupts evaluation state, and every subsequent statement then fails with `TypeError: this value is not callable` (e.g. `print("hi")\nprint(2)\n` fails on the second line) — not yet fixed.
 
 The bytecode format itself — currently identical to SVML, the format [Sinter](https://github.com/source-academy/sinter) executes — is documented in the [py-slang wiki](https://github.com/source-academy/py-slang/wiki), forked from the [js-slang SVML wiki](https://github.com/source-academy/js-slang/wiki/SVML-Specification) so it can be edited to describe PVML (py-slang's own bytecode target) without touching the canonical SVML docs. See [PVML-Specification](https://github.com/source-academy/py-slang/wiki/PVML-Specification) for the wire format and [PVML-Instruction-Set](https://github.com/source-academy/py-slang/wiki/PVML-Instruction-Set) for the opcode reference — the latter also documents a known mismatch between py-slang's primitive-function index table and the one built into Sinter/Pynter today.
 
-#### Tail-call optimization
+**Headless design decisions.** "Headless" means running a program without a Source Academy frontend attached: the standalone CLI above (all five engines) and the library runners (`runCode`, `runCodePvmlInterpreter`, `runCodePvml`, `runCodePy2Js`). There is no Conductor host, so no data visualizer, no module loader and no interactive input.
 
-Both the CSE machine and the PVML compiler perform tail-call optimization: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pvml-browser` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
+The guiding rule: **a program that runs in the browser should also run headless and print the same output**, so functions that exist only to talk to the user interface degrade gracefully instead of being undefined or failing. Where that is impossible, the function is documented here as unsupported.
+
+| Function                                        | Headless behavior                                                                                                                                                                                                                                                                                          | Why                                                                                                                                                                                                             |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `draw_data(value1, *values)` (§2+)              | Draws nothing and **returns its first argument**, in every engine. In the browser, the CSE machine and py2js draw it on the data visualizer first; PVML-in-browser doesn't draw yet ([#490](https://github.com/source-academy/py-slang/issues/490)). Needs at least one argument. Not defined in §1.       | There is no canvas to draw on. Returning the first argument matches Source's `draw_data` and lets the call sit inside an expression.                                                                            |
+| `breakpoint()`                                  | No-op.                                                                                                                                                                                                                                                                                                     | There is no debugger to stop in.                                                                                                                                                                                |
+| `set_timeout(f, t)`, `clear_all_timeout()`      | `py2js`: real timers. `pvml` and `pynter`: no-ops, so `f` is **never called** (they still check the arity, exactly 2 arguments for `set_timeout` and none for `clear_all_timeout`). `cse`: reports "not yet supported". `wasm`: undefined ([#321](https://github.com/source-academy/py-slang/issues/321)). | A callback needs an event loop. Where there is none, a no-op lets the rest of the program run; the CSE machine instead fails loudly, because silently skipping `f` would make a program's output quietly wrong. |
+| `input()`                                       | Not supported. `cse` returns an empty string (stdin is closed); `py2js` and `pvml` raise an error; `pynter` faults; `wasm` doesn't define it.                                                                                                                                                              | It needs an interactive stdin and, in the browser engines, a frontend round trip.                                                                                                                               |
+| `from <module> import ...` (e.g. runes, sounds) | Not supported.                                                                                                                                                                                                                                                                                             | Modules are loaded through Conductor's module loader and drawn by the frontend.                                                                                                                                 |
+
+The `wasm` engine is a separate case: it defines only a small hand-written subset of the built-in library (no `math_*`, `abs`, `len`, streams, ...), in the browser as well as headless. This is tracked in [#488](https://github.com/source-academy/py-slang/issues/488).
+
+Where this lives in the code:
+
+- `VARIANT_GROUPS` (`src/runner.ts`), which the CLI and the PVML runners default to, includes the `dataVisualizer` group from §2, mirroring `PyCseEvaluator2..4`. The `dataVisualizer` builtin only calls the visualizer when one is attached (`context.dataVisualizer`).
+- The PVML primitives are numbered to match native Pynter's `sivmfn_primitives[]` table: `draw_data` is Pynter's own slot 6, and `breakpoint`, `set_timeout` and `clear_all_timeout` are slots 132-134 (`PRIMITIVE_FUNCTIONS` in `src/engines/pvml/builtins.ts`). Changing one side means changing the other.
+- `src/tests/headless-draw-data.test.ts` and `src/tests/dataVisualizer.test.ts` pin these behaviors; the latter also runs on native Pynter when `PYNTER_RUNNER_PATH` is set.
+
+#### Proper tail calls
+
+Both the CSE machine and the PVML compiler implement proper tail-calls: a call in tail position (the direct value of a `return`, including through both branches of a ternary) reuses the current call frame instead of growing the call stack, so tail-recursive SICPy programs run in constant stack space regardless of recursion depth. On the PVML side this is a compile-time decision (`PVMLCompiler.compileTail` emits `CALLT`/`CALLTP`/`CALLTA` instead of `CALL`/`CALLP`/`CALLA`), reused unchanged by all three PVML pathways (`PyPvmlEvaluator1..4`, `PyPvmlPynterEvaluator`, and both `--engine pvml`/`--engine pynter` CLI paths) — native Pynter's own VM (`vm.c`) has always correctly implemented the `CALLT`/`CALLTP` opcodes themselves, so this only needed a compiler-side fix, not a native Pynter change.
 
 ### Running the test suite
 
@@ -144,7 +170,7 @@ A third, opt-in suite reruns test cases against a native Pynter binary instead �
 [Pynter](https://github.com/source-academy/pynter) `runner` binary instead of `PVMLInterpreter`
 (see "Running the standalone CLI (repl)" above for background). It's skipped by default, since it
 needs a locally built Pynter binary that CI doesn't have. `src/tests/pvml-tco-pynter.test.ts` (see
-"Tail-call optimization" above) and `src/tests/operator-conformance-pynter.test.ts` are opt-in the
+"Proper tail calls" above) and `src/tests/operator-conformance-pynter.test.ts` are opt-in the
 same way, for the same reason.
 
 To run these, build `runner` from the Pynter repo (see its
@@ -188,7 +214,7 @@ truth. Unlike the Pynter suite, **this runs in CI** (`node.js.yml` sets `CPYTHON
 the `test-coverage` step) — `ubuntu-latest` ships Python 3 and `sourceacademy-sicp` has no
 third-party dependencies, so there's no extra setup cost. It also has a secondary benefit for
 py-slang itself: since it checks the CSE machine's test cases are true statements about Python, not
-just that py-slang agrees with itself, it catches cases where a test's *expected value* is wrong.
+just that py-slang agrees with itself, it catches cases where a test's _expected value_ is wrong.
 
 To run it locally, point `CPYTHON_PATH` at a Python 3.10+ interpreter (any interpreter that can
 `import` the `python/sicp` package works):
@@ -199,7 +225,7 @@ CPYTHON_PATH=python3 yarn test
 
 Cases that test Source Academy Python's own pedagogical restrictions (chapter-gating, `bool`
 excluded from arithmetic builtins) are cleanly skipped rather than counted as failures, since
-CPython — unlike Pynter — is *more* permissive than this dialect, not less, and has no equivalent
+CPython — unlike Pynter — is _more_ permissive than this dialect, not less, and has no equivalent
 restriction to check against. Cases exercising `parse()`/`tokenize()` are skipped too, since those
 are py-slang-only metacircular-evaluator features with no CPython equivalent. To see just this
 suite's results, filter by its test-name tag:

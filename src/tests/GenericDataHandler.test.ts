@@ -21,13 +21,14 @@ import {
   TypedValue,
 } from "@sourceacademy/conductor/types";
 import { asInterfacableEvaluator, GenericDataHandler } from "../conductor/GenericDataHandler";
+import { InvalidIdentifierError, InvalidTypeError } from "../conductor/errors";
 
 function fakeEvaluator(): IEvaluator {
   return { startEvaluator: () => Promise.resolve(undefined) };
 }
 
 test("repeated allocations through the proxy get distinct ids and land in dataHandler", async () => {
-  const dataHandler = new GenericDataHandler();
+  const dataHandler = new GenericDataHandler(4);
   const proxied = asInterfacableEvaluator(fakeEvaluator(), dataHandler);
 
   const first = await proxied.pair_make(
@@ -57,7 +58,7 @@ test("repeated allocations through the proxy get distinct ids and land in dataHa
 
 test("non-dataHandler properties still resolve against the underlying evaluator", async () => {
   const evaluator = fakeEvaluator();
-  const proxied = asInterfacableEvaluator(evaluator, new GenericDataHandler());
+  const proxied = asInterfacableEvaluator(evaluator, new GenericDataHandler(4));
   await expect(proxied.startEvaluator("entry")).resolves.toBeUndefined();
 });
 
@@ -86,26 +87,45 @@ function makeAddClosure(): ExternCallable<[DataType.NUMBER, DataType.NUMBER], Da
   };
 }
 
+const str = (value: string): TypedValue<DataType.CONST_STRING> => ({
+  type: DataType.CONST_STRING,
+  value,
+});
+
+/** Deliberately non-commutative, so it records the order it was applied in. */
+function makeConcatClosure(): ExternCallable<
+  [DataType.CONST_STRING, DataType.CONST_STRING],
+  DataType.CONST_STRING
+> {
+  return async function* (
+    a: TypedValue<DataType.CONST_STRING>,
+    b: TypedValue<DataType.CONST_STRING>,
+  ) {
+    await Promise.resolve();
+    return str(`(${a.value} ${b.value})`);
+  };
+}
+
 describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chain list helpers", () => {
   test("list() builds a proper pair-chain, and is_list recognizes it", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const xs = await dh.list(num(1), num(2), num(3));
     expect(await dh.is_list(xs)).toBe(true);
   });
 
   test("is_list is false for a non-pair, non-empty-list value", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     expect(await dh.is_list(num(42) as unknown as TypedValue<DataType.LIST>)).toBe(false);
   });
 
   test("is_list is false for an improper pair (tail isn't nil or another pair)", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const improper = await dh.pair_make(num(1), num(2));
     expect(await dh.is_list(improper as unknown as TypedValue<DataType.LIST>)).toBe(false);
   });
 
   test("is_list is false for a dangling/invalid pair identifier", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const bogus: TypedValue<DataType.PAIR> = {
       type: DataType.PAIR,
       value: 9999 as unknown as PairIdentifier,
@@ -114,55 +134,55 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
   });
 
   test("list_to_vec round-trips list()'s elements back out, in order", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const xs = await dh.list(num(1), num(2), num(3));
     expect(await dh.list_to_vec(xs)).toEqual([num(1), num(2), num(3)]);
   });
 
   test("list_to_vec rejects a non-list value", async () => {
-    const dh = new GenericDataHandler();
-    await expect(dh.list_to_vec(num(42) as unknown as TypedValue<DataType.LIST>)).rejects.toThrow(
-      /Expected a list, got type/,
-    );
+    const dh = new GenericDataHandler(4);
+    await expect(async () =>
+      dh.list_to_vec(num(42) as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidTypeError);
   });
 
   test("list_to_vec rejects a dangling/invalid pair identifier", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const bogus: TypedValue<DataType.PAIR> = {
       type: DataType.PAIR,
       value: 9999 as unknown as PairIdentifier,
     };
-    await expect(dh.list_to_vec(bogus as unknown as TypedValue<DataType.LIST>)).rejects.toThrow(
-      /Invalid pair identifier/,
-    );
+    await expect(async () =>
+      dh.list_to_vec(bogus as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
   test("length counts list()'s elements", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const xs = await dh.list(num(1), num(2), num(3), num(4));
     expect(await dh.length(xs)).toBe(4);
   });
 
-  test("length throws on a non-list value", () => {
-    const dh = new GenericDataHandler();
-    expect(() => dh.length(num(42) as unknown as TypedValue<DataType.LIST>)).toThrow(
-      /Expected a list, got type/,
-    );
+  test("length throws on a non-list value", async () => {
+    const dh = new GenericDataHandler(4);
+    await expect(async () =>
+      dh.length(num(42) as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidTypeError);
   });
 
-  test("length throws on a dangling/invalid pair identifier", () => {
-    const dh = new GenericDataHandler();
+  test("length throws on a dangling/invalid pair identifier", async () => {
+    const dh = new GenericDataHandler(4);
     const bogus: TypedValue<DataType.PAIR> = {
       type: DataType.PAIR,
       value: 9999 as unknown as PairIdentifier,
     };
-    expect(() => dh.length(bogus as unknown as TypedValue<DataType.LIST>)).toThrow(
-      /Invalid pair identifier/,
-    );
+    await expect(async () =>
+      dh.length(bogus as unknown as TypedValue<DataType.LIST>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
-  test("accumulate reduces a list left-to-right through a closure", async () => {
-    const dh = new GenericDataHandler();
+  test("accumulate reduces a list through a closure", async () => {
+    const dh = new GenericDataHandler(4);
     const add = makeAddClosure();
     const op = await dh.closure_make(
       { args: [DataType.NUMBER, DataType.NUMBER], returnType: DataType.NUMBER },
@@ -175,8 +195,33 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
     expect(result).toEqual(num(6));
   });
 
+  /**
+   * The direction and argument order test. `add` above cannot check either — it is commutative and
+   * associative, so every reading of accumulate gives 6 — which is how source-academy/py-slang#473
+   * survived: this folded left-to-right passing `[acc, element]`, where conductor's own reference
+   * implementation (conductor/src/conductor/stdlib/list/accumulate.ts), SICP and Source all fold
+   * right-to-left passing `[element, acc]`.
+   *
+   * It matters because the module bundles are shared: a bundle folding into a list or a difference
+   * got one answer from Python and another from Source.
+   */
+  test("accumulate folds right-to-left, passing the element before the accumulator", async () => {
+    const dh = new GenericDataHandler(4);
+    const op = await dh.closure_make(
+      { args: [DataType.CONST_STRING, DataType.CONST_STRING], returnType: DataType.CONST_STRING },
+      makeConcatClosure(),
+    );
+    const xs = await dh.list(str("1"), str("2"), str("3"));
+
+    const result = await drain(dh.accumulate(op, str("nil"), xs, DataType.CONST_STRING));
+
+    // Right-to-left, element first. Left-to-right with the accumulator first would give
+    // "(((nil 1) 2) 3)"; right-to-left with the accumulator first, "(nil (3 (2 1)))".
+    expect(result).toEqual(str("(1 (2 (3 nil)))"));
+  });
+
   test("accumulate on an empty list returns the initial value untouched", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const add = makeAddClosure();
     const op = await dh.closure_make(
       { args: [DataType.NUMBER, DataType.NUMBER], returnType: DataType.NUMBER },
@@ -190,7 +235,7 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
   });
 
   test("accumulate rejects a malformed (non-list) sequence", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const add = makeAddClosure();
     const op = await dh.closure_make(
       { args: [DataType.NUMBER, DataType.NUMBER], returnType: DataType.NUMBER },
@@ -203,8 +248,7 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
       num(42) as unknown as TypedValue<DataType.LIST>,
       DataType.NUMBER,
     );
-
-    await expect(gen.next()).rejects.toThrow(/Expected a list, got type/);
+    await expect(async () => gen.next()).rejects.toBeInstanceOf(InvalidTypeError);
   });
 });
 
@@ -217,7 +261,7 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
  */
 describe("PAIR and ARRAY are interchangeable, per Martin's 'pair is just a 2-element array'", () => {
   test("pair_head/pair_tail read an ARRAY-tagged value's first two elements", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
     await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, num(1));
     await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, num(2));
@@ -228,7 +272,7 @@ describe("PAIR and ARRAY are interchangeable, per Martin's 'pair is just a 2-ele
   });
 
   test("pair_sethead/pair_settail write back into the underlying array", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
     const asPair = arr as unknown as TypedValue<DataType.PAIR>;
 
@@ -240,24 +284,26 @@ describe("PAIR and ARRAY are interchangeable, per Martin's 'pair is just a 2-ele
   });
 
   test("pair_assert checks an ARRAY-tagged value's element types the same as a genuine PAIR", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const arr = await dh.array_make(DataType.NUMBER, 2, num(0));
     const asPair = arr as unknown as TypedValue<DataType.PAIR>;
 
     await expect(dh.pair_assert(asPair, DataType.NUMBER, DataType.NUMBER)).resolves.toBeUndefined();
-    expect(() => dh.pair_assert(asPair, DataType.CONST_STRING)).toThrow(/Expected head of type/);
-  });
-
-  test("pair_head throws on a too-short array (fewer than 2 elements), same as a dangling pair", async () => {
-    const dh = new GenericDataHandler();
-    const arr = await dh.array_make(DataType.NUMBER, 1, num(0));
-    expect(() => dh.pair_head(arr as unknown as TypedValue<DataType.PAIR>)).toThrow(
-      /Invalid pair identifier/,
+    await expect(async () => dh.pair_assert(asPair, DataType.CONST_STRING)).rejects.toBeInstanceOf(
+      InvalidTypeError,
     );
   });
 
+  test("pair_head throws on a too-short array (fewer than 2 elements), same as a dangling pair", async () => {
+    const dh = new GenericDataHandler(4);
+    const arr = await dh.array_make(DataType.NUMBER, 1, num(0));
+    await expect(async () =>
+      dh.pair_head(arr as unknown as TypedValue<DataType.PAIR>),
+    ).rejects.toBeInstanceOf(InvalidIdentifierError);
+  });
+
   test("is_list/list_to_vec/length/accumulate accept a DataType.ARRAY directly", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const arr = await dh.array_make(DataType.NUMBER, 3, num(0));
     await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, num(1));
     await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 1, num(2));

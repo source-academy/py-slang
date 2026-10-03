@@ -2,11 +2,13 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { moduleToPvml } from "../engines/pvml/modules";
-import { PVMLBoxType } from "../engines/pvml/types";
 import { PVMLCompiler } from "../engines/pvml/pvml-compiler";
 import { PVMLInterpreter } from "../engines/pvml/pvml-interpreter";
+import { PVMLBoxType } from "../engines/pvml/types";
+import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
 import { analyzeWithEnvironments } from "../resolver";
+import dataVisualizer from "../stdlib/dataVisualizer";
 import linkedList from "../stdlib/linked-list";
 import list from "../stdlib/list";
 import math from "../stdlib/math";
@@ -17,6 +19,7 @@ import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
 import { EvaluatorError } from "./errors";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
+import { registerAutoCompletePlugin } from "./plugins/autocomplete";
 
 function once(fn: () => Promise<void>): () => Promise<void> {
   let promise: Promise<void> | undefined;
@@ -69,19 +72,21 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * see GenericDataHandler.ts. Passed to moduleToPvml as the IDataHandler
    * a module's exports are read against, and wrapped via
    * asInterfacableEvaluator when registering ModuleLoaderRunnerPlugin. */
-  private readonly dataHandler = new GenericDataHandler();
+  private readonly dataHandler: GenericDataHandler;
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
+    registerAutoCompletePlugin(conductor, variant);
     this.variant = variant;
     this.groups = groups;
     this.preludeText = groups
       .map(g => g.prelude ?? "")
       .filter(p => p.trim())
       .join("\n");
+    this.dataHandler = new GenericDataHandler(this.variant);
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);
@@ -97,6 +102,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
    * loadImports); it must be the parse of `script` + trailing newline. */
   private async runChunk(script: string, ast?: StmtNS.FileInput): Promise<PVMLBoxType> {
     const source = script.endsWith("\n") ? script : script + "\n";
+    this.dataHandler.setCurrentSource(source);
     ast ??= parse(source);
     const { errors, environments } = analyzeWithEnvironments(
       ast,
@@ -116,6 +122,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       globalEnv: this.globalEnv,
       programText: script,
       variant: this.variant,
+      onCallLocation: (start, end) => this.dataHandler.setCurrentCallLocation(start, end),
     });
     const result = await interpreter.executeAsync();
     this.globalEnv = interpreter.getGlobalEnv();
@@ -132,6 +139,12 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
     const importsByModule = new Map<string, { name: string; alias: string | undefined }[]>();
     for (const stmt of ast.statements) {
       if (stmt instanceof StmtNS.FromImport) {
+        if (stmt.level > 0) {
+          // Local-file imports (leading dots) aren't implemented on PVML yet
+          // (see py2js for the supported engine) — reject explicitly rather
+          // than treating the dotted path as a conductor module name.
+          throw new Error(RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE);
+        }
         const moduleName = stmt.module.lexeme;
         if (!importsByModule.has(moduleName)) {
           importsByModule.set(moduleName, []);
@@ -206,19 +219,28 @@ export class PyPvmlEvaluator1 extends PyPvmlEvaluatorBase {
 
 export class PyPvmlEvaluator2 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [misc, math, linkedList]);
+    super(conductor, 2, [misc, math, linkedList, dataVisualizer]);
   }
 }
 
 export class PyPvmlEvaluator3 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream]);
+    super(conductor, 3, [misc, math, linkedList, list, pairmutator, stream, dataVisualizer]);
   }
 }
 
 export class PyPvmlEvaluator4 extends PyPvmlEvaluatorBase {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [misc, math, linkedList, list, pairmutator, stream, parser]);
+    super(conductor, 4, [
+      misc,
+      math,
+      linkedList,
+      list,
+      pairmutator,
+      stream,
+      parser,
+      dataVisualizer,
+    ]);
   }
 }
 

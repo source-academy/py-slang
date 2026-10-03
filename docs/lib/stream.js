@@ -78,7 +78,7 @@ function stream_to_llist(xs) {
  * The elements of the stream are the given values in the given order.
  * Lazy? No: A complete linked linked_list is generated,
  * and then a stream using llist_to_stream is generated from it.
- * @param {...value} <CODE>value1, value2, ...values</CODE> - given values
+ * @param {...value} <CODE>values</CODE> - given values (value1, value2, ...)
  * @returns {stream} stream containing all values
  */
 

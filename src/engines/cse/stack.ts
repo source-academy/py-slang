@@ -5,6 +5,7 @@ interface IStack<T> {
   push(...items: T[]): void;
   pop(): T | undefined;
   peek(): T | undefined;
+  peekAt(depthFromTop: number): T | undefined;
   size(): number;
   isEmpty(): boolean;
   getStack(): T[];
@@ -31,6 +32,15 @@ export class Stack<T> implements IStack<T> {
       return undefined;
     }
     return this.storage[this.size() - 1];
+  }
+
+  /** `peekAt(0)` is the top (same as `peek()`); `peekAt(n)` looks n items below it. */
+  public peekAt(depthFromTop: number): T | undefined {
+    const index = this.size() - 1 - depthFromTop;
+    if (index < 0) {
+      return undefined;
+    }
+    return this.storage[index];
   }
 
   public size(): number {

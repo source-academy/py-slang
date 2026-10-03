@@ -417,7 +417,10 @@ describe("parse function tests", () => {
         linkedListBuilder(
           "sequence",
           linkedListBuilder(
-            linkedListBuilder("nonlocal_declaration", linkedListBuilder("name", '"x"')),
+            linkedListBuilder(
+              "nonlocal_declaration",
+              linkedListBuilder(linkedListBuilder("name", '"x"')),
+            ),
             linkedListBuilder(
               "assignment",
               linkedListBuilder("name", '"x"'),
@@ -481,7 +484,20 @@ describe("parse function tests", () => {
   it("nonlocal declaration", async () => {
     const { renderedResult } = await compileWithMce(`parse("nonlocal x")`);
     expect(renderedResult).toBe(
-      linkedListBuilder("nonlocal_declaration", linkedListBuilder("name", '"x"')),
+      linkedListBuilder(
+        "nonlocal_declaration",
+        linkedListBuilder(linkedListBuilder("name", '"x"')),
+      ),
+    );
+  });
+
+  it("nonlocal declaration with multiple names", async () => {
+    const { renderedResult } = await compileWithMce(`parse("nonlocal x, y")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "nonlocal_declaration",
+        linkedListBuilder(linkedListBuilder("name", '"x"'), linkedListBuilder("name", '"y"')),
+      ),
     );
   });
 

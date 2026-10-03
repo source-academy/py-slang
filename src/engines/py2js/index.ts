@@ -13,8 +13,10 @@
  * python_typing_back.tex), pinned against the CSE machine by
  * src/tests/operator-conformance-py2js.test.ts.
  */
-import { IDataHandler } from "@sourceacademy/conductor/types";
+import type { BaseDataVisualizerRunnerPlugin } from "@sourceacademy/runner-data-visualizer";
+import { StmtNS } from "../../ast-types";
 import { GenericDataHandler } from "../../conductor/GenericDataHandler";
+import { bundleLocalImports } from "../../modules/localImports";
 import { parse } from "../../parser";
 import { Resolver } from "../../resolver";
 import linkedList from "../../stdlib/linked-list";
@@ -53,6 +55,8 @@ export class Py2JsRunError extends Error {
   constructor(
     public readonly kind: "parse" | "analysis" | "runtime",
     message: string,
+    /** What the program printed before a runtime error, so callers can still show it. */
+    public readonly output: string = "",
   ) {
     super(message);
     this.name = "Py2JsRunError";
@@ -67,11 +71,68 @@ export interface RunPy2JsOptions {
    * callSync / acall).
    */
   extraBuiltins?: Record<string, PyValue> | ((rt: Py2JsRuntime) => Record<string, PyValue>);
+  /**
+   * Sibling files `code` (the entrypoint) can locally import from
+   * (`from .foo import x`), keyed by absolute path (e.g. `"/utils.py"`) —
+   * see src/modules/localImports.ts. Only honored by
+   * runCodePy2JsDual/Py2JsSession: a local import may need to compile and
+   * run another file first, which is inherently async, so runCodePy2Js's
+   * synchronous contract cannot support it (the same pre-existing
+   * limitation it already has for conductor-module imports). Ignored when
+   * `fileGetter` is supplied.
+   */
+  files?: Record<string, string>;
+  /**
+   * Resolves a sibling file on demand instead of requiring the whole
+   * program up front — e.g. the conductor evaluator passes
+   * `path => conductor.requestFile(path)`, backed by whatever multi-file
+   * store the host (the frontend's folder-mode BrowserFS) already has.
+   * Takes priority over `files` when both are given.
+   */
+  fileGetter?: (path: string) => Promise<string | undefined>;
+  /** The entrypoint's own key into `files` (and, for Py2JsSession, into
+   * every chunk it runs against the same persistent environment) — what a
+   * sibling file's relative import is resolved against. Defaults to
+   * `"/main.py"`. */
+  entrypointFilePath?: string;
 }
 
 export interface RunPy2JsResult {
   /** Everything the program printed via print(), concatenated. */
   output: string;
+}
+
+/** `fileGetter` wins when both are given (see RunPy2JsOptions doc); a plain
+ * `files` map is just wrapped into the same async shape
+ * src/modules/localImports.ts expects — always defined, even with neither
+ * option set (a program with no local imports never calls it). */
+function toFileGetter(
+  options: Pick<RunPy2JsOptions, "files" | "fileGetter">,
+): (path: string) => Promise<string | undefined> {
+  if (options.fileGetter) return options.fileGetter;
+  const files = options.files ?? {};
+  return path => Promise.resolve(files[path]);
+}
+
+/** True iff `statements` contains a local (level > 0) import — the signal
+ * to bundle before doing anything else (see bundleLocalImports). A program
+ * with only level === 0 (conductor-module) imports, or none at all, is
+ * completely unaffected — bundleLocalImports itself would also no-op for
+ * these, but checking here avoids even parsing/walking for it. */
+function hasLocalImports(statements: StmtNS.Stmt[]): boolean {
+  return statements.some(s => s.kind === "FromImport" && (s as StmtNS.FromImport).level > 0);
+}
+
+/** Formats a caught error for Py2JsRunError's message: `${e.name}: ${e.message}`, except
+ * a Py2JsRuntimeError's own .message already starts with its own kind as a literal string
+ * (stdlibBridge.ts's error-kind prefixing, py-slang#397) — re-adding e.name in front of an
+ * already-prefixed message would double it ("TypeError: TypeError: ..."). Detected from the
+ * message's own text (any leading "Word: "), not by comparing against e.name — e.name is
+ * ultimately sourced from e.constructor.name (stdlibBridge.ts), which a minified production
+ * build mangles, while the literal "TypeError: " etc. baked into the message text survives. */
+function formatCaughtError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  return /^[A-Za-z]+: /.test(e.message) ? e.message : `${e.name}: ${e.message}`;
 }
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
@@ -128,12 +189,19 @@ function compileScript(
   }
 }
 
-function prepare(
+/**
+ * Builds a fresh runtime for `code` at `variant`: bridges the chapter's
+ * stdlib groups and extraBuiltins, then runs the chapter's group preludes
+ * (always sync — see the inline comment below). Shared by both `prepare()`
+ * (sync path) and `prepareDual()` (async path, so local-file imports in the
+ * main script itself can be resolved with an `await` in between this setup
+ * and compiling that script — see prepareDual's own doc comment).
+ */
+function setupRuntime(
   code: string,
   variant: number,
-  mode: CompileMode,
   options: RunPy2JsOptions,
-): { rt: Py2JsRuntime; js: string } {
+): { rt: Py2JsRuntime; script: string } {
   if (!SUPPORTED_CHAPTERS.includes(variant)) {
     throw new Py2JsRunError(
       "parse",
@@ -171,27 +239,124 @@ function prepare(
 
   // Group preludes (SICPy source defining higher-level functions in terms of
   // the group's own primitives — e.g. linked-list.prelude.ts's map/filter/
-  // reduce) run once, always in sync mode: nothing at chapter 1-2 imports
-  // anything, so there is no reason for the prelude itself to need the async
-  // spine even when the main script below is compiled in dual mode.
+  // reduce) run once, always compiled in dual mode: the prelude text itself
+  // never imports anything or calls input(), but its higher-order functions
+  // call a caller-supplied callback that might need the async spine even
+  // when the prelude function's own body doesn't. A sync-compiled prelude
+  // function's calls (including that callback call) always compile to
+  // `__py.call`, pinning the callback onto the synchronous trampoline
+  // regardless of how the *caller* of the prelude function was itself
+  // invoked — see Py2JsSession.runChunkInternal's identical fix (and its
+  // longer doc comment) for the full story, including the motivating case
+  // (source-academy/modules#944).
   const preludeText = groups
     .map(g => g.prelude ?? "")
     .filter(p => p.trim())
     .join("\n");
   if (preludeText.trim()) {
-    const preludeJs = compileScript(rt, preludeText + "\n", variant, "sync");
+    const preludeJs = compileScript(rt, preludeText + "\n", variant, "dual");
+    // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — lets a
+    // bridged builtin's error name the predefined function it happened inside of
+    // (py-slang#397), e.g. tail() failing inside map()'s own _map helper.
+    rt.compilingPrelude = true;
     try {
       new Function("__py", preludeJs)(rt);
     } catch (e: unknown) {
-      throw new Py2JsRunError(
-        "runtime",
-        e instanceof Error ? `${e.name}: ${e.message}` : String(e),
-      );
+      throw new Py2JsRunError("runtime", formatCaughtError(e));
+    } finally {
+      rt.compilingPrelude = false;
     }
   }
 
+  return { rt, script };
+}
+
+function prepare(
+  code: string,
+  variant: number,
+  mode: CompileMode,
+  options: RunPy2JsOptions,
+): { rt: Py2JsRuntime; js: string } {
+  const { rt, script } = setupRuntime(code, variant, options);
   const js = compileScript(rt, script, variant, mode);
   return { rt, js };
+}
+
+/**
+ * Async counterpart to `prepare()`, used only by runCodePy2JsDual: after
+ * `setupRuntime`, parses the main script and — only if it has a local
+ * (level > 0) import anywhere — flattens it first via bundleLocalImports
+ * (src/modules/localImports.ts), a pure source-to-source transform, and
+ * reparses the result; `__program__` is updated to that flattened text so
+ * it can be shown to students. Either way, what gets resolved/compiled from
+ * here on is just an ordinary single-file program — level === 0
+ * (conductor-module) imports are a separate, pre-existing concern this
+ * function has never touched (and still doesn't): the one-shot API has no
+ * async pre-pass for those, on purpose, matching its behavior before this
+ * feature existed. This is why the sync `prepare()`/`runCodePy2Js` above
+ * cannot support `options.files`/`fileGetter` at all: resolving a local
+ * import may need to bundle another file's contents in first, which is
+ * inherently async.
+ */
+async function prepareDual(
+  code: string,
+  variant: number,
+  options: RunPy2JsOptions,
+): Promise<{ rt: Py2JsRuntime; js: string }> {
+  const { rt, script } = setupRuntime(code, variant, options);
+
+  let ast;
+  try {
+    ast = parse(script);
+  } catch (e: unknown) {
+    throw new Py2JsRunError("parse", String((e as { message?: string })?.message ?? e));
+  }
+
+  let effectiveScript = script;
+  if (hasLocalImports(ast.statements)) {
+    const entrypointFilePath = options.entrypointFilePath ?? "/main.py";
+    try {
+      effectiveScript = await bundleLocalImports(
+        script,
+        entrypointFilePath,
+        toFileGetter(options),
+        variant,
+      );
+    } catch (e: unknown) {
+      throw new Py2JsRunError("analysis", (e as Error)?.message ?? String(e));
+    }
+    rt.builtins.__program__ = effectiveScript;
+    try {
+      ast = parse(effectiveScript);
+    } catch (e: unknown) {
+      throw new Py2JsRunError("parse", String((e as { message?: string })?.message ?? e));
+    }
+  }
+
+  const priorGlobals = Object.keys(rt.globals);
+  const resolver = new Resolver(
+    effectiveScript,
+    ast,
+    makeValidatorsForChapter(variant),
+    [],
+    Object.keys(rt.builtins),
+    priorGlobals,
+  );
+  const errors = resolver.resolve(ast);
+  if (errors.length > 0) {
+    throw new Py2JsRunError("analysis", errors.map(e => e.message).join("\n"));
+  }
+
+  try {
+    const js = compileProgram(ast, Object.keys(rt.builtins), {
+      mode: "dual",
+      repl: { priorGlobals },
+    });
+    return { rt, js };
+  } catch (e: unknown) {
+    if (e instanceof Py2JsCompileError) throw new Py2JsRunError("analysis", e.message);
+    throw e;
+  }
 }
 
 /**
@@ -211,7 +376,8 @@ export function runCodePy2Js(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
+      rt.output.join(""),
     );
   }
   return { output: rt.output.join("") };
@@ -227,7 +393,7 @@ export async function runCodePy2JsDual(
   variant: number,
   options: RunPy2JsOptions = {},
 ): Promise<RunPy2JsResult> {
-  const { rt, js } = prepare(code, variant, "dual", options);
+  const { rt, js } = await prepareDual(code, variant, options);
   try {
     await new AsyncFunction("__py", js)(rt);
   } catch (e: unknown) {
@@ -235,7 +401,8 @@ export async function runCodePy2JsDual(
       "runtime",
       // Keep the Python error kind (Py2JsRuntimeError sets name = pyKind), so
       // callers can still tell ZeroDivisionError from TypeError etc.
-      e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+      formatCaughtError(e),
+      rt.output.join(""),
     );
   }
   return { output: rt.output.join("") };
@@ -263,7 +430,7 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * and the ModuleLoaderRunnerPlugin registration (they must be the same
    * object — see PyCseEvaluatorBase for the identical requirement).
    */
-  dataHandler?: IDataHandler;
+  dataHandler?: GenericDataHandler;
   /**
    * Resolves one input() call with what the user typed — forwarded to
    * Py2JsRuntime.requestInput (see runtime.ts's doc comment on the field).
@@ -273,14 +440,13 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    */
   requestInput?: (prompt?: string) => Promise<string>;
   /**
-   * `__program__`'s value for this session — "the string representation of
-   * the editor content at the time when 'Run' was last pressed" per
-   * docs/specs/python_interpreter.tex, for the REPL case. Mirrors
-   * PVMLInterpreter's own `programText` option (pvml-interpreter.ts). Left
-   * unset (rather than defaulting to e.g. an empty string) if the caller
-   * never supplies one, matching PVML's own conditional-set behavior.
+   * The host conductor's data visualizer plugin, threaded down to draw_data (bridged as one of the
+   * LINKED_LISTS group's native builtins — see stdlibBridge.ts's nativeDrawData). The conductor
+   * evaluator (Py2JsEvaluator.ts) registers and supplies its own instance for chapter 2+, mirroring
+   * PyCseEvaluatorBase's identical registration; left unset for standalone/test use (runCodePy2Js et
+   * al. never pass one), in which case draw_data is a silent no-op.
    */
-  programText?: string;
+  dataVisualizer?: BaseDataVisualizerRunnerPlugin<PyValue>;
 }
 
 /**
@@ -297,19 +463,38 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
  * or the runtime's Py2JsRuntimeError — so callers like the conductor
  * evaluator keep the error's name and any source location it carries.
  *
- * A chunk with `from X import y` is loaded (module requested, exports
- * converted to native values — moduleInterop.ts's loadChunkImports) in an
- * async pre-pass before it compiles, and that one chunk compiles in dual
- * mode so its FromImport-bound module functions are callable via `acall`;
- * every other chunk stays on the fast sync path (see compiler.ts's mode doc
- * and the engine README's module-interop notes on why this crosses one
- * unavoidable microtask per call regardless).
+ * A chunk with `from X import y` is loaded before it compiles: `level > 0`
+ * (a local file) is flattened away entirely by bundleLocalImports
+ * (src/modules/localImports.ts, a pure source-to-source transform — see its
+ * own doc comment) before this chunk is even parsed for real; `level === 0`
+ * (a conductor module — including one hoisted out of a bundled dependency
+ * file) is loaded the same way it always has been, via
+ * moduleInterop.ts's loadChunkImports. Either kind of import forces this
+ * chunk onto the dual (async) compile spine so its FromImport-bound
+ * bindings are callable via `acall`; every other chunk stays on the fast
+ * sync path (see compiler.ts's mode doc and the engine README's module-
+ * interop notes on why this crosses one unavoidable microtask per call
+ * regardless).
  */
 export class Py2JsSession {
   readonly rt: Py2JsRuntime;
   private readonly variant: number;
   private readonly groups: Group[];
-  private readonly dataHandler: IDataHandler;
+  private readonly dataHandler: GenericDataHandler;
+  /** Every chunk this session runs is resolved as if it were this path's own
+   * content, for the purposes of relative-import resolution (what directory
+   * "." means). Mutable: the conductor evaluator doesn't learn the real
+   * entrypoint path until its own evaluateFile(fileName, ...) override — the
+   * host's own file-naming choice, called after this session already
+   * exists — so it calls setEntrypointFilePath() first. Defaults to
+   * "/main.py" for callers (runCodePy2JsDual, tests) that never do. */
+  private entrypointFilePath: string;
+  /** Resolves a sibling file a local import needs — see
+   * src/modules/localImports.ts's LocalFileGetter. Fixed at construction
+   * (unlike entrypointFilePath):
+   * the conductor evaluator already has `conductor` in its own constructor,
+   * so `path => conductor.requestFile(path)` is available immediately. */
+  private readonly fileGetter: (path: string) => Promise<string | undefined>;
   private preludeLoaded = false;
 
   constructor(variant: number, options: Py2JsSessionOptions = {}) {
@@ -321,19 +506,19 @@ export class Py2JsSession {
     }
     this.variant = variant;
     this.groups = PY2JS_GROUPS[variant] ?? [];
-    this.dataHandler = options.dataHandler ?? new GenericDataHandler();
+    this.dataHandler = options.dataHandler ?? new GenericDataHandler(variant);
+    this.entrypointFilePath = options.entrypointFilePath ?? "/main.py";
+    this.fileGetter = toFileGetter(options);
     this.rt = new Py2JsRuntime(variant >= 3);
+    this.rt.onCurrentCall = (start, end) => this.dataHandler.setCurrentCallLocation(start, end);
     this.rt.onOutput = options.onOutput;
     this.rt.onPendingWorkChange = options.onPendingWorkChange;
     this.rt.requestInput = options.requestInput;
-    if (options.programText !== undefined) {
-      this.rt.builtins.__program__ = options.programText;
-    }
 
     // Same builtin layering as prepare(): bridged stdlib under the native
     // core, extraBuiltins over everything. The bridge's source string is
     // empty — its synthetic error nodes never point at real chunk text.
-    const bridged = bridgeStdlibGroups(this.rt, this.groups, "", variant);
+    const bridged = bridgeStdlibGroups(this.rt, this.groups, "", variant, options.dataVisualizer);
     for (const [name, value] of Object.entries(bridged)) {
       if (!(name in this.rt.builtins)) this.rt.builtins[name] = value;
     }
@@ -344,6 +529,25 @@ export class Py2JsSession {
     }
   }
 
+  /** Sets what path a relative import (`from .foo import x`) run against this
+   * session resolves against — the conductor evaluator calls this from its
+   * evaluateFile(fileName, ...) override, since it only learns the host's
+   * chosen entrypoint path then, after this session already exists. */
+  setEntrypointFilePath(path: string): void {
+    this.entrypointFilePath = path;
+  }
+
+  /** `__program__` is simply "the single string Python program that gets
+   * compiled to JS" — runChunkInternal is the only caller, setting this
+   * from whatever text it's actually about to compile for a given chunk
+   * (see its own comment); no external caller needs to (or should) manage
+   * this separately, exactly mirroring how the CSE machine keeps its own
+   * `__program__` current internally (interpreter.ts's own
+   * pyDefineVariable("__program__", ...)). */
+  private setProgramText(text: string): void {
+    this.rt.builtins.__program__ = text;
+  }
+
   /** Compile and run one chunk against the persistent globals. */
   async runChunk(code: string): Promise<void> {
     if (!this.preludeLoaded) {
@@ -352,14 +556,57 @@ export class Py2JsSession {
         .map(g => g.prelude ?? "")
         .filter(p => p.trim())
         .join("\n");
-      if (preludeText.trim()) await this.runChunkInternal(preludeText);
+      if (preludeText.trim()) {
+        // Marks every function this defines pyPrelude: true (see Py2JsRuntime.def) — the
+        // Py2JsSession analogue of setupRuntime's identical wrapping around its own,
+        // separate prelude-loading call above. Without this, a bridged builtin's error
+        // can never name the predefined function it happened inside of (py-slang#397)
+        // for any conductor-evaluator session, since that's the only path they use.
+        this.rt.compilingPrelude = true;
+        try {
+          await this.runChunkInternal(preludeText);
+        } finally {
+          this.rt.compilingPrelude = false;
+        }
+      }
     }
     await this.runChunkInternal(code);
   }
 
   private async runChunkInternal(code: string): Promise<void> {
-    const script = code.endsWith("\n") ? code : code + "\n";
-    const ast = parse(script);
+    let script = code.endsWith("\n") ? code : code + "\n";
+    let ast = parse(script);
+
+    // Local (level > 0) imports are flattened away entirely before anything
+    // else happens — a pure source-to-source transform (see
+    // src/modules/localImports.ts), so everything below sees an ordinary
+    // single-file program either way. `priorGlobalNames` (this session's
+    // existing globals) lets a dependency already bundled by an earlier
+    // chunk be recognized and skipped rather than re-bundled/re-run.
+    if (hasLocalImports(ast.statements)) {
+      script = await bundleLocalImports(
+        script,
+        this.entrypointFilePath,
+        this.fileGetter,
+        this.variant,
+        new Set(Object.keys(this.rt.globals)),
+      );
+      ast = parse(script);
+    }
+
+    // Local imports may have expanded this into a different source string.
+    // The active call spans below are offsets into this final script, not the
+    // entry file's original text.
+    this.dataHandler.setCurrentSource(script);
+
+    // __program__ is simply "the single string Python program that gets
+    // compiled to JS" — set here, unconditionally, from whatever that
+    // actually is for this call (the chunk's own text, or the flattened
+    // text if it just got bundled), exactly mirroring the CSE machine's own
+    // pyDefineVariable("__program__", ...) (interpreter.ts): the engine
+    // itself keeps this current, so no external caller (the conductor
+    // evaluator's evaluateFile, in particular) has to remember to.
+    this.setProgramText(script);
 
     // Prior chunks' global names are passed as the resolver's module-level
     // names (its REPL parameter), exactly how the PVML evaluator seeds
@@ -376,6 +623,9 @@ export class Py2JsSession {
     const errors = resolver.resolve(ast);
     if (errors.length > 0) throw errors[0];
 
+    // level === 0 (conductor-module) imports — including any the flattening
+    // above hoisted out of a bundled dependency file — are unaffected by
+    // any of this: still loaded and bound exactly as they always have been.
     const imports = hasImports(ast.statements);
     if (imports) {
       const bindings = await loadChunkImports(this.rt, this.dataHandler, ast.statements);
@@ -388,7 +638,27 @@ export class Py2JsSession {
     // spine even with no imports of its own. referencedNames already saw
     // every such reference during the resolve() call above (including
     // inside nested function bodies), so this needs no second AST walk.
-    if (imports || resolver.referencedNames.has("input")) {
+    //
+    // compilingPrelude also forces dual mode, for a different reason: the
+    // prelude text itself never imports anything or calls input(), but its
+    // higher-order functions (reduce/_reduce, map/_map, filter/_filter, ...)
+    // call a caller-supplied callback that might. A sync-compiled prelude
+    // function's own calls - including that callback call - always compile
+    // to `__py.call` (compiler.ts's mode doc), regardless of how the
+    // *caller* of the prelude function was itself invoked; that pins the
+    // callback (and everything it calls, e.g. a module accessor) onto the
+    // synchronous trampoline even when the surrounding program is running on
+    // the async spine, throwing "needs a frontend round-trip" for a call
+    // that would have been perfectly fine had the prelude function been
+    // dual-compiled like the code calling it (source-academy/modules#944's
+    // motivating case: `reduce(f, initial, xs)` calling `f`, which itself
+    // calls a sound-module accessor). Dual-compiling the prelude fixes this
+    // the same way dual-compiling any other chunk does: its callback call
+    // now compiles to `await __py.acall`, so it correctly rides the async
+    // spine when invoked from one, while still working identically via
+    // `__py.call` when invoked from a sync context (def2's sync body is
+    // exactly this same compiled function, unaffected either way).
+    if (imports || resolver.referencedNames.has("input") || this.rt.compilingPrelude) {
       const js = compileProgram(ast, Object.keys(this.rt.builtins), {
         mode: "dual",
         repl: { priorGlobals },

@@ -153,7 +153,7 @@ test("set_timeout requires a callable first argument", () => {
 });
 
 test("set_timeout requires a numeric second argument", () => {
-  expect(() => runCodePy2Js(`def f():\n    pass\nset_timeout(f, 'soon')`, 1)).toThrow(/TypeError/);
+  expect(() => runCodePy2Js(`def f():\n    x = 1\nset_timeout(f, 'soon')`, 1)).toThrow(/TypeError/);
 });
 
 test("clear_all_timeout takes no arguments", () => {
@@ -168,7 +168,7 @@ test("a scheduled callback can itself call an imported module function needing a
   // `double`, so the whole chunk (and later's own compiled body) is in dual
   // mode, exactly as a real sound_matrix-calling-back-into-Python program
   // would be.
-  const dh = new GenericDataHandler();
+  const dh = new GenericDataHandler(4);
   async function* doubleFunc(
     x: TypedValue<DataType>,
   ): AsyncGenerator<void, TypedValue<DataType>, undefined> {

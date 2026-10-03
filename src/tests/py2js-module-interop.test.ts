@@ -9,7 +9,7 @@
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { GenericDataHandler } from "../conductor/GenericDataHandler";
 import { moduleToPython, pythonToModule } from "../engines/py2js/moduleInterop";
-import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque } from "../engines/py2js/runtime";
+import { Py2JsRuntime, Py2JsRuntimeError, PyOpaque, PyValue } from "../engines/py2js/runtime";
 
 function makeRt() {
   return new Py2JsRuntime();
@@ -17,7 +17,7 @@ function makeRt() {
 
 describe("pythonToModule", () => {
   test("scalars", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     expect(await pythonToModule(rt, dh, 5n)).toEqual({ type: DataType.NUMBER, value: 5 });
     expect(await pythonToModule(rt, dh, 2.5)).toEqual({ type: DataType.NUMBER, value: 2.5 });
@@ -30,7 +30,7 @@ describe("pythonToModule", () => {
   });
 
   test("a PyOpaque round-trips back to its original typed value", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const typed = await dh.opaque_make({ some: "handle" });
     const opaque = new PyOpaque(typed);
@@ -38,7 +38,7 @@ describe("pythonToModule", () => {
   });
 
   test("complex values are rejected", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const { PyComplexNumber } = await import("../types");
     await expect(pythonToModule(rt, dh, new PyComplexNumber(1, 2))).rejects.toThrow(
@@ -47,7 +47,7 @@ describe("pythonToModule", () => {
   });
 
   test("a Python function becomes a callable CLOSURE a module can invoke", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     // Conductor's NUMBER always maps to py2js's native `number` (float) —
     // module signatures only know NUMBER, same convention as every engine's
@@ -60,14 +60,14 @@ describe("pythonToModule", () => {
     // The module's-eye view: call it through conductor's own generic
     // closure protocol (closure_call_unchecked), exactly as a real module
     // would — never touching rt.callSync directly.
-    const gen = dh.closure_call_unchecked(typed, [{ type: DataType.NUMBER, value: 21 }]);
+    const gen = dh.closure_call(typed, [{ type: DataType.NUMBER, value: 21 }], DataType.NUMBER);
     let step = await gen.next();
     while (!step.done) step = await gen.next();
     expect(step.value).toEqual({ type: DataType.NUMBER, value: 42 });
   });
 
   test("a scalar-in/scalar-out Python function also gets a working closure_call_sync fast path", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const double = rt.def("double", 1, (x: unknown) => (x as number) * 2);
     const typed = await pythonToModule(rt, dh, double);
@@ -80,7 +80,7 @@ describe("pythonToModule", () => {
   });
 
   test("closure_call_sync returns undefined (no sync path) for a closure with no .sync", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     async function* noSync(): AsyncGenerator<void, TypedValue<DataType>, undefined> {
       await Promise.resolve();
       return { type: DataType.NUMBER, value: 1 };
@@ -90,7 +90,7 @@ describe("pythonToModule", () => {
   });
 
   test("closure_call_sync calls the underlying Python function exactly once, even when it throws on a non-scalar result", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     let callCount = 0;
     // Returns a pair (a 2-element PyList) - not representable by the sync
@@ -109,11 +109,98 @@ describe("pythonToModule", () => {
     expect(() => dh.closure_call_sync(typed, [])).toThrow(Py2JsRuntimeError);
     expect(callCount).toBe(1);
   });
+
+  describe("pair()/llist() chains (regression: modules#931)", () => {
+    // llist(a, b, c, ...) builds nested cons cells - a raw JS array [a, [b, null]] for
+    // llist(a, b) - not the flat [a, b] a literal [a, b] produces (see LinkedListBuiltins.llist's
+    // py2js analogue - pair()/llist() always produce this shape, per moduleInterop.ts's own doc
+    // comment). Mirrors that shape directly to keep this fixture self-contained.
+    function pyLlist(...elements: PyValue[]): PyValue {
+      return elements.reduceRight<PyValue>((tail, head) => [head, tail], null);
+    }
+
+    test("llist(a, b) - the reported repro's exact shape - flattens to a flat 2-element ARRAY, not a nested one", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(60, 64);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 60 },
+        { type: DataType.NUMBER, value: 64 },
+      ]);
+    });
+
+    test("llist(a) - a single-element chain - flattens to a 1-element ARRAY", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(1);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+      ]);
+    });
+
+    test("llist(a, b, c, d) - a longer chain - flattens to a 4-element ARRAY in order", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const chain = pyLlist(1, 2, 3, 4);
+
+      const typed = await pythonToModule(rt, dh, chain);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+        { type: DataType.NUMBER, value: 3 },
+        { type: DataType.NUMBER, value: 4 },
+      ]);
+    });
+
+    test("a chain element that is itself an llist chain is recursively flattened too", async () => {
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const inner = pyLlist(1, 2);
+      const outer = pyLlist(inner, 3);
+
+      const typed = await pythonToModule(rt, dh, outer);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      const elements = await dh.list_to_vec(typed as TypedValue<DataType.LIST>);
+      expect(elements[1]).toEqual({ type: DataType.NUMBER, value: 3 });
+      expect(elements[0].type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(elements[0] as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+      ]);
+    });
+
+    test("a raw 2-element list that ISN'T a proper chain (e.g. pair(1, 2)) is unaffected - still a flat ARRAY", async () => {
+      // isProperList(pair(1, 2)) is false (its tail, 2, isn't itself a pair or None) - this must
+      // take the exact same path as before the fix, not be mistaken for an llist chain.
+      const dh = new GenericDataHandler(4);
+      const rt = makeRt();
+      const rawPair = [1, 2];
+
+      const typed = await pythonToModule(rt, dh, rawPair);
+
+      expect(typed.type).toBe(DataType.ARRAY);
+      await expect(dh.list_to_vec(typed as TypedValue<DataType.LIST>)).resolves.toEqual([
+        { type: DataType.NUMBER, value: 1 },
+        { type: DataType.NUMBER, value: 2 },
+      ]);
+    });
+  });
 });
 
 describe("moduleToPython", () => {
   test("scalars", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     expect(await moduleToPython(rt, dh, { type: DataType.NUMBER, value: 5 })).toBe(5);
     expect(await moduleToPython(rt, dh, { type: DataType.BOOLEAN, value: false })).toBe(false);
@@ -123,7 +210,7 @@ describe("moduleToPython", () => {
   });
 
   test("OPAQUE becomes a PyOpaque wrapper", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const typed = await dh.opaque_make("payload");
     const result = await moduleToPython(rt, dh, typed);
@@ -137,7 +224,7 @@ describe("moduleToPython", () => {
     // now builds a flat ARRAY (uniformly, like any other list) rather than reconstructing a PAIR.
     // pair_head/pair_tail still read the same two elements off it either way (GenericDataHandler's
     // ARRAY bridge, covered in GenericDataHandler.test.ts).
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const pair = await dh.pair_make(
       { type: DataType.NUMBER, value: 1 },
@@ -160,7 +247,7 @@ describe("moduleToPython", () => {
   });
 
   test("ARRAY converts to a genuine flat PyList, recursively (e.g. scrabble's word lists)", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const arr = await dh.array_make(DataType.CONST_STRING, 2);
     await dh.array_set(arr as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
@@ -176,7 +263,7 @@ describe("moduleToPython", () => {
   });
 
   test("a nested ARRAY (array of arrays) converts to a nested PyList", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const inner = await dh.array_make(DataType.CONST_STRING, 1);
     await dh.array_set(inner as unknown as TypedValue<DataType.ARRAY, DataType.VOID>, 0, {
@@ -192,7 +279,7 @@ describe("moduleToPython", () => {
     // Per Martin: a pair is just an array of length 2, not a distinct concept - a genuine [10, 20]
     // literal (typeof "object", an Array) converts exactly like any other Python list now, as a
     // flat ARRAY, with no special-casing by length.
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const typed = await pythonToModule(rt, dh, [10n, 20n]);
     expect(typed.type).toBe(DataType.ARRAY);
@@ -207,7 +294,7 @@ describe("moduleToPython", () => {
   });
 
   test("an N-element (N != 2) list now converts to a flat ARRAY too, instead of throwing", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const typed = await pythonToModule(rt, dh, [1n, 2n, 3n]);
     expect(typed.type).toBe(DataType.ARRAY);
@@ -223,7 +310,7 @@ describe("moduleToPython", () => {
     // EMPTY_LIST case) - if [] built EMPTY_LIST here, moduleToPython(pythonToModule([])) would
     // round-trip back as None instead of [], exactly the ambiguity this redesign removes
     // elsewhere.
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     const typed = await pythonToModule(rt, dh, []);
     expect(typed.type).toBe(DataType.ARRAY);
@@ -231,8 +318,8 @@ describe("moduleToPython", () => {
     await expect(moduleToPython(rt, dh, typed)).resolves.toEqual([]);
   });
 
-  test("CLOSURE becomes an asyncOnly PyFunction", async () => {
-    const dh = new GenericDataHandler();
+  test("CLOSURE without a .sync twin still requires a frontend round-trip", async () => {
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
     async function* addOne(
       x: TypedValue<DataType>,
@@ -246,21 +333,91 @@ describe("moduleToPython", () => {
     );
     const fn = await moduleToPython(rt, dh, closure, "add_one");
     expect(typeof fn).toBe("function");
-    const f = fn as unknown as { pyName: string; asyncOnly?: boolean };
+    const f = fn as unknown as { pyName: string };
     expect(f.pyName).toBe("add_one");
-    expect(f.asyncOnly).toBe(true);
 
-    // Sync call rejects: this is the guard that makes a hot, synchronously
-    // sampled module callback fail loudly instead of misbehaving if it tries
-    // to call an imported function that needs a real round-trip.
+    // Sync call rejects: addOne carries no `.sync` twin, so the sync body's
+    // own closure_call_sync attempt comes back undefined and it raises the
+    // same "needs a frontend round-trip" error a hardcoded asyncOnly guard
+    // used to raise unconditionally - this is now a per-call outcome, not a
+    // fixed property of the PyFunction (see the next test).
     expect(() => rt.callSync(fn as never, [4n])).toThrow(/frontend round-trip/);
 
     // Async call goes through and produces the right value.
     expect(await rt.acall(fn as never, [4n])).toBe(5);
   });
 
+  test("CLOSURE with a .sync twin is callable synchronously, no frontend round-trip needed", async () => {
+    const dh = new GenericDataHandler(4);
+    const rt = makeRt();
+    // The pix_n_flix shape: a module accessor (e.g. get_pixel_value) that can
+    // prove it never needs a real host round-trip - a plain, synchronous read
+    // against an in-memory buffer - attaches `.sync` alongside its mandatory
+    // async-generator body, mirroring closureToWave's identical pattern for
+    // sound's wave sampling (src/bundles/sound/src/index.ts).
+    async function* addOne(
+      x: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return { type: DataType.NUMBER, value: (x as TypedValue<DataType.NUMBER>).value + 1 };
+    }
+    Object.assign(addOne, {
+      sync: (x: TypedValue<DataType>): TypedValue<DataType> => ({
+        type: DataType.NUMBER,
+        value: (x as TypedValue<DataType.NUMBER>).value + 1,
+      }),
+    });
+    const closure = await dh.closure_make(
+      { returnType: DataType.NUMBER, args: [DataType.NUMBER] },
+      addOne,
+    );
+    const fn = await moduleToPython(rt, dh, closure, "add_one");
+
+    // No throw, no await needed - the sync body's own closure_call_sync
+    // attempt succeeds and returns the plain value directly.
+    expect(rt.callSync(fn as never, [4n])).toBe(5);
+    // The async path still works too, unconditionally.
+    expect(await rt.acall(fn as never, [4n])).toBe(5);
+  });
+
+  test("CLOSURE with a .sync twin taking/returning an OPAQUE handle is callable synchronously (pix_n_flix's get_pixel_value shape)", async () => {
+    const dh = new GenericDataHandler(4);
+    const rt = makeRt();
+    // get_pixel_value(source, x, y, p): source is an opaque image handle, not
+    // a scalar - this only works synchronously if moduleToPythonSync/
+    // pythonToModuleSync pass OPAQUE straight through like the async
+    // converters already do, rather than treating it as "no sync path". The
+    // closure body itself doesn't need real buffer semantics to prove this -
+    // just that the OPAQUE argument survives the sync round-trip and comes
+    // back out as the identical PyOpaque, unconverted.
+    async function* identity(
+      handle: TypedValue<DataType>,
+    ): AsyncGenerator<void, TypedValue<DataType>, undefined> {
+      await Promise.resolve();
+      return handle;
+    }
+    Object.assign(identity, {
+      sync: (handle: TypedValue<DataType>): TypedValue<DataType> => handle,
+    });
+    const closure = await dh.closure_make(
+      { returnType: DataType.OPAQUE, args: [DataType.OPAQUE] },
+      identity,
+    );
+    const fn = await moduleToPython(rt, dh, closure, "get_pixel_value");
+
+    const typedHandle = await dh.opaque_make([10, 20, 30, 255]);
+    const opaqueHandle = new PyOpaque(typedHandle);
+
+    // No throw, no await needed - the sync body's own closure_call_sync
+    // attempt succeeds because the OPAQUE handle argument now converts
+    // through pythonToModuleSync instead of bailing to "no sync path", and
+    // the same handle (by reference) comes back out via moduleToPythonSync.
+    expect(rt.callSync(fn as never, [opaqueHandle]) as PyOpaque).toEqual(opaqueHandle);
+    expect((await rt.acall(fn as never, [opaqueHandle])) as PyOpaque).toEqual(opaqueHandle);
+  });
+
   test("a Python closure invoked by a module can itself call another asyncOnly module closure (source-academy/py-slang#348)", async () => {
-    const dh = new GenericDataHandler();
+    const dh = new GenericDataHandler(4);
     const rt = makeRt();
 
     // A module-exported function needing a real frontend round-trip -

@@ -1,7 +1,7 @@
 Python §3 is a small programming language, designed for the third chapter
 of the textbook
-<a href="https://sourceacademy.org/sicpjs">Structure and Interpretation
-of Computer Programs, JavaScript Adaptation</a> (SICP JS).
+<a href="https://sourceacademy.org/sicpy">Structure and Interpretation
+of Computer Programs, Python Adaptation</a> (SICPy).
 
 ## What names are predeclared in Python §3?
 
@@ -16,16 +16,16 @@ these groups:
       <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
     </li>
     <li>
-      <a href="../LINKED LISTS/index.html">LINKED LISTS</a>: Support for linked lists
+      <a href="../LINKED LIST/index.html">LINKED LIST</a>: Support for linked lists
     </li>
     <li>
-      <a href="../PAIR MUTATORS/index.html">PAIR MUTATORS</a>: Mutating pairs
+      <a href="../PAIR MUTATOR/index.html">PAIR MUTATOR</a>: Mutating pairs
     </li>
     <li>
-      <a href="../LISTS/index.html">LISTS</a>: Support for lists
+      <a href="../LIST/index.html">LIST</a>: Support for lists
     </li>
     <li>
-      <a href="../STREAMS/index.html">STREAMS</a>: Support for streams
+      <a href="../STREAM/index.html">STREAM</a>: Support for streams
     </li>
   </ul>
 
@@ -36,9 +36,9 @@ these groups:
 Variables can be assigned to with identical syntax to variable declaration:
 
 <PRE><CODE>x = 1
-print(x) // x is 1
+print(x)  # x is 1
 x = x + 1
-print(x)  // now x is 2
+print(x)  # now x is 2
 </CODE></PRE>
 
 The difference from variable declaration is that in assignments, the variable must
@@ -47,7 +47,7 @@ the value of the existing variable. In the example above, the first line creates
 variable `x` and assigns it to 1. The third line changes the value of `x` to 2.
 
 Read more on variable declaration and assignment in
-<a href="https://sourceacademy.org/sicpjs/3.1.1">section 3.1.1 Local State Variables</a>
+<a href="https://sourceacademy.org/sicpy/3.1.1">section 3.1.1 Local State Variables</a>
 of the textbook.
 
 ### While loops
@@ -93,7 +93,7 @@ For loops are not covered in the textbook.
 
 Lists are created using literal list expressions, as follows:
 
-<CODE>my_list = [10, 20, 30];</CODE>
+<CODE>my_list = [10, 20, 30]</CODE>
 
 The constant `my_list` now refers to a list with three elements.
 The elements in such a literal list expressions have implicit
@@ -103,12 +103,12 @@ has key 2 and so on.
 A list can be accessed using list access expressions, with
 a given key:
 
-<CODE>my_list[0] + my_list[1] + my_list[2]; // 60</CODE>
+<CODE>my_list[0] + my_list[1] + my_list[2]  # 60</CODE>
 
-Like pairs, lists can be changed in Source §3. This is done
+Like pairs, lists can be changed in Python §3. This is done
 using list assignment:
 
-<CODE>my_list[1] = 200;</CODE>
+<CODE>my_list[1] = 200</CODE>
 
 List assignment and list access in Python §3 are restricted
 to integers (numbers with no fractional component) larger than or
@@ -118,7 +118,7 @@ Accessing a list at a list index that has not been assigned yet (using a
 literal list expression or a list assignment) will result in an error. For
 example, the following will result in an error:
 
-<CODE>my_list[3]; // error: list index out of range</CODE>
+<CODE>my_list[3]  # error: list index out of range</CODE>
 
 Lists are not covered in the textbook.
 
