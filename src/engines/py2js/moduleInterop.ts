@@ -222,7 +222,8 @@ export async function pythonToModule(
         }
         return converted;
       };
-      const arity = Math.max(0, fn.pyArity);
+      // A variadic function (`def f(a, *rest)`) crosses with just its fixed parameters.
+      const arity = fn.pyRest ? (fn.pyMinArgs ?? 0) : Math.max(0, fn.pyArity);
       return dh.closure_make(
         { returnType: DataType.ANY, args: Array(arity).fill(DataType.ANY) },
         pyClosureFunc,

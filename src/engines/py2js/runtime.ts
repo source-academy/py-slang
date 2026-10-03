@@ -121,6 +121,13 @@ export interface PyFunction {
    */
   pyMinArgs?: number;
   /**
+   * True for a compiled `def`/`lambda` whose last parameter is a rest parameter (`*args`), which
+   * collects every surplus argument into a list. Such a function has `pyArity` -1 (any number of
+   * arguments may be passed) and `pyMinArgs` set to its number of fixed parameters, which both
+   * `arity()` reports and `checkCallable` enforces as a lower bound.
+   */
+  pyRest?: boolean;
+  /**
    * Dual compilation: the async twin of this (sync) body, sharing the same
    * closure environment. Present on every user function compiled in dual
    * mode; absent on builtins (which are plain sync JS, or return a Promise
@@ -1074,6 +1081,15 @@ export class Py2JsRuntime {
         ),
       );
     }
+    if (f.pyRest && nArgs < f.pyMinArgs!) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        withEnclosingPredefinedFunction(
+          `${f.pyName}() takes at least ${f.pyMinArgs} argument${f.pyMinArgs === 1 ? "" : "s"} but ${nArgs} ${nArgs === 1 ? "was" : "were"} given`,
+          enclosing,
+        ),
+      );
+    }
     if (f.pyArity >= 0 && f.pyArity !== nArgs) {
       throw new Py2JsRuntimeError(
         "TypeError",
@@ -1144,16 +1160,44 @@ export class Py2JsRuntime {
     }
   }
 
+  /**
+   * The arguments a call's `*xs` expands to. Like the CSE machine, only a list may be spread (not
+   * a string or any other iterable); the result is a copy, so the callee can't alias `xs`.
+   */
+  spread(v: PyValue): PyValue[] {
+    if (!Array.isArray(v)) {
+      throw new Py2JsRuntimeError(
+        "TypeError",
+        `argument after * must be a list, not '${pyTypeName(v, !this.universalEquality)}'`,
+      );
+    }
+    return [...v];
+  }
+
   /** Tail call marker: bounced on the caller's trampoline instead of growing the stack. */
   tail(f: PyValue, args: PyValue[]): TailCall {
     return { __tail: true, f, args };
   }
 
-  /** Wrap a compiled function body with its metadata. */
-  def(name: string, arity: number, fn: (...args: PyValue[]) => PyValue | TailCall): PyFunction {
+  /**
+   * Wrap a compiled function body with its metadata. `arity` is the number of fixed parameters;
+   * `rest` marks a function whose body also takes a trailing rest parameter, making it variadic.
+   */
+  def(
+    name: string,
+    arity: number,
+    fn: (...args: PyValue[]) => PyValue | TailCall,
+    rest = false,
+  ): PyFunction {
     const f = fn as PyFunction;
     f.pyName = name;
-    f.pyArity = arity;
+    if (rest) {
+      f.pyArity = -1;
+      f.pyMinArgs = arity;
+      f.pyRest = true;
+    } else {
+      f.pyArity = arity;
+    }
     if (this.compilingPrelude) f.pyPrelude = true;
     return f;
   }
@@ -1169,8 +1213,9 @@ export class Py2JsRuntime {
     arity: number,
     syncFn: (...args: PyValue[]) => PyValue | TailCall,
     asyncFn: (...args: PyValue[]) => Promise<PyValue | TailCall>,
+    rest = false,
   ): PyFunction {
-    const f = this.def(name, arity, syncFn);
+    const f = this.def(name, arity, syncFn, rest);
     f.asyncBody = asyncFn;
     return f;
   }
