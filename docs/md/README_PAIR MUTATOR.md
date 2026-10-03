@@ -1,4 +1,4 @@
-PAIR MUTATORS provides two functions for changing pairs.
+PAIR MUTATOR provides two functions for changing pairs.
 Click on a name on the right to see how they are defined and used.
 
 Pair mutation is covered in

@@ -59,17 +59,17 @@ run() {
   # MATH
   run_jsdoc "MATH" "README_MATH.md" "MATH" "$LIB/math.js" &
 
-  # LINKED LISTS
-  run_jsdoc "LINKED LISTS" "README_LINKED LISTS.md" "LINKED LISTS" "$LIB/linked_list.js" &
+  # LINKED LIST
+  run_jsdoc "LINKED LIST" "README_LINKED LIST.md" "LINKED LIST" "$LIB/linked_list.js" &
 
   # PAIR MUTATOR
   run_jsdoc "PAIR MUTATOR" "README_PAIR MUTATOR.md" "PAIR MUTATOR" "$LIB/pairmutator.js" &
 
-  # LISTS
-  run_jsdoc "LISTS" "README_LISTS.md" "LISTS" "$LIB/list.js" &
+  # LIST
+  run_jsdoc "LIST" "README_LIST.md" "LIST" "$LIB/list.js" &
 
-  # STREAMS
-  run_jsdoc "STREAMS" "README_STREAMS.md" "STREAMS" "$LIB/stream.js" &
+  # STREAM
+  run_jsdoc "STREAM" "README_STREAM.md" "STREAM" "$LIB/stream.js" &
 
   # MCE
   run_jsdoc "MCE" "README_MCE.md" "MCE" "$LIB/mce.js" &
