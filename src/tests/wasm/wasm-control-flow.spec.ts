@@ -33,7 +33,10 @@ x
     expect(renderedResult).toBe("0");
   });
 
-  it("if condition uses truthiness (nonzero int)", async () => {
+  // A non-bool if condition is a TypeError (py-slang#437: if/elif now require a genuine bool,
+  // matching and/or/not -- see CHECK_BOOL_FX's doc comment in runtime/operators.ts), not the
+  // any-type truthiness these two used to pin as expected.
+  it("non-bool if condition (nonzero int) errors", async () => {
     const pythonCode = `
 x = 0
 if 10:
@@ -42,12 +45,12 @@ else:
     pass
 x
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("7");
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
   });
 
-  it("if condition uses truthiness (zero is false)", async () => {
+  it("non-bool if condition (zero) errors", async () => {
     const pythonCode = `
 x = 1
 if 0:
@@ -56,9 +59,9 @@ else:
     pass
 x
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("1");
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
   });
 
   it("nested if statements", async () => {
@@ -114,15 +117,17 @@ x
     expect(renderedResult).toBe("10");
   });
 
-  it("ternary uses truthiness", async () => {
+  // A non-bool ternary condition is a TypeError (py-slang#437), not the any-type truthiness this
+  // used to pin as expected -- this is the issue's own reproduction case.
+  it("non-bool ternary condition errors", async () => {
     const pythonCode = `
 x = 1
 y = 100 if x else 200
 y
 `;
-    const { rawResult, renderedResult } = await compileToWasmAndRun(pythonCode, true);
-    expect(rawResult[0]).toBe(TYPE_TAG.INT);
-    expect(renderedResult).toBe("100");
+    await expect(compileToWasmAndRun(pythonCode, true)).rejects.toThrow(
+      new Error(ERROR_MAP.EXPECTED_BOOL_OPERAND),
+    );
   });
 
   it("does not evaluate else branch when condition is True", async () => {
