@@ -61,7 +61,7 @@
  * a backstop for constructs the validators admit but this engine does not
  * support yet, not the primary user-facing diagnostics.
  */
-import { ExprNS, StmtNS } from "../../ast-types";
+import { ExprNS, FunctionParam, StmtNS } from "../../ast-types";
 
 export class Py2JsCompileError extends Error {
   constructor(feature: string) {
@@ -153,9 +153,37 @@ function emitName(name: string, ctx: EmitCtx, write: boolean): string {
 const emitFloat = (n: number): string =>
   Number.isFinite(n) ? String(n) : Number.isNaN(n) ? "NaN" : n > 0 ? "Infinity" : "-Infinity";
 
+/**
+ * The comma-separated elements of a JS array literal holding a call's arguments. A `*xs` argument
+ * is expanded inline (`...__py.spread(xs)`), evaluated left to right with its neighbours, exactly
+ * like the CSE machine's spread flattening at application time.
+ */
+function emitArgs(args: ExprNS.Expr[], a: boolean, ctx: EmitCtx): string {
+  return args
+    .map(arg =>
+      arg.kind === "Starred"
+        ? `...__py.spread(${emitExpr((arg as ExprNS.Starred).value, a, ctx)})`
+        : emitExpr(arg, a, ctx),
+    )
+    .join(", ");
+}
+
+/**
+ * A function's parameter names, and whether its last one is a rest parameter (`*args`). Like the
+ * PVML and wasm compilers, rejects a rest parameter that isn't last: the parser accepts
+ * `def f(*a, b)`, but the language has no keyword-only parameters for `b` to be.
+ */
+function splitParams(parameters: FunctionParam[]): { names: string[]; rest: boolean } {
+  const starred = parameters.findIndex(p => p.isStarred);
+  if (starred !== -1 && starred !== parameters.length - 1) {
+    throw new Py2JsCompileError("a rest parameter (*args) must be the last parameter");
+  }
+  return { names: parameters.map(p => p.lexeme), rest: starred !== -1 };
+}
+
 function emitCall(c: ExprNS.Call, a: boolean, ctx: EmitCtx): string {
   const callee = emitExpr(c.callee, a, ctx);
-  const args = c.args.map(arg => emitExpr(arg, a, ctx)).join(", ");
+  const args = emitArgs(c.args, a, ctx);
   const start = c.startToken.indexInSource;
   const end = c.endToken.indexInSource + c.endToken.lexeme.length;
   // Evaluate callee/arguments first: either can contain another call and
@@ -174,6 +202,7 @@ function emitCall(c: ExprNS.Call, a: boolean, ctx: EmitCtx): string {
 function emitFunctionValue(
   name: string,
   params: string[],
+  rest: boolean,
   scope: Scope,
   emitBody: (a: boolean) => string,
   ctx: EmitCtx,
@@ -186,14 +215,20 @@ function emitFunctionValue(
       ctx.scopes.pop();
     }
   };
-  const plist = params.map(mangle).join(", ");
+  // A rest parameter is a JS rest parameter: the fresh array it collects is the Python list.
+  const plist = params
+    .map((p, i) => (rest && i === params.length - 1 ? "..." : "") + mangle(p))
+    .join(", ");
+  // `__py.def`'s arity is the number of *fixed* parameters; `true` marks the function variadic.
+  const fixed = rest ? params.length - 1 : params.length;
+  const restArg = rest ? ", true" : "";
   if (!ctx.dual) {
-    return `__py.def(${JSON.stringify(name)}, ${params.length}, (${plist}) => ${emitOnce(false)})`;
+    return `__py.def(${JSON.stringify(name)}, ${fixed}, (${plist}) => ${emitOnce(false)}${restArg})`;
   }
   return (
-    `__py.def2(${JSON.stringify(name)}, ${params.length}, ` +
+    `__py.def2(${JSON.stringify(name)}, ${fixed}, ` +
     `(${plist}) => ${emitOnce(false)}, ` +
-    `async (${plist}) => ${emitOnce(true)})`
+    `async (${plist}) => ${emitOnce(true)}${restArg})`
   );
 }
 
@@ -254,13 +289,14 @@ function emitExpr(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
     }
     case "Lambda": {
       const l = e as ExprNS.Lambda;
-      const params = l.parameters.map(p => p.lexeme);
+      const { names: params, rest } = splitParams(l.parameters);
       // A lambda body is in tail position: evaluating it *is* the return.
       // "(anonymous)" matches the CSE machine's rendering of lambda values
       // (toPythonString on a nameless closure), pinned by the stdlib sweep.
       return emitFunctionValue(
         "(anonymous)",
         params,
+        rest,
         { params: new Set(params), locals: new Set() },
         bodyAsync => emitTailPosition(l.body, bodyAsync, ctx),
         ctx,
@@ -279,7 +315,7 @@ function emitTailPosition(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
       // synchronously (no stack growth, no await) and the caller's
       // trampoline — sync or async — bounces it.
       const c = e as ExprNS.Call;
-      return `__py.tail(${emitExpr(c.callee, a, ctx)}, [${c.args.map(arg => emitExpr(arg, a, ctx)).join(", ")}])`;
+      return `__py.tail(${emitExpr(c.callee, a, ctx)}, [${emitArgs(c.args, a, ctx)}])`;
     }
     case "Grouping":
       return `(${emitTailPosition((e as ExprNS.Grouping).expression, a, ctx)})`;
@@ -345,7 +381,7 @@ function scanScopeDeclarations(stmts: StmtNS.Stmt[], kind: "Global" | "NonLocal"
   const visit = (body: StmtNS.Stmt[]): void => {
     for (const s of body) {
       if (s.kind === kind) {
-        names.add((s as StmtNS.Global | StmtNS.NonLocal).name.lexeme);
+        (s as StmtNS.Global | StmtNS.NonLocal).names.forEach(n => names.add(n.lexeme));
       } else if (s.kind === "If") {
         visit((s as StmtNS.If).body);
         const elseBlock = (s as StmtNS.If).elseBlock;
@@ -377,7 +413,7 @@ function scanScopeDeclarations(stmts: StmtNS.Stmt[], kind: "Global" | "NonLocal"
 function collectAllGlobalDecls(stmts: StmtNS.Stmt[], into: Set<string> = new Set()): Set<string> {
   for (const s of stmts) {
     if (s.kind === "Global") {
-      into.add((s as StmtNS.Global).name.lexeme);
+      (s as StmtNS.Global).names.forEach(n => into.add(n.lexeme));
     } else if (s.kind === "If") {
       collectAllGlobalDecls((s as StmtNS.If).body, into);
       const elseBlock = (s as StmtNS.If).elseBlock;
@@ -421,8 +457,7 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
     }
     case "FunctionDef": {
       const f = s as StmtNS.FunctionDef;
-      if (f.parameters.some(p => p.isStarred)) throw new Py2JsCompileError("rest parameters");
-      const params = f.parameters.map(p => p.lexeme);
+      const { names: params, rest } = splitParams(f.parameters);
       const paramSet = new Set(params);
       // Names this function declares `global`/`nonlocal` are excluded from its
       // own hoisted locals — see the file header and scanScopeDeclarations —
@@ -442,7 +477,7 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
         emitDecls(locals, new Set(params), inner) +
         emitStmts(f.body, inner, bodyAsync, ctx) +
         `${inner}return null;\n${indent}}`;
-      const fnValue = emitFunctionValue(f.name.lexeme, params, scope, emitBody, ctx);
+      const fnValue = emitFunctionValue(f.name.lexeme, params, rest, scope, emitBody, ctx);
       return `${indent}${emitName(f.name.lexeme, ctx, true)} = ${fnValue};\n`;
     }
     case "Return": {

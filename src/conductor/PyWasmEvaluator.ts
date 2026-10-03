@@ -6,7 +6,7 @@ import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
-import { compileToWasmAndRun } from "../engines/wasm";
+import { compileToWasmAndRun, WasmRuntimeError } from "../engines/wasm";
 import { PreparedModuleBindings, prepareModuleBindings } from "../engines/wasm/moduleInterop";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
@@ -140,16 +140,18 @@ class PyWasmEvaluator extends BasicEvaluator {
         moduleBindings,
       });
 
+      // Flush what was printed before a runtime error, then report the error.
+      prints.forEach(print => this.conductor.sendOutput(print));
       if (errors.length > 0) {
         errors.forEach(error => this.conductor.sendError(new EvaluatorError(error)));
         return;
       }
-
-      prints.forEach(print => this.conductor.sendOutput(print));
       if (renderedResult != null) {
         this.conductor.sendOutput(renderedResult);
       }
     } catch (error) {
+      // A runtime error aborts an interactive run; show what was printed first.
+      (error as WasmRuntimeError)?.prints?.forEach(print => this.conductor.sendOutput(print));
       this.conductor.sendError(new EvaluatorError(error));
     }
   }
@@ -170,12 +172,12 @@ class PyWasmEvaluator extends BasicEvaluator {
         moduleBindings,
       });
 
+      // Flush what was printed before a runtime error, then report the error.
+      prints.forEach(print => this.conductor.sendOutput(print));
       if (errors.length > 0) {
         errors.forEach(error => this.conductor.sendError(new EvaluatorError(error)));
         return;
       }
-
-      prints.forEach(print => this.conductor.sendOutput(print));
     } catch (error) {
       this.conductor.sendError(new EvaluatorError(error));
     }

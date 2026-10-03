@@ -96,7 +96,7 @@ export class RuntimeSourceError implements SourceError {
 export function getFullLine(
   source: string,
   current: number,
-): { lineIndex: number; fullLine: string } {
+): { lineIndex: number; fullLine: string; lineStart: number } {
   let back: number = current;
   let forward: number = current;
 
@@ -113,7 +113,10 @@ export function getFullLine(
   const lineIndex = source.slice(0, back).split("\n").length;
   const fullLine = source.slice(back, forward);
 
-  return { lineIndex, fullLine };
+  // `back` is `current`'s own line's start index in `source` — callers whose node may span
+  // multiple lines (py-slang#467's Codex review) use it to place an indicator by column instead
+  // of `fullLine.indexOf(someMultilineSnippet)`, which can never match (see ConditionNotBoolError).
+  return { lineIndex, fullLine, lineStart: back };
 }
 
 export function createErrorIndicator(snippet: string, errorPos: number): string {
@@ -221,6 +224,49 @@ export class UnsupportedOperandTypeError extends RuntimeSourceError {
 
     // Assemble the final multi-line message
     this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
+  }
+}
+
+/**
+ * An `if`/`elif` condition, or a conditional expression's (`x if p else y`)
+ * predicate, that isn't a bool — py-slang#436: docs/specs/python_typing_back.tex's
+ * "Following if and elif, Python §x only allows boolean expressions" applies to
+ * both (see the BRANCH instruction, which both compile to). `contextLabel`
+ * (`"if condition"` / `"conditional expression condition"`) lets one error class
+ * serve both call sites, matching py2js's shared condBool/the stepper's shared
+ * contractConditional — just with CSE's own "friendly type name, no chained
+ * operand" phrasing (UnsupportedOperandTypeError's style) instead of their
+ * `'quoted-python-type-name'` one.
+ */
+export class ConditionNotBoolError extends RuntimeSourceError {
+  constructor(
+    source: string,
+    node: ExprNS.Expr,
+    context: Context,
+    originalType: string,
+    contextLabel: string,
+  ) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine, lineStart } = getFullLine(source, index);
+    // The condition's own column on its line — not `fullLine.indexOf(snippet)`: for a condition
+    // spanning multiple lines, `snippet` (below) contains newlines that can never occur inside
+    // `fullLine` (only the condition's first line), so that search always failed and fell back to
+    // column 0 (py-slang#467 review).
+    const adjustedOffset = index - lineStart;
+    const snippet = source.substring(
+      node.startToken.indexInSource,
+      node.endToken.indexInSource + node.endToken.lexeme.length,
+    );
+    // Only the portion of a multiline condition that's visible on its first displayed line —
+    // the full (possibly multiline) snippet would otherwise make the indicator run past the end
+    // of that single printed line.
+    const snippetOnLine = snippet.split("\n")[0];
+    const indicator = createErrorIndicator(snippetOnLine, 0);
+    const hint = `TypeError: ${contextLabel} must be bool, not ${typeStr}`;
+    this.message = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}`;
   }
 }
 

@@ -16,7 +16,7 @@ these groups:
       <a href="../MATH/index.html">MATH</a>: Mathematical constants and functions
     </li>
     <li>
-      <a href="../LINKED LISTS/index.html">LINKED LISTS</a>: Support for linked lists
+      <a href="../LINKED LIST/index.html">LINKED LIST</a>: Support for linked lists
     </li>
   </ul>
 
@@ -36,7 +36,7 @@ Python §2 uses the predeclared name `None` to denote the empty linked list.
 ### The LINKED LIST functions
 
 To work with linked lists, you can use the functions in the
-<a href="../LINKED LISTS/index.html">LINKED LISTS</a> group of predeclared functions, already mentioned
+<a href="../LINKED LIST/index.html">LINKED LIST</a> group of predeclared functions, already mentioned
 above.
 
 ## You want the definitive specs?

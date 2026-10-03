@@ -8,7 +8,9 @@ import { NoLoopsValidator } from "./features/no-loops";
 import { NoGlobalValidator } from "./features/no-global";
 import { NoNonlocalValidator } from "./features/no-nonlocal";
 import { NoPassValidator } from "./features/no-pass";
+import { NoRangeRedeclarationValidator } from "./features/no-range-redeclaration";
 import { createNoReassignmentValidator } from "./features/no-reassignment";
+import { createRangeOnlyInForHeaderValidator } from "./features/range-only-in-for-header";
 import { NoRestParamsValidator } from "./features/no-rest-params";
 import { NoSpreadValidator } from "./features/no-spread";
 import { FeatureValidator } from "./types";
@@ -31,6 +33,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
     NoSpreadValidator,
     NoAnnAssignValidator,
     NoIsOperatorValidator,
+    createRangeOnlyInForHeaderValidator(false),
   ];
 }
 
@@ -52,22 +55,35 @@ export function makeChapter2Validators(): FeatureValidator[] {
     NoSpreadValidator,
     NoAnnAssignValidator,
     NoIsOperatorValidator,
+    createRangeOnlyInForHeaderValidator(false),
   ];
 }
 
 /**
  * Source Chapter 3: lists, loops, and reassignment are all allowed.
- * for loops are restricted to range() only. Break and continue are allowed, but only within loops. No annotated assignments allowed.
+ * for loops are restricted to range() only, and the name `range` cannot be redefined. Break and continue are allowed, but only within loops. No annotated assignments allowed.
  */
 export function makeChapter3Validators(): FeatureValidator[] {
-  return [ForRangeOnlyValidator, createBreakContinueValidator(), NoAnnAssignValidator];
+  return [
+    ForRangeOnlyValidator,
+    NoRangeRedeclarationValidator,
+    createRangeOnlyInForHeaderValidator(true),
+    createBreakContinueValidator(),
+    NoAnnAssignValidator,
+  ];
 }
 
 /**
- * Source Chapter 4: unrestricted. No validators except for break/continue validation and annotated assignment validation.
+ * Source Chapter 4: unrestricted. No validators except for for-range-only, `range` redefinition, break/continue and annotated assignment validation.
  */
 export function makeChapter4Validators(): FeatureValidator[] {
-  return [ForRangeOnlyValidator, createBreakContinueValidator(), NoAnnAssignValidator];
+  return [
+    ForRangeOnlyValidator,
+    NoRangeRedeclarationValidator,
+    createRangeOnlyInForHeaderValidator(true),
+    createBreakContinueValidator(),
+    NoAnnAssignValidator,
+  ];
 }
 
 export function makeValidatorsForChapter(chapter: number): FeatureValidator[] {

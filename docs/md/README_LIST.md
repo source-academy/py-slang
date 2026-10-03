@@ -1,4 +1,4 @@
-LISTS provides two useful functions for list processing.
+LIST provides two useful functions for list processing.
 Click on a name on the right to see how they are defined and used.
 
 Lists are not covered in 

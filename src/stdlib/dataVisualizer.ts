@@ -1,6 +1,6 @@
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
-import { BuiltinValue, NoneValue, Value } from "../engines/cse/stash";
+import { BuiltinValue, Value } from "../engines/cse/stash";
 import { GroupName, minArgMap, Validate } from "./utils";
 
 const dataVisualizerBuiltins = new Map<string, BuiltinValue>();
@@ -14,9 +14,12 @@ export class DataVisualizerBuiltins {
     _source: string,
     _command: ExprNS.Call,
     context: Context,
-  ): Promise<NoneValue> {
+  ): Promise<Value> {
+    // Draws its arguments when a data visualizer is attached (the browser); headless, there is
+    // nothing to draw to, so this is just the identity on its first argument. Either way it returns
+    // that argument, like Source's draw_data, so the call can sit inside an expression.
     await context.dataVisualizer?.sendDrawing(args);
-    return { type: "none" };
+    return args[0];
   }
 }
 

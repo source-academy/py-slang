@@ -87,6 +87,25 @@ function makeAddClosure(): ExternCallable<[DataType.NUMBER, DataType.NUMBER], Da
   };
 }
 
+const str = (value: string): TypedValue<DataType.CONST_STRING> => ({
+  type: DataType.CONST_STRING,
+  value,
+});
+
+/** Deliberately non-commutative, so it records the order it was applied in. */
+function makeConcatClosure(): ExternCallable<
+  [DataType.CONST_STRING, DataType.CONST_STRING],
+  DataType.CONST_STRING
+> {
+  return async function* (
+    a: TypedValue<DataType.CONST_STRING>,
+    b: TypedValue<DataType.CONST_STRING>,
+  ) {
+    await Promise.resolve();
+    return str(`(${a.value} ${b.value})`);
+  };
+}
+
 describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chain list helpers", () => {
   test("list() builds a proper pair-chain, and is_list recognizes it", async () => {
     const dh = new GenericDataHandler(4);
@@ -162,7 +181,7 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
     ).rejects.toBeInstanceOf(InvalidIdentifierError);
   });
 
-  test("accumulate reduces a list left-to-right through a closure", async () => {
+  test("accumulate reduces a list through a closure", async () => {
     const dh = new GenericDataHandler(4);
     const add = makeAddClosure();
     const op = await dh.closure_make(
@@ -174,6 +193,31 @@ describe("list()/is_list/list_to_vec/length/accumulate — the generic pair-chai
     const result = await drain(dh.accumulate(op, num(0), xs, DataType.NUMBER));
 
     expect(result).toEqual(num(6));
+  });
+
+  /**
+   * The direction and argument order test. `add` above cannot check either — it is commutative and
+   * associative, so every reading of accumulate gives 6 — which is how source-academy/py-slang#473
+   * survived: this folded left-to-right passing `[acc, element]`, where conductor's own reference
+   * implementation (conductor/src/conductor/stdlib/list/accumulate.ts), SICP and Source all fold
+   * right-to-left passing `[element, acc]`.
+   *
+   * It matters because the module bundles are shared: a bundle folding into a list or a difference
+   * got one answer from Python and another from Source.
+   */
+  test("accumulate folds right-to-left, passing the element before the accumulator", async () => {
+    const dh = new GenericDataHandler(4);
+    const op = await dh.closure_make(
+      { args: [DataType.CONST_STRING, DataType.CONST_STRING], returnType: DataType.CONST_STRING },
+      makeConcatClosure(),
+    );
+    const xs = await dh.list(str("1"), str("2"), str("3"));
+
+    const result = await drain(dh.accumulate(op, str("nil"), xs, DataType.CONST_STRING));
+
+    // Right-to-left, element first. Left-to-right with the accumulator first would give
+    // "(((nil 1) 2) 3)"; right-to-left with the accumulator first, "(nil (3 (2 1)))".
+    expect(result).toEqual(str("(1 (2 (3 nil)))"));
   });
 
   test("accumulate on an empty list returns the initial value untouched", async () => {

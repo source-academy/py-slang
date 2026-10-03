@@ -22,19 +22,22 @@ import list from "./stdlib/list";
 import pairmutator from "./stdlib/pairmutator";
 import stream from "./stdlib/stream";
 import parser from "./stdlib/parser";
+import dataVisualizer from "./stdlib/dataVisualizer";
 import type { Group } from "./stdlib/utils";
 
 export const VARIANT_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
-  2: [misc, math, linkedList],
-  3: [misc, math, linkedList, list, pairmutator, stream],
-  4: [misc, math, linkedList, list, pairmutator, stream, parser],
+  2: [misc, math, linkedList, dataVisualizer],
+  3: [misc, math, linkedList, list, pairmutator, stream, dataVisualizer],
+  4: [misc, math, linkedList, list, pairmutator, stream, parser, dataVisualizer],
 };
 
 export class RunError extends Error {
   constructor(
     public readonly kind: "parse" | "analysis" | "runtime",
     message: string,
+    /** What the program printed before a runtime error, so callers can still show it. */
+    public readonly output: string = "",
   ) {
     super(message);
     this.name = "RunError";
@@ -178,7 +181,11 @@ export async function runCode(
       // proper message from context.errors; otherwise (a genuinely unrecorded throw) wrap
       // the escaping value directly, same as the parse()-error catch above.
       if (context.errors.length === 0) {
-        throw new RunError("runtime", String((e as { message?: string })?.message ?? e));
+        throw new RunError(
+          "runtime",
+          String((e as { message?: string })?.message ?? e),
+          output.join(""),
+        );
       }
     }
 
@@ -188,6 +195,7 @@ export async function runCode(
         errors.join("\n") ||
           context.errors.map(e => e.message).join("\n") ||
           "Unknown runtime error",
+        output.join(""),
       );
     }
   } finally {

@@ -393,7 +393,8 @@ export function markUnboundLocal(node: StepNode, name: string): StepNode {
 
 /**
  * Identifier names read freely within `node` — not bound by an enclosing `lambda`/`def` parameter,
- * nor (for a `def`) a name its own body assigns anywhere (see {@link assignedNamesOf}). Used by
+ * nor (for a `def`) its own name (a recursive self-call is bound to the function itself, not free —
+ * py-slang#469) or a name its own body assigns anywhere (see {@link assignedNamesOf}). Used by
  * {@link avoidCapture} to tell whether inserting `node` (a substitution's `value`) under some other
  * binder could accidentally fall under one of *that* binder's own names.
  */
@@ -408,6 +409,7 @@ function freeNames(node: StepNode): Set<string> {
     }
     case "FunctionDeclaration": {
       const names = freeNames(node.body as StepNode);
+      names.delete(String((node.id as StepNode).name));
       paramNames(node).forEach(p => names.delete(p));
       assignedNamesOf(node.body as StepNode).forEach(n => names.delete(n));
       return names;

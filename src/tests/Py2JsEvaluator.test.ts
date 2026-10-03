@@ -171,7 +171,7 @@ describe("Py2JsEvaluator2", () => {
     expect(outputs).toEqual(["[2, [4, None]]"]);
   });
 
-  test("draw_data validates arity, and returns None without a real Conductor-attached plugin", async () => {
+  test("draw_data validates arity, and returns its first argument without a real Conductor-attached plugin", async () => {
     const { conductor, errors, outputs } = makeMockConductor();
     const evaluator = new Py2JsEvaluator2(conductor);
 
@@ -181,12 +181,13 @@ describe("Py2JsEvaluator2", () => {
 
     // The mock conductor's registerPlugin returns undefined (no real plugin attached, mirroring
     // "the normal case outside a real Conductor run" — see dataVisualizer.test.ts on the CSE
-    // side) — draw_data still validates arity and returns None without crashing.
+    // side) — draw_data still validates arity, draws nothing and returns its first argument
+    // without crashing.
     await evaluator.evaluateChunk("print(draw_data(1))\n");
     await evaluator.evaluateChunk("print(draw_data(1, 2))\n");
     await evaluator.evaluateChunk("print(draw_data(1, 2, 3))\n");
 
     expect(errors).toHaveLength(1);
-    expect(outputs).toEqual(["None", "None", "None"]);
+    expect(outputs).toEqual(["1", "1", "1"]);
   });
 });

@@ -474,8 +474,8 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
  *
  * `plugin` is undefined below chapter 2 (bridgeStdlibGroups is never called with one there — see
  * Py2JsEvaluator.ts) and in every standalone/test run (runCodePy2Js et al. pass no dataVisualizer
- * option), in which case this is a silent no-op, exactly like context.dataVisualizer?.sendDrawing(...)
- * on the CSE side when no host conductor is attached.
+ * option), in which case it draws nothing and just returns its first argument, exactly like
+ * context.dataVisualizer?.sendDrawing(...) on the CSE side when no host conductor is attached.
  */
 function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefined): PyFunction {
   const f = ((...args: PyValue[]) => {
@@ -486,7 +486,8 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
       );
     }
     plugin?.sendDrawing(args);
-    return null;
+    // The identity on its first argument (like Source's draw_data), whether or not there is a canvas.
+    return args[0];
   }) as PyFunction;
   f.pyName = "draw_data";
   f.pyArity = -1;
@@ -494,6 +495,54 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
   f.pyNative = true;
   f.pyMinArgs = 1;
   return f;
+}
+
+/**
+ * pair/llist/head/tail (chapter 2's linked-list group): return the caller's own PyValues rather
+ * than copies. The generic toTagged/fromTagged round-trip rebuilds every PyList it touches, so
+ * through it `head(p)` returned a fresh copy of p's head on every call, and `pair(x, x)` stored two
+ * copies of x. That broke everything that depends on identity: shared substructure (draw_data drew
+ * `pair(head(xs), pair(head(xs), ...))` as two separate lists), and chapter 3's set_head/set_tail
+ * (mutating `head(p)` changed a throwaway copy, not the list p holds).
+ *
+ * Only the well-formed call is handled here. Anything else (wrong argument count, a non-pair given
+ * to head/tail) falls through to `bridged`, the generic bridge of the same CSE builtin, so arity and
+ * type errors keep the CSE machine's exact messages.
+ */
+function nativeLinkedListPrimitive(
+  bridged: PyFunction,
+  fastPath: (args: PyValue[]) => { value: PyValue } | undefined,
+): PyFunction {
+  const f = ((...args: PyValue[]) => {
+    const result = fastPath(args);
+    return result === undefined ? bridged(...args) : result.value;
+  }) as PyFunction;
+  f.pyName = bridged.pyName;
+  f.pyArity = bridged.pyArity;
+  f.pyBuiltin = true;
+  f.pyNative = true;
+  f.pyMinArgs = bridged.pyMinArgs;
+  return f;
+}
+
+function nativeLinkedListPrimitives(out: Record<string, PyValue>): void {
+  const bridged = (name: string) => out[name] as PyFunction;
+  out.pair = nativeLinkedListPrimitive(bridged("pair"), args =>
+    args.length === 2 ? { value: [args[0], args[1]] } : undefined,
+  );
+  out.llist = nativeLinkedListPrimitive(bridged("llist"), args => {
+    let result: PyValue = null;
+    for (let i = args.length - 1; i >= 0; i--) {
+      result = [args[i], result];
+    }
+    return { value: result };
+  });
+  out.head = nativeLinkedListPrimitive(bridged("head"), args =>
+    args.length === 1 && isPairShaped(args[0]) ? { value: args[0][0] } : undefined,
+  );
+  out.tail = nativeLinkedListPrimitive(bridged("tail"), args =>
+    args.length === 1 && isPairShaped(args[0]) ? { value: args[0][1] } : undefined,
+  );
 }
 
 /**
@@ -518,7 +567,7 @@ export function bridgeStdlibGroups(
           ? bridgeBuiltin(rt, name, value, context, source)
           : fromTagged(name, value);
     }
-    // See nativeSetPairSlot/nativeStream/nativeDrawData's doc comments for why these groups'
+    // See nativeSetPairSlot/nativeStream/nativeLinkedListPrimitive/nativeDrawData's doc comments for why these groups'
     // primitives are reimplemented natively instead of left as the generic bridge produced above.
     if (group.name === GroupName.PAIRMUTATORS) {
       out.set_head = nativeSetPairSlot("set_head", 0, variant <= 2);
@@ -534,6 +583,7 @@ export function bridgeStdlibGroups(
     // alongside it rather than in its own group (unlike the CSE machine, which uses a dedicated
     // DATA_VISUALIZER group), so it inherits the exact same chapter-2-onward availability.
     if (group.name === GroupName.LINKED_LISTS) {
+      nativeLinkedListPrimitives(out);
       out.draw_data = nativeDrawData(dataVisualizer);
     }
   }

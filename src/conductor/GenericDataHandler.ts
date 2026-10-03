@@ -625,6 +625,16 @@ export class GenericDataHandler implements IDataHandler {
       return Promise.reject(e);
     }
   }
+  /**
+   * Folds right-to-left, passing the *element* first: the first application is on the last element
+   * of the list and `initial`. This matches conductor's own reference implementation
+   * (`conductor/src/conductor/stdlib/list/accumulate.ts`), SICP's `accumulate`, and Source's.
+   *
+   * This used to fold left-to-right and pass `[acc, element]`. A commutative operator cannot tell
+   * the two apart, which is how it survived — but the module bundles are shared across languages,
+   * so any bundle folding into a list, a difference, or any other non-commutative structure got a
+   * different answer from Python than from Source (source-academy/py-slang#473).
+   */
   async *accumulate<T extends DataType>(
     op: TypedValue<DataType.CLOSURE, T>,
     initial: TypedValue<T>,
@@ -632,8 +642,9 @@ export class GenericDataHandler implements IDataHandler {
     resultType: T,
   ): AsyncGenerator<void, TypedValue<NoInfer<T>>, undefined> {
     let acc = initial;
-    for (const element of this.readListElements(sequence)) {
-      acc = yield* this.closure_call(op, [acc, element], resultType);
+    const elements = this.readListElements(sequence);
+    for (let i = elements.length - 1; i >= 0; i--) {
+      acc = yield* this.closure_call(op, [elements[i], acc], resultType);
     }
     return acc;
   }
