@@ -16,15 +16,13 @@
  * expression directly and renders it via the runtime's own log_* host
  * imports, without needing a print()-wrapping trick.
  *
- * Comparison is *value*-aware, not raw-text: the runtime's log_float host
- * import renders whole-number floats via plain JS Number#toString (e.g.
- * "2"), not toPythonFloat's Python-style "2.0" -- and log_complex renders
- * "re + imj" instead of toPythonString's "(re+imj)". Both are display-format
- * differences, not value differences, so float/complex results are compared
- * numerically instead of as exact text (ints/bools/strings, which the
- * runtime already renders in Python-compatible form, are still compared as
- * exact text). See the two-run investigation in this file's originating
- * conversation for the concrete "2" vs "2.0" / "1 + 2j" vs "(1+2j)" cases.
+ * Every result is compared as exact text: the runtime renders each type in the
+ * same Python-compatible form CSE itself uses (floats via toPythonFloat,
+ * complex via PyComplexNumber#toString -- see hostImports.ts's log_float and
+ * log_complex). Earlier revisions compared floats and complex numbers
+ * numerically to work around display-format differences (log_float rendering
+ * "2" for 2.0, log_complex rendering "1 + 2j" for "(1+2j)"); both are fixed
+ * (py-slang#323, #332).
  *
  * The WASM engine's group set per chapter mirrors PyWasmEvaluator1..4 (see
  * conductor/PyWasmEvaluator.ts) rather than runner.ts's VARIANT_GROUPS: WASM
@@ -52,7 +50,6 @@ import list from "../stdlib/list";
 import pairmutator from "../stdlib/pairmutator";
 import parserGroup from "../stdlib/parser";
 import { Group, toPythonString } from "../stdlib/utils";
-import { PyComplexNumber } from "../types/value-types";
 import { makeValidatorsForChapter } from "../validator";
 import { BINARY_OPS_12, BINARY_OPS_34, literalFor, universeForChapter } from "./operator-spec";
 import { generateMockStreams } from "./utils";
@@ -133,23 +130,6 @@ async function wasmOutcome(code: string, chapter: number, groups: Group[]): Prom
   }
 }
 
-/**
- * Parses the runtime's log_complex format ("{imag}j" when the real part is
- * zero, else "{real} {+|-} {|imag|}j" — see hostImports.ts) back into a
- * PyComplexNumber, so a complex result can be compared numerically against
- * the CSE reference instead of as exact text (see file header).
- */
-function parseWasmComplex(text: string): PyComplexNumber {
-  const pureImag = text.match(/^(-?[\d.]+(?:e[+-]?\d+)?)j$/);
-  if (pureImag) return new PyComplexNumber(0, Number(pureImag[1]));
-
-  const signed = text.match(/^(-?[\d.]+(?:e[+-]?\d+)?) ([+-]) ([\d.]+(?:e[+-]?\d+)?)j$/);
-  if (!signed) throw new Error(`Cannot parse WASM complex output: ${JSON.stringify(text)}`);
-  const real = Number(signed[1]);
-  const imag = Number(signed[3]) * (signed[2] === "-" ? -1 : 1);
-  return new PyComplexNumber(real, imag);
-}
-
 function expectMatch(wanted: CseOutcome, actual: WasmOutcome): void {
   if (wanted.kind === "error") {
     expect(actual.kind).toBe("error");
@@ -158,18 +138,7 @@ function expectMatch(wanted: CseOutcome, actual: WasmOutcome): void {
   expect(actual.kind).toBe("value");
   if (actual.kind !== "value") return;
 
-  if (wanted.type === "number") {
-    // Ignores the runtime's missing toPythonFloat-style ".0" suffix on
-    // whole-number floats -- see file header.
-    expect(Number(actual.text)).toBe(wanted.value as number);
-  } else if (wanted.type === "complex") {
-    const expected = wanted.value as PyComplexNumber;
-    const parsed = parseWasmComplex(actual.text);
-    expect(parsed.real).toBeCloseTo(expected.real);
-    expect(parsed.imag).toBeCloseTo(expected.imag);
-  } else {
-    expect(actual.text).toBe(wanted.text);
-  }
+  expect(actual.text).toBe(wanted.text);
 }
 
 for (const chapter of [1, 2, 3, 4]) {

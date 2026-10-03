@@ -1,8 +1,15 @@
 import { compileToWasmAndRun } from "../../engines/wasm";
 import { ERROR_MAP, TYPE_TAG } from "../../engines/wasm/runtime";
 import mce from "../../stdlib/parser";
+import { escape } from "../../stdlib/utils";
 
-const linkedListBuilder = (...elements: string[]) => {
+// Strings inside a printed list are shown with repr quoting (`['a', 1]`), like CSE. In a parse
+// tree the atoms are node names / quoted lexemes (strings) plus numbers, True/False/None and
+// nested lists (not strings); a nested list has already been rendered, so it is left alone.
+const isNonString = (element: string) =>
+  element.startsWith("[") || /^(None|True|False|-?[\d.]+(e[+-]?\d+)?j?)$/.test(element);
+
+const renderList = (elements: string[]) => {
   let expected = "None";
   for (let i = elements.length - 1; i >= 0; i--) {
     expected = `[${elements[i]}, ${expected}]`;
@@ -10,18 +17,24 @@ const linkedListBuilder = (...elements: string[]) => {
   return expected;
 };
 
+const linkedListBuilder = (...elements: string[]) =>
+  renderList(elements.map(e => (isNonString(e) ? e : escape(e))));
+
+/** A list whose elements are all strings (e.g. the result of `tokenize`). */
+const stringListBuilder = (...elements: string[]) => renderList(elements.map(e => escape(e)));
+
 describe("tokenize function tests", () => {
   const compileWithMce = async (pythonCode: string) =>
     compileToWasmAndRun(pythonCode, true, { groups: [mce] });
 
   it("returns tokens in source order", async () => {
     const { renderedResult } = await compileWithMce(`tokenize("x = 1 + 2")`);
-    expect(renderedResult).toBe(linkedListBuilder("x", "=", "1", "+", "2"));
+    expect(renderedResult).toBe(stringListBuilder("x", "=", "1", "+", "2"));
   });
 
   it("ignores redundant whitespace", async () => {
     const { renderedResult } = await compileWithMce(`tokenize("x    +   y   ")`);
-    expect(renderedResult).toBe(linkedListBuilder("x", "+", "y"));
+    expect(renderedResult).toBe(stringListBuilder("x", "+", "y"));
   });
 
   it("returns None for empty input", async () => {
@@ -32,12 +45,12 @@ describe("tokenize function tests", () => {
 
   it("tokenizes punctuation-heavy expressions", async () => {
     const { renderedResult } = await compileWithMce(`tokenize("f(x, y[0])")`);
-    expect(renderedResult).toBe(linkedListBuilder("f", "(", "x", ",", "y", "[", "0", "]", ")"));
+    expect(renderedResult).toBe(stringListBuilder("f", "(", "x", ",", "y", "[", "0", "]", ")"));
   });
 
   it("tokenizes multibyte UTF-8 string lexemes", async () => {
     const { renderedResult } = await compileWithMce(`tokenize('"😀é"')`);
-    expect(renderedResult).toBe(linkedListBuilder('"😀é"'));
+    expect(renderedResult).toBe(stringListBuilder('"😀é"'));
   });
 
   it("tokenize on non-string should error", async () => {

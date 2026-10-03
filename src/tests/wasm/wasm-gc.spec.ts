@@ -405,7 +405,7 @@ f(1073741824, 1)
 
     expect(afterPtr).toBeGreaterThan(beforePtr);
     expect(rawResult[0]).toBe(TYPE_TAG.COMPLEX);
-    expect(renderedResult).toBe("2 + 3j");
+    expect(renderedResult).toBe("(2+3j)");
   });
 
   it("does not forward complex aliases during collect (duplicate copies are expected)", async () => {
