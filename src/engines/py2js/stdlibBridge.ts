@@ -474,8 +474,8 @@ function nativeApplyInUnderlyingPython(rt: Py2JsRuntime): PyFunction {
  *
  * `plugin` is undefined below chapter 2 (bridgeStdlibGroups is never called with one there — see
  * Py2JsEvaluator.ts) and in every standalone/test run (runCodePy2Js et al. pass no dataVisualizer
- * option), in which case this is a silent no-op, exactly like context.dataVisualizer?.sendDrawing(...)
- * on the CSE side when no host conductor is attached.
+ * option), in which case it draws nothing and just returns its first argument, exactly like
+ * context.dataVisualizer?.sendDrawing(...) on the CSE side when no host conductor is attached.
  */
 function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefined): PyFunction {
   const f = ((...args: PyValue[]) => {
@@ -486,7 +486,8 @@ function nativeDrawData(plugin: BaseDataVisualizerRunnerPlugin<PyValue> | undefi
       );
     }
     plugin?.sendDrawing(args);
-    return null;
+    // The identity on its first argument (like Source's draw_data), whether or not there is a canvas.
+    return args[0];
   }) as PyFunction;
   f.pyName = "draw_data";
   f.pyArity = -1;

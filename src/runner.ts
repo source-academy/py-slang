@@ -22,13 +22,14 @@ import list from "./stdlib/list";
 import pairmutator from "./stdlib/pairmutator";
 import stream from "./stdlib/stream";
 import parser from "./stdlib/parser";
+import dataVisualizer from "./stdlib/dataVisualizer";
 import type { Group } from "./stdlib/utils";
 
 export const VARIANT_GROUPS: Record<number, Group[]> = {
   1: [misc, math],
-  2: [misc, math, linkedList],
-  3: [misc, math, linkedList, list, pairmutator, stream],
-  4: [misc, math, linkedList, list, pairmutator, stream, parser],
+  2: [misc, math, linkedList, dataVisualizer],
+  3: [misc, math, linkedList, list, pairmutator, stream, dataVisualizer],
+  4: [misc, math, linkedList, list, pairmutator, stream, parser, dataVisualizer],
 };
 
 export class RunError extends Error {

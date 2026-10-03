@@ -67,9 +67,11 @@ function llist(...values) {}
 /**
  * PRIMITIVE
  * Visualizes the arguments in a separate drawing area in the Source
- * Academy using box-and-pointer diagrams.
+ * Academy using box-and-pointer diagrams. Where there is no drawing area
+ * (for example, when running from the command line), nothing is drawn.
  *
  * @param {value} <CODE>values</CODE> - given values (value1, value2, ...)
+ * @returns {value} the first of the given values
  */
 function draw_data(...values) {}
 
