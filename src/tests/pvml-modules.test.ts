@@ -1,6 +1,7 @@
 import type { IModulePlugin } from "@sourceacademy/conductor/module";
 import type { IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { DataType, IDataHandler, TypedValue } from "@sourceacademy/conductor/types";
+import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { PyPvmlEvaluator1, PyPvmlEvaluator4 } from "../conductor/PyPvmlEvaluator";
 
 /** Minimal IRunnerPlugin mock, mirroring PyPvmlEvaluator.test.ts's, plus a
@@ -31,7 +32,9 @@ function makeMockConductor(withModuleLoader: boolean = true) {
     registerPlugin: () => undefined,
     hostLoadPlugin: () => Promise.resolve(),
     ...(withModuleLoader && {
-      registerPlugin: (_cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
+      // Only the module loader is faked; other plugins (autocomplete, data visualizer) get none.
+      registerPlugin: (cls: unknown, _conductor: unknown, evaluator: IDataHandler) => {
+        if (cls !== ModuleLoaderRunnerPlugin) return undefined;
         dataHandler = evaluator;
         return makeFakeLoader(evaluator);
       },
