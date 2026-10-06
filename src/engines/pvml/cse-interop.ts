@@ -19,8 +19,7 @@ function functionDisplayValue(name: string): FunctionValue {
 
 /** Reverse of PRIMITIVE_FUNCTIONS (builtins.ts): primitive index -> a name to
  * display when a bare reference to it (e.g. `f = abs`) is str()'d/repr()'d.
- * A few indices have more than one name (e.g. print/display both -> 5,
- * len/list_length both -> 2) — not interchangeable for display purposes
+ * A few indices have more than one name (e.g. print/display both -> 5) — not interchangeable for display purposes
  * (py-slang#278: print(print) rendered as "<built-in function display>",
  * surprising for code that never mentioned display). PRIMITIVE_FUNCTIONS
  * always lists the canonical name first and the alias second (each

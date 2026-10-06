@@ -707,8 +707,8 @@ set_tail(x, [3, 4])
       await expectShadowStackToEqual(pythonCode, []);
     });
 
-    it("list_length function should leave stack clean (not push result onto stack)", async () => {
-      const pythonCode = `list_length([1, 2, 3])`;
+    it("len function should leave stack clean (not push result onto stack)", async () => {
+      const pythonCode = `len([1, 2, 3])`;
       await expectShadowStackToEqual(pythonCode, []);
     });
 

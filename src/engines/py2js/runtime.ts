@@ -15,7 +15,7 @@
  *               the same flat `{type:"list", value: Value[]}`
  *               (src/engines/cse/stash.ts). "Is this a pair" is therefore a
  *               structural question (length === 2), not a type-level one —
- *               is_list/list_length/subscripting/pyTypeName can't tell a
+ *               is_list/subscripting/pyTypeName can't tell a
  *               pair from a 2-element list either, on either engine, which
  *               is the correct, CSE-matching answer, not a gap.
  *   function -> JS function carrying pyName/pyArity metadata

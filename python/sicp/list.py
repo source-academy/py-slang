@@ -9,7 +9,6 @@ loaded after ``linked-list``, so its ``equal`` is the one in effect).
 
 from .linked_list import head, is_pair, tail
 from .misc import (
-    error,
     is_boolean,
     is_float,
     is_function,
@@ -21,12 +20,6 @@ from .misc import (
 
 def is_list(x):
     return isinstance(x, list)
-
-
-def list_length(xs):
-    if not is_list(xs):
-        error("list_length expects a list as argument, but encountered", xs)
-    return len(xs)
 
 
 def equal(xs, ys):
@@ -46,10 +39,10 @@ def equal(xs, ys):
     elif is_function(xs):
         return is_function(ys) and xs == ys
     elif is_list(xs):
-        if not is_list(ys) or list_length(xs) != list_length(ys):
+        if not is_list(ys) or len(xs) != len(ys):
             return False
         i = 0
-        while i < list_length(xs):
+        while i < len(xs):
             if not equal(xs[i], ys[i]):
                 return False
             i = i + 1
