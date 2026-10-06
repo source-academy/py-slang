@@ -47,6 +47,7 @@ import {
   stringLiteral,
   substitute,
   substituteRest,
+  tieKnot,
   unparse,
 } from "./ast";
 import {
@@ -1081,7 +1082,10 @@ async function stepHead(
         init.type === "ArrowFunctionExpression" && init.name === undefined
           ? { ...init, name }
           : init;
-      const substitutedRest = substituteRest(rest, name, boundValue);
+      // A name free in its own (non-function) value refers cyclically to that value.
+      const closedValue =
+        boundValue.type === "ArrowFunctionExpression" ? boundValue : tieKnot(boundValue, name);
+      const substitutedRest = substituteRest(rest, name, closedValue);
       return {
         kind: "step",
         newBody: substitutedRest,

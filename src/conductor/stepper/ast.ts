@@ -304,21 +304,98 @@ export function isEmptyList(node: StepNode): boolean {
  * value into several occurrences so that each occurrence is a distinct object (markers and node-id
  * assignment rely on the per-step AST being a proper tree).
  */
-export function clone<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(clone) as unknown as T;
+export function clone<T>(value: T, seen: Map<object, unknown> = new Map()): T {
   if (value !== null && typeof value === "object") {
+    // Cyclic values (see {@link tieKnot}) clone to cyclic copies instead of recursing forever.
+    const prior = seen.get(value as object);
+    if (prior !== undefined) return prior as T;
+    if (Array.isArray(value)) {
+      const arr: unknown[] = [];
+      seen.set(value, arr);
+      for (const v of value) arr.push(clone(v, seen));
+      return arr as unknown as T;
+    }
     const out: Record<string, unknown> = {};
+    seen.set(value as object, out);
     for (const key of Object.keys(value as Record<string, unknown>)) {
-      out[key] = clone((value as Record<string, unknown>)[key]);
+      out[key] = clone((value as Record<string, unknown>)[key], seen);
     }
     return out as T;
   }
   return value;
 }
 
+const KNOT = "\u0000knot";
+
+/**
+ * `value` with every free occurrence of `name` in it replaced by `value` itself, as a cyclic graph
+ * (Source Stepper spec: "n in v refers cyclically to the node at which the replacement happens") — so
+ * `b = pair(1, lambda: b)` binds `b` to a pair whose lambda returns that very pair. Returns `value`
+ * unchanged when `name` does not occur free in it.
+ */
+export function tieKnot(value: StepNode, name: string): StepNode {
+  let found = false;
+  const marked = substitute(value, name, { type: "Identifier", name: KNOT });
+  const patch = (n: unknown, parent: Record<string, unknown> | unknown[], key: string | number) => {
+    if (Array.isArray(n)) n.forEach((c, i) => patch(c, n, i));
+    else if (n !== null && typeof n === "object") {
+      if ((n as StepNode).type === "Identifier" && (n as StepNode).name === KNOT) {
+        found = true;
+        (parent as Record<string | number, unknown>)[key] = marked;
+      } else {
+        for (const k of Object.keys(n))
+          patch((n as Record<string, unknown>)[k], n as Record<string, unknown>, k);
+      }
+    }
+  };
+  for (const k of Object.keys(marked)) patch(marked[k], marked, k);
+  if (!found) return value;
+  // Remembered for display: a back-reference renders as this name (see `unparse`).
+  marked.cycleName = name;
+  return marked;
+}
+
 /* -------------------------------------------------------------------------- */
 /*                               Substitution                                 */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Applies the tree transformation `fn` to `node`, preserving cycles: every cycle runs through a root
+ * that {@link tieKnot} marked with `cycleName`, so revisiting such a root while it is still being
+ * transformed yields its (in-progress) result instead of recursing forever.
+ */
+function transformCyclic(
+  inProgress: Map<StepNode, StepNode>,
+  node: StepNode,
+  fn: (node: StepNode) => StepNode,
+): StepNode {
+  if (typeof node.cycleName !== "string") return fn(node);
+  const prior = inProgress.get(node);
+  if (prior !== undefined) return prior;
+  const result = {} as StepNode;
+  inProgress.set(node, result);
+  try {
+    return Object.assign(result, fn(node));
+  } finally {
+    inProgress.delete(node);
+  }
+}
+
+/** Like {@link transformCyclic}, for a name-collecting walk: a revisited cyclic root adds nothing. */
+function collectCyclic(
+  inProgress: Set<StepNode>,
+  node: StepNode,
+  fn: (node: StepNode) => Set<string>,
+): Set<string> {
+  if (typeof node.cycleName !== "string") return fn(node);
+  if (inProgress.has(node)) return new Set();
+  inProgress.add(node);
+  try {
+    return fn(node);
+  } finally {
+    inProgress.delete(node);
+  }
+}
 
 function mapValue(value: unknown, fn: (node: StepNode) => StepNode): unknown {
   if (Array.isArray(value)) return value.map(v => mapValue(v, fn));
@@ -398,7 +475,12 @@ export function markUnboundLocal(node: StepNode, name: string): StepNode {
  * {@link avoidCapture} to tell whether inserting `node` (a substitution's `value`) under some other
  * binder could accidentally fall under one of *that* binder's own names.
  */
+const freeNamesInProgress = new Set<StepNode>();
 function freeNames(node: StepNode): Set<string> {
+  return collectCyclic(freeNamesInProgress, node, freeNamesOf);
+}
+
+function freeNamesOf(node: StepNode): Set<string> {
   switch (node.type) {
     case "Identifier":
       return new Set([String(node.name)]);
@@ -439,6 +521,7 @@ function freeNames(node: StepNode): Set<string> {
  * a rename occasionally skips ahead to a higher `_N` suffix, never an incorrect one. */
 function allIdentifierNames(node: StepNode): Set<string> {
   const names = new Set<string>();
+  const seen = new Set<StepNode>();
   const walk = (value: unknown): void => {
     if (Array.isArray(value)) {
       value.forEach(walk);
@@ -446,7 +529,8 @@ function allIdentifierNames(node: StepNode): Set<string> {
     }
     if (value === null || typeof value !== "object") return;
     const n = value as StepNode;
-    if (typeof n.type !== "string") return;
+    if (typeof n.type !== "string" || seen.has(n)) return;
+    seen.add(n);
     if (n.type === "Identifier" && typeof n.name === "string") names.add(n.name);
     Object.keys(n).forEach(key => walk(n[key]));
   };
@@ -503,7 +587,15 @@ function renameOwnBinding(node: StepNode, before: string, after: string): StepNo
  * reference to it. Mirrors `SICPy`'s chapter 1/2 scoping exactly like {@link assignedNamesOf} does: no
  * `global`/`nonlocal` and no loops, so a `lambda`/`def` boundary is the only place a name can be
  * independently re-bound. */
+const renameInProgress = new Map<string, Map<StepNode, StepNode>>();
 function renameShadowAware(node: StepNode, before: string, after: string): StepNode {
+  const key = `${before}:${after}`;
+  let inProgress = renameInProgress.get(key);
+  if (inProgress === undefined) renameInProgress.set(key, (inProgress = new Map()));
+  return transformCyclic(inProgress, node, n => renameShadowAwareOf(n, before, after));
+}
+
+function renameShadowAwareOf(node: StepNode, before: string, after: string): StepNode {
   switch (node.type) {
     case "Identifier":
       return node.name === before ? { ...node, name: after } : node;
@@ -559,7 +651,22 @@ function avoidCapture(node: StepNode, value: StepNode): StepNode {
   }, node);
 }
 
+// Keyed by the substitution being performed, since one substitution can start another inside it
+// (`markUnboundLocal` from a `def` case).
+const substituteInProgress = new Map<string, Map<StepNode, StepNode>>();
 function substituteOrTag(
+  node: StepNode,
+  name: string,
+  value: StepNode,
+  tagOnly: boolean,
+): StepNode {
+  const key = `${tagOnly}:${name}`;
+  let inProgress = substituteInProgress.get(key);
+  if (inProgress === undefined) substituteInProgress.set(key, (inProgress = new Map()));
+  return transformCyclic(inProgress, node, n => substituteOrTagOf(n, name, value, tagOnly));
+}
+
+function substituteOrTagOf(
   node: StepNode,
   name: string,
   value: StepNode,
@@ -720,7 +827,23 @@ export function markBuiltins(
     return inner;
   };
 
+  // Nodes currently being walked: a cyclic value (see {@link tieKnot}) re-enters its own node, where
+  // the back-reference is kept as is.
+  const inProgress = new Set<StepNode>();
   const walk = (
+    node: StepNode,
+    bound: ReadonlySet<string>,
+    libraryPath: ReadonlySet<string>,
+  ): StepNode => {
+    if (inProgress.has(node)) return node;
+    inProgress.add(node);
+    try {
+      return walkNode(node, bound, libraryPath);
+    } finally {
+      inProgress.delete(node);
+    }
+  };
+  const walkNode = (
     node: StepNode,
     bound: ReadonlySet<string>,
     libraryPath: ReadonlySet<string>,
@@ -846,6 +969,22 @@ export function assignedNamesOf(node: StepNode): Set<string> {
  */
 export function unparse(node: StepNode | null | undefined): string {
   if (!node) return "";
+  if (typeof node.cycleName === "string") {
+    if (unparsing.has(node)) return node.cycleName;
+    unparsing.add(node);
+    try {
+      return unparseNode(node);
+    } finally {
+      unparsing.delete(node);
+    }
+  }
+  return unparseNode(node);
+}
+
+/** Cyclic nodes (see {@link tieKnot}) currently being unparsed. */
+const unparsing = new Set<StepNode>();
+
+function unparseNode(node: StepNode): string {
   switch (node.type) {
     case "Literal":
       return String(node.raw ?? node.value);

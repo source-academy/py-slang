@@ -3153,3 +3153,26 @@ describe("Python stepper — real module resolution (py-slang#385)", () => {
     expect(await evaluatePython(literal, undefined, { evaluator: dh })).toBe("6.0");
   });
 });
+
+describe("self-referential declaration (py-slang#497)", () => {
+  // Per the Source stepper spec, substituting a value in which its own name occurs free makes that
+  // occurrence refer cyclically to the value itself.
+  it("lets a lambda inside the bound pair refer to that pair", async () => {
+    expect(await finalOutput("b = pair(1, lambda: b)\nprint(head(tail(tail(b)())()))")).toBe("1\n");
+  });
+
+  it("keeps the cycle through later substitutions and calls", async () => {
+    const src =
+      "ones = pair(1, lambda: ones)\n" +
+      "def take(s, n):\n" +
+      "    return None if n == 0 else pair(head(s), take(tail(s)(), n - 1))\n" +
+      "print_llist(take(ones, 3))";
+    expect(await finalOutput(src)).toBe("llist(1, 1, 1)\n");
+  });
+
+  it("still handles mutually referring pairs", async () => {
+    const src = "a = pair(1, lambda: c)\nc = pair(2, lambda: a)\n";
+    expect(await result(src + "head(tail(a)())")).toBe("2");
+    expect(await result(src + "head(tail(tail(a)())())")).toBe("1");
+  });
+});
