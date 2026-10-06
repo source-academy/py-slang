@@ -3161,6 +3161,13 @@ describe("self-referential declaration (py-slang#497)", () => {
     expect(await finalOutput("b = pair(1, lambda: b)\nprint(head(tail(tail(b)())()))")).toBe("1\n");
   });
 
+  // py-slang#501
+  it("serializes the back-reference as `...`, not an empty node", async () => {
+    const all = await steps("b = pair(1, lambda: b)\nprint(tail(b)())");
+    const isDots = (n: any) => n.type === "Identifier" && n.name === "...";
+    expect(all.some(st => findNode(st.ast, isDots) !== undefined)).toBe(true);
+  });
+
   it("keeps the cycle through later substitutions and calls", async () => {
     const src =
       "ones = pair(1, lambda: ones)\n" +
