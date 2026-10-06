@@ -1,3 +1,4 @@
+import { DATA_VISUALIZER_DIRECTORY_ID } from "@sourceacademy/common-data-visualizer";
 import { BasicEvaluator, IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
@@ -17,6 +18,7 @@ import pairmutator from "../stdlib/pairmutator";
 import parser from "../stdlib/parser";
 import stream from "../stdlib/stream";
 import { Group } from "../stdlib/utils";
+import { PvmlDataVisualizerRunnerPlugin } from "./dataVisualizer/PvmlDataVisualizerRunnerPlugin";
 import { EvaluatorError } from "./errors";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { registerAutoCompletePlugin } from "./plugins/autocomplete";
@@ -76,6 +78,9 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
   /** This evaluator's own ModuleLoaderRunnerPlugin registration — see
    * loadImports for why the static singleton is deliberately not used. */
   private moduleLoader?: ModuleLoaderRunnerPlugin;
+  /** Receives `draw_data` calls — registered for §2+ only, where `draw_data` exists, mirroring
+   * PyCseEvaluatorBase and Py2JsEvaluatorBase. */
+  private readonly dataVisualizerPlugin?: PvmlDataVisualizerRunnerPlugin;
 
   protected constructor(conductor: IRunnerPlugin, variant: number, groups: Group[]) {
     super(conductor);
@@ -87,6 +92,10 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       .filter(p => p.trim())
       .join("\n");
     this.dataHandler = new GenericDataHandler(this.variant);
+    if (variant >= 2) {
+      this.dataVisualizerPlugin = conductor.registerPlugin(PvmlDataVisualizerRunnerPlugin);
+      conductor.hostLoadPlugin(DATA_VISUALIZER_DIRECTORY_ID);
+    }
     this.ensurePreludeLoaded = once(async () => {
       if (this.preludeText.trim()) {
         await this.runChunk(this.preludeText);
@@ -123,6 +132,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
       programText: script,
       variant: this.variant,
       onCallLocation: (start, end) => this.dataHandler.setCurrentCallLocation(start, end),
+      drawData: this.dataVisualizerPlugin && (args => this.dataVisualizerPlugin!.sendDrawing(args)),
     });
     const result = await interpreter.executeAsync();
     this.globalEnv = interpreter.getGlobalEnv();
@@ -200,6 +210,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
+      this.dataVisualizerPlugin?.resetRun();
       await this.ensurePreludeLoaded();
       const ast = parse(chunk.endsWith("\n") ? chunk : chunk + "\n");
       await this.loadImports(ast);

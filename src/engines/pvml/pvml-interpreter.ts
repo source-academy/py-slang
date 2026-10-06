@@ -169,6 +169,8 @@ export class PVMLInterpreter {
   private pendingExtern?: { extern: PVMLExtern; args: PVMLBoxType[] };
   private currentCallLocation?: { start: number; end: number };
   private readonly onCallLocation?: (start: number, end: number) => void;
+  /** See the constructor option of the same name. */
+  private readonly drawData?: (args: PVMLBoxType[]) => void;
   /** True only while `executeAsync`'s driver loop is running — the only
    * context able to await a pendingExtern. See PVMLExtern's doc comment. */
   private allowExtern = false;
@@ -200,6 +202,8 @@ export class PVMLInterpreter {
       variant?: number;
       /** Receives a source span immediately before a dynamic call dispatch. */
       onCallLocation?: (start: number, end: number) => void;
+      /** Receives `draw_data`'s arguments — see `executePrimitive`'s parameter of the same name. */
+      drawData?: (args: PVMLBoxType[]) => void;
       /**
        * Set only when `program` was compiled with `targetsPynter: true` (see
        * PVMLCompiler's `targetsPynter` field doc) — e.g. via the assembler's
@@ -230,6 +234,7 @@ export class PVMLInterpreter {
     this.halted = false;
     this.onOutput = options?.sendOutput ?? (() => {});
     this.onCallLocation = options?.onCallLocation;
+    this.drawData = options?.drawData;
     this.legacyArraySemantics = options?.legacyArraySemantics ?? false;
 
     if (options) {
@@ -1648,6 +1653,7 @@ export class PVMLInterpreter {
         this.onOutput,
         (f, a) => this.invokeValue(f, a),
         this.variant,
+        this.drawData,
       );
       this.push(result);
       return;
@@ -1868,6 +1874,7 @@ export class PVMLInterpreter {
       this.onOutput,
       (f, a) => this.invokeValue(f, a),
       this.variant,
+      this.drawData,
     );
     this.push(result);
 

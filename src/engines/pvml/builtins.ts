@@ -229,8 +229,9 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["breakpoint", 132],
   ["set_timeout", 133],
   ["clear_all_timeout", 134],
-  // `draw_data` is native Pynter's own slot 6 (inherited from Sinter, where it was a stub): it draws
-  // nothing (there is no canvas) and returns its first argument, like Source's.
+  // `draw_data` is native Pynter's own slot 6 (inherited from Sinter, where it was a stub): it returns
+  // its first argument, like Source's, and draws only when a data visualizer is attached (the
+  // PVML-in-browser evaluators); headless runs have no canvas.
   ["draw_data", 6],
 ]);
 
@@ -629,6 +630,9 @@ export function executePrimitive(
    * argument-type error messages need it (a "pair" and a length-2 "list" are
    * the exact same runtime value here). */
   variant: number = 4,
+  /** Sends `draw_data`'s arguments to a data visualizer, when one is attached (the PVML-in-browser
+   * evaluators, §2+); absent in headless runs, where `draw_data` only returns its first argument. */
+  drawData?: (args: PVMLBoxType[]) => void,
 ): PVMLBoxType {
   switch (primitiveIndex) {
     case 2: {
@@ -1342,9 +1346,10 @@ export function executePrimitive(
         );
       return undefined;
 
-    case 6: // draw_data — there is no drawing canvas; the identity on its first argument.
+    case 6: // draw_data — draws via `drawData` when a visualizer is attached; returns its first argument.
       if (args.length < 1)
         throw new MissingRequiredPositionalError("draw_data() takes at least 1 argument");
+      drawData?.(args);
       return args[0];
 
     case 128: // math_nextafter — see PRIMITIVE_FUNCTIONS' doc comment: an unimplemented
