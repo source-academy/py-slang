@@ -210,7 +210,7 @@ abstract class PyPvmlEvaluatorBase extends BasicEvaluator {
 
   async evaluateChunk(chunk: string): Promise<void> {
     try {
-      this.dataVisualizerPlugin?.resetRun();
+      await this.dataVisualizerPlugin?.resetRun();
       await this.ensurePreludeLoaded();
       const ast = parse(chunk.endsWith("\n") ? chunk : chunk + "\n");
       await this.loadImports(ast);
