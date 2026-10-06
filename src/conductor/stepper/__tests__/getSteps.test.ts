@@ -3170,6 +3170,16 @@ describe("self-referential declaration (py-slang#497)", () => {
     expect(await finalOutput(src)).toBe("llist(1, 1, 1)\n");
   });
 
+  it("ties a knot around a value that already contains a cycle", async () => {
+    const src = "a = pair(1, lambda: a)\nb = pair(a, lambda: b)\n";
+    expect(await result(src + "head(head(tail(b)()))")).toBe("1");
+    expect(await result(src + "head(tail(head(tail(b)()))())")).toBe("1");
+  });
+
+  it("an eager self-reference is still a NameError, as in Python", async () => {
+    expect(await result("x = pair(1, x)\nhead(x)")).toBe("NameError: name 'x' is not defined");
+  });
+
   it("still handles mutually referring pairs", async () => {
     const src = "a = pair(1, lambda: c)\nc = pair(2, lambda: a)\n";
     expect(await result(src + "head(tail(a)())")).toBe("2");

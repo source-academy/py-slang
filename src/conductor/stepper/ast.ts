@@ -336,9 +336,13 @@ const KNOT = "\u0000knot";
 export function tieKnot(value: StepNode, name: string): StepNode {
   let found = false;
   const marked = substitute(value, name, { type: "Identifier", name: KNOT });
+  // `value` may already contain a cycle (a value tied by an earlier declaration), so visit each object once.
+  const seen = new Set<object>([marked]);
   const patch = (n: unknown, parent: Record<string, unknown> | unknown[], key: string | number) => {
+    if (n === null || typeof n !== "object" || seen.has(n)) return;
+    seen.add(n);
     if (Array.isArray(n)) n.forEach((c, i) => patch(c, n, i));
-    else if (n !== null && typeof n === "object") {
+    else {
       if ((n as StepNode).type === "Identifier" && (n as StepNode).name === KNOT) {
         found = true;
         (parent as Record<string | number, unknown>)[key] = marked;
