@@ -38,7 +38,7 @@ coincidence. A chapter-2 pair and a chapter-3+ list literal are the _same_
 (which represents both as the same flat `{type:"list", value: Value[]}` —
 `src/engines/cse/stash.ts`) — there is no separate pair type here either.
 "Is this a pair" is therefore a structural question (length === 2), not a
-type-level one, on both engines; `is_list`/`list_length`/subscripting can't
+type-level one, on both engines; `is_list`/subscripting can't
 tell a pair from a 2-element list apart because there is nothing to tell
 apart. Error messages still say "pair" at chapters 1-2 and "list" at
 chapter 3+ for a list-shaped value (`pyTypeName`'s `sayPair` parameter,

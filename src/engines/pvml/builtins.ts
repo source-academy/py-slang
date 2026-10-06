@@ -74,7 +74,7 @@ import {
  * SIVMFN_PRIMITIVE_COUNT in pynter/vm/include/pynter/internal_fn.h) rather
  * than reused from an existing slot.
  *
- * `is_list`/`list_length` (list.ts, over Python list literals, which PVML
+ * `is_list` (list.ts, over Python list literals, which PVML
  * represents as native's raw arrays) are deliberately mapped to native's
  * `is_array`/`array_length`, NOT native's own `is_list`(19)/`length`(26) —
  * those check "is/measure a proper cons-pair chain", which is the concept
@@ -116,7 +116,6 @@ export const PRIMITIVE_FUNCTIONS: Map<string, number> = new Map([
   ["is_string", 24],
   ["is_none", 20],
   ["len", 2],
-  ["list_length", 2], // Same concept as len() for list.ts; see note above.
   ["llist", 27], // Native `list(...)` builds an identical null-terminated cons chain.
   // 131, not the alphabetically-natural-looking 30: native Pynter's own
   // sivmfn_primitives[] array (a plain C array indexed positionally) never
@@ -636,7 +635,7 @@ export function executePrimitive(
 ): PVMLBoxType {
   switch (primitiveIndex) {
     case 2: {
-      // len / list_length — Python's len() returns an int, so this must be a bigint (matching
+      // len — Python's len() returns an int, so this must be a bigint (matching
       // PVMLType.BIGINT), not a plain JS number: v.elements.length is a number, and printing it
       // unconverted silently produced a float ("5.0" instead of "5") -- a real bug JS's loose
       // 5 === 5.0 equality had been hiding from the old return-value-comparison test suite.
