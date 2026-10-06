@@ -203,7 +203,7 @@ function isNode(value: unknown): value is StepNode {
  * Serializes one step into plain JSON, assigning every node a stable `nodeId` (unique within the
  * step) so markers can reference their redex by id — object identity does not survive the channel.
  * Cycle-safe via an on-path set (any node revisited while still an ancestor becomes a child-less
- * stub), guaranteeing a finite, structured-clone-able tree.
+ * `...` identifier), guaranteeing a finite, structured-clone-able tree.
  */
 function serializeStep(step: Step): SerializedStep {
   let counter = 0;
@@ -221,7 +221,10 @@ function serializeStep(step: Step): SerializedStep {
 
   const serializeNode = (node: StepNode): SerializedStepperNode => {
     const nodeId = idOf(node);
-    if (onPath.has(node)) return { type: node.type, nodeId };
+    // A back-reference to a node still being serialized (a cyclic value, see `tieKnot` in `ast.ts`) is
+    // shown as `...`, an identifier the host already knows how to render, instead of a childless
+    // node of the original type (which rendered as nothing, e.g. `lambda: `).
+    if (onPath.has(node)) return { type: "Identifier", nodeId, name: "..." };
     onPath.add(node);
     const out: SerializedStepperNode = { type: node.type, nodeId };
     for (const key of Object.keys(node)) {
