@@ -549,7 +549,7 @@ describe("PVML E2E", () => {
       ["def f():\n    pass\nstr(f)", "<function f>", null],
       ["f = lambda x: x\nstr(f)", "<function (anonymous)>", null],
       ["str(abs)", "<built-in function abs>", null],
-      // print/display and len/list_length share a single primitive index
+      // print/display share a single primitive index
       // (builtins.ts) -- py-slang#278: this used to render as "display"
       // (whichever alias cse-interop.ts's reverse-lookup happened to build
       // last), even though the user never referenced display at all.

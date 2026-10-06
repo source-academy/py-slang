@@ -1,6 +1,6 @@
 /**
  * py2js chapter 3: native list literals, subscript access/assignment,
- * is_list/list_length, and the pair-mutator/stream builtins.
+ * is_list/len, and the pair-mutator/stream builtins.
  *
  * The list.test.ts fixtures are the CSE/PVML/native-Pynter/CPython
  * conformance suite for these constructs (an expression-value form there,
@@ -23,10 +23,10 @@ test.each([
   ["print(is_list(1))", "False\n"],
   ["print(is_list(None))", "False\n"],
   ["print(is_list('x'))", "False\n"],
-  ["print(list_length([]))", "0\n"],
-  ["print(list_length([1, 2, 3]))", "3\n"],
-  ["print(list_length([1, [2, 3], 4]))", "3\n"],
-])("is_list/list_length: %s", (code, expected) => {
+  ["print(len([]))", "0\n"],
+  ["print(len([1, 2, 3]))", "3\n"],
+  ["print(len([1, [2, 3], 4]))", "3\n"],
+])("is_list/len: %s", (code, expected) => {
   expect(runCodePy2Js(code, 3).output).toBe(expected);
 });
 
@@ -61,8 +61,8 @@ test.each([
 test.each([
   ["xs = [10, 20, 30]\nprint(xs[1])", "20\n"],
   ["xs = [10, 20, 30]\nxs[1] = 99\nprint(xs)", "[10, 99, 30]\n"],
-  ["xs = [1, 2, 3]\nprint(list_length(xs))", "3\n"],
-  ["xs = [1, 2, 3]\nxs[0] = 100\nprint(list_length(xs))", "3\n"],
+  ["xs = [1, 2, 3]\nprint(len(xs))", "3\n"],
+  ["xs = [1, 2, 3]\nxs[0] = 100\nprint(len(xs))", "3\n"],
   ["xs = [1, 2, 3, 4]\nprint(xs)", "[1, 2, 3, 4]\n"],
   ["xs = [1, 2, 3, 4]\nprint(xs[2])", "3\n"],
   ["xs = [1, 2, 3, 4]\nxs[2] = 42\nprint(xs)", "[1, 2, 42, 4]\n"],
@@ -204,7 +204,7 @@ describe("pair() and a list literal are one representation (no separate PyPair t
     expect(runCodePy2Js(code, 3).output).toBe("[99, 2]\n");
   });
 
-  test("a pair still fails is_list/list_length's normal cousins the same way a list would if malformed — sanity check both directions work through the exact same code path", () => {
+  test("a pair still fails is_list/len's normal cousins the same way a list would if malformed — sanity check both directions work through the exact same code path", () => {
     // xs[0] on a literal list and p[0] on a pair go through the identical
     // listAccess call — this just confirms neither direction regressed.
     const code =

@@ -388,14 +388,14 @@ f(1, 2, 3)
   });
 
   it("list length function", async () => {
-    const pythonCode = `list_length([10, 20, 30])`;
+    const pythonCode = `len([10, 20, 30])`;
     const { rawResult, renderedResult } = await compileWithList(pythonCode);
     expect(rawResult[0]).toBe(TYPE_TAG.INT);
     expect(renderedResult).toBe("3");
   });
 
   it("list length on non-list should error", async () => {
-    const pythonCode = `list_length(42)`;
+    const pythonCode = `len(42)`;
     await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.GET_LENGTH_NOT_LIST),
     );

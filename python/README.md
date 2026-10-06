@@ -4,7 +4,7 @@ The **Source Academy Python** standard library, packaged for plain **CPython**.
 
 Source Academy runs a subset of Python (via
 [`py-slang`](https://github.com/source-academy/py-slang)) that adds a standard
-library for the *Structure and Interpretation of Computer Programs* (SICP) —
+library for the _Structure and Interpretation of Computer Programs_ (SICP) —
 `pair`, `head`, `tail`, `llist`, the `math_*` functions, streams, and so on.
 This package provides those same names to ordinary CPython, so that code written
 for CS1101S or the SICP Python edition runs the same way on your own machine.
@@ -29,7 +29,7 @@ Then the Source Academy Python standard library is available:
 xs = llist(1, 2, 3)
 print(xs)                       # [1, [2, [3, None]]]
 print_llist(xs)                 # llist(1, 2, 3)
-print(list_length([1, 4, 9, 16, 25]))                # 5
+print(len([1, 4, 9, 16, 25]))                        # 5
 print(math_sqrt(2))             # 1.4142135623730951
 print(eval_stream(integers_from(1), 4))              # [1, [2, [3, [4, None]]]]
 ```
@@ -50,14 +50,14 @@ llist(1, 2, 3)    # [1, [2, [3, None]]]
 
 The library mirrors the groups in `py-slang`'s standard library:
 
-| submodule            | provides |
-| -------------------- | -------- |
+| submodule            | provides                                                                                                                                                                        |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sicp.misc`          | `error`, `arity`, `real`, `imag`, `is_none` / `is_integer` / `is_float` / `is_complex` / `is_string` / `is_boolean` / `is_function` / `is_number`, `random_random`, `time_time` |
-| `sicp.math`          | `math_pi`, `math_e`, `math_tau`, `math_inf`, `math_nan`, and the `math_*` functions (`math_sqrt`, `math_sin`, `math_floor`, `math_comb`, …) |
-| `sicp.linked_list`   | `pair`, `head`, `tail`, `is_pair`, `llist`, `print_llist`, plus `map`, `filter`, `reduce`, `reverse`, `append`, `length`, `member`, `remove`, `enum_llist`, … |
-| `sicp.pair_mutators` | `set_head`, `set_tail` |
-| `sicp.list`          | `is_list`, `list_length`, `equal` |
-| `sicp.stream`        | `stream`, `stream_map`, `stream_filter`, `stream_ref`, `integers_from`, `eval_stream`, … |
+| `sicp.math`          | `math_pi`, `math_e`, `math_tau`, `math_inf`, `math_nan`, and the `math_*` functions (`math_sqrt`, `math_sin`, `math_floor`, `math_comb`, …)                                     |
+| `sicp.linked_list`   | `pair`, `head`, `tail`, `is_pair`, `llist`, `print_llist`, plus `map`, `filter`, `reduce`, `reverse`, `append`, `length`, `member`, `remove`, `enum_llist`, …                   |
+| `sicp.pair_mutators` | `set_head`, `set_tail`                                                                                                                                                          |
+| `sicp.list`          | `is_list`, `equal`                                                                                                                                                              |
+| `sicp.stream`        | `stream`, `stream_map`, `stream_filter`, `stream_ref`, `integers_from`, `eval_stream`, …                                                                                        |
 
 `from sicp import *` brings the whole superset into scope, mirroring the
 environment students have in Source Academy's Python.

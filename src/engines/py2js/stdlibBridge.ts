@@ -130,7 +130,7 @@ function toTagged(v: PyValue, memo: Map<PyList, Value> = new Map()): Value {
       // CSE has no separate representation for a pair vs. an arbitrary-
       // length list (both are its flat `{type:"list", value: Value[]}` —
       // see src/engines/cse/stash.ts), so converting element-wise here
-      // reproduces CSE's own is_list/list_length answers exactly, including
+      // reproduces CSE's own is_list answers exactly, including
       // on a 2-element list (which CSE cannot tell apart from a pair
       // either — see runtime.ts's PyList doc comment).
       if (Array.isArray(v)) return toTaggedList(v, memo);

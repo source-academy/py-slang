@@ -264,7 +264,7 @@ describe("Function *args & unpacking tests", () => {
     it("no extra arguments: *args is empty", async () => {
       const pythonCode = `
 def f(a, b, *c):
-    return list_length(c)
+    return len(c)
 
 f(1, 2)
   `;
@@ -289,7 +289,7 @@ f(1, 2, 10, 20)
       const pythonCode = `
 def f(a, *args):
     sum = 0
-    for i in range(list_length(args)):
+    for i in range(len(args)):
         sum = sum + args[i]
     return sum
 
@@ -374,7 +374,7 @@ f(1, 2, 3)
     it("only one *args allowed", async () => {
       const pythonCode = `
 def f(*args1, *args2):
-    return list_length(args1) + list_length(args2)
+    return len(args1) + len(args2)
 
 f(1, 2, 3)
 `;
@@ -395,7 +395,7 @@ f(1, 2, 3)
 
     it("lambda with only *args", async () => {
       const pythonCode = `
-f = lambda *args: list_length(args)
+f = lambda *args: len(args)
 f(1, 2, 3)
 `;
       const { rawResult, renderedResult } = await compileWithList(pythonCode);
@@ -415,7 +415,7 @@ f()
 
     it("lambda only one *args allowed", async () => {
       const pythonCode = `
-f = lambda *args1, *args2: list_length(args1)
+f = lambda *args1, *args2: len(args1)
 f(1, 2, 3)
 `;
       expect((await compileWithList(pythonCode)).errors).toContainEqual(
@@ -528,7 +528,7 @@ f(1, *42)
       const pythonCode = `
 def f(a, *args):
     sum = a
-    for i in range(list_length(args)):
+    for i in range(len(args)):
         sum = sum + args[i]
     return sum
 

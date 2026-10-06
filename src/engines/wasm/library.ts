@@ -67,6 +67,7 @@ const funcHelper = <Arity extends number, HasVarArgs extends boolean = false>(
 });
 
 const miscLib: LibFuncType[] = [
+  funcHelper("len", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
   funcHelper("print", 1, true).body(x => wasm.call(LOG_FX).args(x)),
   funcHelper("str", 1).body(x => wasm.call(TO_STR_FX).args(x)),
   funcHelper("repr", 1).body(x => wasm.call(TO_REPR_FX).args(x)),
@@ -118,10 +119,7 @@ const pairMutatorLib: LibFuncType[] = [
   ),
 ];
 
-const listLib: LibFuncType[] = [
-  funcHelper("list_length", 1).body(x => wasm.call(LIST_LENGTH_FX).args(x)),
-  funcHelper("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x)),
-];
+const listLib: LibFuncType[] = [funcHelper("is_list", 1).body(x => wasm.call(IS_LIST_FX).args(x))];
 
 const mceLib: LibFuncType[] = [
   funcHelper("tokenize", 1).body(x => wasm.call(TOKENIZE_FX).args(x)),

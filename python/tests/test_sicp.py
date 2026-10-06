@@ -44,7 +44,7 @@ def test_pair_mutation():
 
 def test_lists_and_equal():
     assert is_list([1, 2, 3]) and not is_list(None)
-    assert list_length([1, 4, 9, 16]) == 4
+    assert len([1, 4, 9, 16]) == 4
     assert equal(llist(1, llist(2, 3)), llist(1, llist(2, 3)))
     assert not equal(llist(1, 2), llist(1, 3))
 
