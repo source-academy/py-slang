@@ -262,17 +262,26 @@ export const SET_LIST_ELEMENT_FX = wasm
       .args(local.get("$list_val"), local.get("$index"), local.get("$tag"), local.get("$val")),
   );
 
-export const LIST_LENGTH_FX = wasm
-  .func("$_list_length")
+/**
+ * `len`: the number of elements of a list/tuple, or the number of characters of a string. Strings are
+ * stored as UTF-8 and their stored length is in bytes, so a character is counted once per byte that is
+ * not a UTF-8 continuation byte (0b10xxxxxx), matching Python's code-point count.
+ */
+export const LEN_FX = wasm
+  .func("$_len")
   .params({ $tag: i32, $val: i64 })
   .results(i32, i64)
+  .locals({ $i: i32, $count: i32, $ptr: i32, $n: i32 })
   .body(
     wasm
       .if(
         i32.eqz(
           i32.or(
-            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
-            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+            i32.or(
+              i32.eq(local.get("$tag"), i32.const(TYPE_TAG.LIST)),
+              i32.eq(local.get("$tag"), i32.const(TYPE_TAG.TUPLE)),
+            ),
+            i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING)),
           ),
         ),
       )
@@ -283,6 +292,37 @@ export const LIST_LENGTH_FX = wasm
 
     wasm.call(POP_SHADOW_STACK_FX),
     wasm.raw`(local.set $val) (local.set $tag)`,
+
+    wasm.if(i32.eq(local.get("$tag"), i32.const(TYPE_TAG.STRING))).then(
+      local.set("$ptr", i32.wrap_i64(i64.shr_u(local.get("$val"), i64.const(32)))),
+      local.set("$n", i32.wrap_i64(local.get("$val"))),
+
+      wasm
+        .loop("$loop")
+        .body(
+          wasm
+            .if(i32.lt_u(local.get("$i"), local.get("$n")))
+            .then(
+              local.set(
+                "$count",
+                i32.add(
+                  local.get("$count"),
+                  i32.ne(
+                    i32.and(
+                      i32.load8_u(i32.add(local.get("$ptr"), local.get("$i"))),
+                      i32.const(0xc0),
+                    ),
+                    i32.const(0x80),
+                  ),
+                ),
+              ),
+              local.set("$i", i32.add(local.get("$i"), i32.const(1))),
+              wasm.br("$loop"),
+            ),
+        ),
+
+      wasm.return(wasm.call(MAKE_INT_FX).args(i64.extend_i32_u(local.get("$count")))),
+    ),
 
     wasm.call(MAKE_INT_FX).args(i64.and(local.get("$val"), i64.const(0xffffffff))),
   );

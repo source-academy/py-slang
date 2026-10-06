@@ -394,7 +394,20 @@ f(1, 2, 3)
     expect(renderedResult).toBe("3");
   });
 
-  it("list length on non-list should error", async () => {
+  it.each([
+    ['len("abc")', "3"],
+    ['len("")', "0"],
+    // Strings are UTF-8; len counts characters (code points), not bytes.
+    ['len("héllo")', "5"],
+    ['len("日本語")', "3"],
+    ['len("a😀b")', "3"],
+  ])("string length: %s", async (pythonCode, expected) => {
+    const { rawResult, renderedResult } = await compileWithList(pythonCode);
+    expect(rawResult[0]).toBe(TYPE_TAG.INT);
+    expect(renderedResult).toBe(expected);
+  });
+
+  it("len on a non-list, non-string should error", async () => {
     const pythonCode = `len(42)`;
     await expect(compileWithList(pythonCode)).rejects.toThrow(
       new Error(ERROR_MAP.GET_LENGTH_NOT_LIST),
