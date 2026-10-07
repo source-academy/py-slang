@@ -88,6 +88,9 @@ interface Scope {
   /** Non-parameter locals (`let`-declared at body top, assigned where the
    * Python assignment executes): a read may precede the assignment. */
   locals: Set<string>;
+  /** Names this function declares `global`: they bypass every enclosing
+   * function scope and resolve straight to module scope. */
+  globalDecls: Set<string>;
 }
 
 interface EmitCtx {
@@ -102,6 +105,11 @@ interface EmitCtx {
   /** Program mode only: the program's top-level names — `let`-compiled, with
    * reads guarded like locals but raising NameError (module level). */
   programGlobals?: Set<string>;
+  /** Program mode only: the module-level names some function declares
+   * `global`. Their module `let` gets a distinct JS identifier (modMangle),
+   * since an enclosing function's local of the same Python name would
+   * otherwise shadow it, and JS cannot name a shadowed outer binding. */
+  globalDeclared?: Set<string>;
   /** Enclosing function scopes, outermost first. */
   scopes: Scope[];
   /** Mutable counter for unique hidden for-loop temp names (nested for-loops
@@ -111,6 +119,10 @@ interface EmitCtx {
 }
 
 const mangle = (name: string) => "$" + name;
+
+/** The JS identifier of a module-level name in program mode. */
+const modMangle = (name: string, ctx: EmitCtx) =>
+  ctx.globalDeclared?.has(name) ? "$g$" + name : mangle(name);
 
 /**
  * A name reference or assignment target, resolved against the scope stack.
@@ -132,6 +144,7 @@ const mangle = (name: string) => "$" + name;
 function emitName(name: string, ctx: EmitCtx, write: boolean): string {
   const j = JSON.stringify(name);
   for (let i = ctx.scopes.length - 1; i >= 0; i--) {
+    if (ctx.scopes[i].globalDecls.has(name)) break;
     if (ctx.scopes[i].params.has(name)) return mangle(name);
     if (ctx.scopes[i].locals.has(name)) {
       const m = mangle(name);
@@ -142,7 +155,7 @@ function emitName(name: string, ctx: EmitCtx, write: boolean): string {
     return write ? `__py.globals[${j}]` : `__py.gref(${j})`;
   }
   if (ctx.programGlobals?.has(name)) {
-    const m = mangle(name);
+    const m = modMangle(name, ctx);
     return write ? m : `__py.pgref(${m}, ${j})`;
   }
   return mangle(name);
@@ -297,7 +310,7 @@ function emitExpr(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
         "(anonymous)",
         params,
         rest,
-        { params: new Set(params), locals: new Set() },
+        { params: new Set(params), locals: new Set(), globalDecls: new Set() },
         bodyAsync => emitTailPosition(l.body, bodyAsync, ctx),
         ctx,
       );
@@ -429,9 +442,14 @@ function collectAllGlobalDecls(stmts: StmtNS.Stmt[], into: Set<string> = new Set
   return into;
 }
 
-function emitDecls(names: Set<string>, exclude: Set<string>, indent: string): string {
+function emitDecls(
+  names: Set<string>,
+  exclude: Set<string>,
+  indent: string,
+  name: (n: string) => string = mangle,
+): string {
   const filtered = [...names].filter(n => !exclude.has(n));
-  return filtered.length === 0 ? "" : `${indent}let ${filtered.map(mangle).join(", ")};\n`;
+  return filtered.length === 0 ? "" : `${indent}let ${filtered.map(name).join(", ")};\n`;
 }
 
 function emitStmts(stmts: StmtNS.Stmt[], indent: string, a: boolean, ctx: EmitCtx): string {
@@ -470,7 +488,7 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
           n => !paramSet.has(n) && !globalDecls.has(n) && !nonlocalDecls.has(n),
         ),
       );
-      const scope: Scope = { params: paramSet, locals };
+      const scope: Scope = { params: paramSet, locals, globalDecls };
       const inner = indent + "  ";
       const emitBody = (bodyAsync: boolean) =>
         `{\n` +
@@ -635,6 +653,7 @@ export function compileProgram(
     scopes: [],
     globals: options.repl ? new Set([...options.repl.priorGlobals, ...topLevelNames]) : undefined,
     programGlobals: options.repl ? undefined : topLevelNames,
+    globalDeclared: options.repl ? undefined : collectAllGlobalDecls(file.statements),
     forId: { next: 0 },
   };
 
@@ -648,7 +667,7 @@ export function compileProgram(
   return (
     `"use strict";\n` +
     preamble +
-    (ctx.globals ? "" : emitDecls(topLevelNames, new Set(), "")) +
+    (ctx.globals ? "" : emitDecls(topLevelNames, new Set(), "", n => modMangle(n, ctx))) +
     emitStmts(file.statements, "", dual, ctx)
   );
 }
