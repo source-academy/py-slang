@@ -28,7 +28,7 @@ export async function compileScriptToWasmBinary(
 
   const builderGenerator = new BuilderGenerator(
     [...PARSE_TREE_STRINGS],
-    makeLibraryFunctions(groups),
+    makeLibraryFunctions(groups, script),
     interactiveMode,
     options.pageCount ?? 1,
     options.chapter ?? 4,

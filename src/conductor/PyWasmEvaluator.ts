@@ -7,13 +7,10 @@ import { DataType, TypedValue } from "@sourceacademy/conductor/types";
 import { ModuleLoaderRunnerPlugin } from "@sourceacademy/runner-module-loader";
 import { StmtNS } from "../ast-types";
 import { compileToWasmAndRun, WasmRuntimeError } from "../engines/wasm";
+import { WASM_GROUPS } from "../engines/wasm/groups";
 import { PreparedModuleBindings, prepareModuleBindings } from "../engines/wasm/moduleInterop";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../errors";
 import { parse } from "../parser/parser-adapter";
-import linkedList from "../stdlib/linked-list";
-import list from "../stdlib/list";
-import pairmutator from "../stdlib/pairmutator";
-import mce from "../stdlib/parser";
 import { Group } from "../stdlib/utils";
 import { asInterfacableEvaluator, GenericDataHandler } from "./GenericDataHandler";
 import { EvaluatorError } from "./errors";
@@ -186,24 +183,24 @@ class PyWasmEvaluator extends BasicEvaluator {
 
 export class PyWasmEvaluator1 extends PyWasmEvaluator {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 1, []);
+    super(conductor, 1, WASM_GROUPS[1]);
   }
 }
 
 export class PyWasmEvaluator2 extends PyWasmEvaluator {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 2, [linkedList]);
+    super(conductor, 2, WASM_GROUPS[2]);
   }
 }
 
 export class PyWasmEvaluator3 extends PyWasmEvaluator {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 3, [linkedList, pairmutator, list]);
+    super(conductor, 3, WASM_GROUPS[3]);
   }
 }
 
 export class PyWasmEvaluator4 extends PyWasmEvaluator {
   constructor(conductor: IRunnerPlugin) {
-    super(conductor, 4, [linkedList, pairmutator, list, mce]);
+    super(conductor, 4, WASM_GROUPS[4]);
   }
 }

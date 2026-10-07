@@ -55,6 +55,7 @@ import {
   LOG_FX,
   TO_REPR_FX,
   TO_STR_FX,
+  BUILTIN_BRIDGE_FX,
 } from "./stdlib";
 import {
   CHECK_INT_FX,
@@ -107,6 +108,7 @@ export const nativeFunctions = [
   LOG_FX,
   TO_STR_FX,
   TO_REPR_FX,
+  BUILTIN_BRIDGE_FX,
   BOOLISE_FX,
   ARITY_FX,
   IS_NONE_FX,

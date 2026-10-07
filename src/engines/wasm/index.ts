@@ -1,7 +1,9 @@
+import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { compileScriptToWasmBinary } from "./compiler";
 import { createHostImports, HostRuntimeState } from "./hostImports";
 import { createModuleCall, createModuleGet, getJspi, hostrefDisplay } from "./moduleInterop";
+import { wasmMiscPrelude } from "./wasmPrelude";
 import {
   type CompileOptions,
   type WasmExports,
@@ -52,8 +54,11 @@ export async function compileToWasmAndRun(
   interactiveMode: boolean = false,
   options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
-  const groups = [...(options.groups ?? []), misc];
-  const prelude = groups.map(group => group.prelude).join("\n");
+  const groups = [...(options.groups ?? []), misc, math];
+  const prelude = [
+    ...groups.map(group => group.prelude),
+    wasmMiscPrelude(options.chapter ?? 4),
+  ].join("\n");
 
   // A chunk's own `from X import y` must compile as one of the program's
   // leading import statements (see splitLeadingImports' doc comment), which

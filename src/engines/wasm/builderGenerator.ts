@@ -15,6 +15,7 @@ import {
 import { ExprNS, StmtNS } from "../../ast-types";
 import { RELATIVE_IMPORT_NOT_SUPPORTED_MESSAGE } from "../../errors";
 import { TokenType } from "../../tokenizer";
+import { WASM_UNSUPPORTED_BUILTINS } from "./bridgedBuiltins";
 import { LibFuncType } from "./library";
 import {
   ALLOC_ENV_FX,
@@ -154,6 +155,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
       }
 
       return [this.environment.length - 1 - i, index];
+    }
+    if (WASM_UNSUPPORTED_BUILTINS.has(name)) {
+      throw new Error(`NameError: '${name}' is not supported by the WASM engine`);
     }
     // Mirrors CSE's NameError (src/errors/errors.ts).
     throw new Error(`NameError: name '${name}' is not defined`);
@@ -345,6 +349,11 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
           .import("arith", "ext")
           .func("$_host_arith_ext")
           .params(i32, i32, i64, i32, i64)
+          .results(i32, i64),
+        wasm
+          .import("builtin", "call")
+          .func("$_host_builtin_call")
+          .params(i32, i32, i64, i32, i64, i32, i64)
           .results(i32, i64),
         wasm.import("stringify", "to_str").func("$_host_to_str").params(i32, i64).results(i32, i64),
         wasm
@@ -643,7 +652,7 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     const body = this.visit(expr.body);
     this.environment.pop();
 
-    this.userFunctions[tag] = [wasm.return(body)];
+    this.userFunctions[tag] = [wasm.return(body, ...RETURN_NONVOID_SUFFIX)];
 
     return wasm
       .call(MAKE_CLOSURE_FX)

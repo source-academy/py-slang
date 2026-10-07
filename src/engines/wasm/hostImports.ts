@@ -4,6 +4,7 @@ import { toAstToken } from "../../parser/token-bridge";
 import { pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types/value-types";
 import { escape, toPythonFloat } from "../../stdlib/utils";
+import { createBuiltinBridge } from "./builtinBridge";
 import { MetacircularGenerator } from "./metacircularGenerator";
 import { ARITHMETIC_OP_TAG, ERROR_MAP, GC_OBJECT_HEADER_SIZE, TYPE_TAG } from "./runtime";
 import type { WasmExports } from "./types";
@@ -126,6 +127,9 @@ export function createHostImports(
       },
       log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
       log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
+    },
+    builtin: {
+      call: createBuiltinBridge(memory, () => runtime.wasmExports),
     },
     stringify: {
       /**
