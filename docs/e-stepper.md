@@ -184,52 +184,23 @@ stash, and a self-contained plugin keeps the frontend language-agnostic.
 
 ### Protocol (`@sourceacademy/common-e-stepper`)
 
-Extends the stepper protocol (`@sourceacademy/common-stepper`) and reuses the CSE machine's frame
-types (`@sourceacademy/common-cse-machine`), so frames look the same in both tools:
+Extends the stepper protocol (`@sourceacademy/common-stepper`).
 
-```ts
-export const E_STEPPER_CHANNEL_ID = "__e_stepper";
-export const RUNNER_ID = "__runner_e_stepper";
-export const WEB_ID = "__web_e_stepper";
-export const E_STEPPER_DIRECTORY_ID = "e-stepper";
+The protocol lives in the plugins repo (source-academy/plugins#124), which is its source of truth.
+In summary:
 
-/** A heap object the program or a frame refers to. */
-export type HeapObject =
-  | { kind: "function"; id: string; name?: string; params: string[]; envId: string; source: string }
-  | { kind: "list"; id: string; elements: EStepperValue[] };
-
-/** A value in a frame binding or a list element. */
-export type EStepperValue =
-  | { kind: "primitive"; display: string; label: string }
-  | { kind: "ref"; id: string }
-  | { kind: "builtin"; name: string }
-  | { kind: "unassigned" };
-
-export interface EStepperFrame {
-  id: string;                 // e.g. "E3", stable for the run
-  name: string;               // "global", or the function name
-  parentId: string | null;
-  bindings: { name: string; value: EStepperValue }[];
-  isActive: boolean;          // frame of the current redex
-  isGarbage: boolean;
-}
-
-export interface EStepperStep extends SerializedStepperStep {
-  // `ast` may contain the node types EnvBlock { envId, body } and Ref { objectId }
-  frames: EStepperFrame[];
-  heap: HeapObject[];
-  /** Bindings read by this step's implicit lookups, for highlighting. */
-  lookups?: { frameId: string; name: string }[];
-}
-```
-
-The `SyntaxProfile` gains two template parts: `{ envBlock: "body", envProp: "envId" }` renders a
-bracketed, labelled block, and `{ ref: "objectId" }` renders a reference badge (or a mu-term, for a
-named function object).
-
-Whether frames reuse `CseSerializedEnvFrame` directly or the simpler `EStepperFrame` above is decided
-in the protocol issue. Reuse is better if the CSE machine's frame drawing could ever be shared;
-otherwise the simpler shape wins.
+- ids: channel `__e_stepper`, runner `__runner_e_stepper`, web `__web_e_stepper`, directory
+  `e-stepper`;
+- `EStepperStep` is a stepper step (`SerializedStepperStep`) plus `frames`, `heap`,
+  `activeFrameId` (the frame of the current redex) and `lookups` (bindings the step reads);
+- frames (`EStepperFrame`: id/label, name, parent, bindings, `isGarbage`) have their own shape
+  rather than reusing the CSE machine's `CseSerializedEnvFrame`, since the web plugin draws its own
+  diagram and shares no drawing code with the CSE machine;
+- heap objects are function objects (name, parameters, defining frame, source) and lists; a value
+  is a primitive, a reference, a builtin (by name) or unassigned;
+- the program refers into the store through the node types `EnvBlock { envId, body }` and
+  `Ref { objectId }`. The host renders these itself, since their meaning is fixed and
+  language-independent; a language's `SyntaxProfile` only covers its ordinary nodes.
 
 ## Testing
 
