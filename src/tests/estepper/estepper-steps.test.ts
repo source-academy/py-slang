@@ -9,6 +9,10 @@ import type {
 } from "@sourceacademy/common-e-stepper";
 
 import { NO_INPUT_MESSAGE } from "../../conductor/estepper/engine";
+import { collectSnapshots } from "../../conductor/plugins/PyCseMachinePlugin";
+import { Context } from "../../engines/cse/context";
+import { Control } from "../../engines/cse/control";
+import { Stash } from "../../engines/cse/stash";
 import { EStepperProgramError, runEStepper } from "../../conductor/estepper/getSteps";
 import { parse } from "../../parser";
 
@@ -259,6 +263,63 @@ describe("protocol consistency", () => {
       walk(step.ast);
       for (const m of step.markers ?? []) if (m.redexId) expect(ids.has(m.redexId)).toBe(true);
     }
+  });
+});
+
+describe("the store as a CSE machine snapshot", () => {
+  type CseStep = EStepperStep & {
+    cse: {
+      stepIndex: number;
+      control: unknown[];
+      stash: unknown[];
+      environments: {
+        name: string;
+        isActive: boolean;
+        bindings: { name: string; value: { displayValue: string } }[];
+      }[];
+    };
+  };
+  /** Frames by name, with their bindings, in a comparable form. */
+  const framesOf = (environments: CseStep["cse"]["environments"]) =>
+    environments
+      .map(e => `${e.name}: ${e.bindings.map(b => `${b.name}=${b.value.displayValue}`).join(" ")}`)
+      .sort();
+
+  test("every step carries one, environments only", async () => {
+    const steps = (await run(MAKE_WITHDRAW)).steps as CseStep[];
+    steps.forEach((step, i) => {
+      expect(step.cse.stepIndex).toBe(i);
+      expect(step.cse.control).toEqual([]);
+      expect(step.cse.stash).toEqual([]);
+    });
+    // Inside the call of withdraw, its frame is the active one, as in the CSE machine.
+    const inCall = steps.find(s => s.activeFrameId === "E2")!;
+    expect(inCall.cse.environments.find(e => e.isActive)?.name).toBe("withdraw");
+  });
+
+  test("the final snapshot shows the same frames as the CSE machine's own", async () => {
+    const program = `def make_withdraw(balance):
+    def withdraw(amount):
+        nonlocal balance
+        balance = balance - amount
+        return balance
+    return withdraw
+W1 = make_withdraw(100)
+W1(50)
+`;
+    const steps = (await runEStepper(parse(program), program, 3)).steps as CseStep[];
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(program)),
+      new Stash(),
+      -1,
+      3,
+      program,
+    );
+    const cseFinal = snapshots[snapshots.length - 1] as unknown as CseStep["cse"];
+    expect(framesOf(steps[steps.length - 1].cse.environments)).toEqual(
+      framesOf(cseFinal.environments),
+    );
   });
 });
 

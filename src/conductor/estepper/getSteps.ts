@@ -9,6 +9,7 @@
  * the store is mutable, so it is snapshotted before and after every contraction.
  */
 
+import type { CseSnapshot } from "@sourceacademy/common-cse-machine";
 import type {
   EStepperLookup,
   EStepperStep,
@@ -25,10 +26,11 @@ import { describeValue } from "./text";
 
 /**
  * {@link EStepperStep} with the stepper protocol's `output` field, which `@sourceacademy/common-stepper`
- * added in 0.0.2; this package still depends on 0.0.1 (see the identical widening in
- * `../stepper/getSteps.ts`). The field crosses the channel as plain JSON either way.
+ * added in 0.0.2 (this package still depends on 0.0.1; see the identical widening in
+ * `../stepper/getSteps.ts`), and the `cse` snapshot `@sourceacademy/common-e-stepper` adds in 0.0.2.
+ * The fields cross the channel as plain JSON either way.
  */
-type Step = EStepperStep & { output?: string };
+type Step = EStepperStep & { output?: string; cse?: CseSnapshot };
 
 /** Default cap on the number of steps (two per contraction). */
 export const DEFAULT_STEP_LIMIT = 1000;
@@ -125,7 +127,12 @@ export async function runEStepper(
       const id = serializer.ids.get(marker.redex);
       if (id !== undefined) m.redexId = id;
     }
-    const step: Step = { ast, markers: [m], ...store };
+    const step: Step = {
+      ast,
+      markers: [m],
+      ...store,
+      cse: { ...store.cse, stepIndex: steps.length },
+    };
     if (output) step.output = output;
     if (lookups.length > 0) step.lookups = lookups;
     steps.push(step);

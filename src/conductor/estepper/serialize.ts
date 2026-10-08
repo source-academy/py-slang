@@ -9,6 +9,7 @@
  * library functions — are not drawn; a library function value is shown by its name, like a builtin.
  */
 
+import type { CseSnapshot } from "@sourceacademy/common-cse-machine";
 import type {
   EStepperFrame,
   EStepperHeapObject,
@@ -21,6 +22,7 @@ import type { Closure } from "../../engines/cse/closure";
 import { type Environment, UNASSIGNED } from "../../engines/cse/environment";
 import type { ListValue, Value } from "../../engines/cse/stash";
 import { toPythonString } from "../../stdlib/utils";
+import { serializeEnvChain } from "../plugins/PyCseMachinePlugin";
 import type { Machine } from "./engine";
 import { type Expr, type Stmt, translateExpr, translateStmts } from "./terms";
 import { functionName } from "./text";
@@ -430,6 +432,8 @@ export interface StoreSnapshot {
   frames: EStepperFrame[];
   heap: EStepperHeapObject[];
   activeFrameId: string;
+  /** The same store as a CSE machine snapshot (its `stepIndex` is set when the step is made). */
+  cse: CseSnapshot;
 }
 
 export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot {
@@ -513,7 +517,12 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   // Heap objects in label order, so the drawing is stable from step to step.
   heap.sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
 
-  return { frames, heap, activeFrameId: labels.frame(activeInList(program, machine.programEnv)) };
+  return {
+    frames,
+    heap,
+    activeFrameId: labels.frame(activeInList(program, machine.programEnv)),
+    cse: cseSnapshot(machine, program, 0),
+  };
 }
 
 /** The source text of a function definition or lambda. */
@@ -521,4 +530,109 @@ function sourceText(code: string, node: StmtNS.FunctionDef | ExprNS.Lambda): str
   const start = node.startToken.indexInSource;
   const end = node.endToken.indexInSource + node.endToken.lexeme.length;
   return start >= 0 && end <= code.length ? code.slice(start, end) : "";
+}
+
+/* -------------------------------------------------------------------------- */
+/*                         The store as a CSE snapshot                        */
+/* -------------------------------------------------------------------------- */
+
+/** The frames of the function bodies under evaluation (the call stack) and the values in the
+ * program, which keep frames alive the way the CSE machine's control and stash do. */
+function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[] } {
+  const frames: Environment[] = [];
+  const values: Value[] = [];
+  const expr = (e: Expr): void => {
+    switch (e.k) {
+      case "val":
+        values.push(e.v);
+        return;
+      case "block":
+        frames.push(e.env);
+        if (Array.isArray(e.body)) stmts(e.body);
+        else expr(e.body);
+        return;
+      case "bin":
+      case "bool":
+        expr(e.left);
+        expr(e.right);
+        return;
+      case "unary":
+        expr(e.arg);
+        return;
+      case "cond":
+        expr(e.test);
+        expr(e.cons);
+        expr(e.alt);
+        return;
+      case "call":
+        expr(e.callee);
+        e.args.forEach(expr);
+        return;
+      case "list":
+        e.elems.forEach(expr);
+        return;
+      case "sub":
+        expr(e.obj);
+        expr(e.index);
+        return;
+      default:
+        return;
+    }
+  };
+  const stmts = (list: Stmt[]): void => {
+    for (const st of list) {
+      switch (st.k) {
+        case "expr":
+          expr(st.e);
+          break;
+        case "assign":
+          expr(st.value);
+          break;
+        case "subassign":
+          expr(st.obj);
+          expr(st.index);
+          expr(st.value);
+          break;
+        case "return":
+          if (st.e) expr(st.e);
+          break;
+        case "if":
+          expr(st.test);
+          stmts(st.cons);
+          if (st.alt) stmts(st.alt);
+          break;
+        case "while":
+          expr(st.test);
+          break;
+        case "forinit":
+          st.args.forEach(expr);
+          break;
+        case "loop":
+          stmts(st.body);
+          break;
+        default:
+          break;
+      }
+    }
+  };
+  stmts(program);
+  return { frames, values };
+}
+
+/**
+ * The step's store as a CSE machine snapshot (environments only; control and stash empty), made
+ * with the CSE machine plugin's own serializer, so a host can draw it with its CSE machine
+ * visualization exactly as the CSE Machine tab would. Frames that are no longer reachable are
+ * left out, as in the CSE machine's snapshots; a host shows them as dead frames from earlier steps.
+ */
+export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number): CseSnapshot {
+  const { frames, values } = programRoots(program);
+  const active = activeInList(program, machine.programEnv);
+  const callStack = [active, ...frames.reverse(), machine.programEnv];
+  return {
+    stepIndex,
+    control: [],
+    stash: [],
+    environments: serializeEnvChain(callStack, values, [], active),
+  };
 }
