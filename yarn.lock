@@ -1703,6 +1703,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@sourceacademy/common-e-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/common-e-stepper@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/common-stepper": ">=0.0.4"
+  checksum: 10c0/6ccc0037a1c112376dad9a38c4bbc6a359b53c725f2fa905def89c2dae6a6c5879f32682397f3fc32acac8f6dc82635eec1360b49ae9ab971af9f77299c388e4
+  languageName: node
+  linkType: hard
+
 "@sourceacademy/common-stepper@npm:^0.0.1":
   version: 0.0.1
   resolution: "@sourceacademy/common-stepper@npm:0.0.1"
@@ -1733,12 +1742,14 @@ __metadata:
     "@sourceacademy/common-autocomplete": "npm:^0.0.1"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
     "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
+    "@sourceacademy/common-e-stepper": "npm:^0.0.1"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-data-visualizer": "npm:^0.0.1"
+    "@sourceacademy/runner-e-stepper": "npm:^0.0.1"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
@@ -1803,6 +1814,18 @@ __metadata:
   peerDependencies:
     "@sourceacademy/conductor": ">=0.3.0"
   checksum: 10c0/d5e1530c90e9508ed8e32f23d906fdd46696f94ac720c0c7c11c5d57fbe1781c54ca91741c22b099779f2f9937c24b6ecf426daa59fe6db14376e6793414c849
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-e-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-e-stepper@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/common-e-stepper": ">=0.0.0"
+    "@sourceacademy/common-stepper": ">=0.0.4"
+    "@sourceacademy/conductor": ^0.8.0
+    "@sourceacademy/runner-stepper": ">=0.0.1"
+  checksum: 10c0/7a4384d723522afbcc4aff3402e90d8368d19fbd5684ae9de6bc4829d1b1a835c3d88b0d4170f5ca6ac27a1e6a50d55f0eb27c38a31972ee10604c25f0c31dd0
   languageName: node
   linkType: hard
 
