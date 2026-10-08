@@ -56,20 +56,24 @@ CSE machine visualization, it is not drawn, and a builtin value is shown by its 
 
 ## Initial configuration
 
-`G` binds every name the program's top-level statements bind (assignments, `def`s, `for` targets,
-imports), initially unassigned. This matches the CSE machine, and with it `NameError` for a name
-used before its assignment. P is the program's statement list, evaluated in `G`.
+`G` starts empty and grows: a global binding appears when its first assignment (or `def`, `for`
+target, import) executes. This matches the CSE machine, which never pre-allocates module bindings
+(`pyGetGlobalVariable` in `src/engines/cse/utils.ts`), and it matters for a program that shadows a
+builtin later, such as `print(1); print = 0`: the first `print` must still find the builtin.
+Function frames, by contrast, are created with all their locals present but unassigned (see the
+call rule). P is the program's statement list, evaluated in `G`.
 
 ## Reduction rules
 
 Evaluation order, short-circuiting (`and`, `or`, conditional expressions), `if`/`while`/`for`
 unrolling, `break`/`continue`, primitive operators and builtin calls are as in the current stepper
-(`src/conductor/stepper/reduce.ts`). Only the rules involving names, functions and data change. E
+(`src/conductor/stepper/reduce.ts`). The stepper rejects the identity and membership operators
+(`src/conductor/stepper/preprocess.ts`), so the e-stepper defines them itself (see the table). Only the rules involving names, functions and data change. E
 always denotes the current environment of the redex.
 
 | Redex (in E) | Contractum | Store effect |
 |---|---|---|
-| name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. Unassigned binding: `UnboundLocalError` (function frame) or `NameError` (global) |
+| name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnboundLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |
 | `lambda ps: e` | `Ref(#k)` | allocate `#k = Fn(ε, ps, e, E)` |
 | `def f(ps): body` (statement) | statement removed | allocate `#k = Fn(f, ps, body, E)`; bind `f ↦ Ref(#k)` in the frame `f` belongs to |
 | `Ref(#k)(v₁, …, vₙ)` with `#k = Fn(_, ps, body, E')` | `EnvBlock(E'', body)` | new frame `E''`, parent `E'`, binding `psᵢ ↦ vᵢ` (rest parameters: a new list), plus every name the body assigns, unassigned |
@@ -82,7 +86,8 @@ always denotes the current environment of the redex.
 | `Ref(#k)[i] = v` (statement) | statement removed | `#k[i] := v` |
 | `pair(a, b)`, `llist(…)`, `stream(…)` | `Ref(#k)` (outermost cell) | allocate the cells |
 | `set_head(Ref(#k), v)`, `set_tail(…)` | `None` | `#k[0] := v` / `#k[1] := v` |
-| `v is w` | `True` iff same primitive value, or same reference | none |
+| `v is w`, `v is not w` | `True` iff same primitive value or same reference (negated for `is not`), as in the CSE machine (`pyIdentical`) | none |
+| `v in w`, `v not in w` | membership, as in the CSE machine | none |
 
 A statement sequence inside an `EnvBlock` reduces statement by statement, exactly like the current
 stepper's block expression for a multi-statement `def`. When a statement is consumed, it disappears.
@@ -136,17 +141,17 @@ W1 = make_withdraw(100)
 W1(50)
 ```
 
-Initially, `G = { make_withdraw: unassigned, W1: unassigned }`.
+Initially, `G` is empty.
 
-1. The `def make_withdraw` statement is consumed: `#1 = Fn(make_withdraw, [balance], …, G)` and
-   `make_withdraw ↦ #1` in G.
+1. The `def make_withdraw` statement is consumed: `#1 = Fn(make_withdraw, [balance], …, G)`, and
+   `G` gains the binding `make_withdraw ↦ #1`.
 2. `W1 = make_withdraw(100)`: lookup of `make_withdraw` (implicit) and the call happen in one step.
    New frame `E1 = { balance: 100, withdraw: unassigned }`, parent G. The program becomes
    `W1 = EnvBlock(E1, def withdraw…; return withdraw)`.
 3. Inside E1, `def withdraw` is consumed: `#2 = Fn(withdraw, [amount], …, E1)`, `withdraw ↦ #2` in E1.
 4. `return withdraw` looks up `withdraw` in E1 and returns: `W1 = withdraw` (`Ref(#2)`, shown in bold
    as `withdraw`).
-5. `W1 = Ref(#2)` is consumed: `W1 ↦ #2` in G. E1 stays alive, since #2 points to it.
+5. `W1 = Ref(#2)` is consumed: `G` gains `W1 ↦ #2`. E1 stays alive, since #2 points to it.
 6. `W1(50)`: new frame `E2 = { amount: 50 }`, parent **E1** (the defining environment of #2, not the
    caller's). The program becomes `EnvBlock(E2, if balance >= amount: …)`.
 7. `balance >= amount` evaluates in E2: `balance` is found in E1 (100), `amount` in E2 (50), giving
