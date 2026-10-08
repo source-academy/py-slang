@@ -67,8 +67,9 @@ call rule). P is the program's statement list, evaluated in `G`.
 
 Evaluation order, short-circuiting (`and`, `or`, conditional expressions), `if`/`while`/`for`
 unrolling, `break`/`continue`, primitive operators and builtin calls are as in the current stepper
-(`src/conductor/stepper/reduce.ts`). The stepper rejects the identity and membership operators
-(`src/conductor/stepper/preprocess.ts`), so the e-stepper defines them itself (see the table). Only the rules involving names, functions and data change. E
+(`src/conductor/stepper/reduce.ts`). The stepper rejects the identity operators (`src/conductor/stepper/preprocess.ts`), so
+the e-stepper defines `is` and `is not` itself (see the table). The membership operators `in` and
+`not in` are not part of Python §3 or §4. Only the rules involving names, functions and data change. E
 always denotes the current environment of the redex.
 
 | Redex (in E) | Contractum | Store effect |
@@ -87,7 +88,6 @@ always denotes the current environment of the redex.
 | `pair(a, b)`, `llist(…)`, `stream(…)` | `Ref(#k)` (outermost cell) | allocate the cells |
 | `set_head(Ref(#k), v)`, `set_tail(…)` | `None` | `#k[0] := v` / `#k[1] := v` |
 | `v is w`, `v is not w` | `True` iff same primitive value or same reference (negated for `is not`), as in the CSE machine (`pyIdentical`) | none |
-| `v in w`, `v not in w` | membership, as in the CSE machine | none |
 
 A statement sequence inside an `EnvBlock` reduces statement by statement, exactly like the current
 stepper's block expression for a multi-statement `def`. When a statement is consumed, it disappears.
