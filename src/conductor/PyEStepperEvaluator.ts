@@ -15,7 +15,8 @@ import { fetchRunConfig } from "./runConfig";
  * and on each run checks the program (as the CSE evaluator does) and pushes its steps to the host.
  *
  * Like the substitution stepper's evaluator, a run produces no REPL value and the program's output
- * is shown with the steps, not echoed to the REPL. Module imports are not supported yet.
+ * is shown with the steps, not echoed to the REPL. `input()` asks the host for a line, as in the CSE
+ * evaluator (while the steps are computed). Module imports are not supported yet.
  */
 abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
   private readonly eStepper: PyEStepperRunnerPlugin;
@@ -26,7 +27,9 @@ abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
   ) {
     super(conductor);
     registerAutoCompletePlugin(conductor, chapter);
-    this.eStepper = conductor.registerPlugin(PyEStepperRunnerPlugin, chapter);
+    this.eStepper = conductor.registerPlugin(PyEStepperRunnerPlugin, chapter, prompt =>
+      this.conductor.requestInput(prompt),
+    );
     conductor.hostLoadPlugin(E_STEPPER_DIRECTORY_ID);
   }
 

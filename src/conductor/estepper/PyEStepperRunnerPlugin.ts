@@ -4,6 +4,7 @@ import type { IChannel, IConduit } from "@sourceacademy/conductor/conduit";
 import { BaseEStepperRunnerPlugin } from "@sourceacademy/runner-e-stepper";
 
 import type { StmtNS } from "../../ast-types";
+import type { RequestInput } from "./engine";
 import { DEFAULT_STEP_LIMIT, getEStepperSteps } from "./getSteps";
 import { eStepperSyntaxProfile } from "./syntaxProfile";
 
@@ -22,6 +23,8 @@ export class PyEStepperRunnerPlugin extends BaseEStepperRunnerPlugin<StmtNS.File
     // which has the same shape as the e-stepper's.
     channels: IChannel<StepperMessage>[],
     private readonly chapter: number,
+    /** How `input()` asks the user for a line (the evaluator passes the host's `requestInput`). */
+    private readonly requestInput?: RequestInput,
   ) {
     super(conduit, channels);
   }
@@ -35,7 +38,7 @@ export class PyEStepperRunnerPlugin extends BaseEStepperRunnerPlugin<StmtNS.File
   }
 
   getSteps(ast: StmtNS.FileInput): Promise<EStepperStep[]> {
-    return getEStepperSteps(ast, this.code, this.chapter, this.stepLimit);
+    return getEStepperSteps(ast, this.code, this.chapter, this.stepLimit, this.requestInput);
   }
 
   protected override getSyntaxProfile(): SyntaxProfile {

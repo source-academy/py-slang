@@ -8,6 +8,7 @@ import type {
   SerializedStepperNode,
 } from "@sourceacademy/common-e-stepper";
 
+import { NO_INPUT_MESSAGE } from "../../conductor/estepper/engine";
 import { EStepperProgramError, runEStepper } from "../../conductor/estepper/getSteps";
 import { parse } from "../../parser";
 
@@ -258,6 +259,29 @@ describe("protocol consistency", () => {
       walk(step.ast);
       for (const m of step.markers ?? []) if (m.redexId) expect(ids.has(m.redexId)).toBe(true);
     }
+  });
+});
+
+describe("input()", () => {
+  const PROGRAM = `name = input("Name? ")\nage = input()\nprint(name, age)\n`;
+
+  test("asks the host for each line, with its prompt", async () => {
+    const prompts: (string | undefined)[] = [];
+    const answers = ["Ada", "36"];
+    const result = await runEStepper(parse(PROGRAM), PROGRAM, 3, undefined, prompt => {
+      prompts.push(prompt);
+      return Promise.resolve(answers.shift()!);
+    });
+    expect(result.error).toBeUndefined();
+    expect(prompts).toEqual(["Name? ", undefined]);
+    // As in CPython and the CSE machine, input(prompt) writes the prompt to the output.
+    expect(result.output).toBe("Name? Ada 36\n");
+  });
+
+  test("without a host, input() stops evaluation instead of reading an empty line", async () => {
+    const result = await run(PROGRAM);
+    expect(result.error).toBe(NO_INPUT_MESSAGE);
+    expect(result.output).toBe("Name? ");
   });
 });
 

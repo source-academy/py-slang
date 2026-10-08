@@ -18,7 +18,7 @@ import type {
 import type { StmtNS } from "../../ast-types";
 import { analyze } from "../../resolver/analysis";
 import { VARIANT_GROUPS } from "../../runner";
-import { type Contraction, Machine } from "./engine";
+import { type Contraction, Machine, type RequestInput } from "./engine";
 import { ProgramSerializer, snapshotStore, type StoreSnapshot } from "./serialize";
 import { type Expr, type Stmt, translateStmts } from "./terms";
 import { describeValue } from "./text";
@@ -70,10 +70,11 @@ async function prepare(
   fileInput: StmtNS.FileInput,
   code: string,
   chapter: number,
+  requestInput?: RequestInput,
 ): Promise<Machine> {
   const groups = VARIANT_GROUPS[chapter];
   if (!groups) throw new Error(`Invalid chapter: ${chapter}`);
-  const machine = await Machine.create(code, chapter, groups);
+  const machine = await Machine.create(code, chapter, groups, requestInput);
   // As the CSE evaluator: the prelude's names are known to the resolver like builtins.
   const preludeNames = Object.keys(machine.programEnv.tail?.head ?? {});
   const errors = analyze(fileInput, code, chapter, groups, preludeNames);
@@ -90,13 +91,18 @@ export async function checkEStepperProgram(
   await prepare(fileInput, code, chapter);
 }
 
+/**
+ * Runs a program on the e-stepper. `requestInput` is how `input()` asks the user for a line; when
+ * it is absent (the CLI, tests), `input()` stops evaluation with an error.
+ */
 export async function runEStepper(
   fileInput: StmtNS.FileInput,
   code: string,
   chapter: number,
   stepLimit = DEFAULT_STEP_LIMIT,
+  requestInput?: RequestInput,
 ): Promise<EStepperRun> {
-  const machine = await prepare(fileInput, code, chapter);
+  const machine = await prepare(fileInput, code, chapter, requestInput);
   let program: Stmt[] = translateStmts(fileInput.statements);
   const steps: Step[] = [];
 
@@ -198,6 +204,7 @@ export async function getEStepperSteps(
   code: string,
   chapter: number,
   stepLimit = DEFAULT_STEP_LIMIT,
+  requestInput?: RequestInput,
 ): Promise<EStepperStep[]> {
-  return (await runEStepper(fileInput, code, chapter, stepLimit)).steps;
+  return (await runEStepper(fileInput, code, chapter, stepLimit, requestInput)).steps;
 }

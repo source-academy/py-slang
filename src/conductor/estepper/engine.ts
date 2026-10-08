@@ -168,7 +168,12 @@ export class Machine {
    * Sets up the store for a program: the chapter's builtins, and its library prelude evaluated (on
    * the CSE machine) into the prelude frame, exactly as the CSE evaluator does.
    */
-  static async create(code: string, variant: number, groups: Group[]): Promise<Machine> {
+  static async create(
+    code: string,
+    variant: number,
+    groups: Group[],
+    requestInput?: RequestInput,
+  ): Promise<Machine> {
     const context = new Context();
     context.variant = variant;
     for (const group of groups) {
@@ -178,7 +183,7 @@ export class Machine {
     const printed = { text: "" };
     context.streams = makeStreams(text => {
       printed.text += text;
-    });
+    }, requestInput);
     const preludeText = groups.map(g => g.prelude ?? "").join("\n");
     if (preludeText.trim()) {
       const ast = parse(preludeText + "\n");
@@ -977,18 +982,45 @@ export class Machine {
   }
 }
 
-function makeStreams(onOutput: (text: string) => void) {
+/** Asks the user for a line of input (the host's `requestInput`), showing `prompt` if given. */
+export type RequestInput = (prompt?: string) => Promise<string>;
+
+/** The message `input()` stops with when there is no host to ask (e.g. the CLI). */
+export const NO_INPUT_MESSAGE =
+  "input() is not supported here: there is no way to ask for input (the e-stepper can ask only when run in the Source Academy)";
+
+function makeStreams(onOutput: (text: string) => void, requestInput?: RequestInput) {
   const stdoutStream = new WritableStream<string>({ write: onOutput });
   const stderrStream = new WritableStream<unknown>({ write() {} });
-  const stdinStream = new ReadableStream<string>({
-    start(controller) {
-      controller.close();
+  // As the CSE evaluator's `createInputStream`: each read asks the host for one line, with the
+  // prompt `input()` set just before. Without a host, reading fails instead of returning "" (which
+  // would let the program continue as if the user had entered an empty line).
+  let prompt: string | undefined;
+  const stdinStream = new ReadableStream<string>(
+    {
+      async pull(controller) {
+        if (!requestInput) {
+          controller.error(new Error(NO_INPUT_MESSAGE));
+          return;
+        }
+        const ask = prompt;
+        prompt = undefined;
+        controller.enqueue(await requestInput(ask));
+      },
     },
-  });
+    // Pull only on an actual read, not eagerly at construction (see `createInputStream`).
+    { highWaterMark: 0 },
+  );
   return {
     initialised: true as const,
     stdout: { stream: stdoutStream, writer: stdoutStream.getWriter() },
     stderr: { stream: stderrStream, writer: stderrStream.getWriter() },
-    stdin: { stream: stdinStream, reader: stdinStream.getReader(), setNextPrompt: () => {} },
+    stdin: {
+      stream: stdinStream,
+      reader: stdinStream.getReader(),
+      setNextPrompt: (next?: string) => {
+        prompt = next;
+      },
+    },
   };
 }
