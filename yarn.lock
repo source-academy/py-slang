@@ -1696,10 +1696,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-data-visualizer@npm:^0.0.1":
-  version: 0.0.1
-  resolution: "@sourceacademy/common-data-visualizer@npm:0.0.1"
-  checksum: 10c0/ce926ba006bf5a6ed6d06fd318c51089be4015596b0b98a52b2160fde1834e1f968a4bdbfb9685e6990505836cdf2c6ac42ce77abfbf3ab58fcb3ed0d5e2402d
+"@sourceacademy/common-data-visualizer@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@sourceacademy/common-data-visualizer@npm:0.0.2"
+  checksum: 10c0/7d5cf0e0c0d61837416b4cfbea87f06f335e8ca8e61036ed95533d878b4b93afd90815bc5312a5adcff0dbbc19776e4c8f48ae883512a5712e10b8ad0d153bbf
   languageName: node
   linkType: hard
 
@@ -1732,7 +1732,7 @@ __metadata:
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-autocomplete": "npm:^0.0.1"
     "@sourceacademy/common-cse-machine": "npm:^0.3.0"
-    "@sourceacademy/common-data-visualizer": "npm:^0.0.1"
+    "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
