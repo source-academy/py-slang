@@ -3,6 +3,7 @@ import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-vi
 
 import { Value } from "../../engines/cse/stash";
 import { toPythonString } from "../../stdlib/utils";
+import { noneNode } from "./noneNode";
 
 /**
  * Converts one py-slang runtime {@link Value} into a {@link SerializedDataVisualizerNode}. Purely
@@ -20,7 +21,7 @@ export function toDataVisualizerNode(
 ): SerializedDataVisualizerNode {
   switch (value.type) {
     case "none":
-      return { type: "empty" };
+      return noneNode();
     case "list": {
       const { refId, alreadySeen } = refs.get(value);
       if (alreadySeen) {

@@ -37,7 +37,7 @@ describe("toDataVisualizerNodePy2Js", () => {
 
   test("converts None to the empty terminator", () => {
     const refs = createRefIdAllocator();
-    expect(toDataVisualizerNodePy2Js(null, refs)).toEqual({ type: "empty" });
+    expect(toDataVisualizerNodePy2Js(null, refs)).toEqual({ type: "empty", displayValue: "None" });
   });
 
   test("converts a pair (a length-2 PyList) to an array node", () => {

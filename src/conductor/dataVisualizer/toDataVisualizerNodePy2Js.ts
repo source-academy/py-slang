@@ -2,6 +2,7 @@ import type { RefIdAllocator } from "@sourceacademy/runner-data-visualizer";
 import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-visualizer";
 
 import { PyOpaque, type PyValue, pyStr } from "../../engines/py2js/runtime";
+import { noneNode } from "./noneNode";
 
 /**
  * Converts one py2js runtime {@link PyValue} into a {@link SerializedDataVisualizerNode}. The py2js
@@ -42,7 +43,7 @@ export function toDataVisualizerNodePy2Js(
       return { type: "function", refId, displayValue: pyStr(value) };
     }
     default:
-      if (value === null) return { type: "empty" };
+      if (value === null) return noneNode();
       if (Array.isArray(value)) {
         const { refId, alreadySeen } = refs.get(value);
         if (alreadySeen) return { type: "ref", refId };

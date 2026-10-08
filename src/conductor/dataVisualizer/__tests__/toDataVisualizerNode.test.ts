@@ -30,7 +30,7 @@ describe("toDataVisualizerNode", () => {
 
   test("converts None to the empty terminator", () => {
     const refs = createRefIdAllocator();
-    expect(toDataVisualizerNode({ type: "none" }, refs)).toEqual({ type: "empty" });
+    expect(toDataVisualizerNode({ type: "none" }, refs)).toEqual({ type: "empty", displayValue: "None" });
   });
 
   test("converts a pair (a length-2 ListValue) to an array node", () => {

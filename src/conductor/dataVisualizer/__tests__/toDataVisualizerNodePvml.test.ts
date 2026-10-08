@@ -36,7 +36,7 @@ describe("toDataVisualizerNodePvml", () => {
   });
 
   test("converts None to the empty terminator", () => {
-    expect(toDataVisualizerNodePvml(null, createRefIdAllocator())).toEqual({ type: "empty" });
+    expect(toDataVisualizerNodePvml(null, createRefIdAllocator())).toEqual({ type: "empty", displayValue: "None" });
   });
 
   test("converts a pair to an array node", () => {
