@@ -311,6 +311,9 @@ export function activeInList(list: Stmt[], env: Environment): Environment {
 
 type HeapObj = ListValue | Closure;
 
+const isList = (obj: HeapObj): obj is ListValue => "type" in obj && obj.type === "list";
+const asValue = (obj: HeapObj): Value => (isList(obj) ? obj : { type: "closure", closure: obj });
+
 /** Collects the frames and heap objects a set of roots reaches (library internals excluded). */
 class Reach {
   readonly frames = new Set<Environment>();
@@ -446,6 +449,15 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   all.frame(machine.programEnv);
   all.stmts(program);
   for (const env of machine.createdEnvs) all.frame(env);
+  // And every object shown at an earlier step, as the CSE machine keeps showing objects that
+  // have become garbage (e.g. the list `[None]` once `[None] * 3` has been evaluated).
+  for (const obj of machine.shownObjects.keys()) all.value(asValue(obj));
+  const active = activeInList(program, machine.programEnv);
+  for (const obj of all.objects) {
+    if (!machine.shownObjects.has(obj)) {
+      machine.shownObjects.set(obj, isList(obj) ? active : obj.environment);
+    }
+  }
 
   const labels = machine.labels;
   const valueOf = (v: Value | typeof UNASSIGNED): EStepperValue => {
@@ -493,7 +505,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   for (const item of all.visited) {
     if (!all.objects.has(item as HeapObj)) continue;
     const obj = item as HeapObj;
-    if ("type" in obj && obj.type === "list") {
+    if (isList(obj)) {
       heap.push({
         kind: "list",
         id: labels.object(obj),
@@ -501,7 +513,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
         isGarbage: !live.objects.has(obj),
       });
     } else {
-      const closure = obj as Closure;
+      const closure = obj;
       const node = closure.node;
       heap.push({
         kind: "function",
@@ -520,7 +532,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   return {
     frames,
     heap,
-    activeFrameId: labels.frame(activeInList(program, machine.programEnv)),
+    activeFrameId: labels.frame(active),
     cse: cseSnapshot(machine, program, 0),
   };
 }
@@ -638,6 +650,31 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     code: machine.code,
   };
   const frameId = (env: Environment) => ids.frames(env) ?? env.id;
+
+  // Objects shown at earlier steps that nothing here refers to any more: each goes into the heap
+  // of the frame it belongs to (as anonymous heap objects), so a host draws it there, as dead.
+  // A function object's frame is serialized too, through the values the chain starts from.
+  const reached = new Reach(machine);
+  for (const env of callStack) reached.frame(env);
+  for (const v of values) reached.value(v);
+  const unreferenced = [...machine.shownObjects.keys()].filter(obj => !reached.objects.has(obj));
+  for (const obj of unreferenced) if (!isList(obj)) reached.frame(obj.environment);
+  const garbage = unreferenced.filter(obj => !reached.objects.has(obj));
+  const environments = serializeEnvChain(
+    callStack,
+    [...values, ...garbage.filter(obj => !isList(obj)).map(asValue)],
+    [],
+    active,
+    ids,
+  );
+  for (const obj of garbage) {
+    const home = machine.shownObjects.get(obj)!;
+    const frame =
+      environments.find(f => f.id === frameId(home)) ??
+      environments.find(f => f.id === frameId(machine.programEnv));
+    if (!frame) continue;
+    (frame.heapObjects ??= []).push(serializeValue(asValue(obj), frame.id, ids));
+  }
   return {
     stepIndex,
     // What the program still holds, as the CSE machine's control and stash would: a frame for
@@ -647,6 +684,6 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     // are not shown as dead.
     control: frames.map(env => ({ displayText: "ENVIRONMENT", metadata: { envId: frameId(env) } })),
     stash: values.map(v => serializeValue(v, frameId(active), ids)),
-    environments: serializeEnvChain(callStack, values, [], active, ids),
+    environments,
   };
 }

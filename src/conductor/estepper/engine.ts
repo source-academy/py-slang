@@ -46,7 +46,7 @@ import {
   evaluateUnaryExpression,
   isFalsy,
 } from "../../engines/cse/operators";
-import { Stash, type Value } from "../../engines/cse/stash";
+import { type ListValue, Stash, type Value } from "../../engines/cse/stash";
 import {
   evaluateForIterator,
   evaluateListAssignment,
@@ -146,6 +146,10 @@ export class Machine {
   readonly text: TextContext;
   /** Frames created by calls the program makes (shown even once they are garbage). */
   readonly createdEnvs: Environment[] = [];
+  /** Every heap object shown at some step so far (shown from then on, greyed out once garbage),
+   * with the frame it belongs to: a function object's defining frame, or for a list, the frame
+   * that was active when it was first shown. */
+  readonly shownObjects = new Map<ListValue | Closure, Environment>();
   /** Everything the program has printed so far (written by `print` through the CSE streams). */
   private readonly printed: { text: string };
   /** Bindings read during the current contraction. */
