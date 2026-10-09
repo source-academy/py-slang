@@ -22,7 +22,7 @@ import type { Closure } from "../../engines/cse/closure";
 import { type Environment, UNASSIGNED } from "../../engines/cse/environment";
 import type { ListValue, Value } from "../../engines/cse/stash";
 import { toPythonString } from "../../stdlib/utils";
-import { serializeEnvChain } from "../plugins/PyCseMachinePlugin";
+import { serializeEnvChain, serializeValue } from "../plugins/PyCseMachinePlugin";
 import type { Machine } from "./engine";
 import { type Expr, type Stmt, translateExpr, translateStmts } from "./terms";
 import { functionName } from "./text";
@@ -629,17 +629,24 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
   const { frames, values } = programRoots(program);
   const active = activeInList(program, machine.programEnv);
   const callStack = [active, ...frames.reverse(), machine.programEnv];
+  // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
+  // stand for, so a host can tell which object a reference in the program pane means, and which
+  // frame an environment bracket does.
+  const ids = {
+    objects: (obj: object) => machine.labels.peekObject(obj),
+    frames: (env: Environment) => machine.labels.peekFrame(env),
+    code: machine.code,
+  };
+  const frameId = (env: Environment) => ids.frames(env) ?? env.id;
   return {
     stepIndex,
-    control: [],
-    stash: [],
-    // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
-    // stand for, so a host can tell which object a reference in the program pane means, and which
-    // frame an environment bracket does.
-    environments: serializeEnvChain(callStack, values, [], active, {
-      objects: obj => machine.labels.peekObject(obj),
-      frames: env => machine.labels.peekFrame(env),
-      code: machine.code,
-    }),
+    // What the program still holds, as the CSE machine's control and stash would: a frame for
+    // each function body under evaluation (an ENVIRONMENT instruction), and the values in the
+    // program (results not yet used, e.g. a function just returned). A host does not draw them
+    // here (environments only), but counts them as roots, so frames and objects they keep alive
+    // are not shown as dead.
+    control: frames.map(env => ({ displayText: "ENVIRONMENT", metadata: { envId: frameId(env) } })),
+    stash: values.map(v => serializeValue(v, frameId(active), ids)),
+    environments: serializeEnvChain(callStack, values, [], active, ids),
   };
 }
