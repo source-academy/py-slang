@@ -107,12 +107,20 @@ function formatValue(v: Value, seen: Set<object> = new Set()): string {
 }
 
 /**
- * Names the heap objects (lists and closures) a snapshot's values refer to, for
- * `SerializedValue.objectId`; `undefined` leaves an object unnamed. The CSE machine itself names
- * none; the e-stepper names them with its own labels (`#3`), so a host drawing its snapshots can
- * tell it which object is meant.
+ * Ids for a snapshot's heap objects and frames. The CSE machine leaves both unset: objects are
+ * unnamed (no `SerializedValue.objectId`) and frames keep their environments' ids. The e-stepper
+ * gives both its own labels (`#3`, `E2`, `Global`), so a host drawing its snapshots can tell which
+ * object or frame a reference or bracket in the program pane means. `undefined` falls back to the
+ * default.
  */
-export type ObjectIds = (obj: object) => string | undefined;
+export interface SnapshotIds {
+  /** For `SerializedValue.objectId`: names a list (its Value) or a closure (its `Closure`). */
+  objects?: (obj: object) => string | undefined;
+  /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
+  frames?: (env: Environment) => string | undefined;
+}
+
+const frameId = (env: Environment, ids: SnapshotIds): string => ids.frames?.(env) ?? env.id;
 
 /**
  * `path` holds the lists being serialized around `v`. A list that contains itself
@@ -123,7 +131,7 @@ export type ObjectIds = (obj: object) => string | undefined;
 function serializeValue(
   v: Value | typeof UNASSIGNED,
   envId = "",
-  objectIds?: ObjectIds,
+  ids: SnapshotIds = {},
   path: Set<object> = new Set(),
 ): SerializedValue {
   // A local that createEnvironment preallocated at CALL time but that hasn't been
@@ -136,8 +144,8 @@ function serializeValue(
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
     return withObjectId(
-      { ...base, metadata: { closureFrameId: cl.environment.id, params, funcName } },
-      objectIds?.(cl),
+      { ...base, metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName } },
+      ids.objects?.(cl),
     );
   }
   if (v.type === "list") {
@@ -148,11 +156,11 @@ function serializeValue(
           label: "list",
           metadata: { id: getListId(v), envId, elements: [], backReference: true },
         },
-        objectIds?.(v),
+        ids.objects?.(v),
       );
     }
     path.add(v);
-    const elements = v.value.map((el: Value) => serializeValue(el, envId, objectIds, path));
+    const elements = v.value.map((el: Value) => serializeValue(el, envId, ids, path));
     path.delete(v);
     return withObjectId(
       {
@@ -160,7 +168,7 @@ function serializeValue(
         label: "list",
         metadata: { id: getListId(v), envId, elements },
       },
-      objectIds?.(v),
+      ids.objects?.(v),
     );
   }
   return base;
@@ -414,7 +422,7 @@ function serializeEnvChain(
   stashValues: Value[],
   controlItems: ControlStackItem[],
   activeEnv: Environment,
-  objectIds?: ObjectIds,
+  ids: SnapshotIds = {},
 ): SerializedEnvFrame[] {
   const seen = new Set<string>();
   const queue: Environment[] = [];
@@ -455,7 +463,7 @@ function serializeEnvChain(
   const visibleParentId = (env: Environment): string | null => {
     let cur = env.tail;
     while (cur) {
-      if (cur.name !== "prelude") return cur.id;
+      if (cur.name !== "prelude") return frameId(cur, ids);
       cur = cur.tail;
     }
     return null;
@@ -465,16 +473,18 @@ function serializeEnvChain(
     .filter(env => env.name !== "prelude")
     .map(
       (env): LabelledEnvFrame => ({
-        id: env.id,
+        id: frameId(env, ids),
         name: env.name,
         label: frameLabel(env),
         parentId: visibleParentId(env),
-        closureFrameId: env.closure?.environment?.id,
+        closureFrameId: env.closure?.environment
+          ? frameId(env.closure.environment, ids)
+          : undefined,
         bindings: Object.entries(env.head)
           .filter(([name]) => name !== "__program__")
           .map(([name, val]) => ({
             name,
-            value: serializeValue(val, env.id, objectIds),
+            value: serializeValue(val, frameId(env, ids), ids),
           })),
         isActive: env.id === activeEnv.id,
         isOnCallStack: callStackIds.has(env.id),
