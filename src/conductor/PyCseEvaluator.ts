@@ -150,7 +150,9 @@ abstract class PyCseEvaluatorBase extends BasicEvaluator {
       // snapshots collected, CSE tab never appears) so stdout/errors are emitted.
       if (this.variant >= 3) {
         const config = await fetchRunConfig(this.conductor);
-        const maxSnapshots = config.stepLimit ?? 1000;
+        // The CSE tab's slider counts steps taken, from 0 (the first snapshot): its right end is
+        // one less than the number of snapshots, and must reach the step limit.
+        const maxSnapshots = (config.stepLimit ?? 1000) + 1;
         markBreakpoints(ast, config.breakpointLines ?? []);
 
         const { snapshots, breakpointSteps } = await collectSnapshots(
