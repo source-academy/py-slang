@@ -798,64 +798,53 @@ export class Machine {
         const step = await this.reduceExpr(head.test, env);
         if (step) return this.stmtStep(head, rest, { ...head, test: step.node }, step.c);
         const test = this.resolve(head.test, env);
+        const isLoop = head.src instanceof StmtNS.While;
         if (test.type !== "bool") {
           this.enter(env);
           handleRuntimeError(
             this.context,
-            new ConditionNotBoolError(
-              this.code,
-              head.src.condition,
-              this.context,
-              test.type,
-              "if condition",
-            ),
+            isLoop
+              ? new PyTypeError(this.code, head.src, this.context, test.type)
+              : new ConditionNotBoolError(
+                  this.code,
+                  head.src.condition,
+                  this.context,
+                  test.type,
+                  "if condition",
+                ),
           );
         }
         const branch = test.value ? head.cons : (head.alt ?? []);
+        const condition = `condition is ${test.value ? "True" : "False"}`;
         return {
           kind: "step",
           list: [...branch, ...rest],
           c: {
             pre: head,
             before: "Evaluating if statement",
-            after: `Evaluated if statement: condition is ${test.value ? "True" : "False"}`,
+            after: isLoop
+              ? `Evaluated if statement: ${condition}, ${test.value ? "run the loop body" : "the loop ends"}`
+              : `Evaluated if statement: ${condition}`,
           },
         };
       }
       case "while": {
-        const step = await this.reduceExpr(head.test, env);
-        if (step) return this.stmtStep(head, rest, { ...head, test: step.node }, step.c);
-        const test = this.resolve(head.test, env);
-        if (test.type !== "bool") {
-          this.enter(env);
-          handleRuntimeError(
-            this.context,
-            new PyTypeError(this.code, head.src, this.context, test.type),
-          );
-        }
-        if (!test.value) {
-          return this.removed(
-            head,
-            rest,
-            "Evaluating while statement",
-            "Evaluated while statement: condition is False, the loop ends",
-          );
-        }
-        const loop: LoopStmt = {
-          k: "loop",
-          body: translateStmts(head.src.body),
-          next: { k: "while", test: translateExpr(head.src.condition), src: head.src },
+        // The textbook rule: `while test: body` is `if test: (body; while test: body)`. The loop
+        // stays in the program, in full, while its test is evaluated.
+        const loop: LoopStmt = { k: "loop", body: translateStmts(head.src.body), next: head };
+        const unfolded: Stmt = {
+          k: "if",
+          test: translateExpr(head.src.condition),
+          cons: [loop],
+          alt: null,
+          src: head.src,
         };
-        return {
-          kind: "step",
-          list: [loop, ...rest],
-          c: {
-            pre: head,
-            post: loop,
-            before: "Evaluating while statement",
-            after: "Evaluated while statement: condition is True, run the body",
-          },
-        };
+        return this.stmtStep(head, rest, unfolded, {
+          pre: head,
+          post: unfolded,
+          before: "Unfolding the while loop",
+          after: "Unfolded the while loop into an if statement whose body ends with the loop",
+        });
       }
       case "forinit": {
         const r = await this.reduceChildren(head.args, env);

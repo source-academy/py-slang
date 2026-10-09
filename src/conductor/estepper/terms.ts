@@ -176,15 +176,17 @@ export interface ReturnStmt {
   src: StmtNS.Return;
 }
 
+/** An `if` statement, or a `while` loop unfolded into `if test: (body; while test: body)`. */
 export interface IfStmt {
   k: "if";
   test: Expr;
   cons: Stmt[];
   alt: Stmt[] | null;
-  src: StmtNS.If;
+  src: StmtNS.If | StmtNS.While;
 }
 
-/** A `while` loop about to test its condition. Its body is translated afresh for each iteration. */
+/** A `while` loop, as written: it unfolds into an `if` (see {@link IfStmt}), whose test is then
+ * evaluated. Its body is translated afresh for each iteration. */
 export interface WhileStmt {
   k: "while";
   test: Expr;
