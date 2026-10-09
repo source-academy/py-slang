@@ -72,6 +72,11 @@ the e-stepper defines `is` and `is not` itself (see the table). The membership o
 `not in` are not part of Python §3 or §4. Only the rules involving names, functions and data change. E
 always denotes the current environment of the redex.
 
+A `while` loop unfolds by the textbook rule before its test is evaluated:
+`while test: body` becomes `if test: (body; while test: body)`. The loop stays in the program, in
+full, while the test is evaluated, so the program and the environment always hold all that is
+needed to continue by hand.
+
 | Redex (in E) | Contractum | Store effect |
 |---|---|---|
 | name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnboundLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |

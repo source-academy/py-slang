@@ -204,6 +204,66 @@ describe("loops", () => {
     ]);
   });
 
+  test("a while loop unfolds into an if statement whose body ends with the loop", async () => {
+    const { steps, output } = await run(`i = 0\nwhile i < 2:\n    i = i + 1\nprint(i)\n`);
+    expect(output).toBe("2\n");
+    const iteration = [
+      "Unfolded the while loop into an if statement whose body ends with the loop",
+      "Looked up i in the global frame: N",
+      "Evaluated N < 2: True",
+      "Evaluated if statement: condition is True, run the loop body",
+      "Looked up i in the global frame: N",
+      "Evaluated N + 1: M",
+      "Assigned i = M in the global frame",
+      "Finished the loop body, back to the loop",
+    ];
+    const nth = (n: number) =>
+      iteration.map(s => s.replace(/N/g, `${n}`).replace(/M/g, `${n + 1}`));
+    expect(story(steps)).toEqual([
+      "Start of evaluation",
+      "Assigned i = 0 in the global frame",
+      ...nth(0),
+      ...nth(1),
+      "Unfolded the while loop into an if statement whose body ends with the loop",
+      "Looked up i in the global frame: 2",
+      "Evaluated 2 < 2: False",
+      "Evaluated if statement: condition is False, the loop ends",
+      "Looked up i in the global frame: 2",
+      "Ran print(2)",
+      "Evaluation complete",
+    ]);
+    // While the test is evaluated, the loop is in the program in full, test included: in the if
+    // statement's body, after the loop body.
+    const testing = steps.find(s => s.markers?.[0]?.explanation === "Evaluated 0 < 2: True")!;
+    const find = (node: unknown, type: string): SerializedStepperNode | undefined => {
+      if (Array.isArray(node)) {
+        for (const n of node) {
+          const found = find(n, type);
+          if (found) return found;
+        }
+      } else if (node && typeof node === "object") {
+        if ((node as SerializedStepperNode).type === type) return node as SerializedStepperNode;
+        for (const n of Object.values(node)) {
+          const found = find(n, type);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+    const unfolded = find(testing.ast, "IfStatement")!;
+    expect(find(unfolded.test, "Literal")).toMatchObject({ raw: "True" });
+    const loop = find(unfolded.consequent, "WhileStatement")!;
+    expect(loop.test).toMatchObject({
+      type: "BinaryExpression",
+      left: { type: "Identifier", name: "i" },
+    });
+  });
+
+  test("a while loop's condition must be a bool, as in the CSE machine", async () => {
+    const { error } = await run(`while 1:\n    break\n`);
+    expect(error).toMatch(/TypeError/);
+  });
+
   test("break ends the loop, continue starts the next iteration", async () => {
     const { steps } = await run(`while True:\n    break\nfor i in range(1):\n    continue\n`);
     expect(story(steps)).toContain("Evaluated break: the loop ends");
