@@ -14,6 +14,7 @@ import { Context } from "../../engines/cse/context";
 import { Control } from "../../engines/cse/control";
 import { Stash } from "../../engines/cse/stash";
 import { EStepperProgramError, runEStepper } from "../../conductor/estepper/getSteps";
+import { markBreakpoints } from "../../breakpoints";
 import { parse } from "../../parser";
 
 const run = (code: string, chapter = 3, stepLimit?: number) =>
@@ -832,6 +833,70 @@ describe("breakpoints", () => {
   test("other builtin calls are not stops", async () => {
     const { steps } = await run("print(1)\nabs(-2)\n");
     expect(stops(steps)).toEqual([]);
+  });
+});
+
+describe("gutter breakpoints", () => {
+  /** Runs `code` with the gutter's breakpoints on `lines`, as the evaluator does. */
+  const runWith = (code: string, lines: number[]) => {
+    const ast = parse(code);
+    markBreakpoints(ast, lines);
+    return runEStepper(ast, code, 3);
+  };
+  const stops = (steps: EStepperStep[]): string[] =>
+    steps
+      .filter(s => s.markers?.some(m => m.redexNodeType === "DebuggerStatement"))
+      .map(s => s.markers?.[0]?.explanation ?? "");
+
+  test("a flagged statement is a stop, on the step that evaluates it", async () => {
+    const { steps } = await runWith("x = 1\ny = 2\nz = 3\n", [2]);
+    expect(stops(steps)).toEqual(["Assigning y = 2"]);
+  });
+
+  test("no flagged lines, no stops", async () => {
+    const { steps } = await runWith("x = 1\ny = 2\n", []);
+    expect(stops(steps)).toEqual([]);
+  });
+
+  test("a statement of several steps is a stop once, at its first step", async () => {
+    const { steps } = await runWith("x = 1\ny = x + x\nz = y\n", [2]);
+    expect(stops(steps)).toHaveLength(1);
+    expect(stops(steps)[0]).toMatch(/x/);
+    // ...and it is the statement's first step: the program still shows `y = x + x` in full.
+    const stop = steps.find(s => s.markers?.some(m => m.redexNodeType === "DebuggerStatement"))!;
+    expect(stop.markers?.[0].redexType).toBe("beforeMarker");
+  });
+
+  test("a statement in a function body is a stop at every call", async () => {
+    const { steps } = await runWith("def f(a):\n    b = a\n    return b\nf(1)\nf(2)\n", [2]);
+    expect(stops(steps)).toHaveLength(2);
+  });
+
+  test("a line outside any statement stops at the next one, as for the CSE machine", async () => {
+    const { steps } = await runWith("x = 1\n\ny = 2\n", [2]);
+    expect(stops(steps)).toEqual(["Assigning y = 2"]);
+  });
+
+  test("a loop's line stops, and the loop still finishes", async () => {
+    const { steps, error } = await runWith("i = 0\nwhile i < 2:\n    i = i + 1\n", [2]);
+    expect(error).toBeUndefined();
+    expect(stops(steps).length).toBeGreaterThanOrEqual(1);
+    expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+  });
+
+  test("a flagged branch statement is a stop of its own, also when it is the branch's only statement", async () => {
+    const { steps } = await runWith("if True:\n    x = 1\ny = 2\n", [1, 2]);
+    expect(stops(steps)).toHaveLength(2);
+    expect(stops(steps)).toContain("Assigning x = 1");
+    // ...and the same with a statement before and after it in the branch.
+    const longer = await runWith("if True:\n    w = 0\n    x = 1\n    z = 2\n", [1, 3]);
+    expect(stops(longer.steps)).toHaveLength(2);
+    expect(stops(longer.steps)).toContain("Assigning x = 1");
+  });
+
+  test("a breakpoint() on a flagged line is still one stop", async () => {
+    const { steps } = await runWith("x = 1\nbreakpoint()\n", [2]);
+    expect(stops(steps)).toHaveLength(1);
   });
 });
 

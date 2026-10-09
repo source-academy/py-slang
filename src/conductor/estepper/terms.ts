@@ -238,7 +238,7 @@ export interface UnsupportedStmt {
   src: StmtNS.Stmt;
 }
 
-export type Stmt =
+export type Stmt = (
   | ExprStmt
   | AssignStmt
   | SubAssignStmt
@@ -251,7 +251,14 @@ export type Stmt =
   | LoopStmt
   | SimpleStmt
   | ScopeStmt
-  | UnsupportedStmt;
+  | UnsupportedStmt
+) & {
+  /**
+   * Set once a gutter breakpoint on the statement has fired (see `Machine.stepList`), so that its
+   * next steps, while it is partly evaluated, are not stops too.
+   */
+  breakpointFired?: boolean;
+};
 
 /* -------------------------------------------------------------------------- */
 /*                                 Translation                                */

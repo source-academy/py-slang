@@ -3,6 +3,7 @@ import { ConductorError, EvaluatorSyntaxError } from "@sourceacademy/conductor/c
 import { BasicEvaluator, type IRunnerPlugin } from "@sourceacademy/conductor/runner";
 import { RunnerStatus } from "@sourceacademy/conductor/types";
 
+import { markBreakpoints } from "../breakpoints";
 import { parse } from "../parser";
 import { checkEStepperProgram, EStepperProgramError } from "./estepper/getSteps";
 import { PyEStepperRunnerPlugin } from "./estepper/PyEStepperRunnerPlugin";
@@ -50,6 +51,8 @@ abstract class PyEStepperEvaluatorBase extends BasicEvaluator {
       const script = chunk + "\n";
       const ast = parse(script);
       const config = await fetchRunConfig(this.conductor);
+      // The gutter's breakpoints are stops for the host's breakpoint navigation, like `breakpoint()`.
+      markBreakpoints(ast, config.breakpointLines ?? []);
       if (config.stepLimit !== undefined) this.eStepper.setStepLimit(config.stepLimit);
       try {
         await checkEStepperProgram(ast, script, this.chapter);
