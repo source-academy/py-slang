@@ -734,11 +734,14 @@ export class Machine {
     if (outcome.kind === "end" || !hasUnfiredBreakpoint(list[0])) return outcome;
     const c: Contraction = { ...outcome.c, isBreakpoint: true };
     if (outcome.kind !== "step") return { ...outcome, c };
-    // The statement may still be there, partly evaluated (or unfolded, a `while` into an `if`): it
-    // has fired, and must not fire again for its next steps.
+    // The statement may still be the first one, partly evaluated (or unfolded, a `while` into an
+    // `if`): it has fired, and must not fire again for its next steps. Told by its source: a
+    // statement that replaced it (the branch an `if` chose, the next statement) has its own, and
+    // its own breakpoint.
+    const next = outcome.list[0];
     const fired =
-      outcome.list.length === list.length
-        ? [{ ...outcome.list[0], breakpointFired: true }, ...outcome.list.slice(1)]
+      next && (next as { src?: unknown }).src === (list[0] as { src?: unknown }).src
+        ? [{ ...next, breakpointFired: true }, ...outcome.list.slice(1)]
         : outcome.list;
     return { ...outcome, list: fired, c };
   }

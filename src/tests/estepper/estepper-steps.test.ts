@@ -884,6 +884,16 @@ describe("gutter breakpoints", () => {
     expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
   });
 
+  test("a flagged branch statement is a stop of its own, also when it is the branch's only statement", async () => {
+    const { steps } = await runWith("if True:\n    x = 1\ny = 2\n", [1, 2]);
+    expect(stops(steps)).toHaveLength(2);
+    expect(stops(steps)).toContain("Assigning x = 1");
+    // ...and the same with a statement before and after it in the branch.
+    const longer = await runWith("if True:\n    w = 0\n    x = 1\n    z = 2\n", [1, 3]);
+    expect(stops(longer.steps)).toHaveLength(2);
+    expect(stops(longer.steps)).toContain("Assigning x = 1");
+  });
+
   test("a breakpoint() on a flagged line is still one stop", async () => {
     const { steps } = await runWith("x = 1\nbreakpoint()\n", [2]);
     expect(stops(steps)).toHaveLength(1);
