@@ -37,6 +37,11 @@ export class Labels {
     return label;
   }
 
+  /** The label of a frame if it already has one, without assigning one. */
+  peekFrame(env: Environment): string | undefined {
+    return this.frames.get(env);
+  }
+
   /** The label of a heap object if it already has one, without assigning one. */
   peekObject(obj: object): string | undefined {
     return this.objects.get(obj);

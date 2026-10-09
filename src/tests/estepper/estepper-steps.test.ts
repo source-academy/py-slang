@@ -368,6 +368,53 @@ describe("frame labels in the CSE machine snapshots", () => {
   });
 });
 
+describe("frame ids in the CSE machine snapshots", () => {
+  type Frame = {
+    id: string;
+    name: string;
+    parentId: string | null;
+    bindings: { value: { metadata?: { closureFrameId?: string } } }[];
+  };
+
+  test("are the e-stepper's frame labels, wherever a frame is referred to", async () => {
+    const { steps } = await run(MAKE_WITHDRAW);
+    for (const step of steps) {
+      const environments = step.cse!.environments as Frame[];
+      const ids = new Set(environments.map(e => e.id));
+      // Every live frame the e-stepper shows is in the snapshot under the same id (garbage
+      // frames are left out of snapshots; a host shows them as dead frames from earlier steps)...
+      for (const f of step.frames) if (!f.isGarbage) expect(ids.has(f.id)).toBe(true);
+      // ...and parents and closures refer to frames by those ids.
+      for (const e of environments) {
+        if (e.parentId !== null) expect(ids.has(e.parentId)).toBe(true);
+        for (const b of e.bindings) {
+          const closureFrameId = b.value.metadata?.closureFrameId;
+          if (closureFrameId !== undefined) expect(ids.has(closureFrameId)).toBe(true);
+        }
+      }
+    }
+    const inCall = steps.find(s => s.activeFrameId === "E2")!;
+    const withdraw = (inCall.cse!.environments as (Frame & { isActive: boolean })[]).find(
+      e => e.isActive,
+    )!;
+    expect(withdraw).toMatchObject({ id: "E2", name: "withdraw", parentId: "E1" });
+  });
+
+  test("the CSE machine's own snapshots keep the environments' ids", async () => {
+    const program = `def f(x):\n    return x\nf(1)\n`;
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(program)),
+      new Stash(),
+      -1,
+      3,
+      program,
+    );
+    const ids = snapshots.flatMap(s => s.environments.map(e => e.id));
+    expect(ids.some(id => /^E\d+$|^Global$/.test(id))).toBe(false);
+  });
+});
+
 describe("self-referential lists", () => {
   const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
   type Serialized = {

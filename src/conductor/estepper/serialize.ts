@@ -633,10 +633,12 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     stepIndex,
     control: [],
     stash: [],
-    // Values carry the e-stepper's labels of the objects they refer to, so a host can tell which
-    // object a reference in the program pane (`#3`) means.
-    environments: serializeEnvChain(callStack, values, [], active, obj =>
-      machine.labels.peekObject(obj),
-    ),
+    // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
+    // stand for, so a host can tell which object a reference in the program pane means, and which
+    // frame an environment bracket does.
+    environments: serializeEnvChain(callStack, values, [], active, {
+      objects: obj => machine.labels.peekObject(obj),
+      frames: env => machine.labels.peekFrame(env),
+    }),
   };
 }
