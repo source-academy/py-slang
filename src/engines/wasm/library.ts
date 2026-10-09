@@ -1,7 +1,9 @@
 import { i32, i64, wasm, WasmCall, WasmInstruction } from "@sourceacademy/wasm-util";
 import { Group, GroupName } from "../../stdlib/utils";
+import { BRIDGED_BUILTINS } from "./bridgedBuiltins";
 import {
   ARITY_FX,
+  BUILTIN_BRIDGE_FX,
   ERROR_MAP,
   GEN_LIST_FX,
   GET_LEX_ADDR_FX,
@@ -20,6 +22,7 @@ import {
   LOG_FX,
   MAKE_INT_FX,
   MAKE_LINKED_LIST_FX,
+  MAKE_NONE_FX,
   MAKE_PAIR_FX,
   PARSE_FX,
   SET_LIST_ELEMENT_FX,
@@ -72,6 +75,15 @@ const miscLib: LibFuncType[] = [
   funcHelper("str", 1).body(x => wasm.call(TO_STR_FX).args(x)),
   funcHelper("repr", 1).body(x => wasm.call(TO_REPR_FX).args(x)),
   funcHelper("error", 1, true).body(x => [wasm.call(LOG_FX).args(x), wasm.unreachable()]),
+  // Raised by the min/max prelude (wasmPrelude.ts) on a boolean argument.
+  funcHelper("_max_bool_error", 0, true).body(() => [
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAX_BOOL))),
+    wasm.unreachable(),
+  ]),
+  funcHelper("_min_bool_error", 0, true).body(() => [
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MIN_BOOL))),
+    wasm.unreachable(),
+  ]),
   funcHelper("_gen_list", 1).body(x => wasm.call(GEN_LIST_FX).args(x)),
   funcHelper("arity", 1).body(x => wasm.call(ARITY_FX).args(x)),
 
@@ -83,6 +95,15 @@ const miscLib: LibFuncType[] = [
   funcHelper("is_function", 1).body(x => wasm.call(IS_FUNCTION_FX).args(x)),
   funcHelper("is_none", 1).body(x => wasm.call(IS_NONE_FX).args(x)),
 ];
+
+/** Builtins run host-side through the `builtin.call` import (see bridgedBuiltins.ts). */
+const bridgedLib: LibFuncType[] = BRIDGED_BUILTINS.map(({ name, arity, variadic }, id) =>
+  funcHelper(name, arity as number, false, variadic).body((...args: WasmCall[]) => {
+    // The bridge takes exactly three argument slots; unused ones are None.
+    const slots = Array.from({ length: 3 }, (_, i) => args[i] ?? wasm.call(MAKE_NONE_FX));
+    return wasm.call(BUILTIN_BRIDGE_FX).args(i32.const(id), ...slots);
+  }),
+);
 
 const linkedListLib: LibFuncType[] = [
   funcHelper("pair", 2).body((x, y) => wasm.call(MAKE_PAIR_FX).args(x, y)),
@@ -126,9 +147,19 @@ const mceLib: LibFuncType[] = [
   funcHelper("parse", 1).body(x => wasm.call(PARSE_FX).args(x)),
 ];
 
-export function makeLibraryFunctions(groups: Group[]): LibFuncType[] {
+/**
+ * `script` is the full program text (prelude included). The bridged builtins
+ * are only compiled in when the script mentions them: the engine currently
+ * breaks down once a program has about 140 functions (builtins + prelude +
+ * user code), and the ~55 numeric builtins would use most of that headroom
+ * for programs that never call them.
+ */
+export function makeLibraryFunctions(groups: Group[], script: string): LibFuncType[] {
+  const mentioned = new Set(script.match(/[A-Za-z_][A-Za-z_0-9]*/g));
   return [
-    ...(groups.some(group => group.name === GroupName.MISC) ? miscLib : []),
+    ...(groups.some(group => group.name === GroupName.MISC)
+      ? [...miscLib, ...bridgedLib.filter(f => mentioned.has(f.name))]
+      : []),
     ...(groups.some(group => group.name === GroupName.LINKED_LISTS) ? linkedListLib : []),
     ...(groups.some(group => group.name === GroupName.PAIRMUTATORS) ? pairMutatorLib : []),
     ...(groups.some(group => group.name === GroupName.LIST) ? listLib : []),

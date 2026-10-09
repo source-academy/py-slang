@@ -1,7 +1,9 @@
+import math from "../../stdlib/math";
 import misc from "../../stdlib/misc";
 import { compileScriptToWasmBinary } from "./compiler";
 import { createHostImports, HostRuntimeState } from "./hostImports";
 import { createModuleCall, createModuleGet, getJspi, hostrefDisplay } from "./moduleInterop";
+import { wasmMiscPrelude } from "./wasmPrelude";
 import {
   type CompileOptions,
   type WasmExports,
@@ -34,6 +36,41 @@ function splitLeadingImports(code: string): { imports: string; rest: string } {
   return { imports: lines.slice(0, i).join("\n"), rest: lines.slice(i).join("\n") };
 }
 
+/** The names a block of `from X import a, b as c` lines binds. */
+export function importedNames(imports: string): Set<string> {
+  const names = new Set<string>();
+  for (const line of imports.split("\n")) {
+    const match = /^\s*from\s+\S+\s+import\s+(.+)$/.exec(line);
+    if (!match) continue;
+    for (const item of match[1].split(",")) {
+      const parts = item.trim().split(/\s+as\s+/);
+      names.add(parts[parts.length - 1].trim());
+    }
+  }
+  return names;
+}
+
+/**
+ * Drops the prelude's top-level definitions (`def name(...)` blocks and
+ * `name = ...` lines) of names the user imported explicitly, since the
+ * prelude runs after the imports and would otherwise overwrite them.
+ */
+export function omitDefinitions(prelude: string, names: Set<string>): string {
+  if (names.size === 0) return prelude;
+  const kept: string[] = [];
+  let skipping = false;
+  for (const line of prelude.split("\n")) {
+    const top = /^(?:def\s+([A-Za-z_]\w*)|([A-Za-z_]\w*)\s*=(?!=))/.exec(line);
+    if (top) {
+      skipping = names.has(top[1] ?? top[2]);
+    } else if (line.trim() !== "" && !/^\s/.test(line)) {
+      skipping = false;
+    }
+    if (!skipping) kept.push(line);
+  }
+  return kept.join("\n");
+}
+
 /** A runtime error from an interactive run, with the output printed before it. */
 export type WasmRuntimeError = Error & { prints?: string[] };
 
@@ -52,14 +89,18 @@ export async function compileToWasmAndRun(
   interactiveMode: boolean = false,
   options: CompileOptions = {},
 ): Promise<WasmRunResult | WasmInteractiveRunResult> {
-  const groups = [...(options.groups ?? []), misc];
-  const prelude = groups.map(group => group.prelude).join("\n");
+  const groups = [...(options.groups ?? []), misc, math];
+  const fullPrelude = [
+    ...groups.map(group => group.prelude),
+    wasmMiscPrelude(options.chapter ?? 4),
+  ].join("\n");
 
   // A chunk's own `from X import y` must compile as one of the program's
   // leading import statements (see splitLeadingImports' doc comment), which
   // means it has to precede the prepended prelude here, not follow the
   // student's code the way `code` alone would put it.
   const { imports, rest } = splitLeadingImports(code);
+  const prelude = omitDefinitions(fullPrelude, importedNames(imports));
   const script = imports + "\n" + prelude + "\n" + rest + "\n";
 
   const errors: Error[] = [];
@@ -119,7 +160,9 @@ export async function compileToWasmAndRun(
     };
 
     const instantiated = await WebAssembly.instantiate(compileResult.wasm, {
-      ...createHostImports(memory, runtimeState, index => hostrefDisplay(prepared, Number(index))),
+      ...createHostImports(memory, runtimeState, compileResult.dataEnd, index =>
+        hostrefDisplay(prepared, Number(index)),
+      ),
       modules: moduleImports as WebAssembly.ModuleImports,
     });
 

@@ -4,6 +4,7 @@ import { toAstToken } from "../../parser/token-bridge";
 import { pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types/value-types";
 import { escape, toPythonFloat } from "../../stdlib/utils";
+import { createBuiltinBridge } from "./builtinBridge";
 import { MetacircularGenerator } from "./metacircularGenerator";
 import { ARITHMETIC_OP_TAG, ERROR_MAP, GC_OBJECT_HEADER_SIZE, TYPE_TAG } from "./runtime";
 import type { WasmExports } from "./types";
@@ -72,6 +73,9 @@ export type HostRuntimeState = {
 export function createHostImports(
   memory: WebAssembly.Memory,
   runtime: HostRuntimeState,
+  /** Boundary below which STRING payload pointers address the data segment
+   * (no GC header) rather than the heap. */
+  dataEnd: number,
   /** Renders a HOSTREF (imported-module value — see moduleInterop.ts) for
    * print(). Defaults cover the no-modules case, where log_hostref can
    * never actually fire but the import must still exist. */
@@ -126,6 +130,9 @@ export function createHostImports(
       },
       log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
       log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
+    },
+    builtin: {
+      call: createBuiltinBridge(memory, () => runtime.wasmExports, dataEnd),
     },
     stringify: {
       /**

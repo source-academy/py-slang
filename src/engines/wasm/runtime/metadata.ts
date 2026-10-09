@@ -73,6 +73,8 @@ export const ERROR_MAP = {
   EXPECTED_BOOL_OPERAND: "TypeError: expected a boolean operand for this operation",
   HOSTREF_STARRED:
     "TypeError: argument unpacking is not supported when calling an imported module function",
+  MAX_BOOL: "TypeError: unsupported argument type for max: bool",
+  MIN_BOOL: "TypeError: unsupported argument type for min: bool",
 } as const;
 
 export const getErrorIndex = (errorKey: (typeof ERROR_MAP)[keyof typeof ERROR_MAP]) =>
