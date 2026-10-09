@@ -415,6 +415,82 @@ describe("frame ids in the CSE machine snapshots", () => {
   });
 });
 
+describe("function bodies in the CSE machine snapshots", () => {
+  const PROGRAM = `x = 1
+def f(y):
+    return x
+def g(n):
+    if n == 0:
+        return 'done'
+    else:
+        a = n * 2
+        return a
+h = lambda z: z + 1
+`;
+  type Fn = { name: string; value: { metadata?: { params?: string[]; body?: string } } };
+  const functions = (environments: unknown[]) =>
+    new Map(
+      (environments as { bindings: Fn[] }[])
+        .flatMap(e => e.bindings)
+        .filter(b => b.value.metadata?.params !== undefined)
+        .map(b => [b.name, b.value.metadata!]),
+    );
+
+  test("carry the source of each function's body, dedented", async () => {
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(PROGRAM)),
+      new Stash(),
+      -1,
+      3,
+      PROGRAM,
+    );
+    const fns = functions(snapshots[snapshots.length - 1].environments);
+    expect(fns.get("f")).toMatchObject({ params: ["y"], body: "return x" });
+    expect(fns.get("g")!.body).toBe(
+      "if n == 0:\n    return 'done'\nelse:\n    a = n * 2\n    return a",
+    );
+    expect(fns.get("h")).toMatchObject({ params: ["z"], body: "z + 1" });
+  });
+
+  test("keep the whitespace inside a multi-line string", async () => {
+    const program = `def f():\n    s = """a\n  b"""\n    return s\n`;
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(program)),
+      new Stash(),
+      -1,
+      3,
+      program,
+    );
+    const fns = functions(snapshots[snapshots.length - 1].environments);
+    expect(fns.get("f")!.body).toBe('s = """a\n  b"""\nreturn s');
+  });
+
+  test("of a function from an earlier chunk (REPL), from that chunk's source", async () => {
+    const context = new Context();
+    const first = `def f(y):\n    return y + 1\n`;
+    const second = `zzzzzzzzzzzzzzzzzzzzzzzzzzz = 0\nf(1)\n`;
+    await collectSnapshots(context, new Control(parse(first)), new Stash(), -1, 3, first);
+    const { snapshots } = await collectSnapshots(
+      context,
+      new Control(parse(second)),
+      new Stash(),
+      -1,
+      3,
+      second,
+    );
+    const fns = functions(snapshots[snapshots.length - 1].environments);
+    expect(fns.get("f")!.body).toBe("return y + 1");
+  });
+
+  test("in the e-stepper's snapshots too", async () => {
+    const { steps } = await run(PROGRAM);
+    const fns = functions(steps[steps.length - 1].cse!.environments);
+    expect(fns.get("f")!.body).toBe("return x");
+  });
+});
+
 describe("self-referential lists", () => {
   const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
   type Serialized = {

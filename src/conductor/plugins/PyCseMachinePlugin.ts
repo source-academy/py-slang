@@ -12,7 +12,7 @@ import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { toPythonFloat } from "../../stdlib/utils";
-import { TokenType } from "../../tokenizer";
+import { Token, TokenType } from "../../tokenizer";
 
 // `objectId` is declared by @sourceacademy/common-cse-machine from 0.3.1 on.
 type SerializedValue = CseSerializedValue & { objectId?: string };
@@ -118,9 +118,99 @@ export interface SnapshotIds {
   objects?: (obj: object) => string | undefined;
   /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
   frames?: (env: Environment) => string | undefined;
+  /**
+   * The program's source, for a closure's `metadata.body`: the source of its body, which a host
+   * shows when describing the function (otherwise it has only the name and parameters).
+   */
+  code?: string;
 }
 
 const frameId = (env: Environment, ids: SnapshotIds): string => ids.frames?.(env) ?? env.id;
+
+/**
+ * The source each function (its AST node) was parsed from. A REPL session evaluates chunk after
+ * chunk in one context, so a function defined in an earlier chunk has token positions in that
+ * chunk's source, not in the one being evaluated now; `collectSnapshots` records each chunk's
+ * functions here.
+ */
+const functionSources = new WeakMap<object, string>();
+
+/** Records `code` as the source of every function in the AST under `root` (see `functionSources`). */
+function recordFunctionSources(root: unknown, code: string): void {
+  const seen = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (typeof node !== "object" || node === null || seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof Token) return;
+    const kind = (node as { kind?: unknown }).kind;
+    if (kind === "FunctionDef" || kind === "Lambda" || kind === "MultiLambda") {
+      functionSources.set(node, code);
+    }
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(root);
+}
+
+type Positioned = { startToken?: Token; endToken?: Token };
+
+/** The tokens in the AST under `root` that span several lines (multi-line strings). */
+function multilineTokens(root: unknown): Token[] {
+  const tokens = new Set<Token>();
+  const seen = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (typeof node !== "object" || node === null || seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof Token) {
+      if (node.lexeme.includes("\n")) tokens.add(node);
+      return;
+    }
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(root);
+  return [...tokens];
+}
+
+/**
+ * The source of a function's body as written, dedented: a `def`'s statements, a lambda's
+ * expression. `undefined` when the body has no real source position (e.g. a function the runtime
+ * made up), or when its source is unknown (`code` does not hold the body's tokens).
+ */
+function functionBodySource(node: Closure["node"], fallbackCode: string): string | undefined {
+  const code = functionSources.get(node) ?? fallbackCode;
+  const body = (node as { body: unknown }).body as Positioned[] | Positioned;
+  const parts = Array.isArray(body) ? body : [body];
+  const first = parts[0]?.startToken;
+  const last = parts[parts.length - 1]?.endToken;
+  if (!first || !last || first.synthetic || last.synthetic) return undefined;
+  const start = first.indexInSource;
+  const end = last.indexInSource + last.lexeme.length;
+  if (start < 0 || end <= start || end > code.length) return undefined;
+  // Positions from another source (see `functionSources`) would give some unrelated text.
+  if (!code.startsWith(first.lexeme, start) || !code.startsWith(last.lexeme, last.indexInSource)) {
+    return undefined;
+  }
+  // The body's first line starts at its first statement; the others still carry the indentation
+  // of the body, which is removed — except on lines inside a multi-line string, whose leading
+  // whitespace belongs to the string.
+  const inString = multilineTokens(body).map(t => [
+    t.indexInSource,
+    t.indexInSource + t.lexeme.length,
+  ]);
+  const indent = start - (code.lastIndexOf("\n", start - 1) + 1);
+  let offset = start;
+  return code
+    .slice(start, end)
+    .split("\n")
+    .map((line, i) => {
+      const lineStart = offset;
+      offset += line.length + 1;
+      if (i === 0 || inString.some(([from, to]) => lineStart > from && lineStart < to)) {
+        return line;
+      }
+      return line.slice(Math.min(indent, line.length - line.trimStart().length));
+    })
+    .join("\n");
+}
 
 /**
  * `path` holds the lists being serialized around `v`. A list that contains itself
@@ -143,8 +233,12 @@ function serializeValue(
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
+    const body = ids.code === undefined ? undefined : functionBodySource(cl.node, ids.code);
     return withObjectId(
-      { ...base, metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName } },
+      {
+        ...base,
+        metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName, body },
+      },
       ids.objects?.(cl),
     );
   }
@@ -515,6 +609,9 @@ export async function collectSnapshots(
   // flickering to 0 while these synthetic nodes are being evaluated.
   let lastKnownLine: number | undefined;
 
+  // This chunk's functions keep this chunk's source, for their bodies in later chunks' snapshots.
+  recordFunctionSources(control.getStack(), code);
+
   const stream = generateCSEMachineStateStream(
     code,
     context,
@@ -542,12 +639,13 @@ export async function collectSnapshots(
       .getStack()
       .slice()
       .reverse()
-      .map(sv => serializeValue(sv, activeEnv.id));
+      .map(sv => serializeValue(sv, activeEnv.id, { code }));
     const environments = serializeEnvChain(
       context.runtime.environments,
       s.getStack(),
       rawControlStack,
       activeEnv,
+      { code },
     );
 
     // The node most recently evaluated at this step. Mirrors the non-conductor CSE
