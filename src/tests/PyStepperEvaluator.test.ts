@@ -135,3 +135,18 @@ describe("PyStepperEvaluator2", () => {
     expect(results).toEqual([undefined]);
   });
 });
+
+describe("the step limit", () => {
+  const forever = "def f(n):\n    return f(n + 1)\nf(0)\n";
+
+  test("the number at the slider's right end never exceeds it: an even limit gives the odd number below", async () => {
+    const { getPythonSteps } = await import("../conductor/stepper/getSteps");
+    const { parse } = await import("../parser");
+    for (const limit of [2, 3, 4, 5, 10, 11, 12, 13, 100, 101]) {
+      const steps = await getPythonSteps(parse(forever), limit);
+      // The slider counts steps taken, from 0: the last of n steps is n - 1.
+      expect(steps.length - 1).toBe(limit % 2 === 0 ? limit - 1 : limit);
+      expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Maximum number of steps exceeded");
+    }
+  });
+});

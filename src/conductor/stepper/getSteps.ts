@@ -33,14 +33,18 @@ import { translateProgram } from "./translate";
 const DEFAULT_CONTRACTION_LIMIT = 500;
 
 /** `stepLimit` (steps, the public unit — see `getPythonSteps`/`evaluatePython`) to a contraction
- * count (two steps per contraction). Shared by both entry points so they always agree on how far to
+ * count. The step slider counts the steps taken, from 0 (the start) to the last, as in the e-stepper
+ * and the CSE machine, and the number at its right end never exceeds `stepLimit`. A run is a "Start
+ * of evaluation" step, two steps per contraction and a last step ("Evaluation complete" or "Maximum
+ * number of steps exceeded"), so that number is odd: an even limit gives the odd number below it.
+ * Shared by both entry points so they always agree on how far to
  * reduce a given `stepLimit` — see py-slang#191's CodeRabbit review: `evaluatePython` used to loop to
  * a hardcoded `DEFAULT_CONTRACTION_LIMIT` regardless of what `stepLimit` its sibling was actually
  * given, so a run configured with a *smaller* `stepLimit` could have the Stepper tab's own pass stop
  * before reaching an `input()` call the REPL-value pass still tried to reach — `InputRecorder.replaying`
  * would then fall back to a live request, prompting the student a second time for the same input. */
 function contractionLimitFor(stepLimit: number): number {
-  return Math.max(1, Math.floor(stepLimit / 2));
+  return Math.max(0, Math.floor((stepLimit - 1) / 2));
 }
 
 interface Marker {
@@ -117,6 +121,11 @@ async function drive(
   };
 
   pushStep(prog, [{ explanation: "Start of evaluation" }]);
+  // A limit too small for a single contraction: the start, and why there is no more.
+  if (contractionLimit === 0) {
+    pushStep(prog, [{ explanation: "Maximum number of steps exceeded" }]);
+    return steps;
+  }
 
   // `reduce.ts`'s `applyPythonCallable` (a module calling back into a Python function, py-slang#423)
   // deliberately does not draw from this budget — see `StepperContext.contractionBudget`'s doc
@@ -298,7 +307,8 @@ function serializeStep(step: Step): SerializedStep {
  * {@link ../stepper/PythonStepperRunnerPlugin runner plugin} returns to the host.
  *
  * @param fileInput The parsed Python program.
- * @param stepLimit Maximum number of *steps* (two per contraction); defaults to 1000.
+ * @param stepLimit Maximum number at the step slider's right end (it counts steps taken, from 0;
+ * see `contractionLimitFor`); defaults to 1000.
  * @param context The stepper's bundled host capabilities (module resolution, `input()`) — see
  * `context.ts`. Defaults to `{}` (neither capability wired up — e.g. a test calling this directly);
  * a program that needs one it doesn't have simply degrades gracefully (an unresolved import throws a

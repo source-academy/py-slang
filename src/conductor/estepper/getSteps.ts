@@ -30,7 +30,12 @@ import { type Expr, type Stmt, translateStmts } from "./terms";
  */
 type Step = EStepperStep & { output?: string };
 
-/** Default cap on the number of steps (two per contraction). */
+/**
+ * Default cap on the number of steps. The step slider counts the steps taken, from 0 (the start) to
+ * the last, and the number at its right end never exceeds the limit: a run is the start, two steps
+ * per contraction and a last step, so that number is odd, and an even limit gives the odd number
+ * below it.
+ */
 export const DEFAULT_STEP_LIMIT = 1000;
 
 /** The text of an error for a step explanation. The CSE machine's runtime errors carry a
@@ -145,7 +150,7 @@ export async function runEStepper(
 
   push(program, snapshotStore(machine, program), "", { explanation: "Start of evaluation" });
 
-  const contractionLimit = Math.max(1, Math.floor(stepLimit / 2));
+  const contractionLimit = Math.max(0, Math.floor((stepLimit - 1) / 2));
   for (let n = 0; ; n++) {
     if (n === contractionLimit) {
       push(program, snapshotStore(machine, program), machine.output, {
