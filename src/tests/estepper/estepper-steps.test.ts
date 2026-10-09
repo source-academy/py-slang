@@ -421,35 +421,6 @@ describe("frame ids in the CSE machine snapshots", () => {
   });
 });
 
-describe("global and nonlocal declarations", () => {
-  test("take no step of their own, wherever they are in the body", async () => {
-    const program = `count = 0
-def bump(n):
-    if n > 0:
-        global count
-    count = count + n
-    return count
-bump(2)
-`;
-    const { steps, error } = await run(program);
-    expect(error).toBeUndefined();
-    const explanations = story(steps);
-    expect(explanations.join("\n")).not.toMatch(/declaration/);
-    expect(explanations).toContainEqual(
-      expect.stringMatching(
-        /^Called bump\(2\): new frame E1 extends the global frame, without a binding for global count/,
-      ),
-    );
-    expect(explanations).toContainEqual(
-      expect.stringMatching(/^Assigned count = 2 in the global frame/),
-    );
-    // The `if` whose branch holds the declaration is evaluated; the declaration is shown until
-    // the branch is done.
-    const branch = steps.find(s => JSON.stringify(s.ast).includes("GlobalStatement"));
-    expect(branch).toBeDefined();
-  });
-});
-
 describe("self-referential lists", () => {
   const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
   type Serialized = {
@@ -561,5 +532,34 @@ describe("limits and rejected programs", () => {
     await expect(run(`print(undefined_name)\n`)).rejects.toBeInstanceOf(EStepperProgramError);
     // Python §3 only has for loops over range(...).
     await expect(run(`for x in [1, 2]:\n    pass\n`)).rejects.toBeInstanceOf(EStepperProgramError);
+  });
+});
+
+describe("global and nonlocal declarations", () => {
+  test("take no step of their own, wherever they are in the body", async () => {
+    const program = `count = 0
+def bump(n):
+    if n > 0:
+        global count
+    count = count + n
+    return count
+bump(2)
+`;
+    const { steps, error } = await run(program);
+    expect(error).toBeUndefined();
+    const explanations = story(steps);
+    expect(explanations.join("\n")).not.toMatch(/declaration/);
+    expect(explanations).toContainEqual(
+      expect.stringMatching(
+        /^Called bump\(2\): new frame E1 extends the global frame, without a binding for global count/,
+      ),
+    );
+    expect(explanations).toContainEqual(
+      expect.stringMatching(/^Assigned count = 2 in the global frame/),
+    );
+    // The `if` whose branch holds the declaration is evaluated; the declaration is shown until
+    // the branch is done.
+    const branch = steps.find(s => JSON.stringify(s.ast).includes("GlobalStatement"));
+    expect(branch).toBeDefined();
   });
 });
