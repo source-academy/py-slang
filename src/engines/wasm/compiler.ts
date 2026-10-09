@@ -20,7 +20,14 @@ export async function compileScriptToWasmBinary(
   groups: Group[],
 ): Promise<CompileToBinaryResult> {
   const ast = parse(script);
-  const analysisErrors = analyze(ast, script, options.chapter ?? 4, groups);
+  const analysisErrors = analyze(
+    ast,
+    script,
+    options.chapter ?? 4,
+    groups,
+    // Engine-private helpers the WASM prelude calls (see wasmPrelude.ts).
+    ["_max_bool_error", "_min_bool_error"],
+  );
 
   if (analysisErrors.length > 0) {
     return { ok: false, errors: analysisErrors };
@@ -28,7 +35,7 @@ export async function compileScriptToWasmBinary(
 
   const builderGenerator = new BuilderGenerator(
     [...PARSE_TREE_STRINGS],
-    makeLibraryFunctions(groups),
+    makeLibraryFunctions(groups, script),
     interactiveMode,
     options.pageCount ?? 1,
     options.chapter ?? 4,

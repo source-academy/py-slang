@@ -48,27 +48,14 @@ import { Command } from "commander";
 import { runCodePy2Js } from "./engines/py2js";
 import { runEStepper } from "./conductor/estepper/getSteps";
 import { compileToWasmAndRun } from "./engines/wasm";
+import { WASM_GROUPS } from "./engines/wasm/groups";
 import { parse } from "./parser";
 import { runCodePvml, runCodePvmlInterpreter } from "./pvml-runner";
 import { runCode } from "./runner";
-import linkedList from "./stdlib/linked-list";
-import list from "./stdlib/list";
-import pairmutator from "./stdlib/pairmutator";
-import mce from "./stdlib/parser";
-import type { Group } from "./stdlib/utils";
 
 type Engine = "cse" | "pynter" | "pvml" | "py2js" | "wasm" | "estepper";
 
 const ENGINES: Engine[] = ["cse", "pynter", "pvml", "py2js", "wasm", "estepper"];
-
-/** Mirrors PyWasmEvaluator1..4's own per-chapter groups (misc is added
- * internally by compileToWasmAndRun itself). */
-const WASM_GROUPS: Record<number, Group[]> = {
-  1: [],
-  2: [linkedList],
-  3: [linkedList, pairmutator, list],
-  4: [linkedList, pairmutator, list, mce],
-};
 
 interface ReplOptions {
   variant: string;

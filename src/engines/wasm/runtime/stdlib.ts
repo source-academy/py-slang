@@ -340,3 +340,38 @@ export const TO_REPR_FX = wasm
     popGcableArgPreamble(),
     wasm.call("$_host_to_repr").args(local.get("$tag"), local.get("$value")),
   );
+
+/**
+ * Calls a stdlib builtin implemented host-side (see bridgedBuiltins.ts):
+ * `$id` selects the entry, and up to three tagged arguments follow (unused
+ * ones are None). Same shadow-stack discipline as TO_STR_FX above, once per
+ * argument: GET_LEX_ADDR_FX pushed each GC'able argument (only a complex
+ * number is one of these), so they are popped here in reverse order, and the
+ * host's result (an int, float or bool, never a heap value) pushes nothing.
+ */
+export const BUILTIN_BRIDGE_FX = wasm
+  .func("$_builtin_bridge")
+  .params({ $id: i32, $t1: i32, $v1: i64, $t2: i32, $v2: i64, $t3: i32, $v3: i64 })
+  .results(i32, i64)
+  .body(
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$t3")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $v3) (local.set $t3)`),
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$t2")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $v2) (local.set $t2)`),
+    wasm
+      .if(wasm.call(IS_TAG_GCABLE).args(local.get("$t1")))
+      .then(wasm.call(POP_SHADOW_STACK_FX), wasm.raw`(local.set $v1) (local.set $t1)`),
+    wasm
+      .call("$_host_builtin_call")
+      .args(
+        local.get("$id"),
+        local.get("$t1"),
+        local.get("$v1"),
+        local.get("$t2"),
+        local.get("$v2"),
+        local.get("$t3"),
+        local.get("$v3"),
+      ),
+  );
