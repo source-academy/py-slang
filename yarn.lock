@@ -1689,10 +1689,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-cse-machine@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@sourceacademy/common-cse-machine@npm:0.3.0"
-  checksum: 10c0/c0462cc2dd8d779179c31d168aa3e71ea7f81818535166e38aeb3c048469fcf7eebc388ed4110d3300d6b6933cc310da3fbe4c3a4026746c5df409eb91dd7042
+"@sourceacademy/common-cse-machine@npm:^0.3.1":
+  version: 0.3.1
+  resolution: "@sourceacademy/common-cse-machine@npm:0.3.1"
+  checksum: 10c0/04d0a087d884ccd4433081dd04dd77a4c40d34ea5320638023b5ff803c4829c0e483b6fc6628e3c81eecc4683872f87dc9fbbc9895cc712427d4848734a92d06
   languageName: node
   linkType: hard
 
@@ -1703,12 +1703,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-e-stepper@npm:^0.0.1":
-  version: 0.0.1
-  resolution: "@sourceacademy/common-e-stepper@npm:0.0.1"
+"@sourceacademy/common-e-stepper@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@sourceacademy/common-e-stepper@npm:0.0.2"
   peerDependencies:
+    "@sourceacademy/common-cse-machine": ">=0.3.1"
     "@sourceacademy/common-stepper": ">=0.0.4"
-  checksum: 10c0/6ccc0037a1c112376dad9a38c4bbc6a359b53c725f2fa905def89c2dae6a6c5879f32682397f3fc32acac8f6dc82635eec1360b49ae9ab971af9f77299c388e4
+  checksum: 10c0/8a63f9f5e85f34c1495711fb92ff24debe737fe0fa7159d6451d0f0c641585e359469f47c8f176b709ca3f7d28d3edee99cffea37b9cb13ae7b2d56fde31f5b7
   languageName: node
   linkType: hard
 
@@ -1740,9 +1741,9 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-autocomplete": "npm:^0.0.1"
-    "@sourceacademy/common-cse-machine": "npm:^0.3.0"
+    "@sourceacademy/common-cse-machine": "npm:^0.3.1"
     "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
-    "@sourceacademy/common-e-stepper": "npm:^0.0.1"
+    "@sourceacademy/common-e-stepper": "npm:^0.0.2"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"

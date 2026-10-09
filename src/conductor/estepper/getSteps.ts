@@ -9,7 +9,6 @@
  * the store is mutable, so it is snapshotted before and after every contraction.
  */
 
-import type { CseSnapshot } from "@sourceacademy/common-cse-machine";
 import type {
   EStepperLookup,
   EStepperStep,
@@ -30,7 +29,7 @@ import { describeValue } from "./text";
  * `../stepper/getSteps.ts`), and the `cse` snapshot `@sourceacademy/common-e-stepper` adds in 0.0.2.
  * The fields cross the channel as plain JSON either way.
  */
-type Step = EStepperStep & { output?: string; cse?: CseSnapshot };
+type Step = EStepperStep & { output?: string };
 
 /** Default cap on the number of steps (two per contraction). */
 export const DEFAULT_STEP_LIMIT = 1000;

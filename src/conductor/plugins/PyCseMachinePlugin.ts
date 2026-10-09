@@ -2,7 +2,7 @@ import type {
   CseSnapshot,
   CseSerializedEnvFrame as SerializedEnvFrame,
   CseSerializedInstruction as SerializedInstruction,
-  CseSerializedValue,
+  CseSerializedValue as SerializedValue,
 } from "@sourceacademy/common-cse-machine";
 import { Closure } from "../../engines/cse/closure";
 import { Context } from "../../engines/cse/context";
@@ -13,12 +13,6 @@ import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { toPythonFloat } from "../../stdlib/utils";
 import { Token, TokenType } from "../../tokenizer";
-
-// `objectId` is declared by @sourceacademy/common-cse-machine from 0.3.1 on.
-type SerializedValue = CseSerializedValue & { objectId?: string };
-
-// `label` is declared by @sourceacademy/common-cse-machine from 0.3.2 on.
-type LabelledEnvFrame = SerializedEnvFrame & { label?: string };
 
 /**
  * Headings for the frames whose names Python shares with JavaScript (the host would otherwise call
@@ -566,7 +560,7 @@ function serializeEnvChain(
   return queue
     .filter(env => env.name !== "prelude")
     .map(
-      (env): LabelledEnvFrame => ({
+      (env): SerializedEnvFrame => ({
         id: frameId(env, ids),
         name: env.name,
         label: frameLabel(env),
