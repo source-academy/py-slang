@@ -140,6 +140,20 @@ describe("PyCseEvaluator3/4 (CSE snapshots)", () => {
     expect(secondBreakpointSteps).toEqual([]);
   });
 
+  test("the step limit is the number at the slider's right end: one less than the snapshots", async () => {
+    for (const stepLimit of [1, 10, 11]) {
+      const { conductor, errors, sendSnapshots } = makeMockConductor({
+        "/__cse_config__": JSON.stringify({ stepLimit }),
+      });
+      const evaluator = new PyCseEvaluator3(conductor);
+      await evaluator.evaluateChunk("x = 0\nwhile True:\n    x = x + 1");
+      expect(errors).toEqual([]);
+      const [snapshots] = sendSnapshots.mock.calls[0];
+      // The slider runs from 0 (the first snapshot): its right end is stepLimit.
+      expect(snapshots.length - 1).toBe(stepLimit);
+    }
+  });
+
   test("gutter-click breakpoint lines from /__cse_config__ (#383) surface in sendSnapshots", async () => {
     // The host has no dedicated message for gutter clicks; it serves them through the same
     // /__cse_config__ virtual file evaluateChunk already fetches stepLimit from (see runConfig.ts).

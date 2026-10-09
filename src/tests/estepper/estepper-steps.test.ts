@@ -834,3 +834,27 @@ describe("breakpoints", () => {
     expect(stops(steps)).toEqual([]);
   });
 });
+
+describe("the step limit", () => {
+  const forever = "x = 0\nwhile True:\n    x = x + 1\n";
+
+  test("the number at the slider's right end never exceeds it: an even limit gives the odd number below", async () => {
+    // The slider counts steps taken, from 0: the last of n steps is n - 1.
+    const last = async (limit: number) => (await run(forever, 3, limit)).steps.length - 1;
+    for (const limit of [2, 3, 4, 5, 10, 11, 12, 13, 100, 101]) {
+      expect(await last(limit)).toBe(limit % 2 === 0 ? limit - 1 : limit);
+    }
+  });
+
+  test("a run that reaches the limit ends with the step that says so", async () => {
+    const { steps, truncated } = await run(forever, 3, 10);
+    expect(truncated).toBe(true);
+    expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Maximum number of steps exceeded");
+  });
+
+  test("a program that needs fewer steps is not cut", async () => {
+    const { steps, truncated } = await run("x = 1\n", 3, 10);
+    expect(truncated).toBe(false);
+    expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
+  });
+});
