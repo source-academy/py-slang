@@ -42,6 +42,10 @@ export const eStepperSyntaxProfile: SyntaxProfile = {
   },
   expressionPrecedence: {
     ...pythonSyntaxProfile.expressionPrecedence,
+    // Atoms and calls bind as tightly as a subscript, so a substituted value or call result is never
+    // parenthesised inside one: `A[0]` and `f(x)[0]`, not `A[(0)]`.
+    Literal: 20,
+    CallExpression: 20,
     MemberExpression: 20,
     Ref: 20,
     EnvBlock: 20,
