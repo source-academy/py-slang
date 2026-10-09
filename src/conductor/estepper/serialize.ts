@@ -639,6 +639,7 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     environments: serializeEnvChain(callStack, values, [], active, {
       objects: obj => machine.labels.peekObject(obj),
       frames: env => machine.labels.peekFrame(env),
+      code: machine.code,
     }),
   };
 }
