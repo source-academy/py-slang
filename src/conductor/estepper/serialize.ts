@@ -77,12 +77,19 @@ export class ProgramSerializer {
           name: v.name,
           hoverText: `built-in function ${v.name}`,
         });
-      default:
-        return this.node(term, "Literal", {
-          value: null,
-          raw: toPythonString(v, true),
-          label: TYPE_LABELS[v.type] ?? v.type,
-        });
+      default: {
+        const raw = toPythonString(v, true);
+        const label = TYPE_LABELS[v.type] ?? v.type;
+        // A negative number is `-` applied to a literal, not an atom: shown as `-1`, it would
+        // otherwise lose its parentheses as a receiver, and `-1[0]` parses as `-(1[0])`.
+        if ((v.type === "bigint" || v.type === "number") && raw.startsWith("-")) {
+          return this.node(term, "UnaryExpression", {
+            operator: "-",
+            argument: this.node(null, "Literal", { value: null, raw: raw.slice(1), label }),
+          });
+        }
+        return this.node(term, "Literal", { value: null, raw, label });
+      }
     }
   }
 

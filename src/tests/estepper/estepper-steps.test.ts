@@ -140,6 +140,20 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
   });
 });
 
+describe("negative values", () => {
+  test("a negative number is shown as unary minus, so it keeps its parentheses as a receiver", async () => {
+    const { steps } = await run("y = -1\nz = y[0]\n");
+    const json = steps.map(st => JSON.stringify(st.ast));
+    // Substituted for `y`, -1 is `-` applied to the literal 1, never a literal with raw "-1".
+    expect(json.some(j => j.includes('"raw":"-1"'))).toBe(false);
+    expect(
+      json.some(j =>
+        /"MemberExpression","nodeId":"[^"]*","object":\{"type":"UnaryExpression"/.test(j),
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("lookups", () => {
   test("every name is looked up in a step of its own, which reports the binding read", async () => {
     const { steps } = await run(`x = 1\ny = x + 2\n`);
