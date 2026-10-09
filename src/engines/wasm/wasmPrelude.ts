@@ -5,7 +5,8 @@
  * instead — see bridgedBuiltins.ts.)
  *
  * The prelude is compiled together with the user's program, so it is subject
- * to the same sublanguage restrictions: rest parameters and subscripts are
+ * to the same sublanguage restrictions (booleans are rejected up front, since
+ * the comparison runtime would otherwise coerce them to integers): rest parameters and subscripts are
  * only available from §3, which is why min/max take exactly two arguments in
  * §1–2 but any number (at least two) from §3 on.
  */
@@ -19,12 +20,16 @@ math_nan = math_inf - math_inf
 
 const MIN_MAX_TWO_ARGUMENTS = `
 def max(first, second):
+    if is_boolean(first) or is_boolean(second):
+        _max_bool_error()
     if second > first:
         return second
     else:
         return first
 
 def min(first, second):
+    if is_boolean(first) or is_boolean(second):
+        _min_bool_error()
     if second < first:
         return second
     else:
@@ -33,6 +38,13 @@ def min(first, second):
 
 const MIN_MAX_VARIADIC = `
 def max(first, second, *rest):
+    if is_boolean(first) or is_boolean(second):
+        _max_bool_error()
+    j = 0
+    while j < len(rest):
+        if is_boolean(rest[j]):
+            _max_bool_error()
+        j = j + 1
     best = first
     if second > best:
         best = second
@@ -44,6 +56,13 @@ def max(first, second, *rest):
     return best
 
 def min(first, second, *rest):
+    if is_boolean(first) or is_boolean(second):
+        _min_bool_error()
+    j = 0
+    while j < len(rest):
+        if is_boolean(rest[j]):
+            _min_bool_error()
+        j = j + 1
     best = first
     if second < best:
         best = second

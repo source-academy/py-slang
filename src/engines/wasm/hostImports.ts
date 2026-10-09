@@ -73,6 +73,9 @@ export type HostRuntimeState = {
 export function createHostImports(
   memory: WebAssembly.Memory,
   runtime: HostRuntimeState,
+  /** Boundary below which STRING payload pointers address the data segment
+   * (no GC header) rather than the heap. */
+  dataEnd: number,
   /** Renders a HOSTREF (imported-module value — see moduleInterop.ts) for
    * print(). Defaults cover the no-modules case, where log_hostref can
    * never actually fire but the import must still exist. */
@@ -129,7 +132,7 @@ export function createHostImports(
       log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
     },
     builtin: {
-      call: createBuiltinBridge(memory, () => runtime.wasmExports),
+      call: createBuiltinBridge(memory, () => runtime.wasmExports, dataEnd),
     },
     stringify: {
       /**

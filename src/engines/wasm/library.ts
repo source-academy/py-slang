@@ -75,6 +75,15 @@ const miscLib: LibFuncType[] = [
   funcHelper("str", 1).body(x => wasm.call(TO_STR_FX).args(x)),
   funcHelper("repr", 1).body(x => wasm.call(TO_REPR_FX).args(x)),
   funcHelper("error", 1, true).body(x => [wasm.call(LOG_FX).args(x), wasm.unreachable()]),
+  // Raised by the min/max prelude (wasmPrelude.ts) on a boolean argument.
+  funcHelper("_max_bool_error", 0, true).body(() => [
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MAX_BOOL))),
+    wasm.unreachable(),
+  ]),
+  funcHelper("_min_bool_error", 0, true).body(() => [
+    wasm.call("$_log_error").args(i32.const(getErrorIndex(ERROR_MAP.MIN_BOOL))),
+    wasm.unreachable(),
+  ]),
   funcHelper("_gen_list", 1).body(x => wasm.call(GEN_LIST_FX).args(x)),
   funcHelper("arity", 1).body(x => wasm.call(ARITY_FX).args(x)),
 

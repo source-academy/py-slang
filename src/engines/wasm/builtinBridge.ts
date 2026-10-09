@@ -27,7 +27,12 @@ type SyncBuiltin = (
   context: Context,
 ) => Value | undefined;
 
-function decodeArgument(memory: WebAssembly.Memory, tag: number, val: bigint): Value {
+function decodeArgument(
+  memory: WebAssembly.Memory,
+  dataEnd: number,
+  tag: number,
+  val: bigint,
+): Value {
   switch (tag) {
     case TYPE_TAG.INT:
       return { type: "bigint", value: val };
@@ -45,10 +50,20 @@ function decodeArgument(memory: WebAssembly.Memory, tag: number, val: bigint): V
         value: new PyComplexNumber(dv.getFloat64(0, true), dv.getFloat64(8, true)),
       };
     }
+    // `complex("1+2j")` is the one bridged function that takes a string, so
+    // its payload (ptr << 32 | length) is really decoded. Literals live in
+    // the data segment below `dataEnd`; heap strings carry a GC header.
+    case TYPE_TAG.STRING: {
+      const ptr = Number(val >> 32n);
+      const len = Number(val & 0xffffffffn);
+      const offset = ptr < dataEnd ? ptr : ptr + GC_OBJECT_HEADER_SIZE;
+      return {
+        type: "string",
+        value: new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, len)),
+      };
+    }
     // Only the *type* of the remaining kinds matters (no bridged function
     // accepts them, and the builtin's own check names the type it rejects).
-    case TYPE_TAG.STRING:
-      return { type: "string", value: "" };
     case TYPE_TAG.LIST:
     case TYPE_TAG.TUPLE:
       return { type: "list", value: [] };
@@ -80,6 +95,7 @@ function encodeResult(exports: WasmExports, name: string, result: Value | undefi
 export function createBuiltinBridge(
   memory: WebAssembly.Memory,
   getExports: () => WasmExports | null,
+  dataEnd: number,
 ) {
   const context = new Context();
   const table = BRIDGED_BUILTINS.map(entry => {
@@ -112,7 +128,7 @@ export function createBuiltinBridge(
       [t3, v3],
     ];
     const fixed = raw.slice(0, entry.arity);
-    const args = fixed.map(([tag, val]) => decodeArgument(memory, tag, val));
+    const args = fixed.map(([tag, val]) => decodeArgument(memory, dataEnd, tag, val));
     if (entry.variadic) {
       // The rest list follows the fixed arguments: (ptr << 32 | length), with
       // 12-byte (tag u32, value u64) elements after the GC header.
@@ -122,7 +138,12 @@ export function createBuiltinBridge(
       const view = new DataView(memory.buffer, pointer, length * 12);
       for (let i = 0; i < length; i++) {
         args.push(
-          decodeArgument(memory, view.getUint32(i * 12, true), view.getBigInt64(i * 12 + 4, true)),
+          decodeArgument(
+            memory,
+            dataEnd,
+            view.getUint32(i * 12, true),
+            view.getBigInt64(i * 12 + 4, true),
+          ),
         );
       }
     }

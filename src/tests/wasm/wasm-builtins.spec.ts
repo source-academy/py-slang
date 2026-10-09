@@ -3,7 +3,7 @@
  * the CSE machine (the reference implementation) rather than hard-coded
  * expectations, plus a sweep that every builtin a chapter offers resolves.
  */
-import { compileToWasmAndRun } from "../../engines/wasm";
+import { compileToWasmAndRun, importedNames, omitDefinitions } from "../../engines/wasm";
 import { WASM_UNSUPPORTED_BUILTINS } from "../../engines/wasm/bridgedBuiltins";
 import { WASM_GROUPS } from "../../engines/wasm/groups";
 import { runCode, VARIANT_GROUPS } from "../../runner";
@@ -239,5 +239,39 @@ describe("every builtin a chapter offers is available", () => {
   it("unsupported builtins say so instead of claiming the name is undefined", async () => {
     const { error } = await runWasm("f = input\n");
     expect(error).toBe("NameError: 'input' is not supported by the WASM engine");
+  });
+});
+
+describe("review follow-ups (#506)", () => {
+  it("complex() accepts a string, literal or built at runtime", async () => {
+    await expectSameAsCse("print(complex('1+2j'))\n");
+    await expectSameAsCse("s = '1+' + '2j'\nprint(complex(s))\n");
+  });
+
+  for (const code of [
+    "max(True, False)\n",
+    "min(1, False)\n",
+    "max(1, 2, True)\n",
+    "min(1, 2, False)\n",
+  ]) {
+    it(`rejects booleans: ${code.trim()}`, async () => {
+      const cse = await runCse(code);
+      const wasm = await runWasm(code);
+      expect(errorKind(cse.error)).toBe("TypeError");
+      expect(errorKind(wasm.error)).toBe("TypeError");
+    });
+  }
+
+  it("the prelude does not overwrite explicitly imported names", () => {
+    const names = importedNames("from m import max, math_pi as pi_alias, min as lo\n");
+    expect([...names].sort()).toEqual(["lo", "max", "pi_alias"]);
+    const prelude =
+      "math_pi = 3\nmath_e = 2\ndef max(a, b):\n    return a\n\ndef min(a, b):\n    return b\n";
+    const kept = omitDefinitions(prelude, importedNames("from m import max, math_pi\n"));
+    expect(kept).toContain("math_e = 2");
+    expect(kept).toContain("def min");
+    expect(kept).not.toContain("def max");
+    expect(kept).not.toContain("math_pi");
+    expect(kept).not.toContain("return a");
   });
 });
