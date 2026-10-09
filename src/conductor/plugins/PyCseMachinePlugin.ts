@@ -17,6 +17,22 @@ import { TokenType } from "../../tokenizer";
 // `objectId` is declared by @sourceacademy/common-cse-machine from 0.3.1 on.
 type SerializedValue = CseSerializedValue & { objectId?: string };
 
+// `label` is declared by @sourceacademy/common-cse-machine from 0.3.2 on.
+type LabelledEnvFrame = SerializedEnvFrame & { label?: string };
+
+/**
+ * Headings for the frames whose names Python shares with JavaScript (the host would otherwise call
+ * them "Program" and "Global"): the program's frame is Python's global (module) scope, and the
+ * frame above it holds the builtins. They are told apart by structure, not by name alone, since a
+ * function's frame is named after the function (`def programEnvironment(): ...`): the builtins
+ * frame is the root, and the program's frame is the one named so that belongs to no call.
+ */
+function frameLabel(env: Environment): string | undefined {
+  if (env.tail === null) return "Built-ins";
+  if (env.closure === undefined && env.name === "programEnvironment") return "Global";
+  return undefined;
+}
+
 type ControlStackItem = {
   instrType?: string;
   env?: Environment;
@@ -447,21 +463,26 @@ function serializeEnvChain(
 
   return queue
     .filter(env => env.name !== "prelude")
-    .map(env => ({
-      id: env.id,
-      name: env.name,
-      parentId: visibleParentId(env),
-      closureFrameId: env.closure?.environment?.id,
-      bindings: Object.entries(env.head)
-        .filter(([name]) => name !== "__program__")
-        .map(([name, val]) => ({
-          name,
-          value: serializeValue(val, env.id, objectIds),
-        })),
-      isActive: env.id === activeEnv.id,
-      isOnCallStack: callStackIds.has(env.id),
-      globalNames: env.closure?.globalVariables.size ? [...env.closure.globalVariables] : undefined,
-    }));
+    .map(
+      (env): LabelledEnvFrame => ({
+        id: env.id,
+        name: env.name,
+        label: frameLabel(env),
+        parentId: visibleParentId(env),
+        closureFrameId: env.closure?.environment?.id,
+        bindings: Object.entries(env.head)
+          .filter(([name]) => name !== "__program__")
+          .map(([name, val]) => ({
+            name,
+            value: serializeValue(val, env.id, objectIds),
+          })),
+        isActive: env.id === activeEnv.id,
+        isOnCallStack: callStackIds.has(env.id),
+        globalNames: env.closure?.globalVariables.size
+          ? [...env.closure.globalVariables]
+          : undefined,
+      }),
+    );
 }
 
 // ── Snapshot collection ───────────────────────────────────────────────────────
