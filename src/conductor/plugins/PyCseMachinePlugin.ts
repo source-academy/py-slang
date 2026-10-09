@@ -12,7 +12,7 @@ import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { toPythonFloat } from "../../stdlib/utils";
-import { TokenType } from "../../tokenizer";
+import { Token, TokenType } from "../../tokenizer";
 
 // `objectId` is declared by @sourceacademy/common-cse-machine from 0.3.1 on.
 type SerializedValue = CseSerializedValue & { objectId?: string };
@@ -118,9 +118,45 @@ export interface SnapshotIds {
   objects?: (obj: object) => string | undefined;
   /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
   frames?: (env: Environment) => string | undefined;
+  /**
+   * The program's source, for a closure's `metadata.body`: the source of its body, which a host
+   * shows when describing the function (otherwise it has only the name and parameters).
+   */
+  code?: string;
 }
 
 const frameId = (env: Environment, ids: SnapshotIds): string => ids.frames?.(env) ?? env.id;
+
+/**
+ * The source of a function's body as written, dedented: a `def`'s statements, a lambda's
+ * expression. `undefined` when the body has no real source position (e.g. a function the runtime
+ * made up).
+ */
+function functionBodySource(node: Closure["node"], code: string): string | undefined {
+  const body = (node as { body: unknown }).body as
+    | { startToken?: Token; endToken?: Token }[]
+    | {
+        startToken?: Token;
+        endToken?: Token;
+      };
+  const parts = Array.isArray(body) ? body : [body];
+  const first = parts[0]?.startToken;
+  const last = parts[parts.length - 1]?.endToken;
+  if (!first || !last || first.synthetic || last.synthetic) return undefined;
+  const start = first.indexInSource;
+  const end = last.indexInSource + last.lexeme.length;
+  if (start < 0 || end <= start || end > code.length) return undefined;
+  // The body's first line starts at its first statement; the others still carry the indentation
+  // of the body, which is removed.
+  const indent = start - (code.lastIndexOf("\n", start - 1) + 1);
+  return code
+    .slice(start, end)
+    .split("\n")
+    .map((line, i) =>
+      i === 0 ? line : line.slice(Math.min(indent, line.length - line.trimStart().length)),
+    )
+    .join("\n");
+}
 
 /**
  * `path` holds the lists being serialized around `v`. A list that contains itself
@@ -143,8 +179,12 @@ function serializeValue(
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
+    const body = ids.code === undefined ? undefined : functionBodySource(cl.node, ids.code);
     return withObjectId(
-      { ...base, metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName } },
+      {
+        ...base,
+        metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName, body },
+      },
       ids.objects?.(cl),
     );
   }
@@ -542,12 +582,13 @@ export async function collectSnapshots(
       .getStack()
       .slice()
       .reverse()
-      .map(sv => serializeValue(sv, activeEnv.id));
+      .map(sv => serializeValue(sv, activeEnv.id, { code }));
     const environments = serializeEnvChain(
       context.runtime.environments,
       s.getStack(),
       rawControlStack,
       activeEnv,
+      { code },
     );
 
     // The node most recently evaluated at this step. Mirrors the non-conductor CSE
