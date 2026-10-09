@@ -3,6 +3,9 @@
  * of error (if any) must be the same. The e-stepper reuses the CSE machine's values, operators,
  * environments and stdlib, so any difference is a bug in its own rewriting rules.
  */
+import { readFileSync } from "fs";
+import { join } from "path";
+
 import { runEStepper } from "../../conductor/estepper/getSteps";
 import { parse } from "../../parser";
 import { runCode } from "../../runner";
@@ -203,4 +206,49 @@ describe.each([3, 4])("Python §%i: e-stepper agrees with the CSE machine", chap
     expect(eStepper.error).toBe(cse.error);
     expect(eStepper.output).toBe(cse.output);
   });
+});
+
+/**
+ * §4 (py-slang#509): parse, tokenize, apply_in_underlying_python, and a metacircular evaluator
+ * (fixtures/mce.py, in the style of SICP Python 4.1) running small programs. The e-stepper shows
+ * every function body the evaluator's recursion is in, so its steps grow with the evaluated
+ * program; small ones keep these tests quick.
+ */
+const MCE = readFileSync(join(__dirname, "fixtures/mce.py"), "utf8");
+const mce = (program: string) => `${MCE}print(parse_and_evaluate(${JSON.stringify(program)}))\n`;
+
+const section4Programs: Record<string, string> = {
+  parse: `print(parse("def f(x):\\n    return x + 1 if x > 0 else -x\\nf(2)"))\n`,
+  "parse of a lambda and a list": `print(parse("g = lambda y: [y, not y]"))\n`,
+  tokenize: `print(tokenize("x = 1 + 2"))\n`,
+  "apply_in_underlying_python, builtin": `print(apply_in_underlying_python(max, llist(3, 7, 5)))\n`,
+  "apply_in_underlying_python, user function": `def f(a, b):\n    return a * b\nprint(apply_in_underlying_python(f, llist(6, 7)))\n`,
+  "apply_in_underlying_python, lambda": `print(apply_in_underlying_python(lambda x: x + 1, llist(5)))\n`,
+  "apply_in_underlying_python, no arguments": `print(apply_in_underlying_python(llist, None))\n`,
+  "apply_in_underlying_python, not a function": `print(apply_in_underlying_python(1, llist(1)))\n`,
+  "apply_in_underlying_python, a Python list": `print(apply_in_underlying_python(max, [3, 7]))\n`,
+  "metacircular evaluator, literal": mce(`42\n`),
+  "metacircular evaluator, operators": mce(`1 + 2 * 3\n`),
+  "metacircular evaluator, lambda": mce(`(lambda x: x * 2)(21)\n`),
+  "metacircular evaluator, unbound name": mce(`y\n`),
+};
+
+const SECTION_4_ERRORS = new Set([
+  "apply_in_underlying_python, not a function",
+  "apply_in_underlying_python, a Python list",
+  "metacircular evaluator, unbound name",
+]);
+
+describe("Python §4: e-stepper agrees with the CSE machine on §4's own programs", () => {
+  test.each(Object.entries(section4Programs))(
+    "%s",
+    async (name, code) => {
+      const [cse, eStepper] = await Promise.all([viaCse(code, 4), viaEStepper(code, 4)]);
+      if (SECTION_4_ERRORS.has(name)) expect(cse.error).toBeDefined();
+      else expect(cse.error).toBeUndefined();
+      expect(eStepper.error).toBe(cse.error);
+      expect(eStepper.output).toBe(cse.output);
+    },
+    60_000,
+  );
 });
