@@ -25,6 +25,7 @@ export {
   Py2JsEvaluator3,
   Py2JsEvaluator4,
 } from "./Py2JsEvaluator";
+export { PyEStepperEvaluator3, PyEStepperEvaluator4 } from "./PyEStepperEvaluator";
 export { PyStepperEvaluator1, PyStepperEvaluator2 } from "./PyStepperEvaluator";
 export {
   PyWasmEvaluator1,

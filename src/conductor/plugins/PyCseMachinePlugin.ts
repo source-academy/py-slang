@@ -12,7 +12,20 @@ import { generateCSEMachineStateStream } from "../../engines/cse/interpreter";
 import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { toPythonFloat } from "../../stdlib/utils";
-import { TokenType } from "../../tokenizer";
+import { Token, TokenType } from "../../tokenizer";
+
+/**
+ * Headings for the frames whose names Python shares with JavaScript (the host would otherwise call
+ * them "Program" and "Global"): the program's frame is Python's global (module) scope, and the
+ * frame above it holds the builtins. They are told apart by structure, not by name alone, since a
+ * function's frame is named after the function (`def programEnvironment(): ...`): the builtins
+ * frame is the root, and the program's frame is the one named so that belongs to no call.
+ */
+function frameLabel(env: Environment): string | undefined {
+  if (env.tail === null) return "Built-ins";
+  if (env.closure === undefined && env.name === "programEnvironment") return "Global";
+  return undefined;
+}
 
 type ControlStackItem = {
   instrType?: string;
@@ -41,7 +54,9 @@ function getListId(v: object): number {
   return _listIdMap.get(v)!;
 }
 
-function formatValue(v: Value): string {
+// `seen` holds the lists being formatted around `v`: a list that contains itself (`xs[0] = xs`)
+// is shown as `[...]` where it recurs, as CPython's repr does.
+function formatValue(v: Value, seen: Set<object> = new Set()): string {
   if (v === undefined || v === null) return "None";
   switch (v.type) {
     case "bigint":
@@ -67,7 +82,10 @@ function formatValue(v: Value): string {
     case "error":
       return v.message;
     case "list": {
-      const items = v.value.slice(0, 4).map(i => formatValue(i));
+      if (seen.has(v)) return "[...]";
+      seen.add(v);
+      const items = v.value.slice(0, 4).map(i => formatValue(i, seen));
+      seen.delete(v);
       const suffix = v.value.length > 4 ? ", ..." : "";
       return `[${items.join(", ")}${suffix}]`;
     }
@@ -82,7 +100,124 @@ function formatValue(v: Value): string {
   }
 }
 
-function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedValue {
+/**
+ * Ids for a snapshot's heap objects and frames. The CSE machine leaves both unset: objects are
+ * unnamed (no `SerializedValue.objectId`) and frames keep their environments' ids. The e-stepper
+ * gives both its own labels (`#3`, `E2`, `Global`), so a host drawing its snapshots can tell which
+ * object or frame a reference or bracket in the program pane means. `undefined` falls back to the
+ * default.
+ */
+export interface SnapshotIds {
+  /** For `SerializedValue.objectId`: names a list (its Value) or a closure (its `Closure`). */
+  objects?: (obj: object) => string | undefined;
+  /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
+  frames?: (env: Environment) => string | undefined;
+  /**
+   * The program's source, for a closure's `metadata.body`: the source of its body, which a host
+   * shows when describing the function (otherwise it has only the name and parameters).
+   */
+  code?: string;
+}
+
+const frameId = (env: Environment, ids: SnapshotIds): string => ids.frames?.(env) ?? env.id;
+
+/**
+ * The source each function (its AST node) was parsed from. A REPL session evaluates chunk after
+ * chunk in one context, so a function defined in an earlier chunk has token positions in that
+ * chunk's source, not in the one being evaluated now; `collectSnapshots` records each chunk's
+ * functions here.
+ */
+const functionSources = new WeakMap<object, string>();
+
+/** Records `code` as the source of every function in the AST under `root` (see `functionSources`). */
+function recordFunctionSources(root: unknown, code: string): void {
+  const seen = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (typeof node !== "object" || node === null || seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof Token) return;
+    const kind = (node as { kind?: unknown }).kind;
+    if (kind === "FunctionDef" || kind === "Lambda" || kind === "MultiLambda") {
+      functionSources.set(node, code);
+    }
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(root);
+}
+
+type Positioned = { startToken?: Token; endToken?: Token };
+
+/** The tokens in the AST under `root` that span several lines (multi-line strings). */
+function multilineTokens(root: unknown): Token[] {
+  const tokens = new Set<Token>();
+  const seen = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (typeof node !== "object" || node === null || seen.has(node)) return;
+    seen.add(node);
+    if (node instanceof Token) {
+      if (node.lexeme.includes("\n")) tokens.add(node);
+      return;
+    }
+    for (const value of Object.values(node)) visit(value);
+  };
+  visit(root);
+  return [...tokens];
+}
+
+/**
+ * The source of a function's body as written, dedented: a `def`'s statements, a lambda's
+ * expression. `undefined` when the body has no real source position (e.g. a function the runtime
+ * made up), or when its source is unknown (`code` does not hold the body's tokens).
+ */
+function functionBodySource(node: Closure["node"], fallbackCode: string): string | undefined {
+  const code = functionSources.get(node) ?? fallbackCode;
+  const body = (node as { body: unknown }).body as Positioned[] | Positioned;
+  const parts = Array.isArray(body) ? body : [body];
+  const first = parts[0]?.startToken;
+  const last = parts[parts.length - 1]?.endToken;
+  if (!first || !last || first.synthetic || last.synthetic) return undefined;
+  const start = first.indexInSource;
+  const end = last.indexInSource + last.lexeme.length;
+  if (start < 0 || end <= start || end > code.length) return undefined;
+  // Positions from another source (see `functionSources`) would give some unrelated text.
+  if (!code.startsWith(first.lexeme, start) || !code.startsWith(last.lexeme, last.indexInSource)) {
+    return undefined;
+  }
+  // The body's first line starts at its first statement; the others still carry the indentation
+  // of the body, which is removed — except on lines inside a multi-line string, whose leading
+  // whitespace belongs to the string.
+  const inString = multilineTokens(body).map(t => [
+    t.indexInSource,
+    t.indexInSource + t.lexeme.length,
+  ]);
+  const indent = start - (code.lastIndexOf("\n", start - 1) + 1);
+  let offset = start;
+  return code
+    .slice(start, end)
+    .split("\n")
+    .map((line, i) => {
+      const lineStart = offset;
+      offset += line.length + 1;
+      if (i === 0 || inString.some(([from, to]) => lineStart > from && lineStart < to)) {
+        return line;
+      }
+      return line.slice(Math.min(indent, line.length - line.trimStart().length));
+    })
+    .join("\n");
+}
+
+/**
+ * `path` holds the lists being serialized around `v`. A list that contains itself
+ * (`xs[0] = xs`) is serialized once; where it recurs, it is a back reference: the same list `id`,
+ * no elements, `backReference: true`. (Hosts look lists up by `id`, so they resolve it to the
+ * list itself.)
+ */
+function serializeValue(
+  v: Value | typeof UNASSIGNED,
+  envId = "",
+  ids: SnapshotIds = {},
+  path: Set<object> = new Set(),
+): SerializedValue {
   // A local that createEnvironment preallocated at CALL time but that hasn't been
   // assigned yet — mirrors js-slang's uninitialized-`const`/`let` placeholder rendering.
   if (v === UNASSIGNED) return { displayValue: "", label: "unassigned" };
@@ -92,20 +227,43 @@ function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedVal
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
-    return { ...base, metadata: { closureFrameId: cl.environment.id, params, funcName } };
+    const body = ids.code === undefined ? undefined : functionBodySource(cl.node, ids.code);
+    return withObjectId(
+      {
+        ...base,
+        metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName, body },
+      },
+      ids.objects?.(cl),
+    );
   }
   if (v.type === "list") {
-    return {
-      displayValue: formatValue(v),
-      label: "list",
-      metadata: {
-        id: getListId(v),
-        envId,
-        elements: v.value.map((el: Value) => serializeValue(el, envId)),
+    if (path.has(v)) {
+      return withObjectId(
+        {
+          displayValue: "[...]",
+          label: "list",
+          metadata: { id: getListId(v), envId, elements: [], backReference: true },
+        },
+        ids.objects?.(v),
+      );
+    }
+    path.add(v);
+    const elements = v.value.map((el: Value) => serializeValue(el, envId, ids, path));
+    path.delete(v);
+    return withObjectId(
+      {
+        displayValue: formatValue(v),
+        label: "list",
+        metadata: { id: getListId(v), envId, elements },
       },
-    };
+      ids.objects?.(v),
+    );
   }
   return base;
+}
+
+function withObjectId(value: SerializedValue, objectId: string | undefined): SerializedValue {
+  return objectId === undefined ? value : { ...value, objectId };
 }
 
 // ── Control serialisation ─────────────────────────────────────────────────────
@@ -352,6 +510,7 @@ function serializeEnvChain(
   stashValues: Value[],
   controlItems: ControlStackItem[],
   activeEnv: Environment,
+  ids: SnapshotIds = {},
 ): SerializedEnvFrame[] {
   const seen = new Set<string>();
   const queue: Environment[] = [];
@@ -392,7 +551,7 @@ function serializeEnvChain(
   const visibleParentId = (env: Environment): string | null => {
     let cur = env.tail;
     while (cur) {
-      if (cur.name !== "prelude") return cur.id;
+      if (cur.name !== "prelude") return frameId(cur, ids);
       cur = cur.tail;
     }
     return null;
@@ -400,21 +559,28 @@ function serializeEnvChain(
 
   return queue
     .filter(env => env.name !== "prelude")
-    .map(env => ({
-      id: env.id,
-      name: env.name,
-      parentId: visibleParentId(env),
-      closureFrameId: env.closure?.environment?.id,
-      bindings: Object.entries(env.head)
-        .filter(([name]) => name !== "__program__")
-        .map(([name, val]) => ({
-          name,
-          value: serializeValue(val, env.id),
-        })),
-      isActive: env.id === activeEnv.id,
-      isOnCallStack: callStackIds.has(env.id),
-      globalNames: env.closure?.globalVariables.size ? [...env.closure.globalVariables] : undefined,
-    }));
+    .map(
+      (env): SerializedEnvFrame => ({
+        id: frameId(env, ids),
+        name: env.name,
+        label: frameLabel(env),
+        parentId: visibleParentId(env),
+        closureFrameId: env.closure?.environment
+          ? frameId(env.closure.environment, ids)
+          : undefined,
+        bindings: Object.entries(env.head)
+          .filter(([name]) => name !== "__program__")
+          .map(([name, val]) => ({
+            name,
+            value: serializeValue(val, frameId(env, ids), ids),
+          })),
+        isActive: env.id === activeEnv.id,
+        isOnCallStack: callStackIds.has(env.id),
+        globalNames: env.closure?.globalVariables.size
+          ? [...env.closure.globalVariables]
+          : undefined,
+      }),
+    );
 }
 
 // ── Snapshot collection ───────────────────────────────────────────────────────
@@ -436,6 +602,9 @@ export async function collectSnapshots(
   // unambiguous "not a real line" signal. Keep showing the last real line instead of
   // flickering to 0 while these synthetic nodes are being evaluated.
   let lastKnownLine: number | undefined;
+
+  // This chunk's functions keep this chunk's source, for their bodies in later chunks' snapshots.
+  recordFunctionSources(control.getStack(), code);
 
   const stream = generateCSEMachineStateStream(
     code,
@@ -464,12 +633,13 @@ export async function collectSnapshots(
       .getStack()
       .slice()
       .reverse()
-      .map(sv => serializeValue(sv, activeEnv.id));
+      .map(sv => serializeValue(sv, activeEnv.id, { code }));
     const environments = serializeEnvChain(
       context.runtime.environments,
       s.getStack(),
       rawControlStack,
       activeEnv,
+      { code },
     );
 
     // The node most recently evaluated at this step. Mirrors the non-conductor CSE

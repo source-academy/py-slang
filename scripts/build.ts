@@ -38,6 +38,8 @@ const allTargets = [
   "Py2JsEvaluator4",
   "PyStepperEvaluator1",
   "PyStepperEvaluator2",
+  "PyEStepperEvaluator3",
+  "PyEStepperEvaluator4",
 ] as const;
 
 type EvaluatorName = (typeof allTargets)[number];

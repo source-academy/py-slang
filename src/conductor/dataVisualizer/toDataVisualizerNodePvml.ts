@@ -4,6 +4,7 @@ import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-vi
 import { pvmlBoxToCseValue } from "../../engines/pvml/cse-interop";
 import { isPVMLObject, type PVMLBoxType } from "../../engines/pvml/types";
 import { toPythonString } from "../../stdlib/utils";
+import { noneNode } from "./noneNode";
 
 /**
  * Converts one PVML runtime value ({@link PVMLBoxType}) into a {@link SerializedDataVisualizerNode}.
@@ -20,7 +21,7 @@ export function toDataVisualizerNodePvml(
   value: PVMLBoxType,
   refs: RefIdAllocator,
 ): SerializedDataVisualizerNode {
-  if (value === null || value === undefined) return { type: "empty" };
+  if (value === null || value === undefined) return noneNode();
   if (isPVMLObject(value)) {
     switch (value.type) {
       case "array": {

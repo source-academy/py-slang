@@ -1689,17 +1689,27 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-cse-machine@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@sourceacademy/common-cse-machine@npm:0.3.0"
-  checksum: 10c0/c0462cc2dd8d779179c31d168aa3e71ea7f81818535166e38aeb3c048469fcf7eebc388ed4110d3300d6b6933cc310da3fbe4c3a4026746c5df409eb91dd7042
+"@sourceacademy/common-cse-machine@npm:^0.3.1":
+  version: 0.3.1
+  resolution: "@sourceacademy/common-cse-machine@npm:0.3.1"
+  checksum: 10c0/04d0a087d884ccd4433081dd04dd77a4c40d34ea5320638023b5ff803c4829c0e483b6fc6628e3c81eecc4683872f87dc9fbbc9895cc712427d4848734a92d06
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-data-visualizer@npm:^0.0.1":
-  version: 0.0.1
-  resolution: "@sourceacademy/common-data-visualizer@npm:0.0.1"
-  checksum: 10c0/ce926ba006bf5a6ed6d06fd318c51089be4015596b0b98a52b2160fde1834e1f968a4bdbfb9685e6990505836cdf2c6ac42ce77abfbf3ab58fcb3ed0d5e2402d
+"@sourceacademy/common-data-visualizer@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@sourceacademy/common-data-visualizer@npm:0.0.2"
+  checksum: 10c0/7d5cf0e0c0d61837416b4cfbea87f06f335e8ca8e61036ed95533d878b4b93afd90815bc5312a5adcff0dbbc19776e4c8f48ae883512a5712e10b8ad0d153bbf
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/common-e-stepper@npm:^0.0.2":
+  version: 0.0.2
+  resolution: "@sourceacademy/common-e-stepper@npm:0.0.2"
+  peerDependencies:
+    "@sourceacademy/common-cse-machine": ">=0.3.1"
+    "@sourceacademy/common-stepper": ">=0.0.4"
+  checksum: 10c0/8a63f9f5e85f34c1495711fb92ff24debe737fe0fa7159d6451d0f0c641585e359469f47c8f176b709ca3f7d28d3edee99cffea37b9cb13ae7b2d56fde31f5b7
   languageName: node
   linkType: hard
 
@@ -1731,14 +1741,16 @@ __metadata:
     "@rollup/plugin-typescript": "npm:^12.1.2"
     "@rollup/plugin-wasm": "npm:^6.2.2"
     "@sourceacademy/common-autocomplete": "npm:^0.0.1"
-    "@sourceacademy/common-cse-machine": "npm:^0.3.0"
-    "@sourceacademy/common-data-visualizer": "npm:^0.0.1"
+    "@sourceacademy/common-cse-machine": "npm:^0.3.1"
+    "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
+    "@sourceacademy/common-e-stepper": "npm:^0.0.2"
     "@sourceacademy/common-stepper": "npm:^0.0.1"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.2.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
     "@sourceacademy/runner-cse-machine": "npm:^3.0.0"
     "@sourceacademy/runner-data-visualizer": "npm:^0.0.1"
+    "@sourceacademy/runner-e-stepper": "npm:^0.0.1"
     "@sourceacademy/runner-module-loader": "npm:^0.0.1"
     "@sourceacademy/runner-stepper": "npm:^0.0.1"
     "@sourceacademy/wasm-util": "npm:^1.0.6"
@@ -1803,6 +1815,18 @@ __metadata:
   peerDependencies:
     "@sourceacademy/conductor": ">=0.3.0"
   checksum: 10c0/d5e1530c90e9508ed8e32f23d906fdd46696f94ac720c0c7c11c5d57fbe1781c54ca91741c22b099779f2f9937c24b6ecf426daa59fe6db14376e6793414c849
+  languageName: node
+  linkType: hard
+
+"@sourceacademy/runner-e-stepper@npm:^0.0.1":
+  version: 0.0.1
+  resolution: "@sourceacademy/runner-e-stepper@npm:0.0.1"
+  peerDependencies:
+    "@sourceacademy/common-e-stepper": ">=0.0.0"
+    "@sourceacademy/common-stepper": ">=0.0.4"
+    "@sourceacademy/conductor": ^0.8.0
+    "@sourceacademy/runner-stepper": ">=0.0.1"
+  checksum: 10c0/7a4384d723522afbcc4aff3402e90d8368d19fbd5684ae9de6bc4829d1b1a835c3d88b0d4170f5ca6ac27a1e6a50d55f0eb27c38a31972ee10604c25f0c31dd0
   languageName: node
   linkType: hard
 
@@ -3357,10 +3381,10 @@ __metadata:
   linkType: hard
 
 "handlebars@npm:^4.7.8":
-  version: 4.7.9
-  resolution: "handlebars@npm:4.7.9"
+  version: 4.7.10
+  resolution: "handlebars@npm:4.7.10"
   dependencies:
-    minimist: "npm:^1.2.5"
+    minimist: "npm:^1.2.8"
     neo-async: "npm:^2.6.2"
     source-map: "npm:^0.6.1"
     uglify-js: "npm:^3.1.4"
@@ -3370,7 +3394,7 @@ __metadata:
       optional: true
   bin:
     handlebars: bin/handlebars
-  checksum: 10c0/22f8105a7e68e81aff2662bb434edf05f757d21d850731d71cec886d69c10cd33d3c43e34b2892968ec62de8241611851d3d0674c8ef324ea3e01dc66262faa9
+  checksum: 10c0/9b5573584ae5836172ae3f1502d9819568ba1b92ee83b81b18223beeb4c07486595e7b0fa633102beabc66ed06fe6e7da1dd9a9ea8c7072b9550b9a88809165c
   languageName: node
   linkType: hard
 
@@ -4488,7 +4512,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"minimist@npm:^1.2.5":
+"minimist@npm:^1.2.8":
   version: 1.2.8
   resolution: "minimist@npm:1.2.8"
   checksum: 10c0/19d3fcdca050087b84c2029841a093691a91259a47def2f18222f41e7645a0b7c44ef4b40e88a1e58a40c84d2ef0ee6047c55594d298146d0eb3f6b737c20ce6

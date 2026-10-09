@@ -7,6 +7,7 @@
  *   yarn repl <file.py> --engine pvml [-v <1-4>]
  *   yarn repl <file.py> --engine py2js [-v <1-4>]
  *   yarn repl <file.py> --engine wasm [-v <1-4>]
+ *   yarn repl <file.py> --engine estepper [-v <3-4>] [--trace]
  *
  * Runs a SICPy program through one of five engines:
  *   - cse (default): the tree-walking CSE evaluator.
@@ -31,6 +32,9 @@
  *     runs it via Node's built-in WebAssembly support — the same compiler
  *     PyWasmEvaluator1..4 use in the Conductor pathway. Supports all four
  *     SICPy chapters (-v 1-4).
+ *   - estepper: the environment stepper (src/conductor/estepper), the engine
+ *     behind PyEStepperEvaluator3/4 — the program's output, or with --trace
+ *     every step's explanation followed by the output. Chapters 3-4 only.
  *
  * The engine can also be set via the PY_SLANG_ENGINE environment variable
  * (e.g. `PY_SLANG_ENGINE=pvml yarn repl file.py`); an explicit --engine flag
@@ -42,19 +46,42 @@
 import { readFileSync } from "fs";
 import { Command } from "commander";
 import { runCodePy2Js } from "./engines/py2js";
+import { runEStepper } from "./conductor/estepper/getSteps";
 import { compileToWasmAndRun } from "./engines/wasm";
 import { WASM_GROUPS } from "./engines/wasm/groups";
+import { parse } from "./parser";
 import { runCodePvml, runCodePvmlInterpreter } from "./pvml-runner";
 import { runCode } from "./runner";
 
-type Engine = "cse" | "pynter" | "pvml" | "py2js" | "wasm";
+type Engine = "cse" | "pynter" | "pvml" | "py2js" | "wasm" | "estepper";
 
-const ENGINES: Engine[] = ["cse", "pynter", "pvml", "py2js", "wasm"];
+const ENGINES: Engine[] = ["cse", "pynter", "pvml", "py2js", "wasm", "estepper"];
 
 interface ReplOptions {
   variant: string;
   engine: Engine;
   pynter?: string;
+  trace?: boolean;
+}
+
+async function runEStepperCli(code: string, variant: number, trace: boolean): Promise<string> {
+  if (variant !== 3 && variant !== 4) {
+    process.stderr.write(`--engine estepper supports chapters 3-4 only (got -v ${variant}).\n`);
+    process.exit(1);
+  }
+  const script = code.endsWith("\n") ? code : code + "\n";
+  const run = await runEStepper(parse(script), script, variant);
+  const traceText = trace
+    ? run.steps
+        // The explanations of the start, after and final steps tell the whole story.
+        .filter(step => step.markers?.[0]?.redexType !== "beforeMarker")
+        .map(step => (step.markers?.[0]?.explanation ?? "") + "\n")
+        .join("")
+    : "";
+  if (run.error !== undefined) {
+    throw Object.assign(new Error(run.error), { output: traceText + run.output });
+  }
+  return traceText + run.output;
 }
 
 async function runWasm(code: string, variant: number): Promise<string> {
@@ -110,7 +137,9 @@ async function runFile(filename: string, opts: ReplOptions): Promise<void> {
             ? runCodePy2Js(code, variant).output
             : opts.engine === "wasm"
               ? await runWasm(code, variant)
-              : await runCode(code, variant);
+              : opts.engine === "estepper"
+                ? await runEStepperCli(code, variant, opts.trace ?? false)
+                : await runCode(code, variant);
     process.stdout.write(output);
   } catch (e) {
     // Show what the program printed before it failed, then the error.
@@ -126,18 +155,21 @@ const envEngine = process.env.PY_SLANG_ENGINE;
 
 const program = new Command()
   .name("py-slang")
-  .description("Run SICPy programs using the py-slang CSE, Pynter, PVML, py2js, or WASM evaluator")
+  .description(
+    "Run SICPy programs using the py-slang CSE, Pynter, PVML, py2js, WASM or e-stepper evaluator",
+  )
   .argument("<file>", "SICPy source file to evaluate")
   .option("-v, --variant <number>", "SICPy chapter/variant (1–4)", "4")
   .option(
     "-e, --engine <name>",
-    "Execution engine: cse, pynter, pvml, py2js, or wasm (default: $PY_SLANG_ENGINE, or cse)",
+    "Execution engine: cse, pynter, pvml, py2js, wasm, or estepper (default: $PY_SLANG_ENGINE, or cse)",
     envEngine ?? "cse",
   )
   .option(
     "--pynter <path>",
     "Path to a native Pynter `runner` binary (required for --engine pynter, which only supports -v 3)",
   )
+  .option("--trace", "With --engine estepper: print every step's explanation before the output")
   .action(async (file: string, opts: ReplOptions) => {
     if (!ENGINES.includes(opts.engine)) {
       process.stderr.write(
