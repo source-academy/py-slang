@@ -65,16 +65,24 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(story(steps)).toEqual([
       "Start of evaluation",
       "Defined make_withdraw: function object #1 in the global frame",
-      "Called make_withdraw(100): new frame E1 extends the global frame (make_withdraw is function object #1 in Global)",
+      "Looked up make_withdraw in the global frame: function object #1",
+      "Called make_withdraw(100): new frame E1 extends the global frame",
       "Defined withdraw: function object #2 in frame E1",
-      "Returned withdraw from E1 (withdraw is function object #2 in E1)",
+      "Looked up withdraw in frame E1: function object #2",
+      "Returned withdraw from E1",
       "Assigned W1 = withdraw in the global frame",
-      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance (W1 is function object #2 in Global)",
-      "Evaluated balance >= amount: True (balance is 100 in E1, amount is 50 in E2)",
+      "Looked up W1 in the global frame: function object #2",
+      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance",
+      "Looked up balance in frame E1: 100",
+      "Looked up amount in frame E2: 50",
+      "Evaluated 100 >= 50: True",
       "Evaluated if statement: condition is True",
-      "Evaluated balance - amount: 50 (balance is 100 in E1, amount is 50 in E2)",
+      "Looked up balance in frame E1: 100",
+      "Looked up amount in frame E2: 50",
+      "Evaluated 100 - 50: 50",
       "Assigned balance = 50 in frame E1",
-      "Returned 50 from E2 (balance is 50 in E1)",
+      "Looked up balance in frame E1: 50",
+      "Returned 50 from E2",
       "Finished the expression statement: its value 50 is not used",
       "Evaluation complete",
     ]);
@@ -133,29 +141,39 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
 });
 
 describe("lookups", () => {
-  test("bindings read by a step are reported for highlighting", async () => {
+  test("every name is looked up in a step of its own, which reports the binding read", async () => {
     const { steps } = await run(`x = 1\ny = x + 2\n`);
-    const add = steps.find(s => s.markers?.[0]?.explanation === "Evaluating x + 2")!;
-    expect(add.lookups).toEqual([{ frameId: "Global", name: "x" }]);
+    expect(story(steps)).toEqual([
+      "Start of evaluation",
+      "Assigned x = 1 in the global frame",
+      "Looked up x in the global frame: 1",
+      "Evaluated 1 + 2: 3",
+      "Assigned y = 3 in the global frame",
+      "Evaluation complete",
+    ]);
+    const lookup = steps.find(s => s.markers?.[0]?.explanation === "Looking up x")!;
+    expect(lookup.lookups).toEqual([{ frameId: "Global", name: "x" }]);
   });
 
-  test("a name is looked up in its own step when a later operand could change it", async () => {
-    const { steps } = await run(`x = 1
+  test("names are looked up left to right, before a later operand could change them", async () => {
+    const { steps, output } = await run(`x = 1
 def bump():
     global x
     x = x + 10
     return 0
 print(x + bump())
 `);
-    expect(story(steps)).toContain("Looked up x: 1");
-    // ... and the addition uses the value read before the call, as Python does.
-    expect(
-      (
-        await run(
-          `x = 1\ndef bump():\n    global x\n    x = x + 10\n    return 0\nprint(x + bump())\n`,
-        )
-      ).output,
-    ).toBe("1\n");
+    expect(output).toBe("1\n");
+    const story_ = story(steps);
+    expect(story_.indexOf("Looked up x in the global frame: 1")).toBeLessThan(
+      story_.indexOf("Looked up bump in the global frame: function object #1"),
+    );
+  });
+
+  test("the predicate of a while loop looks names up like any other expression", async () => {
+    const { steps } = await run(`i = 0\nwhile i < 1:\n    i = i + 1\n`);
+    expect(story(steps)).toContain("Looked up i in the global frame: 0");
+    expect(story(steps)).toContain("Evaluated 0 < 1: True");
   });
 
   test("builtins need no lookup step", async () => {
@@ -173,11 +191,13 @@ describe("loops", () => {
       "Evaluated range: from 0 to 2 in steps of 1",
       "Evaluated for statement: run the body with i = 0",
       "Assigned i = 0 in the global frame",
-      "Ran print(0) (i is 0 in Global)",
+      "Looked up i in the global frame: 0",
+      "Ran print(0)",
       "Finished the loop body, back to the loop",
       "Evaluated for statement: run the body with i = 1",
       "Assigned i = 1 in the global frame",
-      "Ran print(1) (i is 1 in Global)",
+      "Looked up i in the global frame: 1",
+      "Ran print(1)",
       "Finished the loop body, back to the loop",
       "Evaluated for statement: 2 is not in the range, the loop ends",
       "Evaluation complete",

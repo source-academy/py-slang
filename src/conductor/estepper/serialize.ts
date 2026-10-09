@@ -250,56 +250,56 @@ export class ProgramSerializer {
 /*                               Active frame                                 */
 /* -------------------------------------------------------------------------- */
 
-const isReady = (e: Expr): boolean => e.k === "val" || e.k === "name";
-
 /** The environment the next redex of `e` is evaluated in. */
-function activeInExpr(e: Expr, env: Environment): Environment {
+function activeInExpr(machine: Machine, e: Expr, env: Environment): Environment {
   switch (e.k) {
     case "block":
-      return Array.isArray(e.body) ? activeInList(e.body, e.env) : activeInExpr(e.body, e.env);
+      return Array.isArray(e.body)
+        ? activeInList(machine, e.body, e.env)
+        : activeInExpr(machine, e.body, e.env);
     case "bin":
-      return activeInChildren([e.left, e.right], env);
+      return activeInChildren(machine, [e.left, e.right], env);
     case "bool":
-      return activeInChildren([e.left], env);
+      return activeInChildren(machine, [e.left], env);
     case "unary":
-      return activeInChildren([e.arg], env);
+      return activeInChildren(machine, [e.arg], env);
     case "cond":
-      return activeInChildren([e.test], env);
+      return activeInChildren(machine, [e.test], env);
     case "call":
-      return activeInChildren([e.callee, ...e.args], env);
+      return activeInChildren(machine, [e.callee, ...e.args], env);
     case "list":
-      return activeInChildren(e.elems, env);
+      return activeInChildren(machine, e.elems, env);
     case "sub":
-      return activeInChildren([e.obj, e.index], env);
+      return activeInChildren(machine, [e.obj, e.index], env);
     default:
       return env;
   }
 }
 
-function activeInChildren(children: Expr[], env: Environment): Environment {
-  const next = children.find(c => !isReady(c));
-  return next ? activeInExpr(next, env) : env;
+function activeInChildren(machine: Machine, children: Expr[], env: Environment): Environment {
+  const next = children.find(c => !machine.isReady(c, env));
+  return next ? activeInExpr(machine, next, env) : env;
 }
 
-export function activeInList(list: Stmt[], env: Environment): Environment {
+export function activeInList(machine: Machine, list: Stmt[], env: Environment): Environment {
   if (list.length === 0) return env;
   const head = list[0];
   switch (head.k) {
     case "expr":
-      return activeInExpr(head.e, env);
+      return activeInExpr(machine, head.e, env);
     case "assign":
-      return activeInExpr(head.value, env);
+      return activeInExpr(machine, head.value, env);
     case "subassign":
-      return activeInChildren([head.obj, head.index, head.value], env);
+      return activeInChildren(machine, [head.obj, head.index, head.value], env);
     case "return":
-      return head.e ? activeInExpr(head.e, env) : env;
+      return head.e ? activeInExpr(machine, head.e, env) : env;
     case "if":
     case "while":
-      return activeInExpr(head.test, env);
+      return activeInExpr(machine, head.test, env);
     case "forinit":
-      return activeInChildren(head.args, env);
+      return activeInChildren(machine, head.args, env);
     case "loop":
-      return activeInList(head.body, env);
+      return activeInList(machine, head.body, env);
     default:
       return env;
   }
@@ -452,7 +452,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   // And every object shown at an earlier step, as the CSE machine keeps showing objects that
   // have become garbage (e.g. the list `[None]` once `[None] * 3` has been evaluated).
   for (const obj of machine.shownObjects.keys()) all.value(asValue(obj));
-  const active = activeInList(program, machine.programEnv);
+  const active = activeInList(machine, program, machine.programEnv);
   for (const obj of all.objects) {
     if (!machine.shownObjects.has(obj)) {
       machine.shownObjects.set(obj, isList(obj) ? active : obj.environment);
@@ -639,7 +639,7 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
  */
 export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number): CseSnapshot {
   const { frames, values } = programRoots(program);
-  const active = activeInList(program, machine.programEnv);
+  const active = activeInList(machine, program, machine.programEnv);
   const callStack = [active, ...frames.reverse(), machine.programEnv];
   // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
   // stand for, so a host can tell which object a reference in the program pane means, and which
