@@ -69,8 +69,7 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
       "Defined withdraw: function object #2 in frame E1",
       "Returned withdraw from E1 (withdraw is function object #2 in E1)",
       "Assigned W1 = withdraw in the global frame",
-      "Called withdraw(50): new frame E2 extends E1 (W1 is function object #2 in Global)",
-      "Evaluated nonlocal declaration: balance refers to an enclosing frame",
+      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance (W1 is function object #2 in Global)",
       "Evaluated balance >= amount: True (balance is 100 in E1, amount is 50 in E2)",
       "Evaluated if statement: condition is True",
       "Evaluated balance - amount: 50 (balance is 100 in E1, amount is 50 in E2)",
@@ -79,6 +78,13 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
       "Finished the expression statement: its value 50 is not used",
       "Evaluation complete",
     ]);
+  });
+
+  test("declarations are not evaluated, but stay in the program while its body runs", async () => {
+    const { steps } = await run(MAKE_WITHDRAW);
+    const inE2 = steps.filter(s => s.activeFrameId === "E2");
+    expect(inE2.length).toBeGreaterThan(1);
+    for (const step of inE2) expect(JSON.stringify(step.ast)).toContain("NonlocalStatement");
   });
 
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
@@ -602,5 +608,34 @@ describe("limits and rejected programs", () => {
     await expect(run(`print(undefined_name)\n`)).rejects.toBeInstanceOf(EStepperProgramError);
     // Python §3 only has for loops over range(...).
     await expect(run(`for x in [1, 2]:\n    pass\n`)).rejects.toBeInstanceOf(EStepperProgramError);
+  });
+});
+
+describe("global and nonlocal declarations", () => {
+  test("take no step of their own, wherever they are in the body", async () => {
+    const program = `count = 0
+def bump(n):
+    if n > 0:
+        global count
+    count = count + n
+    return count
+bump(2)
+`;
+    const { steps, error } = await run(program);
+    expect(error).toBeUndefined();
+    const explanations = story(steps);
+    expect(explanations.join("\n")).not.toMatch(/declaration/);
+    expect(explanations).toContainEqual(
+      expect.stringMatching(
+        /^Called bump\(2\): new frame E1 extends the global frame, without a binding for global count/,
+      ),
+    );
+    expect(explanations).toContainEqual(
+      expect.stringMatching(/^Assigned count = 2 in the global frame/),
+    );
+    // The `if` whose branch holds the declaration is evaluated; the declaration is shown until
+    // the branch is done.
+    const branch = steps.find(s => JSON.stringify(s.ast).includes("GlobalStatement"));
+    expect(branch).toBeDefined();
   });
 });

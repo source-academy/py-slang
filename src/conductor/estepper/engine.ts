@@ -568,7 +568,7 @@ export class Machine {
           before: `Calling ${display}`,
           after: `Called ${display}: new frame ${label} extends ${
             parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
-          }`,
+          }${declarationsNote(closure)}`,
         },
       };
     }
@@ -967,19 +967,33 @@ export class Machine {
       case "pass":
         return this.removed(head, rest, "Evaluating pass", "Evaluated pass");
       case "global":
-      case "nonlocal":
-        return this.removed(
-          head,
-          rest,
-          `Evaluating ${head.k} declaration`,
-          `Evaluated ${head.k} declaration: ${head.names.join(", ")} ${
-            head.names.length === 1 ? "refers" : "refer"
-          } to ${head.k === "global" ? "the global frame" : "an enclosing frame"}`,
-        );
+      case "nonlocal": {
+        // Declarations are not evaluated: when the function was defined, they decided which names
+        // in its body are found (and assigned) in the global frame or an enclosing function's frame
+        // (the closure's `globalVariables` and `nonlocalVariables`). So they stay in the program,
+        // as part of its source, and evaluation goes on with the statements after them.
+        const inner = await this.stepList(rest, env);
+        return inner.kind === "step" ? { ...inner, list: [head, ...inner.list] } : inner;
+      }
       case "unsupported-stmt":
         throw new Error(`The environment stepper does not support ${head.what} statements`);
     }
   }
+}
+
+/**
+ * What a called function's `global` and `nonlocal` declarations decided, for the call step's
+ * explanation: the new frame has no binding for the declared names (they are found, and assigned,
+ * in the global frame or an enclosing function's frame). The declarations themselves are not
+ * evaluated (see `stepList`).
+ */
+function declarationsNote(closure: Closure): string {
+  const names = [
+    ...[...closure.nonlocalVariables].map(name => `nonlocal ${name}`),
+    ...[...closure.globalVariables].map(name => `global ${name}`),
+  ];
+  if (names.length === 0) return "";
+  return `, without ${names.length === 1 ? "a binding" : "bindings"} for ${names.join(", ")}`;
 }
 
 /** Asks the user for a line of input (the host's `requestInput`), showing `prompt` if given. */
