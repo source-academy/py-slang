@@ -21,7 +21,6 @@ import { VARIANT_GROUPS } from "../../runner";
 import { type Contraction, Machine, type RequestInput } from "./engine";
 import { ProgramSerializer, snapshotStore, type StoreSnapshot } from "./serialize";
 import { type Expr, type Stmt, translateStmts } from "./terms";
-import { describeValue } from "./text";
 
 /**
  * {@link EStepperStep} with the stepper protocol's `output` field, which `@sourceacademy/common-stepper`
@@ -176,16 +175,6 @@ export async function runEStepper(
       name: l.name,
     }));
     const c: Contraction = outcome.c;
-    // Name lookups happen as part of the contraction that uses them; say where they were found.
-    const lookedUp =
-      machine.lookups.length > 0 && !c.after.startsWith("Looked up")
-        ? ` (${machine.lookups
-            .map(
-              l =>
-                `${l.name} is ${describeValue(l.value, machine.text)} in ${machine.labels.frame(l.env)}`,
-            )
-            .join(", ")})`
-        : "";
     push(
       program,
       storeBefore,
@@ -198,7 +187,7 @@ export async function runEStepper(
       program,
       snapshotStore(machine, program),
       machine.output,
-      { redex: c.post, redexType: "afterMarker", explanation: c.after + lookedUp },
+      { redex: c.post, redexType: "afterMarker", explanation: c.after },
       lookups,
     );
   }

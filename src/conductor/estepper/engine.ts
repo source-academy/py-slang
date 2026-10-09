@@ -74,7 +74,7 @@ import {
   translateStmts,
   val,
 } from "./terms";
-import { exprText, stmtHeadText, type TextContext, valueText } from "./text";
+import { describeValue, exprText, stmtHeadText, type TextContext, valueText } from "./text";
 
 /** A binding read by a name lookup during a step. */
 export interface Lookup {
@@ -110,34 +110,6 @@ type ListOutcome =
 const ATOMIC_STEP_LIMIT = 1_000_000;
 
 const NONE: Value = { type: "none" };
-
-/** Whether evaluating `e` could change bindings (so names read before it must be read first). */
-function mayHaveEffects(e: Expr): boolean {
-  switch (e.k) {
-    case "val":
-    case "name":
-    case "lambda":
-    case "unsupported":
-      return false;
-    case "call":
-    case "block":
-      return true;
-    case "bin":
-    case "bool":
-      return mayHaveEffects(e.left) || mayHaveEffects(e.right);
-    case "unary":
-      return mayHaveEffects(e.arg);
-    case "cond":
-      return mayHaveEffects(e.test) || mayHaveEffects(e.cons) || mayHaveEffects(e.alt);
-    case "list":
-      return e.elems.some(mayHaveEffects);
-    case "sub":
-      return mayHaveEffects(e.obj) || mayHaveEffects(e.index);
-  }
-}
-
-/** A value or a name: needs no reduction step of its own (a name is looked up when used). */
-const isReady = (e: Expr): boolean => e.k === "val" || e.k === "name";
 
 export class Machine {
   readonly context: Context;
@@ -251,7 +223,15 @@ export class Machine {
     return value;
   }
 
-  /** The value of a ready term (looking up a name). */
+  /**
+   * Whether a term needs no reduction step of its own: a value, or the name of a builtin or library
+   * function. Every other name is looked up in a step of its own.
+   */
+  isReady(e: Expr, env: Environment): boolean {
+    return e.k === "val" || (e.k === "name" && this.isLibraryName(e, env));
+  }
+
+  /** The value of a ready term (looking up a library name). */
   private resolve(e: Expr, env: Environment): Value {
     if (e.k === "val") return e.v;
     if (e.k === "name") return this.lookup(e, env);
@@ -290,8 +270,8 @@ export class Machine {
   }
 
   /**
-   * Whether a name refers to a builtin or library function. Such a binding cannot be changed by
-   * evaluating other parts of an expression, so it needs no lookup step of its own.
+   * Whether a name refers to a builtin or library function. Such a name is not bound in any frame
+   * the diagram shows, so it is looked up when used, without a step of its own.
    */
   private isLibraryName(e: Expr & { k: "name" }, env: Environment): boolean {
     const start = env.closure?.globalVariables.has(e.name) ? this.programEnv : env;
@@ -317,38 +297,14 @@ export class Machine {
   /*                                Expressions                               */
   /* ------------------------------------------------------------------------ */
 
-  /**
-   * Reduces the first of `children` that is not ready, after first looking up any earlier names
-   * whose bindings the later child's evaluation could change (Python evaluates left to right).
-   * Returns null when every child is ready.
-   */
+  /** Reduces the first of `children` that is not ready (Python evaluates left to right), or
+   * returns null when every child is ready. */
   private async reduceChildren(
     children: Expr[],
     env: Environment,
   ): Promise<{ index: number; step: ExprStep } | null> {
     for (let i = 0; i < children.length; i++) {
-      if (isReady(children[i])) continue;
-      if (mayHaveEffects(children[i])) {
-        for (let j = 0; j < i; j++) {
-          const earlier = children[j];
-          if (earlier.k === "name" && !this.isLibraryName(earlier, env)) {
-            const value = this.lookup(earlier, env);
-            const node = val(value);
-            return {
-              index: j,
-              step: {
-                node,
-                c: {
-                  pre: earlier,
-                  post: node,
-                  before: `Looking up ${earlier.name}`,
-                  after: `Looked up ${earlier.name}: ${this.v(value)}`,
-                },
-              },
-            };
-          }
-        }
-      }
+      if (this.isReady(children[i], env)) continue;
       const step = await this.reduceExpr(children[i], env);
       if (step) return { index: i, step };
     }
@@ -359,8 +315,22 @@ export class Machine {
   async reduceExpr(e: Expr, env: Environment): Promise<ExprStep | null> {
     switch (e.k) {
       case "val":
-      case "name":
         return null;
+      case "name": {
+        if (this.isLibraryName(e, env)) return null;
+        const value = this.lookup(e, env);
+        const frame = this.lookups[this.lookups.length - 1].env;
+        const node = val(value);
+        return {
+          node,
+          c: {
+            pre: e,
+            post: node,
+            before: `Looking up ${e.name}`,
+            after: `Looked up ${e.name} in ${this.where(frame)}: ${describeValue(value, this.text)}`,
+          },
+        };
+      }
       case "unsupported":
         throw new Error(`The environment stepper does not support ${e.what} expressions`);
       case "bin": {
