@@ -340,6 +340,21 @@ describe("frame labels in the CSE machine snapshots", () => {
     }
   });
 
+  test("a function named like the program's frame gets no label", async () => {
+    const program = `def programEnvironment(x):\n    return x\nprogramEnvironment(1)\n`;
+    const result = await runEStepper(parse(program), program, 3);
+    const frames = result.steps.flatMap(s => s.cse!.environments) as {
+      name: string;
+      label?: string;
+      isActive: boolean;
+    }[];
+    const labels = new Set(
+      frames.filter(e => e.name === "programEnvironment").map(e => e.label ?? "(none)"),
+    );
+    // The program's own frame is "Global"; the call's frame, also named programEnvironment, is not.
+    expect(labels).toEqual(new Set(["Global", "(none)"]));
+  });
+
   test("a function named like an Object method gets no label", async () => {
     const program = `def constructor(x):\n    return x\nconstructor(1)\n`;
     const result = await runEStepper(parse(program), program, 3);
