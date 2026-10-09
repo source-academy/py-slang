@@ -323,6 +323,36 @@ W1(50)
   });
 });
 
+describe("frame labels in the CSE machine snapshots", () => {
+  test("use Python's names for the module and builtins frames, and none for others", async () => {
+    const steps = await run(MAKE_WITHDRAW);
+    const environments = steps.steps[steps.steps.length - 1].cse!.environments as {
+      name: string;
+      label?: string;
+    }[];
+    const labelOf = (name: string) => environments.find(e => e.name === name)?.label;
+    expect(labelOf("programEnvironment")).toBe("Global");
+    expect(
+      environments.filter(e => e.name !== "programEnvironment" && e.name !== "global"),
+    ).not.toHaveLength(0);
+    for (const e of environments) {
+      if (e.name !== "programEnvironment" && e.name !== "global") expect(e.label).toBeUndefined();
+    }
+  });
+
+  test("a function named like an Object method gets no label", async () => {
+    const program = `def constructor(x):\n    return x\nconstructor(1)\n`;
+    const result = await runEStepper(parse(program), program, 3);
+    const frames = result.steps.flatMap(s => s.cse!.environments) as {
+      name: string;
+      label?: string;
+    }[];
+    const call = frames.find(e => e.name === "constructor");
+    expect(call).toBeDefined();
+    expect(call!.label).toBeUndefined();
+  });
+});
+
 describe("self-referential lists", () => {
   const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
   type Serialized = {
