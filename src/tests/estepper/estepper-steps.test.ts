@@ -453,6 +453,37 @@ h = lambda z: z + 1
     expect(fns.get("h")).toMatchObject({ params: ["z"], body: "z + 1" });
   });
 
+  test("keep the whitespace inside a multi-line string", async () => {
+    const program = `def f():\n    s = """a\n  b"""\n    return s\n`;
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(program)),
+      new Stash(),
+      -1,
+      3,
+      program,
+    );
+    const fns = functions(snapshots[snapshots.length - 1].environments);
+    expect(fns.get("f")!.body).toBe('s = """a\n  b"""\nreturn s');
+  });
+
+  test("of a function from an earlier chunk (REPL), from that chunk's source", async () => {
+    const context = new Context();
+    const first = `def f(y):\n    return y + 1\n`;
+    const second = `zzzzzzzzzzzzzzzzzzzzzzzzzzz = 0\nf(1)\n`;
+    await collectSnapshots(context, new Control(parse(first)), new Stash(), -1, 3, first);
+    const { snapshots } = await collectSnapshots(
+      context,
+      new Control(parse(second)),
+      new Stash(),
+      -1,
+      3,
+      second,
+    );
+    const fns = functions(snapshots[snapshots.length - 1].environments);
+    expect(fns.get("f")!.body).toBe("return y + 1");
+  });
+
   test("in the e-stepper's snapshots too", async () => {
     const { steps } = await run(PROGRAM);
     const fns = functions(steps[steps.length - 1].cse!.environments);
