@@ -114,6 +114,8 @@ export async function runEStepper(
       redex?: Expr | Stmt;
       redexType?: "beforeMarker" | "afterMarker";
       explanation: string;
+      /** Whether the redex is a `breakpoint()` statement (see `Contraction.isBreakpoint`). */
+      isBreakpoint?: boolean;
     },
     lookups: EStepperLookup[] = [],
   ): void => {
@@ -124,6 +126,11 @@ export async function runEStepper(
     if (marker.redex) {
       const id = serializer.ids.get(marker.redex);
       if (id !== undefined) m.redexId = id;
+    }
+    // As in the stepper, only the before step is a breakpoint for the host's navigation (the double
+    // arrow stops on the step that evaluates the statement, not once more after it).
+    if (marker.isBreakpoint && marker.redexType === "beforeMarker") {
+      m.redexNodeType = "DebuggerStatement";
     }
     const step: Step = {
       ast,
@@ -179,7 +186,12 @@ export async function runEStepper(
       program,
       storeBefore,
       outputBefore,
-      { redex: c.pre, redexType: "beforeMarker", explanation: c.before },
+      {
+        redex: c.pre,
+        redexType: "beforeMarker",
+        explanation: c.before,
+        isBreakpoint: c.isBreakpoint,
+      },
       lookups,
     );
     program = outcome.list;

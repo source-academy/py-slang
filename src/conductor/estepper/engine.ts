@@ -93,6 +93,14 @@ export interface Contraction {
   after: string;
   /** Present continuous, shown before the step. */
   before: string;
+  /** The name of the builtin this step applied, if it was one. */
+  calledBuiltin?: string;
+  /**
+   * Whether the step is a `breakpoint()` statement: a call of the builtin `breakpoint` that is the
+   * whole of a statement (as in the stepper; `x = breakpoint()` is not one). The host's breakpoint
+   * navigation stops at such steps.
+   */
+  isBreakpoint?: boolean;
 }
 
 interface ExprStep {
@@ -601,7 +609,13 @@ export class Machine {
     const node = val(result);
     return {
       node,
-      c: { pre: e, post: node, before: `Running ${display}`, after: `Ran ${display}` },
+      c: {
+        pre: e,
+        post: node,
+        before: `Running ${display}`,
+        after: `Ran ${display}`,
+        calledBuiltin: callee.type === "builtin" ? callee.name : undefined,
+      },
     };
   }
 
@@ -704,12 +718,18 @@ export class Machine {
       case "expr": {
         const step = await this.reduceExpr(head.e, env);
         if (step) {
+          // A call of `breakpoint` that is the whole statement marks the step for the host's
+          // breakpoint navigation.
+          const c: Contraction =
+            head.e === step.c.pre && step.c.calledBuiltin === "breakpoint"
+              ? { ...step.c, isBreakpoint: true }
+              : step.c;
           // A statement whose value is None (e.g. a call of print) has nothing left to show:
           // drop it in the same step.
           if (step.node.k === "val" && step.node.v.type === "none" && head.e === step.c.pre) {
-            return { kind: "step", list: rest, c: { ...step.c, post: undefined } };
+            return { kind: "step", list: rest, c: { ...c, post: undefined } };
           }
-          return this.stmtStep(head, rest, { ...head, e: step.node }, step.c);
+          return this.stmtStep(head, rest, { ...head, e: step.node }, c);
         }
         const value = this.resolve(head.e, env);
         return this.removed(

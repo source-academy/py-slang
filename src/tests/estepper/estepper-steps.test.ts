@@ -797,3 +797,40 @@ describe("apply_in_underlying_python (§4)", () => {
     expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new frame E1/);
   });
 });
+
+describe("breakpoints", () => {
+  /** The steps whose marker the host's breakpoint navigation stops at, by explanation. */
+  const stops = (steps: EStepperStep[]): string[] =>
+    steps
+      .filter(s => s.markers?.some(m => m.redexNodeType === "DebuggerStatement"))
+      .map(s => s.markers?.[0]?.explanation ?? "");
+
+  test("a breakpoint() statement is a step the host can jump to, on the step before it runs", async () => {
+    const { steps } = await run("x = 1\nbreakpoint()\nx = 2\n");
+    expect(stops(steps)).toEqual(["Running breakpoint()"]);
+    // Only the before step: the one after ("Ran breakpoint()") is not a stop.
+    const stop = steps.find(s => s.markers?.some(m => m.redexNodeType === "DebuggerStatement"))!;
+    expect(stop.markers?.[0].redexType).toBe("beforeMarker");
+    expect(steps.filter(s => s.markers?.[0]?.explanation === "Ran breakpoint()")).toHaveLength(1);
+  });
+
+  test("each breakpoint() is a stop, also inside a function body", async () => {
+    const { steps } = await run("def f():\n    breakpoint()\n    return 1\nbreakpoint()\nf()\n");
+    expect(stops(steps)).toHaveLength(2);
+  });
+
+  test("an alias of breakpoint is one too, as in the stepper", async () => {
+    const { steps } = await run("bp = breakpoint\nbp()\n");
+    expect(stops(steps)).toHaveLength(1);
+  });
+
+  test("breakpoint() used as a value, not as a statement, is not a stop", async () => {
+    const { steps } = await run("x = breakpoint()\nprint(1)\n");
+    expect(stops(steps)).toEqual([]);
+  });
+
+  test("other builtin calls are not stops", async () => {
+    const { steps } = await run("print(1)\nabs(-2)\n");
+    expect(stops(steps)).toEqual([]);
+  });
+});
