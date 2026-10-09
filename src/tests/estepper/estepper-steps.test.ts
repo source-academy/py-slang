@@ -323,6 +323,75 @@ W1(50)
   });
 });
 
+describe("self-referential lists", () => {
+  const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
+  type Serialized = {
+    displayValue: string;
+    objectId?: string;
+    metadata?: { id?: number; elements?: Serialized[]; backReference?: boolean };
+  };
+  const xsIn = (environments: { name: string; bindings: { name: string; value: unknown }[] }[]) =>
+    environments.flatMap(e => e.bindings).find(b => b.name === "xs")!.value as Serialized;
+
+  test("are stepped through, and their snapshots end the cycle with a back reference", async () => {
+    const result = await runEStepper(parse(PROGRAM), PROGRAM, 3);
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe("[[...]]\n");
+    const last = result.steps[result.steps.length - 1] as EStepperStep & {
+      cse: { environments: Parameters<typeof xsIn>[0] };
+    };
+    const xs = xsIn(last.cse.environments);
+    expect(xs.displayValue).toBe("[[...]]");
+    const inner = xs.metadata!.elements![0];
+    expect(inner).toMatchObject({
+      displayValue: "[...]",
+      objectId: xs.objectId,
+      metadata: { id: xs.metadata!.id, elements: [], backReference: true },
+    });
+  });
+
+  test("do not break the CSE machine's own snapshots", async () => {
+    // (A bare Context has no builtins, hence no print.)
+    const CYCLE = `xs = [0]\nxs[0] = xs\n`;
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(CYCLE)),
+      new Stash(),
+      -1,
+      3,
+      CYCLE,
+    );
+    const xs = xsIn(snapshots[snapshots.length - 1].environments);
+    expect(xs.metadata!.elements![0].metadata!.backReference).toBe(true);
+    expect(xs.objectId).toBeUndefined();
+  });
+});
+
+describe("object ids in the CSE machine snapshots", () => {
+  test("are the e-stepper's labels of the objects the program pane shows", async () => {
+    const steps = (await run(MAKE_WITHDRAW)).steps;
+    for (const step of steps) {
+      const labels = new Set(step.heap.map(o => o.id));
+      const ids = (step.cse!.environments as { bindings: { value: { objectId?: string } }[] }[])
+        .flatMap(e => e.bindings.map(b => b.value.objectId))
+        .filter((id): id is string => id !== undefined);
+      for (const id of ids) expect(labels.has(id)).toBe(true);
+    }
+    // The global frame's make_withdraw is named, as in the program pane.
+    const last = steps[steps.length - 1];
+    const makeWithdraw = last.heap.find(o => o.kind === "function" && o.name === "make_withdraw")!;
+    const binding = (
+      last.cse!.environments as {
+        name: string;
+        bindings: { name: string; value: { objectId?: string } }[];
+      }[]
+    )
+      .flatMap(e => e.bindings)
+      .find(b => b.name === "make_withdraw")!;
+    expect(binding.value.objectId).toBe(makeWithdraw.id);
+  });
+});
+
 describe("input()", () => {
   const PROGRAM = `name = input("Name? ")\nage = input()\nprint(name, age)\n`;
 

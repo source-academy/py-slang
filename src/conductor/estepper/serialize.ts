@@ -633,6 +633,10 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     stepIndex,
     control: [],
     stash: [],
-    environments: serializeEnvChain(callStack, values, [], active),
+    // Values carry the e-stepper's labels of the objects they refer to, so a host can tell which
+    // object a reference in the program pane (`#3`) means.
+    environments: serializeEnvChain(callStack, values, [], active, obj =>
+      machine.labels.peekObject(obj),
+    ),
   };
 }
