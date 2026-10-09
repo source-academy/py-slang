@@ -250,56 +250,56 @@ export class ProgramSerializer {
 /*                               Active frame                                 */
 /* -------------------------------------------------------------------------- */
 
-const isReady = (e: Expr): boolean => e.k === "val" || e.k === "name";
-
 /** The environment the next redex of `e` is evaluated in. */
-function activeInExpr(e: Expr, env: Environment): Environment {
+function activeInExpr(machine: Machine, e: Expr, env: Environment): Environment {
   switch (e.k) {
     case "block":
-      return Array.isArray(e.body) ? activeInList(e.body, e.env) : activeInExpr(e.body, e.env);
+      return Array.isArray(e.body)
+        ? activeInList(machine, e.body, e.env)
+        : activeInExpr(machine, e.body, e.env);
     case "bin":
-      return activeInChildren([e.left, e.right], env);
+      return activeInChildren(machine, [e.left, e.right], env);
     case "bool":
-      return activeInChildren([e.left], env);
+      return activeInChildren(machine, [e.left], env);
     case "unary":
-      return activeInChildren([e.arg], env);
+      return activeInChildren(machine, [e.arg], env);
     case "cond":
-      return activeInChildren([e.test], env);
+      return activeInChildren(machine, [e.test], env);
     case "call":
-      return activeInChildren([e.callee, ...e.args], env);
+      return activeInChildren(machine, [e.callee, ...e.args], env);
     case "list":
-      return activeInChildren(e.elems, env);
+      return activeInChildren(machine, e.elems, env);
     case "sub":
-      return activeInChildren([e.obj, e.index], env);
+      return activeInChildren(machine, [e.obj, e.index], env);
     default:
       return env;
   }
 }
 
-function activeInChildren(children: Expr[], env: Environment): Environment {
-  const next = children.find(c => !isReady(c));
-  return next ? activeInExpr(next, env) : env;
+function activeInChildren(machine: Machine, children: Expr[], env: Environment): Environment {
+  const next = children.find(c => !machine.isReady(c, env));
+  return next ? activeInExpr(machine, next, env) : env;
 }
 
-export function activeInList(list: Stmt[], env: Environment): Environment {
+export function activeInList(machine: Machine, list: Stmt[], env: Environment): Environment {
   if (list.length === 0) return env;
   const head = list[0];
   switch (head.k) {
     case "expr":
-      return activeInExpr(head.e, env);
+      return activeInExpr(machine, head.e, env);
     case "assign":
-      return activeInExpr(head.value, env);
+      return activeInExpr(machine, head.value, env);
     case "subassign":
-      return activeInChildren([head.obj, head.index, head.value], env);
+      return activeInChildren(machine, [head.obj, head.index, head.value], env);
     case "return":
-      return head.e ? activeInExpr(head.e, env) : env;
+      return head.e ? activeInExpr(machine, head.e, env) : env;
     case "if":
     case "while":
-      return activeInExpr(head.test, env);
+      return activeInExpr(machine, head.test, env);
     case "forinit":
-      return activeInChildren(head.args, env);
+      return activeInChildren(machine, head.args, env);
     case "loop":
-      return activeInList(head.body, env);
+      return activeInList(machine, head.body, env);
     default:
       return env;
   }
@@ -310,6 +310,9 @@ export function activeInList(list: Stmt[], env: Environment): Environment {
 /* -------------------------------------------------------------------------- */
 
 type HeapObj = ListValue | Closure;
+
+const isList = (obj: HeapObj): obj is ListValue => "type" in obj && obj.type === "list";
+const asValue = (obj: HeapObj): Value => (isList(obj) ? obj : { type: "closure", closure: obj });
 
 /** Collects the frames and heap objects a set of roots reaches (library internals excluded). */
 class Reach {
@@ -446,6 +449,15 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   all.frame(machine.programEnv);
   all.stmts(program);
   for (const env of machine.createdEnvs) all.frame(env);
+  // And every object shown at an earlier step, as the CSE machine keeps showing objects that
+  // have become garbage (e.g. the list `[None]` once `[None] * 3` has been evaluated).
+  for (const obj of machine.shownObjects.keys()) all.value(asValue(obj));
+  const active = activeInList(machine, program, machine.programEnv);
+  for (const obj of all.objects) {
+    if (!machine.shownObjects.has(obj)) {
+      machine.shownObjects.set(obj, isList(obj) ? active : obj.environment);
+    }
+  }
 
   const labels = machine.labels;
   const valueOf = (v: Value | typeof UNASSIGNED): EStepperValue => {
@@ -493,7 +505,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   for (const item of all.visited) {
     if (!all.objects.has(item as HeapObj)) continue;
     const obj = item as HeapObj;
-    if ("type" in obj && obj.type === "list") {
+    if (isList(obj)) {
       heap.push({
         kind: "list",
         id: labels.object(obj),
@@ -501,7 +513,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
         isGarbage: !live.objects.has(obj),
       });
     } else {
-      const closure = obj as Closure;
+      const closure = obj;
       const node = closure.node;
       heap.push({
         kind: "function",
@@ -520,7 +532,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   return {
     frames,
     heap,
-    activeFrameId: labels.frame(activeInList(program, machine.programEnv)),
+    activeFrameId: labels.frame(active),
     cse: cseSnapshot(machine, program, 0),
   };
 }
@@ -627,7 +639,7 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
  */
 export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number): CseSnapshot {
   const { frames, values } = programRoots(program);
-  const active = activeInList(program, machine.programEnv);
+  const active = activeInList(machine, program, machine.programEnv);
   const callStack = [active, ...frames.reverse(), machine.programEnv];
   // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
   // stand for, so a host can tell which object a reference in the program pane means, and which
@@ -638,6 +650,31 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     code: machine.code,
   };
   const frameId = (env: Environment) => ids.frames(env) ?? env.id;
+
+  // Objects shown at earlier steps that nothing here refers to any more: each goes into the heap
+  // of the frame it belongs to (as anonymous heap objects), so a host draws it there, as dead.
+  // A function object's frame is serialized too, through the values the chain starts from.
+  const reached = new Reach(machine);
+  for (const env of callStack) reached.frame(env);
+  for (const v of values) reached.value(v);
+  const unreferenced = [...machine.shownObjects.keys()].filter(obj => !reached.objects.has(obj));
+  for (const obj of unreferenced) if (!isList(obj)) reached.frame(obj.environment);
+  const garbage = unreferenced.filter(obj => !reached.objects.has(obj));
+  const environments = serializeEnvChain(
+    callStack,
+    [...values, ...garbage.filter(obj => !isList(obj)).map(asValue)],
+    [],
+    active,
+    ids,
+  );
+  for (const obj of garbage) {
+    const home = machine.shownObjects.get(obj)!;
+    const frame =
+      environments.find(f => f.id === frameId(home)) ??
+      environments.find(f => f.id === frameId(machine.programEnv));
+    if (!frame) continue;
+    (frame.heapObjects ??= []).push(serializeValue(asValue(obj), frame.id, ids));
+  }
   return {
     stepIndex,
     // What the program still holds, as the CSE machine's control and stash would: a frame for
@@ -647,6 +684,6 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     // are not shown as dead.
     control: frames.map(env => ({ displayText: "ENVIRONMENT", metadata: { envId: frameId(env) } })),
     stash: values.map(v => serializeValue(v, frameId(active), ids)),
-    environments: serializeEnvChain(callStack, values, [], active, ids),
+    environments,
   };
 }

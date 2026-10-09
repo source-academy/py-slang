@@ -46,7 +46,7 @@ import {
   evaluateUnaryExpression,
   isFalsy,
 } from "../../engines/cse/operators";
-import { Stash, type Value } from "../../engines/cse/stash";
+import { type ListValue, Stash, type Value } from "../../engines/cse/stash";
 import {
   evaluateForIterator,
   evaluateListAssignment,
@@ -74,7 +74,7 @@ import {
   translateStmts,
   val,
 } from "./terms";
-import { exprText, stmtHeadText, type TextContext, valueText } from "./text";
+import { describeValue, exprText, stmtHeadText, type TextContext, valueText } from "./text";
 
 /** A binding read by a name lookup during a step. */
 export interface Lookup {
@@ -111,34 +111,6 @@ const ATOMIC_STEP_LIMIT = 1_000_000;
 
 const NONE: Value = { type: "none" };
 
-/** Whether evaluating `e` could change bindings (so names read before it must be read first). */
-function mayHaveEffects(e: Expr): boolean {
-  switch (e.k) {
-    case "val":
-    case "name":
-    case "lambda":
-    case "unsupported":
-      return false;
-    case "call":
-    case "block":
-      return true;
-    case "bin":
-    case "bool":
-      return mayHaveEffects(e.left) || mayHaveEffects(e.right);
-    case "unary":
-      return mayHaveEffects(e.arg);
-    case "cond":
-      return mayHaveEffects(e.test) || mayHaveEffects(e.cons) || mayHaveEffects(e.alt);
-    case "list":
-      return e.elems.some(mayHaveEffects);
-    case "sub":
-      return mayHaveEffects(e.obj) || mayHaveEffects(e.index);
-  }
-}
-
-/** A value or a name: needs no reduction step of its own (a name is looked up when used). */
-const isReady = (e: Expr): boolean => e.k === "val" || e.k === "name";
-
 export class Machine {
   readonly context: Context;
   readonly programEnv: Environment;
@@ -146,6 +118,10 @@ export class Machine {
   readonly text: TextContext;
   /** Frames created by calls the program makes (shown even once they are garbage). */
   readonly createdEnvs: Environment[] = [];
+  /** Every heap object shown at some step so far (shown from then on, greyed out once garbage),
+   * with the frame it belongs to: a function object's defining frame, or for a list, the frame
+   * that was active when it was first shown. */
+  readonly shownObjects = new Map<ListValue | Closure, Environment>();
   /** Everything the program has printed so far (written by `print` through the CSE streams). */
   private readonly printed: { text: string };
   /** Bindings read during the current contraction. */
@@ -247,7 +223,15 @@ export class Machine {
     return value;
   }
 
-  /** The value of a ready term (looking up a name). */
+  /**
+   * Whether a term needs no reduction step of its own: a value, or the name of a builtin or library
+   * function. Every other name is looked up in a step of its own.
+   */
+  isReady(e: Expr, env: Environment): boolean {
+    return e.k === "val" || (e.k === "name" && this.isLibraryName(e, env));
+  }
+
+  /** The value of a ready term (looking up a library name). */
   private resolve(e: Expr, env: Environment): Value {
     if (e.k === "val") return e.v;
     if (e.k === "name") return this.lookup(e, env);
@@ -286,8 +270,8 @@ export class Machine {
   }
 
   /**
-   * Whether a name refers to a builtin or library function. Such a binding cannot be changed by
-   * evaluating other parts of an expression, so it needs no lookup step of its own.
+   * Whether a name refers to a builtin or library function. Such a name is not bound in any frame
+   * the diagram shows, so it is looked up when used, without a step of its own.
    */
   private isLibraryName(e: Expr & { k: "name" }, env: Environment): boolean {
     const start = env.closure?.globalVariables.has(e.name) ? this.programEnv : env;
@@ -313,38 +297,14 @@ export class Machine {
   /*                                Expressions                               */
   /* ------------------------------------------------------------------------ */
 
-  /**
-   * Reduces the first of `children` that is not ready, after first looking up any earlier names
-   * whose bindings the later child's evaluation could change (Python evaluates left to right).
-   * Returns null when every child is ready.
-   */
+  /** Reduces the first of `children` that is not ready (Python evaluates left to right), or
+   * returns null when every child is ready. */
   private async reduceChildren(
     children: Expr[],
     env: Environment,
   ): Promise<{ index: number; step: ExprStep } | null> {
     for (let i = 0; i < children.length; i++) {
-      if (isReady(children[i])) continue;
-      if (mayHaveEffects(children[i])) {
-        for (let j = 0; j < i; j++) {
-          const earlier = children[j];
-          if (earlier.k === "name" && !this.isLibraryName(earlier, env)) {
-            const value = this.lookup(earlier, env);
-            const node = val(value);
-            return {
-              index: j,
-              step: {
-                node,
-                c: {
-                  pre: earlier,
-                  post: node,
-                  before: `Looking up ${earlier.name}`,
-                  after: `Looked up ${earlier.name}: ${this.v(value)}`,
-                },
-              },
-            };
-          }
-        }
-      }
+      if (this.isReady(children[i], env)) continue;
       const step = await this.reduceExpr(children[i], env);
       if (step) return { index: i, step };
     }
@@ -355,8 +315,22 @@ export class Machine {
   async reduceExpr(e: Expr, env: Environment): Promise<ExprStep | null> {
     switch (e.k) {
       case "val":
-      case "name":
         return null;
+      case "name": {
+        if (this.isLibraryName(e, env)) return null;
+        const value = this.lookup(e, env);
+        const frame = this.lookups[this.lookups.length - 1].env;
+        const node = val(value);
+        return {
+          node,
+          c: {
+            pre: e,
+            post: node,
+            before: `Looking up ${e.name}`,
+            after: `Looked up ${e.name} in ${this.where(frame)}: ${describeValue(value, this.text)}`,
+          },
+        };
+      }
       case "unsupported":
         throw new Error(`The environment stepper does not support ${e.what} expressions`);
       case "bin": {
@@ -824,64 +798,53 @@ export class Machine {
         const step = await this.reduceExpr(head.test, env);
         if (step) return this.stmtStep(head, rest, { ...head, test: step.node }, step.c);
         const test = this.resolve(head.test, env);
+        const isLoop = head.src instanceof StmtNS.While;
         if (test.type !== "bool") {
           this.enter(env);
           handleRuntimeError(
             this.context,
-            new ConditionNotBoolError(
-              this.code,
-              head.src.condition,
-              this.context,
-              test.type,
-              "if condition",
-            ),
+            isLoop
+              ? new PyTypeError(this.code, head.src, this.context, test.type)
+              : new ConditionNotBoolError(
+                  this.code,
+                  head.src.condition,
+                  this.context,
+                  test.type,
+                  "if condition",
+                ),
           );
         }
         const branch = test.value ? head.cons : (head.alt ?? []);
+        const condition = `condition is ${test.value ? "True" : "False"}`;
         return {
           kind: "step",
           list: [...branch, ...rest],
           c: {
             pre: head,
             before: "Evaluating if statement",
-            after: `Evaluated if statement: condition is ${test.value ? "True" : "False"}`,
+            after: isLoop
+              ? `Evaluated if statement: ${condition}, ${test.value ? "run the loop body" : "the loop ends"}`
+              : `Evaluated if statement: ${condition}`,
           },
         };
       }
       case "while": {
-        const step = await this.reduceExpr(head.test, env);
-        if (step) return this.stmtStep(head, rest, { ...head, test: step.node }, step.c);
-        const test = this.resolve(head.test, env);
-        if (test.type !== "bool") {
-          this.enter(env);
-          handleRuntimeError(
-            this.context,
-            new PyTypeError(this.code, head.src, this.context, test.type),
-          );
-        }
-        if (!test.value) {
-          return this.removed(
-            head,
-            rest,
-            "Evaluating while statement",
-            "Evaluated while statement: condition is False, the loop ends",
-          );
-        }
-        const loop: LoopStmt = {
-          k: "loop",
-          body: translateStmts(head.src.body),
-          next: { k: "while", test: translateExpr(head.src.condition), src: head.src },
+        // The textbook rule: `while test: body` is `if test: (body; while test: body)`. The loop
+        // stays in the program, in full, while its test is evaluated.
+        const loop: LoopStmt = { k: "loop", body: translateStmts(head.src.body), next: head };
+        const unfolded: Stmt = {
+          k: "if",
+          test: translateExpr(head.src.condition),
+          cons: [loop],
+          alt: null,
+          src: head.src,
         };
-        return {
-          kind: "step",
-          list: [loop, ...rest],
-          c: {
-            pre: head,
-            post: loop,
-            before: "Evaluating while statement",
-            after: "Evaluated while statement: condition is True, run the body",
-          },
-        };
+        return this.stmtStep(head, rest, unfolded, {
+          pre: head,
+          post: unfolded,
+          before: "Unfolding the while loop",
+          after: "Unfolded the while loop into an if statement whose body ends with the loop",
+        });
       }
       case "forinit": {
         const r = await this.reduceChildren(head.args, env);

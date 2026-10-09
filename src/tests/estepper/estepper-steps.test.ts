@@ -65,16 +65,24 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(story(steps)).toEqual([
       "Start of evaluation",
       "Defined make_withdraw: function object #1 in the global frame",
-      "Called make_withdraw(100): new frame E1 extends the global frame (make_withdraw is function object #1 in Global)",
+      "Looked up make_withdraw in the global frame: function object #1",
+      "Called make_withdraw(100): new frame E1 extends the global frame",
       "Defined withdraw: function object #2 in frame E1",
-      "Returned withdraw from E1 (withdraw is function object #2 in E1)",
+      "Looked up withdraw in frame E1: function object #2",
+      "Returned withdraw from E1",
       "Assigned W1 = withdraw in the global frame",
-      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance (W1 is function object #2 in Global)",
-      "Evaluated balance >= amount: True (balance is 100 in E1, amount is 50 in E2)",
+      "Looked up W1 in the global frame: function object #2",
+      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance",
+      "Looked up balance in frame E1: 100",
+      "Looked up amount in frame E2: 50",
+      "Evaluated 100 >= 50: True",
       "Evaluated if statement: condition is True",
-      "Evaluated balance - amount: 50 (balance is 100 in E1, amount is 50 in E2)",
+      "Looked up balance in frame E1: 100",
+      "Looked up amount in frame E2: 50",
+      "Evaluated 100 - 50: 50",
       "Assigned balance = 50 in frame E1",
-      "Returned 50 from E2 (balance is 50 in E1)",
+      "Looked up balance in frame E1: 50",
+      "Returned 50 from E2",
       "Finished the expression statement: its value 50 is not used",
       "Evaluation complete",
     ]);
@@ -133,29 +141,39 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
 });
 
 describe("lookups", () => {
-  test("bindings read by a step are reported for highlighting", async () => {
+  test("every name is looked up in a step of its own, which reports the binding read", async () => {
     const { steps } = await run(`x = 1\ny = x + 2\n`);
-    const add = steps.find(s => s.markers?.[0]?.explanation === "Evaluating x + 2")!;
-    expect(add.lookups).toEqual([{ frameId: "Global", name: "x" }]);
+    expect(story(steps)).toEqual([
+      "Start of evaluation",
+      "Assigned x = 1 in the global frame",
+      "Looked up x in the global frame: 1",
+      "Evaluated 1 + 2: 3",
+      "Assigned y = 3 in the global frame",
+      "Evaluation complete",
+    ]);
+    const lookup = steps.find(s => s.markers?.[0]?.explanation === "Looking up x")!;
+    expect(lookup.lookups).toEqual([{ frameId: "Global", name: "x" }]);
   });
 
-  test("a name is looked up in its own step when a later operand could change it", async () => {
-    const { steps } = await run(`x = 1
+  test("names are looked up left to right, before a later operand could change them", async () => {
+    const { steps, output } = await run(`x = 1
 def bump():
     global x
     x = x + 10
     return 0
 print(x + bump())
 `);
-    expect(story(steps)).toContain("Looked up x: 1");
-    // ... and the addition uses the value read before the call, as Python does.
-    expect(
-      (
-        await run(
-          `x = 1\ndef bump():\n    global x\n    x = x + 10\n    return 0\nprint(x + bump())\n`,
-        )
-      ).output,
-    ).toBe("1\n");
+    expect(output).toBe("1\n");
+    const story_ = story(steps);
+    expect(story_.indexOf("Looked up x in the global frame: 1")).toBeLessThan(
+      story_.indexOf("Looked up bump in the global frame: function object #1"),
+    );
+  });
+
+  test("the predicate of a while loop looks names up like any other expression", async () => {
+    const { steps } = await run(`i = 0\nwhile i < 1:\n    i = i + 1\n`);
+    expect(story(steps)).toContain("Looked up i in the global frame: 0");
+    expect(story(steps)).toContain("Evaluated 0 < 1: True");
   });
 
   test("builtins need no lookup step", async () => {
@@ -173,15 +191,77 @@ describe("loops", () => {
       "Evaluated range: from 0 to 2 in steps of 1",
       "Evaluated for statement: run the body with i = 0",
       "Assigned i = 0 in the global frame",
-      "Ran print(0) (i is 0 in Global)",
+      "Looked up i in the global frame: 0",
+      "Ran print(0)",
       "Finished the loop body, back to the loop",
       "Evaluated for statement: run the body with i = 1",
       "Assigned i = 1 in the global frame",
-      "Ran print(1) (i is 1 in Global)",
+      "Looked up i in the global frame: 1",
+      "Ran print(1)",
       "Finished the loop body, back to the loop",
       "Evaluated for statement: 2 is not in the range, the loop ends",
       "Evaluation complete",
     ]);
+  });
+
+  test("a while loop unfolds into an if statement whose body ends with the loop", async () => {
+    const { steps, output } = await run(`i = 0\nwhile i < 2:\n    i = i + 1\nprint(i)\n`);
+    expect(output).toBe("2\n");
+    const iteration = [
+      "Unfolded the while loop into an if statement whose body ends with the loop",
+      "Looked up i in the global frame: N",
+      "Evaluated N < 2: True",
+      "Evaluated if statement: condition is True, run the loop body",
+      "Looked up i in the global frame: N",
+      "Evaluated N + 1: M",
+      "Assigned i = M in the global frame",
+      "Finished the loop body, back to the loop",
+    ];
+    const nth = (n: number) =>
+      iteration.map(s => s.replace(/N/g, `${n}`).replace(/M/g, `${n + 1}`));
+    expect(story(steps)).toEqual([
+      "Start of evaluation",
+      "Assigned i = 0 in the global frame",
+      ...nth(0),
+      ...nth(1),
+      "Unfolded the while loop into an if statement whose body ends with the loop",
+      "Looked up i in the global frame: 2",
+      "Evaluated 2 < 2: False",
+      "Evaluated if statement: condition is False, the loop ends",
+      "Looked up i in the global frame: 2",
+      "Ran print(2)",
+      "Evaluation complete",
+    ]);
+    // While the test is evaluated, the loop is in the program in full, test included: in the if
+    // statement's body, after the loop body.
+    const testing = steps.find(s => s.markers?.[0]?.explanation === "Evaluated 0 < 2: True")!;
+    const find = (node: unknown, type: string): SerializedStepperNode | undefined => {
+      if (Array.isArray(node)) {
+        for (const n of node) {
+          const found = find(n, type);
+          if (found) return found;
+        }
+      } else if (node && typeof node === "object") {
+        if ((node as SerializedStepperNode).type === type) return node as SerializedStepperNode;
+        for (const n of Object.values(node)) {
+          const found = find(n, type);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+    const unfolded = find(testing.ast, "IfStatement")!;
+    expect(find(unfolded.test, "Literal")).toMatchObject({ raw: "True" });
+    const loop = find(unfolded.consequent, "WhileStatement")!;
+    expect(loop.test).toMatchObject({
+      type: "BinaryExpression",
+      left: { type: "Identifier", name: "i" },
+    });
+  });
+
+  test("a while loop's condition must be a bool, as in the CSE machine", async () => {
+    const { error } = await run(`while 1:\n    break\n`);
+    expect(error).toMatch(/TypeError/);
   });
 
   test("break ends the loop, continue starts the next iteration", async () => {
@@ -332,6 +412,24 @@ describe("the store as a CSE machine snapshot", () => {
         !roots(s).control.some(c => c.metadata.envId === "E1"),
     );
     expect(returned).toBeDefined();
+  });
+
+  test("an object shown once stays shown, as garbage, once nothing refers to it", async () => {
+    const program = `xs = [None] * 3\ndef f():\n    return lambda x: x\nf()\n`;
+    const { steps } = await run(program);
+    const last = steps[steps.length - 1];
+    // The list [None] (#1) is garbage once [None] * 3 (#2) has been made, and so is the function
+    // f's call returned: both are still drawn, greyed out.
+    expect(last.heap.filter(o => o.isGarbage).map(o => o.id)).toEqual(["#1", "#4"]);
+    // In the CSE snapshot, each is in the heap of its frame, which nothing refers to.
+    type Frame = { id: string; heapObjects?: { objectId?: string }[] };
+    const heapObjects = (last.cse!.environments as Frame[]).map(f => [
+      f.id,
+      (f.heapObjects ?? []).map(o => o.objectId),
+    ]);
+    expect(heapObjects).toContainEqual(["Global", ["#1"]]);
+    expect(heapObjects).toContainEqual(["E1", ["#4"]]);
+    expect(roots(last).stash).toEqual([]);
   });
 
   test("the final snapshot shows the same frames as the CSE machine's own", async () => {

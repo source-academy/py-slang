@@ -72,6 +72,11 @@ the e-stepper defines `is` and `is not` itself (see the table). The membership o
 `not in` are not part of Python §3 or §4. Only the rules involving names, functions and data change. E
 always denotes the current environment of the redex.
 
+A `while` loop unfolds by the textbook rule before its test is evaluated:
+`while test: body` becomes `if test: (body; while test: body)`. The loop stays in the program, in
+full, while the test is evaluated, so the program and the environment always hold all that is
+needed to continue by hand.
+
 | Redex (in E) | Contractum | Store effect |
 |---|---|---|
 | name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnboundLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |
@@ -114,9 +119,10 @@ builtins operate on heap objects instead of list literal nodes.
   The heap object in the diagram carries the same badge. Exception: a reference to a *named* function
   object renders as the function's name in bold, with a hover popover showing its definition and
   environment, like the stepper's mu-terms. Arrows from the program into the diagram come later.
-- **Lookups are implicit by default**: a name is replaced by its value as part of the step that
-  consumes it. The step's explanation records the lookups ("`balance` in E2 is 100"), and the diagram
-  briefly highlights the binding that was read. A toggle makes each lookup a step of its own.
+- **Lookups are explicit**: every name in the program is replaced by its value in a step of its own
+  ("Looked up balance in frame E1: 100"), left to right, and the diagram highlights the binding that
+  was read. Only names of builtins and library functions, which no drawn frame binds, are looked up
+  as part of the step that uses them.
 - **Garbage**: frames and objects no longer reachable from P (through `EnvBlock`s and `Ref`s) or `G`
   are greyed out, not removed. This makes the result of a returning call visible: its frame stays
   alive if a returned function object still points to it, and becomes garbage otherwise.
@@ -145,7 +151,7 @@ Initially, `G` is empty.
 
 1. The `def make_withdraw` statement is consumed: `#1 = Fn(make_withdraw, [balance], …, G)`, and
    `G` gains the binding `make_withdraw ↦ #1`.
-2. `W1 = make_withdraw(100)`: lookup of `make_withdraw` (implicit) and the call happen in one step.
+2. `W1 = make_withdraw(100)`: `make_withdraw` is looked up in G (`#1`), then the call is a step.
    New frame `E1 = { balance: 100, withdraw: unassigned }`, parent G. The program becomes
    `W1 = EnvBlock(E1, def withdraw…; return withdraw)`.
 3. Inside E1, `def withdraw` is consumed: `#2 = Fn(withdraw, [amount], …, E1)`, `withdraw ↦ #2` in E1.
@@ -157,8 +163,8 @@ Initially, `G` is empty.
    has no binding for `balance`: `nonlocal balance` decided that when `withdraw` was defined. The
    declaration stays in the program as source, but is not evaluated (no step of its own), here or
    anywhere: `global` and `nonlocal` are declarations, not statements that run.
-7. `balance >= amount` evaluates in E2: `balance` is found in E1 (100), `amount` in E2 (50), giving
-   `True`; the `if` takes its first branch.
+7. `balance >= amount` evaluates in E2: `balance` is looked up and found in E1 (100), then `amount`
+   in E2 (50), each in a step of its own; `100 >= 50` gives `True`; the `if` takes its first branch.
 8. `balance = balance - amount`: the right-hand side reduces to `50`. Because of `nonlocal balance`,
    the assignment rebinds `balance` **in E1**: this is the step the substitution model cannot
    express.
@@ -221,7 +227,7 @@ export interface EStepperStep extends SerializedStepperStep {
   // `ast` may contain the node types EnvBlock { envId, body } and Ref { objectId }
   frames: EStepperFrame[];
   heap: HeapObject[];
-  /** Bindings read by this step's implicit lookups, for highlighting. */
+  /** Bindings read by this step's lookup, for highlighting. */
   lookups?: { frameId: string; name: string }[];
 }
 ```
@@ -250,7 +256,7 @@ otherwise the simpler shape wins.
 4. plugins: `web-e-stepper`; plugin-directory registration.
 5. language-directory, then frontend (reviewed version bumps).
 6. §4 (`parse`, `tokenize`, `apply_in_underlying_python`).
-7. Polish: arrows from the program into the diagram, the lookup toggle, collapsing finished frames.
+7. Polish: arrows from the program into the diagram, collapsing finished frames.
 
 Steps 2–4 are the critical path to a first classroom-usable version. The course is already in
 chapter 3, so this is run as a live experiment: release early, observe, adjust.
