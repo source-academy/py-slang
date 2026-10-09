@@ -2,7 +2,7 @@ import type {
   CseSnapshot,
   CseSerializedEnvFrame as SerializedEnvFrame,
   CseSerializedInstruction as SerializedInstruction,
-  CseSerializedValue as SerializedValue,
+  CseSerializedValue,
 } from "@sourceacademy/common-cse-machine";
 import { Closure } from "../../engines/cse/closure";
 import { Context } from "../../engines/cse/context";
@@ -13,6 +13,9 @@ import { Stash, Value } from "../../engines/cse/stash";
 import { InstrType, operatorTranslator, typeTranslator } from "../../engines/cse/types";
 import { toPythonFloat } from "../../stdlib/utils";
 import { TokenType } from "../../tokenizer";
+
+// `objectId` is declared by @sourceacademy/common-cse-machine from 0.3.1 on.
+type SerializedValue = CseSerializedValue & { objectId?: string };
 
 type ControlStackItem = {
   instrType?: string;
@@ -41,7 +44,9 @@ function getListId(v: object): number {
   return _listIdMap.get(v)!;
 }
 
-function formatValue(v: Value): string {
+// `seen` holds the lists being formatted around `v`: a list that contains itself (`xs[0] = xs`)
+// is shown as `[...]` where it recurs, as CPython's repr does.
+function formatValue(v: Value, seen: Set<object> = new Set()): string {
   if (v === undefined || v === null) return "None";
   switch (v.type) {
     case "bigint":
@@ -67,7 +72,10 @@ function formatValue(v: Value): string {
     case "error":
       return v.message;
     case "list": {
-      const items = v.value.slice(0, 4).map(i => formatValue(i));
+      if (seen.has(v)) return "[...]";
+      seen.add(v);
+      const items = v.value.slice(0, 4).map(i => formatValue(i, seen));
+      seen.delete(v);
       const suffix = v.value.length > 4 ? ", ..." : "";
       return `[${items.join(", ")}${suffix}]`;
     }
@@ -82,7 +90,26 @@ function formatValue(v: Value): string {
   }
 }
 
-function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedValue {
+/**
+ * Names the heap objects (lists and closures) a snapshot's values refer to, for
+ * `SerializedValue.objectId`; `undefined` leaves an object unnamed. The CSE machine itself names
+ * none; the e-stepper names them with its own labels (`#3`), so a host drawing its snapshots can
+ * tell it which object is meant.
+ */
+export type ObjectIds = (obj: object) => string | undefined;
+
+/**
+ * `path` holds the lists being serialized around `v`. A list that contains itself
+ * (`xs[0] = xs`) is serialized once; where it recurs, it is a back reference: the same list `id`,
+ * no elements, `backReference: true`. (Hosts look lists up by `id`, so they resolve it to the
+ * list itself.)
+ */
+function serializeValue(
+  v: Value | typeof UNASSIGNED,
+  envId = "",
+  objectIds?: ObjectIds,
+  path: Set<object> = new Set(),
+): SerializedValue {
   // A local that createEnvironment preallocated at CALL time but that hasn't been
   // assigned yet — mirrors js-slang's uninitialized-`const`/`let` placeholder rendering.
   if (v === UNASSIGNED) return { displayValue: "", label: "unassigned" };
@@ -92,20 +119,39 @@ function serializeValue(v: Value | typeof UNASSIGNED, envId = ""): SerializedVal
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
-    return { ...base, metadata: { closureFrameId: cl.environment.id, params, funcName } };
+    return withObjectId(
+      { ...base, metadata: { closureFrameId: cl.environment.id, params, funcName } },
+      objectIds?.(cl),
+    );
   }
   if (v.type === "list") {
-    return {
-      displayValue: formatValue(v),
-      label: "list",
-      metadata: {
-        id: getListId(v),
-        envId,
-        elements: v.value.map((el: Value) => serializeValue(el, envId)),
+    if (path.has(v)) {
+      return withObjectId(
+        {
+          displayValue: "[...]",
+          label: "list",
+          metadata: { id: getListId(v), envId, elements: [], backReference: true },
+        },
+        objectIds?.(v),
+      );
+    }
+    path.add(v);
+    const elements = v.value.map((el: Value) => serializeValue(el, envId, objectIds, path));
+    path.delete(v);
+    return withObjectId(
+      {
+        displayValue: formatValue(v),
+        label: "list",
+        metadata: { id: getListId(v), envId, elements },
       },
-    };
+      objectIds?.(v),
+    );
   }
   return base;
+}
+
+function withObjectId(value: SerializedValue, objectId: string | undefined): SerializedValue {
+  return objectId === undefined ? value : { ...value, objectId };
 }
 
 // ── Control serialisation ─────────────────────────────────────────────────────
@@ -352,6 +398,7 @@ function serializeEnvChain(
   stashValues: Value[],
   controlItems: ControlStackItem[],
   activeEnv: Environment,
+  objectIds?: ObjectIds,
 ): SerializedEnvFrame[] {
   const seen = new Set<string>();
   const queue: Environment[] = [];
@@ -409,7 +456,7 @@ function serializeEnvChain(
         .filter(([name]) => name !== "__program__")
         .map(([name, val]) => ({
           name,
-          value: serializeValue(val, env.id),
+          value: serializeValue(val, env.id, objectIds),
         })),
       isActive: env.id === activeEnv.id,
       isOnCallStack: callStackIds.has(env.id),

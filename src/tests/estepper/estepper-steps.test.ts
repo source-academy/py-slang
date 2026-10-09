@@ -9,6 +9,10 @@ import type {
 } from "@sourceacademy/common-e-stepper";
 
 import { NO_INPUT_MESSAGE } from "../../conductor/estepper/engine";
+import { collectSnapshots } from "../../conductor/plugins/PyCseMachinePlugin";
+import { Context } from "../../engines/cse/context";
+import { Control } from "../../engines/cse/control";
+import { Stash } from "../../engines/cse/stash";
 import { EStepperProgramError, runEStepper } from "../../conductor/estepper/getSteps";
 import { parse } from "../../parser";
 
@@ -259,6 +263,132 @@ describe("protocol consistency", () => {
       walk(step.ast);
       for (const m of step.markers ?? []) if (m.redexId) expect(ids.has(m.redexId)).toBe(true);
     }
+  });
+});
+
+describe("the store as a CSE machine snapshot", () => {
+  type CseStep = EStepperStep & {
+    cse: {
+      stepIndex: number;
+      control: unknown[];
+      stash: unknown[];
+      environments: {
+        name: string;
+        isActive: boolean;
+        bindings: { name: string; value: { displayValue: string } }[];
+      }[];
+    };
+  };
+  /** Frames by name, with their bindings, in a comparable form. */
+  const framesOf = (environments: CseStep["cse"]["environments"]) =>
+    environments
+      .map(e => `${e.name}: ${e.bindings.map(b => `${b.name}=${b.value.displayValue}`).join(" ")}`)
+      .sort();
+
+  test("every step carries one, environments only", async () => {
+    const steps = (await run(MAKE_WITHDRAW)).steps as CseStep[];
+    steps.forEach((step, i) => {
+      expect(step.cse.stepIndex).toBe(i);
+      expect(step.cse.control).toEqual([]);
+      expect(step.cse.stash).toEqual([]);
+    });
+    // Inside the call of withdraw, its frame is the active one, as in the CSE machine.
+    const inCall = steps.find(s => s.activeFrameId === "E2")!;
+    expect(inCall.cse.environments.find(e => e.isActive)?.name).toBe("withdraw");
+  });
+
+  test("the final snapshot shows the same frames as the CSE machine's own", async () => {
+    const program = `def make_withdraw(balance):
+    def withdraw(amount):
+        nonlocal balance
+        balance = balance - amount
+        return balance
+    return withdraw
+W1 = make_withdraw(100)
+W1(50)
+`;
+    const steps = (await runEStepper(parse(program), program, 3)).steps as CseStep[];
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(program)),
+      new Stash(),
+      -1,
+      3,
+      program,
+    );
+    const cseFinal = snapshots[snapshots.length - 1] as unknown as CseStep["cse"];
+    expect(framesOf(steps[steps.length - 1].cse.environments)).toEqual(
+      framesOf(cseFinal.environments),
+    );
+  });
+});
+
+describe("self-referential lists", () => {
+  const PROGRAM = `xs = [0]\nxs[0] = xs\nprint(xs)\n`;
+  type Serialized = {
+    displayValue: string;
+    objectId?: string;
+    metadata?: { id?: number; elements?: Serialized[]; backReference?: boolean };
+  };
+  const xsIn = (environments: { name: string; bindings: { name: string; value: unknown }[] }[]) =>
+    environments.flatMap(e => e.bindings).find(b => b.name === "xs")!.value as Serialized;
+
+  test("are stepped through, and their snapshots end the cycle with a back reference", async () => {
+    const result = await runEStepper(parse(PROGRAM), PROGRAM, 3);
+    expect(result.error).toBeUndefined();
+    expect(result.output).toBe("[[...]]\n");
+    const last = result.steps[result.steps.length - 1] as EStepperStep & {
+      cse: { environments: Parameters<typeof xsIn>[0] };
+    };
+    const xs = xsIn(last.cse.environments);
+    expect(xs.displayValue).toBe("[[...]]");
+    const inner = xs.metadata!.elements![0];
+    expect(inner).toMatchObject({
+      displayValue: "[...]",
+      objectId: xs.objectId,
+      metadata: { id: xs.metadata!.id, elements: [], backReference: true },
+    });
+  });
+
+  test("do not break the CSE machine's own snapshots", async () => {
+    // (A bare Context has no builtins, hence no print.)
+    const CYCLE = `xs = [0]\nxs[0] = xs\n`;
+    const { snapshots } = await collectSnapshots(
+      new Context(),
+      new Control(parse(CYCLE)),
+      new Stash(),
+      -1,
+      3,
+      CYCLE,
+    );
+    const xs = xsIn(snapshots[snapshots.length - 1].environments);
+    expect(xs.metadata!.elements![0].metadata!.backReference).toBe(true);
+    expect(xs.objectId).toBeUndefined();
+  });
+});
+
+describe("object ids in the CSE machine snapshots", () => {
+  test("are the e-stepper's labels of the objects the program pane shows", async () => {
+    const steps = (await run(MAKE_WITHDRAW)).steps;
+    for (const step of steps) {
+      const labels = new Set(step.heap.map(o => o.id));
+      const ids = (step.cse!.environments as { bindings: { value: { objectId?: string } }[] }[])
+        .flatMap(e => e.bindings.map(b => b.value.objectId))
+        .filter((id): id is string => id !== undefined);
+      for (const id of ids) expect(labels.has(id)).toBe(true);
+    }
+    // The global frame's make_withdraw is named, as in the program pane.
+    const last = steps[steps.length - 1];
+    const makeWithdraw = last.heap.find(o => o.kind === "function" && o.name === "make_withdraw")!;
+    const binding = (
+      last.cse!.environments as {
+        name: string;
+        bindings: { name: string; value: { objectId?: string } }[];
+      }[]
+    )
+      .flatMap(e => e.bindings)
+      .find(b => b.name === "make_withdraw")!;
+    expect(binding.value.objectId).toBe(makeWithdraw.id);
   });
 });
 

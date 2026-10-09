@@ -36,4 +36,9 @@ export class Labels {
     }
     return label;
   }
+
+  /** The label of a heap object if it already has one, without assigning one. */
+  peekObject(obj: object): string | undefined {
+    return this.objects.get(obj);
+  }
 }
