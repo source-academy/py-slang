@@ -291,16 +291,47 @@ describe("the store as a CSE machine snapshot", () => {
       .map(e => `${e.name}: ${e.bindings.map(b => `${b.name}=${b.value.displayValue}`).join(" ")}`)
       .sort();
 
-  test("every step carries one, environments only", async () => {
+  test("every step carries one", async () => {
     const steps = (await run(MAKE_WITHDRAW)).steps as CseStep[];
-    steps.forEach((step, i) => {
-      expect(step.cse.stepIndex).toBe(i);
-      expect(step.cse.control).toEqual([]);
-      expect(step.cse.stash).toEqual([]);
-    });
+    steps.forEach((step, i) => expect(step.cse.stepIndex).toBe(i));
     // Inside the call of withdraw, its frame is the active one, as in the CSE machine.
     const inCall = steps.find(s => s.activeFrameId === "E2")!;
     expect(inCall.cse.environments.find(e => e.isActive)?.name).toBe("withdraw");
+  });
+
+  type Roots = {
+    control: { displayText: string; metadata: { envId: string } }[];
+    stash: { displayValue: string; metadata?: { closureFrameId?: string } }[];
+  };
+  const roots = (step: EStepperStep) => step.cse as unknown as Roots;
+
+  test("its control holds a frame for each function body under evaluation", async () => {
+    const program = `def g(x):\n    return x + 1\ndef f(y):\n    return g(y) * 2\nf(1)\n`;
+    const { steps } = await run(program);
+    // While g runs inside f's body, f's frame (E1) is waiting for g's result: not the active
+    // frame, but still in use, as an ENVIRONMENT instruction would keep it in the CSE machine.
+    const inG = steps.find(s => s.activeFrameId === "E2")!;
+    expect(
+      roots(inG)
+        .control.map(c => c.metadata.envId)
+        .sort(),
+    ).toEqual(["E1", "E2"]);
+    expect(roots(inG).control.every(c => c.displayText === "ENVIRONMENT")).toBe(true);
+    // After both calls, nothing is under evaluation.
+    expect(roots(steps[steps.length - 1]).control).toEqual([]);
+  });
+
+  test("its stash holds the values in the program, e.g. a function just returned", async () => {
+    const program = `def make_adder(n):\n    return lambda x: x + n\nprint(make_adder(3)(4))\n`;
+    const { steps } = await run(program);
+    // Once make_adder has returned, its frame (E1) is kept alive only by the returned function,
+    // which is in the program, waiting to be called: on the stash, pointing to E1.
+    const returned = steps.find(
+      s =>
+        roots(s).stash.some(v => v.metadata?.closureFrameId === "E1") &&
+        !roots(s).control.some(c => c.metadata.envId === "E1"),
+    );
+    expect(returned).toBeDefined();
   });
 
   test("the final snapshot shows the same frames as the CSE machine's own", async () => {
@@ -637,5 +668,20 @@ bump(2)
     // the branch is done.
     const branch = steps.find(s => JSON.stringify(s.ast).includes("GlobalStatement"));
     expect(branch).toBeDefined();
+  });
+});
+
+describe("apply_in_underlying_python (§4)", () => {
+  test("becomes a call of the function on the list's elements, which then steps as usual", async () => {
+    const program = `def f(a, b):\n    return a * b\nprint(apply_in_underlying_python(f, llist(6, 7)))\n`;
+    const { steps, output, error } = await run(program, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("42\n");
+    const explanations = story(steps);
+    const applied = explanations.findIndex(e => e.startsWith("Ran apply_in_underlying_python("));
+    expect(applied).toBeGreaterThan(-1);
+    expect(explanations[applied]).toContain("apply the function to the elements of the list");
+    // The call that follows is an ordinary call: a new frame for f.
+    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new frame E1/);
   });
 });
