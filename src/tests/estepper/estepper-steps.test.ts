@@ -334,6 +334,24 @@ describe("the store as a CSE machine snapshot", () => {
     expect(returned).toBeDefined();
   });
 
+  test("an object shown once stays shown, as garbage, once nothing refers to it", async () => {
+    const program = `xs = [None] * 3\ndef f():\n    return lambda x: x\nf()\n`;
+    const { steps } = await run(program);
+    const last = steps[steps.length - 1];
+    // The list [None] (#1) is garbage once [None] * 3 (#2) has been made, and so is the function
+    // f's call returned: both are still drawn, greyed out.
+    expect(last.heap.filter(o => o.isGarbage).map(o => o.id)).toEqual(["#1", "#4"]);
+    // In the CSE snapshot, each is in the heap of its frame, which nothing refers to.
+    type Frame = { id: string; heapObjects?: { objectId?: string }[] };
+    const heapObjects = (last.cse!.environments as Frame[]).map(f => [
+      f.id,
+      (f.heapObjects ?? []).map(o => o.objectId),
+    ]);
+    expect(heapObjects).toContainEqual(["Global", ["#1"]]);
+    expect(heapObjects).toContainEqual(["E1", ["#4"]]);
+    expect(roots(last).stash).toEqual([]);
+  });
+
   test("the final snapshot shows the same frames as the CSE machine's own", async () => {
     const program = `def make_withdraw(balance):
     def withdraw(amount):
