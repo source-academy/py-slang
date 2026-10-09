@@ -65,6 +65,7 @@ import type { Group } from "../../stdlib/utils";
 import { Labels } from "./labels";
 import {
   type BlockExpr,
+  type CallExpr,
   type Expr,
   type ForStmt,
   type LoopStmt,
@@ -569,6 +570,41 @@ export class Machine {
           after: `Called ${display}: new frame ${label} extends ${
             parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
           }${declarationsNote(closure)}`,
+        },
+      };
+    }
+
+    // `apply_in_underlying_python(f, xs)` applies `f` to the elements of the linked list `xs`. The
+    // CSE machine's builtin does that by pushing the application onto the machine's own stash and
+    // control (it returns nothing), so here it is a step of its own: the call becomes `f(x1, …)`,
+    // which then steps like any other call.
+    if (
+      callee.type === "builtin" &&
+      callee.name === "apply_in_underlying_python" &&
+      args.length === 2
+    ) {
+      const [func, argList] = args;
+      const elements: Value[] = [];
+      // As the builtin: follow the pairs; anything else ends the list.
+      let current = argList;
+      while (current && current.type === "list" && current.value.length === 2) {
+        elements.push(current.value[0]);
+        current = current.value[1];
+      }
+      const node: CallExpr = {
+        k: "call",
+        callee: val(func),
+        args: elements.map(val),
+        starred: elements.map(() => false),
+        src: e.src,
+      };
+      return {
+        node,
+        c: {
+          pre: e,
+          post: node,
+          before: `Running ${display}`,
+          after: `Ran ${display}: apply the function to the ${elements.length === 1 ? "element" : "elements"} of the list`,
         },
       };
     }

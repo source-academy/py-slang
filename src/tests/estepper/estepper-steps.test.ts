@@ -670,3 +670,18 @@ bump(2)
     expect(branch).toBeDefined();
   });
 });
+
+describe("apply_in_underlying_python (§4)", () => {
+  test("becomes a call of the function on the list's elements, which then steps as usual", async () => {
+    const program = `def f(a, b):\n    return a * b\nprint(apply_in_underlying_python(f, llist(6, 7)))\n`;
+    const { steps, output, error } = await run(program, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("42\n");
+    const explanations = story(steps);
+    const applied = explanations.findIndex(e => e.startsWith("Ran apply_in_underlying_python("));
+    expect(applied).toBeGreaterThan(-1);
+    expect(explanations[applied]).toContain("apply the function to the elements of the list");
+    // The call that follows is an ordinary call: a new frame for f.
+    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new frame E1/);
+  });
+});
