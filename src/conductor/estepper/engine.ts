@@ -119,6 +119,20 @@ const ATOMIC_STEP_LIMIT = 1_000_000;
 
 const NONE: Value = { type: "none" };
 
+/**
+ * Whether a statement carries a gutter breakpoint (`hasBreakpoint`, set on its source by
+ * `markBreakpoints`) that has not fired yet. Declarations (`global`, `nonlocal`) are not evaluated,
+ * so they are never stops.
+ */
+function hasUnfiredBreakpoint(stmt: Stmt | undefined): boolean {
+  if (!stmt || stmt.k === "global" || stmt.k === "nonlocal") return false;
+  const { src, breakpointFired } = stmt as {
+    src?: { hasBreakpoint?: boolean };
+    breakpointFired?: boolean;
+  };
+  return !!src?.hasBreakpoint && !breakpointFired;
+}
+
 export class Machine {
   readonly context: Context;
   readonly programEnv: Environment;
@@ -709,8 +723,27 @@ export class Machine {
     return { kind: "step", list: rest, c: { pre: head, before, after } };
   }
 
-  /** Performs one step on a statement list evaluated in `env`. */
+  /**
+   * Performs one step on a statement list evaluated in `env`. A statement flagged by
+   * `markBreakpoints` (a gutter click, resolved to its closest enclosing statement; see
+   * `../../breakpoints.ts`) is a breakpoint like a `breakpoint()` call, once: on the first step that
+   * works on it.
+   */
   async stepList(list: Stmt[], env: Environment): Promise<ListOutcome> {
+    const outcome = await this.stepListOnce(list, env);
+    if (outcome.kind === "end" || !hasUnfiredBreakpoint(list[0])) return outcome;
+    const c: Contraction = { ...outcome.c, isBreakpoint: true };
+    if (outcome.kind !== "step") return { ...outcome, c };
+    // The statement may still be there, partly evaluated (or unfolded, a `while` into an `if`): it
+    // has fired, and must not fire again for its next steps.
+    const fired =
+      outcome.list.length === list.length
+        ? [{ ...outcome.list[0], breakpointFired: true }, ...outcome.list.slice(1)]
+        : outcome.list;
+    return { ...outcome, list: fired, c };
+  }
+
+  private async stepListOnce(list: Stmt[], env: Environment): Promise<ListOutcome> {
     if (list.length === 0) return { kind: "end" };
     const head = list[0];
     const rest = list.slice(1);
