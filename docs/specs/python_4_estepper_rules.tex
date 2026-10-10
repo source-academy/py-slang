@@ -61,7 +61,8 @@ the environment diagram next to the program shows. Frames and heap objects
   parent. We write $\sEnv(x)$ for the value that $\sEnv$ binds to $x$, and
   $\sEnv = \{\, x_1 \mapsto v_1, \ldots \,\}$ for a frame with these bindings.
 \item A \emph{function object} $\mathit{Fn}(n, \mathit{params}, b, \sEnv)$ has
-  an optional name $n$, parameters, a body $b$, and refers to the frame
+  an optional name $n$, parameters, a body $b$ (with its \sCode{global} and
+  \sCode{nonlocal} declarations), and refers to the frame
   $\sEnv$ in which the function was created.
 \item A \emph{list} $\mathit{List}[v_0, \ldots, v_{n-1}]$ refers to its
   elements. A pair is a list of two elements, as in the CSE machine.
@@ -101,14 +102,24 @@ making the \emph{changes} to the frames and the heap''. If a rule does not chang
 the changes are left out, and we write $\sPure{\sEnv}{e}{e'}$. A rule for a
 sub-expression (such as \textbf{Block-reduce}) makes the changes of its premise.
 
-\paragraph{Initial configuration.} $G$ is empty, and the program is
-evaluated in $G$. $G$ grows: a global name is bound when its first
-assignment, function definition or import is executed. This ensures
-that a program that later redefines a built-in name, such as
-\sCode{print(1); print = 0}, can still use the built-in function before the
-assignment. In contrast, the frame of a function call is created with all
-names that the function assigns to already present and unassigned (see
-\textbf{Function-application} below).
+\paragraph{The global frame.} $G$ is empty at the start, and the program is
+evaluated in $G$. $G$ is the only frame that grows while the program runs: a
+global name is bound when its first assignment, function definition, \sCode{for}
+target or import is executed, and not earlier. This ensures that a program that
+later redefines a built-in name, such as \sCode{print(1); print = 0}, can still
+use the built-in function before the assignment, and that reading a global name
+before its first assignment is a \texttt{NameError}. The frame of a function
+call, in contrast, never grows: it is created with all parameters and with all
+names that the function assigns to already present, the latter unassigned
+(see \textbf{Function-application} below).
+
+Inside a function, a name that is declared \sCode{global} or \sCode{nonlocal}
+is \emph{designated} by the function object, which remembers these
+declarations. The frames of its calls do not bind such names; instead, lookup and
+assignment of a designated name go directly to $G$ (\sCode{global}) or to the
+nearest enclosing function frame that binds it (\sCode{nonlocal}). This is the
+only way in which a function accesses $G$ other than by the ordinary search
+through its parent frames; see \textbf{Resolution} below.
 
 \paragraph{Garbage.} A frame or object is \emph{garbage} if it cannot be
 reached from the program term $P$ (through environment blocks and
@@ -133,16 +144,15 @@ environment $\sEnv$ added to every premise.
 
 \subsection*{Names}
 
-\sEntry{Lookup}{A name is replaced by the value that it is bound to. The
-frame in which the name is looked up is determined by the rules for scopes
-below: the first frame on the path from $\sEnv$ to $G$ that determines the name,
-then the built-in frame.
+\sEntry{Lookup}{A name is replaced by the value that it is bound to, in the
+frame that the name \emph{resolves to} from $\sEnv$ (see \textbf{Resolution}
+below), or by the built-in function of that name if no frame binds it.
 Every name in the program is replaced in a step of its own, from left to right,
 and the stepper highlights the binding that was read. (Names of built-in
 and library functions, which no frame in the drawing binds, are looked up
 as part of the step that uses them.)}
 \gentzen{
-  \sEnv'\ \mbox{is the frame that determines } x \mbox{ from } \sEnv
+  x \mbox{ resolves to } \sEnv'\ \mbox{from } \sEnv
   \quad \sEnv'(x) = v \neq \sUn
 }{
   \sPure{\sEnv}{x}{v}
@@ -151,8 +161,9 @@ as part of the step that uses them.)}
 If $\sEnv'(x) = \sUn$, the reduction is stuck with
 \texttt{UnboundLocalError} if $\sEnv'$ is $\sEnv$ itself, and with
 \texttt{NameError} (``cannot access free variable'') if $\sEnv'$ is an
-enclosing frame, as in the CSE machine. If no frame binds $x$, it is a
-\texttt{NameError}.
+enclosing frame, as in the CSE machine. If no frame binds $x$ and $x$ is not a
+built-in function, it is a \texttt{NameError}; for a global name that has not
+been assigned yet, this is the case, because $G$ has no binding for it yet.
 
 \subsection*{Functions}
 
@@ -167,9 +178,9 @@ function object that remembers the current environment.}
 
 \sEntry{Function-definition}{A function definition is removed from the
 program. A new function object that remembers the current environment is
-created, and its name is bound to it in the frame that the name belongs to.}
+created, and its name is bound to it in the frame that the name resolves to.}
 \gentzen{
-  k \mbox{ is fresh}\quad \sEnv' \mbox{ is the frame that } f \mbox{ belongs to}
+  k \mbox{ is fresh}\quad f \mbox{ resolves to } \sEnv' \mbox{ from } \sEnv \mbox{ (growing } G \mbox{ if needed)}
 }{
   \begin{array}{l}
   \sEnv \vdash \sCode{def }f\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_n\sCode{):}\ b\ \sVar{statement}\ldots \Rightarrow \sVar{statement}\ldots \\
@@ -233,11 +244,12 @@ a single step.
 
 \sEntry{Assignment}{The right-hand expression of an assignment is evaluated.
 When it is a value, the statement is removed from the program, and the name is
-rebound to the value in the frame that the name belongs to (see Scopes).
+rebound to the value in the frame that the name resolves to (see
+\textbf{Resolution}); if that is $G$ and $x$ is not bound yet, $G$ grows.
 If the frame was created before, this is a change of the frame that the
 substitution model cannot express.}
 \gentzen{
-  \sEnv' \mbox{ is the frame that } x \mbox{ belongs to}
+  x \mbox{ resolves to } \sEnv' \mbox{ from } \sEnv \mbox{ (growing } G \mbox{ if needed)}
 }{
   \sStep{\sEnv}{x\sCode{ = }v\ \sVar{statement}\ldots}{\sVar{statement}\ldots}
     {\sEnv'(x) := v}
@@ -248,19 +260,31 @@ substitution model cannot express.}
 They remain in the program as source and have been taken into account when
 the frame of the function was created.}
 
-\subsection*{Scopes}
+\subsection*{Resolution}
 
-The frame that a name $x$ \emph{belongs to}, for both lookup and assignment, is
-decided statically by Python's rule, as in the CSE machine:
+The frame that a name $x$ \emph{resolves to} from the environment $\sEnv$,
+for both lookup and assignment, is found by a search that starts in one frame
+and moves to the parent frame until a frame binds $x$ (to a value or to
+$\sUn$). Where the search \emph{starts} depends on the function whose call
+created $\sEnv$ (there is none if $\sEnv$ is $G$):
 \begin{itemize}
-\item if the function declares \sCode{global x}, it is $G$;
-\item if the function declares \sCode{nonlocal x}, it is the nearest
-  enclosing function frame that binds $x$;
-\item otherwise, if $x$ is a parameter of the function or is assigned to
-  anywhere in the body, it is the frame of the function call;
-\item otherwise, the name is looked up in the parent frames, from the
-  innermost to $G$.
+\item if the function designates $x$ as \sCode{global}, the search starts at $G$;
+\item if the function designates $x$ as \sCode{nonlocal}, the search starts at the
+  parent of $\sEnv$ and ignores $G$;
+\item otherwise, the search starts at $\sEnv$ itself.
 \end{itemize}
+No search is needed to know that a parameter, or a name that the function
+assigns to, resolves to the frame of the call: that frame binds it from the
+moment it is created, so the search stops there and never reaches an
+outer binding of the same name. In contrast, a name that no function frame
+binds is searched through the enclosing frames and ends in $G$, where it is
+found only if it has been assigned by now. If no frame binds $x$ at all, lookup
+continues with the built-in functions.
+
+Assignment uses the same resolution, with one addition: if the search ends
+at $G$ without finding a binding (a \sCode{global} name or a name at the top level
+that is assigned for the first time), $G$ \emph{grows} by the new binding of $x$.
+No other frame ever gains a binding.
 
 \subsection*{Lists and pairs}
 
