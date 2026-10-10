@@ -923,3 +923,28 @@ describe("the step limit", () => {
     expect(steps.at(-1)?.markers?.[0]?.explanation).toBe("Evaluation complete");
   });
 });
+
+describe("shadowing a builtin (py-slang#531)", () => {
+  // Python's LEGB: an assignment binds the name in the global frame, in front of the builtins.
+  test("print = 0 shadows the builtin; a name bound to the builtin before still prints", async () => {
+    const { output, error, steps } = await run("p = print\nprint = 0\np(print)\nprint(3)\n");
+    expect(output).toBe("0\n");
+    // Calling the 0 is a TypeError (the message is the CSE machine's, see py-slang#531).
+    expect(error).toMatch(/^TypeError/);
+    expect(frames(steps.at(-1)!)[0]).toMatch(/: p=print print=0$/);
+  });
+
+  test("the builtin is used until the assignment", async () => {
+    const { output, error } = await run("print(1)\nprint = 0\n");
+    expect(error).toBeUndefined();
+    expect(output).toBe("1\n");
+  });
+
+  test("global print in a function shadows it too", async () => {
+    const { output, error } = await run(
+      "def f():\n    global print\n    print = 1\nf()\nprint(2)\n",
+    );
+    expect(output).toBe("");
+    expect(error).toMatch(/^TypeError/);
+  });
+});
