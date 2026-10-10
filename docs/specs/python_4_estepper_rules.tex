@@ -271,29 +271,41 @@ the frame of the function was created.}
 
 \subsection*{Resolution}
 
-The frame that a name $x$ \emph{resolves to} from the environment $\sEnv$,
-for both lookup and assignment, is found by a search that starts in one frame
-and moves to the parent frame until a frame binds $x$ (to a value or to
-$\sUn$). Where the search \emph{starts} depends on the function whose call
-created $\sEnv$ (there is none if $\sEnv$ is $G$):
+Python looks up a name in four scopes, in the order \textbf{LEGB}:
+\emph{Local}, \emph{Enclosing}, \emph{Global}, \emph{Built-in}. In the
+e-stepper they are frames of the chain that starts at the current environment
+$\sEnv$:
 \begin{itemize}
-\item if the function designates $x$ as \sCode{global}, the search starts at $G$;
-\item if the function designates $x$ as \sCode{nonlocal}, the search starts at the
-  parent of $\sEnv$ and ignores $G$;
-\item otherwise, the search starts at $\sEnv$ itself.
+\item \textbf{L}ocal: $\sEnv$, the frame of the current call;
+\item \textbf{E}nclosing: the parent frames of $\sEnv$ that are frames of calls,
+  from the innermost outwards (the frames in which the enclosing functions were
+  called);
+\item \textbf{G}lobal: $G$;
+\item \textbf{B}uilt-in: $B$.
+\end{itemize}
+The frame that a name $x$ \emph{resolves to} from $\sEnv$, for both lookup and
+assignment, is the first frame in this order that binds $x$ (to a value or to
+$\sUn$). Two declarations change the order for the function that makes the call:
+\begin{itemize}
+\item if the function designates $x$ as \sCode{global}, the search skips L and E
+  and starts with G;
+\item if the function designates $x$ as \sCode{nonlocal}, the search skips L and
+  considers only E.
 \end{itemize}
 No search is needed to know that a parameter, or a name that the function
-assigns to, resolves to the frame of the call: that frame binds it from the
-moment it is created, so the search stops there and never reaches an
-outer binding of the same name. In contrast, a name that no function frame
-binds is searched through the enclosing frames and ends in $G$, where it is
-found only if it has been assigned by now. The search ends in the builtins environment $B$, the parent of $G$.
+assigns to, resolves to the local frame: that frame binds it from the moment it
+is created, so the search stops at L and never reaches an outer binding of the
+same name. In contrast, a name that no function frame binds is searched
+through E and G, and then B; it is found in G only if it has been assigned by
+now. If not even $B$ binds $x$, lookup is a \texttt{NameError}.
 
-Assignment uses the same resolution, with one addition: if the search reaches
-$G$ without finding a binding in a function frame, or if it finds a binding only in $B$
-(a \sCode{global} name or a name at the top level that is assigned for the first
-time, possibly shadowing a name of $B$), $G$ \emph{grows} by the new binding of
-$x$. No other frame ever gains a binding, and $B$ never changes.
+Assignment resolves $x$ in the same way, with one difference: it never goes
+as far as B. An assigned name is local, so an assignment in a function body is
+to L, unless the function designates the name as \sCode{global} (then it is to
+G) or \sCode{nonlocal} (then it is to E). At the top level, L is G. If G does not
+bind $x$ yet, it \emph{grows} by the new binding, even if $B$ binds $x$: this is
+why \sCode{print = 0} creates a binding in $G$ that shadows the one in $B$. No
+frame other than $G$ ever gains a binding, and $B$ never changes.
 
 \subsection*{Lists and pairs}
 
