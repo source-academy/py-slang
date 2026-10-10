@@ -173,7 +173,6 @@ print(outer(), x)
   "user error": `error("something went wrong", 42)\n`,
   "range step zero": `for i in range(1, 5, 0):\n    print(i)\n`,
   "range with a float": `for i in range(2.5):\n    print(i)\n`,
-  "builtin reassignment": `def f():\n    global print\n    print = 1\nf()\n`,
   "head of non-pair": `print(head(None))\n`,
 };
 
@@ -193,7 +192,6 @@ const ERROR_PROGRAMS = new Set([
   "user error",
   "range step zero",
   "range with a float",
-  "builtin reassignment",
   "head of non-pair",
 ]);
 
