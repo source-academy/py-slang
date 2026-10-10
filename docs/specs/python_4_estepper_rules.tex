@@ -1,0 +1,430 @@
+\input python_2_stepper_style.tex
+
+\newcommand{\sEnv}{E}
+\newcommand{\sStore}{\Sigma}
+\newcommand{\sRef}[1]{\sCode{\#}#1}
+\newcommand{\sBlock}[2]{[\![\,#1,\ #2\,]\!]}
+\newcommand{\sStep}[4]{#1 \vdash \langle #2,\ \sStore \rangle \Rightarrow \langle #3,\ #4 \rangle}
+\newcommand{\sUn}{\bot}
+
+\section*{Introduction}
+
+The \emph{environment stepper} (``e-stepper'') shows how a Python \S 3 or
+Python \S 4 program is evaluated by the \emph{environment model} of SICPy,
+Chapter 3. Like the substitution stepper (see the specification of the
+Python \S 2 stepper), it rewrites the program itself, one small step at a
+time, so that the shape of a process stays visible. In contrast to the
+substitution stepper, names are \emph{not} replaced by their values at the time
+a binding is made. Instead, every part of the program that is under evaluation
+has an \emph{environment} $\sEnv$ in which it looks up names, and assignments
+change the frames of the environments. This is what makes assignment, local
+state and mutable data structures explainable: the substitution model cannot
+express them.
+
+The environments and the data structures that the program refers to are
+drawn next to the program as in the CSE machine visualization. The
+rewriting rules below and the CSE machine describe the same computations: they
+agree on the result of every program, and on the kind of error, if any.
+
+\section*{Configurations}
+
+A step shows a \emph{configuration} $\langle P, \sStore \rangle$ of a
+\emph{program term} $P$ and a \emph{store} $\sStore$.
+
+\paragraph{Program term.} The program term $P$ is the remaining program: a
+sequence of statements. In it, expressions are rewritten to \emph{values}:
+\begin{itemize}
+\item primitive values: integers, floats, complex numbers, strings,
+  \sCode{True}, \sCode{False} and \sCode{None}, shown as in the substitution
+  stepper;
+\item \emph{references} $\sRef{k}$ to objects in the store: function objects
+  and lists. A reference to a named function object is shown by that name;
+  other references are shown as a badge with the number of the object
+  in the program and in the drawing;
+\item built-in functions, shown by their name.
+\end{itemize}
+A function body (or lambda body) under evaluation is wrapped as an
+\emph{environment block} $\sBlock{\sEnv'}{b}$: the body $b$ is evaluated in
+the environment $\sEnv'$. The stepper shows it as the body, surrounded by a
+bracket that carries the label of $\sEnv'$ (for example \texttt{E3}) in the
+colour of the frame $\sEnv'$ in the drawing.
+
+\paragraph{Store.} The store $\sStore$ is everything that the program can
+refer to, besides primitive values: frames, function objects and lists.
+We do not describe it as a mathematical structure; it is what the drawing next to
+the program shows. The parts of the store \emph{refer to each other}:
+\begin{itemize}
+\item A \emph{frame} binds names to values, or to $\sUn$ (``unassigned''),
+  and refers to its \emph{parent} frame. The \emph{global frame} $G$ has no
+  parent. We write $\sEnv(x)$ for the value that $\sEnv$ binds to $x$, and
+  $\sEnv = \{\, x_1 \mapsto v_1, \ldots \,\}$ for a frame with these bindings.
+\item A \emph{function object} $\mathit{Fn}(n, \mathit{params}, b, \sEnv)$ has
+  an optional name $n$, parameters, a body $b$, and refers to the frame
+  $\sEnv$ in which the function was created.
+\item A \emph{list} $\mathit{List}[v_0, \ldots, v_{n-1}]$ refers to its
+  elements. A pair is a list of two elements, as in the CSE machine.
+\end{itemize}
+A value in a binding or a list that is an object is a \emph{reference}
+$\sRef{k}$: it \emph{is} the object, not a copy of it. Two references with the
+same number refer to the same object, and a change of the object is seen
+through every reference to it. This is the difference to the substitution
+model, in which every use of a name gets its own copy of the value.
+
+\emph{The store can contain cycles.} As in the substitution stepper, where a
+name that occurs in its own value refers cyclically to that value, the parts
+of the store may refer to each other in a circle. The most important cycle is
+the one of every function defined in a frame: the frame binds the name of the
+function to the function object, and the function object refers to the frame in
+which it was created. A list can contain a reference to itself after
+\sCode{set\_tail}. The rules never copy or unfold such a cycle; they only
+create objects and change what a binding or an element refers to.
+We write $\sStore[\sRef{k} := o]$ for the store in which $\sRef{k}$ is
+a new object $o$, and $\sStore[\sEnv(x) := v]$ for the store in which the binding
+of $x$ in $\sEnv$ refers to $v$ (and similarly for list elements).
+
+The built-in functions live in an implicit frame above $G$. It is not drawn.
+
+\paragraph{Current environment.} The \emph{current environment} $\sEnv$ of a
+redex is the environment of the innermost environment block that contains
+it, or $G$ if there is none. It is not written in the program, because the
+environment of a subexpression is the environment of its block. The rules
+below are written as
+\[
+  \sStep{\sEnv}{e}{e'}{\sStore'}
+\]
+which reads: ``in environment $\sEnv$, the expression $e$, with store
+$\sStore$, reduces to $e'$ and changes the store to $\sStore'$''. A store is
+only mentioned in a rule if it is changed or inspected.
+
+\paragraph{Initial configuration.} $G$ is empty, and the program is
+evaluated in $G$. $G$ grows: a global name is bound when its first
+assignment, function definition or import is executed. This ensures
+that a program that later redefines a built-in name, such as
+\sCode{print(1); print = 0}, can still use the built-in function before the
+assignment. In contrast, the frame of a function call is created with all
+names that the function assigns to already present and unassigned (see
+\textbf{Function-application} below).
+
+\paragraph{Garbage.} A frame or object is \emph{garbage} if it cannot be
+reached from the program term $P$ (through environment blocks and
+references) or from $G$. Garbage is not removed, but drawn in grey, so that
+the effect of returning from a call is visible: the frame of a call stays
+alive if a returned function object refers to it, and becomes garbage
+otherwise. The stepper offers to remove the garbage from the drawing
+(``Clear dead frames'').
+
+\section*{Reduction}
+
+The reducer $\Rightarrow$ and its transitive closure $\Rightarrow^*$ are used
+as in the specification of the Python \S 2 stepper. A \emph{contraction} is a
+single step; the order of evaluation is the same: expressions are evaluated
+from left to right, inner expressions before the expressions that contain
+them. We only give the rules that are different from the substitution
+stepper, namely those that involve names, functions and data. The rules for
+the primitive operators, for \sCode{and}, \sCode{or}, conditional
+expressions, built-in functions on primitive values, and for \sCode{if},
+\sCode{pass} and \sCode{breakpoint()} are the same, with the current
+environment $\sEnv$ added to every premise.
+
+\subsection*{Names}
+
+\sEntry{Lookup}{A name is replaced by the value that it is bound to. The
+frame in which the name is looked up is determined by the rules for scopes
+below: the first frame on the path from $\sEnv$ to $G$ that determines the name,
+then the built-in frame.
+Every name in the program is replaced in a step of its own, from left to right,
+and the stepper highlights the binding that was read. (Names of built-in
+and library functions, which no frame in the drawing binds, are looked up
+as part of the step that uses them.)}
+\gentzen{
+  \sEnv'\ \mbox{is the frame that determines } x \mbox{ from } \sEnv
+  \quad \sEnv'(x) = v \neq \sUn
+}{
+  \sStep{\sEnv}{x}{v}{\sStore}
+}
+
+If $\sEnv'(x) = \sUn$, the reduction is stuck with
+\texttt{UnboundLocalError} if $\sEnv'$ is $\sEnv$ itself, and with
+\texttt{NameError} (``cannot access free variable'') if $\sEnv'$ is an
+enclosing frame, as in the CSE machine. If no frame binds $x$, it is a
+\texttt{NameError}.
+
+\subsection*{Functions}
+
+\sEntry{Lambda}{A lambda expression is replaced by a reference to a new
+function object that remembers the current environment.}
+\gentzen{
+  k \mbox{ is fresh}
+}{
+  \sStep{\sEnv}{\sCode{lambda }x_1\sCode{, }\ldots\sCode{, }x_n\sCode{: }e}{\sRef{k}}
+  {\sStore[\sRef{k} := \mathit{Fn}(\varepsilon, x_1\ldots x_n, e, \sEnv)]}
+}
+
+\sEntry{Function-definition}{A function definition is removed from the
+program. A new function object that remembers the current environment is
+created, and its name is bound to it in the frame that the name belongs to.}
+\gentzen{
+  k \mbox{ is fresh}\quad \sEnv' \mbox{ is the frame that } f \mbox{ belongs to}
+}{
+  \begin{array}{l}
+  \sEnv \vdash \langle \sCode{def }f\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_n\sCode{):}\ b\ \sVar{statement}\ldots,\ \sStore \rangle \Rightarrow \\
+  \qquad \langle \sVar{statement}\ldots,\ \sStore[\sRef{k} := \mathit{Fn}(f, x_1\ldots x_n, b, \sEnv)][\sEnv'(f) := \sRef{k}] \rangle
+  \end{array}
+}
+
+\sEntry{Function-application}{The application of a reference to a function
+object, to as many arguments as it has parameters, all of which are values,
+is replaced by the body of the function in an environment block. The block's
+environment is a new frame whose parent is the environment \emph{in which the
+function was created} (and not the environment of the caller). The
+frame binds the parameters to the arguments (a rest parameter
+\sCode{*r} to a new list of the remaining arguments), and every other name
+that the body assigns to as unassigned.
+Names that the body declares \sCode{global} or \sCode{nonlocal} are not bound
+in the new frame. If the number of arguments does not match, the reduction is
+stuck with a \texttt{TypeError}, as in the CSE machine.}
+\gentzen{
+  \sStore(\sRef{k}) = \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
+  \sEnv'' \mbox{ is fresh with parent } \sEnv'
+}{
+  \sStep{\sEnv}{\sRef{k}\sCode{(}v_1\sCode{, }\ldots\sCode{, }v_m\sCode{)}}
+    {\sBlock{\sEnv''}{b}}
+    {\sStore[\sEnv'' := \{x_i \mapsto v_i\} \cup \{y \mapsto \sUn \mid y \in \mathit{assigned}(b)\}]}
+}
+
+\sEntry{Block-return}{An environment block whose first statement is a
+\sCode{return} reduces to the returned expression, evaluated in $\sEnv$:
+the block disappears, the statements after the \sCode{return} are dropped,
+and the frame of the block stays in the store (it may be garbage).
+A \sCode{return} without an expression returns \sCode{None}.}
+\gentzen{}{
+  \sBlock{\sEnv''}{\sCode{return }e\ \sVar{statement}\ldots} \Rightarrow e
+}
+
+\sEntry{Block-value}{An environment block whose body is a lambda body
+that has been reduced to a value $v$ reduces to $v$. An environment block whose
+statements are all finished reduces to \sCode{None}.}
+\gentzen{}{
+  \sBlock{\sEnv''}{v} \Rightarrow v
+  \qquad\qquad
+  \sBlock{\sEnv''}{\varepsilon} \Rightarrow \sCode{None}
+}
+
+\sEntry{Block-reduce}{The first statement of an environment block is
+reduced in the \emph{frame of the block}, not in $\sEnv$.}
+\gentzen{
+  \sStep{\sEnv''}{s}{s'}{\sStore'}
+}{
+  \sStep{\sEnv}{\sBlock{\sEnv''}{s\ \sVar{statement}\ldots}}
+    {\sBlock{\sEnv''}{s'\ \sVar{statement}\ldots}}{\sStore'}
+}
+
+A sequence of statements in an environment block is reduced statement by
+statement as a program, with environment $\sEnv''$. A consumed statement
+disappears. Calls of library functions (such as \sCode{map}) are applied in
+a single step.
+
+\subsection*{Assignment}
+
+\sEntry{Assignment}{The right-hand expression of an assignment is evaluated.
+When it is a value, the statement is removed from the program, and the name is
+rebound to the value in the frame that the name belongs to (see Scopes).
+If the frame was created before, this is a change of the store that the
+substitution model cannot express.}
+\gentzen{
+  \sEnv' \mbox{ is the frame that } x \mbox{ belongs to}
+}{
+  \sStep{\sEnv}{x\sCode{ = }v\ \sVar{statement}\ldots}{\sVar{statement}\ldots}
+    {\sStore[\sEnv'(x) := v]}
+}
+
+\sEntry{Global-and-nonlocal}{The declarations \sCode{global} and
+\sCode{nonlocal} are not statements that run: they have no step of their own.
+They remain in the program as source and have been taken into account when
+the frame of the function was created.}
+
+\subsection*{Scopes}
+
+The frame that a name $x$ \emph{belongs to}, for both lookup and assignment, is
+decided statically by Python's rule, as in the CSE machine:
+\begin{itemize}
+\item if the function declares \sCode{global x}, it is $G$;
+\item if the function declares \sCode{nonlocal x}, it is the nearest
+  enclosing function frame that binds $x$;
+\item otherwise, if $x$ is a parameter of the function or is assigned to
+  anywhere in the body, it is the frame of the function call;
+\item otherwise, the name is looked up in the parent frames, from the
+  innermost to $G$.
+\end{itemize}
+
+\subsection*{Lists and pairs}
+
+\sEntry{List-literal}{A list expression whose elements are all values is
+replaced by a reference to a new list.}
+\gentzen{
+  k \mbox{ is fresh}
+}{
+  \sStep{\sEnv}{\sCode{[}v_0\sCode{, }\ldots\sCode{, }v_{n-1}\sCode{]}}{\sRef{k}}
+    {\sStore[\sRef{k} := \mathit{List}[v_0,\ldots,v_{n-1}]]}
+}
+
+\sEntry{List-access}{The access of an element of a list is replaced by the
+element. A negative index counts from the end. An index that is out of range
+causes an \texttt{IndexError}, and an index that is not an integer, a
+\texttt{TypeError}; the reduction is then stuck. Strings can also be accessed;
+the result is a string of one character.}
+\gentzen{
+  \sStore(\sRef{k}) = \mathit{List}[v_0,\ldots,v_{n-1}]\quad
+  -n \leq i < n
+}{
+  \sRef{k}\sCode{[}i\sCode{]} \Rightarrow v_{i \bmod n}
+}
+
+\sEntry{List-assignment}{The assignment to an element of a list is removed
+from the program, and the element is changed in the store.}
+\gentzen{
+  -n \leq i < n
+}{
+  \sStep{\sEnv}{\sRef{k}\sCode{[}i\sCode{] = }v\ \sVar{statement}\ldots}{\sVar{statement}\ldots}
+    {\sStore[\sRef{k}[i \bmod n] := v]}
+}
+
+\sEntry{Pair-construction}{The application of \sCode{pair}, \sCode{llist}
+(and, in Python \S 3, \sCode{stream}) to values is replaced by a reference to
+the outermost new list; all the cells are created in the same step.}
+\gentzen{
+  k_1, \ldots, k_n \mbox{ are fresh}
+}{
+  \sStep{\sEnv}{\sCode{pair(}v_1\sCode{, }v_2\sCode{)}}{\sRef{k_1}}
+    {\sStore[\sRef{k_1} := \mathit{List}[v_1, v_2]]}
+}
+
+\sEntry{Pair-mutation}{The application of \sCode{set\_head} or
+\sCode{set\_tail} to a reference to a pair and a value is replaced by
+\sCode{None}, and the first or second element of the pair is changed in the
+store.}
+\gentzen{
+  \sStore(\sRef{k}) = \mathit{List}[v_0, v_1]
+}{
+  \sStep{\sEnv}{\sCode{set\_head(}\sRef{k}\sCode{, }v\sCode{)}}{\sCode{None}}
+    {\sStore[\sRef{k}[0] := v]}
+}
+
+The other built-in functions of the linked list and stream libraries, and the
+functions that read lists such as \sCode{head}, \sCode{tail} and
+\sCode{is\_pair}, work as in the substitution stepper, on the lists in the store
+instead of on list literals.
+
+\sEntry{Identity}{\sCode{v is w} is replaced by \sCode{True} if $v$ and $w$
+are the same primitive value or the same reference, and by \sCode{False}
+otherwise; \sCode{is not} is the negation.}
+\gentzen{}{
+  \sRef{k}\sCode{ is }\sRef{k} \Rightarrow \sCode{True}
+}
+
+\subsection*{Loops}
+
+\sEntry{While-unfold}{A \sCode{while} loop is unfolded by the textbook rule
+before its test is evaluated. The loop stays in the program, in full,
+while the test is evaluated; so the program and the store always contain
+what is needed to continue by hand. The \sCode{if} is then reduced by the
+rules for conditional statements.}
+\gentzen{}{
+  \sCode{while }e\sCode{:}\ b\ \Rightarrow\ 
+  \sCode{if }e\sCode{:}\ b\ \ \sCode{while }e\sCode{:}\ b
+}
+
+\sEntry{For-range}{A \sCode{for} loop over \sCode{range(}$a$\sCode{, }$b$\sCode{,
+}$s$\sCode{)} first evaluates the arguments of \sCode{range} to values. The
+loop is then tested step by step: while the current value $c$ is in the
+range, the target is assigned $c$ and the body is run, followed by the loop
+with the next value $c + s$; otherwise the loop ends.}
+\gentzen{
+  c \mbox{ is in the range } a, b, s
+}{
+  \sCode{for }x\sCode{ in range(}c\sCode{, }b\sCode{, }s\sCode{):}\ \sVar{body}
+  \ \Rightarrow\ 
+  x\sCode{ = }c\ \ \sVar{body}\ \ \sCode{for }x\sCode{ in range(}c+s\sCode{, }b\sCode{, }s\sCode{):}\ \sVar{body}
+}
+
+\sEntry{Break-and-continue}{Within an iteration, \sCode{break} removes the rest of
+the iteration and the loop, and \sCode{continue} removes the rest of the
+iteration and continues with the loop.}
+
+\section*{Worked example}
+
+\begin{lstlisting}
+def make_withdraw(balance):
+    def withdraw(amount):
+        nonlocal balance
+        if balance >= amount:
+            balance = balance - amount
+            return balance
+        else:
+            return 'Insufficient funds'
+    return withdraw
+
+W1 = make_withdraw(100)
+W1(50)
+\end{lstlisting}
+
+Initially, $G$ is empty.
+\begin{enumerate}
+\item \textbf{Function-definition}: the definition of \sCode{make\_withdraw}
+  is consumed. A function object $\sRef{1}$ is created
+  for \sCode{make\_withdraw}, with $G$ as its frame, and $G$ binds
+  \sCode{make\_withdraw} to $\sRef{1}$.
+\item \textbf{Lookup}: in \sCode{W1 = make\_withdraw(100)}, the name
+  \sCode{make\_withdraw} is replaced by $\sRef{1}$, in a step of its own.
+\item \textbf{Function-application}: a new frame
+  $E_1 = \{\mathtt{balance} \mapsto 100, \mathtt{withdraw} \mapsto \sUn\}$ with
+  parent $G$. The program becomes
+  \sCode{W1 = }$\sBlock{E_1}{\sCode{def withdraw}\ldots\sCode{; return withdraw}}$.
+\item \textbf{Function-definition} in $E_1$: a function object $\sRef{2}$ is
+  created for \sCode{withdraw}, with $E_1$ as its frame, and $E_1$ binds
+  \sCode{withdraw} to $\sRef{2}$. This is a cycle: $E_1$ refers to $\sRef{2}$,
+  and $\sRef{2}$ refers to $E_1$.
+\item \textbf{Lookup}, then \textbf{Block-return}: the block is replaced by
+  the value of \sCode{withdraw}, which is $\sRef{2}$ (shown as
+  \texttt{withdraw}).
+\item \textbf{Assignment}: $G(\mathtt{W1}) = \sRef{2}$. $E_1$ stays alive, since
+  $\sRef{2}$ refers to it.
+\item \textbf{Function-application}: \sCode{W1(50)} is looked up and applied. A
+  new frame $E_2 = \{\mathtt{amount} \mapsto 50\}$ with parent $E_1$ (the frame
+  in which $\sRef{2}$ was created, and not the caller's). $E_2$ has no binding
+  for \sCode{balance}: \sCode{nonlocal balance} decided that.
+\item \textbf{Lookup}: in \sCode{balance >= amount}, \sCode{balance} is found
+  in $E_1$ (100), then \sCode{amount} in $E_2$ (50), each in its own step.
+  \sCode{100 >= 50} is \sCode{True}, and the \sCode{if} runs its first branch.
+\item \textbf{Assignment}: \sCode{balance = balance - amount} reduces to
+  \sCode{balance = 50}. With \sCode{nonlocal}, the binding is changed
+  \emph{in $E_1$}: this is the step that the substitution model
+  cannot express.
+\item \textbf{Block-return}: \sCode{return balance} gives 50 and the block
+  disappears. $E_2$ is now garbage; $E_1$ is not.
+\end{enumerate}
+A second call \sCode{W1(50)} creates $E_3$ with parent $E_1$ and finds
+\sCode{balance} $= 50$ there.
+
+\section*{Steps and their limit}
+
+Steps are numbered, explained and limited as in the Python \S 2 stepper:
+step 0 shows the program before evaluation, each contraction contributes two
+steps (the redex highlighted, then the result highlighted), and the last step
+is ``Evaluation complete'', ``Evaluation stuck'' or ``Maximum number of steps
+exceeded''. The number of the last step does not exceed the step limit.
+Each step also shows the store as it is at that step: the frames and objects
+of the drawing, with the frame of the current redex highlighted.
+
+A gutter breakpoint in the editor, and the statement \sCode{breakpoint()},
+mark the step in which the statement is reached (for a gutter breakpoint, the
+first step of the statement); the \emph{previous breakpoint} and \emph{next
+breakpoint} buttons jump between these steps.
+
+\section*{Python \S 4}
+
+The e-stepper does not yet support the metacircular evaluator support of
+Python \S 4 (\sCode{parse}, \sCode{tokenize} and
+\sCode{apply\_in\_underlying\_python}), nor constructs outside the Python \S 3
+syntax. When the reduction reaches such a construct, it stops with the
+message that the construct is not supported.
