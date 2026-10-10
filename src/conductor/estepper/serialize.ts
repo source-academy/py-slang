@@ -638,6 +638,18 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
   return { frames, values };
 }
 
+/** Whether a binding of `env` holds `list`, directly or inside the lists it holds. */
+function holds(env: Environment, list: ListValue): boolean {
+  const seen = new Set<ListValue>();
+  const inside = (v: Value): boolean => {
+    if (v.type !== "list" || seen.has(v)) return false;
+    if (v === list) return true;
+    seen.add(v);
+    return v.value.some(inside);
+  };
+  return Object.values(env.head).some(v => v !== UNASSIGNED && inside(v));
+}
+
 /**
  * The step's store as a CSE machine snapshot (environments only; control and stash empty), made
  * with the CSE machine plugin's own serializer, so a host can draw it with its CSE machine
@@ -655,10 +667,14 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     objects: (obj: object) => machine.labels.peekObject(obj),
     frames: (env: Environment) => machine.labels.peekFrame(env),
     // A list stays where it was first drawn (beside the frame it was made in), instead of moving
-    // to whichever frame is active when it is passed to a function; only if that frame is drawn.
+    // to whichever frame is active when it is passed to a function; only if that frame is drawn and
+    // still holds the list. A host draws a list beside a frame that binds it, so a list that only
+    // another frame holds (an argument that was never bound where it was made) would not be drawn.
     homes: (list: object) => {
       const home = machine.shownObjects.get(list as ListValue);
-      return home !== undefined && reached.frames.has(home) ? home : undefined;
+      return home !== undefined && reached.frames.has(home) && holds(home, list as ListValue)
+        ? home
+        : undefined;
     },
     code: machine.code,
   };
