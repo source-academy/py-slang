@@ -638,16 +638,16 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
   return { frames, values };
 }
 
-/** Whether a binding of `env` holds `list`, directly or inside the lists it holds. */
-function holds(env: Environment, list: ListValue): boolean {
-  const seen = new Set<ListValue>();
-  const inside = (v: Value): boolean => {
-    if (v.type !== "list" || seen.has(v)) return false;
-    if (v === list) return true;
-    seen.add(v);
-    return v.value.some(inside);
+/** The lists a binding of `env` holds, directly or inside the lists it holds. */
+function heldLists(env: Environment): Set<ListValue> {
+  const held = new Set<ListValue>();
+  const visit = (v: Value): void => {
+    if (v.type !== "list" || held.has(v)) return;
+    held.add(v);
+    v.value.forEach(visit);
   };
-  return Object.values(env.head).some(v => v !== UNASSIGNED && inside(v));
+  for (const v of Object.values(env.head)) if (v !== UNASSIGNED) visit(v);
+  return held;
 }
 
 /**
@@ -663,6 +663,7 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
   // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
   // stand for, so a host can tell which object a reference in the program pane means, and which
   // frame an environment bracket does.
+  const heldByFrame = new Map<Environment, Set<ListValue>>();
   const ids = {
     objects: (obj: object) => machine.labels.peekObject(obj),
     frames: (env: Environment) => machine.labels.peekFrame(env),
@@ -672,9 +673,11 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     // another frame holds (an argument that was never bound where it was made) would not be drawn.
     homes: (list: object) => {
       const home = machine.shownObjects.get(list as ListValue);
-      return home !== undefined && reached.frames.has(home) && holds(home, list as ListValue)
-        ? home
-        : undefined;
+      if (home === undefined || !reached.frames.has(home)) return undefined;
+      // Worked out once per frame for the snapshot, not for every list in it.
+      let held = heldByFrame.get(home);
+      if (!held) heldByFrame.set(home, (held = heldLists(home)));
+      return held.has(list as ListValue) ? home : undefined;
     },
     code: machine.code,
   };
