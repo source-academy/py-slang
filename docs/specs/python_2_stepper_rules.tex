@@ -1,0 +1,548 @@
+\input python_2_stepper_style.tex
+
+\section*{Introduction}
+
+The \emph{stepper} shows how a Python \S 1 or Python \S 2 program is evaluated
+by the \emph{substitution model}, as used in Chapters 1 and 2 of SICPy: the
+program itself is rewritten, one small step at a time, until it cannot be
+rewritten any further. In contrast to the CSE machine, no environments exist:
+a name is replaced by its value, and a function application is replaced by
+the function's body in which the arguments have been substituted for the
+parameters. The substitution model does not support assignment to names that
+have already been used; that is the reason for Python \S 3 to move on to the
+environment model, visualized by the CSE machine and the environment stepper.
+
+This document specifies the rewriting that the stepper performs. It follows
+the specification of the Source \S 2 stepper, with the differences that arise
+from Python's syntax: programs are sequences of statements without semicolons,
+function bodies are suites that end in \sCode{return}, and a statement that
+consists of a value has no result.
+
+\section*{Reduction}
+
+The \emph{reducer} $\Rightarrow$ is a partial function from
+programs/statements/expressions to
+programs/statements/expressions (with slight abuse of notation
+via overloading)
+and $\Rightarrow^*$ is its reflexive transitive closure.
+A \emph{reduction} is a sequence of programs
+$p_1 \Rightarrow \cdots \Rightarrow p_n$,
+where $p_n$ is not reducible, i.e. there is no
+program $q$ such that $p_n \Rightarrow q$.
+Here, the program $p_n$ is called the \emph{result
+of reducing} $p_1$.
+
+If $p_n$, the result of reducing a program, is the empty
+sequence of statements, the evaluation is \emph{complete}.
+Reduction can get ``stuck'': the result can be a program
+that is not empty, which corresponds to a runtime error. In both cases the
+stepper ends the reduction with a last step that says
+``Evaluation complete'' or ``Evaluation stuck'', respectively.
+Unlike in Source, a statement that consists of a value does not
+survive as the result of the program: it is removed when it is reached
+(see \textbf{Program-discard}); the stepper therefore always ends with
+the empty program, unless a runtime error occurs.
+
+A \emph{value} is an integer, float, complex or string literal,
+\sCode{True}, \sCode{False}, \sCode{None},
+a \sCode{lambda} expression, a function definition
+(\sCode{def}), a built-in function, or a pair
+\sCode{[}$v_1$\sCode{, }$v_2$\sCode{]} of values. (The stepper shows
+the result of \sCode{pair(}$v_1$\sCode{, }$v_2$\sCode{)} in this
+notation; \sCode{None} is the empty linked list.) A function that was
+declared with a name is shown by that name and reveals its definition
+when hovered.
+
+The \emph{substitution} function
+$p [ n := v ]$ on programs/statements/expressions
+replaces every free occurrence of the name $n$
+in $p$ by value $v$. See the section on substitution below. Care must be
+taken to introduce and preserve
+co-references in this process; substitution can introduce
+cyclic references in the result of the substitution. For example,
+$n$ may occur free in $v$, in which case
+every occurrence of $n$ in $p$
+will be replaced by $v$ such that $n$ in $v$ refers cyclically
+to the node at which the replacement happens.
+
+Expressions are reduced from left to right, and inner expressions
+before the expressions that contain them: in
+$e_1 \sCode{ + } e_2$, the expression $e_2$ is only reduced when $e_1$
+is a value. Each reduction step is called a \emph{contraction}. The
+stepper shows two states for each contraction: first the program
+with the expression that is about to be contracted highlighted
+(the \emph{redex}), and then the program after the contraction with
+the result highlighted.
+
+\subsection*{Programs}
+
+\sEntry{Program-intro}{In a sequence of statements, we can always reduce the
+    first statement.}
+\gentzen{
+    \sVar{statement} \Rightarrow \sVar{statement}'
+}{
+    \sVar{statement}\ \sVar{statement}_2\ldots \Rightarrow
+    \sVar{statement}'\ \sVar{statement}_2\ldots
+}
+
+\sEntry{Program-discard}{When the first statement of a program is an
+    expression statement whose expression is a value, the statement is
+    removed. In Python, a statement does not have a result.}
+\gentzen{
+    \sVar{v} \mbox{ is a value}
+}{
+    \sVar{v}\ \sVar{statement}\ldots \Rightarrow
+    \sVar{statement}\ldots
+}
+
+\sEntry{Eliminate-function-definition}{A function definition as the first
+    statement is substituted in the remaining statements, in which its
+    name is replaced by the function.}
+\gentzen{
+             f = \sCode{def } \sVar{name}\sCode{(} x_1 \sCode{, }\ldots\sCode{, }x_n
+                 \sCode{):}\ \sVar{suite}
+}{
+  f\ \sVar{statement} \ldots\ 
+  \Rightarrow\ 
+  \sVar{statement} \ldots[\sVar{name} := f]
+}
+
+\sEntry{Eliminate-assignment}{An assignment of a value as the first
+    statement is substituted in the remaining statements.}
+\gentzen{
+             \sVar{v} \mbox{ is a value}
+}{
+  \sVar{name}\sCode{ = }\sVar{v}\ \sVar{statement} \ldots\ 
+  \Rightarrow \ 
+  \sVar{statement} \ldots[\sVar{name} := \sVar{v}]
+}
+
+\sEntry{Pass}{A \sCode{pass} statement is removed.}
+\gentzen{}{
+  \sCode{pass}\ \sVar{statement}\ldots \Rightarrow \sVar{statement}\ldots
+}
+
+\sEntry{Import}{An import statement is removed, and the imported names are
+  substituted in the remaining statements by the functions of the module.}
+\gentzen{}{
+  \sCode{from }\sVar{module}\sCode{ import }\sVar{name}\ \sVar{statement}\ldots
+  \Rightarrow \sVar{statement}\ldots[\sVar{name} := \sVar{f}]
+}
+
+\sEntry{Breakpoint}{The statement \sCode{breakpoint()} is removed. As a
+  side-effect, the step before this contraction is marked as a breakpoint, to
+  which the \emph{previous breakpoint} and \emph{next breakpoint} buttons of the
+  stepper jump. A statement on which the user has set a breakpoint in the
+  editor is treated in the same way, in addition to its own contraction: the
+  first step that reaches it is marked.}
+\gentzen{}{
+  \sCode{breakpoint()}\ \sVar{statement}\ldots \Rightarrow \sVar{statement}\ldots
+}
+
+\subsection*{Statements: Expression statements}
+
+\sEntry{Expression-statement-reduce}{An expression statement
+is reducible if its expression is reducible.}
+\gentzen{
+  e\ \Rightarrow\ e'
+}{
+  e \ \Rightarrow \ e'
+}
+
+\subsection*{Statements: Assignments}
+
+\sEntry{Evaluate-assignment}{The right-hand expression
+in an assignment is evaluated.}
+\gentzen{
+  \sVar{expression}
+  \ \Rightarrow \ 
+  \sVar{expression}'
+}{
+  \sVar{name}\sCode{ = }\sVar{expression}
+  \ \Rightarrow \ 
+  \sVar{name}\sCode{ = }\sVar{expression}'
+}
+
+\subsection*{Statements: Conditionals}
+
+\sEntry{Conditional-statement-predicate}{A conditional statement
+is reducible if its predicate is reducible.}
+\gentzen{
+  e\ \Rightarrow\ e'
+}{
+  \sCode{if }e\sCode{:}\ \sVar{suite}_1\ \sCode{else:}\ \sVar{suite}_2
+  \ \Rightarrow \ 
+  \sCode{if }e'\sCode{:}\ \sVar{suite}_1\ \sCode{else:}\ \sVar{suite}_2
+}
+
+An \sCode{elif} is the \sCode{else} suite of a conditional statement, which
+consists of a conditional statement; an \sCode{if} without
+\sCode{else} has an empty alternative suite.
+
+\sEntry{Conditional-statement-consequent}{A conditional statement whose
+    predicate is \sCode{True} is replaced by the statements of the consequent
+    suite.}
+\gentzen{
+}{
+  \sCode{if True:}\ \sVar{suite}_1\ \sCode{else:}\ \sVar{suite}_2\ \sVar{statement}\ldots
+  \ \Rightarrow \ 
+  \sVar{suite}_1\ \sVar{statement}\ldots
+}
+
+\sEntry{Conditional-statement-alternative}{A conditional statement whose
+    predicate is \sCode{False} is replaced by the statements of the
+    alternative suite.}
+\gentzen{
+}{
+  \sCode{if False:}\ \sVar{suite}_1\ \sCode{else:}\ \sVar{suite}_2\ \sVar{statement}\ldots
+  \ \Rightarrow \ 
+  \sVar{suite}_2\ \sVar{statement}\ldots
+}
+
+If the predicate is a value other than \sCode{True} and \sCode{False}, the
+reduction is stuck with the error \texttt{TypeError: predicate type must be 'bool'}.
+
+\subsection*{Function bodies}
+
+When a function with a suite as its body is applied, the application is
+replaced by a \emph{block expression}: the statements of the body, with the
+arguments substituted. A block expression is reduced like a program, except
+for the following rules.
+
+\sEntry{Block-expression-intro}{A block expression is
+reducible if its first statement is reducible. The rules for statements
+above apply in the same way as for programs, including
+\textbf{Program-discard} for value statements that are not the last statement.}
+\gentzen{
+  \sVar{statement} \Rightarrow \sVar{statement}'
+}{
+  \sCode{\{}\ \sVar{statement}\ \sVar{statement}_2\ldots\ \sCode{\}}
+  \Rightarrow
+  \sCode{\{}\ \sVar{statement}'\ \sVar{statement}_2\ldots\ \sCode{\}}
+}
+
+\sEntry{Block-expression-return}{A block expression starting with a
+    return statement reduces to the expression of the return statement. The
+    statements after the return statement are dropped. A \sCode{return}
+    without an expression returns \sCode{None}.}
+\gentzen{}{
+    \sCode{\{ return } \sVar{e}\ \sVar{statement\ldots}\ \sCode{\}}
+    \Rightarrow
+    \sVar{e}
+}
+
+\sEntry{Block-expression-fall-off}{A block expression that has no statements
+   left, or whose last statement is a value that is discarded, reduces to
+   \sCode{None}.}
+\gentzen{}{
+    \sCode{\{ \}} \Rightarrow \sCode{None}
+}
+
+As a shortcut, a function whose body starts with a \sCode{return}
+statement, as well as every \sCode{lambda} expression, is
+applied by replacing the application directly with the returned expression
+(or the body of the lambda expression, respectively), without
+creating a block expression.
+
+\subsection*{Expressions: Binary operators}
+
+\sEntry{Left-binary-reduce}{An expression with a binary operator
+can be reduced if its left sub-expression can be reduced.}
+\gentzen{
+  e_1 \ \Rightarrow \ e_1'
+}{
+  e_1\  \sVar{binary-operator} \ e_2
+  \ \Rightarrow \ 
+  e_1'\  \sVar{binary-operator} \ e_2
+}
+
+\sEntry{Right-binary-reduce}{An expression with a binary operator
+can be reduced if its left sub-expression is a value and its right
+sub-expression can be reduced.}
+\gentzen{
+  e_2 \ \Rightarrow \ e_2'
+}{
+  v_1\  \sVar{binary-operator} \ e_2
+  \ \Rightarrow \ 
+  v_1\  \sVar{binary-operator} \ e_2'
+}
+
+\sEntry{Binary-operator-reduce}{A binary operator applied to two values is
+replaced by the result of the operation.
+Integers are arbitrary-precision; if one of the operands is a float, the
+other operand is converted to a float, and if one of them is complex, the
+other is converted to complex (see the numbers section of this specification).
+Operands of other types, for example a boolean operand
+of an arithmetic operator, cause a \texttt{TypeError}, and division by zero
+causes a \texttt{ZeroDivisionError}; the reduction is then stuck.}
+\gentzen{
+  v_1\ \sVar{op}\ v_2 \mbox{ evaluates to } v
+}{
+  v_1\  \sVar{binary-operator} \ v_2
+  \ \Rightarrow \ 
+  v
+}
+
+\sEntry{And-shortcut}{An expression with binary operator
+\sCode{and} whose left sub-expression is \sCode{False} is reduced to \sCode{False},
+without evaluating the right sub-expression.}
+\gentzen{
+}{
+  \sCode{False and }e \ \Rightarrow \ \sCode{False}
+}
+
+\sEntry{And-continue}{An expression with binary operator
+\sCode{and} whose left sub-expression is \sCode{True} is reduced to
+the right sub-expression.}
+\gentzen{
+}{
+  \sCode{True and }e \ \Rightarrow \ e
+}
+
+\sEntry{Or-shortcut}{An expression with binary operator
+\sCode{or} whose left sub-expression is \sCode{True} is reduced to
+\sCode{True}, without evaluating the right sub-expression.}
+\gentzen{
+}{
+  \sCode{True or }e \ \Rightarrow \ \sCode{True}
+}
+
+\sEntry{Or-continue}{An expression with binary operator
+\sCode{or} whose left sub-expression is \sCode{False} is reduced to
+the right sub-expression.}
+\gentzen{
+}{
+  \sCode{False or }e \ \Rightarrow \ e
+}
+
+The left operand of \sCode{and} and \sCode{or} is evaluated first,
+as in the rules for the other binary operators (\textbf{Left-binary-reduce}).
+A left operand that is a value other than \sCode{True} or \sCode{False} causes
+a \texttt{TypeError}.
+
+\subsection*{Expressions: Unary operators}
+
+\sEntry{Unary-reduce}{An expression with a unary operator
+can be reduced if its operand can be reduced.}
+\gentzen{
+  e \ \Rightarrow \ e'
+}{
+  \sVar{unary-operator}\ e
+  \ \Rightarrow \ 
+  \sVar{unary-operator}\ e'
+}
+
+\sEntry{Unary-operator-reduce}{A unary operator (\sCode{-}, \sCode{+} or
+\sCode{not}) applied to a value is replaced by the result of the operation.
+\sCode{not} requires a boolean operand.}
+\gentzen{
+  \sVar{op}\ v \mbox{ evaluates to } v'
+}{
+  \sVar{unary-operator}\ v
+  \ \Rightarrow \ 
+  v'
+}
+
+\subsection*{Expressions: Conditional expressions}
+
+\sEntry{Conditional-expression-predicate}{A conditional expression is
+reducible if its predicate is reducible.}
+\gentzen{
+  e_1\ \Rightarrow\ e_1'
+}{
+  e_2\ \sCode{ if }\ e_1\ \sCode{ else }\ e_3
+  \ \Rightarrow \ 
+  e_2\ \sCode{ if }\ e_1'\ \sCode{ else }\ e_3
+}
+
+\sEntry{Conditional-expression-consequent}{A conditional expression whose
+   predicate is \sCode{True} reduces to its consequent.}
+\gentzen{
+}{
+  e_2\ \sCode{ if True else }\ e_3 \ \Rightarrow \ e_2
+}
+
+\sEntry{Conditional-expression-alternative}{A conditional expression whose
+   predicate is \sCode{False} reduces to its alternative.}
+\gentzen{
+}{
+  e_2\ \sCode{ if False else }\ e_3 \ \Rightarrow \ e_3
+}
+
+\subsection*{Expressions: Function application}
+
+\sEntry{Application-functor-reduce}{A function application
+can be reduced if its functor expression can be reduced.}
+\gentzen{
+  e \ \Rightarrow \ e'
+}{
+  e\  \sCode{(}\ \sVar{expressions} \ \sCode{)}
+  \ \Rightarrow \ 
+  e'\  \sCode{(}\ \sVar{expressions} \ \sCode{)}
+}
+
+\sEntry{Application-argument-reduce}{A function application
+can be reduced if one of its argument expressions can be reduced and all
+preceding arguments are values.}
+\gentzen{
+  e \ \Rightarrow \ e'
+}{
+  v\  \sCode{(}\ v_1 \ldots v_i \sCode{, } e \sCode{, }\ldots\ \sCode{)}
+  \ \Rightarrow \ 
+  v\  \sCode{(}\ v_1 \ldots v_i \sCode{, } e' \sCode{, }\ldots\ \sCode{)}
+}
+
+\sEntry{Function-definition-application-reduce}{The application of a function
+definition, to as many arguments as it has parameters, all of which are values,
+is replaced by its body in which the parameters are replaced by the arguments,
+and the name of the function is replaced by the function itself (so that
+recursive calls can be applied). If the body is a suite that does not start with
+a \sCode{return}, the application is replaced by the block expression of
+the suite.}
+\gentzen{
+  f = \sCode{def }n\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_k\sCode{):}\ b
+}{
+  f\ \sCode{(}\ v_1 \sCode{, }\ldots\sCode{, }v_k\ \sCode{)}
+  \ \Rightarrow \ 
+  b [x_1 := v_1]\ldots[x_k := v_k]
+  [n := f]
+}
+
+\sEntry{Lambda-application-reduce}{The application of a lambda
+expression, to as many arguments as it has parameters, all of which are values,
+is replaced by its body in which the parameters are replaced by the arguments.
+A lambda expression that was assigned to a name $n$ (\sCode{n = lambda ...})
+is applied in the same way as a function definition, including the
+substitution $[n := f]$.}
+\gentzen{
+  f = \sCode{lambda }x_1\sCode{, }\ldots\sCode{, }x_k\sCode{: }e
+}{
+  f\ \sCode{(}\ v_1 \sCode{, }\ldots\sCode{, }v_k\ \sCode{)}
+  \ \Rightarrow \ 
+  e [x_1 := v_1]\ldots[x_k := v_k]
+}
+
+If the number of arguments is different from the number of parameters,
+the reduction is stuck with a \texttt{TypeError}. The same holds for the
+application of a value that is not a function.
+
+\sEntry{Builtin-application-reduce}{The application of a built-in function
+(for example \sCode{abs}, \sCode{math\_sqrt}, \sCode{pair}, \sCode{head},
+\sCode{tail} and the other functions of the linked list library), to arguments
+that are all values, is replaced by the result of the function in one step.
+The functions \sCode{print} and \sCode{print\_llist} additionally write
+to the output, which the stepper shows from the step after this contraction
+onwards.}
+\gentzen{
+  f \mbox{ is a built-in function}\quad f(v_1,\ldots,v_k) = v
+}{
+  f\ \sCode{(}\ v_1 \sCode{, }\ldots\sCode{, }v_k\ \sCode{)}
+  \ \Rightarrow \ 
+  v
+}
+
+\pagebreak
+
+\section*{Substitution}
+
+Substitution $p[x := v]$ replaces the free occurrences of $x$ in $p$ by
+$v$. It is defined by the following cases; for the expressions that are not
+listed (operators, applications, pairs, conditional expressions), the
+substitution is applied to every sub-expression.
+
+\sEntry{Identifier}{An identifier with the same name as $x$ is substituted
+with $v$; other identifiers are left alone.}
+\gentzen{}{
+  x[x := v] \ = \ v \qquad\qquad
+  \sVar{name}[x := v] \ = \ \sVar{name}\quad (\sVar{name} \neq x)
+}
+
+\sEntry{Compound expressions}{All occurrences of $x$ in the
+sub-expressions are substituted with $v$.}
+\gentzen{}{
+  (e_1 \ \sVar{binary-operator} \ e_2)[x := v] \ = \ 
+  e_1[x := v] \ \sVar{binary-operator} \ e_2[x := v]
+}
+
+\sEntry{Lambda expression}{If $x$ is one of the parameters, the
+lambda expression is left alone. Otherwise the body is substituted. If a
+parameter of the lambda expression occurs free in $v$, the parameter is
+renamed first, to avoid that the parameter captures that occurrence.}
+\gentzen{
+  x \notin \{x_1, \ldots, x_k\}\quad
+  \{x_1, \ldots, x_k\} \cap \mathit{free}(v) = \emptyset
+}{
+  (\sCode{lambda }x_1\sCode{, }\ldots\sCode{, }x_k\sCode{: }e)[x := v]
+  \ = \ 
+  \sCode{lambda }x_1\sCode{, }\ldots\sCode{, }x_k\sCode{: }e[x := v]
+}
+
+\sEntry{Function definition}{If $x$ is the name of the function, or one of the
+parameters, the definition is left alone. Otherwise, the body is substituted,
+after the renaming of parameters and local names that occur free in $v$, as for
+lambda expressions. If $x$ is assigned to in the body of the definition, $x$ is
+local to the function (as in Python): $v$ is not substituted into the
+body, and reading $x$ before the assignment is an
+\texttt{UnboundLocalError}.}
+\gentzen{
+  x \notin \{n, x_1, \ldots, x_k\}\quad x \mbox{ is not assigned in } b
+}{
+  (\sCode{def }n\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_k\sCode{):}\ b)[x := v]
+  \ = \ 
+  \sCode{def }n\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_k\sCode{):}\ b[x := v]
+}
+
+\sEntry{Statement sequences}{In a sequence of statements, the statements are
+substituted from left to right. After a statement that declares $x$ (an
+assignment to $x$, or a definition of $x$), the remaining statements are left
+alone, because they refer to that declaration.}
+\gentzen{
+  \mbox{the first statement of } s \mbox{ declares } x
+}{
+  (\sVar{statement}_1\ \sVar{statement}_2 \ldots)[x := v]
+  \ = \ 
+  \sVar{statement}_1[x := v]\ \sVar{statement}_2\ldots
+}
+
+\sEntry{Assignment}{In an assignment, only the right-hand side is
+substituted.}
+\gentzen{}{
+  (\sVar{name}\sCode{ = }e)[x := v] \ = \ \sVar{name}\sCode{ = }e[x := v]
+}
+
+\section*{Free names}
+
+The set $\mathit{free}(p)$ of free names of a program, statement or expression
+$p$ is defined as usual: an identifier is free; a lambda expression binds
+its parameters; a function definition binds its name, its parameters and the
+names that are assigned to in its body; and, in a sequence of statements, an
+assignment or function definition binds its name in the statements that
+follow it. Names of built-in functions are not free: they are never
+substituted.
+
+\section*{Steps and their limit}
+
+The stepper presents an evaluation as a sequence of \emph{steps}, numbered
+from 0 on the step slider:
+\begin{itemize}
+\item Step 0 shows the program before evaluation (``Start of evaluation'').
+\item Each contraction contributes two steps: the program with the redex
+  highlighted (the explanation says what is about to happen, for example
+  ``Evaluating binary expression''), followed by the program after the
+  contraction with the result highlighted (``Evaluated binary expression
+  \ldots'').
+  The program after a contraction is identical to the program before the next
+  contraction; only the highlighting differs. If a contraction removes a
+  statement without leaving a result in its place (for example
+  \textbf{Eliminate-assignment}), nothing is highlighted after it.
+\item The last step is ``Evaluation complete'', ``Evaluation stuck'' (in
+  which case the previous step explains the error), or ``Maximum number
+  of steps exceeded''.
+\end{itemize}
+
+The number of the last step does not exceed the \emph{step limit} that the
+user can configure (default: 1000). A limit of $i$ allows
+$\max(0, \lfloor (i - 1) / 2 \rfloor)$ contractions; the last step is
+numbered $2\cdot\lfloor (i - 1) / 2 \rfloor + 1$ if the evaluation
+completes within the limit. The same limit applies to the environment stepper
+and to the CSE machine, whose step slider also counts from 0.

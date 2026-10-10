@@ -1,0 +1,21 @@
+% Some helper macros for writing the stepper specs in a more idiomatic way
+
+\newcommand{\gentzen}[2]{\[
+\frac{
+  #1
+}{
+  #2
+}
+\]}
+
+% Entry header
+\newcommand{\sEntry}[2]{\paragraph{#1:} #2}
+
+% Template variables
+\newcommand{\sVar}[1]{\textnormal{\textit{#1}}}
+% Template fixed values ("keywords")
+\newcommand{\sKw}[1]{\textbf{\texttt{#1}}}
+% Code fragments
+\newcommand{\sCode}[1]{\textbf{\texttt{#1}}}
+% Statement separator: Python programs are sequences of lines
+\newcommand{\sNl}{\ \mathbin{\textbf{\texttt{;}}}\ }
