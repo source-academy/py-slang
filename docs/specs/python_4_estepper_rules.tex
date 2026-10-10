@@ -29,8 +29,8 @@ agree on the result of every program, and on the kind of error, if any.
 
 \section*{Configurations}
 
-A step shows a \emph{configuration}: the \emph{program term} $P$ and the
-\emph{store}, which is everything else the program can refer to.
+A step shows a \emph{configuration}: the \emph{program term} $P$, and the
+\emph{frames} and the \emph{heap} that the program refers to.
 
 \paragraph{Program term.} The program term $P$ is the remaining program: a
 sequence of statements. In it, expressions are rewritten to \emph{values}:
@@ -38,7 +38,7 @@ sequence of statements. In it, expressions are rewritten to \emph{values}:
 \item primitive values: integers, floats, complex numbers, strings,
   \sCode{True}, \sCode{False} and \sCode{None}, shown as in the substitution
   stepper;
-\item \emph{references} $\sRef{k}$ to objects in the store: function objects
+\item \emph{references} $\sRef{k}$ to objects in the heap: function objects
   and lists. A reference to a named function object is shown by that name;
   other references are shown as a badge with the number of the object
   in the program and in the drawing;
@@ -50,10 +50,11 @@ the environment $\sEnv'$. The stepper shows it as the body, surrounded by a
 bracket that carries the label of $\sEnv'$ (for example \texttt{E3}) in the
 colour of the frame $\sEnv'$ in the drawing.
 
-\paragraph{Store.} The store is everything that the program can
-refer to, besides primitive values: frames, function objects and lists.
-We do not describe it as a mathematical structure; it is what the drawing next to
-the program shows. The parts of the store \emph{refer to each other}:
+\paragraph{Frames and heap.} Besides primitive values, the program can refer
+to frames, and to function objects and lists, which together form the
+\emph{heap}. We do not describe them as a mathematical structure; they are what
+the environment diagram next to the program shows. Frames and heap objects
+\emph{refer to each other}:
 \begin{itemize}
 \item A \emph{frame} binds names to values, or to $\sUn$ (``unassigned''),
   and refers to its \emph{parent} frame. The \emph{global frame} $G$ has no
@@ -71,16 +72,16 @@ same number refer to the same object, and a change of the object is seen
 through every reference to it. This is the difference to the substitution
 model, in which every use of a name gets its own copy of the value.
 
-\emph{The store can contain cycles.} As in the substitution stepper, where a
-name that occurs in its own value refers cyclically to that value, the parts
-of the store may refer to each other in a circle. The most important cycle is
+\emph{Frames and heap can contain cycles.} As in the substitution stepper, where a
+name that occurs in its own value refers cyclically to that value, frames and
+heap objects may refer to each other in a circle. The most important cycle is
 the one of every function defined in a frame: the frame binds the name of the
 function to the function object, and the function object refers to the frame in
 which it was created. A list can contain a reference to itself after
 \sCode{set\_tail}. The rules never copy or unfold such a cycle; they only
 create objects and change what a binding or an element refers to.
-A step can change the store in only three ways, which the rules state
-after the word \emph{changing}: $\mathbf{new}\ \sRef{k} = o$ creates a new
+A step can change the frames and the heap in only three ways, which the rules
+state after the word \emph{changing}: $\mathbf{new}\ \sRef{k} = o$ creates a new
 object $o$ (or a new frame); $\sEnv(x) := v$ makes the binding of $x$ in the
 frame $\sEnv$ refer to $v$; and $\sRef{k}[i] := v$ makes the $i$-th element of
 the list $\sRef{k}$ refer to $v$.
@@ -96,7 +97,7 @@ below are written as
   \sStep{\sEnv}{e}{e'}{\mathit{changes}}
 \]
 which reads: ``in environment $\sEnv$, the expression $e$ reduces to $e'$,
-making the \emph{changes} to the store''. If a rule does not change the store,
+making the \emph{changes} to the frames and the heap''. If a rule does not change them,
 the changes are left out, and we write $\sPure{\sEnv}{e}{e'}$. A rule for a
 sub-expression (such as \textbf{Block-reduce}) makes the changes of its premise.
 
@@ -199,7 +200,7 @@ stuck with a \texttt{TypeError}, as in the CSE machine.}
 \sEntry{Block-return}{An environment block whose first statement is a
 \sCode{return} reduces to the returned expression, evaluated in $\sEnv$:
 the block disappears, the statements after the \sCode{return} are dropped,
-and the frame of the block stays in the store (it may be garbage).
+and the frame of the block stays (it may be garbage).
 A \sCode{return} without an expression returns \sCode{None}.}
 \gentzen{}{
   \sBlock{\sEnv''}{\sCode{return }e\ \sVar{statement}\ldots} \Rightarrow e
@@ -233,7 +234,7 @@ a single step.
 \sEntry{Assignment}{The right-hand expression of an assignment is evaluated.
 When it is a value, the statement is removed from the program, and the name is
 rebound to the value in the frame that the name belongs to (see Scopes).
-If the frame was created before, this is a change of the store that the
+If the frame was created before, this is a change of the frame that the
 substitution model cannot express.}
 \gentzen{
   \sEnv' \mbox{ is the frame that } x \mbox{ belongs to}
@@ -285,7 +286,7 @@ the result is a string of one character.}
 }
 
 \sEntry{List-assignment}{The assignment to an element of a list is removed
-from the program, and the element is changed in the store.}
+from the program, and the element is changed in the heap.}
 \gentzen{
   -n \leq i < n
 }{
@@ -306,7 +307,7 @@ the outermost new list; all the cells are created in the same step.}
 \sEntry{Pair-mutation}{The application of \sCode{set\_head} or
 \sCode{set\_tail} to a reference to a pair and a value is replaced by
 \sCode{None}, and the first or second element of the pair is changed in the
-store.}
+heap.}
 \gentzen{
   \sRef{k} \mbox{ is a pair } \mathit{List}[v_0, v_1]
 }{
@@ -316,7 +317,7 @@ store.}
 
 The other built-in functions of the linked list and stream libraries, and the
 functions that read lists such as \sCode{head}, \sCode{tail} and
-\sCode{is\_pair}, work as in the substitution stepper, on the lists in the store
+\sCode{is\_pair}, work as in the substitution stepper, on the lists in the heap
 instead of on list literals.
 
 \sEntry{Identity}{\sCode{v is w} is replaced by \sCode{True} if $v$ and $w$
@@ -330,7 +331,7 @@ otherwise; \sCode{is not} is the negation.}
 
 \sEntry{While-unfold}{A \sCode{while} loop is unfolded by the textbook rule
 before its test is evaluated. The loop stays in the program, in full,
-while the test is evaluated; so the program and the store always contain
+while the test is evaluated; so the program, the frames and the heap always contain
 what is needed to continue by hand. The \sCode{if} is then reduced by the
 rules for conditional statements.}
 \gentzen{}{
@@ -417,8 +418,8 @@ step 0 shows the program before evaluation, each contraction contributes two
 steps (the redex highlighted, then the result highlighted), and the last step
 is ``Evaluation complete'', ``Evaluation stuck'' or ``Maximum number of steps
 exceeded''. The number of the last step does not exceed the step limit.
-Each step also shows the store as it is at that step: the frames and objects
-of the drawing, with the frame of the current redex highlighted.
+Each step also shows the frames and the heap as they are at that step, in the
+environment diagram, with the frame of the current redex highlighted.
 
 A gutter breakpoint in the editor, and the statement \sCode{breakpoint()},
 mark the step in which the statement is reached (for a gutter breakpoint, the
