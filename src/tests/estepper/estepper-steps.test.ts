@@ -956,6 +956,41 @@ print(q)
     // Before the fix the pair belonged to E1, the frame serialized first, during the call.
     expect([...homes(steps)]).toEqual([globalId]);
   });
+
+  test("a list is always beside a frame that holds it, or the host would not draw it", async () => {
+    // `stream_tail(s)` makes a pair in E2 that E2 never binds: only the frame of the next call does.
+    const code = `def stream_ref(s, n):
+    (head(s) if n == 0
+    else stream_ref(
+    stream_tail(s), n - 1))
+
+def ones():
+    return pair(1, ones)
+
+stream_ref(ones(), 3)
+`;
+    const { steps } = await run(code, 4);
+    type Value = { label?: string; objectId?: string; metadata?: Record<string, unknown> };
+    for (const step of steps) {
+      const frames = step.cse?.environments ?? [];
+      const held = new Map<string, Set<string>>();
+      const lists: [string, string][] = [];
+      const visit = (frameId: string, v: Value) => {
+        if (v.label !== "list") return;
+        const meta = v.metadata as { envId?: string; elements?: Value[] };
+        held.get(frameId)!.add(String(v.objectId));
+        lists.push([String(v.objectId), String(meta.envId)]);
+        meta.elements?.forEach(e => visit(frameId, e));
+      };
+      for (const f of frames) {
+        held.set(f.id, new Set());
+        for (const b of f.bindings) visit(f.id, b.value as Value);
+      }
+      for (const [objectId, home] of lists) {
+        expect(held.get(home)?.has(objectId)).toBe(true);
+      }
+    }
+  });
 });
 
 describe("shadowing a builtin (py-slang#531)", () => {

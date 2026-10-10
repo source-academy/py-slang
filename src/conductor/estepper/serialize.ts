@@ -638,6 +638,18 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
   return { frames, values };
 }
 
+/** The lists a binding of `env` holds, directly or inside the lists it holds. */
+function heldLists(env: Environment): Set<ListValue> {
+  const held = new Set<ListValue>();
+  const visit = (v: Value): void => {
+    if (v.type !== "list" || held.has(v)) return;
+    held.add(v);
+    v.value.forEach(visit);
+  };
+  for (const v of Object.values(env.head)) if (v !== UNASSIGNED) visit(v);
+  return held;
+}
+
 /**
  * The step's store as a CSE machine snapshot (environments only; control and stash empty), made
  * with the CSE machine plugin's own serializer, so a host can draw it with its CSE machine
@@ -651,14 +663,21 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
   // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
   // stand for, so a host can tell which object a reference in the program pane means, and which
   // frame an environment bracket does.
+  const heldByFrame = new Map<Environment, Set<ListValue>>();
   const ids = {
     objects: (obj: object) => machine.labels.peekObject(obj),
     frames: (env: Environment) => machine.labels.peekFrame(env),
     // A list stays where it was first drawn (beside the frame it was made in), instead of moving
-    // to whichever frame is active when it is passed to a function; only if that frame is drawn.
+    // to whichever frame is active when it is passed to a function; only if that frame is drawn and
+    // still holds the list. A host draws a list beside a frame that binds it, so a list that only
+    // another frame holds (an argument that was never bound where it was made) would not be drawn.
     homes: (list: object) => {
       const home = machine.shownObjects.get(list as ListValue);
-      return home !== undefined && reached.frames.has(home) ? home : undefined;
+      if (home === undefined || !reached.frames.has(home)) return undefined;
+      // Worked out once per frame for the snapshot, not for every list in it.
+      let held = heldByFrame.get(home);
+      if (!held) heldByFrame.set(home, (held = heldLists(home)));
+      return held.has(list as ListValue) ? home : undefined;
     },
     code: machine.code,
   };
