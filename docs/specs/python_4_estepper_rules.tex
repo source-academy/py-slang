@@ -1,10 +1,11 @@
 \input python_2_stepper_style.tex
 
 \newcommand{\sEnv}{E}
-\newcommand{\sStore}{\Sigma}
 \newcommand{\sRef}[1]{\sCode{\#}#1}
 \newcommand{\sBlock}[2]{[\![\,#1,\ #2\,]\!]}
-\newcommand{\sStep}[4]{#1 \vdash \langle #2,\ \sStore \rangle \Rightarrow \langle #3,\ #4 \rangle}
+\newcommand{\sStep}[4]{#1 \vdash #2 \Rightarrow #3 \quad\textnormal{\emph{changing:}}\ #4}
+\newcommand{\sPure}[3]{#1 \vdash #2 \Rightarrow #3}
+\newcommand{\sNew}[2]{\mathbf{new}\ \sRef{#1} = #2}
 \newcommand{\sUn}{\bot}
 
 \section*{Introduction}
@@ -28,8 +29,8 @@ agree on the result of every program, and on the kind of error, if any.
 
 \section*{Configurations}
 
-A step shows a \emph{configuration} $\langle P, \sStore \rangle$ of a
-\emph{program term} $P$ and a \emph{store} $\sStore$.
+A step shows a \emph{configuration}: the \emph{program term} $P$ and the
+\emph{store}, which is everything else the program can refer to.
 
 \paragraph{Program term.} The program term $P$ is the remaining program: a
 sequence of statements. In it, expressions are rewritten to \emph{values}:
@@ -49,7 +50,7 @@ the environment $\sEnv'$. The stepper shows it as the body, surrounded by a
 bracket that carries the label of $\sEnv'$ (for example \texttt{E3}) in the
 colour of the frame $\sEnv'$ in the drawing.
 
-\paragraph{Store.} The store $\sStore$ is everything that the program can
+\paragraph{Store.} The store is everything that the program can
 refer to, besides primitive values: frames, function objects and lists.
 We do not describe it as a mathematical structure; it is what the drawing next to
 the program shows. The parts of the store \emph{refer to each other}:
@@ -78,9 +79,11 @@ function to the function object, and the function object refers to the frame in
 which it was created. A list can contain a reference to itself after
 \sCode{set\_tail}. The rules never copy or unfold such a cycle; they only
 create objects and change what a binding or an element refers to.
-We write $\sStore[\sRef{k} := o]$ for the store in which $\sRef{k}$ is
-a new object $o$, and $\sStore[\sEnv(x) := v]$ for the store in which the binding
-of $x$ in $\sEnv$ refers to $v$ (and similarly for list elements).
+A step can change the store in only three ways, which the rules state
+after the word \emph{changing}: $\mathbf{new}\ \sRef{k} = o$ creates a new
+object $o$ (or a new frame); $\sEnv(x) := v$ makes the binding of $x$ in the
+frame $\sEnv$ refer to $v$; and $\sRef{k}[i] := v$ makes the $i$-th element of
+the list $\sRef{k}$ refer to $v$.
 
 The built-in functions live in an implicit frame above $G$. It is not drawn.
 
@@ -90,11 +93,12 @@ it, or $G$ if there is none. It is not written in the program, because the
 environment of a subexpression is the environment of its block. The rules
 below are written as
 \[
-  \sStep{\sEnv}{e}{e'}{\sStore'}
+  \sStep{\sEnv}{e}{e'}{\mathit{changes}}
 \]
-which reads: ``in environment $\sEnv$, the expression $e$, with store
-$\sStore$, reduces to $e'$ and changes the store to $\sStore'$''. A store is
-only mentioned in a rule if it is changed or inspected.
+which reads: ``in environment $\sEnv$, the expression $e$ reduces to $e'$,
+making the \emph{changes} to the store''. If a rule does not change the store,
+the changes are left out, and we write $\sPure{\sEnv}{e}{e'}$. A rule for a
+sub-expression (such as \textbf{Block-reduce}) makes the changes of its premise.
 
 \paragraph{Initial configuration.} $G$ is empty, and the program is
 evaluated in $G$. $G$ grows: a global name is bound when its first
@@ -140,7 +144,7 @@ as part of the step that uses them.)}
   \sEnv'\ \mbox{is the frame that determines } x \mbox{ from } \sEnv
   \quad \sEnv'(x) = v \neq \sUn
 }{
-  \sStep{\sEnv}{x}{v}{\sStore}
+  \sPure{\sEnv}{x}{v}
 }
 
 If $\sEnv'(x) = \sUn$, the reduction is stuck with
@@ -157,7 +161,7 @@ function object that remembers the current environment.}
   k \mbox{ is fresh}
 }{
   \sStep{\sEnv}{\sCode{lambda }x_1\sCode{, }\ldots\sCode{, }x_n\sCode{: }e}{\sRef{k}}
-  {\sStore[\sRef{k} := \mathit{Fn}(\varepsilon, x_1\ldots x_n, e, \sEnv)]}
+  {\sNew{k}{\mathit{Fn}(\varepsilon, x_1\ldots x_n, e, \sEnv)}}
 }
 
 \sEntry{Function-definition}{A function definition is removed from the
@@ -167,8 +171,8 @@ created, and its name is bound to it in the frame that the name belongs to.}
   k \mbox{ is fresh}\quad \sEnv' \mbox{ is the frame that } f \mbox{ belongs to}
 }{
   \begin{array}{l}
-  \sEnv \vdash \langle \sCode{def }f\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_n\sCode{):}\ b\ \sVar{statement}\ldots,\ \sStore \rangle \Rightarrow \\
-  \qquad \langle \sVar{statement}\ldots,\ \sStore[\sRef{k} := \mathit{Fn}(f, x_1\ldots x_n, b, \sEnv)][\sEnv'(f) := \sRef{k}] \rangle
+  \sEnv \vdash \sCode{def }f\sCode{(}x_1\sCode{, }\ldots\sCode{, }x_n\sCode{):}\ b\ \sVar{statement}\ldots \Rightarrow \sVar{statement}\ldots \\
+  \qquad \textnormal{\emph{changing:}}\ \sNew{k}{\mathit{Fn}(f, x_1\ldots x_n, b, \sEnv)},\ \ \sEnv'(f) := \sRef{k}
   \end{array}
 }
 
@@ -184,12 +188,12 @@ Names that the body declares \sCode{global} or \sCode{nonlocal} are not bound
 in the new frame. If the number of arguments does not match, the reduction is
 stuck with a \texttt{TypeError}, as in the CSE machine.}
 \gentzen{
-  \sStore(\sRef{k}) = \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
+  \sRef{k} \mbox{ is a function object } \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
   \sEnv'' \mbox{ is fresh with parent } \sEnv'
 }{
   \sStep{\sEnv}{\sRef{k}\sCode{(}v_1\sCode{, }\ldots\sCode{, }v_m\sCode{)}}
     {\sBlock{\sEnv''}{b}}
-    {\sStore[\sEnv'' := \{x_i \mapsto v_i\} \cup \{y \mapsto \sUn \mid y \in \mathit{assigned}(b)\}]}
+    {\mathbf{new}\ \sEnv'' = \{x_i \mapsto v_i\} \cup \{y \mapsto \sUn \mid y \in \mathit{assigned}(b)\}}
 }
 
 \sEntry{Block-return}{An environment block whose first statement is a
@@ -213,10 +217,10 @@ statements are all finished reduces to \sCode{None}.}
 \sEntry{Block-reduce}{The first statement of an environment block is
 reduced in the \emph{frame of the block}, not in $\sEnv$.}
 \gentzen{
-  \sStep{\sEnv''}{s}{s'}{\sStore'}
+  \sStep{\sEnv''}{s}{s'}{\mathit{changes}}
 }{
   \sStep{\sEnv}{\sBlock{\sEnv''}{s\ \sVar{statement}\ldots}}
-    {\sBlock{\sEnv''}{s'\ \sVar{statement}\ldots}}{\sStore'}
+    {\sBlock{\sEnv''}{s'\ \sVar{statement}\ldots}}{\mathit{changes}}
 }
 
 A sequence of statements in an environment block is reduced statement by
@@ -235,7 +239,7 @@ substitution model cannot express.}
   \sEnv' \mbox{ is the frame that } x \mbox{ belongs to}
 }{
   \sStep{\sEnv}{x\sCode{ = }v\ \sVar{statement}\ldots}{\sVar{statement}\ldots}
-    {\sStore[\sEnv'(x) := v]}
+    {\sEnv'(x) := v}
 }
 
 \sEntry{Global-and-nonlocal}{The declarations \sCode{global} and
@@ -265,7 +269,7 @@ replaced by a reference to a new list.}
   k \mbox{ is fresh}
 }{
   \sStep{\sEnv}{\sCode{[}v_0\sCode{, }\ldots\sCode{, }v_{n-1}\sCode{]}}{\sRef{k}}
-    {\sStore[\sRef{k} := \mathit{List}[v_0,\ldots,v_{n-1}]]}
+    {\sNew{k}{\mathit{List}[v_0,\ldots,v_{n-1}]}}
 }
 
 \sEntry{List-access}{The access of an element of a list is replaced by the
@@ -274,7 +278,7 @@ causes an \texttt{IndexError}, and an index that is not an integer, a
 \texttt{TypeError}; the reduction is then stuck. Strings can also be accessed;
 the result is a string of one character.}
 \gentzen{
-  \sStore(\sRef{k}) = \mathit{List}[v_0,\ldots,v_{n-1}]\quad
+  \sRef{k} \mbox{ is a list } \mathit{List}[v_0,\ldots,v_{n-1}]\quad
   -n \leq i < n
 }{
   \sRef{k}\sCode{[}i\sCode{]} \Rightarrow v_{i \bmod n}
@@ -286,7 +290,7 @@ from the program, and the element is changed in the store.}
   -n \leq i < n
 }{
   \sStep{\sEnv}{\sRef{k}\sCode{[}i\sCode{] = }v\ \sVar{statement}\ldots}{\sVar{statement}\ldots}
-    {\sStore[\sRef{k}[i \bmod n] := v]}
+    {\sRef{k}[i \bmod n] := v}
 }
 
 \sEntry{Pair-construction}{The application of \sCode{pair}, \sCode{llist}
@@ -296,7 +300,7 @@ the outermost new list; all the cells are created in the same step.}
   k_1, \ldots, k_n \mbox{ are fresh}
 }{
   \sStep{\sEnv}{\sCode{pair(}v_1\sCode{, }v_2\sCode{)}}{\sRef{k_1}}
-    {\sStore[\sRef{k_1} := \mathit{List}[v_1, v_2]]}
+    {\sNew{k_1}{\mathit{List}[v_1, v_2]}}
 }
 
 \sEntry{Pair-mutation}{The application of \sCode{set\_head} or
@@ -304,10 +308,10 @@ the outermost new list; all the cells are created in the same step.}
 \sCode{None}, and the first or second element of the pair is changed in the
 store.}
 \gentzen{
-  \sStore(\sRef{k}) = \mathit{List}[v_0, v_1]
+  \sRef{k} \mbox{ is a pair } \mathit{List}[v_0, v_1]
 }{
   \sStep{\sEnv}{\sCode{set\_head(}\sRef{k}\sCode{, }v\sCode{)}}{\sCode{None}}
-    {\sStore[\sRef{k}[0] := v]}
+    {\sRef{k}[0] := v}
 }
 
 The other built-in functions of the linked list and stream libraries, and the
