@@ -36,3 +36,5 @@ the Source Academy.
   
 #### <a href="python_4.pdf">Specification of Python §4</a>
 
+#### <a href="python_2_stepper.pdf">Specification of Python §2 Stepper</a>
+
