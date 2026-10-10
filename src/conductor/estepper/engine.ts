@@ -21,7 +21,6 @@
 
 import { ExprNS, StmtNS } from "../../ast-types";
 import {
-  BuiltinReassignmentError,
   ConditionNotBoolError,
   IndexError,
   ListIndexTypeError,
@@ -262,12 +261,6 @@ export class Machine {
 
   private assign(name: string, value: Value, env: Environment, src: StmtNS.Stmt): Environment {
     this.enter(env);
-    if (this.context.nativeStorage.builtins.has(name)) {
-      handleRuntimeError(
-        this.context,
-        new BuiltinReassignmentError(this.code, name, src as unknown as ExprNS.Expr),
-      );
-    }
     const isGlobal = env.closure?.globalVariables.has(name) ?? false;
     const isNonlocal = env.closure?.nonlocalVariables.has(name) ?? false;
     if (isGlobal) {
