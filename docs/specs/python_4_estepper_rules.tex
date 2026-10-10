@@ -307,6 +307,20 @@ bind $x$ yet, it \emph{grows} by the new binding, even if $B$ binds $x$: this is
 why \sCode{print = 0} creates a binding in $G$ that shadows the one in $B$. No
 frame other than $G$ ever gains a binding, and $B$ never changes.
 
+\paragraph{Example.}
+\begin{lstlisting}
+p = print
+print = 0
+p(print)
+print(3)
+\end{lstlisting}
+In the first line, \sCode{print} is looked up in $B$ and \sCode{p} is bound in $G$ to the
+built-in function. The second line creates the binding of \sCode{print} in $G$ ($G$ grows)
+and $B$ is unchanged. In the third line, \sCode{p} is the built-in function and
+\sCode{print} is $0$ (found in G, before B): the program prints \texttt{0}. In the fourth
+line, the function is $0$, and the reduction is stuck with
+\texttt{TypeError: 'int' object is not callable}.
+
 \subsection*{Lists and pairs}
 
 \sEntry{List-literal}{A list expression whose elements are all values is
