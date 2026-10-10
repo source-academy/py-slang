@@ -92,13 +92,12 @@ the list $\sRef{k}$ refer to $v$.
 the names of the built-in functions (for example \sCode{print}, \sCode{abs},
 \sCode{pair}, \sCode{head}) to built-in functions, and the names of the library
 functions that are written in Python (for example \sCode{map} and
-\sCode{filter}) to function objects whose frame is $B$ itself. It is not drawn,
-and it never changes while the program runs: a program cannot assign to a name
-that $B$ binds as a built-in function (this is an error, as in the CSE
-machine). A name that $G$ binds shadows the library function of the same name,
-and a name that is bound as a built-in function cannot be shadowed. A built-in
-function is shown by its name, and the application of a library function is
-a single step.
+\sCode{filter}) to function objects whose frame is $B$ itself. It is not drawn.
+An assignment never reaches $B$: as in Python, assigning to a name that only
+$B$ binds, for example \sCode{print = 0}, creates a binding in $G$ that
+\emph{shadows} the one in $B$ from then on (see \textbf{Resolution}). Before the
+assignment, \sCode{print} is the built-in function. A built-in function is shown
+by its name, and the application of a library function is a single step.
 
 \paragraph{Current environment.} The \emph{current environment} $\sEnv$ of a
 redex is the environment of the innermost environment block that contains
@@ -117,8 +116,9 @@ sub-expression (such as \textbf{Block-reduce}) makes the changes of its premise.
 evaluated in $G$. $G$ is the only frame that grows while the program runs: a
 global name is bound when its first assignment, function definition, \sCode{for}
 target or import is executed, and not earlier. This ensures that reading a global name before its first assignment is a
-\texttt{NameError}, and that a global name that is a library function, such as
-\sCode{map}, refers to the library function until the program defines its own. The frame of a function
+\texttt{NameError}, and that a name that $B$ binds, such as \sCode{print} or
+\sCode{map}, refers to the one in $B$ until the program binds its own in $G$:
+\sCode{print(1); print = 0} first prints and then rebinds \sCode{print}. The frame of a function
 call, in contrast, never grows: it is created with all parameters and with all
 names that the function assigns to already present, the latter unassigned
 (see \textbf{Function-application} below).
@@ -289,10 +289,11 @@ outer binding of the same name. In contrast, a name that no function frame
 binds is searched through the enclosing frames and ends in $G$, where it is
 found only if it has been assigned by now. The search ends in the builtins environment $B$, the parent of $G$.
 
-Assignment uses the same resolution, with one addition: if the search ends
-at $G$ without finding a binding (a \sCode{global} name or a name at the top level
-that is assigned for the first time), $G$ \emph{grows} by the new binding of $x$.
-No other frame ever gains a binding.
+Assignment uses the same resolution, with one addition: if the search reaches
+$G$ without finding a binding in a function frame, or if it finds a binding only in $B$
+(a \sCode{global} name or a name at the top level that is assigned for the first
+time, possibly shadowing a name of $B$), $G$ \emph{grows} by the new binding of
+$x$. No other frame ever gains a binding, and $B$ never changes.
 
 \subsection*{Lists and pairs}
 
