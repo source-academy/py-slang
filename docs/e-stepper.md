@@ -40,8 +40,8 @@ A step shows a configuration ⟨P, Σ⟩:
   - a function body (or lambda body) under evaluation is wrapped as **`EnvBlock(E, body)`**: the
     body is evaluated in environment `E`.
 - **Σ**, the store:
-  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the global frame `G` has
-    none),
+  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the parent of the global frame `G` is the builtins
+    environment `B`, which has none),
   - **heap objects**:
     - function objects `Fn(name?, params, body, E)`, where E is the defining environment,
     - lists `List[v₀, …, vₙ₋₁]`. Pairs are 2-element lists, as in py-slang's CSE machine.
