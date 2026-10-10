@@ -40,8 +40,8 @@ A step shows a configuration ⟨P, Σ⟩:
   - a function body (or lambda body) under evaluation is wrapped as **`EnvBlock(E, body)`**: the
     body is evaluated in environment `E`.
 - **Σ**, the store:
-  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the global frame `G` has
-    none),
+  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the parent of the global frame `G` is the builtins
+    environment `B`, which has none),
   - **heap objects**:
     - function objects `Fn(name?, params, body, E)`, where E is the defining environment,
     - lists `List[v₀, …, vₙ₋₁]`. Pairs are 2-element lists, as in py-slang's CSE machine.
@@ -51,15 +51,20 @@ outside every `EnvBlock`. This is the only place environments appear in the prog
 every subexpression would make the display unreadable, and subterms inherit their block's
 environment.
 
-Builtins (`print`, `pair`, `math_sqrt`, …) live in an implicit builtins frame above `G`. As in the
-CSE machine visualization, it is not drawn, and a builtin value is shown by its name.
+Builtins (`print`, `pair`, `math_sqrt`, …) and the library functions written in Python (`map`, …) live
+in the builtins environment `B`, the parent of `G` and the root of every chain of frames. As in the
+CSE machine visualization, it is not drawn, and a builtin value is shown by its name. Names resolve
+by Python's LEGB rule: local, enclosing, global, built-in (see `docs/specs/python_4_estepper.tex`).
 
 ## Initial configuration
 
 `G` starts empty and grows: a global binding appears when its first assignment (or `def`, `for`
 target, import) executes. This matches the CSE machine, which never pre-allocates module bindings
 (`pyGetGlobalVariable` in `src/engines/cse/utils.ts`), and it matters for a program that shadows a
-builtin later, such as `print(1); print = 0`: the first `print` must still find the builtin.
+builtin later, such as `print(1); print = 0`: the first `print` must still find the builtin in `B`.
+The assignment does not change `B`: as in Python, it creates a binding in `G` that shadows the
+builtin from then on, so `p = print; print = 0; p(print)` prints `0`, and `print(3)` is then a
+`TypeError`.
 Function frames, by contrast, are created with all their locals present but unassigned (see the
 call rule). P is the program's statement list, evaluated in `G`.
 
@@ -116,9 +121,11 @@ builtins operate on heap objects instead of list literal nodes.
   colour. Nested blocks show the call stack as nesting; the innermost block is the active frame,
   highlighted in the diagram.
 - **References**: in the first version, a reference is a small labelled badge in the program (`#7`).
-  The heap object in the diagram carries the same badge. Exception: a reference to a *named* function
-  object renders as the function's name in bold, with a hover popover showing its definition and
-  environment, like the stepper's mu-terms. Arrows from the program into the diagram come later.
+  The heap object in the diagram carries the same badge. A reference to a function object is its
+  badge too, not the name it was defined with: after `W1 = make_withdraw(100)` the name `withdraw`
+  says nothing about what `W1` holds, and two calls give two objects of the same name. The name and
+  parameters are in the badge's tooltip. Arrows from the program into the diagram, under the host's
+  "Filter Arrows" menu as "From program", start at the badge.
 - **Lookups are explicit**: every name in the program is replaced by its value in a step of its own
   ("Looked up balance in frame E1: 100"), left to right, and the diagram highlights the binding that
   was read. Only names of builtins and library functions, which no drawn frame binds, are looked up
@@ -155,8 +162,8 @@ Initially, `G` is empty.
    New frame `E1 = { balance: 100, withdraw: unassigned }`, parent G. The program becomes
    `W1 = EnvBlock(E1, def withdraw…; return withdraw)`.
 3. Inside E1, `def withdraw` is consumed: `#2 = Fn(withdraw, [amount], …, E1)`, `withdraw ↦ #2` in E1.
-4. `return withdraw` looks up `withdraw` in E1 and returns: `W1 = withdraw` (`Ref(#2)`, shown in bold
-   as `withdraw`).
+4. `return withdraw` looks up `withdraw` in E1 and returns: `W1 = #2` (`Ref(#2)`, shown as the badge
+   `#2`).
 5. `W1 = Ref(#2)` is consumed: `G` gains `W1 ↦ #2`. E1 stays alive, since #2 points to it.
 6. `W1(50)`: new frame `E2 = { amount: 50 }`, parent **E1** (the defining environment of #2, not the
    caller's). The program becomes `EnvBlock(E2, nonlocal balance; if balance >= amount: …)`. E2
@@ -233,8 +240,7 @@ export interface EStepperStep extends SerializedStepperStep {
 ```
 
 The `SyntaxProfile` gains two template parts: `{ envBlock: "body", envProp: "envId" }` renders a
-bracketed, labelled block, and `{ ref: "objectId" }` renders a reference badge (or a mu-term, for a
-named function object).
+bracketed, labelled block, and `{ ref: "objectId" }` renders a reference badge.
 
 Whether frames reuse `CseSerializedEnvFrame` directly or the simpler `EStepperFrame` above is decided
 in the protocol issue. Reuse is better if the CSE machine's frame drawing could ever be shared;
