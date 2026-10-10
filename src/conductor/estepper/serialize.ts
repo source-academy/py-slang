@@ -654,6 +654,12 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
   const ids = {
     objects: (obj: object) => machine.labels.peekObject(obj),
     frames: (env: Environment) => machine.labels.peekFrame(env),
+    // A list stays where it was first drawn (beside the frame it was made in), instead of moving
+    // to whichever frame is active when it is passed to a function; only if that frame is drawn.
+    homes: (list: object) => {
+      const home = machine.shownObjects.get(list as ListValue);
+      return home !== undefined && reached.frames.has(home) ? home : undefined;
+    },
     code: machine.code,
   };
   const frameId = (env: Environment) => ids.frames(env) ?? env.id;

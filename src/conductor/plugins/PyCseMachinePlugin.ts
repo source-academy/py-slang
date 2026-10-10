@@ -113,6 +113,13 @@ export interface SnapshotIds {
   /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
   frames?: (env: Environment) => string | undefined;
   /**
+   * For a list's `metadata.envId`: the frame the list belongs to, where a host draws it. Without
+   * it a list belongs to the frame whose binding is serialized first, so it moves from frame to
+   * frame as the active frame changes. A host looks for a list's drawing next to a binding in
+   * this frame, so it must be one of the frames serialized.
+   */
+  homes?: (list: object) => Environment | undefined;
+  /**
    * The program's source, for a closure's `metadata.body`: the source of its body, which a host
    * shows when describing the function (otherwise it has only the name and parameters).
    */
@@ -120,6 +127,12 @@ export interface SnapshotIds {
 }
 
 const frameId = (env: Environment, ids: SnapshotIds): string => ids.frames?.(env) ?? env.id;
+
+/** The frame a list belongs to: its home if `ids` names one, else the frame being serialized. */
+const homeId = (list: object, envId: string, ids: SnapshotIds): string => {
+  const home = ids.homes?.(list);
+  return home ? frameId(home, ids) : envId;
+};
 
 /**
  * The source each function (its AST node) was parsed from. A REPL session evaluates chunk after
@@ -242,7 +255,12 @@ function serializeValue(
         {
           displayValue: "[...]",
           label: "list",
-          metadata: { id: getListId(v), envId, elements: [], backReference: true },
+          metadata: {
+            id: getListId(v),
+            envId: homeId(v, envId, ids),
+            elements: [],
+            backReference: true,
+          },
         },
         ids.objects?.(v),
       );
@@ -254,7 +272,7 @@ function serializeValue(
       {
         displayValue: formatValue(v),
         label: "list",
-        metadata: { id: getListId(v), envId, elements },
+        metadata: { id: getListId(v), envId: homeId(v, envId, ids), elements },
       },
       ids.objects?.(v),
     );

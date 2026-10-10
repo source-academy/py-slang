@@ -924,6 +924,40 @@ describe("the step limit", () => {
   });
 });
 
+describe("objects keep their place in the diagram", () => {
+  const PAIR_ADD_ONE = `def pair_add_one(p):
+    set_head(p, head(p) + 1)
+    set_tail(p, tail(p) + 1)
+q = pair(2, 5)
+pair_add_one(q)
+print(q)
+`;
+
+  // The CSE snapshot's lists carry the frame they are drawn beside (`metadata.envId`).
+  const homes = (steps: EStepperStep[]): Set<string> => {
+    const found = new Set<string>();
+    const visit = (value: { label?: string; metadata?: Record<string, unknown> }) => {
+      if (value.label !== "list") return;
+      const meta = value.metadata as { envId?: string; elements?: (typeof value)[] };
+      if (typeof meta.envId === "string") found.add(meta.envId);
+      meta.elements?.forEach(visit);
+    };
+    for (const step of steps) {
+      for (const frame of step.cse?.environments ?? []) {
+        for (const b of frame.bindings) visit(b.value as never);
+      }
+    }
+    return found;
+  };
+
+  test("a pair made in the global frame stays beside it while a call holds it", async () => {
+    const { steps } = await run(PAIR_ADD_ONE);
+    const globalId = steps.at(-1)!.frames.find(f => f.name === "global")!.id;
+    // Before the fix the pair belonged to E1, the frame serialized first, during the call.
+    expect([...homes(steps)]).toEqual([globalId]);
+  });
+});
+
 describe("shadowing a builtin (py-slang#531)", () => {
   // Python's LEGB: an assignment binds the name in the global frame, in front of the builtins.
   test("print = 0 shadows the builtin; a name bound to the builtin before still prints", async () => {
