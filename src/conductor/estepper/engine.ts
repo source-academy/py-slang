@@ -318,9 +318,19 @@ export class Machine {
     return true;
   }
 
+  /** Where a binding is: in a frame, as in the book (§3.2.1: "the first frame ... that contains a binding"). */
   private where(env: Environment): string {
     const label = this.labels.frame(env);
     return label === "Global" ? "the global frame" : `frame ${label}`;
+  }
+
+  /**
+   * The environment a function object is created in, or a body runs in. The book speaks of
+   * environments there (§3.2.1: "the environment in which the lambda expression was evaluated").
+   */
+  private inEnv(env: Environment): string {
+    const label = this.labels.frame(env);
+    return label === "Global" ? "the global environment" : `environment ${label}`;
   }
 
   private t(e: Expr): string {
@@ -464,7 +474,7 @@ export class Machine {
             pre: e,
             post: node,
             before: "Creating a function object",
-            after: `Created function object ${this.labels.object(closure)} in ${this.where(env)}`,
+            after: `Created function object ${this.labels.object(closure)} in ${this.inEnv(env)}`,
           },
         };
       }
@@ -577,7 +587,7 @@ export class Machine {
         ? `new environment ${this.labels.frame(frame)}, whose enclosing environment is ${
             parent === this.programEnv ? "the global environment" : this.labels.frame(parent)
           }`
-        : `the new frame has no bindings, so the body runs in ${this.where(parent)}`;
+        : `the new frame has no bindings, so the body runs in ${this.inEnv(parent)}`;
       return {
         node,
         c: {
@@ -847,7 +857,7 @@ export class Machine {
           head,
           rest,
           `Defining ${src.name.lexeme}`,
-          `Defined ${src.name.lexeme}: function object ${this.labels.object(closure)} in ${this.where(env)}`,
+          `Defined ${src.name.lexeme}: function object ${this.labels.object(closure)} in ${this.inEnv(env)}`,
         );
       }
       case "return": {
