@@ -587,7 +587,7 @@ export class Machine {
         ? `new environment ${this.labels.frame(frame)}, whose enclosing environment is ${
             parent === this.programEnv ? "the global environment" : this.labels.frame(parent)
           }`
-        : `the new frame has no bindings, so the body runs in ${this.inEnv(parent)}`;
+        : `the new frame would have no bindings, so the body runs in ${this.inEnv(parent)}`;
       return {
         node,
         c: {

@@ -107,7 +107,7 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     const { steps } = await run("z = 1\ndef f():\n    return z\nf()\n");
     const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called f()"))!;
     expect(called.markers![0].explanation).toBe(
-      "Called f(): the new frame has no bindings, so the body runs in the global environment",
+      "Called f(): the new frame would have no bindings, so the body runs in the global environment",
     );
     // The body's frame is Global in the program, and no frame E1 is in the store.
     expect(JSON.stringify(called.ast)).toContain('"envId":"Global"');
