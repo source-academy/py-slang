@@ -2,6 +2,12 @@
  * Stable display labels for the e-stepper's frames (`Global`, `E1`, `E2`, …) and heap objects
  * (`#1`, `#2`, …), shared by the step explanations and the serialized store so both always say the
  * same thing. A label is assigned the first time an object is shown and never changes afterwards.
+ *
+ * A frame without bindings (a call of a function with no parameters and no locals) is not drawn, as
+ * in the course's environment diagrams, so it has no label of its own: it is labelled like the
+ * nearest enclosing frame that is drawn (`Global`, usually). Looking names up from such a frame is
+ * the same as from that frame, so the label says where a name is found. A frame's bindings are
+ * all there from its creation (locals are unassigned until assigned), so the label never changes.
  */
 
 import type { Closure } from "../../engines/cse/closure";
@@ -18,7 +24,20 @@ export class Labels {
     this.frames.set(programEnv, "Global");
   }
 
-  frame(env: Environment): string {
+  /** Whether a frame is drawn: the global frame always, and any other if it has bindings. */
+  isShown(env: Environment): boolean {
+    return env === this.programEnv || Object.keys(env.head).some(name => name !== "__program__");
+  }
+
+  /** The frame that stands for `env` in the drawing: itself, or its nearest drawn ancestor. */
+  shownFrame(env: Environment): Environment {
+    let shown = env;
+    while (!this.isShown(shown) && shown.tail) shown = shown.tail;
+    return shown;
+  }
+
+  frame(frame: Environment): string {
+    const env = this.shownFrame(frame);
     let label = this.frames.get(env);
     if (label === undefined) {
       label = `E${++this.frameCount}`;

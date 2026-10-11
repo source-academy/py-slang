@@ -103,6 +103,25 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     ).toEqual(["amount"]);
   });
 
+  test("a frame without bindings is not drawn: it is labelled like the frame it extends", async () => {
+    const { steps } = await run("z = 1\ndef f():\n    return z\nf()\n");
+    const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called f()"))!;
+    expect(called.markers![0].explanation).toBe(
+      "Called f(): the new frame has no bindings, so the body runs in the global frame",
+    );
+    // The body's frame is Global in the program, and no frame E1 is in the store.
+    expect(JSON.stringify(called.ast)).toContain('"envId":"Global"');
+    for (const step of steps) expect(step.frames.map(f => f.id)).toEqual(["Global"]);
+    expect(called.activeFrameId).toBe("Global");
+  });
+
+  test("frames with bindings are numbered without gaps, whatever empty frames come between", async () => {
+    const program = "def e():\n    return 1\ndef f(x):\n    return e() + x\nf(2)\n";
+    const { steps } = await run(program);
+    const last = steps[steps.length - 1];
+    expect(frames(last)).toEqual(["Global: e=#1 f=#2", "E1(g)<Global: x=2"]);
+  });
+
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
     const { steps } = await run(MAKE_WITHDRAW);
     const last = steps[steps.length - 1];
@@ -450,7 +469,8 @@ describe("the store as a CSE machine snapshot", () => {
       (f.heapObjects ?? []).map(o => o.objectId),
     ]);
     expect(heapObjects).toContainEqual(["Global", ["#1"]]);
-    expect(heapObjects).toContainEqual(["E1", ["#4"]]);
+    // f's frame has no bindings, so it is not drawn and has no e-stepper label (its CSE id stays).
+    expect(heapObjects.find(([, objects]) => objects.includes("#4"))?.[0]).not.toBe("Global");
     expect(roots(last).stash).toEqual([]);
   });
 

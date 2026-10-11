@@ -100,6 +100,16 @@ needed to continue by hand.
 | `set_head(Ref(#k), v)`, `set_tail(…)` | `None` | `#k[0] := v` / `#k[1] := v` |
 | `v is w`, `v is not w` | `True` iff same primitive value or same reference (negated for `is not`), as in the CSE machine (`pyIdentical`) | none |
 
+**Frames without bindings are not drawn.** A call of a function with no parameters and no locals
+creates a frame with no bindings. As in the course's environment diagrams, such a frame is not drawn
+(the global frame, empty at the start, is the exception), so it has no name of its own: wherever it
+is shown, in the program's `EnvBlock`, in the explanations and as the parent of a drawn frame or of a
+function object, it is replaced by the nearest enclosing frame that is drawn, `Global` for
+`z = 1; def f(): return z; f()`. Looking a name up from such a frame is the same as from the frame it
+extends, so the label says where the name is found. A frame's bindings exist from its creation (the
+locals are unassigned), so this never changes during the call. Frames are numbered `E1`, `E2`, … in the
+order in which a drawn frame is created, with no gaps.
+
 A statement sequence inside an `EnvBlock` reduces statement by statement, exactly like the current
 stepper's block expression for a multi-statement `def`. When a statement is consumed, it disappears.
 

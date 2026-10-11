@@ -310,7 +310,8 @@ export class Machine {
   }
 
   private where(env: Environment): string {
-    return env === this.programEnv ? "the global frame" : `frame ${this.labels.frame(env)}`;
+    const label = this.labels.frame(env);
+    return label === "Global" ? "the global frame" : `frame ${label}`;
   }
 
   private t(e: Expr): string {
@@ -561,17 +562,20 @@ export class Machine {
             ? translateFunctionBody(closure.node.body)
             : translateExpr(closure.node.body),
       };
-      const label = this.labels.frame(frame);
       const parent = closure.environment;
+      // A frame without bindings is not drawn: the body then runs in the frame it extends.
+      const after = this.labels.isShown(frame)
+        ? `new frame ${this.labels.frame(frame)} extends ${
+            parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
+          }`
+        : `the new frame has no bindings, so the body runs in ${this.where(parent)}`;
       return {
         node,
         c: {
           pre: e,
           post: node,
           before: `Calling ${display}`,
-          after: `Called ${display}: new frame ${label} extends ${
-            parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
-          }${declarationsNote(closure)}`,
+          after: `Called ${display}: ${after}${declarationsNote(closure)}`,
         },
       };
     }
@@ -673,6 +677,8 @@ export class Machine {
 
   /** The step of a tail call, which replaces the block `caller` of the calling frame. */
   private tailCalled(c: Contraction, caller: BlockExpr): Contraction {
+    // A frame that is not drawn has nothing to say.
+    if (!this.labels.isShown(caller.env)) return c;
     const left = this.labels.frame(caller.env);
     return {
       ...c,
