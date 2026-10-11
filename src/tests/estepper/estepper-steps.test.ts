@@ -1139,4 +1139,30 @@ print(count(4, 0))
     expect(output).toBe("4\n");
     for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(1);
   });
+
+  test("global and nonlocal declarations are taken to the front of the body at each call", async () => {
+    const code = `z = 0
+def iter(x, y):
+    if x == 0:
+        global z
+        return y
+    else:
+        return iter(x - 1, y + 1)
+
+iter(4,5)
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("");
+    const count = (step: EStepperStep, type: string) =>
+      (JSON.stringify(step.ast).match(new RegExp(`"type":"${type}"`, "g")) ?? []).length;
+    const inBlock = steps.filter(s => envIds(s).length > 0);
+    expect(inBlock.length).toBeGreaterThan(20);
+    // While a call is in the program, its declaration is there, once, whichever branch is taken.
+    for (const step of inBlock) expect(count(step, "GlobalStatement")).toBe(1);
+    // And it is the first statement of the body, before the `if`.
+    const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called iter(4, 5)"))!;
+    const text = JSON.stringify(called.ast);
+    expect(text.indexOf("GlobalStatement")).toBeLessThan(text.indexOf("IfStatement"));
+  });
 });

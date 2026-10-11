@@ -170,7 +170,10 @@ Initially, `G` is empty.
    caller's). The program becomes `EnvBlock(E2, nonlocal balance; if balance >= amount: …)`. E2
    has no binding for `balance`: `nonlocal balance` decided that when `withdraw` was defined. The
    declaration stays in the program as source, but is not evaluated (no step of its own), here or
-   anywhere: `global` and `nonlocal` are declarations, not statements that run.
+   anywhere: `global` and `nonlocal` are declarations, not statements that run. A declaration holds
+   for the whole function body, wherever it stands (in an `if` or a loop, say), so at each call all
+   of them are taken out of the body and put, each once, at its front; they stay in view for as
+   long as the body is, whichever branch is taken.
 7. `balance >= amount` evaluates in E2: `balance` is looked up and found in E1 (100), then `amount`
    in E2 (50), each in a step of its own; `100 >= 50` gives `True`; the `if` takes its first branch.
 8. `balance = balance - amount`: the right-hand side reduces to `50`. Because of `nonlocal balance`,

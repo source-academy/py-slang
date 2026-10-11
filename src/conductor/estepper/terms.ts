@@ -355,11 +355,51 @@ export function translateExpr(expr: ExprNS.Expr): Expr {
   }
 }
 
-export function translateStmts(stmts: StmtNS.Stmt[]): Stmt[] {
-  return stmts.map(translateStmt);
+/**
+ * `dropScope` leaves out the `global` and `nonlocal` declarations (also inside the `if`s): they
+ * are shown once, at the front of a function body (see {@link translateFunctionBody}).
+ */
+export function translateStmts(stmts: StmtNS.Stmt[], dropScope = false): Stmt[] {
+  return stmts
+    .filter(s => !dropScope || !isScopeDeclaration(s))
+    .map(s => translateStmt(s, dropScope));
 }
 
-export function translateStmt(stmt: StmtNS.Stmt): Stmt {
+const isScopeDeclaration = (s: StmtNS.Stmt): boolean =>
+  s.kind === "Global" || s.kind === "NonLocal";
+
+/**
+ * The statements of a function body for a call. A `global` or `nonlocal` declaration holds for the
+ * whole function, wherever it stands in the body (Python reads them before anything is run), so
+ * they are all taken out of the body (also from `if`s and loops) and put at the front, each
+ * once. What the declarations decided is then in view for as long as the body is.
+ */
+export function translateFunctionBody(stmts: StmtNS.Stmt[]): Stmt[] {
+  const declarations: Stmt[] = [];
+  const seen = new Set<string>();
+  const collect = (list: StmtNS.Stmt[]): void => {
+    for (const s of list) {
+      if (isScopeDeclaration(s)) {
+        const d = translateStmt(s);
+        const key = `${d.k} ${(d as ScopeStmt).names.join(",")}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          declarations.push(d);
+        }
+      } else if (s.kind === "If") {
+        const i = s as StmtNS.If;
+        collect(i.body);
+        if (i.elseBlock) collect(i.elseBlock);
+      } else if (s.kind === "While" || s.kind === "For") {
+        collect((s as StmtNS.While | StmtNS.For).body);
+      }
+    }
+  };
+  collect(stmts);
+  return [...declarations, ...translateStmts(stmts, true)];
+}
+
+export function translateStmt(stmt: StmtNS.Stmt, dropScope = false): Stmt {
   switch (stmt.kind) {
     case "SimpleExpr":
       return { k: "expr", e: translateExpr((stmt as StmtNS.SimpleExpr).expression), src: stmt };
@@ -387,8 +427,8 @@ export function translateStmt(stmt: StmtNS.Stmt): Stmt {
       return {
         k: "if",
         test: translateExpr(s.condition),
-        cons: translateStmts(s.body),
-        alt: s.elseBlock ? translateStmts(s.elseBlock) : null,
+        cons: translateStmts(s.body, dropScope),
+        alt: s.elseBlock ? translateStmts(s.elseBlock, dropScope) : null,
         src: s,
       };
     }

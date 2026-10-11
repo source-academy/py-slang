@@ -70,6 +70,7 @@ import {
   type LoopStmt,
   type Stmt,
   translateExpr,
+  translateFunctionBody,
   translateStmts,
   val,
 } from "./terms";
@@ -557,7 +558,7 @@ export class Machine {
         fname: frame.name,
         body:
           closure.node.kind === "FunctionDef"
-            ? translateStmts(closure.node.body)
+            ? translateFunctionBody(closure.node.body)
             : translateExpr(closure.node.body),
       };
       const label = this.labels.frame(frame);
@@ -912,7 +913,11 @@ export class Machine {
       case "while": {
         // The textbook rule: `while test: body` is `if test: (body; while test: body)`. The loop
         // stays in the program, in full, while its test is evaluated.
-        const loop: LoopStmt = { k: "loop", body: translateStmts(head.src.body), next: head };
+        const loop: LoopStmt = {
+          k: "loop",
+          body: translateStmts(head.src.body, env !== this.programEnv),
+          next: head,
+        };
         const unfolded: Stmt = {
           k: "if",
           test: translateExpr(head.src.condition),
@@ -986,7 +991,7 @@ export class Machine {
               value: val({ type: "bigint", value: head.cur }),
               src: head.src,
             },
-            ...translateStmts(head.src.body),
+            ...translateStmts(head.src.body, env !== this.programEnv),
           ],
           next: { ...head, cur: head.cur + head.step },
         };
