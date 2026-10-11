@@ -500,8 +500,10 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
         };
     }
   };
-  const shownParent = (env: Environment): string | null =>
-    env.tail && all.frames.has(env.tail) ? labels.frame(env.tail) : null;
+  const shownParent = (env: Environment): string | null => {
+    const parent = env.tail && labels.shownFrame(env.tail);
+    return parent && all.frames.has(parent) ? labels.frame(parent) : null;
+  };
 
   const frames: EStepperFrame[] = [];
   const heap: EStepperHeapObject[] = [];
@@ -512,13 +514,13 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
     ...[...all.frames].filter(f => f !== machine.programEnv && !machine.createdEnvs.includes(f)),
   ];
   for (const env of frameOrder) {
-    if (!all.frames.has(env)) continue;
+    if (!all.frames.has(env) || !labels.isShown(env)) continue;
     frames.push({
       id: labels.frame(env),
       name: env === machine.programEnv ? "global" : env.name,
       parentId: shownParent(env),
       bindings: Object.entries(env.head)
-        .filter(([name]) => name !== "__program__")
+        .filter(([name]) => env !== machine.programEnv || name !== "__program__")
         .map(([name, v]) => ({ name, value: valueOf(v) })),
       isGarbage: !live.frames.has(env),
     });
