@@ -1098,6 +1098,34 @@ print(h(f(2)))
     expect(story(steps).filter(t => t.includes("a tail call"))).toHaveLength(2);
   });
 
+  test("declarations in front of the return do not hide the tail call", async () => {
+    const code = `total = 0
+
+def count(n):
+    global total
+    if n == 0:
+        return total
+    else:
+        total = total + 1
+        return count(n - 1)
+
+def outer():
+    k = 1
+    def inner(n):
+        nonlocal k
+        k = k + 1
+        return n if n == 0 else inner(n - 1)
+    return inner(2)
+
+print(count(3))
+print(outer())
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("3\n0\n");
+    expect(story(steps).filter(t => t.includes("a tail call")).length).toBeGreaterThanOrEqual(5);
+    for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(2);
+  });
+
   test("a deep tail recursion keeps one frame in the program", async () => {
     const code = `def count(n, acc):
     if n == 0:

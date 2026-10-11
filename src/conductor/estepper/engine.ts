@@ -120,10 +120,11 @@ const NONE: Value = { type: "none" };
 
 /**
  * The expression of the `return` statement a statement list is about to run, if it is a block (a
- * call that has just become the frame of the callee), looking into the loops the `return` is in.
+ * call that has just become the frame of the callee), looking past declarations and into the loops the `return` is in.
  */
 function tailBlock(list: Stmt[]): Expr | undefined {
-  const head = list[0];
+  // `global` and `nonlocal` declarations stay in front of the statement list, unevaluated.
+  const head = list.find(s => s.k !== "global" && s.k !== "nonlocal");
   if (head?.k === "return" && head.e?.k === "block") return head.e;
   if (head?.k === "loop") return tailBlock(head.body);
   return undefined;
