@@ -1196,4 +1196,41 @@ print(x)
       last.frames.find(f => f.id === "E1")!.bindings.map(b => `${b.name}=${show(b.value)}`),
     ).toEqual(["x=1", "inner=#2"]);
   });
+
+  test("declarations in a loop of a function: the global one is at the front, the nonlocal one is not shown", async () => {
+    const code = `z = 0
+
+def f(n):
+    while n > 0:
+        global z
+        z = z + 1
+        n = n - 1
+    return z
+
+def g():
+    k = 0
+    def h(n):
+        for i in range(n):
+            nonlocal k
+            k = k + 1
+        return k
+    return h(2)
+
+print(f(2))
+print(g())
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("2\n2\n");
+    const count = (step: EStepperStep, type: string) =>
+      (JSON.stringify(step.ast).match(new RegExp(`"type":"${type}"`, "g")) ?? []).length;
+    // E1 is the call of f, E3 that of h (E2 is g, whose body shows the definition of h as written).
+    const inF = steps.filter(s => s.activeFrameId === "E1");
+    const inH = steps.filter(s => s.activeFrameId === "E3");
+    expect(inF.length).toBeGreaterThan(10);
+    expect(inH.length).toBeGreaterThan(5);
+    // The one `global z` is at the front of the body, and none is left in the loop.
+    for (const step of inF) expect(count(step, "GlobalStatement")).toBe(1);
+    for (const step of inH) expect(count(step, "NonlocalStatement")).toBe(0);
+  });
 });

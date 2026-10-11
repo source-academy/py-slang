@@ -158,7 +158,9 @@ export class ProgramSerializer {
       case "block":
         return this.node(e, "EnvBlock", {
           envId: this.machine.labels.frame(e.env),
-          body: Array.isArray(e.body) ? e.body.map(s => this.stmt(s)) : this.expr(e.body),
+          body: this.inBody(true, () =>
+            Array.isArray(e.body) ? e.body.map(s => this.stmt(s)) : this.expr(e.body),
+          ),
         });
       case "unsupported":
         return this.node(e, "Identifier", { name: `<${e.what}>` });
@@ -191,7 +193,8 @@ export class ProgramSerializer {
         return this.node(s, "FunctionDeclaration", {
           id: this.ident(s.src.name.lexeme),
           params: this.params(s.src.parameters),
-          body: this.block(translateStmts(s.src.body)),
+          // A definition is shown as written, also inside the body of a call.
+          body: this.inBody(false, () => this.block(translateStmts(s.src.body))),
         });
       case "return":
         return this.node(s, "ReturnStatement", { argument: s.e ? this.expr(s.e) : null });
@@ -204,7 +207,7 @@ export class ProgramSerializer {
       case "while":
         return this.node(s, "WhileStatement", {
           test: this.expr(s.test),
-          body: this.block(translateStmts(s.src.body)),
+          body: this.block(translateStmts(s.src.body, this.inCall)),
         });
       case "forinit":
         return this.forNode(
@@ -248,8 +251,24 @@ export class ProgramSerializer {
         callee: this.node(null, "Builtin", { name: "range", hoverText: "built-in function range" }),
         arguments: rangeArgs,
       }),
-      body: this.block(translateStmts(src.body)),
+      body: this.block(translateStmts(src.body, this.inCall)),
     });
+  }
+
+  /**
+   * Whether the statements being serialized are in the body of a call. The declarations in the
+   * bodies of its loops are left out, as they are in the body itself (see `translateFunctionBody`).
+   */
+  private inCall = false;
+
+  private inBody<T>(inCall: boolean, f: () => T): T {
+    const before = this.inCall;
+    this.inCall = inCall;
+    try {
+      return f();
+    } finally {
+      this.inCall = before;
+    }
   }
 }
 
