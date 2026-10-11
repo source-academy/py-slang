@@ -146,6 +146,10 @@ async function drive(
       // error as the redex explanation on the current tree, then a terminal "Evaluation stuck" step,
       // mirroring Source (which ends a failed run with "Evaluation stuck" rather than "complete").
       const message = errorMessage(error);
+      // Text printed before the error inside this contraction (by a predefined list function's
+      // callbacks) was collected in `pendingOutput`; it counts.
+      output += pendingOutput.text;
+      pendingOutput.text = "";
       pushStep(current, [{ redexType: "beforeMarker", explanation: message }]);
       pushStep(current, [{ explanation: "Evaluation stuck" }]);
       return steps;
