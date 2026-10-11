@@ -430,6 +430,10 @@ application of a value that is not a function.
 (for example \sCode{abs}, \sCode{math\_sqrt}, \sCode{pair}, \sCode{head},
 \sCode{tail} and the other functions of the linked list library), to arguments
 that are all values, is replaced by the result of the function in one step.
+This holds for the predefined functions that are written in Python, such as
+\sCode{length}, \sCode{map} and \sCode{reduce}, as well: the stepper does not
+show their implementation, nor the applications of a function argument
+(for example the function given to \sCode{map}) that they make.
 The functions \sCode{print} and \sCode{print\_llist} additionally write
 to the output, which the stepper shows from the step after this contraction
 onwards.}

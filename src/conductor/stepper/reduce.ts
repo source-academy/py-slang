@@ -50,6 +50,7 @@ import {
   tieKnot,
   unparse,
 } from "./ast";
+import { getListLibraryTemplate } from "./lists";
 import {
   applyBuiltin,
   checkArity,
@@ -650,6 +651,34 @@ export async function applyPythonCallable(
   return current;
 }
 
+/**
+ * Applies the predefined list function `name` to value `args` in one go: expands its template and
+ * reduces the expansion to a value, including the calls to the user's callbacks (`map(f, xs)`). The
+ * text that `print` calls in the callbacks write is returned, for the step's output.
+ */
+async function runLibrary(
+  name: string,
+  args: StepNode[],
+  context: StepperContext,
+): Promise<{ node: StepNode; output: string | undefined }> {
+  const outer = context.pendingOutput;
+  const collected = { text: "" };
+  context.pendingOutput = collected;
+  try {
+    let current = applyBuiltin(name, args);
+    for (;;) {
+      const step = await reduceExpr(current, context);
+      if (step === null) break;
+      if (step.output !== undefined) collected.text += step.output;
+      current = step.node;
+    }
+    if (!isValue(current)) throw new Error("Evaluation stuck");
+    return { node: current, output: collected.text === "" ? undefined : collected.text };
+  } finally {
+    context.pendingOutput = outer;
+  }
+}
+
 async function contractCall(node: StepNode, context: StepperContext): Promise<ReduceResult | null> {
   const callee = node.callee as StepNode;
   const args = node.arguments as StepNode[];
@@ -660,7 +689,11 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
   if (callee.type === "Identifier" && isBuiltinFunctionName(String(callee.name))) {
     if (!args.every(isValue)) return null;
     const name = String(callee.name);
-    const result = applyBuiltin(name, args);
+    // A predefined list function (`length`, `map`, …) is a black box, as in the e-stepper (where it
+    // lives in the builtins environment): its template body is evaluated to the end here, inside
+    // this one step, so the user sees only the program they wrote (py-slang#537).
+    const libraryRun = getListLibraryTemplate(name) ? await runLibrary(name, args, context) : null;
+    const result = libraryRun ? libraryRun.node : applyBuiltin(name, args);
     return {
       node: result,
       preRedex: node,
@@ -670,8 +703,9 @@ async function contractCall(node: StepNode, context: StepperContext): Promise<Re
       // `print`/`print_llist` also write to the program's output; record that text so the driver can
       // show it in the stepper's output panel (from this call's "Ran ..." step onward). Both still
       // yield `None`, same as every other call here.
-      output:
-        name === "print"
+      output: libraryRun
+        ? libraryRun.output
+        : name === "print"
           ? formatPrintOutput(args)
           : name === "print_llist"
             ? formatPrintLlistOutput(args)
