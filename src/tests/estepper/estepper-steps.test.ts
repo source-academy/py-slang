@@ -1084,7 +1084,7 @@ print(f(3))
     expect(output).toBe("8\n");
     const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
     expect(steps[at].markers?.[0]?.explanation).toBe(
-      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed in the program",
+      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed here",
     );
     // Before the call the program is in E1; after it, only in E2 (not E2 inside E1).
     expect(envIds(steps[at - 1])).toEqual(["E1"]);
