@@ -380,8 +380,16 @@ export class PVMLIR {
 export class PVMLProgram {
   readonly entryPoint: number;
   readonly functions: readonly PVMLIR[];
-  constructor(entryPoint: number, functions: PVMLIR[]) {
+  /** The builtins (enabled for the chapter) that the program also binds as module-level names, by
+   * name: LDGG falls back to them while the global is not assigned yet (Python's LEGB rule). */
+  readonly builtinFallbacks: ReadonlyMap<string, PVMLBoxType>;
+  constructor(
+    entryPoint: number,
+    functions: PVMLIR[],
+    builtinFallbacks: ReadonlyMap<string, PVMLBoxType> = new Map(),
+  ) {
     this.entryPoint = entryPoint;
+    this.builtinFallbacks = builtinFallbacks;
     this.functions = Object.freeze([...functions]);
     // Stamp each function with a back-reference to this program's own
     // function table — see PVMLIR's `siblings` doc comment.
@@ -395,7 +403,7 @@ export class PVMLProgram {
   withSpecializedFunction(index: number, newIR: PVMLIR): PVMLProgram {
     const fns = [...this.functions];
     fns[index] = newIR;
-    return new PVMLProgram(this.entryPoint, fns);
+    return new PVMLProgram(this.entryPoint, fns, this.builtinFallbacks);
   }
 }
 

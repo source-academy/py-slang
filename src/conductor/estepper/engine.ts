@@ -623,7 +623,7 @@ export class Machine {
     } else {
       handleRuntimeError(
         this.context,
-        new PyTypeError(this.code, e.src, this.context, callee.type),
+        new PyTypeError(this.code, e.src, this.context, callee.type, true),
       );
     }
     const node = val(result);

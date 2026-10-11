@@ -552,6 +552,8 @@ export class TypeError extends RuntimeSourceError {
     node: ExprNS.Expr | StmtNS.Stmt,
     context: Context,
     originalType: string,
+    /** The error is a call of a value that is not a function, worded as in Python. */
+    notCallable = false,
   ) {
     super(node);
     const typeStr = friendlyTypeName(typeTranslator(originalType), context.variant);
@@ -580,7 +582,9 @@ export class TypeError extends RuntimeSourceError {
       callNode.kind === "Call" && callNode.callee?.kind === "Variable"
         ? (callNode.callee.name?.lexeme ?? "subscript assignment")
         : "subscript assignment";
-    const hint = `TypeError: unsupported argument type for ${subject}: ${typeStr}`;
+    const hint = notCallable
+      ? `TypeError: '${typeTranslator(originalType)}' object is not callable`
+      : `TypeError: unsupported argument type for ${subject}: ${typeStr}`;
 
     // py-slang#397: a synthetic token (e.g. py2js's bridged-builtin call site — see
     // stdlibBridge.ts's syntheticCallNode) carries no real position, only a hardcoded
@@ -722,27 +726,6 @@ export class UserError extends RuntimeSourceError {
     super(node);
     this.type = ErrorType.RUNTIME;
     this.message = message;
-  }
-}
-
-export class BuiltinReassignmentError extends RuntimeSourceError {
-  constructor(source: string, name: string, node: ExprNS.Expr) {
-    super(node);
-    this.type = ErrorType.TYPE;
-    const { lineIndex, fullLine } = getFullLine(source, node.startToken.indexInSource);
-    const snippet = source.substring(
-      node.startToken.indexInSource,
-      node.endToken.indexInSource + node.endToken.lexeme.length,
-    );
-    const offset = fullLine.indexOf(snippet);
-    const adjustedOffset = offset >= 0 ? offset : 0;
-    const errorPos = 0;
-    const indicator = createErrorIndicator(snippet, errorPos);
-
-    const hint = `TypeError: cannot reassign built-in function '${name}'`;
-    const suggestion = `You are trying to assign a value to '${name}', which is a built-in function. This is not allowed.`;
-    const msg = `TypeError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
-    this.message = msg;
   }
 }
 

@@ -9,11 +9,7 @@
 import { ErrorType } from "@sourceacademy/conductor/common";
 import { ExprNS, StmtNS } from "../../ast-types";
 import * as error from "../../errors/errors";
-import {
-  BuiltinReassignmentError,
-  ConditionNotBoolError,
-  UnsupportedOperandTypeError,
-} from "../../errors/errors";
+import { ConditionNotBoolError, UnsupportedOperandTypeError } from "../../errors/errors";
 import { Group } from "../../stdlib/utils";
 import { Token, TokenType } from "../../tokenizer";
 import { CSEBreak, RecursivePartial, Result } from "../../types";
@@ -916,12 +912,6 @@ const cmdEvaluators: CmdEvaluators = {
     const value = stash.pop();
 
     if (value) {
-      if (context.nativeStorage.builtins.has(instr.symbol)) {
-        handleRuntimeError(
-          context,
-          new BuiltinReassignmentError(code, instr.symbol, instr.srcNode as ExprNS.Expr),
-        );
-      }
       const currentEnv = currentEnvironment(context);
       const isGlobal = currentEnv.closure?.globalVariables.has(instr.symbol) ?? false;
       const isNonlocal = currentEnv.closure?.nonlocalVariables.has(instr.symbol) ?? false;
@@ -1280,7 +1270,13 @@ const cmdEvaluators: CmdEvaluators = {
     } else {
       handleRuntimeError(
         context,
-        new error.TypeError(code, instr.srcNode, context, callable ? callable.type : "NoneType"),
+        new error.TypeError(
+          code,
+          instr.srcNode,
+          context,
+          callable ? callable.type : "NoneType",
+          true,
+        ),
       );
     }
   },

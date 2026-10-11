@@ -440,7 +440,14 @@ export class PVMLInterpreter {
         // from "never assigned" (no entry at all, `.get` also returns
         // `undefined`) — see NameError's doc comment.
         if (!this.globalEnv.has(globalName)) {
-          throw new NameError(`NameError: name '${globalName}' is not defined`);
+          // Python's LEGB rule: a name that is not (yet) a global is looked up among the builtins.
+          // So `print(1)` before a module-level `print = 0` still calls the builtin.
+          const builtin = this.program.builtinFallbacks.get(globalName);
+          if (builtin === undefined) {
+            throw new NameError(`NameError: name '${globalName}' is not defined`);
+          }
+          this.push(builtin);
+          break;
         }
         this.push(this.globalEnv.get(globalName));
         break;
