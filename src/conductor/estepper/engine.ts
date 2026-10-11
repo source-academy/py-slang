@@ -123,6 +123,15 @@ const NONE: Value = { type: "none" };
  * The expression of the `return` statement a statement list is about to run, if it is a block (a
  * call that has just become the frame of the callee), looking past declarations and into the loops the `return` is in.
  */
+/** The statement `return e` that a lambda's body `e` stands for. */
+function implicitReturn(body: ExprNS.Expr): Stmt {
+  return {
+    k: "return",
+    e: translateExpr(body),
+    src: new StmtNS.Return(body.startToken, body.endToken, body),
+  };
+}
+
 function tailBlock(list: Stmt[]): Expr | undefined {
   // `global` and `nonlocal` declarations stay in front of the statement list, unevaluated.
   const head = list.find(s => s.k !== "global" && s.k !== "nonlocal");
@@ -559,7 +568,7 @@ export class Machine {
         body:
           closure.node.kind === "FunctionDef"
             ? translateFunctionBody(closure.node.body)
-            : translateExpr(closure.node.body),
+            : [implicitReturn(closure.node.body)],
       };
       const label = this.labels.frame(frame);
       const parent = closure.environment;
@@ -681,26 +690,6 @@ export class Machine {
   }
 
   private async reduceBlock(e: BlockExpr): Promise<ExprStep | null> {
-    if (!Array.isArray(e.body)) {
-      const body = e.body;
-      const step = await this.reduceExpr(body, e.env);
-      // A lambda whose body is a call: a tail call, which the callee's frame replaces.
-      if (step && body.k === "call" && step.node.k === "block") {
-        return { node: step.node, c: this.tailCalled(step.c, e) };
-      }
-      if (step) return { node: { ...e, body: step.node }, c: step.c };
-      const value = this.resolve(body, e.env);
-      const node = val(value);
-      return {
-        node,
-        c: {
-          pre: e,
-          post: node,
-          before: `Returning ${this.v(value)} from ${this.labels.frame(e.env)}`,
-          after: `Returned ${this.v(value)} from ${this.labels.frame(e.env)}`,
-        },
-      };
-    }
     const outcome = await this.stepList(e.body, e.env);
     switch (outcome.kind) {
       case "step": {
