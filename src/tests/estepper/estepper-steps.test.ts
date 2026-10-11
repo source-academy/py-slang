@@ -1017,3 +1017,98 @@ describe("shadowing a builtin (py-slang#531)", () => {
     expect(error).toMatch(/^TypeError/);
   });
 });
+
+describe("tail calls: the callee's frame replaces the caller's block", () => {
+  const blocks = (step: EStepperStep): string[] =>
+    [...JSON.stringify(step.ast).matchAll(/"type":"EnvBlock"[^{]*?"envId":"(E\d+)"/g)].map(
+      m => m[1],
+    );
+  const envIds = (step: EStepperStep): string[] =>
+    [...JSON.stringify(step.ast).matchAll(/"envId":"(E\d+)"/g)].map(m => m[1]);
+
+  test("return g(x) leaves only the frame of g in the program; the caller's frame is dead if nothing holds it", async () => {
+    const code = `def f(x):
+    return g(x + 1)
+
+def g(y):
+    return y * 2
+
+print(f(3))
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("8\n");
+    const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
+    expect(steps[at].markers?.[0]?.explanation).toBe(
+      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed in the program",
+    );
+    // Before the call the program is in E1; after it, only in E2 (not E2 inside E1).
+    expect(envIds(steps[at - 1])).toEqual(["E1"]);
+    expect(envIds(steps[at])).toEqual(["E2"]);
+    expect(blocks(steps[at]).length).toBeLessThanOrEqual(1);
+    expect(steps[at].frames.find(f => f.id === "E1")!.isGarbage).toBe(true);
+  });
+
+  test("the caller's frame stays alive when a function object refers to it", async () => {
+    const code = `def f(x):
+    def h():
+        return x
+    return g(h)
+
+def g(k):
+    return k()
+
+print(f(3))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("3\n");
+    const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
+    expect(envIds(steps[at])).toEqual(["E2"]);
+    // h (in E1) is an argument of g's frame: E1 is not garbage.
+    expect(steps[at].frames.find(f => f.id === "E1")!.isGarbage).toBe(false);
+  });
+
+  test("a call that is not the whole of the return is not a tail call", async () => {
+    const code = `def f(x):
+    return g(x) + 1
+
+def g(y):
+    return y * 2
+
+print(f(3))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("7\n");
+    expect(story(steps).some(t => t.includes("a tail call"))).toBe(false);
+  });
+
+  test("a lambda whose body is a call, and a return inside a loop, are tail calls too", async () => {
+    const code = `def g(y):
+    return y * 2
+
+def f(x):
+    for i in range(1):
+        return g(x)
+
+h = lambda z: g(z)
+print(h(f(2)))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("8\n");
+    expect(story(steps).filter(t => t.includes("a tail call"))).toHaveLength(2);
+  });
+
+  test("a deep tail recursion keeps one frame in the program", async () => {
+    const code = `def count(n, acc):
+    if n == 0:
+        return acc
+    else:
+        return count(n - 1, acc + 1)
+
+print(count(4, 0))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("4\n");
+    for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(1);
+  });
+});

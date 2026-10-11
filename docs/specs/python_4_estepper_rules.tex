@@ -235,6 +235,26 @@ statements are all finished reduces to \sCode{None}.}
   \sBlock{\sEnv''}{\varepsilon} \Rightarrow \sCode{None}
 }
 
+\sEntry{Tail-call}{When the first statement of an environment block is a
+\sCode{return} of the application of a function object to values (a tail
+call), the application is replaced by the callee's block as in
+\textbf{Function-application}, but the \emph{caller's block disappears}: the
+callee's block takes its place, instead of being nested in it. The caller's
+frame is no longer part of the program; it stays in the frames, as garbage
+unless something refers to it (a function object created in it, for example).
+The same holds for a lambda body that is such an application, and for a
+\sCode{return} inside a loop.}
+\gentzen{
+  \sRef{k} \mbox{ is a function object } \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
+  \sEnv_3 \mbox{ is fresh with parent } \sEnv'
+}{
+  \begin{array}{l}
+  \sEnv \vdash \sBlock{\sEnv''}{\sCode{return }\sRef{k}\sCode{(}v_1\sCode{, }\ldots\sCode{, }v_m\sCode{)}\ \sVar{statement}\ldots} \\
+  \qquad \Rightarrow \sBlock{\sEnv_3}{b} \\
+  \qquad \textnormal{\emph{changing:}}\ \mathbf{new}\ \sEnv_3 = \{x_i \mapsto v_i\} \cup \{y \mapsto \sUn \mid y \in \mathit{assigned}(b)\}
+  \end{array}
+}
+
 \sEntry{Block-reduce}{The first statement of an environment block is
 reduced in the \emph{frame of the block}, not in $\sEnv$.}
 \gentzen{

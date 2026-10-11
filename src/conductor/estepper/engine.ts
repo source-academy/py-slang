@@ -119,6 +119,17 @@ const ATOMIC_STEP_LIMIT = 1_000_000;
 const NONE: Value = { type: "none" };
 
 /**
+ * The expression of the `return` statement a statement list is about to run, if it is a block (a
+ * call that has just become the frame of the callee), looking into the loops the `return` is in.
+ */
+function tailBlock(list: Stmt[]): Expr | undefined {
+  const head = list[0];
+  if (head?.k === "return" && head.e?.k === "block") return head.e;
+  if (head?.k === "loop") return tailBlock(head.body);
+  return undefined;
+}
+
+/**
  * Whether a statement carries a gutter breakpoint (`hasBreakpoint`, set on its source by
  * `markBreakpoints`) that has not fired yet. Declarations (`global`, `nonlocal`) are not evaluated,
  * so they are never stops.
@@ -658,10 +669,23 @@ export class Machine {
     return stash.peek() ?? NONE;
   }
 
+  /** The step of a tail call, which replaces the block `caller` of the calling frame. */
+  private tailCalled(c: Contraction, caller: BlockExpr): Contraction {
+    const left = this.labels.frame(caller.env);
+    return {
+      ...c,
+      after: `${c.after}; a tail call, so ${left} is no longer needed in the program`,
+    };
+  }
+
   private async reduceBlock(e: BlockExpr): Promise<ExprStep | null> {
     if (!Array.isArray(e.body)) {
       const body = e.body;
       const step = await this.reduceExpr(body, e.env);
+      // A lambda whose body is a call: a tail call, which the callee's frame replaces.
+      if (step && body.k === "call" && step.node.k === "block") {
+        return { node: step.node, c: this.tailCalled(step.c, e) };
+      }
       if (step) return { node: { ...e, body: step.node }, c: step.c };
       const value = this.resolve(body, e.env);
       const node = val(value);
@@ -677,8 +701,15 @@ export class Machine {
     }
     const outcome = await this.stepList(e.body, e.env);
     switch (outcome.kind) {
-      case "step":
+      case "step": {
+        // `return f(x)` where `f(x)` just became the frame of the call: a tail call. The callee's
+        // frame replaces this block, as nothing of it is needed any more.
+        const tail = outcome.c.post && tailBlock(outcome.list) === outcome.c.post;
+        if (tail && outcome.c.post?.k === "block") {
+          return { node: outcome.c.post, c: this.tailCalled(outcome.c, e) };
+        }
         return { node: { ...e, body: outcome.list }, c: outcome.c };
+      }
       case "return": {
         const node = val(outcome.value);
         return {
