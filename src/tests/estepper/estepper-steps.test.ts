@@ -65,15 +65,15 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(output).toBe("");
     expect(story(steps)).toEqual([
       "Start of evaluation",
-      "Defined make_withdraw: function object #1 in the global frame",
+      "Defined make_withdraw: function object #1 in the global environment",
       "Looked up make_withdraw in the global frame: function object #1",
-      "Called make_withdraw(100): new frame E1 extends the global frame",
-      "Defined withdraw: function object #2 in frame E1",
+      "Called make_withdraw(100): new environment E1, whose enclosing environment is the global environment",
+      "Defined withdraw: function object #2 in environment E1",
       "Looked up withdraw in frame E1: function object #2",
       "Returned withdraw from E1",
       "Assigned W1 = withdraw in the global frame",
       "Looked up W1 in the global frame: function object #2",
-      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance",
+      "Called withdraw(50): new environment E2, whose enclosing environment is E1, without a binding for nonlocal balance",
       "Looked up balance in frame E1: 100",
       "Looked up amount in frame E2: 50",
       "Evaluated 100 >= 50: True",
@@ -107,7 +107,7 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     const { steps } = await run("z = 1\ndef f():\n    return z\nf()\n");
     const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called f()"))!;
     expect(called.markers![0].explanation).toBe(
-      "Called f(): the new frame has no bindings, so the body runs in the global frame",
+      "Called f(): the new frame would have no bindings, so the body runs in the global environment",
     );
     // The body's frame is Global in the program, and no frame E1 is in the store.
     expect(JSON.stringify(called.ast)).toContain('"envId":"Global"');
@@ -815,7 +815,7 @@ bump(2)
     expect(explanations.join("\n")).not.toMatch(/declaration/);
     expect(explanations).toContainEqual(
       expect.stringMatching(
-        /^Called bump\(2\): new frame E1 extends the global frame, without a binding for global count/,
+        /^Called bump\(2\): new environment E1, whose enclosing environment is the global environment, without a binding for global count/,
       ),
     );
     expect(explanations).toContainEqual(
@@ -839,7 +839,7 @@ describe("apply_in_underlying_python (§4)", () => {
     expect(applied).toBeGreaterThan(-1);
     expect(explanations[applied]).toContain("apply the function to the elements of the list");
     // The call that follows is an ordinary call: a new frame for f.
-    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new frame E1/);
+    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new environment E1/);
   });
 });
 
@@ -1084,7 +1084,7 @@ print(f(3))
     expect(output).toBe("8\n");
     const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
     expect(steps[at].markers?.[0]?.explanation).toBe(
-      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed in the program",
+      "Called g(4): new environment E2, whose enclosing environment is the global environment; a tail call, so E1 is no longer needed here",
     );
     // Before the call the program is in E1; after it, only in E2 (not E2 inside E1).
     expect(envIds(steps[at - 1])).toEqual(["E1"]);

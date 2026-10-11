@@ -11,7 +11,7 @@
  * The store *is* the CSE machine's: frames are CSE `Environment`s (created with the CSE machine's
  * own `createEnvironment`, so arity errors, rest parameters and unassigned locals behave
  * identically), function objects are CSE `Closure`s, values are CSE `Value`s, and operators,
- * lookups, list access and the stdlib builtins are the CSE machine's own functions. This keeps the
+ * lookups, list access and the stdlib built-ins are the CSE machine's own functions. This keeps the
  * e-stepper's results and errors in line with the CSE machine by construction.
  *
  * Functions from the library prelude (`map`, `stream_tail`, …) are applied atomically, in a single
@@ -93,10 +93,10 @@ export interface Contraction {
   after: string;
   /** Present continuous, shown before the step. */
   before: string;
-  /** The name of the builtin this step applied, if it was one. */
+  /** The name of the built-in this step applied, if it was one. */
   calledBuiltin?: string;
   /**
-   * Whether the step is a `breakpoint()` statement: a call of the builtin `breakpoint` that is the
+   * Whether the step is a `breakpoint()` statement: a call of the built-in `breakpoint` that is the
    * whole of a statement (as in the stepper; `x = breakpoint()` is not one). The host's breakpoint
    * navigation stops at such steps.
    */
@@ -185,7 +185,7 @@ export class Machine {
   }
 
   /**
-   * Sets up the store for a program: the chapter's builtins, and its library prelude evaluated (on
+   * Sets up the store for a program: the chapter's built-ins, and its library prelude evaluated (on
    * the CSE machine) into the prelude frame, exactly as the CSE evaluator does.
    */
   static async create(
@@ -255,7 +255,7 @@ export class Machine {
       : isNonlocal
         ? pyGetNonlocalVariable(this.code, this.context, name, e.src)
         : pyGetVariable(this.code, this.context, name, e.src);
-    // Record which frame the value came from (builtins come from no frame).
+    // Record which frame the value came from (built-ins come from no frame).
     const start = isGlobal ? this.programEnv : env;
     for (let f: Environment | null = start; f; f = f.tail) {
       if (Object.prototype.hasOwnProperty.call(f.head, name)) {
@@ -267,7 +267,7 @@ export class Machine {
   }
 
   /**
-   * Whether a term needs no reduction step of its own: a value, or the name of a builtin or library
+   * Whether a term needs no reduction step of its own: a value, or the name of a built-in or library
    * function. Every other name is looked up in a step of its own.
    */
   isReady(e: Expr, env: Environment): boolean {
@@ -301,13 +301,13 @@ export class Machine {
     return env;
   }
 
-  /** Library frames (the prelude, and the builtins' global frame) are not drawn. */
+  /** Library frames (the prelude, and the built-ins' global frame) are not drawn. */
   private isShownFrame(env: Environment): boolean {
     return env.name !== "prelude" && env.name !== "global";
   }
 
   /**
-   * Whether a name refers to a builtin or library function. Such a name is not bound in any frame
+   * Whether a name refers to a built-in or library function. Such a name is not bound in any frame
    * the diagram shows, so it is looked up when used, without a step of its own.
    */
   private isLibraryName(e: Expr & { k: "name" }, env: Environment): boolean {
@@ -318,9 +318,19 @@ export class Machine {
     return true;
   }
 
+  /** Where a binding is: in a frame, as in the book (§3.2.1: "the first frame ... that contains a binding"). */
   private where(env: Environment): string {
     const label = this.labels.frame(env);
     return label === "Global" ? "the global frame" : `frame ${label}`;
+  }
+
+  /**
+   * The environment a function object is created in, or a body runs in. The book speaks of
+   * environments there (§3.2.1: "the environment in which the lambda expression was evaluated").
+   */
+  private inEnv(env: Environment): string {
+    const label = this.labels.frame(env);
+    return label === "Global" ? "the global environment" : `environment ${label}`;
   }
 
   private t(e: Expr): string {
@@ -464,7 +474,7 @@ export class Machine {
             pre: e,
             post: node,
             before: "Creating a function object",
-            after: `Created function object ${this.labels.object(closure)} in ${this.where(env)}`,
+            after: `Created function object ${this.labels.object(closure)} in ${this.inEnv(env)}`,
           },
         };
       }
@@ -574,10 +584,10 @@ export class Machine {
       const parent = closure.environment;
       // A frame without bindings is not drawn: the body then runs in the frame it extends.
       const after = this.labels.isShown(frame)
-        ? `new frame ${this.labels.frame(frame)} extends ${
-            parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
+        ? `new environment ${this.labels.frame(frame)}, whose enclosing environment is ${
+            parent === this.programEnv ? "the global environment" : this.labels.frame(parent)
           }`
-        : `the new frame has no bindings, so the body runs in ${this.where(parent)}`;
+        : `the new frame would have no bindings, so the body runs in ${this.inEnv(parent)}`;
       return {
         node,
         c: {
@@ -590,7 +600,7 @@ export class Machine {
     }
 
     // `apply_in_underlying_python(f, xs)` applies `f` to the elements of the linked list `xs`. The
-    // CSE machine's builtin does that by pushing the application onto the machine's own stash and
+    // CSE machine's built-in does that by pushing the application onto the machine's own stash and
     // control (it returns nothing), so here it is a step of its own: the call becomes `f(x1, …)`,
     // which then steps like any other call.
     if (
@@ -600,7 +610,7 @@ export class Machine {
     ) {
       const [func, argList] = args;
       const elements: Value[] = [];
-      // As the builtin: follow the pairs; anything else ends the list.
+      // As the built-in: follow the pairs; anything else ends the list.
       let current = argList;
       while (current && current.type === "list" && current.value.length === 2) {
         elements.push(current.value[0]);
@@ -691,7 +701,7 @@ export class Machine {
     const left = this.labels.frame(caller.env);
     return {
       ...c,
-      after: `${c.after}; a tail call, so ${left} is no longer needed in the program`,
+      after: `${c.after}; a tail call, so ${left} is no longer needed here`,
     };
   }
 
@@ -847,7 +857,7 @@ export class Machine {
           head,
           rest,
           `Defining ${src.name.lexeme}`,
-          `Defined ${src.name.lexeme}: function object ${this.labels.object(closure)} in ${this.where(env)}`,
+          `Defined ${src.name.lexeme}: function object ${this.labels.object(closure)} in ${this.inEnv(env)}`,
         );
       }
       case "return": {

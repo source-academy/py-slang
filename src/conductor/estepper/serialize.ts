@@ -5,8 +5,8 @@
  *
  * Which frames and objects are shown: everything reachable from the program and the global frame,
  * plus every frame a call of the program created (greyed out as garbage once unreachable, so a
- * returned call's frame stays visible). Library internals — the prelude frame, builtins, and
- * library functions — are not drawn; a library function value is shown by its name, like a builtin.
+ * returned call's frame stays visible). Library internals — the prelude frame, built-ins, and
+ * library functions — are not drawn; a library function value is shown by its name, like a built-in.
  */
 
 import type { CseSnapshot } from "@sourceacademy/common-cse-machine";
@@ -350,7 +350,7 @@ class Reach {
   }
 
   private isShownFrame(env: Environment): boolean {
-    // The prelude and builtin frames are library internals.
+    // The prelude and built-in frames are library internals.
     return env.name !== "prelude" && env.name !== "global";
   }
 
