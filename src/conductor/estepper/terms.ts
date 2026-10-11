@@ -369,19 +369,21 @@ const isScopeDeclaration = (s: StmtNS.Stmt): boolean =>
   s.kind === "Global" || s.kind === "NonLocal";
 
 /**
- * The statements of a function body for a call. A `global` or `nonlocal` declaration holds for the
- * whole function, wherever it stands in the body (Python reads them before anything is run), so
- * they are all taken out of the body (also from `if`s and loops) and put at the front, each
- * once. What the declarations decided is then in view for as long as the body is.
+ * The statements of a function body for a call. A `global` declaration holds for the whole
+ * function, wherever it stands in the body (Python reads them before anything is run), so they are
+ * all taken out of the body (also from `if`s and loops) and put at the front, each once: what
+ * they decided is in view for as long as the body is. A `nonlocal` declaration is left out: the
+ * frame of the call has no binding for the name, and the enclosing frames that have it are in the
+ * environment, so the declaration tells nothing more.
  */
 export function translateFunctionBody(stmts: StmtNS.Stmt[]): Stmt[] {
   const declarations: Stmt[] = [];
   const seen = new Set<string>();
   const collect = (list: StmtNS.Stmt[]): void => {
     for (const s of list) {
-      if (isScopeDeclaration(s)) {
+      if (s.kind === "Global") {
         const d = translateStmt(s);
-        const key = `${d.k} ${(d as ScopeStmt).names.join(",")}`;
+        const key = (d as ScopeStmt).names.join(",");
         if (!seen.has(key)) {
           seen.add(key);
           declarations.push(d);

@@ -206,9 +206,11 @@ frame binds the parameters to the arguments (a rest parameter
 \sCode{*r} to a new list of the remaining arguments), and every other name
 that the body assigns to as unassigned.
 Names that the body declares \sCode{global} or \sCode{nonlocal} are not bound
-in the new frame. A declaration holds for the whole body, wherever it stands
-(in an \sCode{if} or a loop, say), so the declarations are taken out of the
-body and placed, each once, at its front. If the number of arguments does not match, the reduction is
+in the new frame. A \sCode{global} declaration holds for the whole body, wherever it stands
+(in an \sCode{if} or a loop, say), so these declarations are taken out of the
+body and placed, each once, at its front. \sCode{nonlocal} declarations are
+left out of the body: the frames that bind the names are in the environment
+already. If the number of arguments does not match, the reduction is
 stuck with a \texttt{TypeError}, as in the CSE machine.}
 \gentzen{
   \sRef{k} \mbox{ is a function object } \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad

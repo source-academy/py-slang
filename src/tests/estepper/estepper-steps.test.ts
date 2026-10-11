@@ -89,11 +89,18 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     ]);
   });
 
-  test("declarations are not evaluated, but stay in the program while its body runs", async () => {
+  test("a nonlocal declaration is not in the body of the call: the environment says it already", async () => {
     const { steps } = await run(MAKE_WITHDRAW);
     const inE2 = steps.filter(s => s.activeFrameId === "E2");
     expect(inE2.length).toBeGreaterThan(1);
-    for (const step of inE2) expect(JSON.stringify(step.ast)).toContain("NonlocalStatement");
+    for (const step of inE2) expect(JSON.stringify(step.ast)).not.toContain("NonlocalStatement");
+    // E2 has no binding for `balance`: that is what the declaration decided.
+    expect(
+      steps
+        .find(s => s.activeFrameId === "E2")!
+        .frames.find(f => f.id === "E2")!
+        .bindings.map(b => b.name),
+    ).toEqual(["amount"]);
   });
 
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
@@ -1140,7 +1147,7 @@ print(count(4, 0))
     for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(1);
   });
 
-  test("global and nonlocal declarations are taken to the front of the body at each call", async () => {
+  test("global declarations are taken to the front of the body at each call", async () => {
     const code = `z = 0
 def iter(x, y):
     if x == 0:
