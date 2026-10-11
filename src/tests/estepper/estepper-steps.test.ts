@@ -89,11 +89,18 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     ]);
   });
 
-  test("declarations are not evaluated, but stay in the program while its body runs", async () => {
+  test("a nonlocal declaration is not in the body of the call: the environment says it already", async () => {
     const { steps } = await run(MAKE_WITHDRAW);
     const inE2 = steps.filter(s => s.activeFrameId === "E2");
     expect(inE2.length).toBeGreaterThan(1);
-    for (const step of inE2) expect(JSON.stringify(step.ast)).toContain("NonlocalStatement");
+    for (const step of inE2) expect(JSON.stringify(step.ast)).not.toContain("NonlocalStatement");
+    // E2 has no binding for `balance`: that is what the declaration decided.
+    expect(
+      steps
+        .find(s => s.activeFrameId === "E2")!
+        .frames.find(f => f.id === "E2")!
+        .bindings.map(b => b.name),
+    ).toEqual(["amount"]);
   });
 
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
@@ -1015,5 +1022,215 @@ describe("shadowing a builtin (py-slang#531)", () => {
     );
     expect(output).toBe("");
     expect(error).toMatch(/^TypeError/);
+  });
+});
+
+describe("tail calls: the callee's frame replaces the caller's block", () => {
+  const blocks = (step: EStepperStep): string[] =>
+    [...JSON.stringify(step.ast).matchAll(/"type":"EnvBlock"[^{]*?"envId":"(E\d+)"/g)].map(
+      m => m[1],
+    );
+  const envIds = (step: EStepperStep): string[] =>
+    [...JSON.stringify(step.ast).matchAll(/"envId":"(E\d+)"/g)].map(m => m[1]);
+
+  test("return g(x) leaves only the frame of g in the program; the caller's frame is dead if nothing holds it", async () => {
+    const code = `def f(x):
+    return g(x + 1)
+
+def g(y):
+    return y * 2
+
+print(f(3))
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("8\n");
+    const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
+    expect(steps[at].markers?.[0]?.explanation).toBe(
+      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed in the program",
+    );
+    // Before the call the program is in E1; after it, only in E2 (not E2 inside E1).
+    expect(envIds(steps[at - 1])).toEqual(["E1"]);
+    expect(envIds(steps[at])).toEqual(["E2"]);
+    expect(blocks(steps[at]).length).toBeLessThanOrEqual(1);
+    expect(steps[at].frames.find(f => f.id === "E1")!.isGarbage).toBe(true);
+  });
+
+  test("the caller's frame stays alive when a function object refers to it", async () => {
+    const code = `def f(x):
+    def h():
+        return x
+    return g(h)
+
+def g(k):
+    return k()
+
+print(f(3))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("3\n");
+    const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
+    expect(envIds(steps[at])).toEqual(["E2"]);
+    // h (in E1) is an argument of g's frame: E1 is not garbage.
+    expect(steps[at].frames.find(f => f.id === "E1")!.isGarbage).toBe(false);
+  });
+
+  test("a call that is not the whole of the return is not a tail call", async () => {
+    const code = `def f(x):
+    return g(x) + 1
+
+def g(y):
+    return y * 2
+
+print(f(3))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("7\n");
+    expect(story(steps).some(t => t.includes("a tail call"))).toBe(false);
+  });
+
+  test("a lambda whose body is a call, and a return inside a loop, are tail calls too", async () => {
+    const code = `def g(y):
+    return y * 2
+
+def f(x):
+    for i in range(1):
+        return g(x)
+
+h = lambda z: g(z)
+print(h(f(2)))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("8\n");
+    expect(story(steps).filter(t => t.includes("a tail call"))).toHaveLength(2);
+  });
+
+  test("declarations in front of the return do not hide the tail call", async () => {
+    const code = `total = 0
+
+def count(n):
+    global total
+    if n == 0:
+        return total
+    else:
+        total = total + 1
+        return count(n - 1)
+
+def outer():
+    k = 1
+    def inner(n):
+        nonlocal k
+        k = k + 1
+        return n if n == 0 else inner(n - 1)
+    return inner(2)
+
+print(count(3))
+print(outer())
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("3\n0\n");
+    expect(story(steps).filter(t => t.includes("a tail call")).length).toBeGreaterThanOrEqual(5);
+    for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(2);
+  });
+
+  test("a deep tail recursion keeps one frame in the program", async () => {
+    const code = `def count(n, acc):
+    if n == 0:
+        return acc
+    else:
+        return count(n - 1, acc + 1)
+
+print(count(4, 0))
+`;
+    const { steps, output } = await run(code, 4);
+    expect(output).toBe("4\n");
+    for (const step of steps) expect(new Set(envIds(step)).size).toBeLessThanOrEqual(1);
+  });
+
+  test("global declarations are taken to the front of the body at each call", async () => {
+    const code = `z = 0
+def iter(x, y):
+    if x == 0:
+        global z
+        return y
+    else:
+        return iter(x - 1, y + 1)
+
+iter(4,5)
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("");
+    const count = (step: EStepperStep, type: string) =>
+      (JSON.stringify(step.ast).match(new RegExp(`"type":"${type}"`, "g")) ?? []).length;
+    const inBlock = steps.filter(s => envIds(s).length > 0);
+    expect(inBlock.length).toBeGreaterThan(20);
+    // While a call is in the program, its declaration is there, once, whichever branch is taken.
+    for (const step of inBlock) expect(count(step, "GlobalStatement")).toBe(1);
+    // And it is the first statement of the body, before the `if`.
+    const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called iter(4, 5)"))!;
+    const text = JSON.stringify(called.ast);
+    expect(text.indexOf("GlobalStatement")).toBeLessThan(text.indexOf("IfStatement"));
+  });
+
+  test("a global name that is not in the global frame yet, and a nonlocal variable of the same name", async () => {
+    // `x` is not in G when `inner` runs, and `outer` has an `x` of its own. `global x` makes the
+    // assignment extend G, and leave outer's `x` alone.
+    const code = `def outer():
+    x = 1
+    def inner():
+        global x
+        x = 2
+    inner()
+    return x
+
+print(outer())
+print(x)
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("1\n2\n");
+    const last = steps.at(-1)!;
+    expect(frames(last)[0]).toBe("Global: outer=#1 x=2");
+    expect(
+      last.frames.find(f => f.id === "E1")!.bindings.map(b => `${b.name}=${show(b.value)}`),
+    ).toEqual(["x=1", "inner=#2"]);
+  });
+
+  test("declarations in a loop of a function: the global one is at the front, the nonlocal one is not shown", async () => {
+    const code = `z = 0
+
+def f(n):
+    while n > 0:
+        global z
+        z = z + 1
+        n = n - 1
+    return z
+
+def g():
+    k = 0
+    def h(n):
+        for i in range(n):
+            nonlocal k
+            k = k + 1
+        return k
+    return h(2)
+
+print(f(2))
+print(g())
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("2\n2\n");
+    const count = (step: EStepperStep, type: string) =>
+      (JSON.stringify(step.ast).match(new RegExp(`"type":"${type}"`, "g")) ?? []).length;
+    // E1 is the call of f, E3 that of h (E2 is g, whose body shows the definition of h as written).
+    const inF = steps.filter(s => s.activeFrameId === "E1");
+    const inH = steps.filter(s => s.activeFrameId === "E3");
+    expect(inF.length).toBeGreaterThan(10);
+    expect(inH.length).toBeGreaterThan(5);
+    // The one `global z` is at the front of the body, and none is left in the loop.
+    for (const step of inF) expect(count(step, "GlobalStatement")).toBe(1);
+    for (const step of inH) expect(count(step, "NonlocalStatement")).toBe(0);
   });
 });

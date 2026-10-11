@@ -206,7 +206,11 @@ frame binds the parameters to the arguments (a rest parameter
 \sCode{*r} to a new list of the remaining arguments), and every other name
 that the body assigns to as unassigned.
 Names that the body declares \sCode{global} or \sCode{nonlocal} are not bound
-in the new frame. If the number of arguments does not match, the reduction is
+in the new frame. A \sCode{global} declaration holds for the whole body, wherever it stands
+(in an \sCode{if} or a loop, say), so these declarations are taken out of the
+body and placed, each once, at its front. \sCode{nonlocal} declarations are
+left out of the body: the frames that bind the names are in the environment
+already. If the number of arguments does not match, the reduction is
 stuck with a \texttt{TypeError}, as in the CSE machine.}
 \gentzen{
   \sRef{k} \mbox{ is a function object } \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
@@ -233,6 +237,26 @@ statements are all finished reduces to \sCode{None}.}
   \sBlock{\sEnv''}{v} \Rightarrow v
   \qquad\qquad
   \sBlock{\sEnv''}{\varepsilon} \Rightarrow \sCode{None}
+}
+
+\sEntry{Tail-call}{When the first statement of an environment block is a
+\sCode{return} of the application of a function object to values (a tail
+call), the application is replaced by the callee's block as in
+\textbf{Function-application}, but the \emph{caller's block disappears}: the
+callee's block takes its place, instead of being nested in it. The caller's
+frame is no longer part of the program; it stays in the frames, as garbage
+unless something refers to it (a function object created in it, for example).
+The same holds for a lambda body that is such an application, and for a
+\sCode{return} inside a loop.}
+\gentzen{
+  \sRef{k} \mbox{ is a function object } \mathit{Fn}(n, x_1\ldots x_m, b, \sEnv')\quad
+  \sEnv_3 \mbox{ is fresh with parent } \sEnv'
+}{
+  \begin{array}{l}
+  \sEnv \vdash \sBlock{\sEnv''}{\sCode{return }\sRef{k}\sCode{(}v_1\sCode{, }\ldots\sCode{, }v_m\sCode{)}\ \sVar{statement}\ldots} \\
+  \qquad \Rightarrow \sBlock{\sEnv_3}{b} \\
+  \qquad \textnormal{\emph{changing:}}\ \mathbf{new}\ \sEnv_3 = \{x_i \mapsto v_i\} \cup \{y \mapsto \sUn \mid y \in \mathit{assigned}(b)\}
+  \end{array}
 }
 
 \sEntry{Block-reduce}{The first statement of an environment block is
@@ -265,9 +289,15 @@ substitution model cannot express.}
 }
 
 \sEntry{Global-and-nonlocal}{The declarations \sCode{global} and
-\sCode{nonlocal} are not statements that run: they have no step of their own.
-They remain in the program as source and have been taken into account when
-the frame of the function was created.}
+\sCode{nonlocal} are not statements that run: they have no step of their own,
+and they have been taken into account when the frame of the function was created.
+A \sCode{global} declaration \emph{stays in the program}, at the front of the
+body of each call (see \textbf{Function-application}). The frame of the call
+cannot show what it decides: the name may not be bound in $G$ yet, in which case
+an assignment to it makes $G$ grow, and an enclosing function may bind the same
+name, which that assignment leaves alone. A \sCode{nonlocal} declaration is
+\emph{not} in the body of a call: the frame of the call has no binding for the
+name, and the enclosing frame that binds it is in the environment already.}
 
 \subsection*{Resolution}
 
@@ -306,6 +336,9 @@ G) or \sCode{nonlocal} (then it is to E). At the top level, L is G. If G does no
 bind $x$ yet, it \emph{grows} by the new binding, even if $B$ binds $x$: this is
 why \sCode{print = 0} creates a binding in $G$ that shadows the one in $B$. No
 frame other than $G$ ever gains a binding, and $B$ never changes.
+In particular, a function that declares $x$ \sCode{global} when $G$ does not bind $x$
+yet makes $G$ grow, even if an enclosing function binds an $x$ of its own: that
+binding is not changed, because the search for a \sCode{global} name skips L and E.
 
 \paragraph{Example.}
 \begin{lstlisting}

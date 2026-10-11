@@ -89,6 +89,7 @@ needed to continue by hand.
 | `def f(ps): body` (statement) | statement removed | allocate `#k = Fn(f, ps, body, E)`; bind `f ↦ Ref(#k)` in the frame `f` belongs to |
 | `Ref(#k)(v₁, …, vₙ)` with `#k = Fn(_, ps, body, E')` | `EnvBlock(E'', body)` | new frame `E''`, parent `E'`, binding `psᵢ ↦ vᵢ` (rest parameters: a new list), plus every name the body assigns, unassigned |
 | `EnvBlock(E'', return v; …)` | `v` | none (the frame stays in Σ) |
+| `EnvBlock(E'', return Ref(#k)(v₁, …, vₙ); …)` (a tail call; also a lambda body that is such a call, and a `return` inside a loop) | `EnvBlock(E₃, body)`, replacing the caller's block | as for a function application; `E''` is left in Σ, garbage unless referenced |
 | `EnvBlock(E'', ε)` (body finished) | `None` | none |
 | `EnvBlock(E'', v)` (lambda body reduced to a value) | `v` | none |
 | `x = v` (statement) | statement removed | rebind `x` in its frame (see scoping) |
@@ -166,10 +167,12 @@ Initially, `G` is empty.
    `#2`).
 5. `W1 = Ref(#2)` is consumed: `G` gains `W1 ↦ #2`. E1 stays alive, since #2 points to it.
 6. `W1(50)`: new frame `E2 = { amount: 50 }`, parent **E1** (the defining environment of #2, not the
-   caller's). The program becomes `EnvBlock(E2, nonlocal balance; if balance >= amount: …)`. E2
-   has no binding for `balance`: `nonlocal balance` decided that when `withdraw` was defined. The
-   declaration stays in the program as source, but is not evaluated (no step of its own), here or
-   anywhere: `global` and `nonlocal` are declarations, not statements that run.
+   caller's). The program becomes `EnvBlock(E2, if balance >= amount: …)`. E2 has no binding for
+   `balance`: `nonlocal balance` decided that when `withdraw` was defined, and the enclosing frame
+   that has it, E1, is in the environment already, so the declaration is not in the body. (A
+   `global` declaration, which holds for the whole body wherever it stands, is taken out of the
+   body at each call and put at its front, once, and stays in view; neither kind is a statement that
+   runs.)
 7. `balance >= amount` evaluates in E2: `balance` is looked up and found in E1 (100), then `amount`
    in E2 (50), each in a step of its own; `100 >= 50` gives `True`; the `if` takes its first branch.
 8. `balance = balance - amount`: the right-hand side reduces to `50`. Because of `nonlocal balance`,
