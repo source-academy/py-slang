@@ -1,6 +1,6 @@
 import { numericCompare, pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types";
-import { PRIMITIVE_FUNCTIONS, executePrimitive } from "./builtins";
+import { executePrimitive } from "./builtins";
 import {
   FreeVariableUnboundError,
   IndexError,
@@ -442,11 +442,11 @@ export class PVMLInterpreter {
         if (!this.globalEnv.has(globalName)) {
           // Python's LEGB rule: a name that is not (yet) a global is looked up among the builtins.
           // So `print(1)` before a module-level `print = 0` still calls the builtin.
-          const primitiveIndex = PRIMITIVE_FUNCTIONS.get(globalName);
-          if (primitiveIndex === undefined) {
+          const builtin = this.program.builtinFallbacks.get(globalName);
+          if (builtin === undefined) {
             throw new NameError(`NameError: name '${globalName}' is not defined`);
           }
-          this.push({ type: "primitive", primitiveIndex });
+          this.push(builtin);
           break;
         }
         this.push(this.globalEnv.get(globalName));

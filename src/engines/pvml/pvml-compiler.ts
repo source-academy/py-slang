@@ -7,7 +7,7 @@ import { Token, TokenType } from "../../tokenizer";
 import { PVMLIRBuilder } from "./PVMLIRBuilder";
 import { PRIMITIVE_CONSTANTS, PRIMITIVE_FUNCTIONS } from "./builtins";
 import OpCodes from "./opcodes";
-import { PVMLProgram } from "./types";
+import { PVMLBoxType, PVMLProgram } from "./types";
 
 /** Signed 32-bit integer bounds used to decide LGCI vs LGCF64 encoding. */
 const I32_MIN = -2_147_483_648;
@@ -272,13 +272,16 @@ export class PVMLCompiler
     return compiler;
   }
 
+  /** The builtins that this program also binds at module level (see `PVMLProgram`). */
+  private readonly builtinFallbacks = new Map<string, PVMLBoxType>();
+
   compileProgram(program: StmtNS.FileInput): PVMLProgram {
     this.compile(program);
 
     const allBuilders = this.builder.getAllBuilders(true);
     const functions = allBuilders.map(b => b.build());
 
-    return new PVMLProgram(0, functions);
+    return new PVMLProgram(0, functions, this.builtinFallbacks);
   }
 
   compile(node: StmtNS.Stmt | ExprNS.Expr): ExpressionResult {
@@ -355,6 +358,16 @@ export class PVMLCompiler
         }
       }
     } else if (isModuleLevelEnv) {
+      // A module-level name that is also an enabled builtin (the root environment holds it): until
+      // it is assigned, it means the builtin.
+      if (parentEnv.enclosing!.names.has(name)) {
+        const constantValue = PRIMITIVE_CONSTANTS.get(name);
+        const primitiveIndex = PRIMITIVE_FUNCTIONS.get(name);
+        if (constantValue !== undefined) this.builtinFallbacks.set(name, constantValue);
+        else if (primitiveIndex !== undefined) {
+          this.builtinFallbacks.set(name, { type: "primitive", primitiveIndex });
+        }
+      }
       annotation = {
         slot: -1,
         envLevel: -1,

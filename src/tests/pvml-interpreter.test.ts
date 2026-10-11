@@ -560,9 +560,9 @@ print(total)
     test("assigning to a builtin name shadows it from then on (LEGB), py-slang#531", () => {
       // The module-level names are in the name-indexed global environment (`useGlobalMap`), as
       // in PyPvmlEvaluator; a name that is not (yet) a global is looked up among the builtins.
-      const run = (code: string) => {
+      const run = (code: string, variant = 4) => {
         const ast = parse(code);
-        const program = PVMLCompiler.fromProgram(ast, 4, undefined, true).compileProgram(ast);
+        const program = PVMLCompiler.fromProgram(ast, variant, undefined, true).compileProgram(ast);
         const outputs: string[] = [];
         new PVMLInterpreter(program, {
           sendOutput: msg => outputs.push(msg),
@@ -572,6 +572,10 @@ print(total)
       };
       expect(run("print(1)\np = print\nprint = 0\np(print)\n")).toEqual(["1", "0"]);
       expect(() => run("print = 0\nprint(3)\n")).toThrow("TypeError: 'int' object is not callable");
+      // A builtin constant is shadowed in the same way.
+      expect(run("print(math_pi)\nmath_pi = 0\nprint(math_pi)\n")).toEqual([String(Math.PI), "0"]);
+      // A builtin of a later chapter is no builtin: its name is unbound until assigned.
+      expect(() => run('x = parse("1")\nparse = 0\n', 1)).toThrow(/NameError|not defined/);
     });
 
     test("assertNumericArgs: math_sin() with a string argument names the actual type", () => {
