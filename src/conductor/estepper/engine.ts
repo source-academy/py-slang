@@ -691,7 +691,7 @@ export class Machine {
     const left = this.labels.frame(caller.env);
     return {
       ...c,
-      after: `${c.after}; a tail call, so ${left} is no longer needed in the program`,
+      after: `${c.after}; a tail call, so ${left} is no longer needed here`,
     };
   }
 
