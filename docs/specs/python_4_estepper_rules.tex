@@ -289,9 +289,15 @@ substitution model cannot express.}
 }
 
 \sEntry{Global-and-nonlocal}{The declarations \sCode{global} and
-\sCode{nonlocal} are not statements that run: they have no step of their own.
-They remain in the program as source and have been taken into account when
-the frame of the function was created.}
+\sCode{nonlocal} are not statements that run: they have no step of their own,
+and they have been taken into account when the frame of the function was created.
+A \sCode{global} declaration \emph{stays in the program}, at the front of the
+body of each call (see \textbf{Function-application}). The frame of the call
+cannot show what it decides: the name may not be bound in $G$ yet, in which case
+an assignment to it makes $G$ grow, and an enclosing function may bind the same
+name, which that assignment leaves alone. A \sCode{nonlocal} declaration is
+\emph{not} in the body of a call: the frame of the call has no binding for the
+name, and the enclosing frame that binds it is in the environment already.}
 
 \subsection*{Resolution}
 
@@ -330,6 +336,9 @@ G) or \sCode{nonlocal} (then it is to E). At the top level, L is G. If G does no
 bind $x$ yet, it \emph{grows} by the new binding, even if $B$ binds $x$: this is
 why \sCode{print = 0} creates a binding in $G$ that shadows the one in $B$. No
 frame other than $G$ ever gains a binding, and $B$ never changes.
+In particular, a function that declares $x$ \sCode{global} when $G$ does not bind $x$
+yet makes $G$ grow, even if an enclosing function binds an $x$ of its own: that
+binding is not changed, because the search for a \sCode{global} name skips L and E.
 
 \paragraph{Example.}
 \begin{lstlisting}
