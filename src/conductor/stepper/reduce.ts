@@ -674,6 +674,11 @@ async function runLibrary(
     }
     if (!isValue(current)) throw new Error("Evaluation stuck");
     return { node: current, output: collected.text === "" ? undefined : collected.text };
+  } catch (error) {
+    // What was printed before the error still counts: hand it to the enclosing collector (the
+    // driver's, at the top), which shows it on the error steps.
+    if (outer !== undefined) outer.text += collected.text;
+    throw error;
   } finally {
     context.pendingOutput = outer;
   }

@@ -1274,6 +1274,11 @@ describe("Python stepper — predefined list functions are one step (py-slang#53
     expect(await finalOutput("for_each(lambda x: print(x), llist(1, 2))")).toBe("1\n2\n");
   });
 
+  test("print in a callback before an error is kept", async () => {
+    const program = 'for_each(lambda x: print(x) or error("boom"), llist(1, 2))';
+    expect(await finalOutput(program)).toBe("1\n");
+  });
+
   test("a library name used as a value is a Builtin, like print", async () => {
     const s = await steps("is_function(llist_ref)");
     expect(findNode(s[0].ast, n => n.type === "Builtin" && n.name === "llist_ref")).toBeDefined();
