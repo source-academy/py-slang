@@ -65,10 +65,10 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(output).toBe("");
     expect(story(steps)).toEqual([
       "Start of evaluation",
-      "Defined make_withdraw: function object #1 in the global frame",
+      "Defined make_withdraw: function object #1 in the global environment",
       "Looked up make_withdraw in the global frame: function object #1",
       "Called make_withdraw(100): new environment E1, whose enclosing environment is the global environment",
-      "Defined withdraw: function object #2 in frame E1",
+      "Defined withdraw: function object #2 in environment E1",
       "Looked up withdraw in frame E1: function object #2",
       "Returned withdraw from E1",
       "Assigned W1 = withdraw in the global frame",
@@ -107,7 +107,7 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     const { steps } = await run("z = 1\ndef f():\n    return z\nf()\n");
     const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called f()"))!;
     expect(called.markers![0].explanation).toBe(
-      "Called f(): the new frame has no bindings, so the body runs in the global frame",
+      "Called f(): the new frame has no bindings, so the body runs in the global environment",
     );
     // The body's frame is Global in the program, and no frame E1 is in the store.
     expect(JSON.stringify(called.ast)).toContain('"envId":"Global"');
@@ -839,7 +839,7 @@ describe("apply_in_underlying_python (§4)", () => {
     expect(applied).toBeGreaterThan(-1);
     expect(explanations[applied]).toContain("apply the function to the elements of the list");
     // The call that follows is an ordinary call: a new frame for f.
-    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new frame E1/);
+    expect(explanations[applied + 1]).toMatch(/^Called f\(6, 7\): new environment E1/);
   });
 });
 
