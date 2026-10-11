@@ -35,7 +35,7 @@ import {
   substitute,
   unparse,
 } from "./ast";
-import { getListLibraryTemplate, listArities, listBuiltins } from "./lists";
+import { listArities, listBuiltins } from "./lists";
 
 /* -------------------------------------------------------------------------- */
 /*                                 Constants                                   */
@@ -592,20 +592,11 @@ export function isBuiltinFunctionValueName(name: string): boolean {
 
 /**
  * What a bare `Identifier` named `name` should be relabeled as for display (see `ast.ts`'s
- * `markBuiltins`), or `undefined` if `name` isn't a built-in value at all. Two different kinds:
- *  - A §2 pre-declared list-library function (`map`, `_map`, `llist_ref`, …) has a real Python-level
- *    body (see `lists.ts`'s `library`) — this returns that raw template, which `markBuiltins` tags with
- *    a `name` marker and walks recursively, so it renders as a mu-term with the same "Function
- *    definition" hover popover a user-defined function gets (py-slang#405).
- *  - Anything else built-in (`print`, `abs`, `is_function`, …) has no body to show — this returns a
- *    `Builtin` node carrying a fixed `hoverText` line instead (py-slang#404).
- * `markBuiltins` never needs to know which case it got: it recognises a function-value shape
- * (`ArrowFunctionExpression`/`FunctionDeclaration`) structurally and treats everything else (e.g. this
- * `Builtin` node) as already-final.
+ * `markBuiltins`): a `Builtin` node carrying a fixed `hoverText` line (py-slang#404), or `undefined`
+ * if `name` isn't a built-in value at all. The predefined list functions (`map`, `llist_ref`, …) are
+ * builtins like `print`: their bodies are not shown (py-slang#537).
  */
 export function resolveBuiltinDisplayValue(name: string): StepNode | undefined {
-  const template = getListLibraryTemplate(name);
-  if (template) return template;
   if (isBuiltinFunctionValueName(name)) {
     return { type: "Builtin", name, hoverText: `built-in function ${name}` };
   }

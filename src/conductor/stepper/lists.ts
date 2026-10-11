@@ -14,10 +14,9 @@
  *    computed directly from already-reduced value arguments; and
  *  - **pre-declared** functions (`map`, `filter`, …), each modelled as a
  *    `lambda`/`def` template that the stepper expands by substituting the value arguments for the
- *    parameters — so the recursion unfolds step by step in the visualiser, exactly as Source unfolds
- *    its `$map`/`$filter`/… helpers. A pre-declared function's body refers to other library functions
- *    (and its own `_`-prefixed helper) by name; those names are themselves library built-ins, so each
- *    recursive call re-expands on demand.
+ *    parameters. The reducer reduces the expansion to a value within one step, so the user does not
+ *    see the recursion (py-slang#537). A pre-declared function's body refers to other library
+ *    functions (and its own `_`-prefixed helper) by name; each recursive call re-expands on demand.
  *
  * `None` (the empty-list value and the `is_none` predicate) is provided by the MISC predicates in
  * `builtins.ts` and is intentionally not redefined here. The §3 pair mutators (`set_head`/`set_tail`)
@@ -515,16 +514,10 @@ for (const [name, fn] of Object.entries(library)) {
 }
 
 /**
- * The raw `lambda`/`def` template for a pre-declared function (`map`, `_map`, `llist_ref`, …), for
- * `getSteps.ts`'s display-time relabeling (py-slang#405) — a bare reference to one of these names, or a
- * cross-reference to it from *inside* another pre-declared function's own body, becomes this template
- * tagged with a `name` marker, so it renders as a mu-term with a "Function definition" hover popover
- * exactly like a user-defined function, instead of the opaque `<built-in function …>` text popover a
- * true native primitive (`pair`/`head`/…) gets. `undefined` for any name not in `library` (including
- * every `primitives` name — those have no Python-level body to show at all).
- *
- * `applyLibrary`'s one-step-per-call expansion (used by `listBuiltins`, i.e. actual evaluation) is
- * unaffected: this is consulted only by the display-time relabeling pass, never by the reducer.
+ * The raw `lambda`/`def` template for a pre-declared function (`map`, `_map`, `llist_ref`, …), or
+ * `undefined` for any other name. The reducer applies such a function in one step (py-slang#537): it
+ * expands the template with `listBuiltins` and reduces the expansion to a value, so the template is
+ * never shown to the user.
  */
 export function getListLibraryTemplate(name: string): StepNode | undefined {
   return library[name];
