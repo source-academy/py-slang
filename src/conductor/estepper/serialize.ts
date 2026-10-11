@@ -158,9 +158,7 @@ export class ProgramSerializer {
       case "block":
         return this.node(e, "EnvBlock", {
           envId: this.machine.labels.frame(e.env),
-          body: this.inBody(true, () =>
-            Array.isArray(e.body) ? e.body.map(s => this.stmt(s)) : this.expr(e.body),
-          ),
+          body: this.inBody(true, () => e.body.map(s => this.stmt(s))),
         });
       case "unsupported":
         return this.node(e, "Identifier", { name: `<${e.what}>` });
@@ -280,9 +278,7 @@ export class ProgramSerializer {
 function activeInExpr(machine: Machine, e: Expr, env: Environment): Environment {
   switch (e.k) {
     case "block":
-      return Array.isArray(e.body)
-        ? activeInList(machine, e.body, e.env)
-        : activeInExpr(machine, e.body, e.env);
+      return activeInList(machine, e.body, e.env);
     case "bin":
       return activeInChildren(machine, [e.left, e.right], env);
     case "bool":
@@ -387,8 +383,7 @@ class Reach {
         return;
       case "block":
         this.frame(e.env);
-        if (Array.isArray(e.body)) this.stmts(e.body);
-        else this.expr(e.body);
+        this.stmts(e.body);
         return;
       case "bin":
       case "bool":
@@ -588,8 +583,7 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
         return;
       case "block":
         frames.push(e.env);
-        if (Array.isArray(e.body)) stmts(e.body);
-        else expr(e.body);
+        stmts(e.body);
         return;
       case "bin":
       case "bool":

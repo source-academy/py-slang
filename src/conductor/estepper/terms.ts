@@ -106,15 +106,15 @@ export interface SubExpr {
 
 /**
  * A function body under evaluation in environment `env`: what a call to a user-defined function
- * steps to. A `def` body is a statement list; a lambda body is an expression. Contracts to the
- * function's result when the body returns.
+ * steps to. A lambda body `e` is the statement list `return e`, so that both kinds of function are
+ * shown alike. Contracts to the function's result when the body returns.
  */
 export interface BlockExpr {
   k: "block";
   env: Environment;
   /** The called function's name (`"lambda"` for an anonymous function). */
   fname: string;
-  body: Stmt[] | Expr;
+  body: Stmt[];
 }
 
 /** A construct the e-stepper does not support; evaluation stops when it is reached. */

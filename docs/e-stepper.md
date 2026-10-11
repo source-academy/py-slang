@@ -87,11 +87,10 @@ needed to continue by hand.
 | name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnboundLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |
 | `lambda ps: e` | `Ref(#k)` | allocate `#k = Fn(ε, ps, e, E)` |
 | `def f(ps): body` (statement) | statement removed | allocate `#k = Fn(f, ps, body, E)`; bind `f ↦ Ref(#k)` in the frame `f` belongs to |
-| `Ref(#k)(v₁, …, vₙ)` with `#k = Fn(_, ps, body, E')` | `EnvBlock(E'', body)` | new frame `E''`, parent `E'`, binding `psᵢ ↦ vᵢ` (rest parameters: a new list), plus every name the body assigns, unassigned |
+| `Ref(#k)(v₁, …, vₙ)` with `#k = Fn(_, ps, body, E')` (the body of a lambda `e` is the statement `return e`) | `EnvBlock(E'', body)` | new frame `E''`, parent `E'`, binding `psᵢ ↦ vᵢ` (rest parameters: a new list), plus every name the body assigns, unassigned |
 | `EnvBlock(E'', return v; …)` | `v` | none (the frame stays in Σ) |
-| `EnvBlock(E'', return Ref(#k)(v₁, …, vₙ); …)` (a tail call; also a lambda body that is such a call, and a `return` inside a loop) | `EnvBlock(E₃, body)`, replacing the caller's block | as for a function application; `E''` is left in Σ, garbage unless referenced |
+| `EnvBlock(E'', return Ref(#k)(v₁, …, vₙ); …)` (a tail call, also in a lambda body, and a `return` inside a loop) | `EnvBlock(E₃, body)`, replacing the caller's block | as for a function application; `E''` is left in Σ, garbage unless referenced |
 | `EnvBlock(E'', ε)` (body finished) | `None` | none |
-| `EnvBlock(E'', v)` (lambda body reduced to a value) | `v` | none |
 | `x = v` (statement) | statement removed | rebind `x` in its frame (see scoping) |
 | `[v₁, …, vₙ]` | `Ref(#k)` | allocate `#k = List[v₁, …, vₙ]` |
 | `Ref(#k)[i]` | element `i` of `#k` | none. Bad index or type: `IndexError`/`TypeError` as in CSE |

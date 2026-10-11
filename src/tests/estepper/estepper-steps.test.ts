@@ -128,6 +128,17 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(frames(last)).toEqual(["Global: e=#1 f=#2", "E1(g)<Global: x=2"]);
   });
 
+  test("the body of a lambda is shown as `return e`, like a def body", async () => {
+    const { steps } = await run("(lambda x: x)(3)\n");
+    const called = steps.find(s => s.markers?.[0]?.explanation?.startsWith("Called #1(3)"))!;
+    expect(JSON.stringify(called.ast)).toMatch(/"EnvBlock".*"body":\[\{"type":"ReturnStatement"/);
+    expect(story(steps).slice(-3)).toEqual([
+      "Returned 3 from E1",
+      "Finished the expression statement: its value 3 is not used",
+      "Evaluation complete",
+    ]);
+  });
+
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
     const { steps } = await run(MAKE_WITHDRAW);
     const last = steps[steps.length - 1];
