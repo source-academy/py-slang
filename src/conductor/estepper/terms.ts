@@ -2,7 +2,7 @@
  * The program terms the environment stepper ("e-stepper") rewrites.
  *
  * Like the substitution stepper, the e-stepper shows the program being rewritten one reduction at a
- * time. Unlike it, values are the CSE machine's own runtime {@link Value}s (so operators, builtins,
+ * time. Unlike it, values are the CSE machine's own runtime {@link Value}s (so operators, built-ins,
  * lists and closures behave exactly as in the CSE machine), names are looked up in the CSE
  * machine's {@link Environment}s instead of being substituted away, and a function body under
  * evaluation is a {@link BlockExpr} that carries the environment it runs in. See

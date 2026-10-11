@@ -40,7 +40,7 @@ A step shows a configuration ⟨P, Σ⟩:
   - a function body (or lambda body) under evaluation is wrapped as **`EnvBlock(E, body)`**: the
     body is evaluated in environment `E`.
 - **Σ**, the store:
-  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the parent of the global frame `G` is the builtins
+  - **frames** `E = { name ↦ value | unassigned }` with a parent frame (the parent of the global frame `G` is the built-ins
     environment `B`, which has none),
   - **heap objects**:
     - function objects `Fn(name?, params, body, E)`, where E is the defining environment,
@@ -52,8 +52,8 @@ every subexpression would make the display unreadable, and subterms inherit thei
 environment.
 
 Builtins (`print`, `pair`, `math_sqrt`, …) and the library functions written in Python (`map`, …) live
-in the builtins environment `B`, the parent of `G` and the root of every chain of frames. As in the
-CSE machine visualization, it is not drawn, and a builtin value is shown by its name. Names resolve
+in the built-ins environment `B`, the parent of `G` and the root of every chain of frames. As in the
+CSE machine visualization, it is not drawn, and a built-in value is shown by its name. Names resolve
 by Python's LEGB rule: local, enclosing, global, built-in (see `docs/specs/python_4_estepper.tex`).
 
 ## Initial configuration
@@ -61,9 +61,9 @@ by Python's LEGB rule: local, enclosing, global, built-in (see `docs/specs/pytho
 `G` starts empty and grows: a global binding appears when its first assignment (or `def`, `for`
 target, import) executes. This matches the CSE machine, which never pre-allocates module bindings
 (`pyGetGlobalVariable` in `src/engines/cse/utils.ts`), and it matters for a program that shadows a
-builtin later, such as `print(1); print = 0`: the first `print` must still find the builtin in `B`.
+built-in later, such as `print(1); print = 0`: the first `print` must still find the built-in in `B`.
 The assignment does not change `B`: as in Python, it creates a binding in `G` that shadows the
-builtin from then on, so `p = print; print = 0; p(print)` prints `0`, and `print(3)` is then a
+built-in from then on, so `p = print; print = 0; p(print)` prints `0`, and `print(3)` is then a
 `TypeError`.
 Function frames, by contrast, are created with all their locals present but unassigned (see the
 call rule). P is the program's statement list, evaluated in `G`.
@@ -71,7 +71,7 @@ call rule). P is the program's statement list, evaluated in `G`.
 ## Reduction rules
 
 Evaluation order, short-circuiting (`and`, `or`, conditional expressions), `if`/`while`/`for`
-unrolling, `break`/`continue`, primitive operators and builtin calls are as in the current stepper
+unrolling, `break`/`continue`, primitive operators and built-in calls are as in the current stepper
 (`src/conductor/stepper/reduce.ts`). The stepper rejects the identity operators (`src/conductor/stepper/preprocess.ts`), so
 the e-stepper defines `is` and `is not` itself (see the table). The membership operators `in` and
 `not in` are not part of Python §3 or §4. Only the rules involving names, functions and data change. E
@@ -122,7 +122,7 @@ by Python's rule, as the CSE machine and the current stepper already do (py-slan
 - otherwise, lookup walks the parent chain.
 
 **Builtin calls** reuse the stepper's `applyBuiltin`, except that list-producing and list-consuming
-builtins operate on heap objects instead of list literal nodes.
+built-ins operate on heap objects instead of list literal nodes.
 
 ## Display conventions
 
@@ -138,7 +138,7 @@ builtins operate on heap objects instead of list literal nodes.
   "Filter Arrows" menu as "From program", start at the badge.
 - **Lookups are explicit**: every name in the program is replaced by its value in a step of its own
   ("Looked up balance in frame E1: 100"), left to right, and the diagram highlights the binding that
-  was read. Only names of builtins and library functions, which no drawn frame binds, are looked up
+  was read. Only names of built-ins and library functions, which no drawn frame binds, are looked up
   as part of the step that uses them.
 - **Garbage**: frames and objects no longer reachable from P (through `EnvBlock`s and `Ref`s) or `G`
   are greyed out, not removed. This makes the result of a returning call visible: its frame stays
@@ -204,7 +204,7 @@ point of §3.1, now visible on one screen.
 
 The engine is separate from both the substitution stepper (`src/conductor/stepper/`) and the CSE
 machine (`src/engines/cse/`). It reuses the stepper's `translate.ts`, `syntaxProfile.ts` (extended),
-builtins and module interop, and its step-driver shape.
+built-ins and module interop, and its step-driver shape.
 
 The web plugin is self-contained, like the Stepper and the Data Visualizer, rather than abstract like
 the CSE machine plugin: the frontend's CSE `Layout` is tied to js-slang's types and to control and
@@ -285,5 +285,5 @@ chapter 3, so this is run as a live experiment: release early, observe, adjust.
   finished `EnvBlock`s (and old frames) is likely needed early.
 - `while` and `for` loops in a frame-based world: does unrolling still read well when the loop body
   assigns to the frame instead of substituting?
-- Do students need to see the builtins frame at all? (Proposed: no.)
+- Do students need to see the built-ins frame at all? (Proposed: no.)
 - Step limit: reuse the frontend's Step Limit control, as the stepper and CSE machine do.

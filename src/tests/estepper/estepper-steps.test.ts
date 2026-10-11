@@ -67,13 +67,13 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
       "Start of evaluation",
       "Defined make_withdraw: function object #1 in the global frame",
       "Looked up make_withdraw in the global frame: function object #1",
-      "Called make_withdraw(100): new frame E1 extends the global frame",
+      "Called make_withdraw(100): new frame E1, whose enclosing environment is the global frame",
       "Defined withdraw: function object #2 in frame E1",
       "Looked up withdraw in frame E1: function object #2",
       "Returned withdraw from E1",
       "Assigned W1 = withdraw in the global frame",
       "Looked up W1 in the global frame: function object #2",
-      "Called withdraw(50): new frame E2 extends E1, without a binding for nonlocal balance",
+      "Called withdraw(50): new frame E2, whose enclosing environment is E1, without a binding for nonlocal balance",
       "Looked up balance in frame E1: 100",
       "Looked up amount in frame E2: 50",
       "Evaluated 100 >= 50: True",
@@ -815,7 +815,7 @@ bump(2)
     expect(explanations.join("\n")).not.toMatch(/declaration/);
     expect(explanations).toContainEqual(
       expect.stringMatching(
-        /^Called bump\(2\): new frame E1 extends the global frame, without a binding for global count/,
+        /^Called bump\(2\): new frame E1, whose enclosing environment is the global frame, without a binding for global count/,
       ),
     );
     expect(explanations).toContainEqual(
@@ -1084,7 +1084,7 @@ print(f(3))
     expect(output).toBe("8\n");
     const at = steps.findIndex(s => s.markers?.[0]?.explanation?.includes("a tail call"));
     expect(steps[at].markers?.[0]?.explanation).toBe(
-      "Called g(4): new frame E2 extends the global frame; a tail call, so E1 is no longer needed here",
+      "Called g(4): new frame E2, whose enclosing environment is the global frame; a tail call, so E1 is no longer needed here",
     );
     // Before the call the program is in E1; after it, only in E2 (not E2 inside E1).
     expect(envIds(steps[at - 1])).toEqual(["E1"]);
