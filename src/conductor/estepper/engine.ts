@@ -574,8 +574,8 @@ export class Machine {
       const parent = closure.environment;
       // A frame without bindings is not drawn: the body then runs in the frame it extends.
       const after = this.labels.isShown(frame)
-        ? `new frame ${this.labels.frame(frame)}, whose enclosing environment is ${
-            parent === this.programEnv ? "the global frame" : this.labels.frame(parent)
+        ? `new environment ${this.labels.frame(frame)}, whose enclosing environment is ${
+            parent === this.programEnv ? "the global environment" : this.labels.frame(parent)
           }`
         : `the new frame has no bindings, so the body runs in ${this.where(parent)}`;
       return {
