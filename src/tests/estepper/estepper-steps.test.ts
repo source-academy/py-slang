@@ -1172,4 +1172,28 @@ iter(4,5)
     const text = JSON.stringify(called.ast);
     expect(text.indexOf("GlobalStatement")).toBeLessThan(text.indexOf("IfStatement"));
   });
+
+  test("a global name that is not in the global frame yet, and a nonlocal variable of the same name", async () => {
+    // `x` is not in G when `inner` runs, and `outer` has an `x` of its own. `global x` makes the
+    // assignment extend G, and leave outer's `x` alone.
+    const code = `def outer():
+    x = 1
+    def inner():
+        global x
+        x = 2
+    inner()
+    return x
+
+print(outer())
+print(x)
+`;
+    const { steps, output, error } = await run(code, 4);
+    expect(error).toBeUndefined();
+    expect(output).toBe("1\n2\n");
+    const last = steps.at(-1)!;
+    expect(frames(last)[0]).toBe("Global: outer=#1 x=2");
+    expect(
+      last.frames.find(f => f.id === "E1")!.bindings.map(b => `${b.name}=${show(b.value)}`),
+    ).toEqual(["x=1", "inner=#2"]);
+  });
 });
