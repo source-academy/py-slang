@@ -115,6 +115,12 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
     expect(called.activeFrameId).toBe("Global");
   });
 
+  test("a frame whose only binding is a parameter named __program__ is drawn", async () => {
+    const { steps } = await run("def f(__program__):\n    return __program__\nf(42)\n");
+    const last = steps[steps.length - 1];
+    expect(frames(last)).toEqual(["Global: f=#1", "E1(g)<Global: __program__=42"]);
+  });
+
   test("frames with bindings are numbered without gaps, whatever empty frames come between", async () => {
     const program = "def e():\n    return 1\ndef f(x):\n    return e() + x\nf(2)\n";
     const { steps } = await run(program);

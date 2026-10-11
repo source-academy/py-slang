@@ -525,7 +525,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
       name: env === machine.programEnv ? "global" : env.name,
       parentId: shownParent(env),
       bindings: Object.entries(env.head)
-        .filter(([name]) => name !== "__program__")
+        .filter(([name]) => env !== machine.programEnv || name !== "__program__")
         .map(([name, v]) => ({ name, value: valueOf(v) })),
       isGarbage: !live.frames.has(env),
     });

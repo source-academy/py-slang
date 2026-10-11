@@ -26,7 +26,7 @@ export class Labels {
 
   /** Whether a frame is drawn: the global frame always, and any other if it has bindings. */
   isShown(env: Environment): boolean {
-    return env === this.programEnv || Object.keys(env.head).some(name => name !== "__program__");
+    return env === this.programEnv || Object.keys(env.head).length > 0;
   }
 
   /** The frame that stands for `env` in the drawing: itself, or its nearest drawn ancestor. */
