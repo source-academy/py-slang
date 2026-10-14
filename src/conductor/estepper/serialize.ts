@@ -673,7 +673,7 @@ function heldLists(env: Environment): Set<ListValue> {
  */
 export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number): CseSnapshot {
   const { frames, values } = programRoots(program);
-  const active = activeInList(machine, program, machine.programEnv);
+  const active = machine.labels.shownFrame(activeInList(machine, program, machine.programEnv));
   const callStack = [active, ...frames.reverse(), machine.programEnv];
   // Values and frames carry the e-stepper's labels of the objects (`#3`) and frames (`E2`) they
   // stand for, so a host can tell which object a reference in the program pane means, and which
@@ -681,7 +681,10 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
   const heldByFrame = new Map<Environment, Set<ListValue>>();
   const ids = {
     objects: (obj: object) => machine.labels.peekObject(obj),
-    frames: (env: Environment) => machine.labels.peekFrame(env),
+    // A frame without bindings is not drawn (see `Labels.isShown`): it is left out, and what
+    // refers to it (a closure made in it) refers to the frame it extends.
+    frames: (env: Environment) => machine.labels.peekFrame(machine.labels.shownFrame(env)),
+    hidden: (env: Environment) => !machine.labels.isShown(env),
     // A list stays where it was first drawn (beside the frame it was made in), instead of moving
     // to whichever frame is active when it is passed to a function; only if that frame is drawn and
     // still holds the list. A host draws a list beside a frame that binds it, so a list that only
