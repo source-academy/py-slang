@@ -479,15 +479,14 @@ describe("the store as a CSE machine snapshot", () => {
     // The list [None] (#1) is garbage once [None] * 3 (#2) has been made, and so is the function
     // f's call returned: both are still drawn, greyed out.
     expect(last.heap.filter(o => o.isGarbage).map(o => o.id)).toEqual(["#1", "#4"]);
-    // In the CSE snapshot, each is in the heap of its frame, which nothing refers to.
+    // In the CSE snapshot, each is in the heap of its frame, which nothing refers to. f's frame
+    // has no bindings, so it is not drawn: the function object made in it belongs to Global.
     type Frame = { id: string; heapObjects?: { objectId?: string }[] };
     const heapObjects = (last.cse!.environments as Frame[]).map(f => [
       f.id,
       (f.heapObjects ?? []).map(o => o.objectId),
     ]);
-    expect(heapObjects).toContainEqual(["Global", ["#1"]]);
-    // f's frame has no bindings, so it is not drawn and has no e-stepper label (its CSE id stays).
-    expect(heapObjects.find(([, objects]) => objects.includes("#4"))?.[0]).not.toBe("Global");
+    expect(heapObjects).toContainEqual(["Global", ["#1", "#4"]]);
     expect(roots(last).stash).toEqual([]);
   });
 
@@ -631,6 +630,52 @@ describe("closures inside lists in the CSE machine snapshots", () => {
           for (const id of closureIds(b.value)) expect(ids.has(id)).toBe(true);
     }
   });
+});
+
+describe("frames without bindings in the CSE machine snapshots", () => {
+  test("are left out, and a closure made in one belongs to the frame it extends", async () => {
+    const { steps } = await run(`def a():\n    return pair(lambda: 1, 1)\n\nb = a()\n`);
+    type V = { metadata?: { closureFrameId?: string; elements?: V[] } };
+    const closureIds = (v: V): string[] => [
+      ...(v.metadata?.closureFrameId ? [v.metadata.closureFrameId] : []),
+      ...(v.metadata?.elements ?? []).flatMap(closureIds),
+    ];
+    for (const step of steps) {
+      const environments = step.cse!.environments as {
+        id: string;
+        parentId: string | null;
+        bindings: { value: V }[];
+      }[];
+      const ids = new Set(environments.map(e => e.id));
+      for (const e of environments) {
+        if (e.id !== "Global" && e.id !== "-1") expect(e.bindings.length).toBeGreaterThan(0);
+        if (e.parentId !== null) expect(ids.has(e.parentId)).toBe(true);
+        for (const b of e.bindings)
+          for (const id of closureIds(b.value)) expect(ids.has(id)).toBe(true);
+      }
+    }
+    const last = steps[steps.length - 1].cse!.environments as {
+      id: string;
+      bindings: { name: string; value: V }[];
+    }[];
+    const b = last.find(e => e.id === "Global")!.bindings.find(x => x.name === "b")!;
+    expect(closureIds(b.value)).toEqual(["Global"]);
+  });
+});
+
+describe("the built-ins root in the CSE machine snapshots", () => {
+  test.each([1, 2, 3, 4])(
+    "is kept in Python §%i, so the parent of Global resolves",
+    async chapter => {
+      const { steps } = await run(`x = 1\n`, chapter);
+      const environments = steps[steps.length - 1].cse!.environments as {
+        id: string;
+        parentId: string | null;
+      }[];
+      const ids = new Set(environments.map(e => e.id));
+      for (const e of environments) if (e.parentId !== null) expect(ids.has(e.parentId)).toBe(true);
+    },
+  );
 });
 
 describe("function bodies in the CSE machine snapshots", () => {

@@ -113,6 +113,11 @@ export interface SnapshotIds {
   /** For a frame's `id`, and wherever it is referred to (parents, closures, lists). */
   frames?: (env: Environment) => string | undefined;
   /**
+   * Frames a host does not draw, which are left out of the snapshot; `frames` then names their
+   * nearest drawn ancestor wherever they are referred to.
+   */
+  hidden?: (env: Environment) => boolean;
+  /**
    * For a list's `metadata.envId`: the frame the list belongs to, where a host draws it. Without
    * it a list belongs to the frame whose binding is serialized first, so it moves from frame to
    * frame as the active frame changes. A host looks for a list's drawing next to a binding in
@@ -584,7 +589,7 @@ function serializeEnvChain(
   };
 
   return queue
-    .filter(env => env.name !== "prelude")
+    .filter(env => env.name !== "prelude" && !ids.hidden?.(env))
     .map(
       (env): SerializedEnvFrame => ({
         id: frameId(env, ids),
