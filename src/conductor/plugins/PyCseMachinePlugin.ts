@@ -541,17 +541,25 @@ function serializeEnvChain(
     seen.add(env.id);
     queue.push(env);
     visit(env.tail);
-    for (const val of Object.values(env.head)) {
-      if (val && val !== UNASSIGNED && val.type === "closure") visit(val.closure?.environment);
+    for (const val of Object.values(env.head)) visitValue(val);
+  };
+
+  // A closure's frame stays alive wherever the closure sits, also inside a list (e.g. the thunk
+  // in a stream's pair); `seenLists` guards against cyclic lists.
+  const seenLists = new Set<object>();
+  const visitValue = (val: Value | typeof UNASSIGNED | undefined): void => {
+    if (!val || val === UNASSIGNED) return;
+    if (val.type === "closure") visit(val.closure?.environment);
+    else if (val.type === "list" && !seenLists.has(val)) {
+      seenLists.add(val);
+      for (const el of val.value) visitValue(el);
     }
   };
 
   for (const env of environments) visit(env);
 
   // Also follow closures sitting on the stash whose environments may not be on the active stack
-  for (const item of stashValues) {
-    if (item && item.type === "closure") visit(item.closure.environment);
-  }
+  for (const item of stashValues) visitValue(item);
 
   // ENV instructions on the control stack keep frames alive that are not on the
   // call stack right now (e.g. h's frame while g(x) is executing inside h).
