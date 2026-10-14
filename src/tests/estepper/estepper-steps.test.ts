@@ -663,6 +663,21 @@ describe("frames without bindings in the CSE machine snapshots", () => {
   });
 });
 
+describe("the built-ins root in the CSE machine snapshots", () => {
+  test.each([1, 2, 3, 4])(
+    "is kept in Python §%i, so the parent of Global resolves",
+    async chapter => {
+      const { steps } = await run(`x = 1\n`, chapter);
+      const environments = steps[steps.length - 1].cse!.environments as {
+        id: string;
+        parentId: string | null;
+      }[];
+      const ids = new Set(environments.map(e => e.id));
+      for (const e of environments) if (e.parentId !== null) expect(ids.has(e.parentId)).toBe(true);
+    },
+  );
+});
+
 describe("function bodies in the CSE machine snapshots", () => {
   const PROGRAM = `x = 1
 def f(y):
