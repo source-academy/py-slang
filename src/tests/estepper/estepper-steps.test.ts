@@ -609,6 +609,30 @@ describe("frame ids in the CSE machine snapshots", () => {
   });
 });
 
+describe("closures inside lists in the CSE machine snapshots", () => {
+  // Issue source-academy/frontend#4471: the thunk in a stream's pair is a closure whose frame
+  // used to be left out of the snapshot, which crashed the frontend.
+  test("keep their frames in the snapshot", async () => {
+    const { steps } = await run(
+      `def scale_stream(c, stream):\n    return stream_map(lambda x: c * x, stream)\n` +
+        `def integers_from(n):\n    return pair(n, lambda: integers_from(n + 1))\n` +
+        `integers = integers_from(1)\nA = scale_stream(10, integers)\n`,
+    );
+    type V = { metadata?: { closureFrameId?: string; elements?: V[] } };
+    const closureIds = (v: V): string[] => [
+      ...(v.metadata?.closureFrameId ? [v.metadata.closureFrameId] : []),
+      ...(v.metadata?.elements ?? []).flatMap(closureIds),
+    ];
+    for (const step of steps) {
+      const environments = step.cse!.environments as { id: string; bindings: { value: V }[] }[];
+      const ids = new Set(environments.map(e => e.id));
+      for (const e of environments)
+        for (const b of e.bindings)
+          for (const id of closureIds(b.value)) expect(ids.has(id)).toBe(true);
+    }
+  });
+});
+
 describe("function bodies in the CSE machine snapshots", () => {
   const PROGRAM = `x = 1
 def f(y):
