@@ -713,7 +713,7 @@ h = lambda z: z + 1
     expect(fns.get("g")!.body).toBe(
       "if n == 0:\n    return 'done'\nelse:\n    a = n * 2\n    return a",
     );
-    expect(fns.get("h")).toMatchObject({ params: ["z"], body: "z + 1" });
+    expect(fns.get("h")).toMatchObject({ params: ["z"], body: "return z + 1" });
   });
 
   test("keep the whitespace inside a multi-line string", async () => {

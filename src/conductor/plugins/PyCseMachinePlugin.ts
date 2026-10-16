@@ -245,7 +245,10 @@ function serializeValue(
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
     const params = cl.node.parameters.map((p: { lexeme: string }) => p.lexeme);
-    const body = ids.code === undefined ? undefined : functionBodySource(cl.node, ids.code);
+    const source = ids.code === undefined ? undefined : functionBodySource(cl.node, ids.code);
+    // A lambda's body is an expression that is implicitly returned; shown as a `def` would,
+    // with the `return`.
+    const body = source !== undefined && cl.node.kind === "Lambda" ? `return ${source}` : source;
     return withObjectId(
       {
         ...base,
