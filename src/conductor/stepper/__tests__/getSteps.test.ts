@@ -809,22 +809,22 @@ describe("Python stepper — a runtime error is named in the step before the stu
 describe("Python stepper — a def-local reassignment shadows the whole function body (py-slang#447)", () => {
   // Python decides a name is local to a function from *every* assignment in its body, not just the
   // ones textually before a given read — so a read before that assignment must not fall back to an
-  // outer/global value of the same name; it's an UnboundLocalError, exactly like real Python.
+  // outer/global value of the same name; it's an UnassignedLocalError, exactly like real Python.
   const errorStep = async (src: string): Promise<string | undefined> => {
     const e = await explanations(src);
     expect(e[e.length - 1]).toBe("Evaluation stuck");
     return e[e.length - 2];
   };
 
-  test("a read before the function's own later assignment is UnboundLocalError, not the outer value", async () => {
+  test("a read before the function's own later assignment is UnassignedLocalError, not the outer value", async () => {
     expect(await errorStep("z = 2\ndef f():\n  print(z)\n  z = 3\nf()")).toBe(
-      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+      "UnassignedLocalError: cannot access local variable 'z' where it is not associated with a value",
     );
   });
 
   test("reported the same way when the outer value is read as an expression result", async () => {
     expect(await errorStep("z = 2\ndef f():\n  y = z\n  z = 3\n  return y\nf()")).toBe(
-      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+      "UnassignedLocalError: cannot access local variable 'z' where it is not associated with a value",
     );
   });
 
@@ -848,7 +848,7 @@ describe("Python stepper — a def-local reassignment shadows the whole function
         "z = 2\ndef f():\n  print(z)\n  if True:\n    z = 3\n  else:\n    z = 4\nf()",
       ),
     ).toBe(
-      "UnboundLocalError: cannot access local variable 'z' where it is not associated with a value",
+      "UnassignedLocalError: cannot access local variable 'z' where it is not associated with a value",
     );
   });
 
@@ -861,11 +861,11 @@ describe("Python stepper — a def-local reassignment shadows the whole function
     // resolve), but a `def` that reassigns its own name makes that name local to itself, exactly like
     // any other name — so an early read of `f` must not resolve to the function value either.
     expect(await errorStep("def f():\n  print(f)\n  f = 3\nf()")).toBe(
-      "UnboundLocalError: cannot access local variable 'f' where it is not associated with a value",
+      "UnassignedLocalError: cannot access local variable 'f' where it is not associated with a value",
     );
   });
 
-  test("a name never bound anywhere is a NameError, not an UnboundLocalError", async () => {
+  test("a name never bound anywhere is a NameError, not an UnassignedLocalError", async () => {
     // Distinct from every case above: `missing` is never assigned anywhere in the program, so nothing
     // makes it local to `f` — real Python reports NameError here. (Ordinarily caught earlier, at
     // preprocessing — `steps()`/`result()` skip that step, exercising the reducer's own fallback.)

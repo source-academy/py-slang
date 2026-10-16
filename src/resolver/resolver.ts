@@ -934,7 +934,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
         // enclosing function, or the module, just not yet registered because the resolver
         // hasn't visited that part of the tree (e.g. it's nested in an `if`/`while`/`for`,
         // or in a `def` that appears later in the same body). Real Python only fails at
-        // *runtime* (UnboundLocalError / NameError) for such forward references — it never
+        // *runtime* (UnassignedLocalError / NameError) for such forward references — it never
         // rejects them statically — so accept here and let the interpreter's own dynamic
         // checks (which already do a correct whole-function scan) catch genuine misuse.
         if (this.nameHasStaticBinding(expr.name.lexeme)) {

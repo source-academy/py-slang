@@ -711,7 +711,7 @@ export function executePrimitive(
     case 74: // set_head
       // Returns None (Python's print()-like void-function convention), not
       // bare JS `undefined` -- PVMLBoxType's `undefined` is a TDZ-only
-      // internal sentinel (see UnboundLocalError/FreeVariableUnboundError
+      // internal sentinel (see UnassignedLocalError/FreeVariableUnboundError
       // above), never a genuine Python-visible value; returning it here was
       // a Sinter remnant (Source's own void-function convention), not a
       // deliberate choice -- see pynter's equivalent fix for the same bug.

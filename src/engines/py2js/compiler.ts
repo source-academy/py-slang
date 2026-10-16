@@ -129,7 +129,7 @@ const modMangle = (name: string, ctx: EmitCtx) =>
  *
  * Unbound-read guards: Python has no TDZ — its environments grow
  * dynamically — but reading a binding whose assignment never executed is
- * still an error (UnboundLocalError for function locals, NameError at module
+ * still an error (UnassignedLocalError for function locals, NameError at module
  * level), which the CSE machine mirrors. JS `let` initializes to undefined
  * instead, so every read of a guardable binding compiles to an inline
  * `=== undefined` check; undefined is not a PyValue (None is null), so the

@@ -35,7 +35,7 @@ export const GC_SPECIAL_TAG = {
 // same "TypeError: unsupported operand type(s) for X" / "unsupported
 // argument type for X" phrasing and CPython-style error-class prefixes
 // (TypeError/IndexError/ZeroDivisionError/RecursionError/MemoryError/
-// UnboundLocalError), without naming the actual offending type -- unlike
+// UnassignedLocalError), without naming the actual offending type -- unlike
 // those two engines, log_error only carries a static message index, with no
 // operand type/value threaded through to interpolate into it.
 export const ERROR_MAP = {
@@ -46,7 +46,7 @@ export const ERROR_MAP = {
   COMPARE_OP_UNKNOWN_TYPE: "TypeError: unsupported operand type(s) for this comparison",
   CALL_NOT_FX: "TypeError: this value is not callable",
   FUNC_WRONG_ARITY: "TypeError: function called with the wrong number of arguments",
-  UNBOUND: "UnboundLocalError: cannot access a local variable before it is assigned a value",
+  UNBOUND: "UnassignedLocalError: cannot access a local variable before it is assigned a value",
   HEAD_NOT_PAIR: "TypeError: unsupported argument type for head",
   TAIL_NOT_PAIR: "TypeError: unsupported argument type for tail",
   BOOL_UNKNOWN_TYPE: "Cannot convert a value of an unrecognized type to bool",

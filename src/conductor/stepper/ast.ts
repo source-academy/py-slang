@@ -429,7 +429,7 @@ export function paramNames(node: StepNode): string[] {
  * before a given read, so a `def` that reassigns `name` shadows an outer binding of it throughout the
  * *whole* function, including reads that appear earlier in the body (py-slang#447). Left as a bare,
  * unsubstituted `Identifier`, such a read is caught at reduction time instead: `reduce.ts`'s
- * `reduceExpr` rejects a non-builtin `Identifier` it must evaluate as `UnboundLocalError`, which is
+ * `reduceExpr` rejects a non-builtin `Identifier` it must evaluate as `UnassignedLocalError`, which is
  * exactly what that read is until the function's own later assignment substitutes a real value in for
  * the rest of its body ({@link substituteRest}, driven by `reduce.ts`'s `stepHead`). Shared by the
  * reducer (function application, statement-level bindings) and the linked-list library (binding a
@@ -460,7 +460,7 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
  * value in for it — used exactly where {@link substitute}'s `FunctionDeclaration` case (and
  * `reduce.ts`'s identical own-name/`selfName` case in `contractCall`) finds that `name` is assigned
  * somewhere later in the very body being skipped, so an outer binding must not be substituted in at
- * all. A read of such a name is a genuine Python `UnboundLocalError` once the function actually runs
+ * all. A read of such a name is a genuine Python `UnassignedLocalError` once the function actually runs
  * (py-slang#447) — distinct from a name that is never bound *anywhere* in the program, which is a
  * `NameError` instead. Both surface as a bare, unsubstituted `Identifier` by the time `reduce.ts`'s
  * `reduceExpr` has to evaluate one; this tag is how it tells the two apart (see its `Identifier` case)
@@ -468,7 +468,7 @@ export function substitute(node: StepNode, name: string, value: StepNode): StepN
  * `substitute` (nested function/param boundaries, sequential block redeclaration) so it tags precisely
  * the occurrences a real substitution pass would otherwise have left untouched for the same reason.
  */
-export function markUnboundLocal(node: StepNode, name: string): StepNode {
+export function markUnassignedLocal(node: StepNode, name: string): StepNode {
   return substituteOrTag(node, name, { type: "Identifier", name }, true);
 }
 
@@ -656,7 +656,7 @@ function avoidCapture(node: StepNode, value: StepNode): StepNode {
 }
 
 // Keyed by the substitution being performed, since one substitution can start another inside it
-// (`markUnboundLocal` from a `def` case).
+// (`markUnassignedLocal` from a `def` case).
 const substituteInProgress = new Map<string, Map<StepNode, StepNode>>();
 function substituteOrTag(
   node: StepNode,
@@ -692,7 +692,7 @@ function substituteOrTagOf(
         // (Python's own rule), so the outer `value` must not be substituted in here at all — but reads
         // of it before that later assignment are real, so tag them `unboundLocal` instead of leaving
         // them indistinguishable from a name that's never bound anywhere.
-        return { ...node, body: markUnboundLocal(node.body as StepNode, name) };
+        return { ...node, body: markUnassignedLocal(node.body as StepNode, name) };
       }
       const avoided = avoidCapture(node, value);
       return { ...avoided, body: substituteOrTag(avoided.body as StepNode, name, value, tagOnly) };

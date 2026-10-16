@@ -699,11 +699,11 @@ export class Py2JsRuntime {
   }
 
   /** A function-local read before its assignment executed — CPython's
-   * UnboundLocalError (the CSE machine raises the same; compiled reads of
+   * UnassignedLocalError (the CSE machine raises the same; compiled reads of
    * non-parameter locals guard with `=== undefined`). */
   unboundErr(name: string): never {
     throw new Py2JsRuntimeError(
-      "UnboundLocalError",
+      "UnassignedLocalError",
       `local variable '${name}' referenced before assignment`,
     );
   }

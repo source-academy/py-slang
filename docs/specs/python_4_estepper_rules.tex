@@ -168,7 +168,7 @@ as part of the step that uses them.)}
 }
 
 If $\sEnv'(x) = \sUn$, the reduction is stuck with
-\texttt{UnboundLocalError} if $\sEnv'$ is $\sEnv$ itself, and with
+\texttt{UnassignedLocalError} if $\sEnv'$ is $\sEnv$ itself, and with
 \texttt{NameError} (``cannot access free variable'') if $\sEnv'$ is an
 enclosing frame, as in the CSE machine. If no frame binds $x$ and $x$ is not a
 built-in function, it is a \texttt{NameError}; for a global name that has not
