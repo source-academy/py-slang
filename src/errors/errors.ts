@@ -652,7 +652,7 @@ export class SublanguageError extends RuntimeSourceError {
   }
 }
 
-export class UnboundLocalError extends RuntimeSourceError {
+export class UnassignedLocalError extends RuntimeSourceError {
   constructor(source: string, name: string, node: ExprNS.Expr) {
     super(node);
     this.type = ErrorType.TYPE;
@@ -666,14 +666,14 @@ export class UnboundLocalError extends RuntimeSourceError {
     const errorPos = 0;
     const indicator = createErrorIndicator(snippet, errorPos);
 
-    const hint = `UnboundLocalError: cannot access local variable '${name}' where it is not associated with a value`;
+    const hint = `UnassignedLocalError: cannot access local variable '${name}' where it is not associated with a value`;
     const suggestion = `The variable '${name}' is used in the current function, so it's considered a local variable. However, you tried to access it before a value was assigned to it in the local scope. Assign a value to '${name}' before you use it.`;
-    const msg = `UnboundLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
+    const msg = `UnassignedLocalError at line ${lineIndex}\n\n    ${fullLine}\n    ${" ".repeat(adjustedOffset)}${indicator}\n${hint}\n\n${suggestion}`;
     this.message = msg;
   }
 }
 
-// Distinct from UnboundLocalError: raised when a name captured from an enclosing function
+// Distinct from UnassignedLocalError: raised when a name captured from an enclosing function
 // (either via an explicit `nonlocal` declaration, or an implicit closure read that needs
 // no such declaration) hasn't been assigned yet by its owning scope at the point it's
 // read — the name is a free/cell variable, not a local of the current function. Matches

@@ -200,7 +200,7 @@ continue
 
   // A binding construct may appear anywhere in its owning scope's body — nested inside
   // `if`/`while`/`for`, or after a nested `def` that reads it — and real Python only fails
-  // at runtime (UnboundLocalError/NameError) for such forward references, never statically.
+  // at runtime (UnassignedLocalError/NameError) for such forward references, never statically.
   describe("Forward references to names bound later in the same scope", () => {
     test("same-function forward reference: name used before an if-nested assignment", () => {
       const code = `

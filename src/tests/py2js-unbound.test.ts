@@ -1,7 +1,7 @@
 /**
  * Unbound-name semantics parity: Python's environments grow dynamically (no
  * TDZ), but reading a binding whose assignment never executed is an error —
- * UnboundLocalError for function locals, NameError at module level. The CSE
+ * UnassignedLocalError for function locals, NameError at module level. The CSE
  * machine implements this; py2js compiles guarded reads (see emitName in
  * engines/py2js/compiler.ts) because JS `let` would otherwise leak a silent
  * `undefined`. Each case runs on both engines and must agree on
@@ -29,7 +29,7 @@ function py2jsOutcome(code: string): { error: string } | { output: string } {
   }
 }
 
-test("local read before assignment is an UnboundLocalError (CSE parity)", async () => {
+test("local read before assignment is an UnassignedLocalError (CSE parity)", async () => {
   const code = `def f():
     y = x
     x = 1
@@ -39,10 +39,10 @@ print(f())`;
   expect(await cseErrors(code)).toBe(true);
   const outcome = py2jsOutcome(code);
   expect(outcome).toHaveProperty("error");
-  expect((outcome as { error: string }).error).toContain("UnboundLocalError");
+  expect((outcome as { error: string }).error).toContain("UnassignedLocalError");
 });
 
-test("local bound only in a not-taken branch is an UnboundLocalError (CSE parity)", async () => {
+test("local bound only in a not-taken branch is an UnassignedLocalError (CSE parity)", async () => {
   const code = `def f(c):
     if c:
         x = 1
@@ -51,7 +51,7 @@ print(f(False))`;
   expect(await cseErrors(code)).toBe(true);
   const outcome = py2jsOutcome(code);
   expect(outcome).toHaveProperty("error");
-  expect((outcome as { error: string }).error).toContain("UnboundLocalError");
+  expect((outcome as { error: string }).error).toContain("UnassignedLocalError");
 });
 
 test("calling a function before the module-level global it reads is assigned is a NameError (CSE parity)", async () => {

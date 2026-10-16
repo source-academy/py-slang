@@ -487,7 +487,7 @@ after the renaming of parameters and local names that occur free in $v$, as for
 lambda expressions. If $x$ is assigned to in the body of the definition, $x$ is
 local to the function (as in Python): $v$ is not substituted into the
 body, and reading $x$ before the assignment is an
-\texttt{UnboundLocalError}.}
+\texttt{UnassignedLocalError}.}
 \gentzen{
   x \notin \{n, x_1, \ldots, x_k\}\quad x \mbox{ is not assigned in } b
 }{

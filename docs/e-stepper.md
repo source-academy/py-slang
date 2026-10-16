@@ -84,7 +84,7 @@ needed to continue by hand.
 
 | Redex (in E) | Contractum | Store effect |
 |---|---|---|
-| name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnboundLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |
+| name `x` | the value bound to `x`, found by walking from E toward `G`, then builtins. Respects `global`/`nonlocal` (see below) | none. The first frame that has `x` decides; if `x` is unassigned there, the error is `UnassignedLocalError` when that frame is E's own, and `NameError` ("cannot access free variable") when it is an enclosing function's frame, as in the CSE machine (`pyGetVariable`). No frame and no builtin: `NameError` |
 | `lambda ps: e` | `Ref(#k)` | allocate `#k = Fn(ε, ps, e, E)` |
 | `def f(ps): body` (statement) | statement removed | allocate `#k = Fn(f, ps, body, E)`; bind `f ↦ Ref(#k)` in the frame `f` belongs to |
 | `Ref(#k)(v₁, …, vₙ)` with `#k = Fn(_, ps, body, E')` (the body of a lambda `e` is the statement `return e`) | `EnvBlock(E'', body)` | new frame `E''`, parent `E'`, binding `psᵢ ↦ vᵢ` (rest parameters: a new list), plus every name the body assigns, unassigned |

@@ -11,7 +11,7 @@ import {
   toPythonAstAndResolve,
 } from "./utils";
 import { FeatureNotSupportedError } from "../validator";
-import { FreeVariableUnboundError, UnboundLocalError } from "../errors/errors";
+import { FreeVariableUnboundError, UnassignedLocalError } from "../errors/errors";
 
 // ── Issue #177: nonlocal keyword — resolver acceptance ───────────────────────
 
@@ -312,9 +312,10 @@ result_outside = i
     ],
   ],
 
-  "reading a for-loop target before the loop runs raises UnboundLocalError, not an outer lookup": [
+  "reading a for-loop target before the loop runs raises UnassignedLocalError, not an outer lookup":
     [
-      `
+      [
+        `
 i = 100
 def f():
     print(i)
@@ -322,12 +323,12 @@ def f():
         pass
 f()
 `,
-      UnboundLocalError,
-      null,
+        UnassignedLocalError,
+        null,
+      ],
     ],
-  ],
 
-  "reading a nonlocal before its for-loop-target binding executes raises FreeVariableUnboundError, not UnboundLocalError":
+  "reading a nonlocal before its for-loop-target binding executes raises FreeVariableUnboundError, not UnassignedLocalError":
     [
       [
         `

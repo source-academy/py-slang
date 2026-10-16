@@ -8,7 +8,7 @@ import {
   RecursionError,
   TooManyPositionalArgumentsError,
   TypeError,
-  UnboundLocalError,
+  UnassignedLocalError,
 } from "../../errors/errors";
 import { Token, TokenType } from "../../tokenizer";
 import { isStatementSequence } from "./closure";
@@ -279,7 +279,7 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   // at CALL time, so a name owned by some frame on the chain is always found there — as
   // either a real value or the UNASSIGNED sentinel — before the walk can reach an
   // unrelated binding of the same name further out (e.g. a global). This is what makes
-  // reads of the frame that's still executing raise UnboundLocalError, and reads of an
+  // reads of the frame that's still executing raise UnassignedLocalError, and reads of an
   // enclosing frame (an implicit closure read, no `nonlocal` needed) raise the
   // "free variable" error, instead of both silently falling through to an outer scope.
   let currentEnv: Environment | null = env;
@@ -288,7 +288,10 @@ export function pyGetVariable(code: string, context: Context, name: string, node
       const value = currentEnv.head[name];
       if (value === UNASSIGNED) {
         if (currentEnv === env) {
-          handleRuntimeError(context, new UnboundLocalError(code, name, node as ExprNS.Variable));
+          handleRuntimeError(
+            context,
+            new UnassignedLocalError(code, name, node as ExprNS.Variable),
+          );
         } else {
           handleRuntimeError(
             context,
@@ -368,7 +371,7 @@ export function pyGetNonlocalVariable(
     if (value === UNASSIGNED) {
       // `name` is a free variable captured from an enclosing scope (via `nonlocal`), not a
       // local of the *current* function — CPython raises NameError with "free variable ...
-      // in enclosing scope" wording here, distinct from UnboundLocalError (which is for a
+      // in enclosing scope" wording here, distinct from UnassignedLocalError (which is for a
       // name that's local to the function actually doing the reading).
       handleRuntimeError(
         context,

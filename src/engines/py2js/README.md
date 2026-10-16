@@ -86,7 +86,7 @@ textual position. The fix, used uniformly everywhere a name is declared
 as an uninitialized `let` before any code in that scope runs (`emitDecls`),
 and guard every read of a non-parameter binding with an inline
 `=== undefined` check (`emitName` in `compiler.ts`) that raises
-`UnboundLocalError` (function-local) or `NameError` (module-level) —
+`UnassignedLocalError` (function-local) or `NameError` (module-level) —
 `undefined` is never a legitimate `PyValue` (`None` is `null`), so the
 check is exact and costs one perfectly-predicted comparison. `global`/
 `nonlocal` (chapter 3+) generalize this: a name a function declares

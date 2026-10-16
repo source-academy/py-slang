@@ -26,7 +26,7 @@ export type PVMLBoxType =
  * this engine's internal JS representation. UNDEFINED and ITERATOR are the
  * only members that don't have a Python-facing name: both are PVML-internal
  * sentinels (an unset local-variable slot, always intercepted by
- * UnboundLocalError/FreeVariableUnboundError before it could ever reach an
+ * UnassignedLocalError/FreeVariableUnboundError before it could ever reach an
  * operator as a value; a for-loop's own iteration state, never a value a
  * user program can bind to a name) that should never actually reach one of
  * these error messages.

@@ -8,7 +8,7 @@ import {
   ListMultiplyTypeError,
   NameError,
   PVMLInterpreterError,
-  UnboundLocalError,
+  UnassignedLocalError,
   UnsupportedOperandTypeError,
   ZeroDivisionError,
 } from "./errors";
@@ -1423,10 +1423,12 @@ export class PVMLInterpreter {
     }
     const value = this.currentFrame.env.get(slot);
     // `undefined` is PVMLEnvironment's initial fill value, never a real
-    // stored value (None is the distinct `null` — see UnboundLocalError's
+    // stored value (None is the distinct `null` — see UnassignedLocalError's
     // doc comment) — so this slot has never been assigned yet.
     if (value === undefined) {
-      throw new UnboundLocalError("UnboundLocalError: local variable referenced before assignment");
+      throw new UnassignedLocalError(
+        "UnassignedLocalError: local variable referenced before assignment",
+      );
     }
     this.push(value);
   }
