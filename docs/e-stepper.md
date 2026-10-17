@@ -2,7 +2,7 @@
 
 Status: design note, draft. Tracking project: **e-stepper** (source-academy GitHub organization).
 
-For students: [the environment stepper, a guide](e-stepper-guide.md).
+For students: [the environment stepper, a guide](md/README_ESTEPPER.md), published at <https://docs.sourceacademy.org/python/e-stepper/>.
 
 ## Motivation
 

@@ -120,6 +120,5 @@ W1(50)
 
 ## See also
 
-- [Design note and reduction rules](e-stepper.md)
-- [Specification of the Python §4 environment stepper](specs/python_4_estepper.tex) (PDF on the
-  Python documentation page)
+- [Design note and reduction rules](https://github.com/source-academy/py-slang/blob/main/docs/e-stepper.md)
+- [Specification of the Python §4 environment stepper](../python_4_estepper.pdf)

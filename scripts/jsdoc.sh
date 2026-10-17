@@ -75,6 +75,9 @@ run() {
   run_jsdoc "MCE" "README_MCE.md" "MCE" "$LIB/mce.js" &
   
 
+  # Environment stepper: a guide for students (a page of its own, no library functions)
+  run_jsdoc "Environment stepper" "README_ESTEPPER.md" "e-stepper" "$LIB/empty.js" &
+
   # Python §1
   run_jsdoc "Python §1" "README_1.md" "python_1" "$LIB/misc.js" "$LIB/math.js" &
   
