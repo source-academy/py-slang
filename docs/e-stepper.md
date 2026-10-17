@@ -2,6 +2,8 @@
 
 Status: design note, draft. Tracking project: **e-stepper** (source-academy GitHub organization).
 
+For students: [the environment stepper, a guide](e-stepper-guide.md).
+
 ## Motivation
 
 In CS1101S, the substitution model stops working at SICPy §3.1, where assignment and local state
