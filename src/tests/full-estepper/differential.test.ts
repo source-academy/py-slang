@@ -672,3 +672,57 @@ describeIfCPython("review of the first slice, second round: declaration order, c
     ],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython(
+  "review of the first slice, third round: ranges, parameters, hidden bindings",
+  () => {
+    test.each<[string, string]>([
+      ["list of a range longer than an index", "print('before')\nlist(range(10 ** 100))\n"],
+      ["len of a range longer than an index", "print(len(range(10 ** 100)))\n"],
+      ["a list extended by a range longer than an index", "a = []\na += range(10 ** 100)\n"],
+      [
+        "len of a long range that fits",
+        "print(len(range(10 ** 18)), len(range(0, 10 ** 18, 7)))\n",
+      ],
+      [
+        "a for loop over a huge range is lazy",
+        "for i in range(10 ** 100):\n    print(i)\n    if i == 2:\n        break\n",
+      ],
+      ["a duplicate parameter", "print('before')\ndef f(x, x):\n    pass\n"],
+      [
+        "a duplicate parameter in a nested function",
+        "print('before')\ndef g():\n    def f(a, b, a):\n        pass\n",
+      ],
+      ["a duplicate parameter of a lambda", "print('before')\nf = lambda y, y: y\n"],
+      ["distinct parameters", "def f(x, y):\n    return x - y\nprint(f(5, 2))\n"],
+      [
+        "a name bound by unpacking in a function is local",
+        "x = 'module'\ndef f():\n    print(x)\n    if False:\n        x, y = [1, 2]\nf()\n",
+      ],
+      [
+        "a name bound by unpacking in a for loop is local",
+        "x = 'module'\ndef f():\n    print(x)\n    for x, y in []:\n        pass\nf()\n",
+      ],
+      [
+        "a name bound by an import is local",
+        "os = 'module'\ndef f():\n    print(os)\n    if False:\n        import os\nf()\n",
+      ],
+      [
+        "a name bound by a class statement is local",
+        "C = 'module'\ndef f():\n    print(C)\n    if False:\n        class C:\n            pass\nf()\n",
+      ],
+      [
+        "a name bound by an except clause is local",
+        "e = 'module'\ndef f():\n    print(e)\n    try:\n        pass\n    except Exception as e:\n        pass\nf()\n",
+      ],
+      [
+        "a name bound by with is local",
+        "w = 'module'\ndef f():\n    print(w)\n    if False:\n        with open('x') as w:\n            pass\nf()\n",
+      ],
+      [
+        "a name deleted in a function is local",
+        "d = 'module'\ndef f():\n    print(d)\n    if False:\n        del d\nf()\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);

@@ -81,8 +81,13 @@ const BUILTINS: Record<string, Builtin> = {
         return int(v.obj.elements.length);
       case "str":
         return int(Array.from(v.value).length);
-      case "range":
-        return int(rangeLength(v));
+      case "range": {
+        const length = rangeLength(v);
+        if (length > 9223372036854775807n) {
+          throw new PyError("OverflowError", "Python int too large to convert to C ssize_t");
+        }
+        return int(length);
+      }
       default:
         throw new PyError("TypeError", `object of type '${typeName(v)}' has no len()`);
     }

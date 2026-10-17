@@ -51,12 +51,51 @@ function collect(
       if (stmt.elseBlock) collect(stmt.elseBlock, assigned, globals, nonlocals);
     } else if (stmt instanceof StmtNS.While) {
       collect(stmt.body, assigned, globals, nonlocals);
+    } else if (stmt instanceof StmtNS.TupleAssign) {
+      bindTargets(stmt.target, assigned);
+    } else if (stmt instanceof StmtNS.ForUnpack) {
+      bindTargets(stmt.target, assigned);
+      collect(stmt.body, assigned, globals, nonlocals);
+    } else if (stmt instanceof StmtNS.AnnAssign) {
+      assigned.add(stmt.target.name.lexeme);
+    } else if (stmt instanceof StmtNS.Del) {
+      for (const t of stmt.targets) bindTargets(t, assigned);
+    } else if (stmt instanceof StmtNS.Class) {
+      assigned.add(stmt.name.lexeme);
+    } else if (stmt instanceof StmtNS.Decorated) {
+      collect([stmt.definition], assigned, globals, nonlocals);
+    } else if (stmt instanceof StmtNS.Import) {
+      for (const n of stmt.names) assigned.add((n.alias ?? n.name).lexeme.split(".")[0]);
+    } else if (stmt instanceof StmtNS.FromImport) {
+      for (const n of stmt.names) assigned.add((n.alias ?? n.name).lexeme);
+    } else if (stmt instanceof StmtNS.With) {
+      for (const item of stmt.items) if (item.target) bindTargets(item.target, assigned);
+      collect(stmt.body, assigned, globals, nonlocals);
+    } else if (stmt instanceof StmtNS.Try) {
+      collect(stmt.body, assigned, globals, nonlocals);
+      for (const h of stmt.handlers) {
+        if (h.name) assigned.add(h.name.lexeme);
+        collect(h.body, assigned, globals, nonlocals);
+      }
+      if (stmt.orElse) collect(stmt.orElse, assigned, globals, nonlocals);
+      if (stmt.finalBody) collect(stmt.finalBody, assigned, globals, nonlocals);
     } else if (stmt instanceof StmtNS.Global) {
       for (const n of stmt.names) globals.add(n.lexeme);
     } else if (stmt instanceof StmtNS.NonLocal) {
       for (const n of stmt.names) nonlocals.add(n.lexeme);
     }
   }
+}
+
+/**
+ * The names that an assignment target binds. (Statements that the engine does not run yet still
+ * decide which names are local: CPython knows that before it runs anything.)
+ */
+function bindTargets(target: ExprNS.Expr, assigned: Set<string>): void {
+  if (target instanceof ExprNS.Variable) assigned.add(target.name.lexeme);
+  else if (target instanceof ExprNS.Tuple || target instanceof ExprNS.List) {
+    for (const e of target.elements) bindTargets(e, assigned);
+  } else if (target instanceof ExprNS.Starred) bindTargets(target.value, assigned);
 }
 
 /**
@@ -88,8 +127,33 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
       }
     }
   };
+  checkDuplicateParameters(program);
   walk(program, [], false);
   checkOrder(program, new Map());
+}
+
+/** A parameter name may appear once in a `def` or a `lambda`: `def f(x, x)` is a SyntaxError. */
+function checkDuplicateParameters(program: StmtNS.Stmt[]): void {
+  for (const stmt of program) {
+    traverseAST(stmt, n => {
+      if (
+        n instanceof StmtNS.FunctionDef ||
+        n instanceof ExprNS.Lambda ||
+        n instanceof ExprNS.MultiLambda
+      ) {
+        const names = new Set<string>();
+        for (const p of n.parameters) {
+          if (names.has(p.lexeme)) {
+            throw new PyError(
+              "SyntaxError",
+              `duplicate argument '${p.lexeme}' in function definition`,
+            );
+          }
+          names.add(p.lexeme);
+        }
+      }
+    });
+  }
 }
 
 /**

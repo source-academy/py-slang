@@ -142,6 +142,9 @@ The differences from §3/§4 follow from Python, and the engine does what CPytho
   is `False`), and Python 3.8 and later warn about `is` with a literal. Lists, functions and ranges
   keep their identity. Giving every number and string an identity would show students distinctions
   that CPython does not promise; to be revisited if a course needs it.
+- **a range longer than 10 million is not built as a list in one step**: `list(range(n))`, `min`,
+  `+=` and the like stop with a `MemoryError` (CPython would try, and for lengths beyond an index
+  raises `OverflowError`, which the engine does too). A `for` loop over any range is lazy.
 
 ## Decisions for the engine
 

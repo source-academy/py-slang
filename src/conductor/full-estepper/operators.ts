@@ -555,7 +555,19 @@ export function iterAt(v: PyValue, pos: number): PyValue | undefined {
 }
 
 /** All the elements of an iterable. */
+/** The longest range that the engine builds as a list in one step (CPython would try, and may run out of memory). */
+const MAX_MATERIALIZED = 10_000_000n;
+
+/** A range longer than an index is an OverflowError for CPython; a very long one is a MemoryError here. */
+export function checkMaterializable(length: bigint): void {
+  if (length > 9223372036854775807n) {
+    throw new PyError("OverflowError", "Python int too large to convert to C ssize_t");
+  }
+  if (length > MAX_MATERIALIZED) throw new PyError("MemoryError", "");
+}
+
 export function elementsOf(v: PyValue): PyValue[] {
+  if (v.type === "range") checkMaterializable(rangeLength(v));
   const out: PyValue[] = [];
   for (let pos = 0; ; pos++) {
     const e = iterAt(v, pos);
