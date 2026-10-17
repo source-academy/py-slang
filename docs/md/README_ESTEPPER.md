@@ -122,7 +122,7 @@ In Python §3 and §4, a `for` loop must use `range`: `for x in range(n)`, `rang
 3. The assignment of the loop variable is a step of its own, like any assignment: the binding of
    `x` is created in, or updated in, the frame that the loop runs in. As in Python, a loop has no
    frame of its own: `x` and the names assigned in the body are the frame's names, and stay there
-   after the loop. In a function, that is the frame of the call, in the program, the global frame.
+   after the loop. In a function, that is the frame of the call; in the main program, it is the global frame.
 
 ### `break`, `continue` and `return`
 
