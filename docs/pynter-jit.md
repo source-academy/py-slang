@@ -4,7 +4,8 @@ Status: project plan, draft. Tracking project: [**pynter-jit**](https://github.c
 
 ## Goal
 
-Make pynter-wasm, the pynter VM compiled to WebAssembly (`src/engines/pvml/pynter/`), tier up hot
+Make pynter-wasm, the pynter VM (C, in the [source-academy/pynter](https://github.com/source-academy/pynter)
+repository) compiled to WebAssembly, tier up hot
 functions and loops to WebAssembly generated at run time. Cold code keeps running in the
 interpreter. The aim is a large speedup on numeric loops and recursion, without changing any
 program's observable behavior.
@@ -20,7 +21,7 @@ PVML-in-browser (`src/engines/pvml/pvml-interpreter.ts`) represents values as JS
 `externref`s, so compiled code would call back into JS for every generic operation. Compiling
 PVML bytecode to JavaScript instead would mostly reproduce py2js.
 
-pynter keeps its values NaN-boxed in linear memory (`vm/include/pynter/nanbox.h`), which is
+pynter keeps its values NaN-boxed in linear memory (`vm/include/pynter/nanbox.h` in the pynter repository), which is
 the representation a wasm JIT wants. Generated modules import pynter's memory and function table,
 read and write VM values directly, and call pynter's own C helpers without going through JS.
 
@@ -67,6 +68,10 @@ The native build compiles all of this out.
 
 ### In py-slang (TypeScript), under `src/engines/pvml/pynter/jit/`
 
+py-slang's `src/engines/pvml/pynter/` is only the integration point: TypeScript adapters around the
+`@sourceacademy/pynter-wasm` package. The C VM and its Wasm build live in the pynter repository,
+so the C-side work above happens there.
+
 - A wasm binary encoder.
 - A code generator from pynter bytecode plus feedback to wasm.
 - The installer: compile, instantiate, `table.set`.
@@ -85,7 +90,9 @@ The pynter interpreter is the reference for the JIT. The JIT is written against 
 are Python's:
 
 - **Ints** are 32-bit small ints in the NaN-box, overflowing to heap bigints. Specialized int code
-  uses `i32` arithmetic with an overflow check that calls the bigint helper.
+  widens to `i64` for the operation (add, subtract and multiply of two 32-bit operands can wrap an
+  `i32`: `65536 * 65536` wraps to 0), then checks that the result fits a small int and otherwise calls
+  the bigint helper. The check must never run on a wrapped `i32` result.
 - **Floats** are `f64`, so specialized float code matches the interpreter, py2js and CPython bit
   for bit.
 - **Faults**: type errors, index errors and the like must raise the same `pynter_fault_t`
@@ -101,7 +108,7 @@ suite with the JIT forced on everything, and require identical output and faults
 
 ## The value representation
 
-pynter's NaN-box is 32 bits (`sinanbox_t`, `vm/include/pynter/nanbox.h`), which gives it
+pynter's NaN-box is 32 bits (`sinanbox_t`, `vm/include/pynter/nanbox.h` in the pynter repository), which gives it
 three restrictions:
 
 - floats are `f32`;
@@ -129,7 +136,7 @@ generator (py-slang#572) waits for bigints (pynter#55).
 ### Phase 0: baseline and benchmarks
 
 - A release build of pynter-wasm. The current build sets `PYNTER_DEBUG` and
-  `PYNTER_DEBUG_MEMORY_CHECK` (`devices/wasm/wasm/CMakeLists.txt`), and measuring against it would
+  `PYNTER_DEBUG_MEMORY_CHECK` (`devices/wasm/wasm/CMakeLists.txt` in the pynter repository), and measuring against it would
   overstate every speedup.
 - A benchmark set: a float loop, an int loop, recursive `fib`, a loop over a list, and an
   iterative SICPy-style process (e.g. `fast_expt`, `sqrt_iter`).
@@ -171,8 +178,8 @@ Go if the numeric loop gains at least 10× and `fib` at least 3×.
 
 - pynter: type feedback recording.
 - pynter: the bailout protocol and frame reconstruction.
-- py-slang: a specializing code generator. Locals are held in wasm locals (`i32` small ints with an
-  overflow check that calls the bigint helper, `f64` floats), with a guard at every point where feedback was assumed and a bailout
+- py-slang: a specializing code generator. Locals are held in wasm locals (32-bit small ints, operated on as `i64`
+  with a range check that calls the bigint helper on overflow, and `f64` floats), with a guard at every point where feedback was assumed and a bailout
   when a guard fails.
 
 ### Phase 4: calls and loops
