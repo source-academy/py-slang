@@ -436,14 +436,15 @@ export class Machine {
         );
       }
       case "subassign": {
-        const r = this.reduceChildren([head.obj, head.index, head.e], frame, depth);
+        // Python evaluates the right-hand side first, then the object, then the index.
+        const r = this.reduceChildren([head.e, head.obj, head.index], frame, depth);
         if (r) {
           const node =
             r.index === 0
-              ? { ...head, obj: r.step.node }
+              ? { ...head, e: r.step.node }
               : r.index === 1
-                ? { ...head, index: r.step.node }
-                : { ...head, e: r.step.node };
+                ? { ...head, obj: r.step.node }
+                : { ...head, index: r.step.node };
           return this.stmtStep(rest, node, r.step.c);
         }
         setItem(
@@ -473,19 +474,20 @@ export class Machine {
         );
       }
       case "augsub": {
-        const r = this.reduceChildren([head.obj, head.index, head.e], frame, depth);
+        const r = this.reduceChildren([head.obj, head.index], frame, depth);
         if (r) {
           const node =
-            r.index === 0
-              ? { ...head, obj: r.step.node }
-              : r.index === 1
-                ? { ...head, index: r.step.node }
-                : { ...head, e: r.step.node };
+            r.index === 0 ? { ...head, obj: r.step.node } : { ...head, index: r.step.node };
           return this.stmtStep(rest, node, r.step.c);
         }
         const obj = this.valueOf(head.obj, frame);
         const index = this.valueOf(head.index, frame);
-        const result = inplaceOp(head.op, getItem(obj, index), this.valueOf(head.e, frame));
+        // Python reads the element before it evaluates the right-hand side, and combines that
+        // old value with the result, even if the right-hand side changed the element.
+        const old = head.old ?? getItem(obj, index);
+        const r2 = this.reduceChildren([head.e], frame, depth);
+        if (r2) return this.stmtStep(rest, { ...head, old, e: r2.step.node }, r2.step.c);
+        const result = inplaceOp(head.op, old, this.valueOf(head.e, frame));
         setItem(obj, index, result);
         const text = stmtText(head, this.labels);
         return this.removed(rest, `Assigning ${text}`, `Assigned ${text}`);

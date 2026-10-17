@@ -124,6 +124,11 @@ export function pyIs(a: PyValue, b: PyValue): boolean {
 /** -1, 0 or 1 for numbers; null if either is NaN. */
 function compareNum(x: Num, y: Num): number | null {
   if (!x.float && !y.float) return x.i < y.i ? -1 : x.i > y.i ? 1 : 0;
+  if (x.float !== y.float) {
+    // An int is below +inf and above -inf, however large it is (converting it could overflow).
+    const f = x.float ? x.f : (y as { f: number }).f;
+    if (f === Infinity || f === -Infinity) return (f === Infinity) === x.float ? 1 : -1;
+  }
   const fx = x.float ? x.f : Number(x.i);
   const fy = y.float ? y.f : Number(y.i);
   if (Number.isNaN(fx) || Number.isNaN(fy)) return null;

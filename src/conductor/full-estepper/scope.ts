@@ -63,7 +63,9 @@ function collect(
  * outside a function, `break` and `continue` outside a loop. Throws the first one.
  */
 export function checkProgram(program: StmtNS.Stmt[]): void {
-  const walk = (stmts: StmtNS.Stmt[], inFunction: boolean, inLoop: boolean): void => {
+  // `enclosing` has the scopes of the functions around the statements, innermost last.
+  const walk = (stmts: StmtNS.Stmt[], enclosing: ScopeInfo[], inLoop: boolean): void => {
+    const inFunction = enclosing.length > 0;
     for (const stmt of stmts) {
       if (stmt instanceof StmtNS.Return && !inFunction) {
         throw new PyError("SyntaxError", "'return' outside function");
@@ -71,15 +73,47 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
         throw new PyError("SyntaxError", "'break' outside loop");
       } else if (stmt instanceof StmtNS.Continue && !inLoop) {
         throw new PyError("SyntaxError", "'continue' not properly in loop");
+      } else if (stmt instanceof StmtNS.NonLocal && !inFunction) {
+        throw new PyError("SyntaxError", "nonlocal declaration not allowed at module level");
       } else if (stmt instanceof StmtNS.If) {
-        walk(stmt.body, inFunction, inLoop);
-        if (stmt.elseBlock) walk(stmt.elseBlock, inFunction, inLoop);
+        walk(stmt.body, enclosing, inLoop);
+        if (stmt.elseBlock) walk(stmt.elseBlock, enclosing, inLoop);
       } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
-        walk(stmt.body, inFunction, true);
+        walk(stmt.body, enclosing, true);
       } else if (stmt instanceof StmtNS.FunctionDef) {
-        walk(stmt.body, true, false);
+        const scope = scopeOf(stmt);
+        checkDeclarations(stmt, scope, enclosing);
+        walk(stmt.body, [...enclosing, scope], false);
       }
     }
   };
-  walk(program, false, false);
+  walk(program, [], false);
+}
+
+/** The errors in the `global` and `nonlocal` declarations of a function, which CPython reports at compile time. */
+function checkDeclarations(fn: StmtNS.FunctionDef, scope: ScopeInfo, enclosing: ScopeInfo[]): void {
+  const params = new Set(fn.parameters.map(p => p.lexeme));
+  for (const name of scope.globals) {
+    if (params.has(name))
+      throw new PyError("SyntaxError", `name '${name}' is parameter and global`);
+    if (scope.nonlocals.has(name)) {
+      throw new PyError("SyntaxError", `name '${name}' is nonlocal and global`);
+    }
+  }
+  for (const name of scope.nonlocals) {
+    if (params.has(name)) {
+      throw new PyError("SyntaxError", `name '${name}' is parameter and nonlocal`);
+    }
+    // The nearest enclosing function that binds the name decides; one that declares it global
+    // hides the functions around it.
+    let found = false;
+    for (let i = enclosing.length - 1; i >= 0; i--) {
+      if (enclosing[i].globals.has(name)) break;
+      if (enclosing[i].locals.has(name)) {
+        found = true;
+        break;
+      }
+    }
+    if (!found) throw new PyError("SyntaxError", `no binding for nonlocal '${name}' found`);
+  }
 }

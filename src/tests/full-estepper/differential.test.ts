@@ -572,3 +572,52 @@ describeIfCPython("errors in programs", () => {
     ["an unexpected indent", "x = 1\n    y = 2\n"],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython("review of the first slice: order of evaluation, declarations, huge ints", () => {
+  const trace = "def t(tag, v):\n    print(tag)\n    return v\n";
+  test.each<[string, string]>([
+    [
+      "a subscript assignment evaluates the right-hand side first",
+      `${trace}a = [0, 0]\nt('obj', a)[t('index', 1)] = t('rhs', 5)\nprint(a)\n`,
+    ],
+    [
+      "an augmented subscript assignment reads the element before the right-hand side",
+      "a = [1]\ndef f():\n    a[0] = 10\n    return 2\na[0] += f()\nprint(a)\n",
+    ],
+    [
+      "an augmented subscript assignment evaluates object, index, element, right-hand side",
+      `${trace}a = [1, 2]\nt('obj', a)[t('index', 1)] += t('rhs', 5)\nprint(a)\n`,
+    ],
+    [
+      "a nonlocal without a binding is reported before anything runs",
+      "print('before')\ndef f():\n    nonlocal missing\n    print('after')\n",
+    ],
+    ["nonlocal at module level", "print('before')\nnonlocal x\n"],
+    ["a parameter that is also global", "print('before')\ndef f(x):\n    global x\n"],
+    ["a parameter that is also nonlocal", "def g(x):\n    def f(x):\n        nonlocal x\n"],
+    [
+      "a name that is both global and nonlocal",
+      "def g():\n    x = 1\n    def f():\n        global x\n        nonlocal x\n",
+    ],
+    [
+      "a nonlocal that skips a function with the same global",
+      "def a():\n    x = 1\n    def b():\n        global x\n        def c():\n            nonlocal x\n",
+    ],
+    [
+      "a free variable stops at an enclosing global declaration",
+      "x = 'module'\ndef outer():\n    x = 'outer'\n    def middle():\n        global x\n        def inner():\n            return x\n        return inner()\n    return middle()\nprint(outer())\n",
+    ],
+    [
+      "a valid nonlocal chain",
+      "def a():\n    x = 1\n    def b():\n        nonlocal x\n        def c():\n            nonlocal x\n            x += 1\n        c()\n    b()\n    return x\nprint(a())\n",
+    ],
+    [
+      "huge ints against infinities",
+      "inf = float('inf')\nbig = 10 ** 1000\nprint(big < inf, big > inf, big <= inf, -big > -inf, -big < -inf, inf > big, -inf < -big, big == inf, big != inf, inf == big)\n",
+    ],
+    [
+      "huge ints against finite floats",
+      "print(10 ** 1000 > 1e300, -(10 ** 1000) < -1e300, 10 ** 400 < 1e308)\n",
+    ],
+  ])("%s", (_, code) => same(code));
+});

@@ -119,7 +119,10 @@ export class Store {
   /** The nearest enclosing function frame of `from` (not `from` itself) that has `name` as a local. */
   private enclosingLocal(from: Frame, name: string): Frame | undefined {
     for (let f = from.parent; f; f = f.parent) {
-      if (f.kind === "call" && f.scope?.locals.has(name)) return f;
+      if (f.kind !== "call") continue;
+      // A name that a function declares `global` is the module's, for the functions inside it too.
+      if (f.scope?.globals.has(name)) return undefined;
+      if (f.scope?.locals.has(name)) return f;
     }
     return undefined;
   }

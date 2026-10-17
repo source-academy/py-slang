@@ -34,7 +34,7 @@ export type Stmt =
   | { k: "subassign"; obj: Expr; index: Expr; e: Expr }
   /** `name op= e`: `read` is the name, evaluated first, as Python does. */
   | { k: "augassign"; name: string; op: string; read: Expr; e: Expr }
-  | { k: "augsub"; obj: Expr; index: Expr; op: string; e: Expr }
+  | { k: "augsub"; obj: Expr; index: Expr; op: string; e: Expr; old?: PyValue }
   /** An `if` statement; also what a `while` loop unfolds to (`loop` is true then). */
   | { k: "if"; test: Expr; cons: Stmt[]; alt: Stmt[] | null; loop: boolean }
   | { k: "while"; src: StmtNS.While }
