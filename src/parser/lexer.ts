@@ -41,13 +41,13 @@ const kwType = moo.keywords({
   kw_raise: "raise",
   kw_with: "with",
   kw_del: "del",
+  kw_yield: "yield",
   kw_True: "True",
   kw_False: "False",
   kw_None: "None",
   // Forbidden keywords (surface as their own type so callers can error nicely)
   forbidden_async: "async",
   forbidden_await: "await",
-  forbidden_yield: "yield",
 });
 
 const mooLexer = moo.compile({

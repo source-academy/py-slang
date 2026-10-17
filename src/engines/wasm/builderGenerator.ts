@@ -1043,6 +1043,22 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     throw new Error("Chained comparisons is not supported");
   }
 
+  visitSetExpr(_expr: ExprNS.Set): WasmNumeric {
+    throw new Error("Sets are not supported");
+  }
+  visitComprehensionExpr(_expr: ExprNS.Comprehension): WasmNumeric {
+    throw new Error("Comprehensions are not supported");
+  }
+  visitYieldExpr(_expr: ExprNS.Yield): WasmNumeric {
+    throw new Error("Generators (yield) are not supported");
+  }
+  visitSliceExpr(_expr: ExprNS.Slice): WasmNumeric {
+    throw new Error("Slices are not supported");
+  }
+  visitDoubleStarredExpr(_expr: ExprNS.DoubleStarred): WasmNumeric {
+    throw new Error("Dictionary unpacking are not supported");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): WasmInstruction {
     throw new Error("Tuple assignment is not supported");
   }

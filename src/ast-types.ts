@@ -2,7 +2,11 @@
 import { Token } from "./tokenizer";
 import { PyComplexNumber } from "./types";
 
-export type FunctionParam = Token & { isStarred: boolean; default?: ExprNS.Expr };
+export type FunctionParam = Token & {
+  isStarred: boolean;
+  isDoubleStarred?: boolean;
+  default?: ExprNS.Expr;
+};
 export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;
 export namespace ExprNS {
   export interface Visitor<T> {
@@ -25,6 +29,11 @@ export namespace ExprNS {
     visitCompareChainExpr(expr: CompareChain): T;
     visitTupleExpr(expr: Tuple): T;
     visitDictExpr(expr: Dict): T;
+    visitSetExpr(expr: Set): T;
+    visitComprehensionExpr(expr: Comprehension): T;
+    visitYieldExpr(expr: Yield): T;
+    visitSliceExpr(expr: Slice): T;
+    visitDoubleStarredExpr(expr: DoubleStarred): T;
     visitKeywordExpr(expr: Keyword): T;
     visitNoneExpr(expr: None): T;
     visitComplexExpr(expr: Complex): T;
@@ -291,15 +300,95 @@ export namespace ExprNS {
   }
   export class Dict extends Expr {
     readonly kind = "Dict";
-    keys: Expr[];
+    keys: (Expr | null)[];
     values: Expr[];
-    constructor(startToken: Token, endToken: Token, keys: Expr[], values: Expr[]) {
+    constructor(startToken: Token, endToken: Token, keys: (Expr | null)[], values: Expr[]) {
       super(startToken, endToken);
       this.keys = keys;
       this.values = values;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitDictExpr(this);
+    }
+  }
+  export class Set extends Expr {
+    readonly kind = "Set";
+    elements: Expr[];
+    constructor(startToken: Token, endToken: Token, elements: Expr[]) {
+      super(startToken, endToken);
+      this.elements = elements;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitSetExpr(this);
+    }
+  }
+  export class Comprehension extends Expr {
+    readonly kind = "Comprehension";
+    variant: "list" | "set" | "dict" | "generator";
+    element: Expr;
+    value: Expr | null;
+    generators: { target: Expr; iter: Expr; conditions: Expr[] }[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      variant: "list" | "set" | "dict" | "generator",
+      element: Expr,
+      value: Expr | null,
+      generators: { target: Expr; iter: Expr; conditions: Expr[] }[],
+    ) {
+      super(startToken, endToken);
+      this.variant = variant;
+      this.element = element;
+      this.value = value;
+      this.generators = generators;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitComprehensionExpr(this);
+    }
+  }
+  export class Yield extends Expr {
+    readonly kind = "Yield";
+    value: Expr | null;
+    delegate: boolean;
+    constructor(startToken: Token, endToken: Token, value: Expr | null, delegate: boolean) {
+      super(startToken, endToken);
+      this.value = value;
+      this.delegate = delegate;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitYieldExpr(this);
+    }
+  }
+  export class Slice extends Expr {
+    readonly kind = "Slice";
+    lower: Expr | null;
+    upper: Expr | null;
+    step: Expr | null;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      lower: Expr | null,
+      upper: Expr | null,
+      step: Expr | null,
+    ) {
+      super(startToken, endToken);
+      this.lower = lower;
+      this.upper = upper;
+      this.step = step;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitSliceExpr(this);
+    }
+  }
+  export class DoubleStarred extends Expr {
+    readonly kind = "DoubleStarred";
+    value: Expr;
+    constructor(startToken: Token, endToken: Token, value: Expr) {
+      super(startToken, endToken);
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitDoubleStarredExpr(this);
     }
   }
   export class Keyword extends Expr {

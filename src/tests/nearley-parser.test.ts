@@ -1378,8 +1378,11 @@ describe("Spread expressions", () => {
     expect(call.args[1]).toBeInstanceOf(ExprNS.Variable);
   });
 
-  test("[1, 2, 3] does NOT allow spread", () => {
-    expect(() => parseExpr("[*x]")).toThrow();
+  test("a list display may unpack: [*x] (the sublanguages reject it)", () => {
+    // Python has it; the sublanguages' validators reject a Starred element of a list display.
+    const list = parseExpr("[*x, 1]") as ExprNS.List;
+    expect(list).toBeInstanceOf(ExprNS.List);
+    expect(list.elements[0]).toBeInstanceOf(ExprNS.Starred);
   });
 
   test("f(*[1, 2, 3]) spread of list literal", () => {

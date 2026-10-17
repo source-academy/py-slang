@@ -1230,6 +1230,22 @@ export class PVMLCompiler
     throw new Error("Chained comparisons is not supported by the PVML compiler");
   }
 
+  visitSetExpr(_expr: ExprNS.Set): ExpressionResult {
+    throw new Error("Sets are not supported by the PVML compiler");
+  }
+  visitComprehensionExpr(_expr: ExprNS.Comprehension): ExpressionResult {
+    throw new Error("Comprehensions are not supported by the PVML compiler");
+  }
+  visitYieldExpr(_expr: ExprNS.Yield): ExpressionResult {
+    throw new Error("Generators (yield) are not supported by the PVML compiler");
+  }
+  visitSliceExpr(_expr: ExprNS.Slice): ExpressionResult {
+    throw new Error("Slices are not supported by the PVML compiler");
+  }
+  visitDoubleStarredExpr(_expr: ExprNS.DoubleStarred): ExpressionResult {
+    throw new Error("Dictionary unpacking are not supported by the PVML compiler");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): ExpressionResult {
     throw new Error("Tuple assignment is not supported by the PVML compiler");
   }

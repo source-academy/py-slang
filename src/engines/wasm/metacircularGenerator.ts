@@ -295,6 +295,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
               "Default values of parameters are not supported in parse tree generation",
             );
           }
+          if (p.isDoubleStarred) {
+            throw new Error("Keyword parameters are not supported in parse tree generation");
+          }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
@@ -314,6 +317,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
             throw new Error(
               "Default values of parameters are not supported in parse tree generation",
             );
+          }
+          if (p.isDoubleStarred) {
+            throw new Error("Keyword parameters are not supported in parse tree generation");
           }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
@@ -453,6 +459,22 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
   visitCompareChainExpr(_expr: ExprNS.CompareChain): [number, bigint] {
     throw new Error("Chained comparisons is not supported in parse tree generation");
+  }
+
+  visitSetExpr(_expr: ExprNS.Set): [number, bigint] {
+    throw new Error("Sets are not supported in parse tree generation");
+  }
+  visitComprehensionExpr(_expr: ExprNS.Comprehension): [number, bigint] {
+    throw new Error("Comprehensions are not supported in parse tree generation");
+  }
+  visitYieldExpr(_expr: ExprNS.Yield): [number, bigint] {
+    throw new Error("Generators (yield) are not supported in parse tree generation");
+  }
+  visitSliceExpr(_expr: ExprNS.Slice): [number, bigint] {
+    throw new Error("Slices are not supported in parse tree generation");
+  }
+  visitDoubleStarredExpr(_expr: ExprNS.DoubleStarred): [number, bigint] {
+    throw new Error("Dictionary unpacking are not supported in parse tree generation");
   }
 
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): [number, bigint] {

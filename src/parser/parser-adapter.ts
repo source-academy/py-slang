@@ -5,7 +5,10 @@
 import nearley from "nearley";
 import { StmtNS } from "../ast-types";
 import pythonLexer from "./lexer";
+import { ParseError } from "./parse-error";
 import grammar from "./python-grammar";
+
+export { ParseError };
 
 /**
  * NearleyParser - Drop-in replacement for the old Parser class
@@ -51,6 +54,11 @@ export class NearleyParser {
       const err = error as {
         token?: { value?: string; type?: string; line?: number; col?: number };
       };
+      if (error instanceof ParseError) {
+        // Raised by a rule of the grammar, which does not have the source.
+        if (!error.source) error.source = this.source;
+        throw error;
+      }
       if (err.token) {
         const token = err.token;
         const line = token.line || 0;
@@ -64,23 +72,6 @@ export class NearleyParser {
       }
       throw error;
     }
-  }
-}
-
-/**
- * Error class for parse errors
- */
-export class ParseError extends SyntaxError {
-  line: number;
-  col: number;
-  source: string;
-
-  constructor(message: string, line: number, col: number, source: string) {
-    super(message);
-    this.name = "ParseError";
-    this.line = line;
-    this.col = col;
-    this.source = source;
   }
 }
 

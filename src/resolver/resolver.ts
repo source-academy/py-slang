@@ -1106,6 +1106,43 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitTupleExpr(expr: ExprNS.Tuple): void {
     this.resolve(expr.elements);
   }
+  visitSetExpr(expr: ExprNS.Set): void {
+    this.resolve(expr.elements);
+  }
+  visitYieldExpr(expr: ExprNS.Yield): void {
+    if (expr.value) this.resolve(expr.value);
+  }
+  visitSliceExpr(expr: ExprNS.Slice): void {
+    for (const part of [expr.lower, expr.upper, expr.step]) if (part) this.resolve(part);
+  }
+  visitDoubleStarredExpr(expr: ExprNS.DoubleStarred): void {
+    this.resolve(expr.value);
+  }
+  // A comprehension has a scope of its own for the names that its `for` clauses bind. The first
+  // iterable is evaluated outside of it, as in Python.
+  visitComprehensionExpr(expr: ExprNS.Comprehension): void {
+    const oldEnv = this.environment;
+    if (expr.generators.length > 0) this.resolve(expr.generators[0].iter);
+    const names = new Map<string, Token>();
+    const collect = (target: ExprNS.Expr): void => {
+      if (target instanceof ExprNS.Variable) names.set(target.name.lexeme, target.name);
+      else if (target instanceof ExprNS.Tuple) target.elements.forEach(collect);
+      else if (target instanceof ExprNS.Starred) collect(target.value);
+    };
+    expr.generators.forEach(g => collect(g.target));
+    this.environment = new Environment(this.source, oldEnv, names, new Set(names.keys()));
+    expr.generators.forEach((g, i) => {
+      if (i > 0) this.resolve(g.iter);
+      // an attribute or a subscript as the target refers to names of the enclosing scopes
+      if (!(g.target instanceof ExprNS.Variable || g.target instanceof ExprNS.Tuple)) {
+        this.resolve(g.target);
+      }
+      this.resolve(g.conditions);
+    });
+    this.resolve(expr.element);
+    if (expr.value) this.resolve(expr.value);
+    this.environment = oldEnv;
+  }
   visitAttributeExpr(expr: ExprNS.Attribute): void {
     this.resolve(expr.value);
   }
@@ -1114,7 +1151,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.resolve(expr.comparators);
   }
   visitDictExpr(expr: ExprNS.Dict): void {
-    this.resolve(expr.keys);
+    this.resolve(expr.keys.filter((k): k is ExprNS.Expr => k !== null));
     this.resolve(expr.values);
   }
   visitKeywordExpr(expr: ExprNS.Keyword): void {
