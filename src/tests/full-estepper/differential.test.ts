@@ -773,3 +773,47 @@ describeIfCPython("review of the first slice, fourth round: big numbers, special
     ["a count at the edge of an index", "x = 'ab' * (-(2 ** 63))\nprint(repr(x))\n"],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython("review of the first slice, fifth round: powers, lists, unicode, ranges", () => {
+  test.each<[string, string]>([
+    ["a power above the old exponent cutoff", "x = 2 ** 100001\nprint(x > 0, x % 1000)\n"],
+    [
+      "a large power of a small base",
+      "x = 3 ** 200000\nprint(x % 1000, len(str(x // 10 ** 90000)) if False else 1)\n",
+    ],
+    [
+      "the parity of a huge negative exponent",
+      "print((-1) ** -(10 ** 20 + 1), (-1) ** -(10 ** 20), (-2) ** -(10 ** 20 + 1), (-2) ** -(10 ** 20))\n",
+    ],
+    [
+      "a negative exponent below the exact range",
+      "print(repr((-2) ** -5001), repr((-2) ** -5002), repr(2 ** -5001))\n",
+    ],
+    [
+      "a list that holds the same nan twice",
+      "n = float('nan')\nprint([n] == [n], [n] <= [n], [n] != [n], [n] < [n], [n] in [[n]])\n",
+    ],
+    [
+      "a list with a nan and other elements",
+      "n = float('nan')\nprint([1, n, 3] == [1, n, 3], [1, n, 3] < [1, n, 4])\n",
+    ],
+    [
+      "int of unicode digits",
+      "print(int('\u0661\u0662'), int('\uff11\uff12'), int('\u0967_\u0968'), int(' \u0669 '))\n",
+    ],
+    ["float of unicode digits", "print(float('\uff11\uff12.\uff15'), float('\u0661e\u0662'))\n"],
+    ["an int that is not a number", "int('\u00b2')\n"],
+    [
+      "repr of control and format characters",
+      "print(repr('\x85'), repr('\xa0'), repr('\u200b'), repr('\u2028'), repr('a b'), repr('\xad'))\n",
+    ],
+    [
+      "repr of private use and wide characters",
+      "print(repr('\ue000'), repr('\u{10ffff}'), repr('\u{1f600}'), repr('\u00e9'), repr('\u4e2d'))\n",
+    ],
+    ["a list of strings with such characters", "print(['\x85', '\u200b'])\n"],
+    ["repr of a range with huge endpoints", "print('before')\nprint(range(10 ** 5000))\n"],
+    ["a range with big endpoints that is not printed", "r = range(10 ** 5000)\nprint(len([r]))\n"],
+    ["repr of a range with endpoints that fit", "print(range(10 ** 30, 10 ** 31, 10 ** 29))\n"],
+  ])("%s", (_, code) => same(code));
+});

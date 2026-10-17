@@ -196,6 +196,15 @@ export function floatRepr(x: number): string {
   return negative ? `-${text}` : text;
 }
 
+/** The characters that Python's `repr` escapes: control, format, surrogate, private-use, unassigned, and separators other than the space. */
+const NOT_PRINTABLE = /^[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]$/u;
+
+function escapeChar(code: number): string {
+  if (code < 0x100) return `\\x${code.toString(16).padStart(2, "0")}`;
+  if (code < 0x10000) return `\\u${code.toString(16).padStart(4, "0")}`;
+  return `\\U${code.toString(16).padStart(8, "0")}`;
+}
+
 /** `repr` of a string: single quotes, unless the string has a single quote and no double quote. */
 export function strRepr(s: string): string {
   const quote = s.includes("'") && !s.includes('"') ? '"' : "'";
@@ -206,7 +215,8 @@ export function strRepr(s: string): string {
     else if (ch === "\n") out += "\\n";
     else if (ch === "\r") out += "\\r";
     else if (ch === "\t") out += "\\t";
-    else if (code < 0x20 || code === 0x7f) out += `\\x${code.toString(16).padStart(2, "0")}`;
+    else if (code < 0x20 || code === 0x7f || (ch !== " " && NOT_PRINTABLE.test(ch)))
+      out += escapeChar(code);
     else out += ch;
   }
   return out + quote;
@@ -236,10 +246,12 @@ export function repr(v: PyValue, seen: Set<ListObj> = new Set(), display = false
       return `<function ${v.obj.name}>`;
     case "builtin":
       return `<built-in function ${v.name}>`;
-    case "range":
+    case "range": {
+      const n = (i: bigint): string => (display ? intDisplay(i) : intRepr(i));
       return v.step === 1n
-        ? `range(${v.start}, ${v.stop})`
-        : `range(${v.start}, ${v.stop}, ${v.step})`;
+        ? `range(${n(v.start)}, ${n(v.stop)})`
+        : `range(${n(v.start)}, ${n(v.stop)}, ${n(v.step)})`;
+    }
   }
 }
 

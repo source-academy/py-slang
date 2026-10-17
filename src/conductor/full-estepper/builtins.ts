@@ -46,14 +46,24 @@ function asInteger(v: PyValue): bigint {
   throw new PyError("TypeError", `'${typeName(v)}' object cannot be interpreted as an integer`);
 }
 
+/** Python reads the decimal digits of every script (`int('١٢')` is 12); this turns them into ASCII. */
+function asciiDigits(text: string): string {
+  return text.replace(/\p{Nd}/gu, ch => {
+    // The decimal digits come in runs of ten, starting at the zero.
+    let zero = ch.codePointAt(0) as number;
+    while (/^\p{Nd}$/u.test(String.fromCodePoint(zero - 1))) zero--;
+    return String(((ch.codePointAt(0) as number) - zero) % 10);
+  });
+}
+
 function intFromString(text: string): PyValue {
-  const t = text.trim();
+  const t = asciiDigits(text.trim());
   if (/^[+-]?\d+(_\d+)*$/.test(t)) return int(BigInt(t.replace(/_/g, "")));
   throw new PyError("ValueError", `invalid literal for int() with base 10: ${strRepr(text)}`);
 }
 
 function floatFromString(text: string): PyValue {
-  const t = text.trim().toLowerCase();
+  const t = asciiDigits(text.trim()).toLowerCase();
   const special = /^([+-]?)(inf|infinity|nan)$/.exec(t);
   if (special) {
     if (special[2] === "nan") return float(NaN);

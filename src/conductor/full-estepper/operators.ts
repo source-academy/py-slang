@@ -91,7 +91,9 @@ export function pyEquals(a: PyValue, b: PyValue): boolean {
       const other = (b as typeof a).obj;
       if (a.obj === other) return true;
       if (a.obj.elements.length !== other.elements.length) return false;
-      return a.obj.elements.every((e, i) => pyEquals(e, other.elements[i]));
+      return a.obj.elements.every(
+        (e, i) => pyIs(e, other.elements[i]) || pyEquals(e, other.elements[i]),
+      );
     }
     case "function":
       return a.obj === (b as typeof a).obj;
@@ -186,7 +188,7 @@ function order(op: string, a: PyValue, b: PyValue): number | null {
     const xs = a.obj.elements;
     const ys = b.obj.elements;
     for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
-      if (!pyEquals(xs[i], ys[i])) return order(op, xs[i], ys[i]);
+      if (!(pyIs(xs[i], ys[i]) || pyEquals(xs[i], ys[i]))) return order(op, xs[i], ys[i]);
     }
     return xs.length < ys.length ? -1 : xs.length > ys.length ? 1 : 0;
   }
@@ -324,6 +326,9 @@ function scaledQuotient(num: bigint, den: bigint, k: number): number {
 
 const MAX_EXACT_EXPONENT = 5000n;
 
+/** The largest integer power the engine computes: results of up to this many bits (about 1 MB). */
+const MAX_POWER_BITS = 8_000_000n;
+
 /**
  * `x ** n` for a float and an integer exponent, correctly rounded as the C library that CPython uses
  * is (JavaScript's `**` is not: `7 ** -2` differs from CPython's in the last digit).
@@ -343,8 +348,10 @@ function floatPowInt(x: number, n: bigint): number {
 function power(x: Num, y: Num): PyValue {
   if (!x.float && !y.float) {
     if (y.i >= 0n) {
-      if (y.i > 100_000n && x.i !== 0n && x.i !== 1n && x.i !== -1n) {
-        throw new PyError("MemoryError", "the result is too large");
+      // The result has about bitLength(x) * y bits; refuse what could not be built in a moment.
+      if (x.i !== 0n && x.i !== 1n && x.i !== -1n) {
+        const size = BigInt(bitLength(x.i < 0n ? -x.i : x.i)) * y.i;
+        if (size > MAX_POWER_BITS) throw new PyError("MemoryError", "the result is too large");
       }
       return int(x.i ** y.i);
     }
