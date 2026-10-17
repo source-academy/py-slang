@@ -1,6 +1,6 @@
 # A JIT for pynter-wasm
 
-Status: project plan, draft. Tracking project: **pynter-jit** (source-academy GitHub organization).
+Status: project plan, draft. Tracking project: [**pynter-jit**](https://github.com/orgs/source-academy/projects/60) (source-academy GitHub organization).
 
 ## Goal
 
