@@ -1,6 +1,6 @@
 # The environment stepper for full Python ("full e-stepper")
 
-Status: design note, draft. Tracking project: **full-e-stepper** (source-academy GitHub organization).
+Status: design note; the parser is done (py-slang#556) and the engine's first slice is in. Tracking project: **full-e-stepper** (source-academy GitHub organization).
 Builds on the e-stepper for Python §3/§4: [docs/e-stepper.md](e-stepper.md).
 
 ## Motivation
@@ -117,16 +117,91 @@ New rules (sketches; the full table goes in the specification):
 
 ## Step granularity
 
-The §3/§4 e-stepper looks up every name in a step of its own. With attribute lookups, iterator
-calls and dunder methods, full Python programs would take many more steps. Options:
+Decided for the first slices: **the same granularity as the e-stepper for §3/§4**. Every name that is
+not a built-in is looked up in a step of its own, left to right; every operator, call, assignment and
+statement is a step; a built-in's name is looked up in the step that applies it (no drawn frame binds
+it); a `while` loop unfolds into the textbook's `if`; a call of a function whose frame would have no
+bindings runs in the frame that the function extends. Students who know the e-stepper from §3/§4 see
+the same rules, and the display code of the host is the same.
 
-- the same granularity as §3/§4, with a step limit;
-- a *coarse* mode, the default, in which lookups, `iter`/`next` of built-in iterators and
-  operators on built-in types are part of the step that uses them, and a *fine* mode as in §3/§4;
-- statement-level steps (as in Python Tutor), with the program shown and the current statement
-  highlighted, not rewritten.
+The cost is long traces: a full Python program takes more steps than a §4 program of the same size.
+That is for the step limit and, later, a *coarse* mode as a switch (lookups, `iter`/`next` of built-in
+iterators and operators on built-in types part of the step that uses them) and perhaps statement-level
+steps, as in Python Tutor. Neither changes the engine's rules; both are about what a host shows. To
+be revisited with programs from the course, once the engine is connected to the playground.
 
-To be decided after stage 1, with programs from the course.
+The differences from §3/§4 follow from Python, and the engine does what CPython does:
+
+- a condition is any value's truth value (`if []:`, `x or y` gives an operand), not a bool only;
+- **no tail-call elimination**, as in CPython: a call in tail position keeps its caller's frame, and
+  the depth of calls is limited to CPython's 1000 (`RecursionError`);
+- a list is iterated live: `for x in xs` sees what the body appends to `xs`;
+- `+=` on a list changes it in place and keeps its identity; on a number or a string it rebinds.
+
+## Decisions for the engine
+
+These were open when the note was first written; the first slice of the engine
+(`src/conductor/full-estepper/`) settles them.
+
+1. **The engine has its own values, not the CSE machine's.** The §3/§4 e-stepper runs on the CSE
+   machine's store (its environments, closures, values and operators), which keeps its results in
+   line with the CSE machine by construction. For full Python that is the wrong reference: the CSE
+   machine's operators encode the restrictions of the sublanguages (a list index must be a
+   non-negative integer, `==` rejects booleans in §1/§2, a condition must be a bool, `//` and `%` are
+   restricted), and it has no values for tuples, dictionaries, classes or iterators. The values
+   (`values.ts`) are Python's: `int` (a `bigint`), `float`, `bool`, `str`, `None`, `list`, function
+   objects, built-in functions and `range`, with the others to come. Objects with an identity (lists,
+   function objects) are heap objects; the rest are compared by value.
+2. **Operators and built-ins are CPython's, and the tests prove it.** `operators.ts` and
+   `builtins.ts` implement Python's semantics: the floor division and modulo of negative numbers, the
+   result of `int ** negative int`, `bool` as an `int`, mixed int/float comparison without rounding, `and`
+   and `or` giving an operand, negative indices, `+=` on lists. `repr` writes floats as CPython does
+   (`1e-05`, `1e+16`, `inf`), and refuses to turn an int of more than 4300 digits into a string, as
+   CPython does. Where JavaScript's numbers are not CPython's, the engine does the arithmetic itself:
+   true division of big ints is correctly rounded, `//` of floats follows CPython's algorithm (`1 // 0.1`
+   is `9.0`), and an integer power of a float is computed exactly with `BigInt` and rounded once (the
+   `**` of V8 and the C library that CPython uses differ in the last digit, as in `7 ** -2`). Not yet:
+   complex numbers (a negative number to a fractional power stops with a `NotImplementedError`), and
+   fractional powers are `Math.pow`'s, not exactly the C library's.
+3. **The engine does its own static scoping** (`scope.ts`), by Python's rules, and does not reuse py-slang's
+   resolver, whose scope handling is built around the sublanguages (and provisional for the new
+   syntax). A name in a function body is local if the body assigns it or it is a parameter, unless
+   `global` or `nonlocal` says otherwise; a function's frame has all its locals from the start,
+   unassigned until assigned (`UnboundLocalError`); a free name is looked up in the enclosing function
+   frames, whose static locals decide, then in the module frame, then in the built-ins; the module
+   frame grows as names are assigned. CPython's compile-time errors (`return` outside a function, `break`
+   outside a loop) are reported before anything runs.
+4. **The step granularity** is that of §3/§4 (above).
+5. **Unsupported constructs stop the program when they are reached**, with a `NotImplementedError` that
+   names the construct ("The environment stepper does not support tuples yet"): output that comes
+   before is kept, and a branch that is not taken does not matter. The syntax tree is translated to
+   terms (`terms.ts`) in which what the engine does not do yet is an `unsupported` term.
+
+## What the first slice has
+
+The core of the engine, with no connection to the host yet: its trace is text.
+
+| In the slice | Not yet |
+|---|---|
+| values: int, float, bool, str, None, list, function, built-in, range | tuples, dictionaries, sets, complex numbers, string and list methods |
+| expressions: literals, names, unary and binary operators, comparisons (also `in` and `is`), `and`/`or`, conditional expressions, calls with positional arguments, `lambda`, list displays, subscripts | keyword arguments, defaults, `*args`, `**kwargs`, slices, comprehensions, chained comparisons, attributes |
+| statements: expression, assignment (names and items), augmented assignment, `if`/`elif`/`else`, `while`, `for` over lists, strings and `range`, `def`, `return`, `pass`, `break`, `continue`, `global`, `nonlocal` | assignment to several names, `for` with unpacking, `class`, `try`, `raise`, `with`, `del`, `import`, `assert`, decorators |
+| built-ins: `print`, `len`, `range`, `abs`, `min`, `max`, `str`, `repr`, `int`, `float`, `bool`, `list` | the rest of the SICP library and of Python's built-ins |
+| a text trace (`runFullEStepper`, `formatTrace`), and `--engine full-estepper [--trace]` in the CLI | the protocol of the host's e-stepper tab, the evaluator `pythonFullEStepper`, garbage frames and objects, breakpoints |
+
+## The code
+
+| File | Contents |
+|---|---|
+| `values.ts` | the values, frames, `repr` and `str` |
+| `operators.ts` | Python's operators, subscripts, iteration |
+| `builtins.ts` | the built-in functions |
+| `scope.ts` | static scoping; CPython's compile-time errors |
+| `terms.ts` | the program terms, and the translation from the syntax tree |
+| `store.ts` | frames, name lookup and assignment, labels (`Global`, `E1`, `#1`) |
+| `engine.ts` | `Machine`: one contraction per `step()`, with its explanations |
+| `text.ts` | terms and values as text |
+| `run.ts` | `runFullEStepper` (the trace), `evaluate` (no trace, for the tests) |
 
 ## Architecture
 
@@ -140,20 +215,33 @@ To be decided after stage 1, with programs from the course.
 
 ## Testing
 
-- Unit tests per rule, on small programs.
-- **Differential tests against CPython**: for every program in the corpus, the engine's output and
-  the kind of exception (if any) equal those of `python3` running the same program with the SICP
-  library predeclared, from `sourceacademy-sicp` (`python/`), the package that the full Python
-  evaluator loads into Pyodide. CI installs CPython and that package, as the `python-package`
-  workflow already does for the package's own tests.
-- Golden step sequences for the teaching examples: a bank account class, an iterator class, a
-  generator, a `try`/`finally`.
+- **Differential tests against CPython** (`src/tests/full-estepper/`): a corpus of programs
+  (expressions, errors, statements, scoping, closures, recursion, errors of programs), each run by
+  `python3` and by the engine; what it prints and the name of the exception that stops it (if any)
+  must be the same. The messages of exceptions differ between versions of CPython and are not
+  compared. The tests need `python3`, and skip themselves without it.
+- **Random arithmetic**: expressions over ints, booleans and floats with every operator, evaluated by
+  CPython (one process) and by the engine, 700 per seed; `FUZZ_SEEDS=150` runs 105,000 and found the
+  differences that the arithmetic above works around.
+- **Trace tests**: the explanations, the program after each step, the frames and heap objects of the
+  `make_withdraw` example of the guide, frames that are not drawn, errors, the step limit, and what
+  is not supported.
+- Golden step sequences for the teaching examples of the later stages: a bank account class, an
+  iterator class, a generator, a `try`/`finally`.
+- The library of the course (`sourceacademy-sicp`, `python/`) as the reference for its functions
+  when they are added.
 
 ## Plan
 
 1. This design note.
-2. py-slang: parser for full Python (stage 1 syntax, then the rest).
-3. py-slang: engine, stage 1, with evaluator and differential tests.
+2. py-slang: parser for full Python. Done (#562, #564, #565, #577).
+3. py-slang: engine, stage 1, in slices:
+   1. **the core** (the first slice, above): values, operators, scoping, the machine, a text trace,
+      the differential tests;
+   2. tuples, dictionaries and sets; keyword arguments, defaults, `*args`/`**kwargs`; slices and
+      chained comparisons; string and list methods; complex numbers;
+   3. the host: the protocol (`EStepperStep`: program, frames, heap, the store as a CSE machine
+      snapshot), garbage, breakpoints, the evaluator `pythonFullEStepper`.
 4. plugins, frontend: the new heap objects (tuple, dict first).
 5. language-directory: `pythonFullEStepper` (both directories).
 6. py-slang: stages 2, 3 and 4, each with the heap objects it needs.
@@ -161,10 +249,11 @@ To be decided after stage 1, with programs from the course.
 
 ## Open questions
 
-- Step granularity (above).
-- Parser: extend py-slang's grammar, or a separate one?
+- A *coarse* mode, or statement-level steps (see *Step granularity*), once there are programs of the
+  course to try.
 - How should a class's frame be drawn while its body runs, and the class object afterwards, so that
   students do not take the class for an enclosing scope of its methods?
 - Strings: immutable objects or primitives in the drawing? (The CSE machine shows them inline.)
-- Which built-in functions and methods are in stage 1, and what does the e-stepper show for one that
-  is not supported?
+- How are the SICP library's functions provided: by the engine's built-ins, or by running the
+  library's own Python code (`sourceacademy-sicp`) as ordinary steps?
+- Fractional powers of floats exactly as the C library gives them, if it matters to anyone.
