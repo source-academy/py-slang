@@ -246,6 +246,9 @@ const ParserRules = [
     postprocess: id,
   },
   { name: "statement", symbols: ["statementTupleAssign", { type: "newline" }], postprocess: id },
+  { name: "statement", symbols: ["statementRaise", { type: "newline" }], postprocess: id },
+  { name: "statement", symbols: ["statementDel", { type: "newline" }], postprocess: id },
+  { name: "statement", symbols: ["statementImport", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementReturn", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementPass", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementBreak", { type: "newline" }], postprocess: id },
@@ -258,6 +261,10 @@ const ParserRules = [
   { name: "statement", symbols: ["statementWhile"], postprocess: id },
   { name: "statement", symbols: ["statementFor"], postprocess: id },
   { name: "statement", symbols: ["statementDef"], postprocess: id },
+  { name: "statement", symbols: ["statementClass"], postprocess: id },
+  { name: "statement", symbols: ["statementTry"], postprocess: id },
+  { name: "statement", symbols: ["statementWith"], postprocess: id },
+  { name: "statement", symbols: ["statementDecorated"], postprocess: id },
   {
     name: "statementAssign",
     symbols: [{ type: "name" }, { literal: "=" }, "expression_list"],
@@ -360,11 +367,18 @@ const ParserRules = [
     postprocess: ([kw, ns]: [moo.Token, Token[]]) =>
       new StmtNS.NonLocal(toAstToken(kw), ns[ns.length - 1], ns),
   },
+  { name: "statementAssert$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },
+  {
+    name: "statementAssert$ebnf$1",
+    symbols: ["statementAssert$ebnf$1$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "statementAssert$ebnf$1", symbols: [], postprocess: () => null },
   {
     name: "statementAssert",
-    symbols: [{ literal: "assert" }, "expression"],
-    postprocess: ([kw, e]: [moo.Token, ExprNS.Expr]) =>
-      new StmtNS.Assert(toAstToken(kw), e.endToken, e),
+    symbols: [{ literal: "assert" }, "expression", "statementAssert$ebnf$1"],
+    postprocess: ([kw, e, msg]: [moo.Token, ExprNS.Expr, [moo.Token, ExprNS.Expr] | null]) =>
+      new StmtNS.Assert(toAstToken(kw), (msg ? msg[1] : e).endToken, e, msg ? msg[1] : null),
   },
   {
     name: "statementExpr",
@@ -402,6 +416,301 @@ const ParserRules = [
         iter,
         body,
       ),
+  },
+  {
+    name: "statementRaise",
+    symbols: [{ literal: "raise" }],
+    postprocess: ([t]: [moo.Token]) => {
+      const k = toAstToken(t);
+      return new StmtNS.Raise(k, k, null, null);
+    },
+  },
+  {
+    name: "statementRaise",
+    symbols: [{ literal: "raise" }, "expression"],
+    postprocess: ([kw, e]: [moo.Token, ExprNS.Expr]) =>
+      new StmtNS.Raise(toAstToken(kw), e.endToken, e, null),
+  },
+  {
+    name: "statementRaise",
+    symbols: [{ literal: "raise" }, "expression", { literal: "from" }, "expression"],
+    postprocess: ([kw, e, , cause]: [moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) =>
+      new StmtNS.Raise(toAstToken(kw), cause.endToken, e, cause),
+  },
+  {
+    name: "statementDel",
+    symbols: [{ literal: "del" }, "del_targets"],
+    postprocess: ([kw, ts]: [moo.Token, ExprNS.Expr[]]) =>
+      new StmtNS.Del(toAstToken(kw), ts[ts.length - 1].endToken, ts),
+  },
+  { name: "del_targets$ebnf$1", symbols: [] },
+  { name: "del_targets$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "target"] },
+  {
+    name: "del_targets$ebnf$1",
+    symbols: ["del_targets$ebnf$1", "del_targets$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "del_targets$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "del_targets$ebnf$2", symbols: ["del_targets$ebnf$2$subexpression$1"], postprocess: id },
+  { name: "del_targets$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "del_targets",
+    symbols: ["target", "del_targets$ebnf$1", "del_targets$ebnf$2"],
+    postprocess: flatList,
+  },
+  {
+    name: "statementImport",
+    symbols: [{ literal: "import" }, "import_names"],
+    postprocess: ([kw, names]: [moo.Token, StmtNS.Import["names"]]) => {
+      const last = names[names.length - 1];
+      return new StmtNS.Import(toAstToken(kw), last.alias || last.name, names);
+    },
+  },
+  { name: "import_names$ebnf$1", symbols: [] },
+  { name: "import_names$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "import_name"] },
+  {
+    name: "import_names$ebnf$1",
+    symbols: ["import_names$ebnf$1", "import_names$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "import_names", symbols: ["import_name", "import_names$ebnf$1"], postprocess: flatList },
+  {
+    name: "import_name",
+    symbols: ["dotted_name"],
+    postprocess: ([t]: [Token]) => ({ name: t, alias: null }),
+  },
+  {
+    name: "import_name",
+    symbols: ["dotted_name", { literal: "as" }, { type: "name" }],
+    postprocess: ([t, , a]: [Token, moo.Token, moo.Token]) => ({ name: t, alias: toAstToken(a) }),
+  },
+  {
+    name: "statementClass",
+    symbols: [{ literal: "class" }, { type: "name" }, { literal: ":" }, "block"],
+    postprocess: ([kw, name, , body]: [moo.Token, moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+      new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), [], body),
+  },
+  {
+    name: "statementClass",
+    symbols: [
+      { literal: "class" },
+      { type: "name" },
+      { literal: "(" },
+      { literal: ")" },
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, name, , , , body]: [
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) =>
+      new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), [], body),
+  },
+  {
+    name: "statementClass",
+    symbols: [
+      { literal: "class" },
+      { type: "name" },
+      { literal: "(" },
+      "spread_expressions",
+      { literal: ")" },
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, name, , bases, , , body]: [
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      ExprNS.Expr[],
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) =>
+      new StmtNS.Class(
+        toAstToken(kw),
+        body[body.length - 1].endToken,
+        toAstToken(name),
+        bases,
+        body,
+      ),
+  },
+  { name: "statementTry$ebnf$1", symbols: ["except_clause"] },
+  {
+    name: "statementTry$ebnf$1",
+    symbols: ["statementTry$ebnf$1", "except_clause"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "statementTry$ebnf$2$subexpression$1",
+    symbols: [{ literal: "else" }, { literal: ":" }, "block"],
+  },
+  {
+    name: "statementTry$ebnf$2",
+    symbols: ["statementTry$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "statementTry$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "statementTry$ebnf$3$subexpression$1",
+    symbols: [{ literal: "finally" }, { literal: ":" }, "block"],
+  },
+  {
+    name: "statementTry$ebnf$3",
+    symbols: ["statementTry$ebnf$3$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "statementTry$ebnf$3", symbols: [], postprocess: () => null },
+  {
+    name: "statementTry",
+    symbols: [
+      { literal: "try" },
+      { literal: ":" },
+      "block",
+      "statementTry$ebnf$1",
+      "statementTry$ebnf$2",
+      "statementTry$ebnf$3",
+    ],
+    postprocess: ([kw, , body, handlers, orElse, fin]: [
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+      StmtNS.Try["handlers"],
+      [moo.Token, moo.Token, StmtNS.Stmt[]] | null,
+      [moo.Token, moo.Token, StmtNS.Stmt[]] | null,
+    ]) => {
+      const last = fin ? fin[2] : orElse ? orElse[2] : handlers[handlers.length - 1].body;
+      return new StmtNS.Try(
+        toAstToken(kw),
+        last[last.length - 1].endToken,
+        body,
+        handlers,
+        orElse ? orElse[2] : null,
+        fin ? fin[2] : null,
+      );
+    },
+  },
+  {
+    name: "statementTry",
+    symbols: [
+      { literal: "try" },
+      { literal: ":" },
+      "block",
+      { literal: "finally" },
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, , body, , , fin]: [
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) => new StmtNS.Try(toAstToken(kw), fin[fin.length - 1].endToken, body, [], null, fin),
+  },
+  {
+    name: "except_clause",
+    symbols: [{ literal: "except" }, { literal: ":" }, "block"],
+    postprocess: ([, , body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) => ({
+      type: null,
+      name: null,
+      body,
+    }),
+  },
+  {
+    name: "except_clause",
+    symbols: [{ literal: "except" }, "expression", { literal: ":" }, "block"],
+    postprocess: ([, type, , body]: [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) => ({
+      type,
+      name: null,
+      body,
+    }),
+  },
+  {
+    name: "except_clause",
+    symbols: [
+      { literal: "except" },
+      "expression",
+      { literal: "as" },
+      { type: "name" },
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([, type, , name, , body]: [
+      moo.Token,
+      ExprNS.Expr,
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) => ({ type, name: toAstToken(name), body }),
+  },
+  { name: "statementWith$ebnf$1", symbols: [] },
+  { name: "statementWith$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "with_item"] },
+  {
+    name: "statementWith$ebnf$1",
+    symbols: ["statementWith$ebnf$1", "statementWith$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "statementWith",
+    symbols: [{ literal: "with" }, "with_item", "statementWith$ebnf$1", { literal: ":" }, "block"],
+    postprocess: ([kw, first, rest, , body]: [
+      moo.Token,
+      StmtNS.With["items"][number],
+      [moo.Token, StmtNS.With["items"][number]][],
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) =>
+      new StmtNS.With(
+        toAstToken(kw),
+        body[body.length - 1].endToken,
+        [first, ...rest.map(r => r[1])],
+        body,
+      ),
+  },
+  {
+    name: "with_item",
+    symbols: ["expression"],
+    postprocess: ([e]: [ExprNS.Expr]) => ({ context: e, target: null }),
+  },
+  {
+    name: "with_item",
+    symbols: ["expression", { literal: "as" }, "target"],
+    postprocess: ([e, , t]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => ({ context: e, target: t }),
+  },
+  { name: "statementDecorated$ebnf$1", symbols: ["decorator"] },
+  {
+    name: "statementDecorated$ebnf$1",
+    symbols: ["statementDecorated$ebnf$1", "decorator"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "statementDecorated$subexpression$1", symbols: ["statementDef"] },
+  { name: "statementDecorated$subexpression$1", symbols: ["statementClass"] },
+  {
+    name: "statementDecorated",
+    symbols: ["statementDecorated$ebnf$1", "statementDecorated$subexpression$1"],
+    postprocess: ([decorators, [definition]]: [ExprNS.Expr[], [StmtNS.Stmt]]) =>
+      new StmtNS.Decorated(decorators[0].startToken, definition.endToken, decorators, definition),
+  },
+  {
+    name: "decorator",
+    symbols: [{ literal: "@" }, "expression", { type: "newline" }],
+    postprocess: ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => e,
   },
   {
     name: "statementDef",
@@ -511,6 +820,9 @@ const ParserRules = [
   { name: "blockInline", symbols: ["statementAnnAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementSubscriptAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementTupleAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementRaise"], postprocess: id },
+  { name: "blockInline", symbols: ["statementDel"], postprocess: id },
+  { name: "blockInline", symbols: ["statementImport"], postprocess: id },
   { name: "blockInline", symbols: ["statementReturn"], postprocess: id },
   { name: "blockInline", symbols: ["statementPass"], postprocess: id },
   { name: "blockInline", symbols: ["statementBreak"], postprocess: id },

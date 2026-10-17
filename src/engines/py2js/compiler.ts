@@ -601,6 +601,9 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
       // binding on its own.
       return "";
     case "Assert":
+      if ((s as StmtNS.Assert).message) {
+        throw new Error("Assertion messages are not supported");
+      }
       return `${indent}__py.assertCheck(${emitExpr((s as StmtNS.Assert).value, a, ctx)});\n`;
     case "FromImport": {
       // The imported values are resolved (module loaded, converted to

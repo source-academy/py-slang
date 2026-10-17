@@ -6,7 +6,8 @@
 export const FULL_PYTHON_VARIANT = Infinity;
 
 /** Keywords only meaningful once every chapter gate is off — real Python
- * keywords that no Source §x chapter grammar accepts (see the `forbidden_*`
+ * keywords that no Source §x chapter accepts (the parser accepts most of them,
+ * and the sublanguage validators reject them; `async`, `await` and `yield` are the `forbidden_*`
  * tokens in lexer.ts), so they only belong in getKeywords/getIllegalKeywords
  * output for FULL_PYTHON_VARIANT. */
 const fullOnlyKeywords = [

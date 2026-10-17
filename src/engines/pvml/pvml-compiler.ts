@@ -1192,6 +1192,28 @@ export class PVMLCompiler
     return { maxStackSize: 0 };
   }
 
+  visitClassStmt(_stmt: StmtNS.Class): ExpressionResult {
+    throw new Error("Classes are not supported by the PVML compiler");
+  }
+  visitDecoratedStmt(_stmt: StmtNS.Decorated): ExpressionResult {
+    throw new Error("Decorators are not supported by the PVML compiler");
+  }
+  visitTryStmt(_stmt: StmtNS.Try): ExpressionResult {
+    throw new Error("try statements are not supported by the PVML compiler");
+  }
+  visitRaiseStmt(_stmt: StmtNS.Raise): ExpressionResult {
+    throw new Error("raise statements are not supported by the PVML compiler");
+  }
+  visitWithStmt(_stmt: StmtNS.With): ExpressionResult {
+    throw new Error("with statements are not supported by the PVML compiler");
+  }
+  visitDelStmt(_stmt: StmtNS.Del): ExpressionResult {
+    throw new Error("del statements are not supported by the PVML compiler");
+  }
+  visitImportStmt(_stmt: StmtNS.Import): ExpressionResult {
+    throw new Error("import statements are not supported by the PVML compiler");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): ExpressionResult {
     throw new Error("Tuple assignment is not supported by the PVML compiler");
   }
