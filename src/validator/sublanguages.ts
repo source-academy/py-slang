@@ -14,6 +14,7 @@ import { createRangeOnlyInForHeaderValidator } from "./features/range-only-in-fo
 import { NoRestParamsValidator } from "./features/no-rest-params";
 import { NoSpreadValidator } from "./features/no-spread";
 import { NoDefaultValuesValidator } from "./features/no-default-values";
+import { NoFullPythonExpressionsValidator } from "./features/no-full-python-expressions";
 import { NoFullPythonStatementsValidator } from "./features/no-full-python-statements";
 import { NoDictsValidator } from "./features/no-dicts";
 import { NoKeywordArgsValidator } from "./features/no-keyword-args";
@@ -27,6 +28,7 @@ const beyondPython4Validators: FeatureValidator[] = [
   NoKeywordArgsValidator,
   NoDefaultValuesValidator,
   NoFullPythonStatementsValidator,
+  NoFullPythonExpressionsValidator,
 ];
 
 /**

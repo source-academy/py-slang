@@ -21,6 +21,8 @@ export namespace ExprNS {
     visitListExpr(expr: List): T;
     visitSubscriptExpr(expr: Subscript): T;
     visitStarredExpr(expr: Starred): T;
+    visitAttributeExpr(expr: Attribute): T;
+    visitCompareChainExpr(expr: CompareChain): T;
     visitTupleExpr(expr: Tuple): T;
     visitDictExpr(expr: Dict): T;
     visitKeywordExpr(expr: Keyword): T;
@@ -242,6 +244,40 @@ export namespace ExprNS {
       return visitor.visitStarredExpr(this);
     }
   }
+  export class Attribute extends Expr {
+    readonly kind = "Attribute";
+    value: Expr;
+    name: Token;
+    constructor(startToken: Token, endToken: Token, value: Expr, name: Token) {
+      super(startToken, endToken);
+      this.value = value;
+      this.name = name;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitAttributeExpr(this);
+    }
+  }
+  export class CompareChain extends Expr {
+    readonly kind = "CompareChain";
+    left: Expr;
+    operators: Token[];
+    comparators: Expr[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      left: Expr,
+      operators: Token[],
+      comparators: Expr[],
+    ) {
+      super(startToken, endToken);
+      this.left = left;
+      this.operators = operators;
+      this.comparators = comparators;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitCompareChainExpr(this);
+    }
+  }
   export class Tuple extends Expr {
     readonly kind = "Tuple";
     elements: Expr[];
@@ -304,6 +340,9 @@ export namespace StmtNS {
   export interface Visitor<T> {
     visitPassStmt(stmt: Pass): T;
     visitAssignStmt(stmt: Assign): T;
+    visitAugAssignStmt(stmt: AugAssign): T;
+    visitAttributeAssignStmt(stmt: AttributeAssign): T;
+    visitForUnpackStmt(stmt: ForUnpack): T;
     visitTupleAssignStmt(stmt: TupleAssign): T;
     visitAnnAssignStmt(stmt: AnnAssign): T;
     visitBreakStmt(stmt: Break): T;
@@ -357,6 +396,61 @@ export namespace StmtNS {
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitAssignStmt(this);
+    }
+  }
+  export class AugAssign extends Stmt {
+    readonly kind = "AugAssign";
+    target: ExprNS.Expr;
+    operator: Token;
+    value: ExprNS.Expr;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      target: ExprNS.Expr,
+      operator: Token,
+      value: ExprNS.Expr,
+    ) {
+      super(startToken, endToken);
+      this.target = target;
+      this.operator = operator;
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitAugAssignStmt(this);
+    }
+  }
+  export class AttributeAssign extends Stmt {
+    readonly kind = "AttributeAssign";
+    target: ExprNS.Attribute;
+    value: ExprNS.Expr;
+    constructor(startToken: Token, endToken: Token, target: ExprNS.Attribute, value: ExprNS.Expr) {
+      super(startToken, endToken);
+      this.target = target;
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitAttributeAssignStmt(this);
+    }
+  }
+  export class ForUnpack extends Stmt {
+    readonly kind = "ForUnpack";
+    target: ExprNS.Tuple;
+    iter: ExprNS.Expr;
+    body: Stmt[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      target: ExprNS.Tuple,
+      iter: ExprNS.Expr,
+      body: Stmt[],
+    ) {
+      super(startToken, endToken);
+      this.target = target;
+      this.iter = iter;
+      this.body = body;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitForUnpackStmt(this);
     }
   }
   export class TupleAssign extends Stmt {

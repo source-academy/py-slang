@@ -1027,6 +1027,22 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   visitImportStmt(_stmt: StmtNS.Import): WasmInstruction {
     throw new Error("import statements are not supported");
   }
+  visitAugAssignStmt(_stmt: StmtNS.AugAssign): WasmInstruction {
+    throw new Error("Augmented assignment is not supported");
+  }
+  visitAttributeAssignStmt(_stmt: StmtNS.AttributeAssign): WasmInstruction {
+    throw new Error("Assignment to attributes is not supported");
+  }
+  visitForUnpackStmt(_stmt: StmtNS.ForUnpack): WasmInstruction {
+    throw new Error("Unpacking in for loops is not supported");
+  }
+  visitAttributeExpr(_expr: ExprNS.Attribute): WasmNumeric {
+    throw new Error("Attribute access is not supported");
+  }
+  visitCompareChainExpr(_expr: ExprNS.CompareChain): WasmNumeric {
+    throw new Error("Chained comparisons is not supported");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): WasmInstruction {
     throw new Error("Tuple assignment is not supported");
   }

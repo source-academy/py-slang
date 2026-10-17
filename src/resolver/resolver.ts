@@ -553,8 +553,25 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       );
     }
   }
-  // A name or subscript that a statement binds, or a tuple of them.
+  visitAugAssignStmt(stmt: StmtNS.AugAssign): void {
+    this.resolve(stmt.value);
+    this.resolveTarget(stmt.target);
+  }
+  visitAttributeAssignStmt(stmt: StmtNS.AttributeAssign): void {
+    this.resolve(stmt.value);
+    this.resolve(stmt.target);
+  }
+  visitForUnpackStmt(stmt: StmtNS.ForUnpack): void {
+    this.resolve(stmt.iter);
+    this.resolveTarget(stmt.target);
+    this.resolve(stmt.body);
+  }
+  // A name, subscript or attribute that a statement binds, or a tuple of them.
   private resolveTarget(target: ExprNS.Expr): void {
+    if (target instanceof ExprNS.Starred) {
+      this.resolveTarget(target.value);
+      return;
+    }
     if (target instanceof ExprNS.Variable) {
       this.declareBound(target.name);
       this.functionVarConstraint(target.name);
@@ -1088,6 +1105,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   visitTupleExpr(expr: ExprNS.Tuple): void {
     this.resolve(expr.elements);
+  }
+  visitAttributeExpr(expr: ExprNS.Attribute): void {
+    this.resolve(expr.value);
+  }
+  visitCompareChainExpr(expr: ExprNS.CompareChain): void {
+    this.resolve(expr.left);
+    this.resolve(expr.comparators);
   }
   visitDictExpr(expr: ExprNS.Dict): void {
     this.resolve(expr.keys);

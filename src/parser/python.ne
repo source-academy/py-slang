@@ -159,6 +159,8 @@ statement ->
   | statementSubscriptAssign %newline            {% id %}
   | statementTupleAssign %newline                {% id %}
   | statementRaise %newline                      {% id %}
+  | statementAttributeAssign %newline            {% id %}
+  | statementAugAssign %newline                  {% id %}
   | statementDel %newline                        {% id %}
   | statementImport %newline                     {% id %}
   | statementReturn %newline                     {% id %}
@@ -176,6 +178,8 @@ statement ->
   | statementFor
       {% id %}
   | statementDef
+      {% id %}
+  | statementForUnpack
       {% id %}
   | statementClass
       {% id %}
@@ -361,6 +365,8 @@ blockInline ->
   | statementSubscriptAssign {% id %}
   | statementTupleAssign  {% id %}
   | statementRaise        {% id %}
+  | statementAttributeAssign {% id %}
+  | statementAugAssign    {% id %}
   | statementDel          {% id %}
   | statementImport       {% id %}
   | statementReturn       {% id %}
@@ -429,8 +435,29 @@ expressionNot ->
 # `x < y < z` cannot be built at all - it's a syntax error, not a silently
 # different parse. See docs/specs/python_precedence.tex.
 expressionCmp ->
-    expressionAdd expressionCmpOp expressionAdd  {% astCompare %}
+    expressionBitOr expressionCmpOp expressionBitOr  {% astCompare %}
+  | expressionBitOr expressionCmpOp expressionBitOr (expressionCmpOp expressionBitOr):+
+      {% ([left, op, right, rest]: [ExprNS.Expr, Token, ExprNS.Expr, [Token, ExprNS.Expr][]]) => {
+           const comparators = [right, ...rest.map(r => r[1])];
+           return new ExprNS.CompareChain(left.startToken, comparators[comparators.length - 1].endToken,
+                                          left, [op, ...rest.map(r => r[0])], comparators);
+         } %}
+  | expressionBitOr                                  {% id %}
+
+# Bitwise operators (full Python only), between the comparisons and the arithmetic operators
+expressionBitOr ->
+    expressionBitOr %vbar expressionBitXor       {% astBinaryTok %}
+  | expressionBitXor                               {% id %}
+expressionBitXor ->
+    expressionBitXor %circumflex expressionBitAnd {% astBinaryTok %}
+  | expressionBitAnd                               {% id %}
+expressionBitAnd ->
+    expressionBitAnd %amper expressionShift      {% astBinaryTok %}
+  | expressionShift                                {% id %}
+expressionShift ->
+    expressionShift expressionShiftOp expressionAdd {% astBinary %}
   | expressionAdd                                  {% id %}
+expressionShiftOp -> %leftshift {% tok %} | %rightshift {% tok %}
 
 expressionCmpOp ->
     %less             {% tok %}
@@ -461,7 +488,8 @@ expressionMulOp ->
   | %doubleslash {% tok %}
 
 expressionUnary ->
-    %plus expressionUnary                        {% astUnary %}
+    %tilde expressionUnary                       {% astUnary %}
+  | %plus expressionUnary                        {% astUnary %}
   | %minus expressionUnary                       {% astUnary %}
   | expressionPow                                  {% id %}
 
@@ -474,6 +502,8 @@ expressionPost ->
       {% ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
   | expressionPost "(" spread_expressions ")"
       {% ([callee,, args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token])  => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+  | expressionPost "." %name
+      {% ([obj,, name]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)) %}
   | expressionPost "(" ")"
       {% ([callee,, rparen]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, []) %}
   | atom                                       {% id %}
@@ -556,17 +586,46 @@ tuple_target ->
     target_list  {% id %}
   | "(" target_list ")"  {% ([l, t, r]: [moo.Token, ExprNS.Tuple, moo.Token]) => new ExprNS.Tuple(toAstToken(l), toAstToken(r), t.elements) %}
 target_list ->
-    target "," {% ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]) %}
-  | target ("," target):+ (%comma):?
+    star_or_target "," {% ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]) %}
+  | star_or_target ("," star_or_target):+ (%comma):?
       {% ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
            const elems = flatList([first, rest]);
            return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
          } %}
-target ->
+star_or_target ->
+    target  {% id %}
+  | "*" target  {% ([star, t]: [moo.Token, ExprNS.Expr]) => new ExprNS.Starred(toAstToken(star), t.endToken, t) %}
+# a name, a subscript or an attribute: what `x op= e` can change
+simple_target ->
     %name  {% astVariable %}
   | expressionPost %lsqb expression %rsqb
       {% ([obj,, idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
+  | expressionPost "." %name
+      {% ([obj,, name]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)) %}
+target ->
+    simple_target  {% id %}
   | "(" target_list ")"  {% ([, t]: [moo.Token, ExprNS.Tuple, moo.Token]) => t %}
+
+# `a.b = value`
+statementAttributeAssign -> expressionPost "." %name "=" expression_list
+  {% ([obj,, name,, v]: [ExprNS.Expr, moo.Token, moo.Token, moo.Token, ExprNS.Expr]) => {
+       const attr = new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name));
+       return new StmtNS.AttributeAssign(obj.startToken, v.endToken, attr, v);
+     } %}
+
+# `x += e`, ...
+statementAugAssign -> simple_target augassign_op expression_list
+  {% ([t, op, v]: [ExprNS.Expr, Token, ExprNS.Expr]) => new StmtNS.AugAssign(t.startToken, v.endToken, t, op, v) %}
+augassign_op ->
+    %pluseq {% tok %} | %minuseq {% tok %} | %stareq {% tok %} | %slasheq {% tok %}
+  | %doubleslasheq {% tok %} | %percenteq {% tok %} | %doublestareq {% tok %}
+  | %ampereq {% tok %} | %vbareq {% tok %} | %circumflexeq {% tok %}
+  | %leftshifteq {% tok %} | %rightshifteq {% tok %}
+
+# `for a, b in iter:` (`for x in iter:` with a single name is statementFor)
+statementForUnpack -> "for" tuple_target "in" expression ":" block
+  {% ([kw, target,, iter,, body]: [moo.Token, ExprNS.Tuple, moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
+       new StmtNS.ForUnpack(toAstToken(kw), body[body.length - 1].endToken, target, iter, body) %}
 
 expressions -> expression ("," expression):* (%comma):?
   {% flatList %}

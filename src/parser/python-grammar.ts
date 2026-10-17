@@ -247,6 +247,12 @@ const ParserRules = [
   },
   { name: "statement", symbols: ["statementTupleAssign", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementRaise", { type: "newline" }], postprocess: id },
+  {
+    name: "statement",
+    symbols: ["statementAttributeAssign", { type: "newline" }],
+    postprocess: id,
+  },
+  { name: "statement", symbols: ["statementAugAssign", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementDel", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementImport", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementReturn", { type: "newline" }], postprocess: id },
@@ -261,6 +267,7 @@ const ParserRules = [
   { name: "statement", symbols: ["statementWhile"], postprocess: id },
   { name: "statement", symbols: ["statementFor"], postprocess: id },
   { name: "statement", symbols: ["statementDef"], postprocess: id },
+  { name: "statement", symbols: ["statementForUnpack"], postprocess: id },
   { name: "statement", symbols: ["statementClass"], postprocess: id },
   { name: "statement", symbols: ["statementTry"], postprocess: id },
   { name: "statement", symbols: ["statementWith"], postprocess: id },
@@ -836,6 +843,8 @@ const ParserRules = [
   { name: "blockInline", symbols: ["statementSubscriptAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementTupleAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementRaise"], postprocess: id },
+  { name: "blockInline", symbols: ["statementAttributeAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementAugAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementDel"], postprocess: id },
   { name: "blockInline", symbols: ["statementImport"], postprocess: id },
   { name: "blockInline", symbols: ["statementReturn"], postprocess: id },
@@ -902,10 +911,65 @@ const ParserRules = [
   { name: "expressionNot", symbols: ["expressionCmp"], postprocess: id },
   {
     name: "expressionCmp",
-    symbols: ["expressionAdd", "expressionCmpOp", "expressionAdd"],
+    symbols: ["expressionBitOr", "expressionCmpOp", "expressionBitOr"],
     postprocess: astCompare,
   },
-  { name: "expressionCmp", symbols: ["expressionAdd"], postprocess: id },
+  { name: "expressionCmp$ebnf$1$subexpression$1", symbols: ["expressionCmpOp", "expressionBitOr"] },
+  { name: "expressionCmp$ebnf$1", symbols: ["expressionCmp$ebnf$1$subexpression$1"] },
+  { name: "expressionCmp$ebnf$1$subexpression$2", symbols: ["expressionCmpOp", "expressionBitOr"] },
+  {
+    name: "expressionCmp$ebnf$1",
+    symbols: ["expressionCmp$ebnf$1", "expressionCmp$ebnf$1$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  {
+    name: "expressionCmp",
+    symbols: ["expressionBitOr", "expressionCmpOp", "expressionBitOr", "expressionCmp$ebnf$1"],
+    postprocess: ([left, op, right, rest]: [
+      ExprNS.Expr,
+      Token,
+      ExprNS.Expr,
+      [Token, ExprNS.Expr][],
+    ]) => {
+      const comparators = [right, ...rest.map(r => r[1])];
+      return new ExprNS.CompareChain(
+        left.startToken,
+        comparators[comparators.length - 1].endToken,
+        left,
+        [op, ...rest.map(r => r[0])],
+        comparators,
+      );
+    },
+  },
+  { name: "expressionCmp", symbols: ["expressionBitOr"], postprocess: id },
+  {
+    name: "expressionBitOr",
+    symbols: ["expressionBitOr", { type: "vbar" }, "expressionBitXor"],
+    postprocess: astBinaryTok,
+  },
+  { name: "expressionBitOr", symbols: ["expressionBitXor"], postprocess: id },
+  {
+    name: "expressionBitXor",
+    symbols: ["expressionBitXor", { type: "circumflex" }, "expressionBitAnd"],
+    postprocess: astBinaryTok,
+  },
+  { name: "expressionBitXor", symbols: ["expressionBitAnd"], postprocess: id },
+  {
+    name: "expressionBitAnd",
+    symbols: ["expressionBitAnd", { type: "amper" }, "expressionShift"],
+    postprocess: astBinaryTok,
+  },
+  { name: "expressionBitAnd", symbols: ["expressionShift"], postprocess: id },
+  {
+    name: "expressionShift",
+    symbols: ["expressionShift", "expressionShiftOp", "expressionAdd"],
+    postprocess: astBinary,
+  },
+  { name: "expressionShift", symbols: ["expressionAdd"], postprocess: id },
+  { name: "expressionShiftOp", symbols: [{ type: "leftshift" }], postprocess: tok },
+  { name: "expressionShiftOp", symbols: [{ type: "rightshift" }], postprocess: tok },
   { name: "expressionCmpOp", symbols: [{ type: "less" }], postprocess: tok },
   { name: "expressionCmpOp", symbols: [{ type: "greater" }], postprocess: tok },
   { name: "expressionCmpOp", symbols: [{ type: "doubleequal" }], postprocess: tok },
@@ -954,6 +1018,11 @@ const ParserRules = [
   { name: "expressionMulOp", symbols: [{ type: "doubleslash" }], postprocess: tok },
   {
     name: "expressionUnary",
+    symbols: [{ type: "tilde" }, "expressionUnary"],
+    postprocess: astUnary,
+  },
+  {
+    name: "expressionUnary",
     symbols: [{ type: "plus" }, "expressionUnary"],
     postprocess: astUnary,
   },
@@ -980,6 +1049,12 @@ const ParserRules = [
     symbols: ["expressionPost", { literal: "(" }, "spread_expressions", { literal: ")" }],
     postprocess: ([callee, , args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token]) =>
       new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args),
+  },
+  {
+    name: "expressionPost",
+    symbols: ["expressionPost", { literal: "." }, { type: "name" }],
+    postprocess: ([obj, , name]: [ExprNS.Expr, moo.Token, moo.Token]) =>
+      new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)),
   },
   {
     name: "expressionPost",
@@ -1148,12 +1223,12 @@ const ParserRules = [
   },
   {
     name: "target_list",
-    symbols: ["target", { literal: "," }],
+    symbols: ["star_or_target", { literal: "," }],
     postprocess: ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]),
   },
-  { name: "target_list$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "target"] },
+  { name: "target_list$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "star_or_target"] },
   { name: "target_list$ebnf$1", symbols: ["target_list$ebnf$1$subexpression$1"] },
-  { name: "target_list$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "target"] },
+  { name: "target_list$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "star_or_target"] },
   {
     name: "target_list$ebnf$1",
     symbols: ["target_list$ebnf$1", "target_list$ebnf$1$subexpression$2"],
@@ -1166,23 +1241,94 @@ const ParserRules = [
   { name: "target_list$ebnf$2", symbols: [], postprocess: () => null },
   {
     name: "target_list",
-    symbols: ["target", "target_list$ebnf$1", "target_list$ebnf$2"],
+    symbols: ["star_or_target", "target_list$ebnf$1", "target_list$ebnf$2"],
     postprocess: ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
       const elems = flatList([first, rest]);
       return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
     },
   },
-  { name: "target", symbols: [{ type: "name" }], postprocess: astVariable },
+  { name: "star_or_target", symbols: ["target"], postprocess: id },
   {
-    name: "target",
+    name: "star_or_target",
+    symbols: [{ literal: "*" }, "target"],
+    postprocess: ([star, t]: [moo.Token, ExprNS.Expr]) =>
+      new ExprNS.Starred(toAstToken(star), t.endToken, t),
+  },
+  { name: "simple_target", symbols: [{ type: "name" }], postprocess: astVariable },
+  {
+    name: "simple_target",
     symbols: ["expressionPost", { type: "lsqb" }, "expression", { type: "rsqb" }],
     postprocess: ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) =>
       new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx),
   },
   {
+    name: "simple_target",
+    symbols: ["expressionPost", { literal: "." }, { type: "name" }],
+    postprocess: ([obj, , name]: [ExprNS.Expr, moo.Token, moo.Token]) =>
+      new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)),
+  },
+  { name: "target", symbols: ["simple_target"], postprocess: id },
+  {
     name: "target",
     symbols: [{ literal: "(" }, "target_list", { literal: ")" }],
     postprocess: ([, t]: [moo.Token, ExprNS.Tuple, moo.Token]) => t,
+  },
+  {
+    name: "statementAttributeAssign",
+    symbols: [
+      "expressionPost",
+      { literal: "." },
+      { type: "name" },
+      { literal: "=" },
+      "expression_list",
+    ],
+    postprocess: ([obj, , name, , v]: [
+      ExprNS.Expr,
+      moo.Token,
+      moo.Token,
+      moo.Token,
+      ExprNS.Expr,
+    ]) => {
+      const attr = new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name));
+      return new StmtNS.AttributeAssign(obj.startToken, v.endToken, attr, v);
+    },
+  },
+  {
+    name: "statementAugAssign",
+    symbols: ["simple_target", "augassign_op", "expression_list"],
+    postprocess: ([t, op, v]: [ExprNS.Expr, Token, ExprNS.Expr]) =>
+      new StmtNS.AugAssign(t.startToken, v.endToken, t, op, v),
+  },
+  { name: "augassign_op", symbols: [{ type: "pluseq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "minuseq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "stareq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "slasheq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "doubleslasheq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "percenteq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "doublestareq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "ampereq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "vbareq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "circumflexeq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "leftshifteq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "rightshifteq" }], postprocess: tok },
+  {
+    name: "statementForUnpack",
+    symbols: [
+      { literal: "for" },
+      "tuple_target",
+      { literal: "in" },
+      "expression",
+      { literal: ":" },
+      "block",
+    ],
+    postprocess: ([kw, target, , iter, , body]: [
+      moo.Token,
+      ExprNS.Tuple,
+      moo.Token,
+      ExprNS.Expr,
+      moo.Token,
+      StmtNS.Stmt[],
+    ]) => new StmtNS.ForUnpack(toAstToken(kw), body[body.length - 1].endToken, target, iter, body),
   },
   { name: "expressions$ebnf$1", symbols: [] },
   { name: "expressions$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },

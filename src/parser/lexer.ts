@@ -72,6 +72,22 @@ const mooLexer = moo.compile({
   string_double: /"(?:[^"\\]|\\.)*"/,
   string_single: /'(?:[^'\\]|\\.)*'/,
 
+  // Augmented assignment, before the operators that they start with.
+  doublestareq: "**=",
+  doubleslasheq: "//=",
+  leftshifteq: "<<=",
+  rightshifteq: ">>=",
+  pluseq: "+=",
+  minuseq: "-=",
+  stareq: "*=",
+  slasheq: "/=",
+  percenteq: "%=",
+  ampereq: "&=",
+  vbareq: "|=",
+  circumflexeq: "^=",
+
+  leftshift: "<<",
+  rightshift: ">>",
   doublestar: "**",
   doubleslash: "//",
   doubleequal: "==",
@@ -100,6 +116,10 @@ const mooLexer = moo.compile({
   dot: ".",
   semi: ";",
   at: "@",
+  amper: "&",
+  vbar: "|",
+  circumflex: "^",
+  tilde: "~",
 
   name: { match: /[a-zA-Z_][a-zA-Z0-9_]*/, type: kwType },
 });

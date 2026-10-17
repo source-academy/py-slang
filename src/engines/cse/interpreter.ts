@@ -426,7 +426,7 @@ function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
 }
 type ExprKeys = Exclude<
   keyof typeof ExprNS,
-  "Expr" | "MultiLambda" | "Starred" | "Tuple" | "Dict" | "Keyword"
+  "Expr" | "MultiLambda" | "Starred" | "Tuple" | "Dict" | "Keyword" | "Attribute" | "CompareChain"
 >;
 type StmtKeys = Exclude<
   keyof typeof StmtNS,
@@ -441,6 +441,9 @@ type StmtKeys = Exclude<
   | "With"
   | "Del"
   | "Import"
+  | "AugAssign"
+  | "AttributeAssign"
+  | "ForUnpack"
 >;
 type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {

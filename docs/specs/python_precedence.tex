@@ -35,10 +35,11 @@ Notes:
 \item Comparison operators are non-associative: unlike full Python,
   where \texttt{\textbf{a < b < c}} is equivalent to
   \texttt{\textbf{a < b and b < c}} (evaluating \texttt{\textbf{b}} once
-  and short-circuiting before \texttt{\textbf{c}} is reached), this
-  grammar gives every comparison exactly two operands. Chaining, as in
-  \texttt{\textbf{a < b < c}}, is therefore rejected outright as a
-  syntax error --- a deliberate sublanguage restriction, rather than
+  and short-circuiting before \texttt{\textbf{c}} is reached), the
+  sublanguages give every comparison exactly two operands. Chaining, as in
+  \texttt{\textbf{a < b < c}}, is therefore rejected outright with an
+  error that says that chained comparisons are not supported --- a
+  deliberate sublanguage restriction, rather than
   giving chained comparisons some other, non-standard meaning.
 \item Unary \texttt{\textbf{+}}/\texttt{\textbf{-}}, \textbf{\texttt{not}}
   and \textbf{\texttt{lambda}} take a single operand to their right, so

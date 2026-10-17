@@ -7,9 +7,20 @@ import { operatorTranslator } from "../engines/cse/types";
 import { TypeError } from "../errors/errors";
 import { parse } from "../parser";
 import pythonLexer from "../parser/lexer";
+import { TokenType } from "../tokenizer/tokenizer";
 import { GroupName, minArgMap, Validate } from "./utils";
 
 const None: NoneValue = { type: "none" };
+
+/** Operators of full Python that `parse()` has no names for (`operatorTranslator` would give
+ * their token numbers). */
+const BITWISE_OPERATORS = new Set<TokenType>([
+  TokenType.AMPER,
+  TokenType.VBAR,
+  TokenType.CIRCUMFLEX,
+  TokenType.LEFTSHIFT,
+  TokenType.RIGHTSHIFT,
+]);
 
 function pair(h: Value, t: Value): ListValue {
   return { type: "list", value: [h, t] };
@@ -117,6 +128,9 @@ export function transform(
         { type: "string", value: (node as ExprNS.Variable).name.lexeme },
       ]);
     case "Binary":
+      if (BITWISE_OPERATORS.has((node as ExprNS.Binary).operator.type)) {
+        throw new Error("Bitwise operators are not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "binary_operator_combination" },
         {
@@ -147,6 +161,9 @@ export function transform(
         transform((node as ExprNS.Compare).right, declaredNames),
       ]);
     case "Unary":
+      if ((node as ExprNS.Unary).operator.type === TokenType.TILDE) {
+        throw new Error("Bitwise operators are not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "unary_operator_combination" },
         {
