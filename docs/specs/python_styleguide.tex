@@ -142,7 +142,7 @@ my_function(1,2,3)
 \end{lstlisting}
 
 Do not put a space between a unary minus and its operand: write \lstinline{-x}, not
-\lstinline{- x}. (This differs from the style guide of Source, the JavaScript sublanguage.)
+\lstinline{- x}.
 Do not put spaces \emph{inside} parentheses, brackets and braces, or \emph{before} the parentheses
 of a function application or a function definition.
 
@@ -414,19 +414,5 @@ A block that seems to end too early or too late & The indentation of its lines d
 \noindent
 A program that follows this guide can still be wrong, of course. But if it is, you can be sure that
 the reason is the logic and not the layout.
-
-\section*{How this guide differs from the style guide of Source}
-
-Colleagues who know the style guide of the JavaScript sublanguages of Source will recognize most of
-the rules. These are the differences that result from Python:
-
-\begin{itemize}
-\item Blocks are not enclosed in braces: the indentation \emph{is} the block.
-\item A conditional expression is written \lstinline{consequent if predicate else alternative}.
-\item A unary minus is written without a space: \lstinline{-x}.
-\item A line can be broken only inside parentheses, brackets and braces; a conditional expression in a
-      \lstinline{return} statement is therefore put in parentheses when it does not fit in a line.
-\item There are two blank lines between top-level function definitions, as in PEP~8.
-\end{itemize}
 
 \end{document}
