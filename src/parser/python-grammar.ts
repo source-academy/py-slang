@@ -98,6 +98,8 @@ const astCompare = ([l, op, r]: [ExprNS.Expr, Token, ExprNS.Expr]) =>
 
 // ── Token / list helpers ────────────────────────────────────────────────
 const tok = ([t]: [moo.Token]) => toAstToken(t);
+const tupleOf = (elems: ExprNS.Expr[]) =>
+  new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
 const flatList = <T>([first, rest]: [T, [unknown, T][]]): T[] => [first, ...rest.map(d => d[1])];
 const tokList = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [
   toAstToken(first),
@@ -1223,12 +1225,12 @@ const ParserRules = [
   },
   {
     name: "target_list",
-    symbols: ["star_or_target", { literal: "," }],
+    symbols: ["target", { literal: "," }],
     postprocess: ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]),
   },
-  { name: "target_list$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "star_or_target"] },
+  { name: "target_list$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "target"] },
   { name: "target_list$ebnf$1", symbols: ["target_list$ebnf$1$subexpression$1"] },
-  { name: "target_list$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "star_or_target"] },
+  { name: "target_list$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "target"] },
   {
     name: "target_list$ebnf$1",
     symbols: ["target_list$ebnf$1", "target_list$ebnf$1$subexpression$2"],
@@ -1241,15 +1243,69 @@ const ParserRules = [
   { name: "target_list$ebnf$2", symbols: [], postprocess: () => null },
   {
     name: "target_list",
-    symbols: ["star_or_target", "target_list$ebnf$1", "target_list$ebnf$2"],
+    symbols: ["target", "target_list$ebnf$1", "target_list$ebnf$2"],
     postprocess: ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
       const elems = flatList([first, rest]);
       return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
     },
   },
-  { name: "star_or_target", symbols: ["target"], postprocess: id },
+  { name: "target_list$ebnf$3$subexpression$1", symbols: ["target", { literal: "," }] },
+  { name: "target_list$ebnf$3", symbols: ["target_list$ebnf$3$subexpression$1"] },
+  { name: "target_list$ebnf$3$subexpression$2", symbols: ["target", { literal: "," }] },
   {
-    name: "star_or_target",
+    name: "target_list$ebnf$3",
+    symbols: ["target_list$ebnf$3", "target_list$ebnf$3$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "target_list$ebnf$4", symbols: [] },
+  { name: "target_list$ebnf$4$subexpression$1", symbols: [{ literal: "," }, "target"] },
+  {
+    name: "target_list$ebnf$4",
+    symbols: ["target_list$ebnf$4", "target_list$ebnf$4$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "target_list$ebnf$5$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "target_list$ebnf$5", symbols: ["target_list$ebnf$5$subexpression$1"], postprocess: id },
+  { name: "target_list$ebnf$5", symbols: [], postprocess: () => null },
+  {
+    name: "target_list",
+    symbols: ["target_list$ebnf$3", "star_target", "target_list$ebnf$4", "target_list$ebnf$5"],
+    postprocess: ([before, star, after]: [
+      [ExprNS.Expr, moo.Token][],
+      ExprNS.Expr,
+      [unknown, ExprNS.Expr][],
+    ]) => tupleOf([...before.map(b => b[0]), star, ...after.map(a => a[1])]),
+  },
+  { name: "target_list$ebnf$6$subexpression$1", symbols: [{ literal: "," }, "target"] },
+  { name: "target_list$ebnf$6", symbols: ["target_list$ebnf$6$subexpression$1"] },
+  { name: "target_list$ebnf$6$subexpression$2", symbols: [{ literal: "," }, "target"] },
+  {
+    name: "target_list$ebnf$6",
+    symbols: ["target_list$ebnf$6", "target_list$ebnf$6$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "target_list$ebnf$7$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "target_list$ebnf$7", symbols: ["target_list$ebnf$7$subexpression$1"], postprocess: id },
+  { name: "target_list$ebnf$7", symbols: [], postprocess: () => null },
+  {
+    name: "target_list",
+    symbols: ["star_target", "target_list$ebnf$6", "target_list$ebnf$7"],
+    postprocess: ([star, after]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) =>
+      tupleOf([star, ...after.map(a => a[1])]),
+  },
+  {
+    name: "target_list",
+    symbols: ["star_target", { literal: "," }],
+    postprocess: ([star]: [ExprNS.Expr]) => tupleOf([star]),
+  },
+  {
+    name: "star_target",
     symbols: [{ literal: "*" }, "target"],
     postprocess: ([star, t]: [moo.Token, ExprNS.Expr]) =>
       new ExprNS.Starred(toAstToken(star), t.endToken, t),
@@ -1295,9 +1351,15 @@ const ParserRules = [
   },
   {
     name: "statementAugAssign",
-    symbols: ["simple_target", "augassign_op", "expression_list"],
+    symbols: ["augassign_target", "augassign_op", "expression_list"],
     postprocess: ([t, op, v]: [ExprNS.Expr, Token, ExprNS.Expr]) =>
       new StmtNS.AugAssign(t.startToken, v.endToken, t, op, v),
+  },
+  { name: "augassign_target", symbols: ["simple_target"], postprocess: id },
+  {
+    name: "augassign_target",
+    symbols: [{ literal: "(" }, "augassign_target", { literal: ")" }],
+    postprocess: ([, t]: [moo.Token, ExprNS.Expr, moo.Token]) => t,
   },
   { name: "augassign_op", symbols: [{ type: "pluseq" }], postprocess: tok },
   { name: "augassign_op", symbols: [{ type: "minuseq" }], postprocess: tok },
@@ -1311,6 +1373,7 @@ const ParserRules = [
   { name: "augassign_op", symbols: [{ type: "circumflexeq" }], postprocess: tok },
   { name: "augassign_op", symbols: [{ type: "leftshifteq" }], postprocess: tok },
   { name: "augassign_op", symbols: [{ type: "rightshifteq" }], postprocess: tok },
+  { name: "augassign_op", symbols: [{ type: "ateq" }], postprocess: tok },
   {
     name: "statementForUnpack",
     symbols: [

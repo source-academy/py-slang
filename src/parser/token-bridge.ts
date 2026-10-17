@@ -66,6 +66,7 @@ const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
   ampereq: TokenType.AMPEREQUAL,
   vbareq: TokenType.VBAREQUAL,
   circumflexeq: TokenType.CIRCUMFLEXEQUAL,
+  ateq: TokenType.ATEQUAL,
   doublestar: TokenType.DOUBLESTAR,
   doubleslash: TokenType.DOUBLESLASH,
   doubleequal: TokenType.DOUBLEEQUAL,

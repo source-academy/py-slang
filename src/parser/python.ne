@@ -69,6 +69,7 @@ const astCompare    = ([l, op, r]: [ExprNS.Expr, Token, ExprNS.Expr]) => new Exp
 
 // ── Token / list helpers ────────────────────────────────────────────────
 const tok           = ([t]: [moo.Token]) => toAstToken(t);
+const tupleOf       = (elems: ExprNS.Expr[]) => new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
 const flatList      = <T>([first, rest]: [T, [unknown, T][]]): T[] => [first, ...rest.map(d => d[1])];
 const tokList       = ([first, rest]: [moo.Token, [unknown, moo.Token][]]) => [toAstToken(first), ...rest.map(d => toAstToken(d[1]))];
 %}
@@ -585,16 +586,26 @@ statementTupleAssign -> tuple_target "=" expression_list
 tuple_target ->
     target_list  {% id %}
   | "(" target_list ")"  {% ([l, t, r]: [moo.Token, ExprNS.Tuple, moo.Token]) => new ExprNS.Tuple(toAstToken(l), toAstToken(r), t.elements) %}
+# The targets of an unpacking: at least one comma (so `a` is not one), and at most one starred
+# target (`a, *b, c`), which may not stand alone (`*a = xs` is an error, `*a, = xs` is not).
+# Each parenthesized target list inside has its own.
 target_list ->
-    star_or_target "," {% ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]) %}
-  | star_or_target ("," star_or_target):+ (%comma):?
+    target "," {% ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]) %}
+  | target ("," target):+ (%comma):?
       {% ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
            const elems = flatList([first, rest]);
            return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
          } %}
-star_or_target ->
-    target  {% id %}
-  | "*" target  {% ([star, t]: [moo.Token, ExprNS.Expr]) => new ExprNS.Starred(toAstToken(star), t.endToken, t) %}
+  | (target ","):+ star_target ("," target):* (%comma):?
+      {% ([before, star, after]: [[ExprNS.Expr, moo.Token][], ExprNS.Expr, [unknown, ExprNS.Expr][]]) =>
+           tupleOf([...before.map(b => b[0]), star, ...after.map(a => a[1])]) %}
+  | star_target ("," target):+ (%comma):?
+      {% ([star, after]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) =>
+           tupleOf([star, ...after.map(a => a[1])]) %}
+  | star_target ","
+      {% ([star]: [ExprNS.Expr]) => tupleOf([star]) %}
+star_target ->
+  "*" target  {% ([star, t]: [moo.Token, ExprNS.Expr]) => new ExprNS.Starred(toAstToken(star), t.endToken, t) %}
 # a name, a subscript or an attribute: what `x op= e` can change
 simple_target ->
     %name  {% astVariable %}
@@ -614,13 +625,17 @@ statementAttributeAssign -> expressionPost "." %name "=" expression_list
      } %}
 
 # `x += e`, ...
-statementAugAssign -> simple_target augassign_op expression_list
+statementAugAssign -> augassign_target augassign_op expression_list
   {% ([t, op, v]: [ExprNS.Expr, Token, ExprNS.Expr]) => new StmtNS.AugAssign(t.startToken, v.endToken, t, op, v) %}
+# the target of `x op= e` may be in parentheses, but it is a single name, subscript or attribute
+augassign_target ->
+    simple_target  {% id %}
+  | "(" augassign_target ")"  {% ([, t]: [moo.Token, ExprNS.Expr, moo.Token]) => t %}
 augassign_op ->
     %pluseq {% tok %} | %minuseq {% tok %} | %stareq {% tok %} | %slasheq {% tok %}
   | %doubleslasheq {% tok %} | %percenteq {% tok %} | %doublestareq {% tok %}
   | %ampereq {% tok %} | %vbareq {% tok %} | %circumflexeq {% tok %}
-  | %leftshifteq {% tok %} | %rightshifteq {% tok %}
+  | %leftshifteq {% tok %} | %rightshifteq {% tok %} | %ateq {% tok %}
 
 # `for a, b in iter:` (`for x in iter:` with a single name is statementFor)
 statementForUnpack -> "for" tuple_target "in" expression ":" block

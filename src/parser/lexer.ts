@@ -85,6 +85,7 @@ const mooLexer = moo.compile({
   ampereq: "&=",
   vbareq: "|=",
   circumflexeq: "^=",
+  ateq: "@=",
 
   leftshift: "<<",
   rightshift: ">>",

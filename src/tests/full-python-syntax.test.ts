@@ -547,7 +547,7 @@ describe("expressions and targets of full Python", () => {
   });
 
   describe("augmented assignment", () => {
-    test.each(["+=", "-=", "*=", "/=", "//=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>="])(
+    test.each(["+=", "-=", "*=", "/=", "//=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", "@="])(
       "%s",
       operator => {
         const [stmt] = statements(`x ${operator} 1`) as [StmtNS.AugAssign];
@@ -562,6 +562,22 @@ describe("expressions and targets of full Python", () => {
       expect(a.target).toBeInstanceOf(ExprNS.Variable);
       expect(b.target).toBeInstanceOf(ExprNS.Subscript);
       expect(c.target).toBeInstanceOf(ExprNS.Attribute);
+    });
+
+    test("the target may be in parentheses, but it is a single name, subscript or attribute", () => {
+      const [a, b, c] = statements(
+        "(x) += 1\n(obj.field) -= 1\n((items[0])) *= 2",
+      ) as StmtNS.AugAssign[];
+      expect(a.target).toBeInstanceOf(ExprNS.Variable);
+      expect(b.target).toBeInstanceOf(ExprNS.Attribute);
+      expect(c.target).toBeInstanceOf(ExprNS.Subscript);
+      expect(() => parse("(x,) += 1\n")).toThrow();
+      expect(() => parse("(a, b) += 1\n")).toThrow();
+      expect(() => parse("a, b += 1\n")).toThrow();
+    });
+
+    test("@= is a matrix-multiplication assignment, which the sublanguages reject by name", () => {
+      expect(errorsIn("matrix @= other", 4)[0].message).toContain("augmented assignment (@=)");
     });
 
     test("the operators do not change the arithmetic ones", () => {
@@ -605,6 +621,38 @@ describe("expressions and targets of full Python", () => {
       expect(kinds("a, *b = xs")).toEqual([ExprNS.Variable, ExprNS.Starred]);
       expect(kinds("*a, b = xs")).toEqual([ExprNS.Starred, ExprNS.Variable]);
       expect(kinds("a, *b, c = xs")).toEqual([ExprNS.Variable, ExprNS.Starred, ExprNS.Variable]);
+    });
+
+    test("at most one starred target in each target list", () => {
+      for (const src of [
+        "a, *b, *c = xs",
+        "*a, *b = xs",
+        "*a, b, *c = xs",
+        "for a, *b, *c in xs:\n    pass",
+        "(*a, *b), c = xs",
+        "*a = xs",
+        "for *a in xs:\n    pass",
+      ]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+      for (const src of [
+        "*a, = xs",
+        "*a, b = xs",
+        "a, *b, = xs",
+        "a, b, *c = xs",
+        "(a, *b), *c = xs",
+        "*a, (b, *c) = xs",
+        "for *a, b in xs:\n    pass",
+        "for (a, *b), *c in xs:\n    pass",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+      const t = statements("a, *b, c = xs")[0] as StmtNS.TupleAssign;
+      expect(t.target.elements.map(e => e.constructor)).toEqual([
+        ExprNS.Variable,
+        ExprNS.Starred,
+        ExprNS.Variable,
+      ]);
     });
 
     test("attributes are targets of tuple assignment, del and with", () => {
