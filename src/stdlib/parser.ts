@@ -72,6 +72,9 @@ function makeBlockIfNeeded(statements: StmtNS.Stmt[], declaredNames: Set<string>
 }
 
 function transformParam(p: FunctionParam): Value {
+  if (p.isDoubleStarred) {
+    throw new Error("Keyword parameters are not supported in parse tree generation");
+  }
   if (p.default) {
     throw new Error("Default values of parameters are not supported in parse tree generation");
   }

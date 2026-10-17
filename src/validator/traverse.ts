@@ -197,6 +197,32 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     traverseAST(expr.index, this.fn);
   }
 
+  visitSetExpr(expr: ExprNS.Set): void {
+    expr.elements.forEach(e => traverseAST(e, this.fn));
+  }
+
+  visitComprehensionExpr(expr: ExprNS.Comprehension): void {
+    for (const { target, iter, conditions } of expr.generators) {
+      traverseAST(target, this.fn);
+      traverseAST(iter, this.fn);
+      conditions.forEach(c => traverseAST(c, this.fn));
+    }
+    traverseAST(expr.element, this.fn);
+    if (expr.value) traverseAST(expr.value, this.fn);
+  }
+
+  visitYieldExpr(expr: ExprNS.Yield): void {
+    if (expr.value) traverseAST(expr.value, this.fn);
+  }
+
+  visitSliceExpr(expr: ExprNS.Slice): void {
+    for (const part of [expr.lower, expr.upper, expr.step]) if (part) traverseAST(part, this.fn);
+  }
+
+  visitDoubleStarredExpr(expr: ExprNS.DoubleStarred): void {
+    traverseAST(expr.value, this.fn);
+  }
+
   visitAttributeExpr(expr: ExprNS.Attribute): void {
     traverseAST(expr.value, this.fn);
   }
@@ -211,7 +237,7 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitDictExpr(expr: ExprNS.Dict): void {
-    expr.keys.forEach(e => traverseAST(e, this.fn));
+    expr.keys.forEach(e => e && traverseAST(e, this.fn));
     expr.values.forEach(e => traverseAST(e, this.fn));
   }
 

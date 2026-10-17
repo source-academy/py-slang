@@ -87,7 +87,19 @@ export class AstWriter {
       // `(a, b)`, `a, b`, `()`: only Python beyond §4 (full Python) has tuples.
       "Tuple     -> elements: Expr[]",
       // `{k: v, ...}`: keys[i] maps to values[i].
-      "Dict      -> keys: Expr[], values: Expr[]",
+      // A key is null for `**value` (as in Python's own ast): then values[i] is the mapping.
+      "Dict      -> keys: (Expr | null)[], values: Expr[]",
+      // `{1, 2}`
+      "Set       -> elements: Expr[]",
+      // `[e for x in xs if c]`, `{e for ...}`, `{k: v for ...}` (element is the key, value the value)
+      // and `(e for ...)`. Each `for` has its own conditions.
+      'Comprehension -> variant: "list" | "set" | "dict" | "generator", element: Expr, value: Expr | null, generators: { target: Expr; iter: Expr; conditions: Expr[] }[]',
+      // `yield`, `yield value`, `yield from value` (delegate)
+      "Yield     -> value: Expr | null, delegate: boolean",
+      // `a[lower:upper:step]`, as the index of a Subscript; each part may be missing
+      "Slice     -> lower: Expr | null, upper: Expr | null, step: Expr | null",
+      // `**value` in a call's arguments (`f(**d)`)
+      "DoubleStarred -> value: Expr",
       // `name=value` among the arguments of a call, in order with the positional ones.
       "Keyword   -> name: Token, value: Expr",
       "None      -> ()",

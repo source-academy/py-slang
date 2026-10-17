@@ -47,6 +47,7 @@ const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
   kw_raise: TokenType.RAISE,
   kw_with: TokenType.WITH,
   kw_del: TokenType.DEL,
+  kw_yield: TokenType.YIELD,
   at: TokenType.AT,
   amper: TokenType.AMPER,
   vbar: TokenType.VBAR,
@@ -119,6 +120,7 @@ export function toFunctionParam(
   },
   isStarred: boolean,
   defaultValue?: ExprNS.Expr,
+  isDoubleStarred = false,
 ): FunctionParam {
-  return Object.assign(toAstToken(mooToken), { isStarred, default: defaultValue });
+  return Object.assign(toAstToken(mooToken), { isStarred, default: defaultValue, isDoubleStarred });
 }

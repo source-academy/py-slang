@@ -19,6 +19,7 @@
 import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { Token, TokenType } from "../tokenizer";
 import pythonLexer from "./lexer";
+import { ParseError } from "./parse-error";
 import { toAstToken, toFunctionParam } from "./token-bridge";
 
 const list = <T>([x]: [T]) => [x];
@@ -66,6 +67,60 @@ const astBinaryTok  = ([l, op, r]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => new
 const astBoolOp     = ([l, op, r]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => new ExprNS.BoolOp(l.startToken, r.endToken, l, toAstToken(op), r);
 const astUnary      = ([op, arg]: [moo.Token, ExprNS.Expr]) => new ExprNS.Unary(toAstToken(op), arg.endToken, toAstToken(op), arg);
 const astCompare    = ([l, op, r]: [ExprNS.Expr, Token, ExprNS.Expr]) => new ExprNS.Compare(l.startToken, r.endToken, l, op, r);
+
+// A `for` clause of a comprehension, with the token that ends it (for the node's position).
+type Clause = { target: ExprNS.Expr; iter: ExprNS.Expr; conditions: ExprNS.Expr[]; end: Token };
+const generators = (clauses: Clause[]) =>
+  clauses.map(({ target, iter, conditions }) => ({ target, iter, conditions }));
+
+// ── Checks that the grammar cannot express (CPython reports them as syntax errors) ──────
+const syntaxError = (message: string, at: Token) => new ParseError(message, at.line, at.col, "");
+
+/** Order of the arguments of a call (or the bases of a class): positional arguments, then keyword
+ * arguments, where `*xs` may follow keyword arguments but not `**d`. */
+function checkArguments(args: ExprNS.Expr[]): ExprNS.Expr[] {
+  let keyword = false;
+  let unpacked = false;
+  for (const arg of args) {
+    if (arg instanceof ExprNS.Keyword) keyword = true;
+    else if (arg instanceof ExprNS.DoubleStarred) unpacked = true;
+    else if (arg instanceof ExprNS.Starred) {
+      if (unpacked) throw syntaxError("iterable argument unpacking follows keyword argument unpacking", arg.startToken);
+    } else if (unpacked) {
+      throw syntaxError("positional argument follows keyword argument unpacking", arg.startToken);
+    } else if (keyword) {
+      throw syntaxError("positional argument follows keyword argument", arg.startToken);
+    }
+  }
+  return args;
+}
+
+// (A copy: Earley shares the parameters between the branches that it follows, and a branch that
+// has this comma may be ruled out by the next token, as in `def f(a, b, c)`.)
+const withTrailingComma = (params: FunctionParam[], comma: unknown): FunctionParam[] => {
+  if (!comma) return params;
+  const last = params[params.length - 1];
+  const flagged = Object.assign(Object.create(Object.getPrototypeOf(last)), last, {
+    trailingComma: true,
+  }) as FunctionParam;
+  return [...params.slice(0, -1), flagged];
+};
+
+/** A parameter without a default may not follow one with a default, unless `*args` came between
+ * (then it is keyword-only). */
+function checkParameters(params: FunctionParam[]): FunctionParam[] {
+  let defaulted = false;
+  let starred = false;
+  for (const param of params) {
+    if (param.isDoubleStarred) continue;
+    if (param.isStarred) starred = true;
+    else if (param.default) defaulted = true;
+    else if (defaulted && !starred) {
+      throw syntaxError("parameter without a default follows parameter with a default", param);
+    }
+  }
+  return params;
+}
 
 // ── Token / list helpers ────────────────────────────────────────────────
 const tok           = ([t]: [moo.Token]) => toAstToken(t);
@@ -191,7 +246,7 @@ statement ->
   | statementDecorated
       {% id %}
 
-statementAssign -> %name "=" expression_list
+statementAssign -> %name "=" assign_rhs
   {% ([n,, v]: [moo.Token, moo.Token, ExprNS.Expr]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
 
 statementAnnAssign ->
@@ -204,7 +259,7 @@ statementAnnAssign ->
            return new StmtNS.AnnAssign(nameTok, ann.endToken, new ExprNS.Variable(nameTok, nameTok, nameTok), dummyVal, ann);
          } %}
 
-statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression_list
+statementSubscriptAssign -> expressionPost %lsqb subscript_index %rsqb "=" assign_rhs
   {% function(d: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token, moo.Token, ExprNS.Expr]) {
        const obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
        const sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
@@ -237,6 +292,8 @@ statementAssert -> "assert" expression ("," expression):?
        new StmtNS.Assert(toAstToken(kw), (msg ? msg[1] : e).endToken, e, msg ? msg[1] : null) %}
 
 statementExpr -> expression
+  {% ([e]: [ExprNS.Expr]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
+  | yield_expr
   {% ([e]: [ExprNS.Expr]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
 
 statementWhile -> "while" expression ":" block
@@ -283,7 +340,7 @@ statementClass ->
            new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), [], body) %}
   | "class" %name "(" spread_expressions ")" ":" block
       {% ([kw, name,, bases,,, body]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr[], moo.Token, moo.Token, StmtNS.Stmt[]]) =>
-           new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), bases, body) %}
+           new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), checkArguments(bases), body) %}
 
 statementTry ->
     "try" ":" block except_clauses ("else" ":" block):? ("finally" ":" block):?
@@ -383,11 +440,26 @@ blockInline ->
 # rest-names ::= ε | *name | name (, name)... [, *name]  [python_3_bnf.tex line 37-38]
 # ============================================================================
 
+# The parameters of a function: `*args` and defaults, then at most one `**kwargs`, which is last.
+# (The order of the parameters is checked where a parameter list is complete, after its closing
+# parenthesis or before the colon of a lambda: Earley completes rules on prefixes of the input too,
+# which a later token may rule out.)
+# A trailing comma is allowed, as in Python (the last parameter then has `trailingComma`; the
+# sublanguages reject it).
 rest_names ->
+    plain_params (%comma):?
+      {% ([ps, comma]: [FunctionParam[], moo.Token | null]) => withTrailingComma(ps, comma) %}
+  | plain_params "," kw_param (%comma):?
+      {% ([ps,, kw, comma]: [FunctionParam[], moo.Token, FunctionParam, moo.Token | null]) => withTrailingComma([...ps, kw], comma) %}
+  | kw_param (%comma):?
+      {% ([kw, comma]: [FunctionParam, moo.Token | null]) => withTrailingComma([kw], comma) %}
+plain_params ->
     param
       {% ([p]: [FunctionParam]) => [p] %}
-  | rest_names "," param
+  | plain_params "," param
       {% ([params,, p]: [FunctionParam[], moo.Token, FunctionParam]) => [...params, p] %}
+kw_param -> "**" %name
+  {% ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, false, undefined, true) %}
 
 param ->
     %name
@@ -399,7 +471,7 @@ param ->
 
 params ->
     "(" ")"                                   {% drop %}
-  | "(" rest_names ")"                        {% ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => ps %}
+  | "(" rest_names ")"                        {% ([, ps]: [moo.Token, FunctionParam[], moo.Token]) => checkParameters(ps) %}
 
 # ============================================================================
 # expression ::= ...                             [python_1_bnf.tex lines 35-46]
@@ -499,10 +571,14 @@ expressionPow ->
   | expressionPost                                 {% id %}
 
 expressionPost ->
-    expressionPost %lsqb expression %rsqb
+    expressionPost %lsqb subscript_index %rsqb
       {% ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
   | expressionPost "(" spread_expressions ")"
-      {% ([callee,, args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token])  => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, args) %}
+      {% ([callee,, args, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr[], moo.Token])  => new ExprNS.Call(callee.startToken, toAstToken(rparen), callee, checkArguments(args)) %}
+  | expressionPost "(" expression comp_for:+ ")"
+      {% ([callee,, element, clauses, rparen]: [ExprNS.Expr, moo.Token, ExprNS.Expr, Clause[], moo.Token]) =>
+           new ExprNS.Call(callee.startToken, toAstToken(rparen), callee,
+             [new ExprNS.Comprehension(element.startToken, clauses[clauses.length - 1].end, "generator", element, null, generators(clauses))]) %}
   | expressionPost "." %name
       {% ([obj,, name]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)) %}
   | expressionPost "(" ")"
@@ -517,6 +593,12 @@ atom ->
     "(" expression ")"
       {% ([lparen, e, rparen]: [moo.Token, ExprNS.Expr, moo.Token]) =>
            new ExprNS.Grouping(toAstToken(lparen), toAstToken(rparen), e) %}
+  | "(" yield_expr ")"
+      {% ([lparen, e, rparen]: [moo.Token, ExprNS.Expr, moo.Token]) =>
+           new ExprNS.Grouping(toAstToken(lparen), toAstToken(rparen), e) %}
+  | "(" expression comp_for:+ ")"
+      {% ([l, element, clauses, r]: [moo.Token, ExprNS.Expr, Clause[], moo.Token]) =>
+           new ExprNS.Comprehension(toAstToken(l), toAstToken(r), "generator", element, null, generators(clauses)) %}
   | "(" ")"
       {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.Tuple(toAstToken(l), toAstToken(r), []) %}
   | "(" tuple_elements ")"
@@ -525,12 +607,23 @@ atom ->
   | %lbrace %rbrace
       {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.Dict(toAstToken(l), toAstToken(r), [], []) %}
   | %lbrace dict_items %rbrace
-      {% ([l, items, r]: [moo.Token, [ExprNS.Expr, ExprNS.Expr][], moo.Token]) =>
+      {% ([l, items, r]: [moo.Token, [ExprNS.Expr | null, ExprNS.Expr][], moo.Token]) =>
            new ExprNS.Dict(toAstToken(l), toAstToken(r), items.map(i => i[0]), items.map(i => i[1])) %}
+  | %lbrace set_items %rbrace
+      {% ([l, elems, r]: [moo.Token, ExprNS.Expr[], moo.Token]) => new ExprNS.Set(toAstToken(l), toAstToken(r), elems) %}
+  | %lbrace expression comp_for:+ %rbrace
+      {% ([l, element, clauses, r]: [moo.Token, ExprNS.Expr, Clause[], moo.Token]) =>
+           new ExprNS.Comprehension(toAstToken(l), toAstToken(r), "set", element, null, generators(clauses)) %}
+  | %lbrace expression ":" expression comp_for:+ %rbrace
+      {% ([l, key,, value, clauses, r]: [moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr, Clause[], moo.Token]) =>
+           new ExprNS.Comprehension(toAstToken(l), toAstToken(r), "dict", key, value, generators(clauses)) %}
   | %lsqb %rsqb
       {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
   | %lsqb expressions %rsqb
       {% ([l, elems, r]: [moo.Token, ExprNS.Expr[], moo.Token]) => new ExprNS.List(toAstToken(l), toAstToken(r), elems) %}
+  | %lsqb expression comp_for:+ %rsqb
+      {% ([l, element, clauses, r]: [moo.Token, ExprNS.Expr, Clause[], moo.Token]) =>
+           new ExprNS.Comprehension(toAstToken(l), toAstToken(r), "list", element, null, generators(clauses)) %}
   | %name                                        {% astVariable %}
   | %number_float
       {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
@@ -550,10 +643,10 @@ atom ->
 
 lambda_expr ->
     "lambda" rest_names ":" expression
-      {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, params, body) %}
+      {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, checkParameters(params), body) %}
   | "lambda" rest_names %doublecolon block
       {% ([kw, params,, body]: [moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
-           new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, params, body, []) %}
+           new ExprNS.MultiLambda(toAstToken(kw), body[body.length-1].endToken, checkParameters(params), body, []) %}
   | "lambda" ":" expression
       {% ([kw,, body]: [moo.Token, moo.Token, ExprNS.Expr]) => new ExprNS.Lambda(toAstToken(kw), body.endToken, [], body) %}
   | "lambda" %doublecolon block
@@ -566,8 +659,8 @@ lambda_expr ->
 
 # A tuple's elements: at least one comma, so `(e)` stays a grouping and `(e,)` is a 1-tuple.
 tuple_elements ->
-    expression "," {% ([e]: [ExprNS.Expr]) => [e] %}
-  | expression ("," expression):+ (%comma):? {% flatList %}
+    star_expression "," {% ([e]: [ExprNS.Expr]) => [e] %}
+  | star_expression ("," star_expression):+ (%comma):? {% flatList %}
 
 # The right-hand side of an assignment and the operand of `return`: an expression, or a tuple
 # written without parentheses (`a, b`, `1,`).
@@ -578,10 +671,12 @@ expression_list ->
 
 # `{k: v, ...}`
 dict_items -> dict_item ("," dict_item):* (%comma):?  {% flatList %}
-dict_item -> expression ":" expression  {% ([k,, v]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => [k, v] %}
+dict_item ->
+    expression ":" expression  {% ([k,, v]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => [k, v] %}
+  | %doublestar expressionBitOr  {% ([, v]: [moo.Token, ExprNS.Expr]) => [null, v] %}
 
 # `a, b = value`, `(a, b), c = value`, `x[0], y = value`
-statementTupleAssign -> tuple_target "=" expression_list
+statementTupleAssign -> tuple_target "=" assign_rhs
   {% ([t,, v]: [ExprNS.Tuple, moo.Token, ExprNS.Expr]) => new StmtNS.TupleAssign(t.startToken, v.endToken, t, v) %}
 tuple_target ->
     target_list  {% id %}
@@ -609,7 +704,7 @@ star_target ->
 # a name, a subscript or an attribute: what `x op= e` can change
 simple_target ->
     %name  {% astVariable %}
-  | expressionPost %lsqb expression %rsqb
+  | expressionPost %lsqb subscript_index %rsqb
       {% ([obj,, idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
   | expressionPost "." %name
       {% ([obj,, name]: [ExprNS.Expr, moo.Token, moo.Token]) => new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name)) %}
@@ -618,14 +713,14 @@ target ->
   | "(" target_list ")"  {% ([, t]: [moo.Token, ExprNS.Tuple, moo.Token]) => t %}
 
 # `a.b = value`
-statementAttributeAssign -> expressionPost "." %name "=" expression_list
+statementAttributeAssign -> expressionPost "." %name "=" assign_rhs
   {% ([obj,, name,, v]: [ExprNS.Expr, moo.Token, moo.Token, moo.Token, ExprNS.Expr]) => {
        const attr = new ExprNS.Attribute(obj.startToken, toAstToken(name), obj, toAstToken(name));
        return new StmtNS.AttributeAssign(obj.startToken, v.endToken, attr, v);
      } %}
 
 # `x += e`, ...
-statementAugAssign -> augassign_target augassign_op expression_list
+statementAugAssign -> augassign_target augassign_op assign_rhs
   {% ([t, op, v]: [ExprNS.Expr, Token, ExprNS.Expr]) => new StmtNS.AugAssign(t.startToken, v.endToken, t, op, v) %}
 # the target of `x op= e` may be in parentheses, but it is a single name, subscript or attribute
 augassign_target ->
@@ -642,8 +737,59 @@ statementForUnpack -> "for" tuple_target "in" expression ":" block
   {% ([kw, target,, iter,, body]: [moo.Token, ExprNS.Tuple, moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
        new StmtNS.ForUnpack(toAstToken(kw), body[body.length - 1].endToken, target, iter, body) %}
 
-expressions -> expression ("," expression):* (%comma):?
+expressions -> star_expression ("," star_expression):* (%comma):?
   {% flatList %}
+
+# An element of a list, tuple or set display: an expression, or `*iterable` (unpacked in place),
+# where an unparenthesized iterable is a bitwise-or expression (`[*(a if c else b)]`, not
+# `[*a if c else b]`), as in Python.
+star_expression ->
+    expression  {% id %}
+  | %star expressionBitOr
+      {% ([star, e]: [moo.Token, ExprNS.Expr]) => new ExprNS.Starred(toAstToken(star), e.endToken, e) %}
+
+# `{1, 2}`: a set display (`{}` is an empty dictionary)
+set_items -> star_expression ("," star_expression):* (%comma):?  {% flatList %}
+
+# `for x in xs if c if d`: a clause of a comprehension. The iterable and the conditions are
+# or-expressions (a conditional expression or a lambda needs parentheses there), as in Python.
+comp_for -> "for" comp_target "in" expressionOr comp_if:*
+  {% ([kw, target,, iter, conditions]: [moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr, ExprNS.Expr[]]) => ({
+       target, iter, conditions,
+       end: conditions.length > 0 ? conditions[conditions.length - 1].endToken : iter.endToken }) %}
+comp_if -> "if" expressionOr  {% ([, c]: [moo.Token, ExprNS.Expr]) => c %}
+comp_target ->
+    target_list  {% id %}
+  | target       {% id %}
+
+# The index of a subscript: an expression or a slice
+subscript_index ->
+    expression  {% id %}
+  | slice_expr  {% id %}
+slice_expr ->
+    expression:? ":" expression:? (":" expression:?):?
+      {% ([lower, colon, upper, rest]: [ExprNS.Expr | null, moo.Token, ExprNS.Expr | null, [moo.Token, ExprNS.Expr | null] | null]) => {
+           const step = rest ? rest[1] : null;
+           const first = lower ? lower.startToken : toAstToken(colon);
+           const last = step ? step.endToken : upper ? upper.endToken : toAstToken(rest ? rest[0] : colon);
+           return new ExprNS.Slice(first, last, lower, upper, step);
+         } %}
+  | expression:? %doublecolon expression:?
+      {% ([lower, colon, step]: [ExprNS.Expr | null, moo.Token, ExprNS.Expr | null]) =>
+           new ExprNS.Slice(lower ? lower.startToken : toAstToken(colon), step ? step.endToken : toAstToken(colon), lower, null, step) %}
+
+# `yield`, `yield v`, `yield from v`; allowed as a statement, as the right-hand side of an
+# assignment and in parentheses
+yield_expr ->
+    "yield"
+      {% ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Yield(k, k, null, false); } %}
+  | "yield" expression_list
+      {% ([kw, v]: [moo.Token, ExprNS.Expr]) => new ExprNS.Yield(toAstToken(kw), v.endToken, v, false) %}
+  | "yield" "from" expression
+      {% ([kw,, v]: [moo.Token, moo.Token, ExprNS.Expr]) => new ExprNS.Yield(toAstToken(kw), v.endToken, v, true) %}
+assign_rhs ->
+    expression_list  {% id %}
+  | yield_expr       {% id %}
 
 # ============================================================================
 # spread-expressions ::= ...                     [python_3_bnf.tex lines 69-70]
@@ -659,6 +805,9 @@ spread_expression ->
   | %star expression
       {% ([star, expr]: [moo.Token, ExprNS.Expr]) =>
            new ExprNS.Starred(toAstToken(star), expr.endToken, expr) %}
+  | %doublestar expression
+      {% ([star, expr]: [moo.Token, ExprNS.Expr]) =>
+           new ExprNS.DoubleStarred(toAstToken(star), expr.endToken, expr) %}
 
 # ============================================================================
 # stringLit — string literals

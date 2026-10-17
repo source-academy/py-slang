@@ -4,7 +4,7 @@
  * (§1–§4) rejects it with a FeatureNotSupportedError.
  */
 import { ExprNS, StmtNS } from "../ast-types";
-import { parse } from "../parser/parser-adapter";
+import { parse, ParseError } from "../parser/parser-adapter";
 import { toFunctionParam } from "../parser/token-bridge";
 import { analyze } from "../resolver";
 import math from "../stdlib/math";
@@ -190,6 +190,20 @@ describe("the sublanguages reject what full Python adds", () => {
     ["a bitwise operator", "x = a & b"],
     ["a shift", "x = a << 1"],
     ["bitwise not", "x = ~a"],
+    ["yield", "def f():\n    yield 1"],
+    ["yield from", "def f():\n    yield from g()"],
+    ["a list comprehension", "[x for x in xs]"],
+    ["a set comprehension", "{x for x in xs}"],
+    ["a dictionary comprehension", "{x: 1 for x in xs}"],
+    ["a generator expression", "(x for x in xs)"],
+    ["a generator expression as the argument", "f(x for x in xs)"],
+    ["a slice", "xs[1:2]"],
+    ["a set display", "{1, 2}"],
+    ["dictionary unpacking in a display", "d = {**a}"],
+    ["dictionary unpacking in a call", "f(**d)"],
+    ["unpacking in a list display", "[*xs, 1]"],
+    ["**kwargs in def", "def f(**kw):\n    return kw"],
+    ["**kwargs in lambda", "g = lambda **kw: kw"],
   ];
 
   for (const chapter of [1, 2, 3, 4]) {
@@ -799,6 +813,448 @@ describe("expressions and targets of full Python", () => {
       const errors = analyze(parse(script), script, 4, [misc, math]);
       expect(errors.length).toBeGreaterThan(0);
       for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
+    });
+  });
+});
+
+describe("the rest of the expressions of full Python", () => {
+  const first = <T extends StmtNS.Stmt>(src: string): T => statements(src)[0] as T;
+  const comp = (src: string) => expression(src) as ExprNS.Comprehension;
+
+  describe("yield", () => {
+    const yielded = (src: string) =>
+      (first<StmtNS.FunctionDef>(`def f():\n    ${src}`).body[0] as StmtNS.SimpleExpr)
+        .expression as ExprNS.Yield;
+
+    test("as a statement: bare, with a value, with several values, and from", () => {
+      expect(yielded("yield")).toBeInstanceOf(ExprNS.Yield);
+      expect(yielded("yield").value).toBeNull();
+      expect(yielded("yield 1").value).toBeInstanceOf(ExprNS.BigIntLiteral);
+      expect(yielded("yield 1, 2").value).toBeInstanceOf(ExprNS.Tuple);
+      const from = yielded("yield from g()");
+      expect(from.delegate).toBe(true);
+      expect(from.value).toBeInstanceOf(ExprNS.Call);
+      expect(yielded("yield 1").delegate).toBe(false);
+    });
+
+    test("as the right-hand side of an assignment, and in parentheses", () => {
+      const body = (src: string) => first<StmtNS.FunctionDef>(`def f():\n    ${src}`).body[0];
+      expect((body("x = yield 1") as StmtNS.Assign).value).toBeInstanceOf(ExprNS.Yield);
+      expect((body("x += yield") as StmtNS.AugAssign).value).toBeInstanceOf(ExprNS.Yield);
+      expect((body("a.b = yield") as StmtNS.AttributeAssign).value).toBeInstanceOf(ExprNS.Yield);
+      expect((body("a, b = yield 1") as StmtNS.TupleAssign).value).toBeInstanceOf(ExprNS.Yield);
+      const sum = (body("y = (yield 1) + 2") as StmtNS.Assign).value as ExprNS.Binary;
+      expect((sum.left as ExprNS.Grouping).expression).toBeInstanceOf(ExprNS.Yield);
+    });
+
+    test("not after return, and not without a value to take", () => {
+      expect(() => parse("def f():\n    return yield 1\n")).toThrow();
+      expect(() => parse("def f():\n    x = yield from\n")).toThrow();
+    });
+  });
+
+  describe("comprehensions", () => {
+    test("list, set, dictionary and generator expression", () => {
+      expect(comp("[x for x in xs]").variant).toBe("list");
+      expect(comp("{x for x in xs}").variant).toBe("set");
+      expect(comp("(x for x in xs)").variant).toBe("generator");
+      const d = comp("{k: v * 2 for k, v in d.items()}");
+      expect(d.variant).toBe("dict");
+      expect(d.element).toBeInstanceOf(ExprNS.Variable);
+      expect(d.value).toBeInstanceOf(ExprNS.Binary);
+      expect(d.generators[0].target).toBeInstanceOf(ExprNS.Tuple);
+    });
+
+    test("several for clauses, each with its conditions", () => {
+      const c = comp("[y for x in xs if a if b for y in x if c]");
+      expect(c.generators).toHaveLength(2);
+      expect(c.generators[0].conditions).toHaveLength(2);
+      expect(c.generators[1].conditions).toHaveLength(1);
+      expect(c.generators[1].iter).toBeInstanceOf(ExprNS.Variable);
+    });
+
+    test("the element may be a conditional expression, the iterable and conditions may not", () => {
+      expect(comp("[a if c else d for x in xs]").element).toBeInstanceOf(ExprNS.Ternary);
+      expect(comp("[x for x in a or b]").generators[0].iter).toBeInstanceOf(ExprNS.BoolOp);
+      expect(() => parse("[x for x in a if b else c]\n")).toThrow();
+    });
+
+    test("targets: names, tuples, parenthesized tuples, attributes", () => {
+      const kinds = (src: string) => comp(src).generators[0].target.constructor;
+      expect(kinds("[x for x in xs]")).toBe(ExprNS.Variable);
+      expect(kinds("[x for a, b in xs]")).toBe(ExprNS.Tuple);
+      expect(kinds("[x for (a, b) in xs]")).toBe(ExprNS.Tuple);
+      expect(kinds("[x for a.b in xs]")).toBe(ExprNS.Attribute);
+      expect(kinds("[x for a, *b in xs]")).toBe(ExprNS.Tuple);
+    });
+
+    test("a generator expression as the only argument of a call, or in parentheses", () => {
+      const call = expression("sum(x * x for x in xs)") as ExprNS.Call;
+      expect(call.args).toHaveLength(1);
+      expect((call.args[0] as ExprNS.Comprehension).variant).toBe("generator");
+      expect(comp("o.m(x for x in xs)")).toBeInstanceOf(ExprNS.Call);
+      const two = expression("f(a, (x for x in xs))") as ExprNS.Call;
+      expect(two.args).toHaveLength(2);
+    });
+
+    test("they nest, and the displays that they resemble are unchanged", () => {
+      expect(comp("[[y for y in x] for x in xs]").element).toBeInstanceOf(ExprNS.Comprehension);
+      expect(expression("[x, y]")).toBeInstanceOf(ExprNS.List);
+      expect(expression("(x)")).toBeInstanceOf(ExprNS.Grouping);
+      expect(expression("{x: y}")).toBeInstanceOf(ExprNS.Dict);
+    });
+
+    test("malformed ones are syntax errors", () => {
+      for (const src of [
+        "[x for x in]",
+        "[for x in xs]",
+        "[x for in xs]",
+        "[x, y for x in xs]",
+        "[*a for a in b]",
+      ]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+    });
+  });
+
+  describe("slices", () => {
+    const index = (src: string) => (expression(src) as ExprNS.Subscript).index as ExprNS.Slice;
+    const parts = (src: string) => {
+      const s = index(src);
+      return [s.lower, s.upper, s.step].map(p => p !== null);
+    };
+
+    test("every combination of lower, upper and step", () => {
+      expect(parts("a[1:2]")).toEqual([true, true, false]);
+      expect(parts("a[:]")).toEqual([false, false, false]);
+      expect(parts("a[1:]")).toEqual([true, false, false]);
+      expect(parts("a[:2]")).toEqual([false, true, false]);
+      expect(parts("a[1:2:3]")).toEqual([true, true, true]);
+      expect(parts("a[::2]")).toEqual([false, false, true]);
+      expect(parts("a[1::2]")).toEqual([true, false, true]);
+      expect(parts("a[::]")).toEqual([false, false, false]);
+      expect(parts("a[1:2:]")).toEqual([true, true, false]);
+      expect(parts("a[:2:3]")).toEqual([false, true, true]);
+      expect(parts("a[1: :2]")).toEqual([true, false, true]);
+    });
+
+    test("the parts are expressions; a plain index is still an expression", () => {
+      expect(index("a[i + 1:j - 1]").lower).toBeInstanceOf(ExprNS.Binary);
+      expect(index("a[x if c else d:e]").lower).toBeInstanceOf(ExprNS.Ternary);
+      expect((expression("a[1]") as ExprNS.Subscript).index).toBeInstanceOf(ExprNS.BigIntLiteral);
+    });
+
+    test("assignment to, deletion of and augmentation of a slice", () => {
+      const a = first<StmtNS.Assign>("a[1:2] = b");
+      expect((a.target as ExprNS.Subscript).index).toBeInstanceOf(ExprNS.Slice);
+      expect(first<StmtNS.Del>("del a[1:2]").targets[0]).toBeInstanceOf(ExprNS.Subscript);
+      expect(first<StmtNS.AugAssign>("a[1:2] += b").target).toBeInstanceOf(ExprNS.Subscript);
+      expect(first<StmtNS.TupleAssign>("a[::2], b = c").target.elements[0]).toBeInstanceOf(
+        ExprNS.Subscript,
+      );
+    });
+
+    test("too many colons are a syntax error", () => {
+      expect(() => parse("a[1:2:3:4]\n")).toThrow();
+      expect(() => parse("a[]\n")).toThrow();
+    });
+  });
+
+  describe("set displays, dictionary unpacking and unpacking in displays", () => {
+    test("{1, 2} is a set, {} is a dictionary", () => {
+      expect((expression("{1, 2,}") as ExprNS.Set).elements).toHaveLength(2);
+      expect(expression("{1}")).toBeInstanceOf(ExprNS.Set);
+      expect(expression("{}")).toBeInstanceOf(ExprNS.Dict);
+    });
+
+    test("**d in a dictionary display has a null key", () => {
+      const d = expression("{'a': 1, **b, 'c': 2}") as ExprNS.Dict;
+      expect(d.keys.map(k => k !== null)).toEqual([true, false, true]);
+      expect(d.values[1]).toBeInstanceOf(ExprNS.Variable);
+      expect((expression("{**a, **b}") as ExprNS.Dict).keys).toEqual([null, null]);
+    });
+
+    test("*xs in list, tuple and set displays", () => {
+      const kinds = (src: string) =>
+        (expression(src) as ExprNS.List | ExprNS.Tuple | ExprNS.Set).elements.map(
+          e => e.constructor,
+        );
+      expect(kinds("[*a, b]")).toEqual([ExprNS.Starred, ExprNS.Variable]);
+      expect(kinds("(a, *b)")).toEqual([ExprNS.Variable, ExprNS.Starred]);
+      expect(kinds("{*a, 1}")).toEqual([ExprNS.Starred, ExprNS.BigIntLiteral]);
+      expect(first<StmtNS.Assign>("x = *a, b").value).toBeInstanceOf(ExprNS.Tuple);
+      expect(() => parse("(*a)\n")).toThrow();
+      expect(() => parse("x = *a\n")).toThrow();
+    });
+  });
+
+  describe("*args, **kwargs and **d", () => {
+    test("**kwargs is the last parameter, after *args and defaults", () => {
+      const def = first<StmtNS.FunctionDef>("def f(a, b=1, *args, c, **kw):\n    pass");
+      expect(def.parameters.map(p => p.lexeme)).toEqual(["a", "b", "args", "c", "kw"]);
+      expect(def.parameters.map(p => !!p.isDoubleStarred)).toEqual([
+        false,
+        false,
+        false,
+        false,
+        true,
+      ]);
+      expect(def.parameters.map(p => p.isStarred)).toEqual([false, false, true, false, false]);
+      const lam = expression("lambda a, **kw: kw") as ExprNS.Lambda;
+      expect(lam.parameters[1].isDoubleStarred).toBe(true);
+    });
+
+    test("**kwargs must be last, and there is only one", () => {
+      for (const src of ["def f(**kw, a):\n    pass", "def f(**a, **b):\n    pass"]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+    });
+
+    test("**d among the arguments of a call and the bases of a class", () => {
+      const call = expression("f(*a, **d, **e)") as ExprNS.Call;
+      expect(call.args.map(a => a.constructor)).toEqual([
+        ExprNS.Starred,
+        ExprNS.DoubleStarred,
+        ExprNS.DoubleStarred,
+      ]);
+      expect(first<StmtNS.Class>("class A(*bases, **kw):\n    pass").bases[1]).toBeInstanceOf(
+        ExprNS.DoubleStarred,
+      );
+    });
+  });
+
+  describe("trailing commas in parameter lists", () => {
+    const flags = (src: string) =>
+      first<StmtNS.FunctionDef>(src).parameters.map(p => !!p.trailingComma);
+
+    test("a trailing comma is allowed after any parameter list, including **kwargs", () => {
+      expect(flags("def f(a, b,):\n    pass")).toEqual([false, true]);
+      expect(flags("def f(a=1,):\n    pass")).toEqual([true]);
+      expect(flags("def f(**kw,):\n    pass")).toEqual([true]);
+      expect(flags("def f(a, **kw,):\n    pass")).toEqual([false, true]);
+      expect(flags("def f(a, *args,):\n    pass")).toEqual([false, true]);
+      expect((expression("lambda **kw,: 1") as ExprNS.Lambda).parameters[0].trailingComma).toBe(
+        true,
+      );
+      expect((expression("lambda a,: a") as ExprNS.Lambda).parameters[0].trailingComma).toBe(true);
+    });
+
+    test("without a trailing comma no parameter is flagged, whichever branch the parser tried", () => {
+      expect(flags("def f(a, b, c):\n    pass")).toEqual([false, false, false]);
+      expect(flags("def f(a, b=1, **kw):\n    pass")).toEqual([false, false, false]);
+      expect(flags("def f(a):\n    pass")).toEqual([false]);
+    });
+
+    test("a comma alone is not a parameter list", () => {
+      expect(() => parse("def f(,):\n    pass\n")).toThrow();
+      expect(() => parse("def f(a,,):\n    pass\n")).toThrow();
+    });
+
+    test("the sublanguages reject it, as they always did", () => {
+      expect(errorsIn("def f(a, b,):\n    return a", 3)[0].message).toContain(
+        "a trailing comma after the last parameter",
+      );
+      expect(errorsIn("g = lambda a,: a", 4)[0].message).toContain("trailing comma");
+      expect(errorsIn("def f(a, b):\n    return a", 4)).toEqual([]);
+    });
+  });
+
+  describe("starred operands of displays", () => {
+    test("an unparenthesized operand is a bitwise-or expression", () => {
+      for (const src of [
+        "[*x if c else y]",
+        "{*lambda: []}",
+        "(*x if c else y,)",
+        "[*a == b]",
+        "[*not a]",
+      ]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+      for (const src of [
+        "[*(x if c else y)]",
+        "[*a | b, *c]",
+        "[*a + b]",
+        "[*f(x)]",
+        "{*a, *b}",
+        "(*a, *b)",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+    });
+
+    test("in a call, *e still takes an expression (Python: *x if c else y is fine there)", () => {
+      expect(() => parse("f(*x if c else y)\n")).not.toThrow();
+    });
+  });
+
+  describe("dictionary unpacking in a display", () => {
+    test("{**a} is named as unpacking, {1: 2} as a dictionary", () => {
+      expect(errorsIn("d = {**a}", 4)[0].message).toContain("dictionary unpacking (**)");
+      expect(errorsIn("d = {'k': 1, **a}", 3)[0].message).toContain("dictionary unpacking (**)");
+      expect(errorsIn("d = {1: 2}", 4)[0].message).toContain("dictionaries");
+    });
+  });
+
+  describe("the order of arguments and of parameters", () => {
+    const message = (src: string): string => {
+      try {
+        parse(src + "\n");
+      } catch (e) {
+        return (e as Error).message;
+      }
+      return "";
+    };
+
+    test("a positional argument cannot follow a keyword argument or **d", () => {
+      expect(message("f(k=1, a)")).toBe("positional argument follows keyword argument");
+      expect(message("f(k=1, a, b)")).toBe("positional argument follows keyword argument");
+      expect(message("f(**d, a)")).toBe("positional argument follows keyword argument unpacking");
+      expect(message("class A(k=1, B):\n    pass")).toBe(
+        "positional argument follows keyword argument",
+      );
+      expect(message("f(**d, *a)")).toBe(
+        "iterable argument unpacking follows keyword argument unpacking",
+      );
+    });
+
+    test("what is allowed after keyword arguments", () => {
+      for (const src of [
+        "f(a, k=1)",
+        "f(k=1, *a)",
+        "f(k=1, **d)",
+        "f(**a, **b)",
+        "f(**a, k=1)",
+        "f(*a, b, *c)",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+    });
+
+    test("a parameter without a default cannot follow one with a default", () => {
+      const msg = "parameter without a default follows parameter with a default";
+      expect(message("def f(a=1, b):\n    pass")).toBe(msg);
+      expect(message("def f(a, b=1, c):\n    pass")).toBe(msg);
+      expect(message("lambda a=1, b: a")).toBe(msg);
+      expect(message("lambda a, b=1, c: a")).toBe(msg);
+    });
+
+    test("what is allowed after defaults: more defaults, *args, keyword-only, **kwargs", () => {
+      for (const src of [
+        "def f(a=1, b=2):\n    pass",
+        "def f(a, b=1, *args):\n    pass",
+        "def f(a=1, *args, b):\n    pass",
+        "def f(a, b=1, **kw):\n    pass",
+        "lambda a=1, *rest, b: a",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+    });
+
+    test("the errors have a position, and are ParseErrors", () => {
+      try {
+        parse("x = 1\nf(k=1, a)\n");
+        throw new Error("did not throw");
+      } catch (e) {
+        expect(e).toBeInstanceOf(ParseError);
+        expect((e as ParseError).line).toBe(2);
+        expect((e as ParseError).source).toContain("f(k=1, a)");
+      }
+    });
+  });
+
+  describe("the sublanguages name the feature", () => {
+    test.each([
+      ["def f():\n    yield 1", "generators (yield)"],
+      ["def f():\n    yield from g()", "generators (yield from)"],
+      ["[x for x in xs]", "list comprehensions"],
+      ["{x for x in xs}", "set comprehensions"],
+      ["{k: v for k, v in d}", "dictionary comprehensions"],
+      ["(x for x in xs)", "generator expressions"],
+      ["xs[1:2]", "slices"],
+      ["s = {1, 2}", "set displays"],
+      ["f(**d)", "dictionary unpacking"],
+      ["xs = [*a, 1]", "unpacking in list displays"],
+      ["def f(**kw):\n    return kw", "keyword parameters (**kwargs)"],
+      ["g = lambda a, **kw: a", "keyword parameters (**kwargs)"],
+    ])("%s", (program, feature) => {
+      expect(errorsIn(program, 3).some(e => e.message.includes(feature))).toBe(true);
+    });
+  });
+
+  describe("consumers", () => {
+    test("traverseAST visits what the new nodes contain", () => {
+      const names: string[] = [];
+      const src = [
+        "def gen():",
+        "    got = yield produced",
+        "    yield from delegate",
+        "squares = [elem + offset for elem in source if keep(elem)]",
+        "table = {key: val for key, val in pairs}",
+        "part = seq[low:high:stride]",
+        "merged = {**left, 'k': right}",
+        "call = f(*args, **options)",
+        "uniq = {item for item in bag}",
+        "lazy = (x for x in stream)",
+      ].join("\n");
+      traverseAST(parse(src + "\n"), node => {
+        if (node instanceof ExprNS.Variable) names.push(node.name.lexeme);
+      });
+      for (const n of [
+        "produced",
+        "delegate",
+        "offset",
+        "source",
+        "keep",
+        "pairs",
+        "seq",
+        "low",
+        "high",
+        "stride",
+        "left",
+        "right",
+        "args",
+        "options",
+        "bag",
+        "stream",
+      ]) {
+        expect(names).toContain(n);
+      }
+    });
+
+    test("parse() rejects them instead of dropping them", () => {
+      for (const src of [
+        "[x for x in xs]",
+        "{1, 2}",
+        "xs[1:2]",
+        "def f():\n    yield 1",
+        "f(**d)",
+        "(x for x in xs)",
+      ]) {
+        expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+      }
+      expect(() => transform(parse("def f(**kw):\n    pass\n"), new Set())).toThrow(
+        "Keyword parameters are not supported in parse tree generation",
+      );
+    });
+
+    test("the resolver gives a comprehension a scope of its own, and finds what it uses", () => {
+      const script =
+        [
+          "xs = [1, 2]",
+          "offset = 1",
+          "ys = [x + offset for x in xs if x]",
+          "zs = {k: v for k, v in xs}",
+          "gen = (a for a in xs for b in xs if b)",
+        ].join("\n") + "\n";
+      const errors = analyze(parse(script), script, 4, [misc, math]);
+      expect(errors.length).toBeGreaterThan(0);
+      for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
+      // the loop variable is not visible outside of the comprehension
+      const leak = "ys = [x for x in range(3)]\nz = x\n";
+      const names = analyze(parse(leak), leak, 4, [misc, math]).filter(
+        e => !(e instanceof FeatureNotSupportedError),
+      );
+      expect(names.length).toBeGreaterThan(0);
     });
   });
 });
