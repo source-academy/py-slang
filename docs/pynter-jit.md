@@ -80,13 +80,14 @@ code generator imports, so the two sides cannot drift apart silently.
 
 ## Semantics to preserve
 
-pynter's semantics, not CPython's, are the reference for the JIT:
+The pynter interpreter is the reference for the JIT. The JIT is written against pynter's
+64-bit value representation (see "The value representation" below), so pynter's semantics
+are Python's:
 
-- **Ints are 21-bit** (`NANBOX_INTMIN`..`NANBOX_INTMAX`) and overflow to float
-  (`NANBOX_WRAP_INT`). Specialized int code uses `i32` arithmetic followed by a range check that
-  falls through to the float conversion. This is cheaper than a bigint guard.
-- **Floats are 32-bit.** Specialized float code uses `f32`, not `f64`, so results match the
-  interpreter bit for bit.
+- **Ints** are 32-bit small ints in the NaN-box, overflowing to heap bigints. Specialized int code
+  uses `i32` arithmetic with an overflow check that calls the bigint helper.
+- **Floats** are `f64`, so specialized float code matches the interpreter, py2js and CPython bit
+  for bit.
 - **Faults**: type errors, index errors and the like must raise the same `pynter_fault_t`
   from compiled code as from the interpreter.
 - **Memory management**: pynter uses refcounting (`siheap_refbox` / `siheap_derefbox`) plus
@@ -98,9 +99,32 @@ pynter's semantics, not CPython's, are the reference for the JIT:
 The differential test (phase 2) is the safety net for all of this: run py-slang's pynter test
 suite with the JIT forced on everything, and require identical output and faults.
 
+## The value representation
+
+pynter's NaN-box is 32 bits (`sinanbox_t`, `vm/include/pynter/nanbox.h`), which gives it
+three restrictions:
+
+- floats are `f32`;
+- ints are 21-bit (`NANBOX_INTMIN`..`NANBOX_INTMAX`) and become floats on overflow;
+- heap pointers are 22-bit offsets, so the heap is at most 4 MB.
+
+These show up as wrong results today, independently of the JIT. They also fix the layout every piece
+of generated code is written against. So they are removed before the JIT's ABI is defined:
+
+- **64-bit NaN-boxing by default** (pynter#54): `f64` floats, 32-bit small ints, 32-bit heap
+  offsets, for wasm, EV3 and ESP32. The 32-bit layout stays as an opt-in `PYNTER_NANBOX32` for AVR
+  Arduino. On EV3 (64 MB of RAM, no FPU, soft-float either way), the cost is about 2× on float
+  arithmetic only.
+- **Bigints on small-int overflow** (pynter#55), using libtommath, behind `PYNTER_BIGINT`.
+- **py-slang adapts** (py-slang#576): reads `f64` and bigint results, and drops the test skips
+  that exist only because of float32 or 32-bit ints.
+
 ## Phases
 
-Each phase ends with something measurable. Phase 1 is a go/no-go gate.
+Each phase ends with something measurable. Phase 1 is a go/no-go gate. Phases 0 and 1 can
+proceed alongside the representation change, since the speedup ceiling barely depends on `f32`
+vs `f64`. Phase 2 (pynter#49) waits for 64-bit boxing (pynter#54). Phase 3's specializing code
+generator (py-slang#572) waits for bigints (pynter#55).
 
 ### Phase 0: baseline and benchmarks
 
@@ -147,8 +171,8 @@ Go if the numeric loop gains at least 10× and `fib` at least 3×.
 
 - pynter: type feedback recording.
 - pynter: the bailout protocol and frame reconstruction.
-- py-slang: a specializing code generator. Locals are held in wasm locals (`i32` small ints with a
-  range guard, `f32` floats), with a guard at every point where feedback was assumed and a bailout
+- py-slang: a specializing code generator. Locals are held in wasm locals (`i32` small ints with an
+  overflow check that calls the bigint helper, `f64` floats), with a guard at every point where feedback was assumed and a bailout
   when a guard fails.
 
 ### Phase 4: calls and loops
