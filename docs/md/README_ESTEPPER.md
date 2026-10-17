@@ -2,7 +2,7 @@
 
 The environment stepper ("e-stepper") shows how a Python §3 or §4 program runs, one small step at a
 time, when the program uses **assignment and local state**. It is the tool for the environment model
-of SICPy §3.1 onwards. Select it with the stepper tab (the two arrows icon) and press **Run**.
+of SICPy §3.1 onwards. Open the **E-Stepper** tab of the playground and press **Run**.
 
 Like the substitution stepper, it rewrites your program: each step evaluates one small part, and
 the rest of the program stays as it was. Unlike the substitution stepper, a call does not
@@ -11,9 +11,10 @@ parameters and local names, and the body of the function is evaluated *in that f
 and the data structures are drawn on the right, as in the CSE machine, and the program on the left
 points into that drawing.
 
-Use the slider or the buttons to move through the steps. With the pane in focus, the keys
-**a** (first step), **b** (previous), **f** (next) and **e** (last) work too. The line above the
-program explains what the step did.
+Use the slider or the buttons to move through the steps. With the pane in focus (click on the
+explanation first), the keys **f** (next step) and **b** (previous step) work too, and **a** and **e**
+jump to the previous and the next `breakpoint()` statement of your program, or to the first and the
+last step if there is none. The line above the program explains what the step did.
 
 ## What you see
 

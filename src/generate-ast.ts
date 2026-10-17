@@ -79,6 +79,11 @@ export class AstWriter {
       "List      -> elements: Expr[]",
       "Subscript -> value: Expr, index: Expr",
       "Starred   -> value: Expr",
+      // `value.name`
+      "Attribute -> value: Expr, name: Token",
+      // `a < b <= c`: a chain of two or more comparisons, where each middle operand is evaluated
+      // once. A single comparison is a Compare.
+      "CompareChain -> left: Expr, operators: Token[], comparators: Expr[]",
       // `(a, b)`, `a, b`, `()`: only Python beyond §4 (full Python) has tuples.
       "Tuple     -> elements: Expr[]",
       // `{k: v, ...}`: keys[i] maps to values[i].
@@ -92,6 +97,13 @@ export class AstWriter {
       "Pass       -> ()",
       "Assign     -> target: AssignTarget, value: ExprNS.Expr",
       // `a, b = value`: target is a Tuple of names, subscripts and nested Tuples.
+      // `target op= value` (`+=`, `-=`, ...): target is a Variable, Subscript or Attribute.
+      "AugAssign  -> target: ExprNS.Expr, operator: Token, value: ExprNS.Expr",
+      // `a.b = value`
+      "AttributeAssign -> target: ExprNS.Attribute, value: ExprNS.Expr",
+      // `for a, b in iter`: target is a Tuple of names, subscripts, attributes, nested tuples and
+      // starred targets. (`for x in iter` with a single name is a For.)
+      "ForUnpack  -> target: ExprNS.Tuple, iter: ExprNS.Expr, body: Stmt[]",
       "TupleAssign -> target: ExprNS.Tuple, value: ExprNS.Expr",
       "AnnAssign  -> target: ExprNS.Variable, value: ExprNS.Expr, ann: ExprNS.Expr",
       "Break      -> ()",

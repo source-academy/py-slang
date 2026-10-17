@@ -181,6 +181,15 @@ describe("the sublanguages reject what full Python adds", () => {
     ["del", "del x"],
     ["import", "import math"],
     ["an assertion message", "assert x, 'message'"],
+    ["attribute access", "a.b"],
+    ["attribute assignment", "a.b = 1"],
+    ["augmented assignment", "x += 1"],
+    ["augmented assignment of a subscript", "xs[0] -= 1"],
+    ["unpacking in a for loop", "for a, b in xs:\n    pass"],
+    ["a chained comparison", "a < b < c"],
+    ["a bitwise operator", "x = a & b"],
+    ["a shift", "x = a << 1"],
+    ["bitwise not", "x = ~a"],
   ];
 
   for (const chapter of [1, 2, 3, 4]) {
@@ -505,5 +514,291 @@ describe("consumers of the statements", () => {
     // The statements are rejected as features; no name of the program is reported undefined.
     expect(errors.length).toBeGreaterThan(0);
     for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
+  });
+});
+
+describe("expressions and targets of full Python", () => {
+  const op = (e: ExprNS.Expr): string => (e as ExprNS.Binary).operator.lexeme;
+
+  describe("attribute access", () => {
+    test("a.b, chained, and on calls and subscripts", () => {
+      const e = expression("a.b.c") as ExprNS.Attribute;
+      expect(e).toBeInstanceOf(ExprNS.Attribute);
+      expect(e.name.lexeme).toBe("c");
+      expect((e.value as ExprNS.Attribute).name.lexeme).toBe("b");
+      expect(expression("f(x).y")).toBeInstanceOf(ExprNS.Attribute);
+      expect(expression("xs[0].y")).toBeInstanceOf(ExprNS.Attribute);
+      expect(expression("a.b(1).c(2)")).toBeInstanceOf(ExprNS.Call);
+    });
+
+    test("a method call is a call of an attribute", () => {
+      const c = expression("a.m(1)") as ExprNS.Call;
+      expect(c.callee).toBeInstanceOf(ExprNS.Attribute);
+    });
+
+    test("a.b = e is an AttributeAssign, also for deeper targets", () => {
+      const a = statements("a.b = 1")[0] as StmtNS.AttributeAssign;
+      expect(a).toBeInstanceOf(StmtNS.AttributeAssign);
+      expect(a.target.name.lexeme).toBe("b");
+      const b = statements("xs[0].c.d = 1")[0] as StmtNS.AttributeAssign;
+      expect(b.target.value).toBeInstanceOf(ExprNS.Attribute);
+      expect(statements("a.b[0] = 1")[0]).toBeInstanceOf(StmtNS.Assign);
+    });
+  });
+
+  describe("augmented assignment", () => {
+    test.each(["+=", "-=", "*=", "/=", "//=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", "@="])(
+      "%s",
+      operator => {
+        const [stmt] = statements(`x ${operator} 1`) as [StmtNS.AugAssign];
+        expect(stmt).toBeInstanceOf(StmtNS.AugAssign);
+        expect(stmt.operator.lexeme).toBe(operator);
+        expect(stmt.target).toBeInstanceOf(ExprNS.Variable);
+      },
+    );
+
+    test("targets are names, subscripts and attributes", () => {
+      const [a, b, c] = statements("x += 1\nxs[0] += 1\na.b += 1") as StmtNS.AugAssign[];
+      expect(a.target).toBeInstanceOf(ExprNS.Variable);
+      expect(b.target).toBeInstanceOf(ExprNS.Subscript);
+      expect(c.target).toBeInstanceOf(ExprNS.Attribute);
+    });
+
+    test("the target may be in parentheses, but it is a single name, subscript or attribute", () => {
+      const [a, b, c] = statements(
+        "(x) += 1\n(obj.field) -= 1\n((items[0])) *= 2",
+      ) as StmtNS.AugAssign[];
+      expect(a.target).toBeInstanceOf(ExprNS.Variable);
+      expect(b.target).toBeInstanceOf(ExprNS.Attribute);
+      expect(c.target).toBeInstanceOf(ExprNS.Subscript);
+      expect(() => parse("(x,) += 1\n")).toThrow();
+      expect(() => parse("(a, b) += 1\n")).toThrow();
+      expect(() => parse("a, b += 1\n")).toThrow();
+    });
+
+    test("@= is a matrix-multiplication assignment, which the sublanguages reject by name", () => {
+      expect(errorsIn("matrix @= other", 4)[0].message).toContain("augmented assignment (@=)");
+    });
+
+    test("the operators do not change the arithmetic ones", () => {
+      expect(op(expression("a ** b"))).toBe("**");
+      expect(op(expression("a // b"))).toBe("//");
+      expect((statements("x = a < b")[0] as StmtNS.Assign).value).toBeInstanceOf(ExprNS.Compare);
+      expect(statements("x == 1")[0]).toBeInstanceOf(StmtNS.SimpleExpr);
+    });
+
+    test("may be the body of an inline block", () => {
+      expect((statements("if c: x += 1")[0] as StmtNS.If).body[0]).toBeInstanceOf(StmtNS.AugAssign);
+    });
+  });
+
+  describe("unpacking targets", () => {
+    test("for a, b in xs", () => {
+      const f = statements("for a, b in xs:\n    pass")[0] as StmtNS.ForUnpack;
+      expect(f).toBeInstanceOf(StmtNS.ForUnpack);
+      expect(f.target.elements).toHaveLength(2);
+      expect(f.iter).toBeInstanceOf(ExprNS.Variable);
+      expect(f.body).toHaveLength(1);
+    });
+
+    test("parenthesized, nested, starred, with attributes and subscripts", () => {
+      const kinds = (src: string) =>
+        (statements(src)[0] as StmtNS.ForUnpack).target.elements.map(e => e.constructor);
+      expect(kinds("for (a, b) in xs:\n    pass")).toHaveLength(2);
+      expect(kinds("for (a, b), c in xs:\n    pass")).toEqual([ExprNS.Tuple, ExprNS.Variable]);
+      expect(kinds("for a, *b in xs:\n    pass")).toEqual([ExprNS.Variable, ExprNS.Starred]);
+      expect(kinds("for a.x, b[0] in xs:\n    pass")).toEqual([ExprNS.Attribute, ExprNS.Subscript]);
+      expect(kinds("for a, in xs:\n    pass")).toHaveLength(1);
+    });
+
+    test("a for loop over one name is still a For", () => {
+      expect(statements("for x in xs:\n    pass")[0]).toBeInstanceOf(StmtNS.For);
+    });
+
+    test("starred targets in assignment", () => {
+      const kinds = (src: string) =>
+        (statements(src)[0] as StmtNS.TupleAssign).target.elements.map(e => e.constructor);
+      expect(kinds("a, *b = xs")).toEqual([ExprNS.Variable, ExprNS.Starred]);
+      expect(kinds("*a, b = xs")).toEqual([ExprNS.Starred, ExprNS.Variable]);
+      expect(kinds("a, *b, c = xs")).toEqual([ExprNS.Variable, ExprNS.Starred, ExprNS.Variable]);
+    });
+
+    test("at most one starred target in each target list", () => {
+      for (const src of [
+        "a, *b, *c = xs",
+        "*a, *b = xs",
+        "*a, b, *c = xs",
+        "for a, *b, *c in xs:\n    pass",
+        "(*a, *b), c = xs",
+        "*a = xs",
+        "for *a in xs:\n    pass",
+      ]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+      for (const src of [
+        "*a, = xs",
+        "*a, b = xs",
+        "a, *b, = xs",
+        "a, b, *c = xs",
+        "(a, *b), *c = xs",
+        "*a, (b, *c) = xs",
+        "for *a, b in xs:\n    pass",
+        "for (a, *b), *c in xs:\n    pass",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+      const t = statements("a, *b, c = xs")[0] as StmtNS.TupleAssign;
+      expect(t.target.elements.map(e => e.constructor)).toEqual([
+        ExprNS.Variable,
+        ExprNS.Starred,
+        ExprNS.Variable,
+      ]);
+    });
+
+    test("attributes are targets of tuple assignment, del and with", () => {
+      const t = statements("a.x, b[0] = 1, 2")[0] as StmtNS.TupleAssign;
+      expect(t.target.elements.map(e => e.constructor)).toEqual([
+        ExprNS.Attribute,
+        ExprNS.Subscript,
+      ]);
+      expect((statements("del a.b")[0] as StmtNS.Del).targets[0]).toBeInstanceOf(ExprNS.Attribute);
+      const w = statements("with f() as a.b:\n    pass")[0] as StmtNS.With;
+      expect(w.items[0].target).toBeInstanceOf(ExprNS.Attribute);
+    });
+  });
+
+  describe("bitwise operators", () => {
+    test("precedence: | below ^ below & below shifts below +", () => {
+      // a | b ^ c & d  ==  a | (b ^ (c & d))
+      const e = expression("a | b ^ c & d") as ExprNS.Binary;
+      expect(op(e)).toBe("|");
+      expect(op(e.right)).toBe("^");
+      expect(op((e.right as ExprNS.Binary).right)).toBe("&");
+      // a + 1 << 2  ==  (a + 1) << 2
+      const s = expression("a + 1 << 2") as ExprNS.Binary;
+      expect(op(s)).toBe("<<");
+      expect(op(s.left)).toBe("+");
+    });
+
+    test("they bind tighter than comparisons, and are left associative", () => {
+      const c = expression("a | b < c & d") as ExprNS.Compare;
+      expect(c).toBeInstanceOf(ExprNS.Compare);
+      expect(op(c.left)).toBe("|");
+      expect(op(c.right)).toBe("&");
+      const l = expression("a << 1 >> 2") as ExprNS.Binary;
+      expect(op(l)).toBe(">>");
+      expect(op(l.left)).toBe("<<");
+    });
+
+    test("~ is a unary operator", () => {
+      const e = expression("~~a") as ExprNS.Unary;
+      expect(e).toBeInstanceOf(ExprNS.Unary);
+      expect(e.operator.lexeme).toBe("~");
+      expect(e.right).toBeInstanceOf(ExprNS.Unary);
+    });
+  });
+
+  describe("chained comparisons", () => {
+    test("a single comparison is still a Compare", () => {
+      expect(expression("a < b")).toBeInstanceOf(ExprNS.Compare);
+    });
+
+    test("two or more operators make a CompareChain, in order", () => {
+      const c = expression("a < b <= c") as ExprNS.CompareChain;
+      expect(c).toBeInstanceOf(ExprNS.CompareChain);
+      expect(c.operators.map(o => o.lexeme)).toEqual(["<", "<="]);
+      expect(c.comparators).toHaveLength(2);
+      const d = expression("1 < x <= 10 != y") as ExprNS.CompareChain;
+      expect(d.operators.map(o => o.lexeme)).toEqual(["<", "<=", "!="]);
+      expect(d.comparators).toHaveLength(3);
+    });
+
+    test("with in, not in, is and is not", () => {
+      const c = expression("a in b not in c is d is not e") as ExprNS.CompareChain;
+      expect(c.operators.map(o => o.lexeme)).toEqual(["in", "not in", "is", "is not"]);
+    });
+
+    test("the operands are not comparisons themselves", () => {
+      const c = expression("a + 1 < b | 2 < c") as ExprNS.CompareChain;
+      expect(c.left).toBeInstanceOf(ExprNS.Binary);
+      expect(c.comparators[0]).toBeInstanceOf(ExprNS.Binary);
+      expect(c.comparators[1]).toBeInstanceOf(ExprNS.Variable);
+    });
+
+    test("and/or combine chains, as before", () => {
+      const e = expression("a < b < c and d < e") as ExprNS.BoolOp;
+      expect(e.left).toBeInstanceOf(ExprNS.CompareChain);
+      expect(e.right).toBeInstanceOf(ExprNS.Compare);
+    });
+  });
+
+  describe("the sublanguages name the feature", () => {
+    test.each([
+      ["a.b", "attribute access"],
+      ["a.b = 1", "assignment to attributes"],
+      ["x += 1", "augmented assignment (+=)"],
+      ["for a, b in xs:\n    pass", "unpacking in for loops"],
+      ["a < b < c", "chained comparisons"],
+      ["x = a | b", "bitwise operators (|)"],
+      ["x = a << 1", "bitwise operators (<<)"],
+      ["x = ~a", "bitwise operators (~)"],
+    ])("%s", (program, feature) => {
+      expect(errorsIn(program, 3)[0].message).toContain(feature);
+    });
+  });
+
+  describe("consumers", () => {
+    test("traverseAST visits what the new nodes contain", () => {
+      const names: string[] = [];
+      const src = [
+        "obj.field = other",
+        "total += step",
+        "for key, value in items:",
+        "    pass",
+        "check = low < mid.size <= high",
+      ].join("\n");
+      traverseAST(parse(src + "\n"), node => {
+        if (node instanceof ExprNS.Variable) names.push(node.name.lexeme);
+      });
+      for (const n of ["obj", "other", "total", "step", "items", "low", "mid", "high"]) {
+        expect(names).toContain(n);
+      }
+    });
+
+    test("parse() rejects them instead of dropping them or mis-naming them", () => {
+      for (const src of [
+        "a.b",
+        "a.b = 1",
+        "x += 1",
+        "for a, b in xs:\n    pass",
+        "a < b < c",
+        "a & b",
+        "a << 1",
+        "~a",
+      ]) {
+        expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+      }
+      expect(() => transform(parse("a | b\n"), new Set())).toThrow(
+        "Bitwise operators are not supported in parse tree generation",
+      );
+    });
+
+    test("the resolver declares the names that the new statements bind", () => {
+      const script =
+        [
+          "xs = 1",
+          "total = 0",
+          "total += xs",
+          "for key, value in xs:",
+          "    key",
+          "    value",
+          "first, *rest = xs",
+          "first",
+          "rest",
+        ].join("\n") + "\n";
+      const errors = analyze(parse(script), script, 4, [misc, math]);
+      expect(errors.length).toBeGreaterThan(0);
+      for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
+    });
   });
 });

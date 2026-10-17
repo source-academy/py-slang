@@ -439,6 +439,22 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   visitImportStmt(_stmt: StmtNS.Import): [number, bigint] {
     throw new Error("import statements are not supported in parse tree generation");
   }
+  visitAugAssignStmt(_stmt: StmtNS.AugAssign): [number, bigint] {
+    throw new Error("Augmented assignment is not supported in parse tree generation");
+  }
+  visitAttributeAssignStmt(_stmt: StmtNS.AttributeAssign): [number, bigint] {
+    throw new Error("Assignment to attributes is not supported in parse tree generation");
+  }
+  visitForUnpackStmt(_stmt: StmtNS.ForUnpack): [number, bigint] {
+    throw new Error("Unpacking in for loops is not supported in parse tree generation");
+  }
+  visitAttributeExpr(_expr: ExprNS.Attribute): [number, bigint] {
+    throw new Error("Attribute access is not supported in parse tree generation");
+  }
+  visitCompareChainExpr(_expr: ExprNS.CompareChain): [number, bigint] {
+    throw new Error("Chained comparisons is not supported in parse tree generation");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): [number, bigint] {
     throw new Error("Tuple assignment is not supported in parse tree generation");
   }

@@ -895,10 +895,11 @@ describe("Token tracking", () => {
   });
 
   test("a syntax error after a multi-line triple-quoted string reports the right line (py-slang#394 repro)", () => {
-    // Mirrors the issue's exact repro: an invalid `&` token six lines below
+    // Mirrors the issue's exact repro: an invalid `?` token six lines below
     // a multi-line triple-quoted string used to be reported against a line
-    // inside the string instead of its own line.
-    expect(() => parseStmts("1 + 2\n'''\na\nb\n'''\n&\n4 + 5")).toThrow(/line 6 col 1/);
+    // inside the string instead of its own line. (The issue used `&`, which is
+    // a bitwise operator of full Python now.)
+    expect(() => parseStmts("1 + 2\n'''\na\nb\n'''\n?\n4 + 5")).toThrow(/line 6 col 1/);
   });
 });
 
@@ -946,12 +947,14 @@ describe("Left-associativity", () => {
     expect(expr.left).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("comparison operators are non-associative: 1 < 2 < 3 is a syntax error", () => {
-    // Unlike full Python (where this is sugar for 1 < 2 and 2 < 3), chaining
-    // is deliberately excluded from this sublanguage rather than given
-    // different (silently wrong, or chapter-dependent) behavior - see
-    // docs/specs/python_precedence.tex.
-    expect(() => parseExpr("1 < 2 < 3")).toThrow();
+  test("1 < 2 < 3 is a chained comparison, not (1 < 2) < 3", () => {
+    // As in full Python, this is sugar for 1 < 2 and 2 < 3. The sublanguages
+    // do not have it: their validators reject a CompareChain with a feature
+    // error, rather than giving it different (silently wrong, or
+    // chapter-dependent) behavior - see docs/specs/python_precedence.tex.
+    const chain = parseExpr("1 < 2 < 3") as ExprNS.CompareChain;
+    expect(chain).toBeInstanceOf(ExprNS.CompareChain);
+    expect(chain.operators).toHaveLength(2);
   });
 
   test("mixed operators: 10 - 3 + 2 = (10 - 3) + 2", () => {
@@ -991,17 +994,17 @@ describe("Compound comparison operators", () => {
     expect(expr.operator.lexeme).toBe("is");
   });
 
-  // Comparison, membership, and identity operators are all non-associative:
-  // each takes exactly two operands, so chaining any of them - even mixed
-  // ones - is a syntax error rather than left-associating like +/-/* do.
-  // See docs/specs/python_precedence.tex.
+  // Comparison, membership, and identity operators do not left-associate
+  // like +/-/* do: a chain of them, even a mixed one, is one CompareChain
+  // (a < b < c means a < b and b < c). The sublanguages reject chains with
+  // a feature error. See docs/specs/python_precedence.tex.
   test.each([
     ["1 == 2 == 3", "chained =="],
     ["x is y is z", "chained is"],
     ["1 in [2] in [3]", "chained in"],
     ["1 < 2 == 3", "mixed comparison operators"],
-  ])("%s is rejected (%s)", src => {
-    expect(() => parseExpr(src)).toThrow();
+  ])("%s is a chain (%s)", src => {
+    expect(parseExpr(src)).toBeInstanceOf(ExprNS.CompareChain);
   });
 });
 
@@ -1186,8 +1189,10 @@ describe("Complex expressions (no ambiguity)", () => {
     expect(expr).toBeInstanceOf(ExprNS.Binary);
   });
 
-  test("chained comparisons are rejected: 1 < 2 < 3 < 4", () => {
-    expect(() => parseExpr("1 < 2 < 3 < 4")).toThrow();
+  test("chained comparisons make one CompareChain: 1 < 2 < 3 < 4", () => {
+    const chain = parseExpr("1 < 2 < 3 < 4") as ExprNS.CompareChain;
+    expect(chain).toBeInstanceOf(ExprNS.CompareChain);
+    expect(chain.comparators).toHaveLength(3);
   });
 
   test("mixed bool ops: a and b or c and d", () => {

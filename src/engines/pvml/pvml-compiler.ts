@@ -1214,6 +1214,22 @@ export class PVMLCompiler
     throw new Error("import statements are not supported by the PVML compiler");
   }
 
+  visitAugAssignStmt(_stmt: StmtNS.AugAssign): ExpressionResult {
+    throw new Error("Augmented assignment is not supported by the PVML compiler");
+  }
+  visitAttributeAssignStmt(_stmt: StmtNS.AttributeAssign): ExpressionResult {
+    throw new Error("Assignment to attributes is not supported by the PVML compiler");
+  }
+  visitForUnpackStmt(_stmt: StmtNS.ForUnpack): ExpressionResult {
+    throw new Error("Unpacking in for loops is not supported by the PVML compiler");
+  }
+  visitAttributeExpr(_expr: ExprNS.Attribute): ExpressionResult {
+    throw new Error("Attribute access is not supported by the PVML compiler");
+  }
+  visitCompareChainExpr(_expr: ExprNS.CompareChain): ExpressionResult {
+    throw new Error("Chained comparisons is not supported by the PVML compiler");
+  }
+
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): ExpressionResult {
     throw new Error("Tuple assignment is not supported by the PVML compiler");
   }

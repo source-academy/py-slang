@@ -114,6 +114,22 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitImportStmt(): void {}
 
+  visitAugAssignStmt(stmt: StmtNS.AugAssign): void {
+    traverseAST(stmt.target, this.fn);
+    traverseAST(stmt.value, this.fn);
+  }
+
+  visitAttributeAssignStmt(stmt: StmtNS.AttributeAssign): void {
+    traverseAST(stmt.target, this.fn);
+    traverseAST(stmt.value, this.fn);
+  }
+
+  visitForUnpackStmt(stmt: StmtNS.ForUnpack): void {
+    traverseAST(stmt.target, this.fn);
+    traverseAST(stmt.iter, this.fn);
+    stmt.body.forEach(s => traverseAST(s, this.fn));
+  }
+
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
     traverseAST(stmt.expression, this.fn);
   }
@@ -179,6 +195,15 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
     traverseAST(expr.value, this.fn);
     traverseAST(expr.index, this.fn);
+  }
+
+  visitAttributeExpr(expr: ExprNS.Attribute): void {
+    traverseAST(expr.value, this.fn);
+  }
+
+  visitCompareChainExpr(expr: ExprNS.CompareChain): void {
+    traverseAST(expr.left, this.fn);
+    expr.comparators.forEach(c => traverseAST(c, this.fn));
   }
 
   visitTupleExpr(expr: ExprNS.Tuple): void {
