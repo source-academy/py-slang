@@ -19,7 +19,7 @@
 
 ### Style guide
 
-The <a href="source_styleguide.pdf">Python § Style Guide</a> gives general
+The <a href="python_styleguide.pdf">Python Style Guide</a> gives general
 recommendations on how to write your programs so that they are readable by
 the members of our learning community.
 
