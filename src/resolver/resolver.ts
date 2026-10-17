@@ -326,8 +326,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       return this.errors;
     }
     if (stmt instanceof Array) {
-      for (const st of stmt) {
-        if (st instanceof StmtNS.FunctionDef) {
+      for (const stm of stmt) {
+        // A decorated definition binds its name like the definition without the decorators.
+        const st = stm instanceof StmtNS.Decorated ? stm.definition : stm;
+        if (st instanceof StmtNS.FunctionDef || st instanceof StmtNS.Class) {
           if (
             !this.globalNamesInCurrentFunction.has(st.name.lexeme) &&
             !this.nonlocalNamesInCurrentFunction.has(st.name.lexeme)
@@ -866,14 +868,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // function/lambda bodies (they introduce their own scope). Mirrors scanGlobalDeclarations
   // / scanNonlocalDeclarations, but collects "is this name bound here at all" instead.
   private hasBindingConstruct(stmts: StmtNS.Stmt[], name: string): boolean {
-    for (const stmt of stmts) {
+    for (const original of stmts) {
+      const stmt = original instanceof StmtNS.Decorated ? original.definition : original;
       if (
         stmt instanceof StmtNS.Assign &&
         stmt.target instanceof ExprNS.Variable &&
         stmt.target.name.lexeme === name
       ) {
         return true;
-      } else if (stmt instanceof StmtNS.FunctionDef && stmt.name.lexeme === name) {
+      } else if (
+        (stmt instanceof StmtNS.FunctionDef || stmt instanceof StmtNS.Class) &&
+        stmt.name.lexeme === name
+      ) {
         return true;
       } else if (stmt instanceof StmtNS.For) {
         if (stmt.target.lexeme === name || this.hasBindingConstruct(stmt.body, name)) {

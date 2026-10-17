@@ -542,17 +542,19 @@ const ParserRules = [
         body,
       ),
   },
-  { name: "statementTry$ebnf$1", symbols: ["except_clause"] },
   {
-    name: "statementTry$ebnf$1",
-    symbols: ["statementTry$ebnf$1", "except_clause"],
-    postprocess: function arrpush<T>(d: [T[], T]) {
-      return d[0].concat([d[1]]);
-    },
+    name: "statementTry$ebnf$1$subexpression$1",
+    symbols: [{ literal: "else" }, { literal: ":" }, "block"],
   },
   {
+    name: "statementTry$ebnf$1",
+    symbols: ["statementTry$ebnf$1$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "statementTry$ebnf$1", symbols: [], postprocess: () => null },
+  {
     name: "statementTry$ebnf$2$subexpression$1",
-    symbols: [{ literal: "else" }, { literal: ":" }, "block"],
+    symbols: [{ literal: "finally" }, { literal: ":" }, "block"],
   },
   {
     name: "statementTry$ebnf$2",
@@ -561,24 +563,14 @@ const ParserRules = [
   },
   { name: "statementTry$ebnf$2", symbols: [], postprocess: () => null },
   {
-    name: "statementTry$ebnf$3$subexpression$1",
-    symbols: [{ literal: "finally" }, { literal: ":" }, "block"],
-  },
-  {
-    name: "statementTry$ebnf$3",
-    symbols: ["statementTry$ebnf$3$subexpression$1"],
-    postprocess: id,
-  },
-  { name: "statementTry$ebnf$3", symbols: [], postprocess: () => null },
-  {
     name: "statementTry",
     symbols: [
       { literal: "try" },
       { literal: ":" },
       "block",
+      "except_clauses",
       "statementTry$ebnf$1",
       "statementTry$ebnf$2",
-      "statementTry$ebnf$3",
     ],
     postprocess: ([kw, , body, handlers, orElse, fin]: [
       moo.Token,
@@ -618,8 +610,31 @@ const ParserRules = [
       StmtNS.Stmt[],
     ]) => new StmtNS.Try(toAstToken(kw), fin[fin.length - 1].endToken, body, [], null, fin),
   },
+  { name: "except_clauses$ebnf$1", symbols: ["except_clause"] },
   {
-    name: "except_clause",
+    name: "except_clauses$ebnf$1",
+    symbols: ["except_clauses$ebnf$1", "except_clause"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "except_clauses$ebnf$2", symbols: ["except_bare"], postprocess: id },
+  { name: "except_clauses$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "except_clauses",
+    symbols: ["except_clauses$ebnf$1", "except_clauses$ebnf$2"],
+    postprocess: ([typed, bare]: [
+      StmtNS.Try["handlers"],
+      StmtNS.Try["handlers"][number] | null,
+    ]) => (bare ? [...typed, bare] : typed),
+  },
+  {
+    name: "except_clauses",
+    symbols: ["except_bare"],
+    postprocess: ([bare]: [StmtNS.Try["handlers"][number]]) => [bare],
+  },
+  {
+    name: "except_bare",
     symbols: [{ literal: "except" }, { literal: ":" }, "block"],
     postprocess: ([, , body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) => ({
       type: null,

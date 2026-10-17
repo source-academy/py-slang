@@ -315,6 +315,15 @@ describe("statements of full Python", () => {
       expect(t.finalBody).toHaveLength(1);
     });
 
+    test("a bare except must be the last handler, and there is at most one", () => {
+      expect(() => parse("try:\n    a()\nexcept:\n    b()\nexcept E:\n    c()\n")).toThrow();
+      expect(() => parse("try:\n    a()\nexcept:\n    b()\nexcept:\n    c()\n")).toThrow();
+      const last = first<StmtNS.Try>("try:\n    a()\nexcept E:\n    b()\nexcept:\n    c()");
+      expect(last.handlers.map(h => h.type === null)).toEqual([false, true]);
+      const only = first<StmtNS.Try>("try:\n    a()\nexcept:\n    b()\nelse:\n    c()");
+      expect(only.handlers).toHaveLength(1);
+    });
+
     test("a try without except or finally is a syntax error", () => {
       expect(() => parse("try:\n    a()\n")).toThrow();
     });
@@ -449,6 +458,26 @@ describe("consumers of the statements", () => {
     expect(() => transform(parse("assert x, 'm'\n"), new Set())).toThrow(
       "Assertion messages are not supported in parse tree generation",
     );
+  });
+
+  test("the resolver declares a decorated function or class, also for use inside itself", () => {
+    const script =
+      [
+        "d = lambda x: x",
+        "@d",
+        "def f(n):",
+        "    return f if n > 0 else 0",
+        "@d",
+        "class A:",
+        "    pass",
+        "def g():",
+        "    return A",
+        "f(1)",
+        "A",
+      ].join("\n") + "\n";
+    const errors = analyze(parse(script), script, 4, [misc, math]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
   });
 
   test("the resolver declares the names that the statements bind", () => {

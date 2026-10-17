@@ -281,7 +281,7 @@ statementClass ->
            new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), bases, body) %}
 
 statementTry ->
-    "try" ":" block except_clause:+ ("else" ":" block):? ("finally" ":" block):?
+    "try" ":" block except_clauses ("else" ":" block):? ("finally" ":" block):?
       {% ([kw,, body, handlers, orElse, fin]: [moo.Token, moo.Token, StmtNS.Stmt[], StmtNS.Try["handlers"], [moo.Token, moo.Token, StmtNS.Stmt[]] | null, [moo.Token, moo.Token, StmtNS.Stmt[]] | null]) => {
            const last = fin ? fin[2] : orElse ? orElse[2] : handlers[handlers.length - 1].body;
            return new StmtNS.Try(toAstToken(kw), last[last.length - 1].endToken, body, handlers,
@@ -290,10 +290,17 @@ statementTry ->
   | "try" ":" block "finally" ":" block
       {% ([kw,, body,,, fin]: [moo.Token, moo.Token, StmtNS.Stmt[], moo.Token, moo.Token, StmtNS.Stmt[]]) =>
            new StmtNS.Try(toAstToken(kw), fin[fin.length - 1].endToken, body, [], null, fin) %}
-except_clause ->
+# The `except` clauses of a `try`: clauses with a type, then at most one bare `except:`, which
+# Python requires to be the last one.
+except_clauses ->
+    except_clause:+ except_bare:?
+      {% ([typed, bare]: [StmtNS.Try["handlers"], StmtNS.Try["handlers"][number] | null]) => bare ? [...typed, bare] : typed %}
+  | except_bare  {% ([bare]: [StmtNS.Try["handlers"][number]]) => [bare] %}
+except_bare ->
     "except" ":" block
       {% ([,, body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) => ({ type: null, name: null, body }) %}
-  | "except" expression ":" block
+except_clause ->
+    "except" expression ":" block
       {% ([, type,, body]: [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) => ({ type, name: null, body }) %}
   | "except" expression "as" %name ":" block
       {% ([, type,, name,, body]: [moo.Token, ExprNS.Expr, moo.Token, moo.Token, moo.Token, StmtNS.Stmt[]]) =>
