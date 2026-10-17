@@ -72,7 +72,47 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitAssertStmt(stmt: StmtNS.Assert): void {
     traverseAST(stmt.value, this.fn);
+    if (stmt.message) traverseAST(stmt.message, this.fn);
   }
+
+  visitClassStmt(stmt: StmtNS.Class): void {
+    stmt.bases.forEach(b => traverseAST(b, this.fn));
+    stmt.body.forEach(s => traverseAST(s, this.fn));
+  }
+
+  visitDecoratedStmt(stmt: StmtNS.Decorated): void {
+    stmt.decorators.forEach(d => traverseAST(d, this.fn));
+    traverseAST(stmt.definition, this.fn);
+  }
+
+  visitTryStmt(stmt: StmtNS.Try): void {
+    stmt.body.forEach(s => traverseAST(s, this.fn));
+    for (const handler of stmt.handlers) {
+      if (handler.type) traverseAST(handler.type, this.fn);
+      handler.body.forEach(s => traverseAST(s, this.fn));
+    }
+    stmt.orElse?.forEach(s => traverseAST(s, this.fn));
+    stmt.finalBody?.forEach(s => traverseAST(s, this.fn));
+  }
+
+  visitRaiseStmt(stmt: StmtNS.Raise): void {
+    if (stmt.value) traverseAST(stmt.value, this.fn);
+    if (stmt.cause) traverseAST(stmt.cause, this.fn);
+  }
+
+  visitWithStmt(stmt: StmtNS.With): void {
+    for (const item of stmt.items) {
+      traverseAST(item.context, this.fn);
+      if (item.target) traverseAST(item.target, this.fn);
+    }
+    stmt.body.forEach(s => traverseAST(s, this.fn));
+  }
+
+  visitDelStmt(stmt: StmtNS.Del): void {
+    stmt.targets.forEach(t => traverseAST(t, this.fn));
+  }
+
+  visitImportStmt(): void {}
 
   visitSimpleExprStmt(stmt: StmtNS.SimpleExpr): void {
     traverseAST(stmt.expression, this.fn);

@@ -418,6 +418,27 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
     throw new Error("Annotated assignment statements are not supported in parse tree generation");
   }
+  visitClassStmt(_stmt: StmtNS.Class): [number, bigint] {
+    throw new Error("Classes are not supported in parse tree generation");
+  }
+  visitDecoratedStmt(_stmt: StmtNS.Decorated): [number, bigint] {
+    throw new Error("Decorators are not supported in parse tree generation");
+  }
+  visitTryStmt(_stmt: StmtNS.Try): [number, bigint] {
+    throw new Error("try statements are not supported in parse tree generation");
+  }
+  visitRaiseStmt(_stmt: StmtNS.Raise): [number, bigint] {
+    throw new Error("raise statements are not supported in parse tree generation");
+  }
+  visitWithStmt(_stmt: StmtNS.With): [number, bigint] {
+    throw new Error("with statements are not supported in parse tree generation");
+  }
+  visitDelStmt(_stmt: StmtNS.Del): [number, bigint] {
+    throw new Error("del statements are not supported in parse tree generation");
+  }
+  visitImportStmt(_stmt: StmtNS.Import): [number, bigint] {
+    throw new Error("import statements are not supported in parse tree generation");
+  }
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): [number, bigint] {
     throw new Error("Tuple assignment is not supported in parse tree generation");
   }

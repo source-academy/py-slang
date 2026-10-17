@@ -95,6 +95,7 @@ export enum TokenType {
   EXCEPT = 93,
   FINALLY = 94,
   RAISE = 95,
+  CLASS = 96,
 }
 
 /**

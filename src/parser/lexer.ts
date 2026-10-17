@@ -34,6 +34,13 @@ const kwType = moo.keywords({
   kw_nonlocal: "nonlocal",
   kw_as: "as",
   kw_assert: "assert",
+  kw_class: "class",
+  kw_try: "try",
+  kw_except: "except",
+  kw_finally: "finally",
+  kw_raise: "raise",
+  kw_with: "with",
+  kw_del: "del",
   kw_True: "True",
   kw_False: "False",
   kw_None: "None",
@@ -41,13 +48,6 @@ const kwType = moo.keywords({
   forbidden_async: "async",
   forbidden_await: "await",
   forbidden_yield: "yield",
-  forbidden_with: "with",
-  forbidden_del: "del",
-  forbidden_try: "try",
-  forbidden_except: "except",
-  forbidden_finally: "finally",
-  forbidden_raise: "raise",
-  forbidden_class: "class",
 });
 
 const mooLexer = moo.compile({
@@ -99,6 +99,7 @@ const mooLexer = moo.compile({
   equal: "=",
   dot: ".",
   semi: ";",
+  at: "@",
 
   name: { match: /[a-zA-Z_][a-zA-Z0-9_]*/, type: kwType },
 });

@@ -326,8 +326,10 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       return this.errors;
     }
     if (stmt instanceof Array) {
-      for (const st of stmt) {
-        if (st instanceof StmtNS.FunctionDef) {
+      for (const stm of stmt) {
+        // A decorated definition binds its name like the definition without the decorators.
+        const st = stm instanceof StmtNS.Decorated ? stm.definition : stm;
+        if (st instanceof StmtNS.FunctionDef || st instanceof StmtNS.Class) {
           if (
             !this.globalNamesInCurrentFunction.has(st.name.lexeme) &&
             !this.nonlocalNamesInCurrentFunction.has(st.name.lexeme)
@@ -490,16 +492,74 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitTupleAssignStmt(stmt: StmtNS.TupleAssign): void {
     this.resolve(stmt.value);
-    const bind = (target: ExprNS.Expr): void => {
-      if (target instanceof ExprNS.Variable) this.functionVarConstraint(target.name);
-      else if (target instanceof ExprNS.Tuple) target.elements.forEach(bind);
-      else this.resolve(target); // a subscript
-    };
-    stmt.target.elements.forEach(bind);
+    stmt.target.elements.forEach(t => this.resolveTarget(t));
   }
 
   visitAssertStmt(stmt: StmtNS.Assert): void {
     this.resolve(stmt.value);
+    if (stmt.message) this.resolve(stmt.message);
+  }
+  // The statements of full Python below are rejected by the sublanguage validators; the resolver
+  // only has to resolve what they contain without failing. The scoping of what they bind (a
+  // class body, the names of `import`, `except ... as`, `with ... as`) is the engine's business:
+  // here a bound name is declared where the statement stands.
+  private declareBound(name: Token): void {
+    if (
+      !this.globalNamesInCurrentFunction.has(name.lexeme) &&
+      !this.nonlocalNamesInCurrentFunction.has(name.lexeme)
+    ) {
+      this.environment?.declareName(name);
+    }
+  }
+  visitClassStmt(stmt: StmtNS.Class): void {
+    this.resolve(stmt.bases);
+    this.declareBound(stmt.name);
+    this.resolve(stmt.body);
+  }
+  visitDecoratedStmt(stmt: StmtNS.Decorated): void {
+    this.resolve(stmt.decorators);
+    this.resolve(stmt.definition);
+  }
+  visitTryStmt(stmt: StmtNS.Try): void {
+    this.resolve(stmt.body);
+    for (const handler of stmt.handlers) {
+      if (handler.type) this.resolve(handler.type);
+      if (handler.name) this.declareBound(handler.name);
+      this.resolve(handler.body);
+    }
+    if (stmt.orElse) this.resolve(stmt.orElse);
+    if (stmt.finalBody) this.resolve(stmt.finalBody);
+  }
+  visitRaiseStmt(stmt: StmtNS.Raise): void {
+    if (stmt.value) this.resolve(stmt.value);
+    if (stmt.cause) this.resolve(stmt.cause);
+  }
+  visitWithStmt(stmt: StmtNS.With): void {
+    for (const item of stmt.items) {
+      this.resolve(item.context);
+      if (item.target) this.resolveTarget(item.target);
+    }
+    this.resolve(stmt.body);
+  }
+  visitDelStmt(stmt: StmtNS.Del): void {
+    this.resolve(stmt.targets);
+  }
+  visitImportStmt(stmt: StmtNS.Import): void {
+    for (const { name, alias } of stmt.names) {
+      // `import a.b` binds `a`.
+      this.declareBound(
+        alias ??
+          new Token(name.type, name.lexeme.split(".")[0], name.line, name.col, name.indexInSource),
+      );
+    }
+  }
+  // A name or subscript that a statement binds, or a tuple of them.
+  private resolveTarget(target: ExprNS.Expr): void {
+    if (target instanceof ExprNS.Variable) {
+      this.declareBound(target.name);
+      this.functionVarConstraint(target.name);
+    } else if (target instanceof ExprNS.Tuple) target.elements.forEach(t => this.resolveTarget(t));
+    else this.resolve(target);
   }
   visitForStmt(stmt: StmtNS.For): void {
     if (
@@ -808,14 +868,18 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // function/lambda bodies (they introduce their own scope). Mirrors scanGlobalDeclarations
   // / scanNonlocalDeclarations, but collects "is this name bound here at all" instead.
   private hasBindingConstruct(stmts: StmtNS.Stmt[], name: string): boolean {
-    for (const stmt of stmts) {
+    for (const original of stmts) {
+      const stmt = original instanceof StmtNS.Decorated ? original.definition : original;
       if (
         stmt instanceof StmtNS.Assign &&
         stmt.target instanceof ExprNS.Variable &&
         stmt.target.name.lexeme === name
       ) {
         return true;
-      } else if (stmt instanceof StmtNS.FunctionDef && stmt.name.lexeme === name) {
+      } else if (
+        (stmt instanceof StmtNS.FunctionDef || stmt instanceof StmtNS.Class) &&
+        stmt.name.lexeme === name
+      ) {
         return true;
       } else if (stmt instanceof StmtNS.For) {
         if (stmt.target.lexeme === name || this.hasBindingConstruct(stmt.body, name)) {

@@ -300,6 +300,9 @@ export function transform(
         ),
       ]);
     case "Assert":
+      if ((node as StmtNS.Assert).message) {
+        throw new Error("Assertion messages are not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "assert_statement" },
         transform((node as StmtNS.Assert).value, declaredNames),

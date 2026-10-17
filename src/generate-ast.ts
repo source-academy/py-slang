@@ -100,7 +100,20 @@ export class AstWriter {
       "FromImport -> module: Token, names: { name: Token; alias: Token | null }[], level: number",
       "Global     -> names: Token[]",
       "NonLocal   -> names: Token[]",
-      "Assert     -> value: ExprNS.Expr",
+      // `assert value, message`: message is null when there is none.
+      "Assert     -> value: ExprNS.Expr, message: ExprNS.Expr | null",
+      // `class name(bases): body`: bases are the arguments of the call-like list, in order, so
+      // they may include Keyword and Starred expressions.
+      "Class      -> name: Token, bases: ExprNS.Expr[], body: Stmt[]",
+      // `@decorator` lines (outermost first) followed by a FunctionDef or a Class.
+      "Decorated  -> decorators: ExprNS.Expr[], definition: Stmt",
+      // `try`, with its `except` clauses (type is null for a bare `except:`), `else` and `finally`.
+      "Try        -> body: Stmt[], handlers: { type: ExprNS.Expr | null; name: Token | null; body: Stmt[] }[], orElse: Stmt[] | null, finalBody: Stmt[] | null",
+      "Raise      -> value: ExprNS.Expr | null, cause: ExprNS.Expr | null",
+      "With       -> items: { context: ExprNS.Expr; target: ExprNS.Expr | null }[], body: Stmt[]",
+      "Del        -> targets: ExprNS.Expr[]",
+      // `import a.b as c`: name is the dotted name as one token.
+      "Import     -> names: { name: Token; alias: Token | null }[]",
       "If         -> condition: ExprNS.Expr, body: Stmt[], elseBlock: Stmt[] | null",
       "While      -> condition: ExprNS.Expr, body: Stmt[]",
       "For        -> target: Token, iter: ExprNS.Expr, body: Stmt[]",

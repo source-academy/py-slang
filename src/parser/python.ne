@@ -158,6 +158,9 @@ statement ->
   | statementAnnAssign %newline                  {% id %}
   | statementSubscriptAssign %newline            {% id %}
   | statementTupleAssign %newline                {% id %}
+  | statementRaise %newline                      {% id %}
+  | statementDel %newline                        {% id %}
+  | statementImport %newline                     {% id %}
   | statementReturn %newline                     {% id %}
   | statementPass %newline                       {% id %}
   | statementBreak %newline                      {% id %}
@@ -173,6 +176,14 @@ statement ->
   | statementFor
       {% id %}
   | statementDef
+      {% id %}
+  | statementClass
+      {% id %}
+  | statementTry
+      {% id %}
+  | statementWith
+      {% id %}
+  | statementDecorated
       {% id %}
 
 statementAssign -> %name "=" expression_list
@@ -216,8 +227,9 @@ statementGlobal -> "global" names
 statementNonlocal -> "nonlocal" names
   {% ([kw, ns]: [moo.Token, Token[]]) => new StmtNS.NonLocal(toAstToken(kw), ns[ns.length - 1], ns) %}
 
-statementAssert -> "assert" expression
-  {% ([kw, e]: [moo.Token, ExprNS.Expr]) => new StmtNS.Assert(toAstToken(kw), e.endToken, e) %}
+statementAssert -> "assert" expression ("," expression):?
+  {% ([kw, e, msg]: [moo.Token, ExprNS.Expr, [moo.Token, ExprNS.Expr] | null]) =>
+       new StmtNS.Assert(toAstToken(kw), (msg ? msg[1] : e).endToken, e, msg ? msg[1] : null) %}
 
 statementExpr -> expression
   {% ([e]: [ExprNS.Expr]) => new StmtNS.SimpleExpr(e.startToken, e.endToken, e) %}
@@ -229,6 +241,82 @@ statementWhile -> "while" expression ":" block
 statementFor -> "for" %name "in" expression ":" block
   {% ([kw, target,, iter,, body]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) =>
        new StmtNS.For(toAstToken(kw), body[body.length-1].endToken, toAstToken(target), iter, body) %}
+
+# ============================================================================
+# Statements of full Python (the sublanguage validators reject them)
+# ============================================================================
+
+statementRaise ->
+    "raise"
+      {% ([t]: [moo.Token]) => { const k = toAstToken(t); return new StmtNS.Raise(k, k, null, null); } %}
+  | "raise" expression
+      {% ([kw, e]: [moo.Token, ExprNS.Expr]) => new StmtNS.Raise(toAstToken(kw), e.endToken, e, null) %}
+  | "raise" expression "from" expression
+      {% ([kw, e,, cause]: [moo.Token, ExprNS.Expr, moo.Token, ExprNS.Expr]) =>
+           new StmtNS.Raise(toAstToken(kw), cause.endToken, e, cause) %}
+
+statementDel -> "del" del_targets
+  {% ([kw, ts]: [moo.Token, ExprNS.Expr[]]) => new StmtNS.Del(toAstToken(kw), ts[ts.length - 1].endToken, ts) %}
+del_targets -> target ("," target):* (%comma):?  {% flatList %}
+
+statementImport -> "import" import_names
+  {% ([kw, names]: [moo.Token, StmtNS.Import["names"]]) => {
+       const last = names[names.length - 1];
+       return new StmtNS.Import(toAstToken(kw), last.alias || last.name, names);
+     } %}
+import_names -> import_name ("," import_name):*  {% flatList %}
+import_name ->
+    dotted_name  {% ([t]: [Token]) => ({ name: t, alias: null }) %}
+  | dotted_name "as" %name  {% ([t,, a]: [Token, moo.Token, moo.Token]) => ({ name: t, alias: toAstToken(a) }) %}
+
+statementClass ->
+    "class" %name ":" block
+      {% ([kw, name,, body]: [moo.Token, moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), [], body) %}
+  | "class" %name "(" ")" ":" block
+      {% ([kw, name,,,, body]: [moo.Token, moo.Token, moo.Token, moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), [], body) %}
+  | "class" %name "(" spread_expressions ")" ":" block
+      {% ([kw, name,, bases,,, body]: [moo.Token, moo.Token, moo.Token, ExprNS.Expr[], moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.Class(toAstToken(kw), body[body.length - 1].endToken, toAstToken(name), bases, body) %}
+
+statementTry ->
+    "try" ":" block except_clauses ("else" ":" block):? ("finally" ":" block):?
+      {% ([kw,, body, handlers, orElse, fin]: [moo.Token, moo.Token, StmtNS.Stmt[], StmtNS.Try["handlers"], [moo.Token, moo.Token, StmtNS.Stmt[]] | null, [moo.Token, moo.Token, StmtNS.Stmt[]] | null]) => {
+           const last = fin ? fin[2] : orElse ? orElse[2] : handlers[handlers.length - 1].body;
+           return new StmtNS.Try(toAstToken(kw), last[last.length - 1].endToken, body, handlers,
+                                 orElse ? orElse[2] : null, fin ? fin[2] : null);
+         } %}
+  | "try" ":" block "finally" ":" block
+      {% ([kw,, body,,, fin]: [moo.Token, moo.Token, StmtNS.Stmt[], moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+           new StmtNS.Try(toAstToken(kw), fin[fin.length - 1].endToken, body, [], null, fin) %}
+# The `except` clauses of a `try`: clauses with a type, then at most one bare `except:`, which
+# Python requires to be the last one.
+except_clauses ->
+    except_clause:+ except_bare:?
+      {% ([typed, bare]: [StmtNS.Try["handlers"], StmtNS.Try["handlers"][number] | null]) => bare ? [...typed, bare] : typed %}
+  | except_bare  {% ([bare]: [StmtNS.Try["handlers"][number]]) => [bare] %}
+except_bare ->
+    "except" ":" block
+      {% ([,, body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) => ({ type: null, name: null, body }) %}
+except_clause ->
+    "except" expression ":" block
+      {% ([, type,, body]: [moo.Token, ExprNS.Expr, moo.Token, StmtNS.Stmt[]]) => ({ type, name: null, body }) %}
+  | "except" expression "as" %name ":" block
+      {% ([, type,, name,, body]: [moo.Token, ExprNS.Expr, moo.Token, moo.Token, moo.Token, StmtNS.Stmt[]]) =>
+           ({ type, name: toAstToken(name), body }) %}
+
+statementWith -> "with" with_item ("," with_item):* ":" block
+  {% ([kw, first, rest,, body]: [moo.Token, StmtNS.With["items"][number], [moo.Token, StmtNS.With["items"][number]][], moo.Token, StmtNS.Stmt[]]) =>
+       new StmtNS.With(toAstToken(kw), body[body.length - 1].endToken, [first, ...rest.map(r => r[1])], body) %}
+with_item ->
+    expression  {% ([e]: [ExprNS.Expr]) => ({ context: e, target: null }) %}
+  | expression "as" target  {% ([e,, t]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => ({ context: e, target: t }) %}
+
+statementDecorated -> decorator:+ (statementDef | statementClass)
+  {% ([decorators, [definition]]: [ExprNS.Expr[], [StmtNS.Stmt]]) =>
+       new StmtNS.Decorated(decorators[0].startToken, definition.endToken, decorators, definition) %}
+decorator -> "@" expression %newline  {% ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => e %}
 
 statementDef -> "def" %name params ":" block
   {% ([kw, name, params,, body]: [moo.Token, moo.Token, FunctionParam[], moo.Token, StmtNS.Stmt[]]) =>
@@ -272,6 +360,9 @@ blockInline ->
   | statementAnnAssign    {% id %}
   | statementSubscriptAssign {% id %}
   | statementTupleAssign  {% id %}
+  | statementRaise        {% id %}
+  | statementDel          {% id %}
+  | statementImport       {% id %}
   | statementReturn       {% id %}
   | statementPass         {% id %}
   | statementBreak        {% id %}
