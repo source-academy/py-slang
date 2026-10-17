@@ -1,4 +1,4 @@
-import { ExprNS, StmtNS } from "../ast-types";
+import { ExprNS, FunctionParam, StmtNS } from "../ast-types";
 import { Group } from "../stdlib/utils";
 import { Token, TokenType } from "../tokenizer/tokenizer";
 import { FeatureValidator } from "../validator/types";
@@ -411,6 +411,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
     this.environment?.functions.add(stmt.name.lexeme);
+    // Default values are evaluated in the enclosing scope, when the function is defined.
+    this.resolveDefaults(stmt.parameters);
 
     // Create a new environment.
     const oldEnv = this.environment;
@@ -484,6 +486,16 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
     this.resolve(stmt.value);
     this.functionVarConstraint(target.name);
+  }
+
+  visitTupleAssignStmt(stmt: StmtNS.TupleAssign): void {
+    this.resolve(stmt.value);
+    const bind = (target: ExprNS.Expr): void => {
+      if (target instanceof ExprNS.Variable) this.functionVarConstraint(target.name);
+      else if (target instanceof ExprNS.Tuple) target.elements.forEach(bind);
+      else this.resolve(target); // a subscript
+    };
+    stmt.target.elements.forEach(bind);
   }
 
   visitAssertStmt(stmt: StmtNS.Assert): void {
@@ -947,6 +959,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
   }
   visitLambdaExpr(expr: ExprNS.Lambda): void {
+    // Default values are evaluated in the enclosing scope, when the function is defined.
+    this.resolveDefaults(expr.parameters);
     // Create a new environment.
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
@@ -963,6 +977,8 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): void {
+    // Default values are evaluated in the enclosing scope, when the function is defined.
+    this.resolveDefaults(expr.parameters);
     // Create a new environment.
     const oldEnv = this.environment;
     // Assign the parameters to the new environment.
@@ -1005,6 +1021,19 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   visitStarredExpr(expr: ExprNS.Starred): void {
     this.resolve(expr.value);
+  }
+  visitTupleExpr(expr: ExprNS.Tuple): void {
+    this.resolve(expr.elements);
+  }
+  visitDictExpr(expr: ExprNS.Dict): void {
+    this.resolve(expr.keys);
+    this.resolve(expr.values);
+  }
+  visitKeywordExpr(expr: ExprNS.Keyword): void {
+    this.resolve(expr.value);
+  }
+  private resolveDefaults(parameters: FunctionParam[]): void {
+    for (const param of parameters) if (param.default) this.resolve(param.default);
   }
   visitTernaryExpr(expr: ExprNS.Ternary): void {
     this.resolve(expr.predicate);

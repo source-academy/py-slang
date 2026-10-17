@@ -13,7 +13,19 @@ import { createNoReassignmentValidator } from "./features/no-reassignment";
 import { createRangeOnlyInForHeaderValidator } from "./features/range-only-in-for-header";
 import { NoRestParamsValidator } from "./features/no-rest-params";
 import { NoSpreadValidator } from "./features/no-spread";
+import { NoDefaultValuesValidator } from "./features/no-default-values";
+import { NoDictsValidator } from "./features/no-dicts";
+import { NoKeywordArgsValidator } from "./features/no-keyword-args";
+import { NoTuplesValidator } from "./features/no-tuples";
 import { FeatureValidator } from "./types";
+
+/** Syntax of full Python that no sublanguage (§1–§4) has: the parser accepts it, these reject it. */
+const beyondPython4Validators: FeatureValidator[] = [
+  NoTuplesValidator,
+  NoDictsValidator,
+  NoKeywordArgsValidator,
+  NoDefaultValuesValidator,
+];
 
 /**
  * Source Chapter 1: no lists, no loops, no reassignment, no break/continue, no global, no nonlocal,
@@ -22,6 +34,7 @@ import { FeatureValidator } from "./types";
  */
 export function makeChapter1Validators(): FeatureValidator[] {
   return [
+    ...beyondPython4Validators,
     NoListsValidator,
     NoLoopsValidator,
     createNoReassignmentValidator(),
@@ -44,6 +57,7 @@ export function makeChapter1Validators(): FeatureValidator[] {
  */
 export function makeChapter2Validators(): FeatureValidator[] {
   return [
+    ...beyondPython4Validators,
     NoListsValidator,
     NoLoopsValidator,
     createNoReassignmentValidator(),
@@ -65,6 +79,7 @@ export function makeChapter2Validators(): FeatureValidator[] {
  */
 export function makeChapter3Validators(): FeatureValidator[] {
   return [
+    ...beyondPython4Validators,
     ForRangeOnlyValidator,
     NoRangeRedeclarationValidator,
     createRangeOnlyInForHeaderValidator(true),
@@ -78,6 +93,7 @@ export function makeChapter3Validators(): FeatureValidator[] {
  */
 export function makeChapter4Validators(): FeatureValidator[] {
   return [
+    ...beyondPython4Validators,
     ForRangeOnlyValidator,
     NoRangeRedeclarationValidator,
     createRangeOnlyInForHeaderValidator(true),

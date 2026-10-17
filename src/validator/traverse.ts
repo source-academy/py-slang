@@ -49,6 +49,11 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     traverseAST(stmt.value, this.fn);
   }
 
+  visitTupleAssignStmt(stmt: StmtNS.TupleAssign): void {
+    traverseAST(stmt.target, this.fn);
+    traverseAST(stmt.value, this.fn);
+  }
+
   visitAnnAssignStmt(stmt: StmtNS.AnnAssign): void {
     traverseAST(stmt.target, this.fn);
     traverseAST(stmt.value, this.fn);
@@ -126,6 +131,19 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
     traverseAST(expr.value, this.fn);
     traverseAST(expr.index, this.fn);
+  }
+
+  visitTupleExpr(expr: ExprNS.Tuple): void {
+    expr.elements.forEach(e => traverseAST(e, this.fn));
+  }
+
+  visitDictExpr(expr: ExprNS.Dict): void {
+    expr.keys.forEach(e => traverseAST(e, this.fn));
+    expr.values.forEach(e => traverseAST(e, this.fn));
+  }
+
+  visitKeywordExpr(expr: ExprNS.Keyword): void {
+    traverseAST(expr.value, this.fn);
   }
 
   visitStarredExpr(expr: ExprNS.Starred): void {

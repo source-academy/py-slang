@@ -541,6 +541,18 @@ export class PVMLCompiler
     return { maxStackSize: 1 };
   }
 
+  visitTupleExpr(_expr: ExprNS.Tuple): ExpressionResult {
+    throw new Error("Tuples are not supported by the PVML compiler");
+  }
+
+  visitDictExpr(_expr: ExprNS.Dict): ExpressionResult {
+    throw new Error("Dictionaries are not supported by the PVML compiler");
+  }
+
+  visitKeywordExpr(_expr: ExprNS.Keyword): ExpressionResult {
+    throw new Error("Keyword arguments are not supported by the PVML compiler");
+  }
+
   visitStarredExpr(_expr: ExprNS.Starred): ExpressionResult {
     // A Starred expression as a direct call argument (`f(*xs)`) is handled
     // entirely by visitCallExpr/compileSpreadCall, without ever visiting the
@@ -1178,6 +1190,10 @@ export class PVMLCompiler
 
   visitPassStmt(_stmt: StmtNS.Pass): ExpressionResult {
     return { maxStackSize: 0 };
+  }
+
+  visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): ExpressionResult {
+    throw new Error("Tuple assignment is not supported by the PVML compiler");
   }
 
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): ExpressionResult {
