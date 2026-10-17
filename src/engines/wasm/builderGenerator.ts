@@ -727,6 +727,18 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
     );
   }
 
+  visitTupleExpr(_expr: ExprNS.Tuple): WasmNumeric {
+    throw new Error("Tuples are not supported");
+  }
+
+  visitDictExpr(_expr: ExprNS.Dict): WasmNumeric {
+    throw new Error("Dictionaries are not supported");
+  }
+
+  visitKeywordExpr(_expr: ExprNS.Keyword): WasmNumeric {
+    throw new Error("Keyword arguments are not supported");
+  }
+
   visitStarredExpr(expr: ExprNS.Starred): WasmNumeric {
     return this.visit(expr.value);
   }
@@ -993,6 +1005,9 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   // UNIMPLEMENTED PYTHON CONSTRUCTS
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
+  }
+  visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): WasmInstruction {
+    throw new Error("Tuple assignment is not supported");
   }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): WasmInstruction {
     throw new Error("Method not implemented.");

@@ -1,4 +1,4 @@
-import { StmtNS, ExprNS } from "../ast-types";
+import { StmtNS, ExprNS, FunctionParam } from "../ast-types";
 import { ASTNode } from "./types";
 
 /**
@@ -15,6 +15,11 @@ export function traverseAST(node: ASTNode, fn: (node: ASTNode) => void): void {
   node.accept(new TraverseVisitor(fn));
 }
 
+/** The default values of parameters are expressions of the tree too. */
+function traverseDefaults(parameters: FunctionParam[], fn: (node: ASTNode) => void): void {
+  for (const param of parameters) if (param.default) traverseAST(param.default, fn);
+}
+
 class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   constructor(private fn: (node: ASTNode) => void) {}
 
@@ -25,6 +30,7 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): void {
+    traverseDefaults(stmt.parameters, this.fn);
     stmt.body.forEach(s => traverseAST(s, this.fn));
   }
 
@@ -46,6 +52,11 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitAssignStmt(stmt: StmtNS.Assign): void {
     traverseAST(stmt.target as ASTNode, this.fn);
+    traverseAST(stmt.value, this.fn);
+  }
+
+  visitTupleAssignStmt(stmt: StmtNS.TupleAssign): void {
+    traverseAST(stmt.target, this.fn);
     traverseAST(stmt.value, this.fn);
   }
 
@@ -112,10 +123,12 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitLambdaExpr(expr: ExprNS.Lambda): void {
+    traverseDefaults(expr.parameters, this.fn);
     traverseAST(expr.body, this.fn);
   }
 
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): void {
+    traverseDefaults(expr.parameters, this.fn);
     expr.body.forEach(s => traverseAST(s, this.fn));
   }
 
@@ -126,6 +139,19 @@ class TraverseVisitor implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitSubscriptExpr(expr: ExprNS.Subscript): void {
     traverseAST(expr.value, this.fn);
     traverseAST(expr.index, this.fn);
+  }
+
+  visitTupleExpr(expr: ExprNS.Tuple): void {
+    expr.elements.forEach(e => traverseAST(e, this.fn));
+  }
+
+  visitDictExpr(expr: ExprNS.Dict): void {
+    expr.keys.forEach(e => traverseAST(e, this.fn));
+    expr.values.forEach(e => traverseAST(e, this.fn));
+  }
+
+  visitKeywordExpr(expr: ExprNS.Keyword): void {
+    traverseAST(expr.value, this.fn);
   }
 
   visitStarredExpr(expr: ExprNS.Starred): void {

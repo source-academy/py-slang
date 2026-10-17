@@ -79,12 +79,20 @@ export class AstWriter {
       "List      -> elements: Expr[]",
       "Subscript -> value: Expr, index: Expr",
       "Starred   -> value: Expr",
+      // `(a, b)`, `a, b`, `()`: only Python beyond §4 (full Python) has tuples.
+      "Tuple     -> elements: Expr[]",
+      // `{k: v, ...}`: keys[i] maps to values[i].
+      "Dict      -> keys: Expr[], values: Expr[]",
+      // `name=value` among the arguments of a call, in order with the positional ones.
+      "Keyword   -> name: Token, value: Expr",
       "None      -> ()",
       "Complex   -> value: string",
     ]);
     this.defineAst("Stmt", [
       "Pass       -> ()",
       "Assign     -> target: AssignTarget, value: ExprNS.Expr",
+      // `a, b = value`: target is a Tuple of names, subscripts and nested Tuples.
+      "TupleAssign -> target: ExprNS.Tuple, value: ExprNS.Expr",
       "AnnAssign  -> target: ExprNS.Variable, value: ExprNS.Expr, ann: ExprNS.Expr",
       "Break      -> ()",
       "Continue   -> ()",

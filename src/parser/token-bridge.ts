@@ -1,4 +1,4 @@
-import { FunctionParam } from "../ast-types";
+import { ExprNS, FunctionParam } from "../ast-types";
 import { Token, TokenType } from "../tokenizer/tokenizer";
 
 const MOO_TO_TOKEN_TYPE: Record<string, TokenType> = {
@@ -91,6 +91,7 @@ export function toFunctionParam(
     offset?: number;
   },
   isStarred: boolean,
+  defaultValue?: ExprNS.Expr,
 ): FunctionParam {
-  return Object.assign(toAstToken(mooToken), { isStarred });
+  return Object.assign(toAstToken(mooToken), { isStarred, default: defaultValue });
 }

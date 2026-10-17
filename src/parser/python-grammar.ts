@@ -245,6 +245,7 @@ const ParserRules = [
     symbols: ["statementSubscriptAssign", { type: "newline" }],
     postprocess: id,
   },
+  { name: "statement", symbols: ["statementTupleAssign", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementReturn", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementPass", { type: "newline" }], postprocess: id },
   { name: "statement", symbols: ["statementBreak", { type: "newline" }], postprocess: id },
@@ -259,7 +260,7 @@ const ParserRules = [
   { name: "statement", symbols: ["statementDef"], postprocess: id },
   {
     name: "statementAssign",
-    symbols: [{ type: "name" }, { literal: "=" }, "expression"],
+    symbols: [{ type: "name" }, { literal: "=" }, "expression_list"],
     postprocess: ([n, , v]: [moo.Token, moo.Token, ExprNS.Expr]) => {
       const tok = toAstToken(n);
       return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v);
@@ -296,7 +297,7 @@ const ParserRules = [
       "expression",
       { type: "rsqb" },
       { literal: "=" },
-      "expression",
+      "expression_list",
     ],
     postprocess: function (
       d: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token, moo.Token, ExprNS.Expr],
@@ -311,7 +312,7 @@ const ParserRules = [
   },
   {
     name: "statementReturn",
-    symbols: [{ literal: "return" }, "expression"],
+    symbols: [{ literal: "return" }, "expression_list"],
     postprocess: ([kw, expr]: [moo.Token, ExprNS.Expr]) =>
       new StmtNS.Return(toAstToken(kw), expr.endToken, expr),
   },
@@ -509,6 +510,7 @@ const ParserRules = [
   { name: "blockInline", symbols: ["statementAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementAnnAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementSubscriptAssign"], postprocess: id },
+  { name: "blockInline", symbols: ["statementTupleAssign"], postprocess: id },
   { name: "blockInline", symbols: ["statementReturn"], postprocess: id },
   { name: "blockInline", symbols: ["statementPass"], postprocess: id },
   { name: "blockInline", symbols: ["statementBreak"], postprocess: id },
@@ -517,37 +519,26 @@ const ParserRules = [
   { name: "blockInline", symbols: ["statementNonlocal"], postprocess: id },
   { name: "blockInline", symbols: ["statementAssert"], postprocess: id },
   { name: "blockInline", symbols: ["statementExpr"], postprocess: id },
+  { name: "rest_names", symbols: ["param"], postprocess: ([p]: [FunctionParam]) => [p] },
   {
     name: "rest_names",
+    symbols: ["rest_names", { literal: "," }, "param"],
+    postprocess: ([params, , p]: [FunctionParam[], moo.Token, FunctionParam]) => [...params, p],
+  },
+  {
+    name: "param",
     symbols: [{ type: "name" }],
-    postprocess: ([t]: [moo.Token]) => {
-      const tok = toFunctionParam(t, false);
-      return [tok];
-    },
+    postprocess: ([t]: [moo.Token]) => toFunctionParam(t, false),
   },
   {
-    name: "rest_names",
+    name: "param",
+    symbols: [{ type: "name" }, { literal: "=" }, "expression"],
+    postprocess: ([t, , d]: [moo.Token, moo.Token, ExprNS.Expr]) => toFunctionParam(t, false, d),
+  },
+  {
+    name: "param",
     symbols: [{ literal: "*" }, { type: "name" }],
-    postprocess: ([, t]: [moo.Token, moo.Token]) => {
-      const tok = toFunctionParam(t, true);
-      return [tok];
-    },
-  },
-  {
-    name: "rest_names",
-    symbols: ["rest_names", { literal: "," }, { type: "name" }],
-    postprocess: ([params, , t]: [FunctionParam[], moo.Token, moo.Token]) => {
-      const tok = toFunctionParam(t, false);
-      return [...params, tok];
-    },
-  },
-  {
-    name: "rest_names",
-    symbols: ["rest_names", { literal: "," }, { literal: "*" }, { type: "name" }],
-    postprocess: ([params, , , t]: [FunctionParam[], moo.Token, moo.Token, moo.Token]) => {
-      const tok = toFunctionParam(t, true);
-      return [...params, tok];
-    },
+    postprocess: ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, true),
   },
   { name: "params", symbols: [{ literal: "(" }, { literal: ")" }], postprocess: drop },
   {
@@ -678,6 +669,35 @@ const ParserRules = [
   },
   {
     name: "atom",
+    symbols: [{ literal: "(" }, { literal: ")" }],
+    postprocess: ([l, r]: [moo.Token, moo.Token]) =>
+      new ExprNS.Tuple(toAstToken(l), toAstToken(r), []),
+  },
+  {
+    name: "atom",
+    symbols: [{ literal: "(" }, "tuple_elements", { literal: ")" }],
+    postprocess: ([l, elems, r]: [moo.Token, ExprNS.Expr[], moo.Token]) =>
+      new ExprNS.Tuple(toAstToken(l), toAstToken(r), elems),
+  },
+  {
+    name: "atom",
+    symbols: [{ type: "lbrace" }, { type: "rbrace" }],
+    postprocess: ([l, r]: [moo.Token, moo.Token]) =>
+      new ExprNS.Dict(toAstToken(l), toAstToken(r), [], []),
+  },
+  {
+    name: "atom",
+    symbols: [{ type: "lbrace" }, "dict_items", { type: "rbrace" }],
+    postprocess: ([l, items, r]: [moo.Token, [ExprNS.Expr, ExprNS.Expr][], moo.Token]) =>
+      new ExprNS.Dict(
+        toAstToken(l),
+        toAstToken(r),
+        items.map(i => i[0]),
+        items.map(i => i[1]),
+      ),
+  },
+  {
+    name: "atom",
     symbols: [{ type: "lsqb" }, { type: "rsqb" }],
     postprocess: ([l, r]: [moo.Token, moo.Token]) =>
       new ExprNS.List(toAstToken(l), toAstToken(r), []),
@@ -730,6 +750,113 @@ const ParserRules = [
     postprocess: ([kw, , body]: [moo.Token, moo.Token, StmtNS.Stmt[]]) =>
       new ExprNS.MultiLambda(toAstToken(kw), body[body.length - 1].endToken, [], body, []),
   },
+  {
+    name: "tuple_elements",
+    symbols: ["expression", { literal: "," }],
+    postprocess: ([e]: [ExprNS.Expr]) => [e],
+  },
+  { name: "tuple_elements$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },
+  { name: "tuple_elements$ebnf$1", symbols: ["tuple_elements$ebnf$1$subexpression$1"] },
+  { name: "tuple_elements$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "expression"] },
+  {
+    name: "tuple_elements$ebnf$1",
+    symbols: ["tuple_elements$ebnf$1", "tuple_elements$ebnf$1$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "tuple_elements$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  {
+    name: "tuple_elements$ebnf$2",
+    symbols: ["tuple_elements$ebnf$2$subexpression$1"],
+    postprocess: id,
+  },
+  { name: "tuple_elements$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "tuple_elements",
+    symbols: ["expression", "tuple_elements$ebnf$1", "tuple_elements$ebnf$2"],
+    postprocess: flatList,
+  },
+  { name: "expression_list", symbols: ["expression"], postprocess: id },
+  {
+    name: "expression_list",
+    symbols: ["tuple_elements"],
+    postprocess: ([elems]: [ExprNS.Expr[]]) =>
+      new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems),
+  },
+  { name: "dict_items$ebnf$1", symbols: [] },
+  { name: "dict_items$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "dict_item"] },
+  {
+    name: "dict_items$ebnf$1",
+    symbols: ["dict_items$ebnf$1", "dict_items$ebnf$1$subexpression$1"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "dict_items$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "dict_items$ebnf$2", symbols: ["dict_items$ebnf$2$subexpression$1"], postprocess: id },
+  { name: "dict_items$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "dict_items",
+    symbols: ["dict_item", "dict_items$ebnf$1", "dict_items$ebnf$2"],
+    postprocess: flatList,
+  },
+  {
+    name: "dict_item",
+    symbols: ["expression", { literal: ":" }, "expression"],
+    postprocess: ([k, , v]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => [k, v],
+  },
+  {
+    name: "statementTupleAssign",
+    symbols: ["tuple_target", { literal: "=" }, "expression_list"],
+    postprocess: ([t, , v]: [ExprNS.Tuple, moo.Token, ExprNS.Expr]) =>
+      new StmtNS.TupleAssign(t.startToken, v.endToken, t, v),
+  },
+  { name: "tuple_target", symbols: ["target_list"], postprocess: id },
+  {
+    name: "tuple_target",
+    symbols: [{ literal: "(" }, "target_list", { literal: ")" }],
+    postprocess: ([l, t, r]: [moo.Token, ExprNS.Tuple, moo.Token]) =>
+      new ExprNS.Tuple(toAstToken(l), toAstToken(r), t.elements),
+  },
+  {
+    name: "target_list",
+    symbols: ["target", { literal: "," }],
+    postprocess: ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]),
+  },
+  { name: "target_list$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "target"] },
+  { name: "target_list$ebnf$1", symbols: ["target_list$ebnf$1$subexpression$1"] },
+  { name: "target_list$ebnf$1$subexpression$2", symbols: [{ literal: "," }, "target"] },
+  {
+    name: "target_list$ebnf$1",
+    symbols: ["target_list$ebnf$1", "target_list$ebnf$1$subexpression$2"],
+    postprocess: function arrpush<T>(d: [T[], T]) {
+      return d[0].concat([d[1]]);
+    },
+  },
+  { name: "target_list$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "target_list$ebnf$2", symbols: ["target_list$ebnf$2$subexpression$1"], postprocess: id },
+  { name: "target_list$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "target_list",
+    symbols: ["target", "target_list$ebnf$1", "target_list$ebnf$2"],
+    postprocess: ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
+      const elems = flatList([first, rest]);
+      return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
+    },
+  },
+  { name: "target", symbols: [{ type: "name" }], postprocess: astVariable },
+  {
+    name: "target",
+    symbols: ["expressionPost", { type: "lsqb" }, "expression", { type: "rsqb" }],
+    postprocess: ([obj, , idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) =>
+      new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx),
+  },
+  {
+    name: "target",
+    symbols: [{ literal: "(" }, "target_list", { literal: ")" }],
+    postprocess: ([, t]: [moo.Token, ExprNS.Tuple, moo.Token]) => t,
+  },
   { name: "expressions$ebnf$1", symbols: [] },
   { name: "expressions$ebnf$1$subexpression$1", symbols: [{ literal: "," }, "expression"] },
   {
@@ -772,6 +899,14 @@ const ParserRules = [
     postprocess: flatList,
   },
   { name: "spread_expression", symbols: ["expression"], postprocess: id },
+  {
+    name: "spread_expression",
+    symbols: [{ type: "name" }, { literal: "=" }, "expression"],
+    postprocess: ([n, , v]: [moo.Token, moo.Token, ExprNS.Expr]) => {
+      const k = toAstToken(n);
+      return new ExprNS.Keyword(k, v.endToken, k, v);
+    },
+  },
   {
     name: "spread_expression",
     symbols: [{ type: "star" }, "expression"],

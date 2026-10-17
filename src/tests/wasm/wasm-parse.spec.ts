@@ -714,6 +714,18 @@ describe("parse function tests", () => {
     );
   });
 
+  it("function declaration with a default value is not supported in parse tree generation", async () => {
+    await expect(compileWithMce(`parse("def f(x=1):\\n    return x")`)).rejects.toThrow(
+      new Error("Default values of parameters are not supported in parse tree generation"),
+    );
+  });
+
+  it("lambda with a default value is not supported in parse tree generation", async () => {
+    await expect(compileWithMce(`parse("lambda x=1: x")`)).rejects.toThrow(
+      new Error("Default values of parameters are not supported in parse tree generation"),
+    );
+  });
+
   it("starred expression in call is not supported in parse tree generation", async () => {
     await expect(compileWithMce(`parse("f(*x)")`)).rejects.toThrow(
       new Error("Starred expressions are not supported in parse tree generation"),

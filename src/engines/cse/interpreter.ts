@@ -424,8 +424,11 @@ export async function* generateCSEMachineStateStream(
 function isDeclaredEvaluator(kind: string): kind is keyof CmdEvaluators {
   return kind in cmdEvaluators;
 }
-type ExprKeys = Exclude<keyof typeof ExprNS, "Expr" | "MultiLambda" | "Starred">;
-type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert">;
+type ExprKeys = Exclude<
+  keyof typeof ExprNS,
+  "Expr" | "MultiLambda" | "Starred" | "Tuple" | "Dict" | "Keyword"
+>;
+type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert" | "TupleAssign">;
 type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;

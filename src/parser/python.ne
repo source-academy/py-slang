@@ -157,6 +157,7 @@ statement ->
     statementAssign %newline                     {% id %}
   | statementAnnAssign %newline                  {% id %}
   | statementSubscriptAssign %newline            {% id %}
+  | statementTupleAssign %newline                {% id %}
   | statementReturn %newline                     {% id %}
   | statementPass %newline                       {% id %}
   | statementBreak %newline                      {% id %}
@@ -174,7 +175,7 @@ statement ->
   | statementDef
       {% id %}
 
-statementAssign -> %name "=" expression
+statementAssign -> %name "=" expression_list
   {% ([n,, v]: [moo.Token, moo.Token, ExprNS.Expr]) => { const tok = toAstToken(n); return new StmtNS.Assign(tok, v.endToken, new ExprNS.Variable(tok, tok, tok), v); } %}
 
 statementAnnAssign ->
@@ -187,7 +188,7 @@ statementAnnAssign ->
            return new StmtNS.AnnAssign(nameTok, ann.endToken, new ExprNS.Variable(nameTok, nameTok, nameTok), dummyVal, ann);
          } %}
 
-statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression
+statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression_list
   {% function(d: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token, moo.Token, ExprNS.Expr]) {
        const obj = d[0], idx = d[2], rsqb = d[3], val = d[5];
        const sub = new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx);
@@ -195,7 +196,7 @@ statementSubscriptAssign -> expressionPost %lsqb expression %rsqb "=" expression
      } %}
 
 statementReturn ->
-    "return" expression
+    "return" expression_list
       {% ([kw, expr]: [moo.Token, ExprNS.Expr]) => new StmtNS.Return(toAstToken(kw), expr.endToken, expr) %}
   | "return"
       {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new StmtNS.Return(tok, tok, null); } %}
@@ -270,6 +271,7 @@ blockInline ->
     statementAssign       {% id %}
   | statementAnnAssign    {% id %}
   | statementSubscriptAssign {% id %}
+  | statementTupleAssign  {% id %}
   | statementReturn       {% id %}
   | statementPass         {% id %}
   | statementBreak        {% id %}
@@ -284,14 +286,18 @@ blockInline ->
 # ============================================================================
 
 rest_names ->
+    param
+      {% ([p]: [FunctionParam]) => [p] %}
+  | rest_names "," param
+      {% ([params,, p]: [FunctionParam[], moo.Token, FunctionParam]) => [...params, p] %}
+
+param ->
     %name
-      {% ([t]: [moo.Token]) => { const tok = toFunctionParam(t, false); return [tok]; } %}
+      {% ([t]: [moo.Token]) => toFunctionParam(t, false) %}
+  | %name "=" expression
+      {% ([t,, d]: [moo.Token, moo.Token, ExprNS.Expr]) => toFunctionParam(t, false, d) %}
   | "*" %name
-      {% ([, t]: [moo.Token, moo.Token]) => { const tok = toFunctionParam(t, true); return [tok]; } %}
-  | rest_names "," %name
-      {% ([params,, t]: [FunctionParam[], moo.Token, moo.Token]) => { const tok = toFunctionParam(t, false); return [...params, tok]; } %}
-  | rest_names "," "*" %name
-      {% ([params,,, t]: [FunctionParam[], moo.Token, moo.Token, moo.Token]) => { const tok = toFunctionParam(t, true); return [...params, tok]; } %}
+      {% ([, t]: [moo.Token, moo.Token]) => toFunctionParam(t, true) %}
 
 params ->
     "(" ")"                                   {% drop %}
@@ -387,7 +393,18 @@ expressionPost ->
 
 atom ->
     "(" expression ")"
-      {% ([, e]: [moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Grouping(e.startToken, e.endToken, e) %}
+      {% ([lparen, e, rparen]: [moo.Token, ExprNS.Expr, moo.Token]) =>
+           new ExprNS.Grouping(toAstToken(lparen), toAstToken(rparen), e) %}
+  | "(" ")"
+      {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.Tuple(toAstToken(l), toAstToken(r), []) %}
+  | "(" tuple_elements ")"
+      {% ([l, elems, r]: [moo.Token, ExprNS.Expr[], moo.Token]) =>
+           new ExprNS.Tuple(toAstToken(l), toAstToken(r), elems) %}
+  | %lbrace %rbrace
+      {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.Dict(toAstToken(l), toAstToken(r), [], []) %}
+  | %lbrace dict_items %rbrace
+      {% ([l, items, r]: [moo.Token, [ExprNS.Expr, ExprNS.Expr][], moo.Token]) =>
+           new ExprNS.Dict(toAstToken(l), toAstToken(r), items.map(i => i[0]), items.map(i => i[1])) %}
   | %lsqb %rsqb
       {% ([l, r]: [moo.Token, moo.Token]) => new ExprNS.List(toAstToken(l), toAstToken(r), []) %}
   | %lsqb expressions %rsqb
@@ -425,6 +442,41 @@ lambda_expr ->
 # expressions ::= ...                            [python_1_bnf.tex line 51]
 # ============================================================================
 
+# A tuple's elements: at least one comma, so `(e)` stays a grouping and `(e,)` is a 1-tuple.
+tuple_elements ->
+    expression "," {% ([e]: [ExprNS.Expr]) => [e] %}
+  | expression ("," expression):+ (%comma):? {% flatList %}
+
+# The right-hand side of an assignment and the operand of `return`: an expression, or a tuple
+# written without parentheses (`a, b`, `1,`).
+expression_list ->
+    expression  {% id %}
+  | tuple_elements
+      {% ([elems]: [ExprNS.Expr[]]) => new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems) %}
+
+# `{k: v, ...}`
+dict_items -> dict_item ("," dict_item):* (%comma):?  {% flatList %}
+dict_item -> expression ":" expression  {% ([k,, v]: [ExprNS.Expr, moo.Token, ExprNS.Expr]) => [k, v] %}
+
+# `a, b = value`, `(a, b), c = value`, `x[0], y = value`
+statementTupleAssign -> tuple_target "=" expression_list
+  {% ([t,, v]: [ExprNS.Tuple, moo.Token, ExprNS.Expr]) => new StmtNS.TupleAssign(t.startToken, v.endToken, t, v) %}
+tuple_target ->
+    target_list  {% id %}
+  | "(" target_list ")"  {% ([l, t, r]: [moo.Token, ExprNS.Tuple, moo.Token]) => new ExprNS.Tuple(toAstToken(l), toAstToken(r), t.elements) %}
+target_list ->
+    target "," {% ([t]: [ExprNS.Expr]) => new ExprNS.Tuple(t.startToken, t.endToken, [t]) %}
+  | target ("," target):+ (%comma):?
+      {% ([first, rest]: [ExprNS.Expr, [unknown, ExprNS.Expr][]]) => {
+           const elems = flatList([first, rest]);
+           return new ExprNS.Tuple(elems[0].startToken, elems[elems.length - 1].endToken, elems);
+         } %}
+target ->
+    %name  {% astVariable %}
+  | expressionPost %lsqb expression %rsqb
+      {% ([obj,, idx, rsqb]: [ExprNS.Expr, moo.Token, ExprNS.Expr, moo.Token]) => new ExprNS.Subscript(obj.startToken, toAstToken(rsqb), obj, idx) %}
+  | "(" target_list ")"  {% ([, t]: [moo.Token, ExprNS.Tuple, moo.Token]) => t %}
+
 expressions -> expression ("," expression):* (%comma):?
   {% flatList %}
 
@@ -437,6 +489,8 @@ spread_expressions -> spread_expression ("," spread_expression):* (%comma):?
 
 spread_expression ->
     expression                                   {% id %}
+  | %name "=" expression
+      {% ([n,, v]: [moo.Token, moo.Token, ExprNS.Expr]) => { const k = toAstToken(n); return new ExprNS.Keyword(k, v.endToken, k, v); } %}
   | %star expression
       {% ([star, expr]: [moo.Token, ExprNS.Expr]) =>
            new ExprNS.Starred(toAstToken(star), expr.endToken, expr) %}
