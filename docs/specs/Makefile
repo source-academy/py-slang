@@ -2,7 +2,7 @@ PDFLATEX = latexmk -pdf
 
 SPECSNUMS = 1 2 3 4 2_stepper 4_estepper
 
-SPECS = $(SPECSNUMS:%=python_%)
+SPECS = $(SPECSNUMS:%=python_%) python_styleguide
 
 PDFSPECS = $(SPECS:%=%.pdf)
 

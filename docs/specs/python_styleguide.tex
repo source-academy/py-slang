@@ -1,0 +1,432 @@
+\input python_header.tex
+
+% python_header.tex defines the language `Python' with JavaScript's keywords; this guide has its own.
+\lstdefinelanguage{PythonStyle}{
+  keywords={and, as, assert, break, continue, def, elif, else, for, from, global, if, import,
+    in, is, lambda, nonlocal, not, or, pass, return, while},
+  keywords=[2]{True, False, None},
+  morecomment=[l]{\#},
+  morestring=[b]',
+  morestring=[b]",
+  sensitive=true
+}
+\lstset{language=PythonStyle, keywordstyle=\bfseries, keywordstyle=[2]\bfseries,
+  commentstyle=\itshape}
+
+\parindent=0pt
+\parskip=0.6em
+
+\begin{document}
+  \thispagestyle{empty}
+
+  \markright{SICP, Python Adaptation, Python Style Guide, 2026}
+  \begin{center}
+    {\Large {\bf Python Style Guide}---2026 edition}\\[10mm]
+
+    {\large Martin Henz}\\[5mm]
+
+    {\large National University of Singapore \\
+    School of Computing}\\[10mm]
+
+    {\large \today}\\[10mm]
+  \end{center}
+
+\noindent
+This is the style guide for the Python sublanguages (\S 1--4) used in the book
+\emph{Structure and Interpretation of Computer Programs, Python Edition} (SICPy).
+It follows \href{https://peps.python.org/pep-0008/}{PEP~8}, the style that most Python programmers use,
+so what you practice here carries over to your future courses and to shared codebases,
+and it adds what SICPy needs.
+In the beginning of a first-year course, instructors may just \emph{encourage}
+adherence to the style, and then gradually enforce adherence in order to
+improve communication between learners and staff.
+
+The point of a style is that \textbf{a reader sees the structure of your program at a glance}.
+In Python, the structure is also what the interpreter reads: indentation and line breaks are part
+of the syntax. Many of the errors that beginners take for logic errors in their programs are
+formatting errors. Follow this guide, and you avoid them.
+
+\section*{Indentation}
+
+The body of a function, and of an \lstinline{if}, \lstinline{elif}, \lstinline{else},
+\lstinline{while} or \lstinline{for} statement, is indented by \textbf{four spaces} more
+than the line that ends with the colon. Use spaces, never tabs, and never a mixture of the two.
+(In the Source Academy editor, the Tab key inserts spaces.)
+
+\begin{lstlisting}
+# good style
+def make_adder(x):
+    def the_adder(y):
+        if x >= 0:
+            return x + y
+        else:
+            return -x + y
+    return the_adder
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: indentation of two spaces (legal, but hard to read)
+def make_adder(x):
+  def the_adder(y):
+    return x + y
+  return the_adder
+\end{lstlisting}
+
+\begin{lstlisting}
+# illegal Python: inconsistent indentation
+def make_adder(x):
+    def the_adder(y):
+        if x >= 0:
+            return x + y
+          else:
+            return -x + y
+    return the_adder
+\end{lstlisting}
+
+Python reports an \lstinline{IndentationError} when the indentation of a line does not
+match any line above it. The cure is to indent every block by the same amount, as in the good example.
+
+\section*{Line length}
+
+A line should have \textbf{at most 79 characters}. In the playground, the vertical line in the
+editor marks the limit: no line should cross it. Long lines are hard to read, and hard to compare
+when you work side by side with others.
+
+\subsection*{How to break a line}
+
+Python ends a statement at the end of the line.
+\textbf{You can break a line only inside parentheses \lstinline{( )}, brackets \lstinline{[ ]}
+or braces \texttt{\{ \}}.}
+Anywhere else, the line break ends the statement, and Python reports an error such as
+``Unexpected token'' at the end of the line.
+
+\begin{lstlisting}
+# illegal Python: the statement ends after the +
+total = first_amount +
+        second_amount
+\end{lstlisting}
+
+\begin{lstlisting}
+# good style: the break is inside parentheses
+total = (first_amount +
+         second_amount)
+\end{lstlisting}
+
+So when a long expression must be broken, put it in parentheses. This is why you will see
+\lstinline{return (} followed by an expression on several lines: the parentheses are what allows
+the line breaks (see \emph{Conditional expressions} below). Do not put parentheses around short
+expressions: write \lstinline{return x + 1}, not \lstinline{return (x + 1)}.
+
+Break lines after commas in arguments and parameters, and before \lstinline{if} and
+\lstinline{else} in conditional expressions. When you break a long expression before or after a
+binary operator, do it the same way throughout your program.
+
+\section*{Spaces}
+
+Put a single space on both sides of a binary operator, and after each comma.
+
+\begin{lstlisting}
+# good style
+x = 1 + 1
+y = (x + 2) * 3
+message = "zero" if x == 0 else "not zero"
+my_function(1, 2, 3)
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style
+x=1+1
+y=(x+2)*3
+message = "zero" if x==0 else "not zero"
+my_function(1,2,3)
+\end{lstlisting}
+
+Do not put a space between a unary minus and its operand: write \lstinline{-x}, not
+\lstinline{- x}. (This differs from the style guide of Source, the JavaScript sublanguage.)
+Do not put spaces \emph{inside} parentheses, brackets and braces, or \emph{before} the parentheses
+of a function application or a function definition.
+
+\begin{lstlisting}
+# good style
+def my_function(arg1, arg2, arg3):
+    return [arg1, arg2, arg3]
+
+result = my_function(1, 2, 3)
+negative_x = -x
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style
+def my_function (arg1, arg2, arg3):
+    return [ arg1, arg2, arg3 ]
+
+result = my_function ( 1, 2, 3 )
+negative_x = - x
+\end{lstlisting}
+
+\paragraph{Trailing whitespace.} There should be no whitespace (spaces or tabs) before a newline:
+you cannot see it, and it causes problems in tools that handle program text, such as version control
+systems. Clean up all such \emph{trailing whitespace} before you submit your program.
+
+\section*{Blank lines}
+
+Separate the top-level function definitions of your program by two blank lines. Inside a function,
+use a single blank line, sparingly, to separate groups of statements.
+
+\begin{lstlisting}
+# good style
+def square(x):
+    return x * x
+
+
+def cube(x):
+    return x * square(x)
+
+
+result = cube(3)
+\end{lstlisting}
+
+\section*{Function definitions}
+
+In \lstinline{def name(parameters):}, there is no space before the opening parenthesis and none
+before the colon. The body starts on the next line, indented by four spaces.
+
+\section*{Conditional statements}
+
+Write \lstinline{if}, \lstinline{elif} and \lstinline{else} each at the start of a line, followed by
+an indented block on the next lines. Do not put the body after the colon, even if it consists of
+one statement.
+
+\begin{lstlisting}
+# good style
+def sign(x):
+    if x > 0:
+        return 1
+    elif x < 0:
+        return -1
+    else:
+        return 0
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: body on the same line as the condition
+def sign(x):
+    if x > 0: return 1
+    elif x < 0: return -1
+    else: return 0
+\end{lstlisting}
+
+Do not put parentheses around the condition: write \lstinline{if x > 0:}, not
+\lstinline{if (x > 0):}.
+
+\section*{Conditional expressions}
+
+If a conditional expression fits in the line, keep it there.
+
+\begin{lstlisting}
+# good style
+def absolute(x):
+    return x if x >= 0 else -x
+
+aspect_ratio = 4 / 3 if landscape else 3 / 4
+\end{lstlisting}
+
+If it does not fit, put it in parentheses, and put the parts that start with \lstinline{if} or
+\lstinline{else} on lines of their own, aligned with the first part. Do not use more lines than
+needed.
+
+\begin{lstlisting}
+# good style
+def ackermann(x, y):
+    return (
+        0 if y == 0
+        else 2 * y if x == 0
+        else 2 if y == 1
+        else ackermann(x - 1, ackermann(x, y - 1))
+    )
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: line too long
+def ackermann(x, y):
+    return 0 if y == 0 else 2 * y if x == 0 else 2 if y == 1 else ackermann(x - 1, ackermann(x, y - 1))
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: too much indentation
+def ackermann(x, y):
+    return (
+        0 if y == 0
+        else 2 * y if x == 0
+            else 2 if y == 1
+                else ackermann(x - 1, ackermann(x, y - 1))
+    )
+\end{lstlisting}
+
+\begin{lstlisting}
+# illegal Python: the line break is not inside parentheses
+def ackermann(x, y):
+    return 0 if y == 0
+    else 2 * y if x == 0
+    else ackermann(x - 1, ackermann(x, y - 1))
+\end{lstlisting}
+
+\section*{Arguments and parameters}
+
+The arguments of function applications, and the parameters of function definitions and lambda
+expressions, are written in one line, if they fit. If they do not fit, they are aligned vertically:
+either under the first argument (after the opening parenthesis), or indented by four spaces on the
+lines after the opening parenthesis, which is then the last character of its line.
+
+\begin{lstlisting}
+# good style: aligned under the first argument
+def execute_application(fun, args, succeed, fail):
+    return succeed(apply_primitive_function(fun, args),
+                   fail)
+\end{lstlisting}
+
+\begin{lstlisting}
+# good style: indented by four spaces
+def make_execution_function(
+    inst, labels, machine, pc, flag, stack, ops
+):
+    return assemble_instruction(
+        instruction_source(inst),
+        labels,
+        machine,
+        pc,
+    )
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: the arguments are neither aligned nor indented
+result = accumulate(add, 0, map(square,
+    enumerate_interval(1,
+        10)))
+\end{lstlisting}
+
+When the arguments are on lines of their own, the closing parenthesis goes on a line of its own,
+aligned with the start of the line that has the opening parenthesis (as above), or at the end of
+the last argument.
+
+\section*{Lambda expressions}
+
+Keep the parameters and the body expression of a lambda expression in one line, if they are short
+enough. If they are lengthy, put the lambda expression in parentheses, break the line after the
+colon, and indent the body by four spaces.
+
+\begin{lstlisting}
+# good style
+def count_buttons(garment):
+    return accumulate(
+        lambda sleaves, total: sleaves + total,
+        0,
+        map(
+            lambda jacket: (
+                count_buttons(jacket) if is_checkered(jacket)
+                else 1
+            ),
+            garment,
+        ),
+    )
+\end{lstlisting}
+
+\section*{Import directives}
+
+If the imported names do not fit in one line, put them in parentheses, indent them by four
+spaces, and put the closing parenthesis on a line of its own.
+
+\begin{lstlisting}
+# good style
+from rune import (
+    beside, heart,
+    show
+)
+show(beside(heart, heart))
+\end{lstlisting}
+
+\section*{Names}
+
+When naming constants or variables, choose names that are meaningful to your reader and that make
+sense in the application domain. Names contain only lower-case letters of the roman alphabet,
+digits, and underscores. Use underscores to separate words (\emph{snake case}). Avoid the
+single letters \lstinline{l} (lower-case L), \lstinline{O} and \lstinline{I}, which look like digits.
+
+\begin{lstlisting}
+# good names
+my_variable
+x_1
+draw_connected_proportional
+
+# bad names
+myVariable
+Draw_Connected_Proportional
+l
+\end{lstlisting}
+
+\section*{Nested scope}
+
+Do not use the same name in a nested scope. Python does not warn you, and you can easily change the
+meaning of a name by accident.
+
+\begin{lstlisting}
+# bad program
+x = 1
+
+
+def f(x):
+    # here, the name x of the global frame is
+    # "shadowed" by the parameter x
+    return x + 1
+\end{lstlisting}
+
+\section*{Comments}
+
+A comment starts with \lstinline{#} and a space. Write a comment on a line of its own, above the
+code that it explains and at the same indentation, and say \emph{why}, not \emph{what}.
+
+\begin{lstlisting}
+# good style
+# The accumulator is the sum of the elements seen so far.
+def sum_iter(xs, acc):
+    return acc if is_null(xs) else sum_iter(tail(xs), acc + head(xs))
+\end{lstlisting}
+
+\section*{If your program does not run}
+
+Many error messages of the Python interpreter come from formatting. Check, in this order:
+
+\medskip
+\noindent
+\begin{tabular}{p{0.34\textwidth}p{0.58\textwidth}}
+\hline
+\textbf{Message or symptom} & \textbf{Likely cause}\\
+\hline
+``Unexpected token'' at the end of a line & A line break outside parentheses: put the expression in parentheses, or keep it on one line.\\
+\texttt{IndentationError} & Inconsistent indentation: indent every block by four spaces, and do not mix tabs and spaces.\\
+``Unexpected token: indent'' & A line is indented that should not be: line it up with the previous statement.\\
+A missing colon & Every \texttt{def}, \texttt{if}, \texttt{elif}, \texttt{else}, \texttt{while} and \texttt{for} line ends with a colon.\\
+A block that seems to end too early or too late & The indentation of its lines differs: align them under each other.\\
+\hline
+\end{tabular}
+
+\medskip
+\noindent
+A program that follows this guide can still be wrong, of course. But if it is, you can be sure that
+the reason is the logic and not the layout.
+
+\section*{How this guide differs from the style guide of Source}
+
+Colleagues who know the style guide of the JavaScript sublanguages of Source will recognize most of
+the rules. These are the differences that result from Python:
+
+\begin{itemize}
+\item Blocks are not enclosed in braces: the indentation \emph{is} the block.
+\item A conditional expression is written \lstinline{consequent if predicate else alternative}.
+\item A unary minus is written without a space: \lstinline{-x}.
+\item A line can be broken only inside parentheses, brackets and braces; a conditional expression in a
+      \lstinline{return} statement is therefore put in parentheses when it does not fit in a line.
+\item There are two blank lines between top-level function definitions, as in PEP~8.
+\end{itemize}
+
+\end{document}
