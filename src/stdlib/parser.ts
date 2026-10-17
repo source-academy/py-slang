@@ -61,6 +61,9 @@ function makeBlockIfNeeded(statements: StmtNS.Stmt[], declaredNames: Set<string>
 }
 
 function transformParam(p: FunctionParam): Value {
+  if (p.default) {
+    throw new Error("Default values of parameters are not supported in parse tree generation");
+  }
   const nameNode = vector_to_llist([
     { type: "string", value: "name" },
     { type: "string", value: p.lexeme },

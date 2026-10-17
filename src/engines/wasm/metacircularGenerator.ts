@@ -290,6 +290,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           if (p.isStarred) {
             throw new Error("Starred parameters are not supported in parse tree generation");
           }
+          if (p.default) {
+            throw new Error(
+              "Default values of parameters are not supported in parse tree generation",
+            );
+          }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
@@ -304,6 +309,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
         ...expr.parameters.map(p => {
           if (p.isStarred) {
             throw new Error("Starred parameters are not supported in parse tree generation");
+          }
+          if (p.default) {
+            throw new Error(
+              "Default values of parameters are not supported in parse tree generation",
+            );
           }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
@@ -407,6 +417,18 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
   visitAnnAssignStmt(_stmt: StmtNS.AnnAssign): [number, bigint] {
     throw new Error("Annotated assignment statements are not supported in parse tree generation");
+  }
+  visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): [number, bigint] {
+    throw new Error("Tuple assignment is not supported in parse tree generation");
+  }
+  visitTupleExpr(_expr: ExprNS.Tuple): [number, bigint] {
+    throw new Error("Tuples are not supported in parse tree generation");
+  }
+  visitDictExpr(_expr: ExprNS.Dict): [number, bigint] {
+    throw new Error("Dictionaries are not supported in parse tree generation");
+  }
+  visitKeywordExpr(_expr: ExprNS.Keyword): [number, bigint] {
+    throw new Error("Keyword arguments are not supported in parse tree generation");
   }
   visitStarredExpr(_expr: ExprNS.Starred): [number, bigint] {
     throw new Error("Starred expressions are not supported in parse tree generation");

@@ -2,7 +2,7 @@
 import { Token } from "./tokenizer";
 import { PyComplexNumber } from "./types";
 
-export type FunctionParam = Token & { isStarred: boolean };
+export type FunctionParam = Token & { isStarred: boolean; default?: ExprNS.Expr };
 export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;
 export namespace ExprNS {
   export interface Visitor<T> {
@@ -21,6 +21,9 @@ export namespace ExprNS {
     visitListExpr(expr: List): T;
     visitSubscriptExpr(expr: Subscript): T;
     visitStarredExpr(expr: Starred): T;
+    visitTupleExpr(expr: Tuple): T;
+    visitDictExpr(expr: Dict): T;
+    visitKeywordExpr(expr: Keyword): T;
     visitNoneExpr(expr: None): T;
     visitComplexExpr(expr: Complex): T;
   }
@@ -239,6 +242,43 @@ export namespace ExprNS {
       return visitor.visitStarredExpr(this);
     }
   }
+  export class Tuple extends Expr {
+    readonly kind = "Tuple";
+    elements: Expr[];
+    constructor(startToken: Token, endToken: Token, elements: Expr[]) {
+      super(startToken, endToken);
+      this.elements = elements;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitTupleExpr(this);
+    }
+  }
+  export class Dict extends Expr {
+    readonly kind = "Dict";
+    keys: Expr[];
+    values: Expr[];
+    constructor(startToken: Token, endToken: Token, keys: Expr[], values: Expr[]) {
+      super(startToken, endToken);
+      this.keys = keys;
+      this.values = values;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitDictExpr(this);
+    }
+  }
+  export class Keyword extends Expr {
+    readonly kind = "Keyword";
+    name: Token;
+    value: Expr;
+    constructor(startToken: Token, endToken: Token, name: Token, value: Expr) {
+      super(startToken, endToken);
+      this.name = name;
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitKeywordExpr(this);
+    }
+  }
   export class None extends Expr {
     readonly kind = "None";
     constructor(startToken: Token, endToken: Token) {
@@ -264,6 +304,7 @@ export namespace StmtNS {
   export interface Visitor<T> {
     visitPassStmt(stmt: Pass): T;
     visitAssignStmt(stmt: Assign): T;
+    visitTupleAssignStmt(stmt: TupleAssign): T;
     visitAnnAssignStmt(stmt: AnnAssign): T;
     visitBreakStmt(stmt: Break): T;
     visitContinueStmt(stmt: Continue): T;
@@ -309,6 +350,19 @@ export namespace StmtNS {
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitAssignStmt(this);
+    }
+  }
+  export class TupleAssign extends Stmt {
+    readonly kind = "TupleAssign";
+    target: ExprNS.Tuple;
+    value: ExprNS.Expr;
+    constructor(startToken: Token, endToken: Token, target: ExprNS.Tuple, value: ExprNS.Expr) {
+      super(startToken, endToken);
+      this.target = target;
+      this.value = value;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitTupleAssignStmt(this);
     }
   }
   export class AnnAssign extends Stmt {
