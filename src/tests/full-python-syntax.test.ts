@@ -5,10 +5,13 @@
  */
 import { ExprNS, StmtNS } from "../ast-types";
 import { parse } from "../parser/parser-adapter";
+import { toFunctionParam } from "../parser/token-bridge";
 import { analyze } from "../resolver";
 import math from "../stdlib/math";
 import misc from "../stdlib/misc";
+import { transform } from "../stdlib/parser";
 import { FeatureNotSupportedError } from "../validator";
+import { traverseAST } from "../validator/traverse";
 
 function statements(src: string): StmtNS.Stmt[] {
   const result = parse(src + "\n");
@@ -190,5 +193,51 @@ describe("the sublanguages reject what full Python adds", () => {
 
   test("programs without them are unaffected", () => {
     expect(errorsIn("def f(a, b):\n    return [a, b]\nf(1, 2)", 4)).toEqual([]);
+  });
+});
+
+describe("consumers of the tree", () => {
+  const visited = (src: string): string[] => {
+    const names: string[] = [];
+    traverseAST(parse(src + "\n"), node => {
+      if (node instanceof ExprNS.Variable) names.push(node.name.lexeme);
+    });
+    return names;
+  };
+
+  test("traverseAST visits the default values of def and lambda", () => {
+    expect(visited("def f(x=g(a)):\n    return x")).toEqual(expect.arrayContaining(["g", "a"]));
+    expect(visited("h = lambda x=b: x")).toEqual(expect.arrayContaining(["b"]));
+  });
+
+  test("traverseAST visits the default values of a multi-line lambda", () => {
+    // (Built by hand: a multi-line lambda cannot stand alone as a statement.)
+    const c = expression("c") as ExprNS.Variable;
+    const param = toFunctionParam(
+      { type: "name", value: "x", line: 1, col: 1, offset: 0 },
+      false,
+      c,
+    );
+    const lambda = new ExprNS.MultiLambda(c.startToken, c.endToken, [param], [], []);
+    const names: string[] = [];
+    traverseAST(lambda, node => {
+      if (node instanceof ExprNS.Variable) names.push(node.name.lexeme);
+    });
+    expect(names).toEqual(["c"]);
+  });
+
+  test("parse() rejects a default value instead of dropping it", () => {
+    expect(() => transform(parse("def f(x=1):\n    return x\n"), new Set())).toThrow(
+      "Default values of parameters are not supported in parse tree generation",
+    );
+    expect(() => transform(parse("lambda x=1: x\n"), new Set())).toThrow(
+      "Default values of parameters are not supported in parse tree generation",
+    );
+  });
+
+  test("parse() rejects the other new syntax too", () => {
+    for (const src of ["(1, 2)", "{1: 2}", "f(k=1)", "a, b = 1, 2"]) {
+      expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+    }
   });
 });

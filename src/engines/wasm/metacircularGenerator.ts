@@ -290,6 +290,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           if (p.isStarred) {
             throw new Error("Starred parameters are not supported in parse tree generation");
           }
+          if (p.default) {
+            throw new Error(
+              "Default values of parameters are not supported in parse tree generation",
+            );
+          }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
@@ -304,6 +309,11 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
         ...expr.parameters.map(p => {
           if (p.isStarred) {
             throw new Error("Starred parameters are not supported in parse tree generation");
+          }
+          if (p.default) {
+            throw new Error(
+              "Default values of parameters are not supported in parse tree generation",
+            );
           }
           return this.dynamicString(`"${p.lexeme}"`);
         }),
