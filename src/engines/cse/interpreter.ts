@@ -428,7 +428,20 @@ type ExprKeys = Exclude<
   keyof typeof ExprNS,
   "Expr" | "MultiLambda" | "Starred" | "Tuple" | "Dict" | "Keyword"
 >;
-type StmtKeys = Exclude<keyof typeof StmtNS, "Stmt" | "AnnAssign" | "Assert" | "TupleAssign">;
+type StmtKeys = Exclude<
+  keyof typeof StmtNS,
+  | "Stmt"
+  | "AnnAssign"
+  | "Assert"
+  | "TupleAssign"
+  | "Class"
+  | "Decorated"
+  | "Try"
+  | "Raise"
+  | "With"
+  | "Del"
+  | "Import"
+>;
 type InstrKeys = Exclude<InstrType, "Assert" | "NonLocal" | "Import" | "Program">;
 type CmdEvaluators = {
   [K in ExprKeys]: CmdEvaluator<InstanceType<(typeof ExprNS)[K]>>;

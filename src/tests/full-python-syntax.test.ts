@@ -172,6 +172,15 @@ describe("the sublanguages reject what full Python adds", () => {
     ["a keyword argument", "f(k=1)"],
     ["a default value in def", "def f(x=1):\n    return x"],
     ["a default value in lambda", "g = lambda x=1: x"],
+    ["a class", "class A:\n    pass"],
+    ["a decorator", "@d\ndef f():\n    return 1"],
+    ["try/except", "try:\n    f()\nexcept:\n    g()"],
+    ["try/finally", "try:\n    f()\nfinally:\n    g()"],
+    ["raise", "raise e"],
+    ["with", "with a as b:\n    f()"],
+    ["del", "del x"],
+    ["import", "import math"],
+    ["an assertion message", "assert x, 'message'"],
   ];
 
   for (const chapter of [1, 2, 3, 4]) {
@@ -239,5 +248,262 @@ describe("consumers of the tree", () => {
     for (const src of ["(1, 2)", "{1: 2}", "f(k=1)", "a, b = 1, 2"]) {
       expect(() => transform(parse(src + "\n"), new Set())).toThrow();
     }
+  });
+});
+
+describe("statements of full Python", () => {
+  const first = <T extends StmtNS.Stmt>(src: string): T => statements(src)[0] as T;
+
+  describe("class", () => {
+    test("without bases", () => {
+      const c = first<StmtNS.Class>("class A:\n    x = 1\n    y = 2");
+      expect(c).toBeInstanceOf(StmtNS.Class);
+      expect(c.name.lexeme).toBe("A");
+      expect(c.bases).toHaveLength(0);
+      expect(c.body).toHaveLength(2);
+    });
+
+    test("with empty parentheses, or with bases and keywords", () => {
+      expect(first<StmtNS.Class>("class A():\n    pass").bases).toHaveLength(0);
+      const c = first<StmtNS.Class>("class A(B, C, metaclass=M):\n    pass");
+      expect(c.bases.map(b => b.constructor)).toEqual([
+        ExprNS.Variable,
+        ExprNS.Variable,
+        ExprNS.Keyword,
+      ]);
+    });
+
+    test("methods are function definitions in the body", () => {
+      const c = first<StmtNS.Class>("class A:\n    def f(self):\n        return 1");
+      expect(c.body[0]).toBeInstanceOf(StmtNS.FunctionDef);
+    });
+  });
+
+  describe("try", () => {
+    test("with except clauses, else and finally", () => {
+      const t = first<StmtNS.Try>(
+        [
+          "try:",
+          "    a()",
+          "except E:",
+          "    b()",
+          "except (F, G) as e:",
+          "    c()",
+          "except:",
+          "    d()",
+          "else:",
+          "    e1()",
+          "finally:",
+          "    f()",
+        ].join("\n"),
+      );
+      expect(t).toBeInstanceOf(StmtNS.Try);
+      expect(t.handlers).toHaveLength(3);
+      expect(t.handlers[0].type).toBeInstanceOf(ExprNS.Variable);
+      expect(t.handlers[0].name).toBeNull();
+      expect(t.handlers[1].type).toBeInstanceOf(ExprNS.Tuple);
+      expect(t.handlers[1].name?.lexeme).toBe("e");
+      expect(t.handlers[2].type).toBeNull();
+      expect(t.orElse).toHaveLength(1);
+      expect(t.finalBody).toHaveLength(1);
+    });
+
+    test("try/finally without an except clause", () => {
+      const t = first<StmtNS.Try>("try:\n    a()\nfinally:\n    b()");
+      expect(t.handlers).toHaveLength(0);
+      expect(t.orElse).toBeNull();
+      expect(t.finalBody).toHaveLength(1);
+    });
+
+    test("a bare except must be the last handler, and there is at most one", () => {
+      expect(() => parse("try:\n    a()\nexcept:\n    b()\nexcept E:\n    c()\n")).toThrow();
+      expect(() => parse("try:\n    a()\nexcept:\n    b()\nexcept:\n    c()\n")).toThrow();
+      const last = first<StmtNS.Try>("try:\n    a()\nexcept E:\n    b()\nexcept:\n    c()");
+      expect(last.handlers.map(h => h.type === null)).toEqual([false, true]);
+      const only = first<StmtNS.Try>("try:\n    a()\nexcept:\n    b()\nelse:\n    c()");
+      expect(only.handlers).toHaveLength(1);
+    });
+
+    test("a try without except or finally is a syntax error", () => {
+      expect(() => parse("try:\n    a()\n")).toThrow();
+    });
+  });
+
+  describe("raise", () => {
+    test("bare, with a value, and with a cause", () => {
+      const [a, b, c] = statements("raise\nraise E\nraise E from F") as StmtNS.Raise[];
+      expect([a.value, a.cause]).toEqual([null, null]);
+      expect(b.value).toBeInstanceOf(ExprNS.Variable);
+      expect(b.cause).toBeNull();
+      expect(c.cause).toBeInstanceOf(ExprNS.Variable);
+    });
+  });
+
+  describe("with", () => {
+    test("with and without as, and with several items", () => {
+      const w = first<StmtNS.With>("with a as b, c:\n    f()");
+      expect(w.items).toHaveLength(2);
+      expect(w.items[0].target).toBeInstanceOf(ExprNS.Variable);
+      expect(w.items[1].target).toBeNull();
+      expect(w.body).toHaveLength(1);
+    });
+  });
+
+  describe("del", () => {
+    test("names, subscripts and several targets", () => {
+      const d = first<StmtNS.Del>("del x, ys[0]");
+      expect(d.targets.map(t => t.constructor)).toEqual([ExprNS.Variable, ExprNS.Subscript]);
+    });
+  });
+
+  describe("import", () => {
+    test("a name, a dotted name, an alias, several names", () => {
+      const i = first<StmtNS.Import>("import a, b.c as d, e.f");
+      expect(i.names.map(n => [n.name.lexeme, n.alias?.lexeme ?? null])).toEqual([
+        ["a", null],
+        ["b.c", "d"],
+        ["e.f", null],
+      ]);
+    });
+
+    test("from ... import at the start of the program still comes first", () => {
+      const stmts = statements("from a import b\nimport c\n");
+      expect(stmts.map(s => s.constructor)).toEqual([StmtNS.FromImport, StmtNS.Import]);
+    });
+  });
+
+  describe("decorators", () => {
+    test("on a function and on a class, several of them", () => {
+      const [f, c] = statements(
+        "@d\n@e(1)\ndef f():\n    return 1\n@d\nclass A:\n    pass",
+      ) as StmtNS.Decorated[];
+      expect(f).toBeInstanceOf(StmtNS.Decorated);
+      expect(f.decorators).toHaveLength(2);
+      expect(f.definition).toBeInstanceOf(StmtNS.FunctionDef);
+      expect(c.definition).toBeInstanceOf(StmtNS.Class);
+    });
+
+    test("a decorator before anything else is a syntax error", () => {
+      expect(() => parse("@d\nx = 1\n")).toThrow();
+    });
+  });
+
+  describe("assert", () => {
+    test("with and without a message", () => {
+      const [a, b] = statements("assert x\nassert x, 'm'") as StmtNS.Assert[];
+      expect(a.message).toBeNull();
+      expect(b.message).toBeInstanceOf(ExprNS.Literal);
+    });
+  });
+
+  test("the former keywords are keywords now, not names", () => {
+    for (const word of ["class", "try", "except", "finally", "raise", "with", "del"]) {
+      expect(() => parse(`${word} = 1\n`)).toThrow();
+    }
+  });
+
+  test("simple statements may be the body of an inline block", () => {
+    expect(first<StmtNS.If>("if x: raise E").body[0]).toBeInstanceOf(StmtNS.Raise);
+    expect(first<StmtNS.If>("if x: del y").body[0]).toBeInstanceOf(StmtNS.Del);
+  });
+});
+
+describe("consumers of the statements", () => {
+  test("traverseAST visits what the statements contain", () => {
+    const names: string[] = [];
+    const src = [
+      "@deco",
+      "class A(Base):",
+      "    try:",
+      "        x = body_call()",
+      "    except Err as e:",
+      "        raise Wrapped from cause",
+      "    else:",
+      "        pass",
+      "    finally:",
+      "        with ctx as target:",
+      "            del gone",
+      "assert check, message",
+    ].join("\n");
+    traverseAST(parse(src + "\n"), node => {
+      if (node instanceof ExprNS.Variable) names.push(node.name.lexeme);
+    });
+    for (const n of [
+      "deco",
+      "Base",
+      "body_call",
+      "Err",
+      "Wrapped",
+      "cause",
+      "ctx",
+      "target",
+      "gone",
+      "check",
+      "message",
+    ]) {
+      expect(names).toContain(n);
+    }
+  });
+
+  test("parse() rejects them instead of dropping them", () => {
+    for (const src of [
+      "class A:\n    pass",
+      "try:\n    f()\nfinally:\n    g()",
+      "raise E",
+      "del x",
+      "import m",
+    ]) {
+      expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+    }
+    expect(() => transform(parse("assert x, 'm'\n"), new Set())).toThrow(
+      "Assertion messages are not supported in parse tree generation",
+    );
+  });
+
+  test("the resolver declares a decorated function or class, also for use inside itself", () => {
+    const script =
+      [
+        "d = lambda x: x",
+        "@d",
+        "def f(n):",
+        "    return f if n > 0 else 0",
+        "@d",
+        "class A:",
+        "    pass",
+        "def g():",
+        "    return A",
+        "f(1)",
+        "A",
+      ].join("\n") + "\n";
+    const errors = analyze(parse(script), script, 4, [misc, math]);
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
+  });
+
+  test("the resolver declares the names that the statements bind", () => {
+    const script =
+      [
+        "f = 1",
+        "E = 2",
+        "ctx = 3",
+        "class A:",
+        "    pass",
+        "import m.n as p",
+        "try:",
+        "    f",
+        "except E as err:",
+        "    err",
+        "with ctx as c:",
+        "    c",
+        "a, b = 1, 2",
+        "A",
+        "p",
+        "a",
+        "b",
+      ].join("\n") + "\n";
+    const errors = analyze(parse(script), script, 4, [misc, math]);
+    // The statements are rejected as features; no name of the program is reported undefined.
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) expect(e).toBeInstanceOf(FeatureNotSupportedError);
   });
 });

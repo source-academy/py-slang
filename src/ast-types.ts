@@ -313,6 +313,13 @@ export namespace StmtNS {
     visitGlobalStmt(stmt: Global): T;
     visitNonLocalStmt(stmt: NonLocal): T;
     visitAssertStmt(stmt: Assert): T;
+    visitClassStmt(stmt: Class): T;
+    visitDecoratedStmt(stmt: Decorated): T;
+    visitTryStmt(stmt: Try): T;
+    visitRaiseStmt(stmt: Raise): T;
+    visitWithStmt(stmt: With): T;
+    visitDelStmt(stmt: Del): T;
+    visitImportStmt(stmt: Import): T;
     visitIfStmt(stmt: If): T;
     visitWhileStmt(stmt: While): T;
     visitForStmt(stmt: For): T;
@@ -461,12 +468,135 @@ export namespace StmtNS {
   export class Assert extends Stmt {
     readonly kind = "Assert";
     value: ExprNS.Expr;
-    constructor(startToken: Token, endToken: Token, value: ExprNS.Expr) {
+    message: ExprNS.Expr | null;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      value: ExprNS.Expr,
+      message: ExprNS.Expr | null,
+    ) {
       super(startToken, endToken);
       this.value = value;
+      this.message = message;
     }
     override accept(visitor: Visitor<any>): any {
       return visitor.visitAssertStmt(this);
+    }
+  }
+  export class Class extends Stmt {
+    readonly kind = "Class";
+    name: Token;
+    bases: ExprNS.Expr[];
+    body: Stmt[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      name: Token,
+      bases: ExprNS.Expr[],
+      body: Stmt[],
+    ) {
+      super(startToken, endToken);
+      this.name = name;
+      this.bases = bases;
+      this.body = body;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitClassStmt(this);
+    }
+  }
+  export class Decorated extends Stmt {
+    readonly kind = "Decorated";
+    decorators: ExprNS.Expr[];
+    definition: Stmt;
+    constructor(startToken: Token, endToken: Token, decorators: ExprNS.Expr[], definition: Stmt) {
+      super(startToken, endToken);
+      this.decorators = decorators;
+      this.definition = definition;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitDecoratedStmt(this);
+    }
+  }
+  export class Try extends Stmt {
+    readonly kind = "Try";
+    body: Stmt[];
+    handlers: { type: ExprNS.Expr | null; name: Token | null; body: Stmt[] }[];
+    orElse: Stmt[] | null;
+    finalBody: Stmt[] | null;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      body: Stmt[],
+      handlers: { type: ExprNS.Expr | null; name: Token | null; body: Stmt[] }[],
+      orElse: Stmt[] | null,
+      finalBody: Stmt[] | null,
+    ) {
+      super(startToken, endToken);
+      this.body = body;
+      this.handlers = handlers;
+      this.orElse = orElse;
+      this.finalBody = finalBody;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitTryStmt(this);
+    }
+  }
+  export class Raise extends Stmt {
+    readonly kind = "Raise";
+    value: ExprNS.Expr | null;
+    cause: ExprNS.Expr | null;
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      value: ExprNS.Expr | null,
+      cause: ExprNS.Expr | null,
+    ) {
+      super(startToken, endToken);
+      this.value = value;
+      this.cause = cause;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitRaiseStmt(this);
+    }
+  }
+  export class With extends Stmt {
+    readonly kind = "With";
+    items: { context: ExprNS.Expr; target: ExprNS.Expr | null }[];
+    body: Stmt[];
+    constructor(
+      startToken: Token,
+      endToken: Token,
+      items: { context: ExprNS.Expr; target: ExprNS.Expr | null }[],
+      body: Stmt[],
+    ) {
+      super(startToken, endToken);
+      this.items = items;
+      this.body = body;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitWithStmt(this);
+    }
+  }
+  export class Del extends Stmt {
+    readonly kind = "Del";
+    targets: ExprNS.Expr[];
+    constructor(startToken: Token, endToken: Token, targets: ExprNS.Expr[]) {
+      super(startToken, endToken);
+      this.targets = targets;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitDelStmt(this);
+    }
+  }
+  export class Import extends Stmt {
+    readonly kind = "Import";
+    names: { name: Token; alias: Token | null }[];
+    constructor(startToken: Token, endToken: Token, names: { name: Token; alias: Token | null }[]) {
+      super(startToken, endToken);
+      this.names = names;
+    }
+    override accept(visitor: Visitor<any>): any {
+      return visitor.visitImportStmt(this);
     }
   }
   export class If extends Stmt {

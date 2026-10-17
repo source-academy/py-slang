@@ -1006,6 +1006,27 @@ export class BuilderGenerator implements BuilderVisitor<WasmInstruction, WasmNum
   visitMultiLambdaExpr(_expr: ExprNS.MultiLambda): WasmNumeric {
     throw new Error("Method not implemented.");
   }
+  visitClassStmt(_stmt: StmtNS.Class): WasmInstruction {
+    throw new Error("Classes are not supported");
+  }
+  visitDecoratedStmt(_stmt: StmtNS.Decorated): WasmInstruction {
+    throw new Error("Decorators are not supported");
+  }
+  visitTryStmt(_stmt: StmtNS.Try): WasmInstruction {
+    throw new Error("try statements are not supported");
+  }
+  visitRaiseStmt(_stmt: StmtNS.Raise): WasmInstruction {
+    throw new Error("raise statements are not supported");
+  }
+  visitWithStmt(_stmt: StmtNS.With): WasmInstruction {
+    throw new Error("with statements are not supported");
+  }
+  visitDelStmt(_stmt: StmtNS.Del): WasmInstruction {
+    throw new Error("del statements are not supported");
+  }
+  visitImportStmt(_stmt: StmtNS.Import): WasmInstruction {
+    throw new Error("import statements are not supported");
+  }
   visitTupleAssignStmt(_stmt: StmtNS.TupleAssign): WasmInstruction {
     throw new Error("Tuple assignment is not supported");
   }
