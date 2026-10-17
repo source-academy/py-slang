@@ -159,6 +159,17 @@ function intRepr(value: bigint): string {
   return text;
 }
 
+/**
+ * An int as a trace shows it: all digits, except for an int that `repr` refuses (the program may
+ * hold such a number without ever converting it), which is shortened.
+ */
+function intDisplay(value: bigint): string {
+  const text = value.toString();
+  const digits = text.replace("-", "").length;
+  if (digits <= MAX_INT_DIGITS) return text;
+  return `${text.slice(0, text.startsWith("-") ? 7 : 6)}…(${digits} digits)`;
+}
+
 /** `repr` of a float, as CPython writes it (`1e-05`, `1e+16`, `3.0`, `inf`, `nan`). */
 export function floatRepr(x: number): string {
   if (Number.isNaN(x)) return "nan";
@@ -202,10 +213,10 @@ export function strRepr(s: string): string {
 }
 
 /** `repr(v)`; the elements of a list are shown by their `repr`, a list that contains itself as `[...]`. */
-export function repr(v: PyValue, seen: Set<ListObj> = new Set()): string {
+export function repr(v: PyValue, seen: Set<ListObj> = new Set(), display = false): string {
   switch (v.type) {
     case "int":
-      return intRepr(v.value);
+      return display ? intDisplay(v.value) : intRepr(v.value);
     case "float":
       return floatRepr(v.value);
     case "bool":
@@ -217,7 +228,7 @@ export function repr(v: PyValue, seen: Set<ListObj> = new Set()): string {
     case "list": {
       if (seen.has(v.obj)) return "[...]";
       seen.add(v.obj);
-      const text = `[${v.obj.elements.map(e => repr(e, seen)).join(", ")}]`;
+      const text = `[${v.obj.elements.map(e => repr(e, seen, display)).join(", ")}]`;
       seen.delete(v.obj);
       return text;
     }

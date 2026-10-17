@@ -48,10 +48,18 @@ function unsupported(op: string, a: PyValue, b: PyValue): PyError {
   );
 }
 
+/** Appends `items` to `target`; `push(...items)` fails for lists of more than about 100,000 elements. */
+function pushAll(target: PyValue[], items: PyValue[]): void {
+  for (const item of items) target.push(item);
+}
+
 const MAX_REPEAT = 100_000_000;
 
 function repeatCount(n: bigint, unit: number): number {
-  if (n <= 0n) return 0;
+  if (n > 9223372036854775807n || n < -9223372036854775808n) {
+    throw new PyError("OverflowError", "cannot fit 'int' into an index-sized integer");
+  }
+  if (n <= 0n || unit === 0) return 0;
   if (n * BigInt(Math.max(unit, 1)) > BigInt(MAX_REPEAT)) {
     throw new PyError("MemoryError", "the result is too large");
   }
@@ -350,6 +358,14 @@ function power(x: Num, y: Num): PyValue {
   }
   const base = toFloat(x);
   const exponent = toFloat(y);
+  // The special cases of the C library, which JavaScript's `**` does not share.
+  if (exponent === 0 || base === 1) return float(1);
+  if (Number.isNaN(base) || Number.isNaN(exponent)) return float(NaN);
+  if (!Number.isFinite(exponent)) {
+    const size = Math.abs(base);
+    if (size === 1) return float(1);
+    return float(exponent > 0 === size > 1 ? Infinity : 0);
+  }
   if (base !== 0 && Number.isFinite(base) && Number.isInteger(exponent)) {
     const n = BigInt(exponent);
     if (n >= -MAX_EXACT_EXPONENT && n <= MAX_EXACT_EXPONENT) {
@@ -425,7 +441,7 @@ function arithmetic(op: string, a: PyValue, b: PyValue): PyValue {
       if (seq.type === "str") return str(seq.value.repeat(repeatCount(n.i, seq.value.length)));
       const times = repeatCount(n.i, seq.obj.elements.length);
       const elements: PyValue[] = [];
-      for (let k = 0; k < times; k++) elements.push(...seq.obj.elements);
+      for (let k = 0; k < times; k++) pushAll(elements, seq.obj.elements);
       return list(elements);
     }
   }
@@ -583,7 +599,7 @@ export function elementsOf(v: PyValue): PyValue[] {
 export function inplaceOp(op: string, a: PyValue, b: PyValue): PyValue {
   if (a.type === "list" && op === "+") {
     const added = elementsOf(b);
-    a.obj.elements.push(...added);
+    pushAll(a.obj.elements, added);
     return a;
   }
   if (a.type === "list" && op === "*") {
@@ -592,7 +608,7 @@ export function inplaceOp(op: string, a: PyValue, b: PyValue): PyValue {
       const times = repeatCount(n.i, a.obj.elements.length);
       const copy = [...a.obj.elements];
       a.obj.elements.length = 0;
-      for (let k = 0; k < times; k++) a.obj.elements.push(...copy);
+      for (let k = 0; k < times; k++) pushAll(a.obj.elements, copy);
       return a;
     }
   }

@@ -21,7 +21,7 @@ export function valueText(v: PyValue, labels: Labels): string {
     case "function":
       return v.obj.src.kind === "FunctionDef" ? v.obj.name : labels.object(v.obj);
     default:
-      return repr(v);
+      return repr(v, new Set(), true);
   }
 }
 

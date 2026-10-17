@@ -726,3 +726,50 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython("review of the first slice, fourth round: big numbers, special powers", () => {
+  test.each<[string, string]>([
+    ["a huge int that is never printed", "x = 10 ** 5000\nprint('ok')\n"],
+    ["a huge int that is compared", "x = 10 ** 5000\nprint(x > 1, x == x, len([x]))\n"],
+    ["a huge int that is printed", "x = 10 ** 5000\nprint(x)\n"],
+    ["a huge int in a list that is printed", "print([10 ** 5000])\n"],
+    ["a huge int that is converted by str", "print(len(str(10 ** 4000)))\nstr(10 ** 5000)\n"],
+    ["a list extended by a long range", "a = []\na += range(300000)\nprint(len(a), a[-1])\n"],
+    [
+      "a long list repeated",
+      "a = list(range(200000))\nb = a * 3\nprint(len(b), b[-1])\nc = a\nc *= 2\nprint(len(c))\n",
+    ],
+    [
+      "a negative zero to odd integer powers",
+      "x = -0.0\nprint(repr(x ** 3), repr(x ** 5), repr(x ** 4), repr(x ** 1))\n",
+    ],
+    [
+      "zero to an infinite exponent",
+      "print(0.0 ** float('inf'), 0.0 ** -float('inf'), 0 ** -float('inf'))\n",
+    ],
+    [
+      "minus one to an infinite exponent",
+      "print((-1.0) ** float('inf'), (-1.0) ** -float('inf'), 1.0 ** float('inf'), 1 ** float('nan'))\n",
+    ],
+    [
+      "other bases to infinite exponents",
+      "inf = float('inf')\nprint(2.0 ** inf, 2.0 ** -inf, 0.5 ** inf, 0.5 ** -inf, -2.0 ** inf, (-2.0) ** -inf, 3 ** inf)\n",
+    ],
+    [
+      "nan powers",
+      "nan = float('nan')\nprint(nan ** 0, nan ** 0.0, 1.0 ** nan, 2.0 ** nan, nan ** 2)\n",
+    ],
+    [
+      "infinite bases",
+      "inf = float('inf')\nprint(inf ** 2, inf ** -2, (-inf) ** 3, (-inf) ** 2, (-inf) ** -3, inf ** 0)\n",
+    ],
+    ["a string repeated by a count that is no index", "'x' * (10 ** 100)\n"],
+    ["a list repeated by a negative count that is no index", "print([] * -(10 ** 100))\n"],
+    ["a string repeated by a negative count that is no index", "print('a' * -(10 ** 100))\n"],
+    [
+      "an empty string repeated by a large count",
+      "print(repr('' * 10 ** 18), repr([] * 10 ** 18))\n",
+    ],
+    ["a count at the edge of an index", "x = 'ab' * (-(2 ** 63))\nprint(repr(x))\n"],
+  ])("%s", (_, code) => same(code));
+});
