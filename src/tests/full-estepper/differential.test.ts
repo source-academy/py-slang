@@ -621,3 +621,54 @@ describeIfCPython("review of the first slice: order of evaluation, declarations,
     ],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython("review of the first slice, second round: declaration order, code points", () => {
+  test.each<[string, string]>([
+    [
+      "a name assigned before its global declaration",
+      "print('before')\ndef f():\n    x = 1\n    global x\n",
+    ],
+    [
+      "a name used before its global declaration",
+      "print('before')\ndef f():\n    print(x)\n    global x\n",
+    ],
+    [
+      "a name assigned before its nonlocal declaration",
+      "def g():\n    x = 0\n    def f():\n        x = 1\n        nonlocal x\n",
+    ],
+    [
+      "a name used before its nonlocal declaration",
+      "def g():\n    x = 0\n    def f():\n        print(x)\n        nonlocal x\n",
+    ],
+    ["a name assigned before global at module level", "print('before')\nx = 1\nglobal x\n"],
+    ["an augmented assignment before the declaration", "def f():\n    x += 1\n    global x\n"],
+    [
+      "a for target before the declaration",
+      "def f():\n    for x in [1]:\n        pass\n    global x\n",
+    ],
+    [
+      "a use in a nested if before the declaration",
+      "def f():\n    if True:\n        print(x)\n    global x\n",
+    ],
+    [
+      "a use inside a lambda or a nested function is not a use of the scope",
+      "x = 1\ndef f():\n    g = lambda: x\n    def h():\n        return x\n    global x\n    return g() + h()\nprint(f())\n",
+    ],
+    [
+      "the declaration first is fine",
+      "x = 1\ndef f():\n    global x\n    x = 2\n    x += 1\nf()\nprint(x)\n",
+    ],
+    [
+      "a declaration in a loop body after use",
+      "def f():\n    while True:\n        print(x)\n        global x\n",
+    ],
+    [
+      "strings compare by code point, not by UTF-16 unit",
+      "print('\u{10000}' < '\ue000', '\ue000' < '\u{10000}', 'a' < 'b', 'ab' < 'a')\n",
+    ],
+    [
+      "lists of such strings",
+      "print(['\u{10000}'] < ['\ue000'], min('\u{10000}', '\ue000') == '\ue000', max('\u{10000}', '\ue000') == '\u{10000}')\n",
+    ],
+  ])("%s", (_, code) => same(code));
+});

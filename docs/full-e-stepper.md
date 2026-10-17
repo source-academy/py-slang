@@ -136,7 +136,12 @@ The differences from §3/§4 follow from Python, and the engine does what CPytho
 - **no tail-call elimination**, as in CPython: a call in tail position keeps its caller's frame, and
   the depth of calls is limited to CPython's 1000 (`RecursionError`);
 - a list is iterated live: `for x in xs` sees what the body appends to `xs`;
-- `+=` on a list changes it in place and keeps its identity; on a number or a string it rebinds.
+- `+=` on a list changes it in place and keeps its identity; on a number or a string it rebinds;
+- **`is` on numbers and strings compares values.** CPython's answer depends on the implementation
+  (small ints are shared and equal constants of a code object are merged, but `float(1) is float(1)`
+  is `False`), and Python 3.8 and later warn about `is` with a literal. Lists, functions and ranges
+  keep their identity. Giving every number and string an identity would show students distinctions
+  that CPython does not promise; to be revisited if a course needs it.
 
 ## Decisions for the engine
 

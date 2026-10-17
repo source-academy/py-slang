@@ -6,6 +6,7 @@
  */
 
 import { ExprNS, StmtNS } from "../../ast-types";
+import { traverseAST } from "../../validator/traverse";
 import { PyError } from "./errors";
 import type { ScopeInfo } from "./values";
 
@@ -88,6 +89,73 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
     }
   };
   walk(program, [], false);
+  checkOrder(program, new Map());
+}
+
+/**
+ * `global` and `nonlocal` must come before the name is used or bound in their scope; CPython
+ * reports it when it compiles. `seen` has the names of the scope so far (parameters, and what the
+ * statements before bound or used), and says whether the name was bound ("assigned") or only used.
+ */
+function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">): void {
+  const use = (node: unknown): void => {
+    if (!node) return;
+    // Names in the body of a lambda belong to the lambda's scope.
+    const inner = new Set<unknown>();
+    traverseAST(node as never, n => {
+      if (n instanceof ExprNS.Lambda || n instanceof ExprNS.MultiLambda) {
+        traverseAST(n, d => d !== n && inner.add(d));
+      } else if (n instanceof ExprNS.Variable && !inner.has(n) && !seen.has(n.name.lexeme)) {
+        seen.set(n.name.lexeme, "used");
+      }
+    });
+  };
+  const bind = (name: string): void => void seen.set(name, "assigned");
+  for (const stmt of stmts) {
+    if (stmt instanceof StmtNS.Global || stmt instanceof StmtNS.NonLocal) {
+      const word = stmt instanceof StmtNS.Global ? "global" : "nonlocal";
+      for (const n of stmt.names) {
+        const how = seen.get(n.lexeme);
+        if (how === "assigned") {
+          throw new PyError(
+            "SyntaxError",
+            `name '${n.lexeme}' is assigned to before ${word} declaration`,
+          );
+        }
+        if (how === "used") {
+          throw new PyError(
+            "SyntaxError",
+            `name '${n.lexeme}' is used prior to ${word} declaration`,
+          );
+        }
+      }
+    } else if (stmt instanceof StmtNS.Assign || stmt instanceof StmtNS.AugAssign) {
+      use(stmt.value);
+      if (stmt.target instanceof ExprNS.Variable) {
+        if (stmt instanceof StmtNS.AugAssign) use(stmt.target);
+        bind(stmt.target.name.lexeme);
+      } else use(stmt.target);
+    } else if (stmt instanceof StmtNS.If) {
+      use(stmt.condition);
+      checkOrder(stmt.body, seen);
+      if (stmt.elseBlock) checkOrder(stmt.elseBlock, seen);
+    } else if (stmt instanceof StmtNS.While) {
+      use(stmt.condition);
+      checkOrder(stmt.body, seen);
+    } else if (stmt instanceof StmtNS.For) {
+      use(stmt.iter);
+      bind(stmt.target.lexeme);
+      checkOrder(stmt.body, seen);
+    } else if (stmt instanceof StmtNS.FunctionDef) {
+      for (const p of stmt.parameters) use(p.default);
+      bind(stmt.name.lexeme);
+      checkOrder(stmt.body, new Map(stmt.parameters.map(p => [p.lexeme, "assigned" as const])));
+    } else if (stmt instanceof StmtNS.Return) {
+      use(stmt.value);
+    } else if (stmt instanceof StmtNS.SimpleExpr) {
+      use(stmt.expression);
+    }
+  }
 }
 
 /** The errors in the `global` and `nonlocal` declarations of a function, which CPython reports at compile time. */

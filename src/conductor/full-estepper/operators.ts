@@ -144,6 +144,21 @@ function compareNum(x: Num, y: Num): number | null {
   return fx < fy ? -1 : fx > fy ? 1 : 0;
 }
 
+/** Python compares strings by code point; JavaScript's `<` compares UTF-16 code units. */
+function compareStr(a: string, b: string): number {
+  const x = a[Symbol.iterator]();
+  const y = b[Symbol.iterator]();
+  for (;;) {
+    const p = x.next();
+    const q = y.next();
+    if (p.done) return q.done ? 0 : -1;
+    if (q.done) return 1;
+    const cp = p.value.codePointAt(0) as number;
+    const cq = q.value.codePointAt(0) as number;
+    if (cp !== cq) return cp < cq ? -1 : 1;
+  }
+}
+
 function orderError(op: string, a: PyValue, b: PyValue): PyError {
   return new PyError(
     "TypeError",
@@ -157,7 +172,7 @@ function order(op: string, a: PyValue, b: PyValue): number | null {
   const y = asNum(b);
   if (x && y) return compareNum(x, y);
   if (a.type === "str" && b.type === "str") {
-    return a.value < b.value ? -1 : a.value > b.value ? 1 : 0;
+    return compareStr(a.value, b.value);
   }
   if (a.type === "list" && b.type === "list") {
     const xs = a.obj.elements;
