@@ -36,12 +36,13 @@ function featureOf(node: ASTNode): string | undefined {
     return "unpacking in list displays ([*a, b])";
   }
   if (
-    (node instanceof StmtNS.FunctionDef ||
-      node instanceof ExprNS.Lambda ||
-      node instanceof ExprNS.MultiLambda) &&
-    node.parameters.some(p => p.isDoubleStarred)
+    node instanceof StmtNS.FunctionDef ||
+    node instanceof ExprNS.Lambda ||
+    node instanceof ExprNS.MultiLambda
   ) {
-    return "keyword parameters (**kwargs)";
+    if (node.parameters.some(p => p.isDoubleStarred)) return "keyword parameters (**kwargs)";
+    if (node.parameters.some(p => p.trailingComma))
+      return "a trailing comma after the last parameter";
   }
   if (node instanceof ExprNS.Attribute) return "attribute access (a.b)";
   if (node instanceof ExprNS.CompareChain) return "chained comparisons (a < b < c)";

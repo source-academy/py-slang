@@ -1005,11 +1005,7 @@ describe("the rest of the expressions of full Python", () => {
     });
 
     test("**kwargs must be last, and there is only one", () => {
-      for (const src of [
-        "def f(**kw, a):\n    pass",
-        "def f(**a, **b):\n    pass",
-        "def f(**kw,):\n    pass",
-      ]) {
+      for (const src of ["def f(**kw, a):\n    pass", "def f(**a, **b):\n    pass"]) {
         expect(() => parse(src + "\n")).toThrow();
       }
     });
@@ -1024,6 +1020,78 @@ describe("the rest of the expressions of full Python", () => {
       expect(first<StmtNS.Class>("class A(*bases, **kw):\n    pass").bases[1]).toBeInstanceOf(
         ExprNS.DoubleStarred,
       );
+    });
+  });
+
+  describe("trailing commas in parameter lists", () => {
+    const flags = (src: string) =>
+      first<StmtNS.FunctionDef>(src).parameters.map(p => !!p.trailingComma);
+
+    test("a trailing comma is allowed after any parameter list, including **kwargs", () => {
+      expect(flags("def f(a, b,):\n    pass")).toEqual([false, true]);
+      expect(flags("def f(a=1,):\n    pass")).toEqual([true]);
+      expect(flags("def f(**kw,):\n    pass")).toEqual([true]);
+      expect(flags("def f(a, **kw,):\n    pass")).toEqual([false, true]);
+      expect(flags("def f(a, *args,):\n    pass")).toEqual([false, true]);
+      expect((expression("lambda **kw,: 1") as ExprNS.Lambda).parameters[0].trailingComma).toBe(
+        true,
+      );
+      expect((expression("lambda a,: a") as ExprNS.Lambda).parameters[0].trailingComma).toBe(true);
+    });
+
+    test("without a trailing comma no parameter is flagged, whichever branch the parser tried", () => {
+      expect(flags("def f(a, b, c):\n    pass")).toEqual([false, false, false]);
+      expect(flags("def f(a, b=1, **kw):\n    pass")).toEqual([false, false, false]);
+      expect(flags("def f(a):\n    pass")).toEqual([false]);
+    });
+
+    test("a comma alone is not a parameter list", () => {
+      expect(() => parse("def f(,):\n    pass\n")).toThrow();
+      expect(() => parse("def f(a,,):\n    pass\n")).toThrow();
+    });
+
+    test("the sublanguages reject it, as they always did", () => {
+      expect(errorsIn("def f(a, b,):\n    return a", 3)[0].message).toContain(
+        "a trailing comma after the last parameter",
+      );
+      expect(errorsIn("g = lambda a,: a", 4)[0].message).toContain("trailing comma");
+      expect(errorsIn("def f(a, b):\n    return a", 4)).toEqual([]);
+    });
+  });
+
+  describe("starred operands of displays", () => {
+    test("an unparenthesized operand is a bitwise-or expression", () => {
+      for (const src of [
+        "[*x if c else y]",
+        "{*lambda: []}",
+        "(*x if c else y,)",
+        "[*a == b]",
+        "[*not a]",
+      ]) {
+        expect(() => parse(src + "\n")).toThrow();
+      }
+      for (const src of [
+        "[*(x if c else y)]",
+        "[*a | b, *c]",
+        "[*a + b]",
+        "[*f(x)]",
+        "{*a, *b}",
+        "(*a, *b)",
+      ]) {
+        expect(() => parse(src + "\n")).not.toThrow();
+      }
+    });
+
+    test("in a call, *e still takes an expression (Python: *x if c else y is fine there)", () => {
+      expect(() => parse("f(*x if c else y)\n")).not.toThrow();
+    });
+  });
+
+  describe("dictionary unpacking in a display", () => {
+    test("{**a} is named as unpacking, {1: 2} as a dictionary", () => {
+      expect(errorsIn("d = {**a}", 4)[0].message).toContain("dictionary unpacking (**)");
+      expect(errorsIn("d = {'k': 1, **a}", 3)[0].message).toContain("dictionary unpacking (**)");
+      expect(errorsIn("d = {1: 2}", 4)[0].message).toContain("dictionaries");
     });
   });
 

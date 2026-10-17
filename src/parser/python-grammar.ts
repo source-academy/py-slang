@@ -128,6 +128,17 @@ function checkArguments(args: ExprNS.Expr[]): ExprNS.Expr[] {
   return args;
 }
 
+// (A copy: Earley shares the parameters between the branches that it follows, and a branch that
+// has this comma may be ruled out by the next token, as in `def f(a, b, c)`.)
+const withTrailingComma = (params: FunctionParam[], comma: unknown): FunctionParam[] => {
+  if (!comma) return params;
+  const last = params[params.length - 1];
+  const flagged = Object.assign(Object.create(Object.getPrototypeOf(last)), last, {
+    trailingComma: true,
+  }) as FunctionParam;
+  return [...params.slice(0, -1), flagged];
+};
+
 /** A parameter without a default may not follow one with a default, unless `*args` came between
  * (then it is keyword-only). */
 function checkParameters(params: FunctionParam[]): FunctionParam[] {
@@ -910,13 +921,35 @@ const ParserRules = [
   { name: "blockInline", symbols: ["statementNonlocal"], postprocess: id },
   { name: "blockInline", symbols: ["statementAssert"], postprocess: id },
   { name: "blockInline", symbols: ["statementExpr"], postprocess: id },
-  { name: "rest_names", symbols: ["plain_params"], postprocess: ([ps]: [FunctionParam[]]) => ps },
+  { name: "rest_names$ebnf$1$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "rest_names$ebnf$1", symbols: ["rest_names$ebnf$1$subexpression$1"], postprocess: id },
+  { name: "rest_names$ebnf$1", symbols: [], postprocess: () => null },
   {
     name: "rest_names",
-    symbols: ["plain_params", { literal: "," }, "kw_param"],
-    postprocess: ([ps, , kw]: [FunctionParam[], moo.Token, FunctionParam]) => [...ps, kw],
+    symbols: ["plain_params", "rest_names$ebnf$1"],
+    postprocess: ([ps, comma]: [FunctionParam[], moo.Token | null]) => withTrailingComma(ps, comma),
   },
-  { name: "rest_names", symbols: ["kw_param"], postprocess: ([kw]: [FunctionParam]) => [kw] },
+  { name: "rest_names$ebnf$2$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "rest_names$ebnf$2", symbols: ["rest_names$ebnf$2$subexpression$1"], postprocess: id },
+  { name: "rest_names$ebnf$2", symbols: [], postprocess: () => null },
+  {
+    name: "rest_names",
+    symbols: ["plain_params", { literal: "," }, "kw_param", "rest_names$ebnf$2"],
+    postprocess: ([ps, , kw, comma]: [
+      FunctionParam[],
+      moo.Token,
+      FunctionParam,
+      moo.Token | null,
+    ]) => withTrailingComma([...ps, kw], comma),
+  },
+  { name: "rest_names$ebnf$3$subexpression$1", symbols: [{ type: "comma" }] },
+  { name: "rest_names$ebnf$3", symbols: ["rest_names$ebnf$3$subexpression$1"], postprocess: id },
+  { name: "rest_names$ebnf$3", symbols: [], postprocess: () => null },
+  {
+    name: "rest_names",
+    symbols: ["kw_param", "rest_names$ebnf$3"],
+    postprocess: ([kw, comma]: [FunctionParam, moo.Token | null]) => withTrailingComma([kw], comma),
+  },
   { name: "plain_params", symbols: ["param"], postprocess: ([p]: [FunctionParam]) => [p] },
   {
     name: "plain_params",
@@ -1628,7 +1661,7 @@ const ParserRules = [
   { name: "star_expression", symbols: ["expression"], postprocess: id },
   {
     name: "star_expression",
-    symbols: [{ type: "star" }, "expression"],
+    symbols: [{ type: "star" }, "expressionBitOr"],
     postprocess: ([star, e]: [moo.Token, ExprNS.Expr]) =>
       new ExprNS.Starred(toAstToken(star), e.endToken, e),
   },

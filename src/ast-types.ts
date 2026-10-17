@@ -5,6 +5,7 @@ import { PyComplexNumber } from "./types";
 export type FunctionParam = Token & {
   isStarred: boolean;
   isDoubleStarred?: boolean;
+  trailingComma?: boolean;
   default?: ExprNS.Expr;
 };
 export type AssignTarget = ExprNS.Variable | ExprNS.Subscript;

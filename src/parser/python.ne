@@ -95,6 +95,17 @@ function checkArguments(args: ExprNS.Expr[]): ExprNS.Expr[] {
   return args;
 }
 
+// (A copy: Earley shares the parameters between the branches that it follows, and a branch that
+// has this comma may be ruled out by the next token, as in `def f(a, b, c)`.)
+const withTrailingComma = (params: FunctionParam[], comma: unknown): FunctionParam[] => {
+  if (!comma) return params;
+  const last = params[params.length - 1];
+  const flagged = Object.assign(Object.create(Object.getPrototypeOf(last)), last, {
+    trailingComma: true,
+  }) as FunctionParam;
+  return [...params.slice(0, -1), flagged];
+};
+
 /** A parameter without a default may not follow one with a default, unless `*args` came between
  * (then it is keyword-only). */
 function checkParameters(params: FunctionParam[]): FunctionParam[] {
@@ -433,13 +444,15 @@ blockInline ->
 # (The order of the parameters is checked where a parameter list is complete, after its closing
 # parenthesis or before the colon of a lambda: Earley completes rules on prefixes of the input too,
 # which a later token may rule out.)
+# A trailing comma is allowed, as in Python (the last parameter then has `trailingComma`; the
+# sublanguages reject it).
 rest_names ->
-    plain_params
-      {% ([ps]: [FunctionParam[]]) => ps %}
-  | plain_params "," kw_param
-      {% ([ps,, kw]: [FunctionParam[], moo.Token, FunctionParam]) => [...ps, kw] %}
-  | kw_param
-      {% ([kw]: [FunctionParam]) => [kw] %}
+    plain_params (%comma):?
+      {% ([ps, comma]: [FunctionParam[], moo.Token | null]) => withTrailingComma(ps, comma) %}
+  | plain_params "," kw_param (%comma):?
+      {% ([ps,, kw, comma]: [FunctionParam[], moo.Token, FunctionParam, moo.Token | null]) => withTrailingComma([...ps, kw], comma) %}
+  | kw_param (%comma):?
+      {% ([kw, comma]: [FunctionParam, moo.Token | null]) => withTrailingComma([kw], comma) %}
 plain_params ->
     param
       {% ([p]: [FunctionParam]) => [p] %}
@@ -727,10 +740,12 @@ statementForUnpack -> "for" tuple_target "in" expression ":" block
 expressions -> star_expression ("," star_expression):* (%comma):?
   {% flatList %}
 
-# An element of a list, tuple or set display: an expression, or `*iterable` (unpacked in place).
+# An element of a list, tuple or set display: an expression, or `*iterable` (unpacked in place),
+# where an unparenthesized iterable is a bitwise-or expression (`[*(a if c else b)]`, not
+# `[*a if c else b]`), as in Python.
 star_expression ->
     expression  {% id %}
-  | %star expression
+  | %star expressionBitOr
       {% ([star, e]: [moo.Token, ExprNS.Expr]) => new ExprNS.Starred(toAstToken(star), e.endToken, e) %}
 
 # `{1, 2}`: a set display (`{}` is an empty dictionary)
