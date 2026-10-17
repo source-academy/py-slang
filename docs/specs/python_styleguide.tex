@@ -94,9 +94,9 @@ when you work side by side with others.
 
 \subsection*{How to break a line}
 
-Python ends a statement at the end of the line.
-\textbf{You can break a line only inside parentheses \lstinline{( )}, brackets \lstinline{[ ]}
-or braces \texttt{\{ \}}.}
+Python ends a statement at the end of the line. A line break is allowed in two places:
+\textbf{inside parentheses \lstinline{( )}, brackets \lstinline{[ ]} or braces
+\texttt{\{ \}}}, and after a \textbf{backslash} at the end of the line.
 Anywhere else, the line break ends the statement, and Python reports an error such as
 ``Unexpected token'' at the end of the line.
 
@@ -112,10 +112,18 @@ total = (first_amount +
          second_amount)
 \end{lstlisting}
 
-So when a long expression must be broken, put it in parentheses. This is why you will see
-\lstinline{return (} followed by an expression on several lines: the parentheses are what allows
-the line breaks (see \emph{Conditional expressions} below). Do not put parentheses around short
-expressions: write \lstinline{return x + 1}, not \lstinline{return (x + 1)}.
+\begin{lstlisting}
+# legal, but avoid: a backslash at the end of the line
+total = first_amount + \
+        second_amount
+\end{lstlisting}
+
+\textbf{Prefer parentheses to the backslash.} The backslash looks out of place, and it is
+fragile: nothing may follow it, not even a space or a comment, or the line is an error that is
+hard to see. So when a long expression must be broken, put it in parentheses. This is why you will
+see \lstinline{return (} followed by an expression on several lines: the parentheses are what
+allows the line breaks (see \emph{Conditional expressions} below). Do not put parentheses around
+short expressions: write \lstinline{return x + 1}, not \lstinline{return (x + 1)}.
 
 Break lines after commas in arguments and parameters, and before \lstinline{if} and
 \lstinline{else} in conditional expressions. When you break a long expression before or after a
@@ -221,7 +229,8 @@ Do not put parentheses around the condition: write \lstinline{if x > 0:}, not
 
 \section*{Conditional expressions}
 
-If a conditional expression fits in the line, keep it there.
+A conditional expression is meant for a short choice between two values. If it fits in the line,
+keep it there.
 
 \begin{lstlisting}
 # good style
@@ -231,12 +240,38 @@ def absolute(x):
 aspect_ratio = 4 / 3 if landscape else 3 / 4
 \end{lstlisting}
 
-If it does not fit, put it in parentheses, and put the parts that start with \lstinline{if} or
-\lstinline{else} on lines of their own, aligned with the first part. Do not use more lines than
-needed.
+\textbf{Long conditional expressions are not natural in Python.} If the parts are lengthy, or you
+need more than one \lstinline{else}, use a conditional statement instead, with
+\lstinline{return} in each branch.
 
 \begin{lstlisting}
 # good style
+def ackermann(x, y):
+    if y == 0:
+        return 0
+    elif x == 0:
+        return 2 * y
+    elif y == 1:
+        return 2
+    else:
+        return ackermann(x - 1, ackermann(x, y - 1))
+\end{lstlisting}
+
+Use a conditional expression that does not fit in the line only if you need an expression, for
+example in the body of a lambda expression, or as an argument. Then put it in parentheses, and put
+the parts that start with \lstinline{if} or \lstinline{else} on lines of their own, aligned with the
+first part. Do not use more lines than needed.
+
+\begin{lstlisting}
+# acceptable: an expression is needed here
+count = lambda jacket: (
+    count_buttons(jacket) if is_checkered(jacket)
+    else 1
+)
+\end{lstlisting}
+
+\begin{lstlisting}
+# bad style: a statement would be more natural
 def ackermann(x, y):
     return (
         0 if y == 0
@@ -254,21 +289,16 @@ def ackermann(x, y):
 
 \begin{lstlisting}
 # bad style: too much indentation
-def ackermann(x, y):
-    return (
-        0 if y == 0
-        else 2 * y if x == 0
-            else 2 if y == 1
-                else ackermann(x - 1, ackermann(x, y - 1))
-    )
+count = lambda jacket: (
+    count_buttons(jacket) if is_checkered(jacket)
+        else 1
+)
 \end{lstlisting}
 
 \begin{lstlisting}
 # illegal Python: the line break is not inside parentheses
-def ackermann(x, y):
-    return 0 if y == 0
-    else 2 * y if x == 0
-    else ackermann(x - 1, ackermann(x, y - 1))
+count = lambda jacket: count_buttons(jacket) if is_checkered(jacket)
+    else 1
 \end{lstlisting}
 
 \section*{Arguments and parameters}
@@ -402,7 +432,7 @@ Many error messages of the Python interpreter come from formatting. Check, in th
 \hline
 \textbf{Message or symptom} & \textbf{Likely cause}\\
 \hline
-``Unexpected token'' at the end of a line & A line break outside parentheses: put the expression in parentheses, or keep it on one line.\\
+``Unexpected token'' at the end of a line & A line break outside parentheses: put the expression in parentheses, or keep it on one line. (A space after a backslash at the end of a line is an error, too, with the message ``invalid syntax''.)\\
 \texttt{IndentationError} & Inconsistent indentation: indent every block by four spaces, and do not mix tabs and spaces.\\
 ``Unexpected token: indent'' & A line is indented that should not be: line it up with the previous statement.\\
 A missing colon & Every \texttt{def}, \texttt{if}, \texttt{elif}, \texttt{else}, \texttt{while} and \texttt{for} line ends with a colon.\\
