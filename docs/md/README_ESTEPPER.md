@@ -83,6 +83,63 @@ function extends instead. The explanation says so ("the new frame would have no 
 body runs in the global environment"). The global frame is the only frame that can be empty and be drawn.
 It starts empty and grows as the program assigns names or defines functions.
 
+## Loops
+
+A loop does not run "inside" one step. The e-stepper unrolls it, so that the program always shows all
+that is left to do, and you can follow the loop one iteration at a time.
+
+### `while`
+
+`while test: body` is first **unfolded** into the `if` statement of the textbook rule: the loop stays
+in the program, in full, at the end of the body.
+
+```python
+while test:                    if test:
+    body              ==>          body
+                                   while test:
+                                       body
+```
+
+The step explains it ("Unfolding the while loop"). Then the program behaves like any `if`: the
+names of `test` are looked up one by one, the test is evaluated, and the `if` chooses.
+
+- If the test is `True`, the body runs, statement by statement, in the current frame. When the body is
+  finished ("Finished the loop body, back to the loop"), the `while` statement that ended the body is
+  next, and it is unfolded again with the *new* values of the names. A loop with *n* iterations is
+  unfolded *n* + 1 times.
+- If the test is `False`, the whole `if` disappears from the program ("the loop ends").
+
+### `for`
+
+In Python §3 and §4, a `for` loop must use `range`: `for x in range(n)`, `range(a, b)` or
+`range(a, b, step)`.
+
+1. The arguments of `range` are evaluated first. Then the loop is shown with all three numbers,
+   for example `for x in range(0, 2, 1):` ("Evaluated range: from 0 to 2 in steps of 1").
+2. Each iteration starts with a test whether the current number is still in the range. If it is,
+   the program gets the assignment `x = 0` (the first iteration), the body, and then the loop for the
+   rest of the range, `for x in range(1, 2, 1):`. If it is not, the loop disappears.
+3. The assignment of the loop variable is a step of its own, like any assignment: the binding of
+   `x` is created in, or updated in, the frame that the loop runs in. As in Python, a loop has no
+   frame of its own: `x` and the names assigned in the body are the frame's names, and stay there
+   after the loop. In a function, that is the frame of the call; in the main program, it is the global frame.
+
+### `break`, `continue` and `return`
+
+- **`break`** ends the loop: the rest of the body, and the unfolded loop after it, disappear
+  ("Evaluated break: the loop ends").
+- **`continue`** skips the rest of the body, and the loop goes on with the next unfolding (`while`)
+  or the next number in the range (`for`).
+- **`return`** in a loop ends the call, as anywhere in a function body: the loop disappears with the
+  rest of the body, and the bracket of the call is replaced by the returned value.
+
+### Many iterations
+
+Every iteration takes a few dozen steps, since each name is looked up in a step of its own, so a
+loop of a hundred iterations needs thousands of steps. The stepper stops at the step limit
+(1000 steps by default; you can change it in the control bar). To see how a loop works, step through
+a few iterations with small numbers, and use `break` or a smaller `range` for the rest.
+
 ## Example
 
 ```python
