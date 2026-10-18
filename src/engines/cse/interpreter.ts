@@ -62,6 +62,7 @@ import {
   isNode,
   pyDefineVariable,
   pyGetGlobalVariable,
+  resolvesToGlobal,
   pyGetNonlocalVariable,
   pyGetVariable,
   pySetNonlocalVariable,
@@ -639,7 +640,7 @@ const cmdEvaluators: CmdEvaluators = {
   ) {
     const name = variable.name.lexeme;
     const currentEnv = currentEnvironment(context);
-    const isGlobal = currentEnv.closure?.globalVariables.has(name) ?? false;
+    const isGlobal = resolvesToGlobal(currentEnv, name);
     const isNonlocal = currentEnv.closure?.nonlocalVariables.has(name) ?? false;
     const value = isGlobal
       ? pyGetGlobalVariable(code, context, name, variable)
@@ -673,10 +674,12 @@ const cmdEvaluators: CmdEvaluators = {
     _isPrelude: boolean,
   ) {
     if (assignNode.target instanceof ExprNS.Subscript) {
+      // As in Python, the right-hand side is evaluated first, then the list, then the index
+      // (the control is a stack: the last item pushed runs first).
       control.push(instrCreator.listAssmtInstr(assignNode.target));
-      control.push(assignNode.value);
       control.push(assignNode.target.index);
       control.push(assignNode.target.value);
+      control.push(assignNode.value);
       return;
     }
 
@@ -965,9 +968,10 @@ const cmdEvaluators: CmdEvaluators = {
     stash: Stash,
     _isPrelude: boolean,
   ) {
-    const value = stash.pop();
+    // The stash holds the value, the list and the index, in the order they were evaluated.
     const index = stash.pop();
     const list = stash.pop();
+    const value = stash.pop();
 
     evaluateListAssignment(code, instr.srcNode as StmtNS.Assign, context, list, index, value);
   },

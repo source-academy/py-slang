@@ -310,6 +310,17 @@ export function pyGetVariable(code: string, context: Context, name: string, node
   handleRuntimeError(context, new NameError(code, name, node as ExprNS.Variable));
 }
 
+// Whether reading `name` from `env` reaches the module's binding: the function declares it
+// `global`, or, as in CPython, an enclosing function does (the name is global for the functions
+// nested in it too) and no function in between binds it as a local (py-slang#580).
+export function resolvesToGlobal(env: Environment, name: string): boolean {
+  for (let e: Environment | null = env; e; e = e.tail) {
+    if (e.closure?.globalVariables.has(name)) return true;
+    if (Object.prototype.hasOwnProperty.call(e.head, name)) return false;
+  }
+  return false;
+}
+
 // Reads `name` starting from the module-level (programEnvironment), bypassing any
 // enclosing function frames. Used when a function declares `global name`.
 export function pyGetGlobalVariable(
