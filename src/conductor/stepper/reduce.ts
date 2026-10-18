@@ -401,6 +401,28 @@ function excludedFromEquality(node: StepNode): boolean {
  * dispatch above and never reach here at the top level, but recursing into a pair's elements can hit
  * any combination, so every case is handled here too.
  */
+/**
+ * A pair compares its components by `x is y or x == y` (the Python reference; PyPy's identity of a
+ * float is its bit pattern), so `pair(math_nan, 1) == pair(math_nan, 1)` is True, while
+ * `math_nan == math_nan` on its own stays False (py-slang#579).
+ */
+function elementEquals(op: string, left: StepNode, right: StepNode): boolean {
+  if (left.type === "Literal" && right.type === "Literal") {
+    const l = left.value;
+    const r = right.value;
+    if (typeof l === "number" && Object.is(l, r)) return true;
+    if (
+      isComplexValue(l) &&
+      isComplexValue(r) &&
+      Object.is(l.real, r.real) &&
+      Object.is(l.imag, r.imag)
+    ) {
+      return true;
+    }
+  }
+  return structuralEquals(op, left, right);
+}
+
 function structuralEquals(op: string, left: StepNode, right: StepNode): boolean {
   if (excludedFromEquality(left) || excludedFromEquality(right)) {
     // Not `reportBinaryTypeError`: it silently no-ops when a side's `valueTypeName` is `null` (its
@@ -415,7 +437,7 @@ function structuralEquals(op: string, left: StepNode, right: StepNode): boolean 
   if (isPairNode(left) && isPairNode(right)) {
     const le = left.elements as StepNode[];
     const re = right.elements as StepNode[];
-    return structuralEquals(op, le[0], re[0]) && structuralEquals(op, le[1], re[1]);
+    return elementEquals(op, le[0], re[0]) && elementEquals(op, le[1], re[1]);
   }
   if (isPairNode(left) || isPairNode(right)) return false;
   if (isEmptyList(left) || isEmptyList(right)) return isEmptyList(left) && isEmptyList(right);
