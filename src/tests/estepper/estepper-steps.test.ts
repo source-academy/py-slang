@@ -575,7 +575,7 @@ describe("frame ids in the CSE machine snapshots", () => {
       const environments = step.cse!.environments as Frame[];
       const ids = new Set(environments.map(e => e.id));
       // Every live frame the e-stepper shows is in the snapshot under the same id (garbage
-      // frames are left out of snapshots; a host shows them as dead frames from earlier steps)...
+      // frames are left out of snapshots; a host shows them as unreachable frames from earlier steps)...
       for (const f of step.frames) if (!f.isGarbage) expect(ids.has(f.id)).toBe(true);
       // ...and parents and closures refer to frames by those ids.
       for (const e of environments) {
