@@ -24,7 +24,6 @@ import {
   ConditionNotBoolError,
   IndexError,
   ListIndexTypeError,
-  RecursionError,
   TypeError as PyTypeError,
   UnsupportedOperandTypeError,
   UserError,
@@ -76,13 +75,6 @@ import {
   val,
 } from "./terms";
 import { describeValue, exprText, stmtHeadText, type TextContext, valueText } from "./text";
-
-/**
- * How many calls may be waiting for their result at once. CPython's limit is 1000, but the term of a
- * call nested deeper than this to be reduced and drawn would overflow the JavaScript stack (about 450
- * calls in Node), and the program would then end with an error of the JavaScript engine.
- */
-export const MAX_CALL_DEPTH = 300;
 
 /** A binding read by a name lookup during a step. */
 export interface Lookup {
@@ -163,8 +155,6 @@ function hasUnfiredBreakpoint(stmt: Stmt | undefined): boolean {
 }
 
 export class Machine {
-  /** How many function bodies enclose the term being reduced: the calls waiting for their result. */
-  private blockDepth = 0;
   readonly context: Context;
   readonly programEnv: Environment;
   readonly labels: Labels;
@@ -579,10 +569,6 @@ export class Machine {
     const display = this.t({ ...e, callee: val(callee), args: rawArgs.map(val) });
 
     if (callee.type === "closure" && !this.isLibrary(callee.closure)) {
-      if (this.blockDepth >= MAX_CALL_DEPTH) {
-        this.enter(env);
-        handleRuntimeError(this.context, new RecursionError(this.code, e.src));
-      }
       const closure = callee.closure;
       const frame = createEnvironment(this.code, this.context, closure, args, e.src);
       this.createdEnvs.push(frame);
@@ -720,13 +706,7 @@ export class Machine {
   }
 
   private async reduceBlock(e: BlockExpr): Promise<ExprStep | null> {
-    this.blockDepth++;
-    let outcome: Awaited<ReturnType<Machine["stepList"]>>;
-    try {
-      outcome = await this.stepList(e.body, e.env);
-    } finally {
-      this.blockDepth--;
-    }
+    const outcome = await this.stepList(e.body, e.env);
     switch (outcome.kind) {
       case "step": {
         // `return f(x)` where `f(x)` just became the frame of the call: a tail call. The callee's

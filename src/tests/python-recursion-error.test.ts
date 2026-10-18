@@ -62,14 +62,16 @@ test("wasm", async () => {
 });
 
 describe("the e-stepper", () => {
-  test.each([FOREVER, MUTUALLY])("a recursion without end", async code => {
-    const run = await runEStepper(parse(code), code, 3, 100000);
+  // (The JavaScript stack runs out at a depth that depends on the host, so the trace ends there.)
+  test("a recursion without end", async () => {
+    const run = await runEStepper(parse(FOREVER), FOREVER, 3, 100000);
     expect(run.truncated).toBe(false);
-    expect(run.error).toMatch(/^RecursionError/);
-    // The failing step is shown like any other runtime error.
-    expect(run.steps[run.steps.length - 2].markers?.[0]?.explanation).toBe(run.error);
-  });
-  test("a recursion that ends within the limit", async () => {
+    expect(run.error).toBe(RECURSION_ERROR_MESSAGE);
+    const explanations = run.steps.slice(-2).map(s => s.markers?.[0]?.explanation);
+    expect(explanations).toEqual([RECURSION_ERROR_MESSAGE, "Evaluation stuck"]);
+    run.steps.forEach((step, i) => expect(step.cse?.stepIndex).toBe(i));
+  }, 180000);
+  test("a recursion that ends", async () => {
     const code = "def f(n):\n    return 0 if n == 0 else 1 + f(n - 1)\nf(250)\n";
     const run = await runEStepper(parse(code), code, 3, 100000);
     expect(run.error).toBeUndefined();

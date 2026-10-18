@@ -81,7 +81,5 @@ print(1 + 2)  	# Outputs: 3
     of \texttt{list[index] = value}; native Python evaluates the value first.
   \item The WebAssembly implementation has 64-bit integers, a lower limit for the
     depth of recursion, and does not support \texttt{global} in nested functions.
-  \item The environment stepper (\S3 and \S4) raises a \texttt{RecursionError} when 300 calls
-    are waiting for their result, where native Python allows about 1000.
   \end{itemize}
 \end{description}
