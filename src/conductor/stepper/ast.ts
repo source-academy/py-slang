@@ -12,6 +12,8 @@
  * they survive the runner→host channel and so reductions can rebuild trees cheaply.
  */
 
+import { toPythonFloat } from "../../stdlib/utils";
+
 /** A single estree-shaped stepper node. Plain JSON: a `type` discriminator plus child fields. */
 export interface StepNode {
   type: string;
@@ -131,6 +133,8 @@ export function isModuleFunctionNode(node: StepNode): boolean {
  * for an integer-valued float (so `4 / 2` reads `2.0`, like Python). Shared by the reducer and the
  * builtin library so all float results display consistently. */
 export function numberRepr(n: number, pyFloat: boolean): string {
+  // A float reads as Python's `repr` does: `-0.0`, `1e+308`, `1.5e-05`.
+  if (pyFloat) return toPythonFloat(n);
   if (Number.isNaN(n)) return "nan";
   if (n === Infinity) return "inf";
   if (n === -Infinity) return "-inf";

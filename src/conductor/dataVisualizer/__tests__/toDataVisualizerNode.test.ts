@@ -8,6 +8,18 @@ function num(value: number): Value {
   return { type: "number", value };
 }
 
+/** Strings as Python writes them (`repr`): what the visualizer draws is a valid literal (py-slang#600). */
+const QUOTED_STRINGS: [string, string][] = [
+  ["hi", "'hi'"],
+  ["", "''"],
+  ['say "hi"', "'say \"hi\"'"],
+  ["it's", '"it\'s"'],
+  ["both ' and \"", "'both \\' and \"'"],
+  ["back\\slash", "'back\\\\slash'"],
+  ["two\nlines", "'two\\nlines'"],
+  ["caf\u00e9 \u4e2d", "'caf\u00e9 \u4e2d'"],
+];
+
 describe("toDataVisualizerNode", () => {
   test("converts leaf values", () => {
     const refs = createRefIdAllocator();
@@ -18,8 +30,8 @@ describe("toDataVisualizerNode", () => {
     });
     expect(toDataVisualizerNode({ type: "string", value: "hi" }, refs)).toEqual({
       type: "leaf",
-      displayValue: "hi",
-      label: "string",
+      displayValue: "'hi'",
+      label: "quoted_string",
     });
     expect(toDataVisualizerNode({ type: "bool", value: true }, refs)).toEqual({
       type: "leaf",
@@ -103,5 +115,17 @@ describe("toDataVisualizerNode", () => {
     const errorValue: Value = { type: "error", message: "boom" };
     const node: SerializedDataVisualizerNode = toDataVisualizerNode(errorValue, refs);
     expect(node).toEqual({ type: "leaf", displayValue: "boom", label: "error" });
+  });
+
+  describe("strings are sent quoted, as Python writes them", () => {
+    test.each(QUOTED_STRINGS)("%j", (text, quoted) => {
+      const refs = createRefIdAllocator();
+      const leaf = { type: "leaf", displayValue: quoted, label: "quoted_string" };
+      expect(toDataVisualizerNode({ type: "string", value: text }, refs)).toEqual(leaf);
+      const pair: Value = { type: "list", value: [{ type: "string", value: text }, num(1)] };
+      const node = toDataVisualizerNode(pair, refs);
+      if (node.type !== "array") throw new Error("expected an array node");
+      expect(node.children[0]).toEqual(leaf);
+    });
   });
 });

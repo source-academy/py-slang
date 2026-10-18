@@ -59,7 +59,9 @@ function decodeArgument(
       const offset = ptr < dataEnd ? ptr : ptr + GC_OBJECT_HEADER_SIZE;
       return {
         type: "string",
-        value: new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, len)),
+        value: new TextDecoder("utf8", { ignoreBOM: true }).decode(
+          new Uint8Array(memory.buffer, offset, len),
+        ),
       };
     }
     // Only the *type* of the remaining kinds matters (no bridged function
