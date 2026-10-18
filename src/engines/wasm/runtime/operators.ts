@@ -1012,14 +1012,18 @@ export const LIST_STRUCT_EQ_FX = wasm
         wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$y_val"), local.get("$i")),
       ),
 
-      // The same float (the same bit pattern, as in PyPy) is identical, hence equal, even a nan:
-      // `[math_nan] == [math_nan]` is True, while `math_nan == math_nan` stays False.
+      // The same float (the same bit pattern, as in PyPy) or the same complex number (the same
+      // allocation) is identical, hence equal, even with a nan inside: `[math_nan] == [math_nan]`
+      // is True, while `math_nan == math_nan` stays False.
       wasm
         .if(
           i32.and(
             i32.and(
-              i32.eq(local.get("$ex_tag"), i32.const(TYPE_TAG.FLOAT)),
-              i32.eq(local.get("$ey_tag"), i32.const(TYPE_TAG.FLOAT)),
+              i32.eq(local.get("$ex_tag"), local.get("$ey_tag")),
+              i32.or(
+                i32.eq(local.get("$ex_tag"), i32.const(TYPE_TAG.FLOAT)),
+                i32.eq(local.get("$ex_tag"), i32.const(TYPE_TAG.COMPLEX)),
+              ),
             ),
             i64.eq(local.get("$ex_val"), local.get("$ey_val")),
           ),

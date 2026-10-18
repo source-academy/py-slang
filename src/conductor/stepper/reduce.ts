@@ -406,13 +406,18 @@ function excludedFromEquality(node: StepNode): boolean {
  * `math_nan == math_nan` on its own stays False (py-slang#579).
  */
 function elementEquals(op: string, left: StepNode, right: StepNode): boolean {
-  if (
-    left.type === "Literal" &&
-    right.type === "Literal" &&
-    typeof left.value === "number" &&
-    Object.is(left.value, right.value)
-  ) {
-    return true;
+  if (left.type === "Literal" && right.type === "Literal") {
+    const l = left.value;
+    const r = right.value;
+    if (typeof l === "number" && Object.is(l, r)) return true;
+    if (
+      isComplexValue(l) &&
+      isComplexValue(r) &&
+      Object.is(l.real, r.real) &&
+      Object.is(l.imag, r.imag)
+    ) {
+      return true;
+    }
   }
   return structuralEquals(op, left, right);
 }

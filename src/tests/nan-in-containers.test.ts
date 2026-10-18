@@ -43,6 +43,16 @@ const PAIR_CASES: [string, string][] = [
   ["pair(1, 2) == pair(1, 2)", "True"],
   ["pair(0.0, 1) == pair(-0.0, 1)", "True"],
 ];
+// A complex number with a nan, shared by two containers (the same object in CPython).
+const COMPLEX_PAIR_CASES: [string, string][] = [
+  ["pair(c, 1) == pair(c, 1)", "True"],
+  ["pair(c, 1) != pair(c, 1)", "False"],
+  ["c == c", "False"],
+];
+const COMPLEX_LIST_CASES: [string, string][] = [
+  ["[c] == [c]", "True"],
+  ["[c] != [c]", "False"],
+];
 const LIST_CASES: [string, string][] = [
   ["[math_nan] == [math_nan]", "True"],
   ["[math_nan] != [math_nan]", "False"],
@@ -57,10 +67,18 @@ describe.each(ENGINES)("a nan in a container: %s", (_, run) => {
       const code = "a = pair(math_nan, None)\nprint(a == a)\nprint(a != a)\n";
       expect(await run(code, chapter)).toBe("True\nFalse\n");
     });
+    test.each(COMPLEX_PAIR_CASES)("%s, c = complex(math_nan, 0)", async (expression, expected) => {
+      const code = `c = complex(math_nan, 0)\nprint(${expression})\n`;
+      expect(await run(code, chapter)).toBe(expected + "\n");
+    });
   });
   describe.each([3, 4])("§%i", chapter => {
     test.each(LIST_CASES)("%s", async (expression, expected) => {
       expect(await run(`print(${expression})\n`, chapter)).toBe(expected + "\n");
+    });
+    test.each(COMPLEX_LIST_CASES)("%s, c = complex(math_nan, 0)", async (expression, expected) => {
+      const code = `c = complex(math_nan, 0)\nprint(${expression})\n`;
+      expect(await run(code, chapter)).toBe(expected + "\n");
     });
   });
 });
@@ -74,5 +92,9 @@ describe("a nan in a pair: the stepper (§2)", () => {
   test("a pair equals itself, nan inside or not", async () => {
     const code = "a = pair(math_nan, None)\na == a\n";
     expect(await evaluatePython(parse(code))).toBe("True");
+  });
+  test.each(COMPLEX_PAIR_CASES)("%s, c = complex(math_nan, 0)", async (expression, expected) => {
+    const code = `c = complex(math_nan, 0)\n${expression}\n`;
+    expect(await evaluatePython(parse(code))).toBe(expected);
   });
 });
