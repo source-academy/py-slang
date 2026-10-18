@@ -411,6 +411,15 @@ function isNaNValue(v: PyValue): boolean {
  * types are simply unequal.
  */
 /**
+ * The same number twice: a float or a complex with the same bit patterns (PyPy's identity of a
+ * number), so that a nan is equal to itself inside a container (py-slang#579).
+ */
+function sameNumber(a: PyValue, b: PyValue): boolean {
+  if (typeof a === "number") return Object.is(a, b);
+  return isComplex(a) && isComplex(b) && Object.is(a.real, b.real) && Object.is(a.imag, b.imag);
+}
+
+/**
  * `==`/`!=`. `restrict` is true at chapters 1-2 (bool/function excluded
  * entirely — docs/specs/python_typing_middle_12.tex) and false at chapter 3+,
  * where equality is total over any operand pair — mirrors
@@ -450,7 +459,10 @@ function pyEquals(l: PyValue, r: PyValue, restrict: boolean, enclosing?: string)
     // separate cross-type case to write, because there's no separate type.
     if (l === r) return true;
     if (l.length !== r.length) return false;
-    return l.every((el, i) => pyEquals(el, r[i], restrict));
+    // A container compares its elements by `x is y or x == y` (the Python reference; PyPy's
+    // identity of a float is its bit pattern), so a nan in a pair equals the same nan in
+    // another pair, while `math_nan == math_nan` on its own stays False.
+    return l.every((el, i) => sameNumber(el, r[i]) || pyEquals(el, r[i], restrict));
   }
   return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }

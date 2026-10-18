@@ -34,6 +34,14 @@ Compared to Python \S 1, Python \S 2 has the following changes:
 \input python_typing_back
 \input python_typing_tail_12
 
+The operators \texttt{\textbf{==}} and \texttt{\textbf{!=}} on pairs compare the corresponding
+components with \texttt{\textbf{==}}, with one exception: a \texttt{\textbf{nan}} component is
+equal to a \texttt{\textbf{nan}} component (and a complex number is equal to another if each of
+their parts is equal or both are \texttt{\textbf{nan}}). Thus
+\texttt{pair(math\_nan, 1) == pair(math\_nan, 1)} evaluates to \texttt{\textbf{True}},
+whereas \texttt{math\_nan == math\_nan} evaluates to \texttt{\textbf{False}}. (Native Python differs
+for two \texttt{\textbf{nan}}s that were computed separately: it does not consider them equal.)
+
 \input python_standard
 
 \input python_misc
