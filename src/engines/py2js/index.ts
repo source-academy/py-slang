@@ -552,6 +552,17 @@ export class Py2JsSession {
 
   /** Compile and run one chunk against the persistent globals. */
   async runChunk(code: string): Promise<void> {
+    try {
+      await this.runChunkWithPrelude(code);
+    } catch (e: unknown) {
+      // (The standalone entry points do this in formatCaughtError.)
+      if (isStackOverflow(e))
+        throw new Py2JsRuntimeError("RecursionError", RECURSION_ERROR_MESSAGE);
+      throw e;
+    }
+  }
+
+  private async runChunkWithPrelude(code: string): Promise<void> {
     if (!this.preludeLoaded) {
       this.preludeLoaded = true;
       const preludeText = this.groups

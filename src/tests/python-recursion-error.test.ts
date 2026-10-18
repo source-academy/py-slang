@@ -4,7 +4,7 @@
  * tail call, which the engines run in constant space.
  */
 import { runEStepper } from "../conductor/estepper/getSteps";
-import { runCodePy2Js } from "../engines/py2js";
+import { Py2JsSession, runCodePy2Js } from "../engines/py2js";
 import { compileToWasmAndRun } from "../engines/wasm";
 import { WASM_GROUPS } from "../engines/wasm/groups";
 import { isStackOverflow, RECURSION_ERROR_MESSAGE } from "../errors/recursion";
@@ -35,6 +35,10 @@ describe("the helper", () => {
     }
     expect(isStackOverflow(caught)).toBe(true);
     expect(isStackOverflow(new RangeError("Invalid array length"))).toBe(false);
+    // Firefox's form of it.
+    const firefox = Object.assign(new Error("too much recursion"), { name: "InternalError" });
+    expect(isStackOverflow(firefox)).toBe(true);
+    expect(isStackOverflow(new Error("too much recursion"))).toBe(false);
     expect(isStackOverflow(new Error("Maximum call stack size exceeded"))).toBe(false);
   });
 });
@@ -51,6 +55,12 @@ describe.each([
     const text = await message(() => run(FOREVER));
     if (_ !== "cse") expect(text).toContain(RECURSION_ERROR_MESSAGE);
   });
+});
+
+test("a py2js session (the conductor evaluator)", async () => {
+  const session = new Py2JsSession(4);
+  const text = await message(() => session.runChunk(FOREVER));
+  expect(text).toContain(RECURSION_ERROR_MESSAGE);
 });
 
 test("wasm", async () => {
