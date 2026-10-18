@@ -35,6 +35,7 @@ import {
   toFloat,
   trueDivideInts,
 } from "../../stdlib/py-arithmetic";
+import { compareCodePoints } from "../../stdlib/py-strings";
 
 import {
   type ComplexValue,
@@ -397,13 +398,13 @@ function stringBinary(op: string, l: string, r: string): StepNode | null {
     case "!=":
       return boolLiteral(l !== r);
     case "<":
-      return boolLiteral(l < r);
+      return boolLiteral(compareCodePoints(l, r) < 0);
     case ">":
-      return boolLiteral(l > r);
+      return boolLiteral(compareCodePoints(l, r) > 0);
     case "<=":
-      return boolLiteral(l <= r);
+      return boolLiteral(compareCodePoints(l, r) <= 0);
     case ">=":
-      return boolLiteral(l >= r);
+      return boolLiteral(compareCodePoints(l, r) >= 0);
     default:
       return null;
   }

@@ -7,6 +7,7 @@ import {
   toFloat,
   trueDivideInts,
 } from "../../stdlib/py-arithmetic";
+import { compareCodePoints } from "../../stdlib/py-strings";
 import { numericCompare, pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types";
 import { executePrimitive } from "./builtins";
@@ -1405,10 +1406,11 @@ export class PVMLInterpreter {
     if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
       const l = left as string;
       const r = right as string;
-      if (op === "<") this.push(l < r);
-      else if (op === ">") this.push(l > r);
-      else if (op === "<=") this.push(l <= r);
-      else this.push(l >= r);
+      const c = compareCodePoints(l, r);
+      if (op === "<") this.push(c < 0);
+      else if (op === ">") this.push(c > 0);
+      else if (op === "<=") this.push(c <= 0);
+      else this.push(c >= 0);
       return;
     }
     throw new UnsupportedOperandTypeError(this.variant, op, leftType, rightType);
@@ -1430,10 +1432,11 @@ export class PVMLInterpreter {
     if (leftType === PVMLType.STRING && rightType === PVMLType.STRING) {
       const l = left as string;
       const r = right as string;
-      if (op === "<") this.push(l < r);
-      else if (op === ">") this.push(l > r);
-      else if (op === "<=") this.push(l <= r);
-      else this.push(l >= r);
+      const c = compareCodePoints(l, r);
+      if (op === "<") this.push(c < 0);
+      else if (op === ">") this.push(c > 0);
+      else if (op === "<=") this.push(c <= 0);
+      else this.push(c >= 0);
       return;
     }
     throw new UnsupportedOperandTypeError(this.variant, op, leftType, rightType);

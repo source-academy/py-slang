@@ -64,6 +64,7 @@ import {
   toFloat,
   trueDivideInts,
 } from "../../stdlib/py-arithmetic";
+import { compareCodePoints } from "../../stdlib/py-strings";
 import { numericCompare, pythonMod } from "../cse/utils";
 
 export type PyValue =
@@ -510,13 +511,13 @@ function pyOrder(
   if (typeof l === "string" && typeof r === "string") {
     switch (op) {
       case "<":
-        return l < r;
+        return compareCodePoints(l, r) < 0;
       case "<=":
-        return l <= r;
+        return compareCodePoints(l, r) <= 0;
       case ">":
-        return l > r;
+        return compareCodePoints(l, r) > 0;
       default:
-        return l >= r;
+        return compareCodePoints(l, r) >= 0;
     }
   }
   if (!isNum(l) || !isNum(r)) unsupported(op, l, r, !universal, enclosing);
