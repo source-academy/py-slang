@@ -132,9 +132,22 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
         walk(stmt.body, enclosing, true, inFunction);
       } else if (stmt instanceof StmtNS.FunctionDef) {
         const scope = scopeOf(stmt);
-        checkDeclarations(stmt, scope, enclosing);
+        checkDeclarations(new Set(stmt.parameters.map(p => p.lexeme)), scope, enclosing);
         walk(stmt.body, [...enclosing, scope], false);
       } else if (stmt instanceof StmtNS.Class) {
+        // A class body has declarations of its own (and no parameters); the functions around the
+        // class are where a `nonlocal` finds its binding.
+        const names = {
+          assigned: new Set<string>(),
+          globals: new Set<string>(),
+          nonlocals: new Set<string>(),
+        };
+        collect(stmt.body, names.assigned, names.globals, names.nonlocals);
+        checkDeclarations(
+          new Set(),
+          { locals: names.assigned, globals: names.globals, nonlocals: names.nonlocals },
+          enclosing,
+        );
         walk(stmt.body, enclosing, false, false);
       } else if (stmt instanceof StmtNS.Decorated) {
         walk([stmt.definition], enclosing, inLoop, inFunction);
@@ -240,10 +253,13 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
     });
   };
   const bind = (name: string): void => void seen.set(name, "assigned");
+  // A name in a target is a binding; what else is in a target (`a[i]`, `a.b`) is used.
   const bindAll = (target: ExprNS.Expr): void => {
-    const names = new Set<string>();
-    bindTargets(target, names);
-    names.forEach(bind);
+    if (target instanceof ExprNS.Variable) bind(target.name.lexeme);
+    else if (target instanceof ExprNS.Tuple || target instanceof ExprNS.List) {
+      for (const e of target.elements) bindAll(e);
+    } else if (target instanceof ExprNS.Starred) bindAll(target.value);
+    else use(target);
   };
   for (const stmt of stmts) {
     if (stmt instanceof StmtNS.Global || stmt instanceof StmtNS.NonLocal) {
@@ -339,8 +355,7 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
 }
 
 /** The errors in the `global` and `nonlocal` declarations of a function, which CPython reports at compile time. */
-function checkDeclarations(fn: StmtNS.FunctionDef, scope: ScopeInfo, enclosing: ScopeInfo[]): void {
-  const params = new Set(fn.parameters.map(p => p.lexeme));
+function checkDeclarations(params: Set<string>, scope: ScopeInfo, enclosing: ScopeInfo[]): void {
   for (const name of scope.globals) {
     if (params.has(name))
       throw new PyError("SyntaxError", `name '${name}' is parameter and global`);

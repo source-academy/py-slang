@@ -1115,3 +1115,45 @@ describeIfCPython(
     });
   },
 );
+
+describeIfCPython(
+  "review of the first slice, eleventh round: tiny quotients, class declarations, targets",
+  () => {
+    test.each<[string, string]>([
+      [
+        "a quotient of big ints far below one",
+        "print(1 / 2 ** 960, 1 / 2 ** 1070, 1 / 2 ** 1080, 3 / 2 ** 1000, -1 / 2 ** 1000, 7 / 10 ** 400)\n",
+      ],
+      [
+        "a quotient of big ints near the edge",
+        "print(2 ** 1100 / 2 ** 1090, 10 ** 308 / 10 ** 3, (2 ** 1024 - 1) / 2 ** 10)\n",
+      ],
+      [
+        "nonlocal without a binding in a class in a function",
+        "print('before')\ndef f():\n    class C:\n        nonlocal x\nprint('after')\n",
+      ],
+      ["nonlocal at module level in a class", "print('before')\nclass C:\n    nonlocal x\n"],
+      [
+        "global and nonlocal in a class",
+        "print('before')\ndef f():\n    x = 1\n    class C:\n        global x\n        nonlocal x\n",
+      ],
+      [
+        "a use in a deletion target before global",
+        "print('before')\ndef f():\n    del a[x]\n    global x\n",
+      ],
+      [
+        "a use in an attribute deletion target before global",
+        "print('before')\ndef f():\n    del x.y\n    global x\n",
+      ],
+      ["a plain del before global", "print('before')\ndef f():\n    del x\n    global x\n"],
+      [
+        "a use in a subscript target of unpacking before global",
+        "print('before')\ndef f():\n    a[x], y = 1, 2\n    global x\n",
+      ],
+      [
+        "an annotation of a name before global stays an error",
+        "print('before')\ndef f():\n    y: x = 1\n    global x\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);

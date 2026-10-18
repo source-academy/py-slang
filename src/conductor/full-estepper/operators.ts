@@ -265,11 +265,8 @@ function trueDivInt(a: bigint, b: bigint): number {
   const negative = a < 0n !== b < 0n;
   const x = a < 0n ? -a : a;
   const y = b < 0n ? -b : b;
-  const bits = (n: bigint) => n.toString(2).length;
-  // Divide with 64 more bits than a double has, then scale.
-  const shift = Math.max(0, 64 + bits(y) - bits(x));
-  const q = (x << BigInt(shift)) / y;
-  const result = Number(q) / 2 ** shift;
+  // (scaledQuotient scales in steps, so a quotient far below 1 stays finite.)
+  const result = scaledQuotient(x, y, 0);
   if (!Number.isFinite(result)) {
     throw new PyError("OverflowError", "integer division result too large for a float");
   }
@@ -596,26 +593,35 @@ let cachedPoints = 0;
 /** The most characters the cache keeps (it is emptied at the end of each run as well). */
 const MAX_CACHED_POINTS = 8_000_000;
 
+let largeText: string | null = null;
+let largePoints: string[] = [];
+
 export function clearStringCache(): void {
   pointCache.clear();
   cachedPoints = 0;
+  largeText = null;
+  largePoints = [];
 }
 
 /** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
 function codePoints(text: string): string[] {
   let points = pointCache.get(text);
-  if (!points) {
-    points = Array.from(text);
-    while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {
-      const oldest = pointCache.keys().next().value as string;
-      cachedPoints -= (pointCache.get(oldest) as string[]).length;
-      pointCache.delete(oldest);
-    }
-    if (points.length <= MAX_CACHED_POINTS) {
-      pointCache.set(text, points);
-      cachedPoints += points.length;
-    }
+  if (points) return points;
+  if (largeText === text) return largePoints;
+  points = Array.from(text);
+  if (points.length > MAX_CACHED_POINTS) {
+    // Too long for the cache, but a traversal of it needs it for as long as it lasts.
+    largeText = text;
+    largePoints = points;
+    return points;
   }
+  while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {
+    const oldest = pointCache.keys().next().value as string;
+    cachedPoints -= (pointCache.get(oldest) as string[]).length;
+    pointCache.delete(oldest);
+  }
+  pointCache.set(text, points);
+  cachedPoints += points.length;
   return points;
 }
 
