@@ -4,6 +4,7 @@ import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-vi
 import { Value } from "../../engines/cse/stash";
 import { toPythonString } from "../../stdlib/utils";
 import { noneNode } from "./noneNode";
+import { stringNode } from "./stringNode";
 
 /**
  * Converts one py-slang runtime {@link Value} into a {@link SerializedDataVisualizerNode}. Purely
@@ -43,10 +44,11 @@ export function toDataVisualizerNode(
       }
       return { type: "function", refId, displayValue: toPythonString(value) };
     }
+    case "string":
+      return stringNode(value.value);
     case "number":
     case "bool":
     case "complex":
-    case "string":
     case "error":
     case "bigint":
     case "opaque":

@@ -207,6 +207,11 @@ function emitCall(c: ExprNS.Call, a: boolean, ctx: EmitCtx): string {
     : `(() => { const __callee = ${callee}; const __args = [${args}]; __py.setCurrentCall(${start}, ${end}); return __py.call(__callee, __args); })()`;
 }
 
+/** The JavaScript BigInt literal of an int literal: `0000` (valid in Python) is `0n` in JavaScript. */
+function bigIntSource(text: string): string {
+  return /^0[xXoObB]/.test(text) ? `${text}n` : `${BigInt(text)}n`;
+}
+
 /**
  * Emit a function value (def or lambda). `scope` is the new function scope
  * (params + locals); it is pushed around each body emission — twice in dual
@@ -248,7 +253,7 @@ function emitFunctionValue(
 function emitExpr(e: ExprNS.Expr, a: boolean, ctx: EmitCtx): string {
   switch (e.kind) {
     case "BigIntLiteral":
-      return `${(e as ExprNS.BigIntLiteral).value}n`;
+      return bigIntSource((e as ExprNS.BigIntLiteral).value);
     case "Literal": {
       const v = (e as ExprNS.Literal).value;
       // number literals here are always Python floats (ints arrive as BigIntLiteral)
