@@ -168,14 +168,12 @@ function serialiseFunction(f: PVMLIR, targetMaxOpcode?: number): ImFunction {
         // here (PVMLIR.toInstructions() resolves the in-memory pool-index
         // encoding back to the real object before this function ever sees
         // it — same as LGCS's string constants), so no pool lookup is
-        // needed; just write both components as inline float32s, matching
-        // getInstructionSize(LGCC)'s 9-byte size. Precision loss from
-        // double (PyComplexNumber) to float32 here is deliberate — native
-        // Pynter's own complex type is single-precision throughout, to
-        // match its existing scalar float width.
+        // needed; just write both components as inline float64s, matching
+        // getInstructionSize(LGCC)'s 17-byte size (Pynter 0.3 and later;
+        // 0.2 took float32s).
         const complex = instr.arg1 as PyComplexNumber;
-        b.putF(32, complex.real);
-        b.putF(32, complex.imag);
+        b.putF(64, complex.real);
+        b.putF(64, complex.imag);
         break;
       }
       case OpCodes.CALLA:
@@ -537,18 +535,18 @@ export function disassemble(p: Uint8Array): PVMLProgram {
               "this opcode is browser-pathway-only and assemble() refuses to encode it",
           );
         case OpCodes.LGCC: {
-          // Two inline float32s (real, imag), matching how serialiseFunction
+          // Two inline float64s (real, imag), matching how serialiseFunction
           // writes them above — reconstructs a PyComplexNumber directly
           // rather than a pool index, since the disassembled Instruction
           // shape carries the resolved value either way (see LGCS's string
           // case just above, which similarly reconstructs the string
           // itself, not an offset).
-          if (cursor + 8 > p.byteLength) {
+          if (cursor + 16 > p.byteLength) {
             throw new Error("Truncated instruction");
           }
-          const real = view.getFloat32(cursor, true);
-          const imag = view.getFloat32(cursor + 4, true);
-          cursor += 8;
+          const real = view.getFloat64(cursor, true);
+          const imag = view.getFloat64(cursor + 8, true);
+          cursor += 16;
           arg1 = new PyComplexNumber(real, imag);
           break;
         }

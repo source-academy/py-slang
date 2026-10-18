@@ -141,14 +141,14 @@ export enum OpCodes {
   // indexes PVMLIR's `complexes` constant pool (arg1) — mirrors LGCBI's
   // bigint-constant-pool encoding, needed because arg1s (Float64Array) can't
   // carry a real+imaginary pair directly. On the wire (native Pynter target,
-  // pvml-assembler.ts), it serialises differently: both float32 components
+  // pvml-assembler.ts), it serialises differently: both float64 components
   // inlined directly in the instruction (mirrors LGCF64's "constant lives
   // right in the instruction stream" pattern instead) — native Pynter's own
   // op_lgc_c (0x64, matching this opcode's own numeric value exactly, see
   // pynter/vm/include/pynter/opcode.h) decodes it that way, not via a pool
   // index. See pynter/vm/include/pynter/heap_obj.h's siheap_complex_t for the
-  // native heap representation (single-precision, unlike the double-
-  // precision PyComplexNumber the browser pathway uses).
+  // native heap representation (double-precision with Pynter's default
+  // 64-bit NaN-boxing, single-precision with the compact PYNTER_NANBOX32).
   LGCC = 100,
   // Generic exponentiation (`**`), all numeric types (int/float/complex) —
   // added alongside complex numbers since raising to a complex power, or a
@@ -300,7 +300,9 @@ export function getInstructionSize(opcode: OpCodes): number {
 
     case OpCodes.LDCF64:
     case OpCodes.LGCF64:
-    // LGCC's wire size (9: opcode + 4-byte real + 4-byte imag, inlined
+      return 9;
+
+    // LGCC's wire size (17: opcode + 8-byte real + 8-byte imag, inlined
     // directly) only applies to native-Pynter serialisation — this
     // function's only caller is pvml-assembler.ts, which never runs for the
     // browser pathway (PVMLInterpreter executes PVMLIR/Instruction objects
@@ -309,7 +311,7 @@ export function getInstructionSize(opcode: OpCodes): number {
     // representation there being a small pool-index instead (see this
     // opcode's own doc comment above).
     case OpCodes.LGCC:
-      return 9;
+      return 17;
 
     default:
       return 1;
