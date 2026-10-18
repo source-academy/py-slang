@@ -33,12 +33,16 @@ function literal(s: string): string {
 }
 
 // The code points where UTF-16 order and code point order differ: a surrogate pair (above U+FFFF)
-// against the code points from U+E000 to U+FFFF; and neighbours.
+// against the code points from U+E000 to U+FFFF; lone surrogates (below U+E000); and neighbours.
 const COMPARED = [
   "",
   "a",
   "ab",
   "b",
+  "\ud800",
+  "\udbff",
+  "\udc00",
+  "\udfff",
   "퟿",
   "",
   "",
@@ -142,12 +146,16 @@ describeIfPython("strings as in CPython", () => {
   const reprs = REPRS.map(s => `[${literal(s)}]`);
   const wantedReprs = cpython(reprs);
 
-  describe.each(ENGINES)("%s", (_, run) => {
+  describe.each(ENGINES)("%s", (engine, run) => {
     test("comparison by code point", async () => {
-      const output = await run(comparisons.map(c => `print(${c})\n`).join(""));
+      // (wasm keeps its strings as UTF-8, which has no lone surrogates.)
+      const cases = comparisons
+        .map((c, i) => ({ expression: c, want: wantedComparisons[i] }))
+        .filter(({ expression }) => engine !== "wasm" || !/\\u[dD][89a-fA-F]/.test(expression));
+      const output = await run(cases.map(({ expression }) => `print(${expression})\n`).join(""));
       const got = output.trim().split("\n");
-      const failures = comparisons
-        .map((c, i) => (got[i] === wantedComparisons[i] ? "" : `${c}: ${got[i]}`))
+      const failures = cases
+        .map(({ expression, want }, i) => (got[i] === want ? "" : `${expression}: ${got[i]}`))
         .filter(f => f !== "");
       expect(failures).toEqual([]);
     });

@@ -6,22 +6,22 @@
  */
 
 /**
- * The first code unit that differs decides, after moving the surrogates (U+D800–U+DFFF, which make up
- * the code points above U+FFFF) above U+E000–U+FFFF, where they belong by code point.
+ * -1, 0 or 1 as `a` is less than, equal to or greater than `b` by code point, as in Python. A pair of
+ * surrogates is one code point above U+FFFF; a surrogate on its own is the code point of that
+ * value (below U+E000), as in a Python string such as `'\ud800'`.
  */
-const byCodePoint = (unit: number): number =>
-  unit >= 0xe000 ? unit - 0x800 : unit >= 0xd800 ? unit + 0x2000 : unit;
-
-/** -1, 0 or 1 as `a` is less than, equal to or greater than `b` by code point, as in Python. */
 export function compareCodePoints(a: string, b: string): number {
   if (a === b) return 0;
-  const n = Math.min(a.length, b.length);
-  for (let i = 0; i < n; i++) {
-    const x = a.charCodeAt(i);
-    const y = b.charCodeAt(i);
-    if (x !== y) return byCodePoint(x) < byCodePoint(y) ? -1 : 1;
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    const x = a.codePointAt(i) as number;
+    const y = b.codePointAt(j) as number;
+    if (x !== y) return x < y ? -1 : 1;
+    i += x > 0xffff ? 2 : 1;
+    j += y > 0xffff ? 2 : 1;
   }
-  return a.length < b.length ? -1 : 1;
+  return i < a.length ? 1 : j < b.length ? -1 : 0;
 }
 
 /** The characters that Python's `repr` escapes: control, format, surrogate, private-use, unassigned,
