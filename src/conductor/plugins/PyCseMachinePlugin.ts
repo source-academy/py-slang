@@ -121,7 +121,8 @@ export interface SnapshotIds {
    * For a list's `metadata.envId`: the frame the list belongs to, where a host draws it. Without
    * it a list belongs to the frame whose binding is serialized first, so it moves from frame to
    * frame as the active frame changes. A host looks for a list's drawing next to a binding in
-   * this frame, so it must be one of the frames serialized.
+   * this frame, so it must be one of the frames serialized, and bind the list itself (a list
+   * that is only nested in a list of the frame is drawn beside that list, in its frame).
    */
   homes?: (list: object) => Environment | undefined;
   /**
@@ -274,13 +275,17 @@ function serializeValue(
       );
     }
     path.add(v);
-    const elements = v.value.map((el: Value) => serializeValue(el, envId, ids, path));
+    // A list nested in another is drawn beside it (a host draws a list beside a reference from
+    // a binding or a list of the frame it belongs to), so, unless a frame binds it itself, it
+    // belongs to the frame of the list around it.
+    const home = homeId(v, envId, ids);
+    const elements = v.value.map((el: Value) => serializeValue(el, home, ids, path));
     path.delete(v);
     return withObjectId(
       {
         displayValue: formatValue(v),
         label: "list",
-        metadata: { id: getListId(v), envId: homeId(v, envId, ids), elements },
+        metadata: { id: getListId(v), envId: home, elements },
       },
       ids.objects?.(v),
     );

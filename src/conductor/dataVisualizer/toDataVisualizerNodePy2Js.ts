@@ -3,6 +3,7 @@ import type { SerializedDataVisualizerNode } from "@sourceacademy/common-data-vi
 
 import { PyOpaque, type PyValue, pyStr } from "../../engines/py2js/runtime";
 import { noneNode } from "./noneNode";
+import { stringNode } from "./stringNode";
 
 /**
  * Converts one py2js runtime {@link PyValue} into a {@link SerializedDataVisualizerNode}. The py2js
@@ -22,7 +23,8 @@ import { noneNode } from "./noneNode";
  * every list, regardless of length, becomes the wire format's N-ary `"array"` node; the host
  * distinguishes "pair" from "list" by `children.length`, not by tag. Leaf labels ("bigint", "number",
  * "bool", "string", "complex", "opaque") match the CSE adapter's `Value.type` labels exactly, since
- * the host's `formatLeaf` special-cases `label === "string"` for quoting and nothing else.
+ * the host's `formatLeaf` special-cases `label === "string"` for quoting and nothing else (strings
+ * are sent already quoted, with their own label: see `stringNode`).
  */
 export function toDataVisualizerNodePy2Js(
   value: PyValue,
@@ -36,7 +38,7 @@ export function toDataVisualizerNodePy2Js(
     case "boolean":
       return { type: "leaf", displayValue: pyStr(value), label: "bool" };
     case "string":
-      return { type: "leaf", displayValue: pyStr(value), label: "string" };
+      return stringNode(value);
     case "function": {
       const { refId, alreadySeen } = refs.get(value);
       if (alreadySeen) return { type: "ref", refId };

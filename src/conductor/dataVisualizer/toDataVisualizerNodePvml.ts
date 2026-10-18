@@ -5,6 +5,7 @@ import { pvmlBoxToCseValue } from "../../engines/pvml/cse-interop";
 import { isPVMLObject, type PVMLBoxType } from "../../engines/pvml/types";
 import { toPythonString } from "../../stdlib/utils";
 import { noneNode } from "./noneNode";
+import { stringNode } from "./stringNode";
 
 /**
  * Converts one PVML runtime value ({@link PVMLBoxType}) into a {@link SerializedDataVisualizerNode}.
@@ -56,5 +57,6 @@ export function toDataVisualizerNodePvml(
     }
   }
   const cseValue = pvmlBoxToCseValue(value);
+  if (cseValue.type === "string") return stringNode(cseValue.value);
   return { type: "leaf", displayValue: toPythonString(cseValue), label: cseValue.type };
 }

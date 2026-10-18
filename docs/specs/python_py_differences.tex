@@ -44,4 +44,42 @@ print(1 + 2)  	# Outputs: 3
   \begin{lstlisting}
 1 + 2    	# Outputs nothing
   \end{lstlisting}
+
+\item[{Tail calls:}]
+  A call in tail position runs in constant space, so that a recursive function can
+  run for any number of iterations: \texttt{f(10000)} with a tail-recursive
+  \texttt{f} works, where native Python raises a \texttt{RecursionError} at a depth
+  of about 1000.
+
+\item[{Conditions and logical operators:}]
+  The conditions of \texttt{if}, \texttt{elif} and \texttt{while}, and the operands
+  of \texttt{not}, and the first operand of \texttt{and} and \texttt{or}, must be
+  booleans, as the tables of operator types specify; native Python accepts any value
+  (truthiness). \texttt{if 1:} and \texttt{0 or 'x'} are errors.
+
+\item[{Dynamic type checks:}]
+  The operators only accept the types of the tables of operator types. Native
+  Python accepts more: \texttt{True + True}, \texttt{'ab' * 3}, \texttt{[1] < [2]}
+  and \texttt{min([3, 1, 2])} are errors here.
+
+\item[{Numbers inside lists:}]
+  Numbers are compared by value, also when they are inside a list or pair, so that a
+  \texttt{nan} in a list equals every \texttt{nan} in the other list, also one that
+  was computed separately (native Python says False for two nans that were computed
+  separately).
+
+\item[{Limits of some implementations:}]
+  These differences from native Python are due to the current state of the implementations,
+  not to the language, and will be removed.
+  \begin{itemize}
+  \item A power with a float exponent that is not an integer can differ from Python's
+    in the last digit, and a negative base with a fractional exponent gives \texttt{nan}
+    instead of a complex number.
+  \item The escape sequence \texttt{\textbackslash U} of strings is not read.
+  \item The implementations that run on the Pynter virtual machine (PVML, native Pynter)
+    and the WebAssembly implementation evaluate the list, the index and then the value
+    of \texttt{list[index] = value}; native Python evaluates the value first.
+  \item The WebAssembly implementation has 64-bit integers, a lower limit for the
+    depth of recursion, and does not support \texttt{global} in nested functions.
+  \end{itemize}
 \end{description}
