@@ -534,7 +534,8 @@ export function unaryOp(op: string, a: PyValue): PyValue {
   if (op === "not") return bool(!truthy(a));
   const n = asNum(a);
   if (op === "-" && n) return n.float ? float(-n.f) : int(-n.i);
-  if (op === "+" && n) return n.float ? float(n.f) : int(n.i);
+  // (CPython returns the very same float for `+x`.)
+  if (op === "+" && n) return n.float ? a : int(n.i);
   if (op === "~" && n && !n.float) return int(-n.i - 1n);
   throw new PyError("TypeError", `bad operand type for unary ${op}: '${typeName(a)}'`);
 }

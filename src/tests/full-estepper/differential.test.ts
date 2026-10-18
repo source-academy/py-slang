@@ -1362,3 +1362,54 @@ describeIfCPython("review of the first slice, sixteenth round: separate nans", (
     ["a nan and a number", `${nan}print([n] == [1], [1] == [n], 1 in [n])\n`],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython(
+  "review of the first slice, seventeenth round: annotated globals, repeated keywords, unary plus",
+  () => {
+    test.each<[string, string]>([
+      [
+        "an annotated assignment after global",
+        "print('before')\ndef f():\n    global x\n    x: int = 1\nprint('after')\n",
+      ],
+      [
+        "an annotation without a value of a global name",
+        "print('before')\ndef f():\n    global x\n    x: int\n",
+      ],
+      [
+        "an annotated assignment after nonlocal",
+        "print('before')\ndef g():\n    x = 0\n    def f():\n        nonlocal x\n        x: int = 1\n",
+      ],
+      [
+        "an annotated assignment in a class with a global name",
+        "print('before')\nclass C:\n    global x\n    x: int = 2\n",
+      ],
+      [
+        "an annotated assignment of another name is fine",
+        "def f():\n    global x\n    y: int = 1\nprint('ok')\n",
+      ],
+      [
+        "an annotated global name in an inner function is not that of the outer one",
+        "def f():\n    global x\n    def g():\n        x: int = 1\nprint('ok')\n",
+      ],
+      ["a repeated keyword argument", "print('before')\nf(x=1, x=2)\n"],
+      ["a repeated keyword argument after a double star", "print('before')\nf(**a, x=1, x=2)\n"],
+      [
+        "a repeated keyword argument in a nested call",
+        "print('before')\nprint(f(y=1, g(z=1, z=2)))\n",
+      ],
+      [
+        "unary plus keeps the same float",
+        "n = float('nan')\nprint([+n] == [n], +n in [n], [+(+n)] == [n])\n",
+      ],
+      ["unary minus makes a new float", "n = float('nan')\nprint([-n] == [n], -n in [n])\n"],
+      ["unary plus of other numbers", "print(+1, +1.5, +True, +0.0, -0.0, +(-0.0))\n"],
+    ])("%s", (_, code) => same(code));
+
+    test.each([
+      ["a global name annotated at module level", "global x\nx: int = 1\n"],
+      ["distinct keyword arguments", "f(x=1, y=2)\n"],
+    ])("%s is not a syntax error (the constructs are unsupported yet)", (_, code) => {
+      expect(evaluate(code, 1000).error?.kind).not.toBe("SyntaxError");
+    });
+  },
+);

@@ -175,9 +175,16 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
 function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
   // The scopes of the program: a function or a lambda (where `yield` is fine) and a class body
   // (where it is not), with everything inside them. A node belongs to the innermost scope.
-  type Scope = { isFunction: boolean; inside: Set<unknown>; comprehension?: string };
+  type Scope = {
+    isFunction: boolean;
+    inside: Set<unknown>;
+    comprehension?: string;
+    /** The names that a `def` or a class body declares `global` or `nonlocal`. */
+    declared?: { globals: Set<string>; nonlocals: Set<string> };
+  };
   const scopes: Scope[] = [];
   const yields: unknown[] = [];
+  const annotated: StmtNS.AnnAssign[] = [];
   for (const stmt of program) {
     traverseAST(stmt, n => {
       const isFunction =
@@ -209,7 +216,25 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
         }
         const inside = new Set<unknown>();
         traverseAST(n, d => d !== n && !defaults.has(d) && inside.add(d));
-        scopes.push({ isFunction, inside });
+        let declared: Scope["declared"];
+        if (n instanceof StmtNS.FunctionDef) declared = scopeOf(n);
+        else if (n instanceof StmtNS.Class) {
+          const names = { globals: new Set<string>(), nonlocals: new Set<string>() };
+          collect(n.body, new Set<string>(), names.globals, names.nonlocals);
+          declared = names;
+        }
+        scopes.push({ isFunction, inside, declared });
+      }
+      if (n instanceof StmtNS.AnnAssign) annotated.push(n);
+      if (n instanceof ExprNS.Call) {
+        const seen = new Set<string>();
+        for (const a of n.args) {
+          if (!(a instanceof ExprNS.Keyword)) continue;
+          if (seen.has(a.name.lexeme)) {
+            throw new PyError("SyntaxError", `keyword argument repeated: ${a.name.lexeme}`);
+          }
+          seen.add(a.name.lexeme);
+        }
       }
       if (n instanceof ExprNS.BigIntLiteral && /^0[0-9]+$/.test(String(n.value))) {
         if (/[1-9]/.test(String(n.value))) {
@@ -231,13 +256,29 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
       if (n instanceof ExprNS.Yield) yields.push(n);
     });
   }
-  for (const y of yields) {
+  const innermostOf = (node: unknown): Scope | undefined => {
     let innermost: Scope | undefined;
     for (const scope of scopes) {
-      if (scope.inside.has(y) && (!innermost || scope.inside.size < innermost.inside.size)) {
+      if (scope.inside.has(node) && (!innermost || scope.inside.size < innermost.inside.size)) {
         innermost = scope;
       }
     }
+    return innermost;
+  };
+  // A name that is annotated cannot be declared `global` or `nonlocal` (in a function or a class).
+  for (const a of annotated) {
+    const declared = innermostOf(a)?.declared;
+    if (!declared || !(a.target instanceof ExprNS.Variable)) continue;
+    const name = a.target.name.lexeme;
+    if (declared.globals.has(name)) {
+      throw new PyError("SyntaxError", `annotated name '${name}' can't be global`);
+    }
+    if (declared.nonlocals.has(name)) {
+      throw new PyError("SyntaxError", `annotated name '${name}' can't be nonlocal`);
+    }
+  }
+  for (const y of yields) {
+    const innermost = innermostOf(y);
     if (innermost?.comprehension) {
       throw new PyError("SyntaxError", `'yield' inside ${innermost.comprehension}`);
     }
