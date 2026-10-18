@@ -18,6 +18,19 @@ The operators
     and \texttt{\textbf{False}} system-wide, and that all lists and functions have their
     own identity once created.
 
+    The operators
+    \texttt{\textbf{==}} and \texttt{\textbf{!=}} on lists compare corresponding
+    elements $x$ and $y$ as \texttt{\textbf{$x$ is $y$ or $x$ == $y$}}, and so does
+    \texttt{\textbf{in}}, as in Python: an element is equal to itself, even if it is
+    not equal to itself on its own. In particular, a \texttt{\textbf{nan}} that is
+    referred to twice is equal to itself inside a list:
+    \texttt{[math\_nan] == [math\_nan]} evaluates to \texttt{\textbf{True}},
+    whereas \texttt{math\_nan == math\_nan} evaluates to \texttt{\textbf{False}}.
+    Whether two numbers that were computed separately are identical is left open, as in Python.
+    In this language, numbers are identical if they have the same value, as in PyPy: a
+    \texttt{\textbf{nan}} inside a list is equal to every \texttt{\textbf{nan}} inside the other
+    list, also if the two were computed separately, which CPython does not consider equal.
+
     List access \texttt{\textit{list}\texttt{\textbf{[}}\textit{index}\texttt{\textbf{]}}}
     and list assignment
     \texttt{\textit{list}\texttt{\textbf{[}}\textit{index}\texttt{\textbf{]} = }\textit{value}}
