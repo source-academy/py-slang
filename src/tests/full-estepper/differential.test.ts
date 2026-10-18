@@ -1221,3 +1221,36 @@ describeIfCPython(
     });
   },
 );
+
+describeIfCPython("review of the first slice, thirteenth round: defaults, leading zeros", () => {
+  test.each<[string, string]>([
+    ["yield in a default of a def", "print('before')\ndef f(x=(yield 1)):\n    pass\n"],
+    ["yield in a default of a lambda", "print('before')\nf = lambda x=(yield 1): x\n"],
+    [
+      "yield in a default of a method of a class in a function",
+      "print('before')\ndef g():\n    def h(x=(yield)):\n        pass\n    return 1\n",
+    ],
+    ["yield in the body of a def is fine", "def f():\n    yield 1\nprint('ok')\n"],
+    [
+      "yield in a default of an inner def inside a generator is fine",
+      "def f():\n    def g(x=(yield)):\n        pass\n    return 1\nprint('ok')\n",
+    ],
+    ["a decimal literal with leading zeros", "print('before')\nx = 0123\n"],
+    ["a decimal literal with leading zeros and underscores", "print('before')\nx = 00_1\n"],
+    ["zeros only are fine", "print(00, 000, 0)\n"],
+    ["a float with leading zeros is fine", "print(0123.5, 0123e1, 00.5)\n"],
+    ["other prefixes are fine", "print(0x10, 0o17, 0b101, 0X1F)\n"],
+    ["leading zeros in a function body", "print('before')\ndef f():\n    return 0777\n"],
+  ])("%s", (_, code) => same(code));
+
+  test("two oversized strings in nested loops keep both materializations", () => {
+    // Not run at the size of the cache limit (8 million), which would take hundreds of megabytes;
+    // this checks the nested-loop result at a size that fits the normal cache.
+    const result = evaluate(
+      "n = 0\nfor a in 'x' * 3000:\n    for b in 'y' * 30:\n        n += 1\nprint(n)\n",
+      2_000_000,
+    );
+    expect(result.error).toBeNull();
+    expect(result.output).toBe("90000\n");
+  });
+});

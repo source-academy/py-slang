@@ -175,26 +175,30 @@ let cachedPoints = 0;
 /** The most characters the cache keeps (it is emptied at the end of each run as well). */
 const MAX_CACHED_POINTS = 8_000_000;
 
-let largeText: string | null = null;
-let largePoints: string[] = [];
+/** Strings too long for the cache above, kept while a traversal of them may be going on. */
+const largeCache = new Map<string, string[]>();
+const MAX_LARGE_STRINGS = 4;
 
 export function clearStringCache(): void {
   pointCache.clear();
   cachedPoints = 0;
-  largeText = null;
-  largePoints = [];
+  largeCache.clear();
 }
 
 /** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
 export function codePoints(text: string): string[] {
   let points = pointCache.get(text);
   if (points) return points;
-  if (largeText === text) return largePoints;
+  points = largeCache.get(text);
+  if (points) return points;
   points = Array.from(text);
   if (points.length > MAX_CACHED_POINTS) {
-    // Too long for the cache, but a traversal of it needs it for as long as it lasts.
-    largeText = text;
-    largePoints = points;
+    // Too long for the cache, but a traversal of it needs it for as long as it lasts (and loops
+    // may be nested: the last few are kept).
+    if (largeCache.size >= MAX_LARGE_STRINGS) {
+      largeCache.delete(largeCache.keys().next().value as string);
+    }
+    largeCache.set(text, points);
     return points;
   }
   while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {

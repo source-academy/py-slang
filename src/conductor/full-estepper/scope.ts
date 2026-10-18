@@ -169,7 +169,8 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
 
 /**
  * Compile-time errors that live in expressions: a decimal literal of more than 4300 digits (CPython
- * has the same limit for the source as for `int(text)`), and `yield` outside a function.
+ * has the same limit for the source as for `int(text)`) or with leading zeros, and `yield` outside
+ * a function.
  */
 function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
   // The scopes of the program: a function or a lambda (where `yield` is fine) and a class body
@@ -183,9 +184,22 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
         n instanceof ExprNS.Lambda ||
         n instanceof ExprNS.MultiLambda;
       if (isFunction || n instanceof StmtNS.Class) {
+        // The defaults of parameters are evaluated in the scope around the function.
+        const defaults = new Set<unknown>();
+        if (isFunction) {
+          for (const p of n.parameters) if (p.default) traverseAST(p.default, d => defaults.add(d));
+        }
         const inside = new Set<unknown>();
-        traverseAST(n, d => d !== n && inside.add(d));
+        traverseAST(n, d => d !== n && !defaults.has(d) && inside.add(d));
         scopes.push({ isFunction, inside });
+      }
+      if (n instanceof ExprNS.BigIntLiteral && /^0[0-9]+$/.test(String(n.value))) {
+        if (/[1-9]/.test(String(n.value))) {
+          throw new PyError(
+            "SyntaxError",
+            "leading zeros in decimal integer literals are not permitted; use an 0o prefix for octal integers",
+          );
+        }
       }
       if (n instanceof ExprNS.BigIntLiteral && /^[0-9]+$/.test(String(n.value))) {
         const digits = String(n.value).length;
