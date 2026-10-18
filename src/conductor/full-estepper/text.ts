@@ -81,7 +81,7 @@ function plainExprText(e: Expr, labels: Labels): string {
   const sub = (x: Expr, min: number) => exprText(x, labels, min);
   switch (e.k) {
     case "val":
-      return valueText(e.v, labels);
+      return e.label ?? valueText(e.v, labels);
     case "name":
       return e.name;
     case "unary":

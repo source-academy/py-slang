@@ -58,7 +58,16 @@ function asciiDigits(text: string): string {
 
 function intFromString(text: string): PyValue {
   const t = asciiDigits(text.trim());
-  if (/^[+-]?\d+(_\d+)*$/.test(t)) return int(BigInt(t.replace(/_/g, "")));
+  if (/^[+-]?\d+(_\d+)*$/.test(t)) {
+    const digits = t.replace(/[+\-_]/g, "").length;
+    if (digits > 4300) {
+      throw new PyError(
+        "ValueError",
+        `Exceeds the limit (4300 digits) for integer string conversion: value has ${digits} digits`,
+      );
+    }
+    return int(BigInt(t.replace(/_/g, "")));
+  }
   throw new PyError("ValueError", `invalid literal for int() with base 10: ${strRepr(text)}`);
 }
 

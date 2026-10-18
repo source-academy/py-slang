@@ -899,3 +899,50 @@ describe("membership in a huge range does not scan it", () => {
     ).toBe("False True False True False\n");
   });
 });
+
+describeIfCPython(
+  "review of the first slice, seventh round: shadowed built-ins, digits, powers, cycles",
+  () => {
+    const shadow = "def f():\n    global print\n    print = 1\n    return 2\n";
+    test.each<[string, string]>([
+      ["a built-in callee is loaded before the arguments run", `${shadow}print(f())\n`],
+      [
+        "a built-in callee shadowed by a later argument, with another argument",
+        `${shadow}print(1, f(), 3)\n`,
+      ],
+      [
+        "a built-in operand is loaded before the next operand runs",
+        "def f():\n    global len\n    len = 0\n    return 1\nprint([len, f()][0] is not 0)\n",
+      ],
+      [
+        "a built-in in a list literal",
+        "def f():\n    global len\n    len = 0\n    return 1\nx = [len, f()]\nprint(x[0]([1, 2]), len)\n",
+      ],
+      [
+        "a built-in operand of a comparison",
+        "def f():\n    global len\n    len = 0\n    return 1\nprint(len == f(), len)\n",
+      ],
+      [
+        "a user function called after a global rebinding",
+        "def g():\n    return 'old'\ndef f():\n    global g\n    g = lambda: 'new'\n    return 2\nprint(g(), f(), g())\nprint(g(), f())\n",
+      ],
+      ["int of a string of 4300 digits", "print(len(str(int('1' * 4300))))\n"],
+      ["int of a string of 4301 digits", "int('1' * 4301)\n"],
+      [
+        "int of a string with underscores and a sign near the limit",
+        "print(len(str(int('-' + '1_' * 4299 + '1'))))\nint('+' + '1_' * 4300 + '1')\n",
+      ],
+      [
+        "negative infinity to fractional powers",
+        "inf = float('inf')\nprint(-inf ** 0.5, (-inf) ** 0.5, (-inf) ** 1.5, (-inf) ** -0.5, (-inf) ** 0.0)\n",
+      ],
+      ["equal cyclic lists", "a = [None]\na[0] = a\nb = [None]\nb[0] = b\nprint(a == b)\n"],
+      ["ordered cyclic lists", "a = [None]\na[0] = a\nb = [None]\nb[0] = b\nprint(a < b)\n"],
+      ["a cyclic list equal to itself", "a = [None]\na[0] = a\nprint(a == a, a != a)\n"],
+      [
+        "deep but finite lists",
+        "a = []\nfor i in range(100):\n    a = [a]\nb = []\nfor i in range(100):\n    b = [b]\nprint(a == b, a < b)\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);

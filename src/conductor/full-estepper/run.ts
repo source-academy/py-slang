@@ -44,6 +44,11 @@ export interface Trace {
 function errorOf(e: unknown): { kind: string; message: string } {
   if (e instanceof PyError) return { kind: e.kind, message: e.message };
   if (e instanceof SyntaxError) return { kind: "SyntaxError", message: e.message };
+  // The JavaScript stack ran out: terms nested deeper than the engine can reduce, which is what
+  // CPython calls a recursion error (it stops at depth 1000, usually before the engine does).
+  if (e instanceof RangeError && /call stack/i.test(e.message)) {
+    return { kind: "RecursionError", message: "maximum recursion depth exceeded" };
+  }
   const message = e instanceof Error ? e.message : String(e);
   // The lexer's errors (`IndentationError`, …) are not SyntaxErrors in py-slang.
   const kind = e instanceof Error && /Indent/.test(e.name) ? "SyntaxError" : "InternalError";

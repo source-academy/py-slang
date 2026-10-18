@@ -12,7 +12,8 @@ import { ExprNS, StmtNS } from "../../ast-types";
 import { FALSE, NONE, TRUE, float, int, str, type Frame, type PyValue } from "./values";
 
 export type Expr =
-  | { k: "val"; v: PyValue }
+  /** A value; `label` is how it reads in the program, for a built-in that has been loaded already. */
+  | { k: "val"; v: PyValue; label?: string }
   | { k: "name"; name: string }
   | { k: "unary"; op: string; arg: Expr }
   /** Arithmetic, comparison, membership and identity operators: both operands are evaluated. */

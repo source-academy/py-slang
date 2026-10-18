@@ -70,6 +70,21 @@ function repeatCount(n: bigint, unit: number): number {
 /*                                  Equality                                  */
 /* -------------------------------------------------------------------------- */
 
+let comparisonDepth = 0;
+
+/** Comparing lists that contain themselves recurses; CPython stops at its recursion limit. */
+function nested<T>(compare: () => T): T {
+  if (comparisonDepth >= 1000) {
+    throw new PyError("RecursionError", "maximum recursion depth exceeded in comparison");
+  }
+  comparisonDepth++;
+  try {
+    return compare();
+  } finally {
+    comparisonDepth--;
+  }
+}
+
 export function pyEquals(a: PyValue, b: PyValue): boolean {
   const x = asNum(a);
   const y = asNum(b);
@@ -91,8 +106,10 @@ export function pyEquals(a: PyValue, b: PyValue): boolean {
       const other = (b as typeof a).obj;
       if (a.obj === other) return true;
       if (a.obj.elements.length !== other.elements.length) return false;
-      return a.obj.elements.every(
-        (e, i) => pyIs(e, other.elements[i]) || pyEquals(e, other.elements[i]),
+      return nested(() =>
+        a.obj.elements.every(
+          (e, i) => pyIs(e, other.elements[i]) || pyEquals(e, other.elements[i]),
+        ),
       );
     }
     case "function":
@@ -187,10 +204,12 @@ function order(op: string, a: PyValue, b: PyValue): number | null {
   if (a.type === "list" && b.type === "list") {
     const xs = a.obj.elements;
     const ys = b.obj.elements;
-    for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
-      if (!(pyIs(xs[i], ys[i]) || pyEquals(xs[i], ys[i]))) return order(op, xs[i], ys[i]);
-    }
-    return xs.length < ys.length ? -1 : xs.length > ys.length ? 1 : 0;
+    return nested(() => {
+      for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
+        if (!(pyIs(xs[i], ys[i]) || pyEquals(xs[i], ys[i]))) return order(op, xs[i], ys[i]);
+      }
+      return xs.length < ys.length ? -1 : xs.length > ys.length ? 1 : 0;
+    });
   }
   throw orderError(op, a, b);
 }
@@ -381,7 +400,12 @@ function power(x: Num, y: Num): PyValue {
   if (base === 0 && exponent < 0) {
     throw new PyError("ZeroDivisionError", "0.0 cannot be raised to a negative power");
   }
-  if (base < 0 && Number.isFinite(exponent) && !Number.isInteger(exponent)) {
+  if (
+    base < 0 &&
+    Number.isFinite(base) &&
+    Number.isFinite(exponent) &&
+    !Number.isInteger(exponent)
+  ) {
     throw new UnsupportedError("complex numbers (a negative number to a fractional power)");
   }
   return checkedPow(base ** exponent, base, exponent);

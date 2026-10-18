@@ -170,12 +170,23 @@ export class Machine {
     children: Expr[],
     frame: Frame,
     depth: number,
-  ): { index: number; step: ExprStep } | null {
+  ): { index: number; step: ExprStep; children: Expr[] } | null {
     for (let i = 0; i < children.length; i++) {
       const step = this.reduceExpr(children[i], frame, depth);
-      if (step) return { index: i, step };
+      if (step) {
+        // A built-in to the left has been loaded already (it is not a step of its own), so
+        // what the children to the right do to the name cannot change it.
+        const frozen = children.map((c, j) => (j < i ? this.freezeBuiltin(c, frame) : c));
+        return { index: i, step, children: frozen };
+      }
     }
     return null;
+  }
+
+  private freezeBuiltin(e: Expr, frame: Frame): Expr {
+    if (e.k !== "name") return e;
+    const { frame: holder, value } = this.store.lookup(e.name, frame);
+    return holder.kind === "builtins" ? { k: "val", v: value, label: e.name } : e;
   }
 
   /** Reduces `e` by one step in `frame`, or returns null if it is a value. */
@@ -204,7 +215,9 @@ export class Machine {
       case "bin": {
         const r = this.reduceChildren([e.left, e.right], frame, depth);
         if (r) {
-          const node = r.index === 0 ? { ...e, left: r.step.node } : { ...e, right: r.step.node };
+          const [left] = r.children;
+          const node =
+            r.index === 0 ? { ...e, left: r.step.node } : { ...e, left, right: r.step.node };
           return { node, c: r.step.c };
         }
         return this.contracted(
@@ -261,7 +274,7 @@ export class Machine {
       case "list": {
         const r = this.reduceChildren(e.elems, frame, depth);
         if (r) {
-          const elems = e.elems.slice();
+          const elems = r.children.slice();
           elems[r.index] = r.step.node;
           return { node: { ...e, elems }, c: r.step.c };
         }
@@ -274,7 +287,9 @@ export class Machine {
       case "sub": {
         const r = this.reduceChildren([e.obj, e.index], frame, depth);
         if (r) {
-          const node = r.index === 0 ? { ...e, obj: r.step.node } : { ...e, index: r.step.node };
+          const [obj] = r.children;
+          const node =
+            r.index === 0 ? { ...e, obj: r.step.node } : { ...e, obj, index: r.step.node };
           return { node, c: r.step.c };
         }
         return this.contracted(
@@ -294,9 +309,9 @@ export class Machine {
     const r = this.reduceChildren(parts, frame, depth);
     if (r) {
       if (r.index === 0) return { node: { ...e, callee: r.step.node }, c: r.step.c };
-      const args = e.args.slice();
+      const args = r.children.slice(1);
       args[r.index - 1] = r.step.node;
-      return { node: { ...e, args }, c: r.step.c };
+      return { node: { ...e, callee: r.children[0], args }, c: r.step.c };
     }
     const callee = this.valueOf(e.callee, frame);
     const args = e.args.map(a => this.valueOf(a, frame));
