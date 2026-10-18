@@ -1243,6 +1243,30 @@ describeIfCPython("review of the first slice, thirteenth round: defaults, leadin
     ["leading zeros in a function body", "print('before')\ndef f():\n    return 0777\n"],
   ])("%s", (_, code) => same(code));
 
+  // PEP 515: an underscore between two digits, and right after a base prefix; nowhere else.
+  test.each<[string, string]>([
+    ["underscores in a decimal integer", "print(1_000_000 * 2)\n"],
+    ["underscores in hex, octal and binary integers", "print(0x1_f + 0b1_0 + 0o1_7)\n"],
+    ["an underscore right after a base prefix", "print(0x_ff, 0b_1, 0o_7)\n"],
+    ["underscores in floats and exponents", "print(1_0.5_5, 1e1_0, 1_0e-1_0, .5_5, 1_0.)\n"],
+    ["underscores in zeros are fine", "print(0_0, 00_0)\n"],
+    ["leading zeros with an underscore", "print('before')\nx = 00_1\n"],
+    ["a trailing underscore", "print('before')\nx = 1_\n"],
+    ["two underscores in a row", "print('before')\nx = 1__0\n"],
+    ["an underscore before the dot", "print('before')\nx = 1_.5\n"],
+    ["an underscore after the dot", "print('before')\nx = 1._5\n"],
+    ["an underscore after the e", "print('before')\nx = 1e_5\n"],
+    ["an underscore before the e", "print('before')\nx = 1_e5\n"],
+    ["a base prefix without digits", "print('before')\nx = 0x_\n"],
+    ["an underscore before the base letter", "print('before')\nx = 0_x1\n"],
+    ["a leading underscore is a name", "print('before')\nprint(_1)\n"],
+    ["4300 digits with underscores are fine", `x = ${"9_".repeat(4299)}9\nprint(x > 0)\n`],
+    [
+      "4301 digits with underscores are too many to print",
+      `x = ${"9_".repeat(4300)}9\nprint('before')\nprint(x)\n`,
+    ],
+  ])("%s", (_, code) => same(code));
+
   test("two oversized strings in nested loops keep both materializations", () => {
     // Not run at the size of the cache limit (8 million), which would take hundreds of megabytes;
     // this checks the nested-loop result at a size that fits the normal cache.
