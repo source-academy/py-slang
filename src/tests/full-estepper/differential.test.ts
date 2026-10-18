@@ -1307,3 +1307,32 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython(
+  "review of the first slice, fifteenth round: loaded right-hand sides, class bases",
+  () => {
+    const rebind = "p = print\nL = [0]\ndef f():\n    global print\n    print = 0\n    return L\n";
+    test.each<[string, string]>([
+      [
+        "a built-in on the right of an item assignment is loaded first",
+        `${rebind}f()[0] = print\np(L[0] is p)\n`,
+      ],
+      [
+        "a built-in on the right of an item assignment, object a name",
+        `${rebind}M = [0]\nM[f()[0]] = print\np(M[0] is p)\n`,
+      ],
+      [
+        "a yield in the base of a class in a function is fine",
+        "def f():\n    class C((yield 1)):\n        pass\n    return 1\nprint('ok')\n",
+      ],
+      [
+        "a yield in the base of a class at module level",
+        "print('before')\nclass C((yield 1)):\n    pass\n",
+      ],
+      [
+        "a yield in the body of a class in a function is not",
+        "print('before')\ndef f():\n    class C(object):\n        x = (yield 1)\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);

@@ -203,6 +203,10 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
         if (isFunction) {
           for (const p of n.parameters) if (p.default) traverseAST(p.default, d => defaults.add(d));
         }
+        // (and so are the base classes of a class)
+        if (n instanceof StmtNS.Class) {
+          for (const b of n.bases) traverseAST(b, d => defaults.add(d));
+        }
         const inside = new Set<unknown>();
         traverseAST(n, d => d !== n && !defaults.has(d) && inside.add(d));
         scopes.push({ isFunction, inside });

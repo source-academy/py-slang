@@ -455,12 +455,14 @@ export class Machine {
         // Python evaluates the right-hand side first, then the object, then the index.
         const r = this.reduceChildren([head.e, head.obj, head.index], frame, depth);
         if (r) {
+          // (The operands before the one that was reduced have been loaded: r.children.)
+          const [e, obj] = r.children;
           const node =
             r.index === 0
               ? { ...head, e: r.step.node }
               : r.index === 1
-                ? { ...head, obj: r.step.node }
-                : { ...head, index: r.step.node };
+                ? { ...head, e, obj: r.step.node }
+                : { ...head, e, obj, index: r.step.node };
           return this.stmtStep(rest, node, r.step.c);
         }
         setItem(
@@ -474,7 +476,10 @@ export class Machine {
       case "augassign": {
         const r = this.reduceChildren([head.read, head.e], frame, depth);
         if (r) {
-          const node = r.index === 0 ? { ...head, read: r.step.node } : { ...head, e: r.step.node };
+          const node =
+            r.index === 0
+              ? { ...head, read: r.step.node }
+              : { ...head, read: r.children[0], e: r.step.node };
           return this.stmtStep(rest, node, r.step.c);
         }
         const result = inplaceOp(
@@ -493,7 +498,9 @@ export class Machine {
         const r = this.reduceChildren([head.obj, head.index], frame, depth);
         if (r) {
           const node =
-            r.index === 0 ? { ...head, obj: r.step.node } : { ...head, index: r.step.node };
+            r.index === 0
+              ? { ...head, obj: r.step.node }
+              : { ...head, obj: r.children[0], index: r.step.node };
           return this.stmtStep(rest, node, r.step.c);
         }
         const obj = this.valueOf(head.obj, frame);
@@ -502,7 +509,13 @@ export class Machine {
         // old value with the result, even if the right-hand side changed the element.
         const old = head.old ?? getItem(obj, index);
         const r2 = this.reduceChildren([head.e], frame, depth);
-        if (r2) return this.stmtStep(rest, { ...head, old, e: r2.step.node }, r2.step.c);
+        if (r2) {
+          const frozen = {
+            obj: this.freezeBuiltin(head.obj, frame),
+            index: this.freezeBuiltin(head.index, frame),
+          };
+          return this.stmtStep(rest, { ...head, ...frozen, old, e: r2.step.node }, r2.step.c);
+        }
         const result = inplaceOp(head.op, old, this.valueOf(head.e, frame));
         setItem(obj, index, result);
         const text = stmtText(head, this.labels);
