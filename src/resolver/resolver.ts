@@ -259,7 +259,12 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // function — including nested in `if`/`while`/`for`, and even after the nested
   // `def` that declares it `nonlocal` (matches CPython's whole-function static scoping).
   private functionDefStack: StmtNS.FunctionDef[] = [];
-  /** How many function bodies (`def`, multi-line lambda) enclose the node being resolved. */
+  /**
+   * How many function bodies (`def`, multi-line lambda) enclose the node being resolved. (When
+   * classes are supported, a class body starts again at 0: a `return` in it is a SyntaxError even
+   * inside a function, as in CPython. Today every sublanguage rejects `class` before its body is
+   * resolved.)
+   */
   private functionDepth = 0;
 
   /** A SyntaxError of CPython's compiler (it rejects the program before running anything). */
@@ -1211,8 +1216,13 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   visitNoneExpr(_expr: ExprNS.None): void {}
   visitLiteralExpr(_expr: ExprNS.Literal): void {}
   visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
-    // As in CPython, a decimal literal of more than 4300 digits is a SyntaxError.
-    if (/^[0-9]+$/.test(expr.value) && expr.value.length > MAX_DECIMAL_DIGITS) {
+    // As in CPython, a decimal literal of more than 4300 digits is a SyntaxError (unless it is all
+    // zeros, which CPython accepts at any length).
+    if (
+      /^[0-9]+$/.test(expr.value) &&
+      expr.value.length > MAX_DECIMAL_DIGITS &&
+      !/^0+$/.test(expr.value)
+    ) {
       this.compileError(
         expr.startToken,
         `Exceeds the limit (${MAX_DECIMAL_DIGITS} digits) for integer literal`,

@@ -46,6 +46,8 @@ const ACCEPTED: [string, string][] = [
     "a return in a nested function",
     "def f():\n    def g():\n        return 1\n    return g()\nprint(f())\n",
   ],
+  ["an integer of 5000 zeros", `x = ${"0".repeat(5000)}\nprint(x)\n`],
+  ["an integer of 5000 zeros with underscores", `x = ${"0_".repeat(4999)}0\nprint(x)\n`],
   ["a lambda with distinct parameters", "print((lambda x, y: x + y)(1, 2))\n"],
   ["a decimal literal of 4300 digits", `x = ${digits(4300)}\nprint(x > 0)\n`],
   [
