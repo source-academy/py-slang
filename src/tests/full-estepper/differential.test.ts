@@ -1254,3 +1254,56 @@ describeIfCPython("review of the first slice, thirteenth round: defaults, leadin
     expect(result.output).toBe("90000\n");
   });
 });
+
+describeIfCPython(
+  "review of the first slice, fourteenth round: yield in comprehensions, string loops",
+  () => {
+    test.each<[string, string]>([
+      [
+        "yield in a list comprehension in a function",
+        "print('before')\ndef f():\n    [(yield x) for x in []]\nprint('after')\n",
+      ],
+      [
+        "yield in a set comprehension in a function",
+        "print('before')\ndef f():\n    {(yield) for x in []}\n",
+      ],
+      [
+        "yield in a dict comprehension in a function",
+        "print('before')\ndef f():\n    {x: (yield) for x in []}\n",
+      ],
+      [
+        "yield in a generator expression in a function",
+        "print('before')\ndef f():\n    ((yield) for x in [])\n",
+      ],
+      [
+        "yield in a condition of a comprehension",
+        "print('before')\ndef f():\n    [x for x in [] if (yield)]\n",
+      ],
+      ["yield in a comprehension at module level", "print('before')\n[(yield 1) for x in []]\n"],
+      [
+        "yield in a later iterable of a comprehension",
+        "print('before')\ndef f():\n    [a for a in [] for b in (yield)]\n",
+      ],
+      [
+        "yield in the first iterable of a comprehension is fine",
+        "def f():\n    [a for a in (yield)]\nprint('ok')\n",
+      ],
+      [
+        "yield in a lambda in a comprehension is fine",
+        "def f():\n    [lambda: (yield) for x in []]\nprint('ok')\n",
+      ],
+      [
+        "a for loop over a string with a break",
+        "for c in 'a\u{10000}bc':\n    print(c)\n    if c == 'b':\n        break\nprint('done')\n",
+      ],
+      [
+        "nested for loops over strings",
+        "for a in 'ab':\n    for b in 'xy':\n        print(a + b)\n",
+      ],
+      [
+        "a for loop over a string that its body rebinds",
+        "s = 'abc'\nfor c in s:\n    s = 'xyz'\n    print(c)\nprint(s)\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);

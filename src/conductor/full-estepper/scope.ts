@@ -175,7 +175,8 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
 function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
   // The scopes of the program: a function or a lambda (where `yield` is fine) and a class body
   // (where it is not), with everything inside them. A node belongs to the innermost scope.
-  const scopes: { isFunction: boolean; inside: Set<unknown> }[] = [];
+  type Scope = { isFunction: boolean; inside: Set<unknown>; comprehension?: string };
+  const scopes: Scope[] = [];
   const yields: unknown[] = [];
   for (const stmt of program) {
     traverseAST(stmt, n => {
@@ -183,6 +184,19 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
         n instanceof StmtNS.FunctionDef ||
         n instanceof ExprNS.Lambda ||
         n instanceof ExprNS.MultiLambda;
+      if (n instanceof ExprNS.Comprehension) {
+        // The first iterable is evaluated in the scope around the comprehension; the rest is not.
+        const first = new Set<unknown>();
+        if (n.generators[0]) traverseAST(n.generators[0].iter, d => first.add(d));
+        const inside = new Set<unknown>();
+        traverseAST(n, d => d !== n && !first.has(d) && inside.add(d));
+        scopes.push({
+          isFunction: false,
+          inside,
+          comprehension:
+            n.variant === "generator" ? "generator expression" : `${n.variant} comprehension`,
+        });
+      }
       if (isFunction || n instanceof StmtNS.Class) {
         // The defaults of parameters are evaluated in the scope around the function.
         const defaults = new Set<unknown>();
@@ -214,11 +228,14 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
     });
   }
   for (const y of yields) {
-    let innermost: { isFunction: boolean; inside: Set<unknown> } | undefined;
+    let innermost: Scope | undefined;
     for (const scope of scopes) {
       if (scope.inside.has(y) && (!innermost || scope.inside.size < innermost.inside.size)) {
         innermost = scope;
       }
+    }
+    if (innermost?.comprehension) {
+      throw new PyError("SyntaxError", `'yield' inside ${innermost.comprehension}`);
     }
     if (!innermost?.isFunction) throw new PyError("SyntaxError", "'yield' outside function");
   }

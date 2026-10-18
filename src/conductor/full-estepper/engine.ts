@@ -15,7 +15,7 @@
 import { parse } from "../../parser";
 import { callBuiltin, type Output } from "./builtins";
 import { PyError, UnsupportedError } from "./errors";
-import { binaryOp, getItem, inplaceOp, iterAt, setItem, unaryOp } from "./operators";
+import { binaryOp, codePoints, getItem, inplaceOp, iterAt, setItem, unaryOp } from "./operators";
 import { checkProgram, scopeOf } from "./scope";
 import { Store } from "./store";
 import {
@@ -29,6 +29,7 @@ import {
 import { describeValue, exprText, stmtText, valueText } from "./text";
 import {
   NONE,
+  str,
   truthy,
   typeName,
   type Frame,
@@ -586,14 +587,25 @@ export class Machine {
         if (source.type !== "list" && source.type !== "str" && source.type !== "range") {
           throw new PyError("TypeError", `'${typeName(source)}' object is not iterable`);
         }
-        const loop: Stmt = { k: "for", target: head.target, source, pos: 0, src: head.src };
+        const loop: Stmt = {
+          k: "for",
+          target: head.target,
+          source,
+          pos: 0,
+          src: head.src,
+          points: source.type === "str" ? codePoints(source.value) : undefined,
+        };
         return this.stmtStep(rest, loop, {
           before: "Evaluating the iterable of the for statement",
           after: `Evaluated the iterable of the for statement: ${this.v(source)}`,
         });
       }
       case "for": {
-        const element = iterAt(head.source, head.pos);
+        const element = head.points
+          ? head.pos < head.points.length
+            ? str(head.points[head.pos])
+            : undefined
+          : iterAt(head.source, head.pos);
         if (element === undefined) {
           return this.removed(
             rest,

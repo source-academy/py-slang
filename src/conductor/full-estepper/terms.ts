@@ -42,7 +42,8 @@ export type Stmt =
   /** `for target in iter`, while `iter` is evaluated. */
   | { k: "forinit"; target: string; iter: Expr; src: StmtNS.For }
   /** `for target in …` over `source`, about to take its `pos`th element. */
-  | { k: "for"; target: string; source: PyValue; pos: number; src: StmtNS.For }
+  /** `points` are the characters of a string source, kept with the loop for as long as it runs. */
+  | { k: "for"; target: string; source: PyValue; pos: number; src: StmtNS.For; points?: string[] }
   /** One iteration of a loop in progress: the rest of its body, then the loop (`next`) itself. */
   | { k: "loop"; body: Stmt[]; next: Stmt }
   | { k: "def"; src: StmtNS.FunctionDef }
