@@ -330,7 +330,7 @@ def make_execution_function(
 
 \begin{lstlisting}
 # bad style: the arguments are neither aligned nor indented
-result = reduce(add, 0, map(square,
+result = accumulate(add, 0, map(square,
     enumerate_interval(1,
         10)))
 \end{lstlisting}
@@ -348,7 +348,7 @@ colon, and indent the body by four spaces.
 \begin{lstlisting}
 # good style
 def count_buttons(garment):
-    return reduce(
+    return accumulate(
         lambda sleaves, total: sleaves + total,
         0,
         map(
@@ -356,8 +356,8 @@ def count_buttons(garment):
                 count_buttons(jacket) if is_checkered(jacket)
                 else 1
             ),
-            garment
-        )
+            garment,
+        ),
     )
 \end{lstlisting}
 
