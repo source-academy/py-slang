@@ -653,15 +653,10 @@ function programRoots(program: Stmt[]): { frames: Environment[]; values: Value[]
   return { frames, values };
 }
 
-/** The lists a binding of `env` holds, directly or inside the lists it holds. */
+/** The lists a binding of `env` holds itself (not those nested in them: a host draws those beside the list around them). */
 function heldLists(env: Environment): Set<ListValue> {
   const held = new Set<ListValue>();
-  const visit = (v: Value): void => {
-    if (v.type !== "list" || held.has(v)) return;
-    held.add(v);
-    v.value.forEach(visit);
-  };
-  for (const v of Object.values(env.head)) if (v !== UNASSIGNED) visit(v);
+  for (const v of Object.values(env.head)) if (v !== UNASSIGNED && v.type === "list") held.add(v);
   return held;
 }
 
@@ -688,8 +683,9 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     hidden: (env: Environment) => env.name !== "global" && !machine.labels.isShown(env),
     // A list stays where it was first drawn (beside the frame it was made in), instead of moving
     // to whichever frame is active when it is passed to a function; only if that frame is drawn and
-    // still holds the list. A host draws a list beside a frame that binds it, so a list that only
-    // another frame holds (an argument that was never bound where it was made) would not be drawn.
+    // still binds the list. A host draws a list beside a frame that binds it, so a list that only
+    // another frame holds (an argument that was never bound where it was made, or a list nested in
+    // another list) would not be drawn there; such a list belongs to the frame of the list around it.
     homes: (list: object) => {
       const home = machine.shownObjects.get(list as ListValue);
       if (home === undefined || !reached.frames.has(home)) return undefined;
