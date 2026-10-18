@@ -53,7 +53,7 @@
 import { readFileSync } from "fs";
 import { Command } from "commander";
 import { runCodePy2Js } from "./engines/py2js";
-import { runEStepper } from "./conductor/estepper/getSteps";
+import { DEFAULT_STEP_LIMIT, runEStepper } from "./conductor/estepper/getSteps";
 import { runFullEStepper } from "./conductor/full-estepper/run";
 import { compileToWasmAndRun } from "./engines/wasm";
 import { WASM_GROUPS } from "./engines/wasm/groups";
@@ -88,6 +88,12 @@ async function runEStepperCli(code: string, variant: number, trace: boolean): Pr
     : "";
   if (run.error !== undefined) {
     throw Object.assign(new Error(run.error), { output: traceText + run.output });
+  }
+  if (run.truncated) {
+    throw Object.assign(
+      new Error(`Stopped: the program has more than ${DEFAULT_STEP_LIMIT} steps`),
+      { output: traceText + run.output },
+    );
   }
   return traceText + run.output;
 }

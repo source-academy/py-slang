@@ -69,7 +69,12 @@ function builtinDisplayValue(primitiveIndex: number): BuiltinValue {
  * rest renders identically to the real thing without needing any of CSE's
  * closure machinery.
  */
-export function pvmlBoxToCseValue(value: PVMLBoxType): Value {
+export function pvmlBoxToCseValue(
+  value: PVMLBoxType,
+  // The lists converted so far, so that a list that contains itself becomes a list that contains
+  // itself (shown as `[...]`, as CPython does) instead of recursing for ever.
+  seen: Map<object, Value> = new Map(),
+): Value {
   if (value === null || value === undefined) {
     return { type: "none" };
   }
@@ -90,8 +95,14 @@ export function pvmlBoxToCseValue(value: PVMLBoxType): Value {
   }
   if (isPVMLObject(value)) {
     switch (value.type) {
-      case "array":
-        return { type: "list", value: value.elements.map(pvmlBoxToCseValue) };
+      case "array": {
+        const known = seen.get(value);
+        if (known) return known;
+        const list: Value = { type: "list", value: [] };
+        seen.set(value, list);
+        for (const element of value.elements) list.value.push(pvmlBoxToCseValue(element, seen));
+        return list;
+      }
       case "closure":
         return functionDisplayValue(value.ir.functionName);
       case "primitive":
