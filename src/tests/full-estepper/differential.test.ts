@@ -1336,3 +1336,29 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython("review of the first slice, sixteenth round: separate nans", () => {
+  const nan = "n = float('nan')\n";
+  test.each<[string, string]>([
+    [
+      "two nans made separately in lists",
+      "print([float('nan')] == [float('nan')], [float('nan')] != [float('nan')])\n",
+    ],
+    ["one nan twice in lists", `${nan}print([n] == [n], [n] != [n], [n] <= [n], [n] < [n])\n`],
+    ["a nan in a list it was not made for", "print(float('nan') in [float('nan')])\n"],
+    ["one nan in a list", `${nan}print(n in [n], n in [1, n], n in [1, 2])\n`],
+    [
+      "a nan passed through a function",
+      `${nan}def f(v):\n    return v\nprint([f(n)] == [n], f(n) in [n])\n`,
+    ],
+    ["a nan copied to another name", `${nan}m = n\nprint([m] == [n], m in [n])\n`],
+    ["a nan fetched from a list", `${nan}a = [n]\nb = [a[0]]\nprint(a == b, a[0] in b)\n`],
+    ["nested lists with one nan", `${nan}print([[n]] == [[n]], [[n], 1] == [[n], 1])\n`],
+    ["nested lists with separate nans", "print([[float('nan')]] == [[float('nan')]])\n"],
+    [
+      "a nan computed twice from the same expression",
+      "a = float('inf') - float('inf')\nb = float('inf') - float('inf')\nprint([a] == [b], [a] == [a])\n",
+    ],
+    ["a nan and a number", `${nan}print([n] == [1], [1] == [n], 1 in [n])\n`],
+  ])("%s", (_, code) => same(code));
+});

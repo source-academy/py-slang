@@ -141,7 +141,9 @@ The differences from §3/§4 follow from Python, and the engine does what CPytho
   (small ints are shared and equal constants of a code object are merged, but `float(1) is float(1)`
   is `False`), and Python 3.8 and later warn about `is` with a literal. Lists, functions and ranges
   keep their identity. Giving every number and string an identity would show students distinctions
-  that CPython does not promise; to be revisited if a course needs it.
+  that CPython does not promise; to be revisited if a course needs it. (Lists, `in` and the
+  comparisons of lists do use the object itself for floats, as CPython does: `[n] == [n]` is `True`
+  for one nan `n`, and `[float('nan')] == [float('nan')]` is `False`.)
 - **a range longer than 10 million is not built as a list in one step**: `list(range(n))`, `min`,
   `+=` and the like stop with a `MemoryError` (CPython would try, and for lengths beyond an index
   raises `OverflowError`, which the engine does too). A `for` loop over any range is lazy.

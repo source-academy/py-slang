@@ -110,7 +110,7 @@ export function pyEquals(a: PyValue, b: PyValue): boolean {
       if (a.obj.elements.length !== other.elements.length) return false;
       return nested(() =>
         a.obj.elements.every(
-          (e, i) => pyIs(e, other.elements[i]) || pyEquals(e, other.elements[i]),
+          (e, i) => sameObject(e, other.elements[i]) || pyEquals(e, other.elements[i]),
         ),
       );
     }
@@ -127,6 +127,16 @@ export function pyEquals(a: PyValue, b: PyValue): boolean {
     default:
       return false;
   }
+}
+
+/**
+ * The shortcut that containers take before they compare two elements: the very same object is equal
+ * to itself, even a nan. Only a float can be unequal to itself, so only for floats does it matter
+ * which object it is (two nans made separately are two objects); for the other values it is the
+ * same as `is`.
+ */
+function sameObject(a: PyValue, b: PyValue): boolean {
+  return a.type === "float" && b.type === "float" ? a === b : pyIs(a, b);
 }
 
 /** The `is` operator: identity for objects, equality for the immutable values. */
@@ -208,7 +218,7 @@ function order(op: string, a: PyValue, b: PyValue): number | null {
     const ys = b.obj.elements;
     return nested(() => {
       for (let i = 0; i < Math.min(xs.length, ys.length); i++) {
-        if (!(pyIs(xs[i], ys[i]) || pyEquals(xs[i], ys[i]))) return order(op, xs[i], ys[i]);
+        if (!(sameObject(xs[i], ys[i]) || pyEquals(xs[i], ys[i]))) return order(op, xs[i], ys[i]);
       }
       return xs.length < ys.length ? -1 : xs.length > ys.length ? 1 : 0;
     });
@@ -223,7 +233,7 @@ function order(op: string, a: PyValue, b: PyValue): number | null {
 function contains(container: PyValue, item: PyValue): boolean {
   switch (container.type) {
     case "list":
-      return container.obj.elements.some(e => pyIs(e, item) || pyEquals(e, item));
+      return container.obj.elements.some(e => sameObject(e, item) || pyEquals(e, item));
     case "str":
       if (item.type !== "str") {
         throw new PyError(
