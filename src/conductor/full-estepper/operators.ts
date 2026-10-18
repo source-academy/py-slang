@@ -212,14 +212,12 @@ function contains(container: PyValue, item: PyValue): boolean {
       }
       return container.value.includes(item.value);
     case "range": {
-      const n = asNum(item);
-      if (!n || n.float) {
-        const length = rangeLength(container);
-        for (let i = 0n; i < length; i++) {
-          if (pyEquals(int(rangeAt(container, i)), item)) return true;
-        }
-        return false;
-      }
+      // CPython scans the range when the item is not an int; the answer is the same as asking
+      // whether the item equals one of the ints, which needs no scan.
+      const num = asNum(item);
+      if (!num) return false;
+      if (num.float && !(Number.isFinite(num.f) && Number.isInteger(num.f))) return false;
+      const n = { i: num.float ? BigInt(num.f) : num.i };
       const offset = n.i - container.start;
       if (offset % container.step !== 0n) return false;
       const k = offset / container.step;

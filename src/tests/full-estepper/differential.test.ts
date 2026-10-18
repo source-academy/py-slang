@@ -817,3 +817,85 @@ describeIfCPython("review of the first slice, fifth round: powers, lists, unicod
     ["repr of a range with endpoints that fit", "print(range(10 ** 30, 10 ** 31, 10 ** 29))\n"],
   ])("%s", (_, code) => same(code));
 });
+
+describeIfCPython(
+  "review of the first slice, sixth round: membership in ranges, compile errors in compound statements",
+  () => {
+    test.each<[string, string]>([
+      [
+        "membership of every kind of value in a small range",
+        "r = range(0, 10, 2)\nprint(2.0 in r, 3.0 in r, 0.5 in r, -0.0 in r, 'a' in r, None in r, True in r, False in r, [2] in r, float('nan') in r, float('inf') in r, 8 in r, 10 in r, -2 in r)\n",
+      ],
+      [
+        "membership in an empty and a descending range",
+        "print(1.0 in range(0), 5.0 in range(10, 0, -5), 4.0 in range(10, 0, -5), 6.0 in range(10, 0, -3))\n",
+      ],
+      ["return in a class body", "print('before')\nclass C:\n    return 1\n"],
+      [
+        "return in a class body inside a function",
+        "print('before')\ndef f():\n    class C:\n        return 1\n",
+      ],
+      [
+        "break in a class body inside a loop",
+        "print('before')\nwhile True:\n    class C:\n        break\n",
+      ],
+      [
+        "return in a try statement",
+        "print('before')\ntry:\n    return 1\nexcept Exception:\n    pass\n",
+      ],
+      [
+        "break in an except clause",
+        "print('before')\ntry:\n    pass\nexcept Exception:\n    break\n",
+      ],
+      [
+        "continue in a finally clause outside a loop",
+        "print('before')\ntry:\n    pass\nfinally:\n    continue\n",
+      ],
+      ["return in a with statement", "print('before')\nwith open('x') as f:\n    return 1\n"],
+      ["return in an unpacking loop", "print('before')\nfor a, b in []:\n    return 1\n"],
+      [
+        "break in an unpacking loop is fine, a continue after it is not",
+        "print('before')\nfor a, b in []:\n    break\ncontinue\n",
+      ],
+      [
+        "a missing nonlocal in a decorated function",
+        "print('before')\n@d\ndef f():\n    nonlocal missing\n",
+      ],
+      [
+        "a duplicate parameter in a class method",
+        "print('before')\nclass C:\n    def m(self, self):\n        pass\n",
+      ],
+      [
+        "a nonlocal without a binding in a class method",
+        "print('before')\nclass C:\n    def m(self):\n        nonlocal missing\n",
+      ],
+    ])("%s", (_, code) => same(code));
+  },
+);
+
+describe("membership in a huge range does not scan it", () => {
+  test.each<[string, string]>([
+    ["0.5", "print(0.5 in range(10 ** 100))"],
+    ["a string", "print('a' in range(10 ** 100))"],
+    ["None", "print(None in range(10 ** 100))"],
+    ["nan", "print(float('nan') in range(10 ** 100))"],
+    ["infinity", "print(float('inf') in range(10 ** 100), -float('inf') in range(10 ** 100))"],
+    [
+      "an integral float",
+      "print(5.0 in range(10 ** 100), 1e30 in range(10 ** 100), 1e30 in range(10 ** 20))",
+    ],
+  ])("%s", (_, code) => {
+    const result = evaluate(code, 1000);
+    expect(result.error).toBeNull();
+    expect(result.output).toMatch(/^(True|False)/);
+  });
+
+  test("the answers", () => {
+    expect(
+      evaluate(
+        "print(0.5 in range(10 ** 100), 5.0 in range(10 ** 100), 'a' in range(10 ** 100), 1e30 in range(10 ** 100), 1e30 in range(10 ** 20))",
+        1000,
+      ).output,
+    ).toBe("False True False True False\n");
+  });
+});

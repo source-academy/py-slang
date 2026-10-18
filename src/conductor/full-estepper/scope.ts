@@ -104,8 +104,14 @@ function bindTargets(target: ExprNS.Expr, assigned: Set<string>): void {
  */
 export function checkProgram(program: StmtNS.Stmt[]): void {
   // `enclosing` has the scopes of the functions around the statements, innermost last.
-  const walk = (stmts: StmtNS.Stmt[], enclosing: ScopeInfo[], inLoop: boolean): void => {
-    const inFunction = enclosing.length > 0;
+  // A class body is not a function: `return` is an error in it, and so is `break` outside a loop;
+  // functions defined in it still see the functions around the class.
+  const walk = (
+    stmts: StmtNS.Stmt[],
+    enclosing: ScopeInfo[],
+    inLoop: boolean,
+    inFunction = enclosing.length > 0,
+  ): void => {
     for (const stmt of stmts) {
       if (stmt instanceof StmtNS.Return && !inFunction) {
         throw new PyError("SyntaxError", "'return' outside function");
@@ -113,17 +119,32 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
         throw new PyError("SyntaxError", "'break' outside loop");
       } else if (stmt instanceof StmtNS.Continue && !inLoop) {
         throw new PyError("SyntaxError", "'continue' not properly in loop");
-      } else if (stmt instanceof StmtNS.NonLocal && !inFunction) {
+      } else if (stmt instanceof StmtNS.NonLocal && enclosing.length === 0) {
         throw new PyError("SyntaxError", "nonlocal declaration not allowed at module level");
       } else if (stmt instanceof StmtNS.If) {
-        walk(stmt.body, enclosing, inLoop);
-        if (stmt.elseBlock) walk(stmt.elseBlock, enclosing, inLoop);
-      } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
-        walk(stmt.body, enclosing, true);
+        walk(stmt.body, enclosing, inLoop, inFunction);
+        if (stmt.elseBlock) walk(stmt.elseBlock, enclosing, inLoop, inFunction);
+      } else if (
+        stmt instanceof StmtNS.While ||
+        stmt instanceof StmtNS.For ||
+        stmt instanceof StmtNS.ForUnpack
+      ) {
+        walk(stmt.body, enclosing, true, inFunction);
       } else if (stmt instanceof StmtNS.FunctionDef) {
         const scope = scopeOf(stmt);
         checkDeclarations(stmt, scope, enclosing);
         walk(stmt.body, [...enclosing, scope], false);
+      } else if (stmt instanceof StmtNS.Class) {
+        walk(stmt.body, enclosing, false, false);
+      } else if (stmt instanceof StmtNS.Decorated) {
+        walk([stmt.definition], enclosing, inLoop, inFunction);
+      } else if (stmt instanceof StmtNS.With) {
+        walk(stmt.body, enclosing, inLoop, inFunction);
+      } else if (stmt instanceof StmtNS.Try) {
+        walk(stmt.body, enclosing, inLoop, inFunction);
+        for (const h of stmt.handlers) walk(h.body, enclosing, inLoop, inFunction);
+        if (stmt.orElse) walk(stmt.orElse, enclosing, inLoop, inFunction);
+        if (stmt.finalBody) walk(stmt.finalBody, enclosing, inLoop, inFunction);
       }
     }
   };
