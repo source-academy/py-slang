@@ -985,6 +985,9 @@ export const LIST_STRUCT_EQ_FX = wasm
     $eq_val: i64,
   })
   .body(
+    // The same list (same packed length and address) is equal to itself, as in CSE's
+    // structuralEquals: a container compares by `x is y or x == y`.
+    wasm.if(i64.eq(local.get("$x_val"), local.get("$y_val"))).then(wasm.return(i32.const(1))),
     local.set("$len_x", i32.wrap_i64(local.get("$x_val"))),
     local.set("$len_y", i32.wrap_i64(local.get("$y_val"))),
     wasm.if(i32.ne(local.get("$len_x"), local.get("$len_y"))).then(wasm.return(i32.const(0))),
@@ -1008,6 +1011,20 @@ export const LIST_STRUCT_EQ_FX = wasm
         "$ey_val",
         wasm.call(LIST_SLOT_VAL_LOAD_FX).args(local.get("$y_val"), local.get("$i")),
       ),
+
+      // The same float (the same bit pattern, as in PyPy) is identical, hence equal, even a nan:
+      // `[math_nan] == [math_nan]` is True, while `math_nan == math_nan` stays False.
+      wasm
+        .if(
+          i32.and(
+            i32.and(
+              i32.eq(local.get("$ex_tag"), i32.const(TYPE_TAG.FLOAT)),
+              i32.eq(local.get("$ey_tag"), i32.const(TYPE_TAG.FLOAT)),
+            ),
+            i64.eq(local.get("$ex_val"), local.get("$ey_val")),
+          ),
+        )
+        .then(local.set("$i", i32.add(local.get("$i"), i32.const(1))), wasm.br("$loop")),
 
       wasm
         .if(wasm.call(IS_TAG_GCABLE).args(local.get("$ex_tag")))

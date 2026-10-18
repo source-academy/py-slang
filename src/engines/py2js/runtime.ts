@@ -431,7 +431,12 @@ function pyEquals(l: PyValue, r: PyValue, restrict: boolean, enclosing?: string)
     // separate cross-type case to write, because there's no separate type.
     if (l === r) return true;
     if (l.length !== r.length) return false;
-    return l.every((el, i) => pyEquals(el, r[i], restrict));
+    // A container compares its elements by `x is y or x == y` (the Python reference; PyPy's
+    // identity of a float is its bit pattern), so a nan in a pair equals the same nan in
+    // another pair, while `math_nan == math_nan` on its own stays False.
+    return l.every(
+      (el, i) => (typeof el === "number" && Object.is(el, r[i])) || pyEquals(el, r[i], restrict),
+    );
   }
   return l === r; // strings by value; mixed types (incl. pair vs non-pair) are simply unequal
 }
