@@ -1067,3 +1067,51 @@ describeIfCPython(
     });
   },
 );
+
+describeIfCPython(
+  "review of the first slice, tenth round: class scopes, all uses, power sizes",
+  () => {
+    test.each<[string, string]>([
+      [
+        "a class body that assigns before global",
+        "print('before')\nclass C:\n    x = 1\n    global x\n",
+      ],
+      [
+        "a class body that uses before global",
+        "print('before')\nclass C:\n    print(x)\n    global x\n",
+      ],
+      [
+        "a use in assert before global",
+        "print('before')\ndef f():\n    assert x\n    global x\nprint('after')\n",
+      ],
+      [
+        "a use in the message of assert before global",
+        "print('before')\ndef f():\n    assert True, x\n    global x\n",
+      ],
+      ["a use in raise before global", "print('before')\ndef f():\n    raise x\n    global x\n"],
+      [
+        "a use in raise from before global",
+        "print('before')\ndef f():\n    raise ValueError from x\n    global x\n",
+      ],
+      [
+        "a use in an attribute assignment before global",
+        "print('before')\ndef f():\n    x.y = 1\n    global x\n",
+      ],
+      ["an annotation before global", "print('before')\ndef f():\n    y: x = 1\n    global x\n"],
+      ["2 ** 4000001", "x = 2 ** 4000001\nprint(x % 1000, x > 0)\n"],
+      ["3 ** 2000000", "x = 3 ** 2000000\nprint(x % 1000)\n"],
+      ["10 ** 2000000", "x = 10 ** 2000000\nprint(x % 1000)\n"],
+      ["a power at the edge, (-2) ** 4000001", "x = (-2) ** 4000001\nprint(x % 1000, x < 0)\n"],
+    ])("%s", (_, code) => same(code));
+
+    test("a class body that declares first is not a syntax error (classes are unsupported yet)", () => {
+      const result = evaluate("class C:\n    global x\n    x = 1\n", 1000);
+      expect(result.error?.kind).not.toBe("SyntaxError");
+    });
+
+    test("a power beyond the limit is a MemoryError", () => {
+      expect(evaluate("2 ** 9000000\n", 1000).error?.kind).toBe("MemoryError");
+      expect(evaluate("(10 ** 5) ** 500000\n", 1000).error?.kind).toBe("MemoryError");
+    });
+  },
+);

@@ -288,6 +288,15 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
       use(stmt.value);
     } else if (stmt instanceof StmtNS.SimpleExpr) {
       use(stmt.expression);
+    } else if (stmt instanceof StmtNS.Assert) {
+      use(stmt.value);
+      use(stmt.message);
+    } else if (stmt instanceof StmtNS.Raise) {
+      use(stmt.value);
+      use(stmt.cause);
+    } else if (stmt instanceof StmtNS.AttributeAssign) {
+      use(stmt.value);
+      use(stmt.target);
     } else if (stmt instanceof StmtNS.TupleAssign) {
       use(stmt.value);
       bindAll(stmt.target);
@@ -297,12 +306,15 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
       checkOrder(stmt.body, seen);
     } else if (stmt instanceof StmtNS.AnnAssign) {
       use(stmt.value);
+      use(stmt.ann);
       bind(stmt.target.name.lexeme);
     } else if (stmt instanceof StmtNS.Del) {
       for (const t of stmt.targets) bindAll(t);
     } else if (stmt instanceof StmtNS.Class) {
       for (const base of stmt.bases) use(base);
       bind(stmt.name.lexeme);
+      // The body is a scope of its own, with its own order of declarations.
+      checkOrder(stmt.body, new Map());
     } else if (stmt instanceof StmtNS.Decorated) {
       for (const d of stmt.decorators) use(d);
       checkOrder([stmt.definition], seen);

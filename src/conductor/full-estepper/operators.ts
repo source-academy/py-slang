@@ -341,6 +341,12 @@ function scaledQuotient(num: bigint, den: bigint, k: number): number {
   return result * 2 ** e;
 }
 
+/** log2 of a positive bigint, as a float (good to many digits, also beyond the range of a double). */
+function log2(x: bigint): number {
+  const shift = Math.max(bitLength(x) - 60, 0);
+  return Math.log2(Number(x >> BigInt(shift))) + shift;
+}
+
 const MAX_EXACT_EXPONENT = 5000n;
 
 /** The largest integer power the engine computes: results of up to this many bits (about 1 MB). */
@@ -367,8 +373,10 @@ function power(x: Num, y: Num): PyValue {
     if (y.i >= 0n) {
       // The result has about bitLength(x) * y bits; refuse what could not be built in a moment.
       if (x.i !== 0n && x.i !== 1n && x.i !== -1n) {
-        const size = BigInt(bitLength(x.i < 0n ? -x.i : x.i)) * y.i;
-        if (size > MAX_POWER_BITS) throw new PyError("MemoryError", "the result is too large");
+        const size = log2(x.i < 0n ? -x.i : x.i) * Number(y.i);
+        if (size > Number(MAX_POWER_BITS)) {
+          throw new PyError("MemoryError", "the result is too large");
+        }
       }
       return int(x.i ** y.i);
     }
@@ -584,14 +592,29 @@ export function setItem(container: PyValue, index: PyValue, value: PyValue): voi
 }
 
 const pointCache = new Map<string, string[]>();
+let cachedPoints = 0;
+/** The most characters the cache keeps (it is emptied at the end of each run as well). */
+const MAX_CACHED_POINTS = 8_000_000;
+
+export function clearStringCache(): void {
+  pointCache.clear();
+  cachedPoints = 0;
+}
 
 /** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
 function codePoints(text: string): string[] {
   let points = pointCache.get(text);
   if (!points) {
     points = Array.from(text);
-    if (pointCache.size >= 16) pointCache.delete(pointCache.keys().next().value as string);
-    pointCache.set(text, points);
+    while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {
+      const oldest = pointCache.keys().next().value as string;
+      cachedPoints -= (pointCache.get(oldest) as string[]).length;
+      pointCache.delete(oldest);
+    }
+    if (points.length <= MAX_CACHED_POINTS) {
+      pointCache.set(text, points);
+      cachedPoints += points.length;
+    }
   }
   return points;
 }

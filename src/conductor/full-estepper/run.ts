@@ -7,6 +7,7 @@
 
 import { Machine } from "./engine";
 import { PyError } from "./errors";
+import { clearStringCache } from "./operators";
 import { stmtsText, valueText } from "./text";
 import { UNASSIGNED, type Frame, type HeapObj } from "./values";
 
@@ -83,7 +84,7 @@ function snapshot(machine: Machine, explanation: string): TraceStep {
   return { explanation, program, frames, objects };
 }
 
-export function runFullEStepper(code: string, stepLimit = 10_000): Trace {
+function traceOf(code: string, stepLimit: number): Trace {
   let machine: Machine;
   try {
     machine = Machine.create(code);
@@ -137,10 +138,9 @@ export function formatTrace(trace: Trace): string {
  * Runs a program to its end (or the step limit) without recording a trace: what it printed and the
  * error that stopped it. For the tests that compare the engine with CPython.
  */
-export function evaluate(
-  code: string,
-  stepLimit = 1_000_000,
-): { output: string; error: Trace["error"]; truncated: boolean; steps: number } {
+type Evaluation = { output: string; error: Trace["error"]; truncated: boolean; steps: number };
+
+function evaluationOf(code: string, stepLimit: number): Evaluation {
   let machine: Machine;
   try {
     machine = Machine.create(code);
@@ -155,5 +155,23 @@ export function evaluate(
     } catch (e) {
       return { output: machine.output, error: errorOf(e), truncated: false, steps: n };
     }
+  }
+}
+
+/** Runs `code` and returns every step of its evaluation. */
+export function runFullEStepper(code: string, stepLimit = 10_000): Trace {
+  try {
+    return traceOf(code, stepLimit);
+  } finally {
+    clearStringCache();
+  }
+}
+
+/** Runs `code` to the end (or the step limit) and returns what it printed. */
+export function evaluate(code: string, stepLimit = 1_000_000): Evaluation {
+  try {
+    return evaluationOf(code, stepLimit);
+  } finally {
+    clearStringCache();
   }
 }
