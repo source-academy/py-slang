@@ -18,6 +18,7 @@ import type {
 import type { StmtNS } from "../../ast-types";
 import { analyze } from "../../resolver/analysis";
 import { VARIANT_GROUPS } from "../../runner";
+import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "../../errors/recursion";
 import { type Contraction, Machine, type RequestInput } from "./engine";
 import { ProgramSerializer, snapshotStore, type StoreSnapshot } from "./serialize";
 import { type Expr, type Stmt, translateStmts } from "./terms";
@@ -42,6 +43,7 @@ export const DEFAULT_STEP_LIMIT = 1000;
  * multi-line message (location, source line, hint, suggestion); the hint line (`XError: ...`) is
  * what a step needs. */
 export function shortErrorMessage(error: unknown): string {
+  if (isStackOverflow(error)) return RECURSION_ERROR_MESSAGE;
   const message =
     typeof error === "object" &&
     error !== null &&
@@ -150,63 +152,86 @@ export async function runEStepper(
 
   push(program, snapshotStore(machine, program), "", { explanation: "Start of evaluation" });
 
-  const contractionLimit = Math.max(0, Math.floor((stepLimit - 1) / 2));
-  for (let n = 0; ; n++) {
-    if (n === contractionLimit) {
-      push(program, snapshotStore(machine, program), machine.output, {
-        explanation: "Maximum number of steps exceeded",
-      });
-      return { steps, output: machine.output, truncated: true };
+  // The number of steps that end a contraction: the JavaScript stack can run out in the middle of
+  // one, in the machine or in drawing the term, which is nested as deep as the calls are.
+  let complete = steps.length;
+  try {
+    const contractionLimit = Math.max(0, Math.floor((stepLimit - 1) / 2));
+    for (let n = 0; ; n++) {
+      complete = steps.length;
+      if (n === contractionLimit) {
+        push(program, snapshotStore(machine, program), machine.output, {
+          explanation: "Maximum number of steps exceeded",
+        });
+        return { steps, output: machine.output, truncated: true };
+      }
+      const storeBefore = snapshotStore(machine, program);
+      const outputBefore = machine.output;
+      machine.lookups = [];
+      let outcome: Awaited<ReturnType<Machine["stepList"]>>;
+      try {
+        outcome = await machine.stepList(program, machine.programEnv);
+      } catch (error) {
+        const message = shortErrorMessage(error);
+        // Output printed during the failed contraction (e.g. by a library function) still counts.
+        push(program, storeBefore, machine.output, {
+          redexType: "beforeMarker",
+          explanation: message,
+        });
+        push(program, snapshotStore(machine, program), machine.output, {
+          explanation: "Evaluation stuck",
+        });
+        return { steps, output: machine.output, error: message, truncated: false };
+      }
+      if (outcome.kind !== "step") {
+        push(program, storeBefore, outputBefore, {
+          explanation: outcome.kind === "end" ? "Evaluation complete" : "Evaluation stuck",
+        });
+        return { steps, output: machine.output, truncated: false };
+      }
+      const lookups = machine.lookups.map(l => ({
+        frameId: machine.labels.frame(l.env),
+        name: l.name,
+      }));
+      const c: Contraction = outcome.c;
+      push(
+        program,
+        storeBefore,
+        outputBefore,
+        {
+          redex: c.pre,
+          redexType: "beforeMarker",
+          explanation: c.before,
+          isBreakpoint: c.isBreakpoint,
+        },
+        lookups,
+      );
+      program = outcome.list;
+      push(
+        program,
+        snapshotStore(machine, program),
+        machine.output,
+        { redex: c.post, redexType: "afterMarker", explanation: c.after },
+        lookups,
+      );
     }
-    const storeBefore = snapshotStore(machine, program);
-    const outputBefore = machine.output;
-    machine.lookups = [];
-    let outcome: Awaited<ReturnType<Machine["stepList"]>>;
-    try {
-      outcome = await machine.stepList(program, machine.programEnv);
-    } catch (error) {
-      const message = shortErrorMessage(error);
-      // Output printed during the failed contraction (e.g. by a library function) still counts.
-      push(program, storeBefore, machine.output, {
-        redexType: "beforeMarker",
-        explanation: message,
-      });
-      push(program, snapshotStore(machine, program), machine.output, {
-        explanation: "Evaluation stuck",
-      });
-      return { steps, output: machine.output, error: message, truncated: false };
-    }
-    if (outcome.kind !== "step") {
-      push(program, storeBefore, outputBefore, {
-        explanation: outcome.kind === "end" ? "Evaluation complete" : "Evaluation stuck",
-      });
-      return { steps, output: machine.output, truncated: false };
-    }
-    const lookups = machine.lookups.map(l => ({
-      frameId: machine.labels.frame(l.env),
-      name: l.name,
-    }));
-    const c: Contraction = outcome.c;
-    push(
-      program,
-      storeBefore,
-      outputBefore,
-      {
-        redex: c.pre,
-        redexType: "beforeMarker",
-        explanation: c.before,
-        isBreakpoint: c.isBreakpoint,
-      },
-      lookups,
-    );
-    program = outcome.list;
-    push(
-      program,
-      snapshotStore(machine, program),
-      machine.output,
-      { redex: c.post, redexType: "afterMarker", explanation: c.after },
-      lookups,
-    );
+  } catch (error) {
+    if (!isStackOverflow(error)) throw error;
+    // The last step that was made whole stands in for the term that could not be drawn.
+    steps.length = complete;
+    const last = steps[steps.length - 1];
+    const stuck = (explanation: string, redexType?: "beforeMarker"): Step => {
+      const step: Step = {
+        ...last,
+        markers: [redexType ? { explanation, redexType } : { explanation }],
+        cse: last.cse && { ...last.cse, stepIndex: steps.length },
+      };
+      delete step.lookups;
+      return step;
+    };
+    steps.push(stuck(RECURSION_ERROR_MESSAGE, "beforeMarker"));
+    steps.push(stuck("Evaluation stuck"));
+    return { steps, output: machine.output, error: RECURSION_ERROR_MESSAGE, truncated: false };
   }
 }
 

@@ -29,6 +29,7 @@ import stream from "../../stdlib/stream";
 import type { Group } from "../../stdlib/utils";
 import { makeValidatorsForChapter } from "../../validator";
 import { CompileMode, compileProgram, Py2JsCompileError } from "./compiler";
+import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "../../errors/recursion";
 import { hasImports, loadChunkImports } from "./moduleInterop";
 import { annotateHostFunction, Py2JsRuntime, Py2JsRuntimeError, PyValue } from "./runtime";
 import { bridgeStdlibGroups } from "./stdlibBridge";
@@ -131,6 +132,7 @@ function hasLocalImports(statements: StmtNS.Stmt[]): boolean {
  * ultimately sourced from e.constructor.name (stdlibBridge.ts), which a minified production
  * build mangles, while the literal "TypeError: " etc. baked into the message text survives. */
 function formatCaughtError(e: unknown): string {
+  if (isStackOverflow(e)) return RECURSION_ERROR_MESSAGE;
   if (!(e instanceof Error)) return String(e);
   return /^[A-Za-z]+: /.test(e.message) ? e.message : `${e.name}: ${e.message}`;
 }
@@ -550,6 +552,17 @@ export class Py2JsSession {
 
   /** Compile and run one chunk against the persistent globals. */
   async runChunk(code: string): Promise<void> {
+    try {
+      await this.runChunkWithPrelude(code);
+    } catch (e: unknown) {
+      // (The standalone entry points do this in formatCaughtError.)
+      if (isStackOverflow(e))
+        throw new Py2JsRuntimeError("RecursionError", RECURSION_ERROR_MESSAGE);
+      throw e;
+    }
+  }
+
+  private async runChunkWithPrelude(code: string): Promise<void> {
     if (!this.preludeLoaded) {
       this.preludeLoaded = true;
       const preludeText = this.groups

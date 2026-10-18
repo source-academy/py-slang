@@ -21,8 +21,10 @@ import {
   UnassignedLocalError,
   UnsupportedOperandTypeError,
   OverflowError,
+  RecursionError,
   ZeroDivisionError,
 } from "./errors";
+import { RECURSION_ERROR_MESSAGE } from "../../errors/recursion";
 import OpCodes from "./opcodes";
 import {
   getPVMLType,
@@ -1645,7 +1647,7 @@ export class PVMLInterpreter {
     }
 
     if (!isTailCall && this.callDepth >= this.maxCallDepth) {
-      throw new Error(`Maximum call depth exceeded (${this.maxCallDepth})`);
+      throw new RecursionError(RECURSION_ERROR_MESSAGE);
     }
 
     const numArgs = args.length;

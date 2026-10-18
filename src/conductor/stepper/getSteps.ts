@@ -21,6 +21,7 @@ import type {
   SerializedStepperStep,
 } from "@sourceacademy/common-stepper";
 
+import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "../../errors/recursion";
 import type { StmtNS } from "../../ast-types";
 import { markBuiltins, type StepNode, unparse } from "./ast";
 import { isStepperValue, resolveBuiltinDisplayValue, substituteBuiltinConstants } from "./builtins";
@@ -92,6 +93,7 @@ function isComplete(prog: StepNode): boolean {
  * structural error rather than a native Error subclass. Preserve its formatted message when the
  * stepper catches it, instead of rendering the object as `[object Object]`. */
 function errorMessage(error: unknown): string {
+  if (isStackOverflow(error)) return RECURSION_ERROR_MESSAGE;
   if (
     typeof error === "object" &&
     error !== null &&
