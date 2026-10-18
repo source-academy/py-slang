@@ -240,7 +240,9 @@ async function readWasmValue(
       const offset = ptr < dataEnd ? ptr : ptr + GC_OBJECT_HEADER_SIZE;
       return {
         type: DataType.CONST_STRING,
-        value: new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, len)),
+        value: new TextDecoder("utf8", { ignoreBOM: true }).decode(
+          new Uint8Array(memory.buffer, offset, len),
+        ),
       };
     }
     case TYPE_TAG.LIST:
