@@ -56,12 +56,16 @@ const mooLexer = moo.compile({
   comment: /#[^\r\n]*/,
   continuation: { match: /\\\r?\n/, lineBreaks: true },
 
-  number_complex: /(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?[jJ]/,
-  number_float: /(?:\d+\.\d*|\.\d+)(?:[eE][+-]?\d+)?|\d+[eE][+-]?\d+/,
-  number_hex: /0[xX][0-9a-fA-F]+/,
-  number_oct: /0[oO][0-7]+/,
-  number_bin: /0[bB][01]+/,
-  number_int: /\d+/,
+  // PEP 515: an underscore may sit between two digits of a group, and right
+  // after a base prefix; the parser strips them (python.ne, `stripUnderscores`).
+  number_complex:
+    /(?:\d+(?:_\d+)*(?:\.(?:\d+(?:_\d+)*)?)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?[jJ]/,
+  number_float:
+    /(?:\d+(?:_\d+)*\.(?:\d+(?:_\d+)*)?|\.\d+(?:_\d+)*)(?:[eE][+-]?\d+(?:_\d+)*)?|\d+(?:_\d+)*[eE][+-]?\d+(?:_\d+)*/,
+  number_hex: /0[xX]_?[0-9a-fA-F]+(?:_[0-9a-fA-F]+)*/,
+  number_oct: /0[oO]_?[0-7]+(?:_[0-7]+)*/,
+  number_bin: /0[bB]_?[01]+(?:_[01]+)*/,
+  number_int: /\d+(?:_\d+)*/,
 
   // `lineBreaks: true` is required so moo's own line/col counters advance
   // across embedded newlines in the matched text (py-slang#394) — without

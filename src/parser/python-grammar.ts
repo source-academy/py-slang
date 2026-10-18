@@ -60,13 +60,14 @@ const astVariable = ([t]: [moo.Token]) => {
   const k = toAstToken(t);
   return new ExprNS.Variable(k, k, k);
 };
+const stripUnderscores = (text: string) => text.replace(/_/g, "");
 const astBigInt = ([t]: [moo.Token]) => {
   const k = toAstToken(t);
-  return new ExprNS.BigIntLiteral(k, k, t.value);
+  return new ExprNS.BigIntLiteral(k, k, stripUnderscores(t.value));
 };
 const astComplex = ([t]: [moo.Token]) => {
   const k = toAstToken(t);
-  return new ExprNS.Complex(k, k, t.value);
+  return new ExprNS.Complex(k, k, stripUnderscores(t.value));
 };
 const astNone = ([t]: [moo.Token]) => {
   const k = toAstToken(t);
@@ -1361,7 +1362,7 @@ const ParserRules = [
     symbols: [{ type: "number_float" }],
     postprocess: ([t]: [moo.Token]) => {
       const tok = toAstToken(t);
-      return new ExprNS.Literal(tok, tok, parseFloat(t.value));
+      return new ExprNS.Literal(tok, tok, parseFloat(stripUnderscores(t.value)));
     },
   },
   { name: "atom", symbols: [{ type: "number_int" }], postprocess: astBigInt },
