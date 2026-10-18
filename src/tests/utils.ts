@@ -562,26 +562,21 @@ export const generatePVMLTestCases = (
 // ---------------------------------------------------------------------------
 
 /**
- * Compares a Pynter float result against the CSE (float64) reference value.
- * Pynter's floats are IEEE-754 single-precision, so the reference value must
- * be rounded to float32 before comparing — otherwise every comparison is
- * inflated by the fp64→fp32 rounding a *correct* Pynter would also incur.
- * The tolerance is relative to that rounded value's magnitude (a fixed
- * absolute tolerance is meaningless once a value exceeds a few thousand, and
- * too generous once it's near zero), with a generous ULP budget on top to
- * absorb rounding compounded across chained float32 arithmetic (loops,
- * transcendental functions) rather than a single operation.
+ * Compares a Pynter float result against the CSE reference value. Pynter's
+ * floats are IEEE-754 doubles (as of its 64-bit NaN-boxing), like CSE's, but
+ * the native runner prints them with printf's "%f"/"%g", i.e. to about six
+ * significant digits, and the comparison goes through that text. So the
+ * tolerance is that of the printed form, relative to the reference's
+ * magnitude (and absolute near zero), rather than of a double.
  */
-const FLOAT32_EPSILON = Math.pow(2, -23);
-const FLOAT32_ULP_BUDGET = 4096;
+const FLOAT_PRINT_TOLERANCE = 1e-5;
 
-export function isCloseToFloat32(actual: unknown, wanted: number): boolean {
+export function isCloseToFloat(actual: unknown, wanted: number): boolean {
   if (typeof actual !== "number") return false;
   if (Number.isNaN(wanted)) return Number.isNaN(actual);
-  const rounded = Math.fround(wanted);
-  if (!Number.isFinite(rounded)) return actual === rounded;
-  const tolerance = FLOAT32_EPSILON * FLOAT32_ULP_BUDGET * Math.max(Math.abs(rounded), 1);
-  return Math.abs(actual - rounded) <= tolerance;
+  if (!Number.isFinite(wanted)) return actual === wanted;
+  const tolerance = FLOAT_PRINT_TOLERANCE * Math.max(Math.abs(wanted), 1);
+  return Math.abs(actual - wanted) <= tolerance;
 }
 
 /**
@@ -631,17 +626,6 @@ const NATIVE_PYNTER_SKIP_REASONS: {
   {
     matches: code => involvesChapter4OnlyParserFeature(code),
     reason: "parse()/tokenize()/apply_in_underlying_python() aren't part of Python 3",
-  },
-  {
-    // Not a bug: native Pynter's complex components are single-precision
-    // (float32, matching this VM's existing scalar float width — see
-    // pynter's siheap_complex_t), and 1e200 vastly exceeds float32's
-    // ~3.4e38 max, so hypotf(1e200f, 0) overflows to +Infinity. An exact
-    // one-off match (not a general "any huge complex" predicate) since this
-    // is the only test case exercising a value this far outside float32's
-    // range.
-    matches: code => code === "abs(1e200+0j)",
-    reason: "native Pynter's complex components are float32, which 1e200 overflows",
   },
   {
     // Each has its own individual, unrelated-to-complex-numbers root cause:
@@ -727,10 +711,10 @@ export const generateNativePynterTestCases = (
         }
 
         if (typeof expected === "number") {
-          expect(isCloseToFloat32(Number(result.capturedResult), expected)).toBe(true);
+          expect(isCloseToFloat(Number(result.capturedResult), expected)).toBe(true);
         } else if (expected instanceof PyComplexNumber) {
           if (Number.isNaN(expected.real) || Number.isNaN(expected.imag)) {
-            // NaN never round-trips through isCloseToFloat32 (never "close
+            // NaN never round-trips through isCloseToFloat (never "close
             // to" anything, including itself) — compare the printed string
             // directly instead, same as the plain-float NaN case elsewhere
             // in this file.
@@ -741,8 +725,8 @@ export const generateNativePynterTestCases = (
             // PyComplexNumber.toString() does, but fromString() accepts either
             // form, so no stripping needed here.
             const parsed = PyComplexNumber.fromString(result.capturedResult ?? "");
-            expect(isCloseToFloat32(parsed.real, expected.real)).toBe(true);
-            expect(isCloseToFloat32(parsed.imag, expected.imag)).toBe(true);
+            expect(isCloseToFloat(parsed.real, expected.real)).toBe(true);
+            expect(isCloseToFloat(parsed.imag, expected.imag)).toBe(true);
           }
         } else {
           expect(result.capturedResult).toBe(toPythonString(testOutputValueToCseValue(expected)));

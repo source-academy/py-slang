@@ -82,7 +82,10 @@ export default async function init(props: Record<string, unknown> = {}): Promise
     const u8 = module.HEAPU8;
     const dv = new DataView(u8.buffer);
     const type = dv.getUint32(resPtr, true);
-    const raw32 = dv.getUint32(resPtr + 4, true);
+    // pynter_value_t's union starts at offset 8 (the NaN-box is 64-bit, so
+    // the union is 8-byte aligned); it was offset 4 with the old 32-bit layout.
+    const valuePtr = resPtr + 8;
+    const raw32 = dv.getUint32(valuePtr, true);
 
     switch (type) {
       case 1: // pynter_type_undefined
@@ -92,9 +95,9 @@ export default async function init(props: Record<string, unknown> = {}): Promise
       case 3: // pynter_type_boolean
         return { type: "bool", value: raw32 === 1 };
       case 4: // pynter_type_integer (32-bit signed)
-        return { type: "int", value: dv.getInt32(resPtr + 4, true) };
-      case 5: // pynter_type_float (IEEE-754 float32)
-        return { type: "float", value: dv.getFloat32(resPtr + 4, true) };
+        return { type: "int", value: dv.getInt32(valuePtr, true) };
+      case 5: // pynter_type_float (IEEE-754 float64)
+        return { type: "float", value: dv.getFloat64(valuePtr, true) };
       case 6: {
         // pynter_type_string: raw32 is a pointer to null-terminated string
         const bytearray = module.HEAPU8.subarray(raw32, module.HEAPU8.indexOf(0, raw32));

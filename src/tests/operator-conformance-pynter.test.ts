@@ -37,7 +37,7 @@ import {
   PyType,
   universeForChapter,
 } from "./operator-spec";
-import { generateMockStreams, isCloseToFloat32 } from "./utils";
+import { generateMockStreams, isCloseToFloat } from "./utils";
 
 type CseOutcome = { kind: "value"; stashType: string; value: unknown } | { kind: "error" };
 
@@ -111,15 +111,15 @@ function pvmlValueMatches(wantType: string, wantValue: unknown, capturedResult: 
     case "bigint":
       return Number(capturedResult) === Number(wantValue);
     case "number":
-      return isCloseToFloat32(Number(capturedResult), Number(wantValue));
+      return isCloseToFloat(Number(capturedResult), Number(wantValue));
     case "bool":
       // Pynter's printer emits Python's "True"/"False" (see display.h).
       return (capturedResult === "True") === wantValue;
     case "string":
       return capturedResult === wantValue;
     case "complex": {
-      // Native Pynter's complex components are float32 (unlike
-      // PyComplexNumber's own double precision) and its printer doesn't
+      // Native Pynter's complex components are doubles (like
+      // PyComplexNumber's) but its printer doesn't
       // attempt CPython's exact scientific-notation formatting, only
       // enough to round-trip through PyComplexNumber.fromString() — compare
       // componentwise with tolerance, not exact text (mirrors the "float"
@@ -130,7 +130,7 @@ function pvmlValueMatches(wantType: string, wantValue: unknown, capturedResult: 
         return capturedResult === want.toString();
       }
       const actual = PyComplexNumber.fromString(capturedResult);
-      return isCloseToFloat32(actual.real, want.real) && isCloseToFloat32(actual.imag, want.imag);
+      return isCloseToFloat(actual.real, want.real) && isCloseToFloat(actual.imag, want.imag);
     }
     case "list":
       // wantValue is the raw CSE Value[] a list-typed stash entry carries
