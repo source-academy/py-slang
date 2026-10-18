@@ -946,3 +946,53 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython(
+  "review of the first slice, eighth round: literals, yield, print, int with a base",
+  () => {
+    const big = (n: number) => "9".repeat(n);
+    test.each<[string, string]>([
+      [
+        "a decimal literal of 4300 digits",
+        `x = ${big(4300)}\nprint(len(str(x)) if False else 1)\n`,
+      ],
+      ["a decimal literal of 4301 digits", `print('before')\nx = ${big(4301)}\nprint('after')\n`],
+      ["a hex literal of many digits is fine", `x = 0x${"f".repeat(5000)}\nprint(x > 0)\n`],
+      ["yield outside a function", "print('before')\nyield 1\n"],
+      ["yield in an expression outside a function", "print('before')\nx = (yield)\n"],
+      ["yield in a class body", "print('before')\nclass C:\n    yield 1\n"],
+      ["yield in an if at module level", "print('before')\nif True:\n    yield 1\n"],
+      ["a print that fails after a first argument", "print('prefix', 10 ** 5000)\n"],
+      [
+        "a print that fails after two arguments",
+        "print('a', 'b', 10 ** 5000, 'c')\nprint('not reached')\n",
+      ],
+      ["a string of many characters as a list", "x = list('x' * 100000)\nprint(len(x), x[-1])\n"],
+      ["min and max of a long string", "s = 'abc' * 50000\nprint(min(s), max(s))\n"],
+      [
+        "a for loop over a string",
+        "n = 0\nfor c in 'a\u{10000}bc':\n    n += 1\n    print(c, n)\n",
+      ],
+      [
+        "int with a base",
+        "print(int('10', 2), int('ff', 16), int('0xff', 16), int('0xff', 0), int('0b101', 0), int('0o17', 0), int('z', 36), int('-12', 5), int(' 7 ', 8), int('1_000', 10), int('0x_1f', 16), int('00', 0), int('0_0', 0))\n",
+      ],
+      ["int with a base: a digit too big", "int('12', 2)\n"],
+      ["int with a base: a bad base", "int('1', 1)\n"],
+      ["int with a base: a bad base 37", "int('1', 37)\n"],
+      ["int with a base: a number, not a string", "int(10, 2)\n"],
+      ["int with a base: a float base", "int('10', 2.0)\n"],
+      ["int with base 0 and a leading zero", "int('010', 0)\n"],
+      [
+        "int with a base: a prefix of another base",
+        "int('0b1', 16) if False else print(int('0b1', 16))\nint('0x1', 8)\n",
+      ],
+      ["int with a base: underscores", "int('1__0', 10)\n"],
+      ["int with a base: a trailing underscore", "int('10_', 10)\n"],
+      ["int with a base: empty", "int('', 2)\n"],
+      ["int with a base: three arguments", "int('1', 2, 3)\n"],
+      ["int with a base: too many digits in base 3", `int('1' * 4301, 3)\n`],
+      ["int with a base: many digits in base 16", `print(int('f' * 5000, 16) > 0)\n`],
+    ])("%s", (_, code) => same(code));
+  },
+);

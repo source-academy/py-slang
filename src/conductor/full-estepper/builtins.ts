@@ -71,6 +71,52 @@ function intFromString(text: string): PyValue {
   throw new PyError("ValueError", `invalid literal for int() with base 10: ${strRepr(text)}`);
 }
 
+/** `int(text, base)`: the base is 0 (the prefix decides) or 2 to 36; digits and letters, `_` between digits. */
+function intWithBase(v: PyValue, baseValue: PyValue): PyValue {
+  if (v.type !== "str") {
+    throw new PyError("TypeError", "int() can't convert non-string with explicit base");
+  }
+  const base = Number(asInteger(baseValue));
+  if (!(base === 0 || (base >= 2 && base <= 36))) {
+    throw new PyError("ValueError", "int() base must be >= 2 and <= 36, or 0");
+  }
+  const invalid = () =>
+    new PyError("ValueError", `invalid literal for int() with base ${base}: ${strRepr(v.value)}`);
+  let t = asciiDigits(v.value.trim());
+  let negative = false;
+  if (t.startsWith("-") || t.startsWith("+")) {
+    negative = t[0] === "-";
+    t = t.slice(1);
+  }
+  let radix = base;
+  const prefix = /^0([xob])/i.exec(t);
+  const prefixBase = prefix ? { x: 16, o: 8, b: 2 }[prefix[1].toLowerCase() as "x" | "o" | "b"] : 0;
+  if (prefix && (base === 0 || base === prefixBase)) {
+    radix = prefixBase;
+    t = t.slice(2);
+    if (t.startsWith("_")) t = t.slice(1);
+  } else if (base === 0) {
+    radix = 10;
+    // No leading zeros without a prefix, except for zero itself.
+    if (/^0[0-9_]*[1-9]/.test(t)) throw invalid();
+  }
+  if (t === "" || t.startsWith("_") || t.endsWith("_") || t.includes("__")) throw invalid();
+  const digits = t.replace(/_/g, "");
+  let value = 0n;
+  for (const ch of digits) {
+    const d = parseInt(ch, 36);
+    if (Number.isNaN(d) || d >= radix) throw invalid();
+    value = value * BigInt(radix) + BigInt(d);
+  }
+  if ((radix & (radix - 1)) !== 0 && digits.length > 4300) {
+    throw new PyError(
+      "ValueError",
+      `Exceeds the limit (4300 digits) for integer string conversion: value has ${digits.length} digits`,
+    );
+  }
+  return int(negative ? -value : value);
+}
+
 function floatFromString(text: string): PyValue {
   const t = asciiDigits(text.trim()).toLowerCase();
   const special = /^([+-]?)(inf|infinity|nan)$/.exec(t);
@@ -88,7 +134,12 @@ function floatFromString(text: string): PyValue {
 
 const BUILTINS: Record<string, Builtin> = {
   print(args, out) {
-    out.write(`${args.map(toStr).join(" ")}\n`);
+    // Python writes the arguments one by one, so what comes before a failing conversion is out.
+    args.forEach((arg, i) => {
+      if (i > 0) out.write(" ");
+      out.write(toStr(arg));
+    });
+    out.write("\n");
     return NONE;
   },
 
@@ -142,8 +193,9 @@ const BUILTINS: Record<string, Builtin> = {
 
   int(args) {
     if (args.length === 0) return int(0);
-    if (args.length > 1)
+    if (args.length > 2)
       throw new PyError("TypeError", `int() takes at most 2 arguments (${args.length} given)`);
+    if (args.length === 2) return intWithBase(args[0], args[1]);
     const [v] = args;
     switch (v.type) {
       case "int":

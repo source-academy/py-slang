@@ -148,9 +148,42 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
       }
     }
   };
+  checkLiteralsAndYields(program);
   checkDuplicateParameters(program);
   walk(program, [], false);
   checkOrder(program, new Map());
+}
+
+/**
+ * Compile-time errors that live in expressions: a decimal literal of more than 4300 digits (CPython
+ * has the same limit for the source as for `int(text)`), and `yield` outside a function.
+ */
+function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
+  // Nodes inside a function or a lambda: a `yield` there is fine.
+  const inner = new Set<unknown>();
+  for (const stmt of program) {
+    traverseAST(stmt, n => {
+      if (
+        n instanceof StmtNS.FunctionDef ||
+        n instanceof ExprNS.Lambda ||
+        n instanceof ExprNS.MultiLambda
+      ) {
+        traverseAST(n, d => d !== n && inner.add(d));
+      }
+      if (n instanceof ExprNS.BigIntLiteral && /^[0-9]+$/.test(String(n.value))) {
+        const digits = String(n.value).length;
+        if (digits > 4300) {
+          throw new PyError(
+            "SyntaxError",
+            `Exceeds the limit (4300 digits) for integer string conversion: value has ${digits} digits`,
+          );
+        }
+      }
+      if (n instanceof ExprNS.Yield && !inner.has(n)) {
+        throw new PyError("SyntaxError", "'yield' outside function");
+      }
+    });
+  }
 }
 
 /** A parameter name may appear once in a `def` or a `lambda`: `def f(x, x)` is a SyntaxError. */

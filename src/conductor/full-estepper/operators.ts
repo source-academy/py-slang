@@ -583,13 +583,25 @@ export function setItem(container: PyValue, index: PyValue, value: PyValue): voi
   items[Number(i)] = value;
 }
 
+let lastText = "";
+let lastPoints: string[] = [];
+
+/** The characters of a string, by code point; the last one asked for is kept, for loops over it. */
+function codePoints(text: string): string[] {
+  if (text !== lastText) {
+    lastText = text;
+    lastPoints = Array.from(text);
+  }
+  return lastPoints;
+}
+
 /** The `pos`th element that iterating over `v` gives, or undefined at its end. A list is read live. */
 export function iterAt(v: PyValue, pos: number): PyValue | undefined {
   switch (v.type) {
     case "list":
       return pos < v.obj.elements.length ? v.obj.elements[pos] : undefined;
     case "str": {
-      const chars = Array.from(v.value);
+      const chars = codePoints(v.value);
       return pos < chars.length ? str(chars[pos]) : undefined;
     }
     case "range":
@@ -599,7 +611,6 @@ export function iterAt(v: PyValue, pos: number): PyValue | undefined {
   }
 }
 
-/** All the elements of an iterable. */
 /** The longest range that the engine builds as a list in one step (CPython would try, and may run out of memory). */
 const MAX_MATERIALIZED = 10_000_000n;
 
@@ -611,6 +622,7 @@ export function checkMaterializable(length: bigint): void {
   if (length > MAX_MATERIALIZED) throw new PyError("MemoryError", "");
 }
 
+/** All the elements of an iterable. */
 export function elementsOf(v: PyValue): PyValue[] {
   if (v.type === "range") checkMaterializable(rangeLength(v));
   const out: PyValue[] = [];
