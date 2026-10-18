@@ -1258,3 +1258,63 @@ describe("the rest of the expressions of full Python", () => {
     });
   });
 });
+
+describe("underscores in numeric literals (PEP 515)", () => {
+  test.each([
+    ["1_000", "1000"],
+    ["0_0", "00"],
+    ["00_0", "000"],
+    ["0x_ff", "0xff"],
+    ["0xdead_beef", "0xdeadbeef"],
+    ["0x1_f", "0x1f"],
+    ["0b_1", "0b1"],
+    ["0b1_0", "0b10"],
+    ["0o1_7", "0o17"],
+  ])("integer %s is read as %s", (src, text) => {
+    const e = expression(src);
+    expect(e).toBeInstanceOf(ExprNS.BigIntLiteral);
+    expect((e as ExprNS.BigIntLiteral).value).toBe(text);
+    expect(BigInt((e as ExprNS.BigIntLiteral).value)).toBe(BigInt(text));
+  });
+
+  test.each([
+    ["1_0.5_5", 10.55],
+    ["1e1_0", 1e10],
+    ["1_0e-1_0", 1e-9],
+    [".5_5", 0.55],
+    ["1_0.", 10],
+  ])("float %s", (src, value) => {
+    const e = expression(src);
+    expect(e).toBeInstanceOf(ExprNS.Literal);
+    expect((e as ExprNS.Literal).value).toBe(value);
+  });
+
+  test("imaginary literals ignore underscores", () => {
+    const e = expression("1_0j");
+    expect(e).toBeInstanceOf(ExprNS.Complex);
+    expect((e as ExprNS.Complex).value.imag).toBe(10);
+    expect((expression("1_0.5_5e1_0J") as ExprNS.Complex).value.imag).toBe(10.55e10);
+  });
+
+  test.each([
+    "1_",
+    "1__0",
+    "1_.5",
+    "1._5",
+    "1e_5",
+    "1_e5",
+    "0x",
+    "0x_",
+    "0_x1",
+    "0b_2",
+    "0o_8",
+    "0x1__f",
+    "1_0_",
+  ])("%s is a syntax error", src => {
+    expect(() => expression(src)).toThrow();
+  });
+
+  test("_1 is an identifier, not a number", () => {
+    expect(expression("_1")).toBeInstanceOf(ExprNS.Variable);
+  });
+});

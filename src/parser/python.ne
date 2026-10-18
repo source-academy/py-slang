@@ -54,8 +54,9 @@ function stripQuotes(s: string) {
 
 // ── Leaf AST constructors (token → node) ────────────────────────────────
 const astVariable   = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Variable(k, k, k); };
-const astBigInt     = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.BigIntLiteral(k, k, t.value); };
-const astComplex    = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Complex(k, k, t.value); };
+const stripUnderscores = (text: string) => text.replace(/_/g, "");
+const astBigInt     = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.BigIntLiteral(k, k, stripUnderscores(t.value)); };
+const astComplex    = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Complex(k, k, stripUnderscores(t.value)); };
 const astNone       = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.None(k, k); };
 const astString     = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, stripQuotes(t.value)); };
 const astTrue       = ([t]: [moo.Token]) => { const k = toAstToken(t); return new ExprNS.Literal(k, k, true); };
@@ -626,7 +627,7 @@ atom ->
            new ExprNS.Comprehension(toAstToken(l), toAstToken(r), "list", element, null, generators(clauses)) %}
   | %name                                        {% astVariable %}
   | %number_float
-      {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(t.value)); } %}
+      {% ([t]: [moo.Token]) => { const tok = toAstToken(t); return new ExprNS.Literal(tok, tok, parseFloat(stripUnderscores(t.value))); } %}
   | %number_int                                  {% astBigInt %}
   | %number_hex                                  {% astBigInt %}
   | %number_oct                                  {% astBigInt %}
