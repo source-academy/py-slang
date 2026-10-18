@@ -178,4 +178,15 @@ describeIfPython("Python's arithmetic on numbers", () => {
       );
     },
   );
+
+  // A negative base with a fractional exponent is a complex number in Python; here it is nan (a
+  // difference that the specs list), not an OverflowError.
+  describe.each(ENGINES)("a negative base with a fractional exponent: %s", (_, run) => {
+    test.each(["(-8) ** 0.5", "(-2.0) ** 0.5", "(-2.5) ** 1e-300", "(-1e300) ** 0.5"])(
+      "%s",
+      async expression => {
+        expect((await run(`print(${expression})\n`, 4)).trim()).toBe("nan");
+      },
+    );
+  });
 });

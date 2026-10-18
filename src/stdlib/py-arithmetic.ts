@@ -132,7 +132,9 @@ function floatPowInt(x: number, n: bigint): number {
 
 /** A float result of `**`; CPython raises an OverflowError where JavaScript gives infinity. */
 function checkedPow(result: number, base: number, exponent: number): number {
-  if (!Number.isFinite(result) && Number.isFinite(base) && Number.isFinite(exponent)) {
+  // (A NaN result is not an overflow: a negative base with a fractional exponent is a complex
+  // number in Python, and NaN here.)
+  if (Math.abs(result) === Infinity && Number.isFinite(base) && Number.isFinite(exponent)) {
     throw new PyArithError("OverflowError", "(34, 'Numerical result out of range')");
   }
   return result;
