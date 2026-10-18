@@ -362,7 +362,7 @@ describe("PVML E2E", () => {
       const ast = parse(code);
       const program = PVMLCompiler.fromProgram(ast, 4).compileProgram(ast);
       const interpreter = new PVMLInterpreter(program, { maxCallDepth: 5 });
-      expect(() => interpreter.execute()).toThrow(/call depth/i);
+      expect(() => interpreter.execute()).toThrow(/RecursionError/);
     });
   });
 

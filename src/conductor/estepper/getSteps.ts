@@ -18,6 +18,7 @@ import type {
 import type { StmtNS } from "../../ast-types";
 import { analyze } from "../../resolver/analysis";
 import { VARIANT_GROUPS } from "../../runner";
+import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "../../errors/recursion";
 import { type Contraction, Machine, type RequestInput } from "./engine";
 import { ProgramSerializer, snapshotStore, type StoreSnapshot } from "./serialize";
 import { type Expr, type Stmt, translateStmts } from "./terms";
@@ -42,6 +43,7 @@ export const DEFAULT_STEP_LIMIT = 1000;
  * multi-line message (location, source line, hint, suggestion); the hint line (`XError: ...`) is
  * what a step needs. */
 export function shortErrorMessage(error: unknown): string {
+  if (isStackOverflow(error)) return RECURSION_ERROR_MESSAGE;
   const message =
     typeof error === "object" &&
     error !== null &&

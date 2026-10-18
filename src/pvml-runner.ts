@@ -32,6 +32,7 @@ import { PVMLInterpreter } from "./engines/pvml/pvml-interpreter";
 import type { PVMLBoxType } from "./engines/pvml/types";
 import { parse } from "./parser";
 import { analyzeWithEnvironments } from "./resolver";
+import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "./errors/recursion";
 import { RunError, VARIANT_GROUPS } from "./runner";
 import type { Group } from "./stdlib/utils";
 import { Token, TokenType } from "./tokenizer";
@@ -334,7 +335,9 @@ function runCodePvmlInterpreterSync(
     } catch (e: unknown) {
       throw new RunError(
         "runtime",
-        String((e as { message?: string })?.message ?? e),
+        isStackOverflow(e)
+          ? RECURSION_ERROR_MESSAGE
+          : String((e as { message?: string })?.message ?? e),
         outputs.join(""),
       );
     }
