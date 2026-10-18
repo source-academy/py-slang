@@ -211,6 +211,19 @@ function structuralEquals(
     return true;
   }
 
+  // The same number (the same value, however it was computed) is equal to itself, a nan too: a nan
+  // inside a container equals a nan inside the other. (The top level of `==` never gets here with
+  // a nan operand: `math_nan == math_nan` is False.)
+  if (
+    (left.type === "number" && right.type === "number" && Object.is(left.value, right.value)) ||
+    (left.type === "complex" &&
+      right.type === "complex" &&
+      Object.is(left.value.real, right.value.real) &&
+      Object.is(left.value.imag, right.value.imag))
+  ) {
+    return true;
+  }
+
   // As in CPython, booleans compare as the ints they are (True == 1, False == 0.0)
   left = asIntIfBool(left);
   right = asIntIfBool(right);
