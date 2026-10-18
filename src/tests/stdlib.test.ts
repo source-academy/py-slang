@@ -1342,7 +1342,9 @@ describe("Standard Library Tests", () => {
         ["x = complex(0, math_nan)\nx == x", false, null],
         ["complex(math_nan, 0) == complex(math_nan, 0)", false, null],
         ["c = complex(math_nan, 0)\n[c] == [c]", true, null],
-        ["[complex(math_nan, 0)] == [complex(math_nan, 0)]", false, null],
+        // Numbers are compared by value inside a container (as in PyPy; CPython would say False for
+        // two separately created nans, see the specs and py-slang#579).
+        ["[complex(math_nan, 0)] == [complex(math_nan, 0)]", true, null],
       ],
       // `is not` is the negation of `is` (regression: it used to parse as plain `is`)
       "is not operator": [

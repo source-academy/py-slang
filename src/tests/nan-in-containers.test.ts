@@ -43,6 +43,14 @@ const PAIR_CASES: [string, string][] = [
   ["pair(1, 2) == pair(1, 2)", "True"],
   ["pair(0.0, 1) == pair(-0.0, 1)", "True"],
 ];
+// Nans computed separately are equal in a container too: this language compares numbers by value
+// (CPython says False for these; see the spec of Python §2).
+const SEPARATE_NAN_CASES: [string, string][] = [
+  ["pair(math_inf - math_inf, 1) == pair(math_inf - math_inf, 1)", "True"],
+  ["pair(math_inf - math_inf, 1) == pair(math_nan, 1)", "True"],
+  ["pair(math_inf - math_inf, 1) != pair(math_nan, 1)", "False"],
+  ["pair(math_inf - math_inf, 1) == pair(math_nan, 2)", "False"],
+];
 // A complex number with a nan, shared by two containers (the same object in CPython).
 const COMPLEX_PAIR_CASES: [string, string][] = [
   ["pair(c, 1) == pair(c, 1)", "True"],
@@ -67,6 +75,9 @@ describe.each(ENGINES)("a nan in a container: %s", (_, run) => {
       const code = "a = pair(math_nan, None)\nprint(a == a)\nprint(a != a)\n";
       expect(await run(code, chapter)).toBe("True\nFalse\n");
     });
+    test.each(SEPARATE_NAN_CASES)("%s", async (expression, expected) => {
+      expect(await run(`print(${expression})\n`, chapter)).toBe(expected + "\n");
+    });
     test.each(COMPLEX_PAIR_CASES)("%s, c = complex(math_nan, 0)", async (expression, expected) => {
       const code = `c = complex(math_nan, 0)\nprint(${expression})\n`;
       expect(await run(code, chapter)).toBe(expected + "\n");
@@ -86,6 +97,9 @@ describe.each(ENGINES)("a nan in a container: %s", (_, run) => {
 // The substitution stepper of §1/§2 (src/conductor/stepper) evaluates to the value of the last
 // expression; it has pairs but no list literals.
 describe("a nan in a pair: the stepper (§2)", () => {
+  test.each(SEPARATE_NAN_CASES)("%s", async (expression, expected) => {
+    expect(await evaluatePython(parse(expression + "\n"))).toBe(expected);
+  });
   test.each(PAIR_CASES)("%s", async (expression, expected) => {
     expect(await evaluatePython(parse(expression + "\n"))).toBe(expected);
   });
