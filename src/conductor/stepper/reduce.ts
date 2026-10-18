@@ -26,6 +26,15 @@
  */
 
 import type { DataType, TypedValue } from "@sourceacademy/conductor/types";
+import {
+  floorDivideFloats,
+  moduloFloats,
+  powerFloats,
+  powerIntNegative,
+  PyArithError,
+  toFloat,
+  trueDivideInts,
+} from "../../stdlib/py-arithmetic";
 import { compareCodePoints } from "../../stdlib/py-strings";
 
 import {
@@ -124,6 +133,16 @@ function isNumericValue(v: unknown): v is bigint | number {
   return typeof v === "bigint" || typeof v === "number";
 }
 
+/** CPython's arithmetic (stdlib/py-arithmetic.ts); its errors are errors of the stepper. */
+function arith<T>(compute: () => T): T {
+  try {
+    return compute();
+  } catch (e) {
+    if (e instanceof PyArithError) throw new Error(`${e.kind}: ${e.message}`);
+    throw e;
+  }
+}
+
 /** Exact integer arithmetic (Python ints and bools, which are ints). */
 function intBinary(op: string, l: bigint, r: bigint): StepNode | null {
   if (r === 0n && (op === "/" || op === "//" || op === "%")) {
@@ -140,7 +159,10 @@ function intBinary(op: string, l: bigint, r: bigint): StepNode | null {
     case "*":
       return literal(l * r, String(l * r), false);
     case "/":
-      return numberLiteral(Number(l) / Number(r), true);
+      return numberLiteral(
+        arith(() => trueDivideInts(l, r)),
+        true,
+      );
     case "//": {
       const q = l / r;
       const floored = l % r !== 0n && l < 0n !== r < 0n ? q - 1n : q;
@@ -152,7 +174,10 @@ function intBinary(op: string, l: bigint, r: bigint): StepNode | null {
     }
     case "**":
       return r < 0n
-        ? numberLiteral(Number(l) ** Number(r), true)
+        ? numberLiteral(
+            arith(() => powerIntNegative(l, r)),
+            true,
+          )
         : literal(l ** r, String(l ** r), false);
     case "<":
       return boolLiteral(l < r);
@@ -176,9 +201,6 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
   if (r === 0 && (op === "/" || op === "//" || op === "%")) {
     throw new Error("ZeroDivisionError: division by zero");
   }
-  if (l === 0 && r < 0 && op === "**") {
-    throw new Error("ZeroDivisionError: 0.0 cannot be raised to a negative power");
-  }
   switch (op) {
     case "+":
       return numberLiteral(l + r, pyFloat);
@@ -189,11 +211,19 @@ function floatBinary(op: string, l: number, r: number, pyFloat: boolean): StepNo
     case "/":
       return numberLiteral(l / r, true);
     case "//":
-      return numberLiteral(Math.floor(l / r), pyFloat);
+      return numberLiteral(
+        arith(() => floorDivideFloats(l, r)),
+        pyFloat,
+      );
     case "%":
-      return numberLiteral(((l % r) + r) % r, pyFloat);
-    case "**":
-      return numberLiteral(l ** r, pyFloat || l ** r !== Math.floor(l ** r));
+      return numberLiteral(
+        arith(() => moduloFloats(l, r)),
+        pyFloat,
+      );
+    case "**": {
+      const power = arith(() => powerFloats(l, r));
+      return numberLiteral(power, pyFloat || power !== Math.floor(power));
+    }
     case "<":
       return boolLiteral(l < r);
     case ">":
@@ -480,9 +510,11 @@ function contractBinary(node: StepNode): ReduceResult | null {
       if (typeof l !== "number" && typeof r !== "number") {
         result = intBinary(op, l, r);
       } else {
-        const ln = typeof l === "number" ? l : Number(l);
-        const rn = typeof r === "number" ? r : Number(r);
-        result = floatBinary(op, ln, rn, true);
+        // An int too big for a float is an OverflowError in arithmetic, but compares exactly.
+        const arithmetic = ["+", "-", "*", "/", "//", "%", "**"].includes(op);
+        const asFloat = (n: bigint | number): number =>
+          typeof n === "number" ? n : arithmetic ? arith(() => toFloat(n)) : Number(n);
+        result = floatBinary(op, asFloat(l), asFloat(r), true);
       }
     }
   }

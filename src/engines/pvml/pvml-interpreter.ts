@@ -1,3 +1,12 @@
+import {
+  floorDivideFloats,
+  moduloFloats,
+  powerFloats,
+  powerIntNegative,
+  PyArithError,
+  toFloat,
+  trueDivideInts,
+} from "../../stdlib/py-arithmetic";
 import { compareCodePoints } from "../../stdlib/py-strings";
 import { numericCompare, pythonMod } from "../cse/utils";
 import { PyComplexNumber } from "../../types";
@@ -11,6 +20,7 @@ import {
   PVMLInterpreterError,
   UnassignedLocalError,
   UnsupportedOperandTypeError,
+  OverflowError,
   ZeroDivisionError,
 } from "./errors";
 import OpCodes from "./opcodes";
@@ -595,7 +605,7 @@ export class PVMLInterpreter {
         const right = this.pop() as number;
         const left = this.pop() as number;
         if (right === 0) throw new ZeroDivisionError("division by zero");
-        this.push(Math.floor(left / right));
+        this.push(PVMLInterpreter.arith(() => floorDivideFloats(left, right)));
         break;
       }
       case OpCodes.MODG: {
@@ -614,7 +624,7 @@ export class PVMLInterpreter {
         const right = this.pop() as number;
         const left = this.pop() as number;
         if (right === 0) throw new ZeroDivisionError("integer modulo by zero");
-        this.push(pythonMod(left, right));
+        this.push(PVMLInterpreter.arith(() => moduloFloats(left, right)));
         break;
       }
       case OpCodes.POWG: {
@@ -1076,8 +1086,8 @@ export class PVMLInterpreter {
       }
     }
     if (typeof left === "number" || typeof right === "number") {
-      const l = Number(left);
-      const r = Number(right);
+      const l = PVMLInterpreter.arith(() => toFloat(left));
+      const r = PVMLInterpreter.arith(() => toFloat(right));
       switch (op) {
         case "+":
           return l + r;
@@ -1090,10 +1100,10 @@ export class PVMLInterpreter {
           return l / r;
         case "//":
           if (r === 0) throw new ZeroDivisionError("division by zero");
-          return Math.floor(l / r);
+          return PVMLInterpreter.arith(() => floorDivideFloats(l, r));
         case "%":
           if (r === 0) throw new ZeroDivisionError("integer modulo by zero");
-          return pythonMod(l, r);
+          return PVMLInterpreter.arith(() => moduloFloats(l, r));
       }
     }
     const l = left;
@@ -1107,7 +1117,7 @@ export class PVMLInterpreter {
         return l * r;
       case "/":
         if (r === 0n) throw new ZeroDivisionError("division by zero");
-        return Number(l) / Number(r);
+        return PVMLInterpreter.arith(() => trueDivideInts(l, r));
       case "//":
         if (r === 0n) throw new ZeroDivisionError("division by zero");
         return (l - pythonMod(l, r)) / r;
@@ -1135,13 +1145,26 @@ export class PVMLInterpreter {
       if (left === 0n && right < 0n) {
         throw new ZeroDivisionError("0.0 cannot be raised to a negative power");
       }
-      if (right < 0n) return Number(left) ** Number(right);
+      if (right < 0n) return PVMLInterpreter.arith(() => powerIntNegative(left, right));
       return left ** right;
     }
-    const l = Number(left);
-    const r = Number(right);
-    if (l === 0 && r < 0) throw new ZeroDivisionError("0.0 cannot be raised to a negative power");
-    return l ** r;
+    const l = PVMLInterpreter.arith(() => toFloat(left));
+    const r = PVMLInterpreter.arith(() => toFloat(right));
+    return PVMLInterpreter.arith(() => powerFloats(l, r));
+  }
+
+  /** Runs CPython's arithmetic (stdlib/py-arithmetic.ts); its errors are errors of this engine. */
+  private static arith<T>(compute: () => T): T {
+    try {
+      return compute();
+    } catch (e) {
+      if (e instanceof PyArithError) {
+        throw e.kind === "ZeroDivisionError"
+          ? new ZeroDivisionError(e.message)
+          : new OverflowError(`OverflowError: ${e.message}`);
+      }
+      throw e;
+    }
   }
 
   /** Whether `value` is a NaN float, or a complex value with a NaN real or
