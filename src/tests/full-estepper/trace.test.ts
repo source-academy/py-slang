@@ -333,3 +333,19 @@ describe("what is not supported yet", () => {
     });
   });
 });
+
+describe("long values in a trace", () => {
+  test("a string of more than 200 characters is shortened, and print still writes all of it", () => {
+    const trace = runFullEStepper("s = 'x' * 1000\nprint(len(s))\ns\n", 1000);
+    const text = JSON.stringify(trace.steps);
+    expect(text).not.toContain("x".repeat(300));
+    expect(text).toContain("1000 characters");
+    expect(trace.output).toBe("1000\n");
+    expect(evaluate("print('x' * 300)", 100).output).toBe(`${"x".repeat(300)}\n`);
+  });
+
+  test("a string of 200 characters is shown in full", () => {
+    const trace = runFullEStepper("s = 'y' * 200\ns\n", 1000);
+    expect(JSON.stringify(trace.steps)).toContain("y".repeat(200));
+  });
+});

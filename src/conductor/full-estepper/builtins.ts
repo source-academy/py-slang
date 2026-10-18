@@ -4,7 +4,7 @@
  */
 
 import { PyError } from "./errors";
-import { binaryOp, elementsOf } from "./operators";
+import { binaryOp, codePoints, elementsOf } from "./operators";
 import {
   FALSE,
   NONE,
@@ -46,6 +46,17 @@ function asInteger(v: PyValue): bigint {
   throw new PyError("TypeError", `'${typeName(v)}' object cannot be interpreted as an integer`);
 }
 
+/**
+ * The whitespace that the numeric conversions of Python skip. It is not JavaScript's (no U+FEFF), and
+ * not that of `str.isspace()` (not the separators \\x1c to \\x1f).
+ */
+const PY_SPACE =
+  "\\t\\n\\v\\f\\r \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
+const PY_STRIP = new RegExp(`^[${PY_SPACE}]+|[${PY_SPACE}]+$`, "g");
+function pyStrip(text: string): string {
+  return text.replace(PY_STRIP, "");
+}
+
 /** Python reads the decimal digits of every script (`int('١٢')` is 12); this turns them into ASCII. */
 function asciiDigits(text: string): string {
   return text.replace(/\p{Nd}/gu, ch => {
@@ -57,7 +68,7 @@ function asciiDigits(text: string): string {
 }
 
 function intFromString(text: string): PyValue {
-  const t = asciiDigits(text.trim());
+  const t = asciiDigits(pyStrip(text));
   if (/^[+-]?\d+(_\d+)*$/.test(t)) {
     const digits = t.replace(/[+\-_]/g, "").length;
     if (digits > 4300) {
@@ -82,7 +93,7 @@ function intWithBase(v: PyValue, baseValue: PyValue): PyValue {
   }
   const invalid = () =>
     new PyError("ValueError", `invalid literal for int() with base ${base}: ${strRepr(v.value)}`);
-  let t = asciiDigits(v.value.trim());
+  let t = asciiDigits(pyStrip(v.value));
   let negative = false;
   if (t.startsWith("-") || t.startsWith("+")) {
     negative = t[0] === "-";
@@ -119,7 +130,7 @@ function intWithBase(v: PyValue, baseValue: PyValue): PyValue {
 }
 
 function floatFromString(text: string): PyValue {
-  const t = asciiDigits(text.trim()).toLowerCase();
+  const t = asciiDigits(pyStrip(text)).toLowerCase();
   const special = /^([+-]?)(inf|infinity|nan)$/.exec(t);
   if (special) {
     if (special[2] === "nan") return float(NaN);
@@ -151,7 +162,7 @@ const BUILTINS: Record<string, Builtin> = {
       case "list":
         return int(v.obj.elements.length);
       case "str":
-        return int(Array.from(v.value).length);
+        return int(codePoints(v.value).length);
       case "range": {
         const length = rangeLength(v);
         if (length > 9223372036854775807n) {

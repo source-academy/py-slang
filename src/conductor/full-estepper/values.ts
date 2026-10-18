@@ -170,6 +170,51 @@ function intDisplay(value: bigint): string {
   return `${text.slice(0, text.startsWith("-") ? 7 : 6)}…(${digits} digits)`;
 }
 
+const pointCache = new Map<string, string[]>();
+let cachedPoints = 0;
+/** The most characters the cache keeps (it is emptied at the end of each run as well). */
+const MAX_CACHED_POINTS = 8_000_000;
+
+let largeText: string | null = null;
+let largePoints: string[] = [];
+
+export function clearStringCache(): void {
+  pointCache.clear();
+  cachedPoints = 0;
+  largeText = null;
+  largePoints = [];
+}
+
+/** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
+export function codePoints(text: string): string[] {
+  let points = pointCache.get(text);
+  if (points) return points;
+  if (largeText === text) return largePoints;
+  points = Array.from(text);
+  if (points.length > MAX_CACHED_POINTS) {
+    // Too long for the cache, but a traversal of it needs it for as long as it lasts.
+    largeText = text;
+    largePoints = points;
+    return points;
+  }
+  while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {
+    const oldest = pointCache.keys().next().value as string;
+    cachedPoints -= (pointCache.get(oldest) as string[]).length;
+    pointCache.delete(oldest);
+  }
+  pointCache.set(text, points);
+  cachedPoints += points.length;
+  return points;
+}
+
+/** A string as a trace shows it: all of it, unless it is long (the trace shows it at every step). */
+function strDisplay(text: string): string {
+  if (text.length <= 200) return strRepr(text);
+  const points = codePoints(text);
+  if (points.length <= 200) return strRepr(text);
+  return `${strRepr(points.slice(0, 100).join(""))}…(${points.length} characters)`;
+}
+
 /** `repr` of a float, as CPython writes it (`1e-05`, `1e+16`, `3.0`, `inf`, `nan`). */
 export function floatRepr(x: number): string {
   if (Number.isNaN(x)) return "nan";
@@ -232,7 +277,7 @@ export function repr(v: PyValue, seen: Set<ListObj> = new Set(), display = false
     case "bool":
       return v.value ? "True" : "False";
     case "str":
-      return strRepr(v.value);
+      return display ? strDisplay(v.value) : strRepr(v.value);
     case "none":
       return "None";
     case "list": {

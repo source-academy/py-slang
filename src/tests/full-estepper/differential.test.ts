@@ -1157,3 +1157,67 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython(
+  "review of the first slice, twelfth round: expression scopes, string indexing, whitespace",
+  () => {
+    test.each<[string, string]>([
+      [
+        "a lambda default is a use in this scope",
+        "print('before')\ndef f():\n    lambda a=x: a\n    global x\nprint('after')\n",
+      ],
+      [
+        "a lambda body is not a use in this scope",
+        "def f():\n    lambda a: x\n    global x\nprint('ok')\n",
+      ],
+      ["a lambda parameter is not a use", "def f():\n    lambda x: x\n    global x\nprint('ok')\n"],
+      [
+        "a comprehension variable is not a use in this scope",
+        "def f():\n    [x for x in y]\n    global x\nprint('ok')\n",
+      ],
+      [
+        "the first iterable of a comprehension is a use",
+        "print('before')\ndef f():\n    [a for a in x]\n    global x\nprint('after')\n",
+      ],
+      [
+        "a later iterable of a comprehension is not",
+        "def f():\n    [a for a in b for c in x]\n    global x\nprint('ok')\n",
+      ],
+      [
+        "the element of a comprehension is not",
+        "def f():\n    [x for a in b]\n    global x\nprint('ok')\n",
+      ],
+      [
+        "a condition of a comprehension is not",
+        "def f():\n    [a for a in b if x]\n    global x\nprint('ok')\n",
+      ],
+      [
+        "a lambda in a comprehension iterable: its default is a use",
+        "print('before')\ndef f():\n    [a for a in [lambda q=x: q]]\n    global x\nprint('after')\n",
+      ],
+      ["string indexing", "s = 'a\u{10000}bc'\nprint(s[0], s[1], s[-1], s[-4], len(s))\ns[4]\n"],
+      ["a string index out of range", "'abc'[-4]\n"],
+      ["int with a byte order mark", "int('\ufeff1')\n"],
+      ["float with a byte order mark", "float('\ufeff1.5')\n"],
+      ["int with a base and a byte order mark", "int('\ufeff1', 8)\n"],
+      [
+        "int with Python's whitespace",
+        "print(int(' \x85 7 \xa0'), int('\u20003\u3000'), int('\x85 12 \x0b', 8), float(' \x852.5\u2029 '))\n",
+      ],
+      [
+        "int with a separator that str.isspace knows but the conversion does not",
+        "int('\\x1c1\\x1d')\n",
+      ],
+      ["float with such a separator", "float(' \\x1e2.5 ')\n"],
+      ["int with the whitespace JavaScript has and Python has not", "int('1\ufeff')\n"],
+    ])("%s", (_, code) => same(code));
+
+    test("indexing and len of a long string stay constant-time per step", () => {
+      const code =
+        "s = 'x' * 100000\nn = 0\nfor i in range(20000):\n    n += len(s) + len(s[i])\nprint(n)\n";
+      const result = evaluate(code, 2_000_000);
+      expect(result.error).toBeNull();
+      expect(result.output).toBe(String(20000 * (100000 + 1)) + "\n");
+    });
+  },
+);

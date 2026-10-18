@@ -3,6 +3,7 @@
  * where stable across versions, the messages) of its errors.
  */
 
+export { clearStringCache, codePoints } from "./values";
 import { PyError, UnsupportedError } from "./errors";
 import {
   bool,
@@ -15,6 +16,7 @@ import {
   truthy,
   typeName,
   type PyValue,
+  codePoints,
 } from "./values";
 
 /** An int or a bool as an int, a float as a float, anything else as null. */
@@ -553,7 +555,7 @@ export function getItem(container: PyValue, index: PyValue): PyValue {
       return items[Number(i)];
     }
     case "str": {
-      const chars = Array.from(container.value);
+      const chars = codePoints(container.value);
       let i = indexOf(container, index, "string");
       if (i < 0n) i += BigInt(chars.length);
       if (i < 0n || i >= BigInt(chars.length))
@@ -586,43 +588,6 @@ export function setItem(container: PyValue, index: PyValue, value: PyValue): voi
     throw new PyError("IndexError", "list assignment index out of range");
   }
   items[Number(i)] = value;
-}
-
-const pointCache = new Map<string, string[]>();
-let cachedPoints = 0;
-/** The most characters the cache keeps (it is emptied at the end of each run as well). */
-const MAX_CACHED_POINTS = 8_000_000;
-
-let largeText: string | null = null;
-let largePoints: string[] = [];
-
-export function clearStringCache(): void {
-  pointCache.clear();
-  cachedPoints = 0;
-  largeText = null;
-  largePoints = [];
-}
-
-/** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
-function codePoints(text: string): string[] {
-  let points = pointCache.get(text);
-  if (points) return points;
-  if (largeText === text) return largePoints;
-  points = Array.from(text);
-  if (points.length > MAX_CACHED_POINTS) {
-    // Too long for the cache, but a traversal of it needs it for as long as it lasts.
-    largeText = text;
-    largePoints = points;
-    return points;
-  }
-  while (pointCache.size > 0 && cachedPoints + points.length > MAX_CACHED_POINTS) {
-    const oldest = pointCache.keys().next().value as string;
-    cachedPoints -= (pointCache.get(oldest) as string[]).length;
-    pointCache.delete(oldest);
-  }
-  pointCache.set(text, points);
-  cachedPoints += points.length;
-  return points;
 }
 
 /** The `pos`th element that iterating over `v` gives, or undefined at its end. A list is read live. */

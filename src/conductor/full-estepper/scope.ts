@@ -242,11 +242,22 @@ function checkDuplicateParameters(program: StmtNS.Stmt[]): void {
 function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">): void {
   const use = (node: unknown): void => {
     if (!node) return;
-    // Names in the body of a lambda belong to the lambda's scope.
+    // Names that belong to an expression's own scope are not uses in this one: the body of a lambda
+    // (its defaults are evaluated here), and a comprehension (its first iterable is evaluated here).
     const inner = new Set<unknown>();
+    const exceptFor = (root: unknown, keep: unknown[]): void => {
+      const kept = new Set<unknown>();
+      for (const k of keep) if (k) traverseAST(k as never, d => kept.add(d));
+      traverseAST(root as never, d => d !== root && !kept.has(d) && inner.add(d));
+    };
     traverseAST(node as never, n => {
       if (n instanceof ExprNS.Lambda || n instanceof ExprNS.MultiLambda) {
-        traverseAST(n, d => d !== n && inner.add(d));
+        exceptFor(
+          n,
+          n.parameters.map(p => p.default),
+        );
+      } else if (n instanceof ExprNS.Comprehension) {
+        exceptFor(n, [n.generators[0]?.iter]);
       } else if (n instanceof ExprNS.Variable && !inner.has(n) && !seen.has(n.name.lexeme)) {
         seen.set(n.name.lexeme, "used");
       }
