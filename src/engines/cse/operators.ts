@@ -2,6 +2,7 @@ import { ExprNS } from "../../ast-types";
 import {
   ListMultiplyTypeError,
   UnsupportedOperandTypeError,
+  OverflowError,
   ZeroDivisionError,
 } from "../../errors/errors";
 import { TokenType } from "../../tokenizer";
@@ -10,6 +11,15 @@ import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { BigIntValue, ListValue, NumberValue, Value } from "./stash";
 import { operatorTranslator } from "./types";
+import {
+  floorDivideFloats,
+  moduloFloats,
+  powerFloats,
+  powerIntNegative,
+  PyArithError,
+  toFloat,
+  trueDivideInts,
+} from "../../stdlib/py-arithmetic";
 import { isCoercedComplex, isNumeric, numericCompare, pythonMod } from "./utils";
 
 export type BinaryOperator =
@@ -644,78 +654,84 @@ export function evaluateBinaryExpression(
       // If either operand is a number, perform the operation with numbers (with potential loss of precision for bigints),
       // otherwise perform the operation using bigints if both operands are bigints. This mimics Python's behavior of coercing to float for mixed int/float operations,
       // while allowing for arbitrary precision with bigints.
-      if (left.type === "number" || right.type === "number") {
-        const l = Number(left.value);
-        const r = Number(right.value);
-        switch (operator) {
-          case TokenType.PLUS:
-            return { type: "number", value: l + r };
-          case TokenType.MINUS:
-            return { type: "number", value: l - r };
-          case TokenType.STAR:
-            return { type: "number", value: l * r };
-          case TokenType.SLASH:
-            if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            return { type: "number", value: l / r };
-          case TokenType.DOUBLESLASH:
-            if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            return { type: "number", value: Math.floor(l / r) };
-          case TokenType.PERCENT:
-            if (r === 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            const mod = pythonMod(l, r);
-            if (typeof mod === "bigint") {
-              return { type: "bigint", value: mod };
-            }
-            return { type: "number", value: mod };
-          case TokenType.DOUBLESTAR:
-            if (l === 0 && r < 0) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            return { type: "number", value: l ** r };
+      // CPython's arithmetic for the cases where JavaScript's differs (py-slang#580, see
+      // stdlib/py-arithmetic.ts): an int too big for a float and a float result out of range are
+      // an OverflowError.
+      try {
+        if (left.type === "number" || right.type === "number") {
+          const l = typeof left.value === "bigint" ? toFloat(left.value) : Number(left.value);
+          const r = typeof right.value === "bigint" ? toFloat(right.value) : Number(right.value);
+          switch (operator) {
+            case TokenType.PLUS:
+              return { type: "number", value: l + r };
+            case TokenType.MINUS:
+              return { type: "number", value: l - r };
+            case TokenType.STAR:
+              return { type: "number", value: l * r };
+            case TokenType.SLASH:
+              if (r === 0) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              return { type: "number", value: l / r };
+            case TokenType.DOUBLESLASH:
+              if (r === 0) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              return { type: "number", value: floorDivideFloats(l, r) };
+            case TokenType.PERCENT:
+              if (r === 0) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              return { type: "number", value: moduloFloats(l, r) };
+            case TokenType.DOUBLESTAR:
+              return { type: "number", value: powerFloats(l, r) };
+          }
         }
-      }
-      if (left.type === "bigint" && right.type === "bigint") {
-        const l = left.value;
-        const r = right.value;
-        switch (operator) {
-          case TokenType.PLUS:
-            return { type: "bigint", value: l + r };
-          case TokenType.MINUS:
-            return { type: "bigint", value: l - r };
-          case TokenType.STAR:
-            return { type: "bigint", value: l * r };
-          case TokenType.SLASH:
-            if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            return { type: "number", value: Number(l) / Number(r) };
-          case TokenType.DOUBLESLASH:
-            if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            return { type: "bigint", value: (l - pythonMod(l, r)) / r };
-          case TokenType.PERCENT:
-            if (r === 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            const mod = pythonMod(l, r);
-            if (typeof mod === "bigint") {
-              return { type: "bigint", value: mod };
-            }
-            return { type: "number", value: mod };
-          case TokenType.DOUBLESTAR:
-            if (l === 0n && r < 0n) {
-              handleRuntimeError(context, new ZeroDivisionError(code, command));
-            }
-            if (r < 0n) return { type: "number", value: Number(l) ** Number(r) };
-            return { type: "bigint", value: l ** r };
+        if (left.type === "bigint" && right.type === "bigint") {
+          const l = left.value;
+          const r = right.value;
+          switch (operator) {
+            case TokenType.PLUS:
+              return { type: "bigint", value: l + r };
+            case TokenType.MINUS:
+              return { type: "bigint", value: l - r };
+            case TokenType.STAR:
+              return { type: "bigint", value: l * r };
+            case TokenType.SLASH:
+              if (r === 0n) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              return { type: "number", value: trueDivideInts(l, r) };
+            case TokenType.DOUBLESLASH:
+              if (r === 0n) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              return { type: "bigint", value: (l - pythonMod(l, r)) / r };
+            case TokenType.PERCENT:
+              if (r === 0n) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              const mod = pythonMod(l, r);
+              if (typeof mod === "bigint") {
+                return { type: "bigint", value: mod };
+              }
+              return { type: "number", value: mod };
+            case TokenType.DOUBLESTAR:
+              if (l === 0n && r < 0n) {
+                handleRuntimeError(context, new ZeroDivisionError(code, command));
+              }
+              if (r < 0n) return { type: "number", value: powerIntNegative(l, r) };
+              return { type: "bigint", value: l ** r };
+          }
         }
+      } catch (e) {
+        if (!(e instanceof PyArithError)) throw e;
+        handleRuntimeError(
+          context,
+          e.kind === "ZeroDivisionError"
+            ? new ZeroDivisionError(code, command)
+            : new OverflowError(code, command, `OverflowError: ${e.message}`),
+        );
       }
       break;
 

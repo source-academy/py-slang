@@ -55,6 +55,15 @@ import { toPythonFloat, toPythonString } from "../../stdlib/utils";
 import { PyComplexNumber } from "../../types";
 import { stringify } from "../../utils/stringify";
 import type { ListValue, Value } from "../cse/stash";
+import {
+  floorDivideFloats,
+  moduloFloats,
+  powerFloats,
+  powerIntNegative,
+  PyArithError,
+  toFloat,
+  trueDivideInts,
+} from "../../stdlib/py-arithmetic";
 import { numericCompare, pythonMod } from "../cse/utils";
 
 export type PyValue =
@@ -373,6 +382,16 @@ const isCoercibleToComplex = (v: PyValue): v is bigint | number | PyComplexNumbe
 function toComplex(v: bigint | number | PyComplexNumber): PyComplexNumber {
   if (isComplex(v)) return v;
   return typeof v === "bigint" ? PyComplexNumber.fromBigInt(v) : PyComplexNumber.fromNumber(v);
+}
+
+/** Runs CPython's arithmetic (stdlib/py-arithmetic.ts); its errors are Python errors of the engine. */
+function arith<T>(compute: () => T): T {
+  try {
+    return compute();
+  } catch (e) {
+    if (e instanceof PyArithError) throw new Py2JsRuntimeError(e.kind, e.message);
+    throw e;
+  }
 }
 
 /** A float NaN, or a complex with a NaN component — unequal to everything,
@@ -766,7 +785,7 @@ export class Py2JsRuntime {
           return l !== r;
         case "/":
           if (r === 0n) throw new Py2JsRuntimeError("ZeroDivisionError", "division by zero");
-          return Number(l) / Number(r);
+          return arith(() => trueDivideInts(l, r));
         case "//":
           if (r === 0n)
             throw new Py2JsRuntimeError("ZeroDivisionError", "integer division or modulo by zero");
@@ -781,7 +800,7 @@ export class Py2JsRuntime {
               "ZeroDivisionError",
               "0.0 cannot be raised to a negative power",
             );
-          return r < 0n ? Number(l) ** Number(r) : l ** r;
+          return r < 0n ? arith(() => powerIntNegative(l, r)) : l ** r;
       }
     }
 
@@ -849,8 +868,8 @@ export class Py2JsRuntime {
 
     // Mixed int/float (or float/float) arithmetic: coerce to float, as the CSE
     // machine does (with the same potential precision loss on huge ints).
-    const a = Number(l);
-    const b = Number(r);
+    const a = arith(() => toFloat(l));
+    const b = arith(() => toFloat(r));
     switch (op) {
       case "+":
         return a + b;
@@ -864,17 +883,12 @@ export class Py2JsRuntime {
       case "//":
         if (b === 0)
           throw new Py2JsRuntimeError("ZeroDivisionError", "float floor division by zero");
-        return Math.floor(a / b);
+        return floorDivideFloats(a, b);
       case "%":
         if (b === 0) throw new Py2JsRuntimeError("ZeroDivisionError", "float modulo");
-        return pythonMod(a, b);
+        return moduloFloats(a, b);
       case "**":
-        if (a === 0 && b < 0)
-          throw new Py2JsRuntimeError(
-            "ZeroDivisionError",
-            "0.0 cannot be raised to a negative power",
-          );
-        return a ** b;
+        return arith(() => powerFloats(a, b));
       default:
         unsupported(op, l, r, !this.universalEquality, enclosing);
     }
