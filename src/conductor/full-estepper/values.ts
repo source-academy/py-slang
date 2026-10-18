@@ -164,6 +164,8 @@ function intRepr(value: bigint): string {
  * hold such a number without ever converting it), which is shortened.
  */
 function intDisplay(value: bigint): string {
+  // TODO(#591): this converts every digit at every step of a trace; cache the display, or count
+  // the digits from the bit length and take only the leading ones.
   const text = value.toString();
   const digits = text.replace("-", "").length;
   if (digits <= MAX_INT_DIGITS) return text;

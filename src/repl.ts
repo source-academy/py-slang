@@ -93,6 +93,7 @@ async function runEStepperCli(code: string, variant: number, trace: boolean): Pr
 }
 
 function runFullEStepperCli(code: string, trace: boolean): string {
+  // TODO(#590): without --trace this should use `evaluate`, which builds no snapshots.
   const run = runFullEStepper(code);
   // The explanations of the start, after and final steps tell the whole story: step 0, and then
   // the step before and the step after each contraction (the odd ones are the "before" steps).

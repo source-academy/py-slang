@@ -139,7 +139,11 @@ function sameObject(a: PyValue, b: PyValue): boolean {
   return a.type === "float" && b.type === "float" ? a === b : pyIs(a, b);
 }
 
-/** The `is` operator: identity for objects, equality for the immutable values. */
+/**
+ * The `is` operator: identity for objects, equality for the immutable values. A deliberate
+ * simplification (docs/full-e-stepper.md): `float('nan') is float('nan')` is `True` here and `False`
+ * in CPython. See #579 for the same question in the other engines.
+ */
 export function pyIs(a: PyValue, b: PyValue): boolean {
   if (a.type !== b.type) return false;
   switch (a.type) {
