@@ -84,6 +84,8 @@ export function createHostImports(
   const capture = (value: string) => {
     runtime.output.push(value);
   };
+  /** The lists (by the address of their elements) that `log_list` is rendering. */
+  const listsBeingRendered = new Set<number>();
   const captureRaw = (tag: number, value: bigint) => {
     runtime.rawOutputs.push([tag, value]);
   };
@@ -108,25 +110,34 @@ export function createHostImports(
       },
       log_list: (pointer: number, length: number) => {
         if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
-
-        const renderedItems: string[] = [];
-        const dataView = new DataView(memory.buffer, pointer, length * 12);
-
-        for (let i = 0; i < length; i++) {
-          const itemTag = dataView.getUint32(i * 12, true);
-          const itemValue = dataView.getBigUint64(i * 12 + 4, true);
-          runtime.wasmExports.log(itemTag, itemValue);
-
-          const renderedItem = runtime.output.pop();
-          if (renderedItem === undefined) {
-            throw new Error("List item logging did not produce a rendered value");
-          }
-          // Elements are shown with repr semantics (`['hi', 2]`), as in CSE, for print, str
-          // and repr alike; nested lists recurse through this same function.
-          renderedItems.push(itemTag === TYPE_TAG.STRING ? escape(renderedItem) : renderedItem);
+        // A list that contains itself is shown as `[...]` where it recurs, as in CPython.
+        if (listsBeingRendered.has(pointer)) {
+          capture("[...]");
+          return;
         }
+        listsBeingRendered.add(pointer);
+        try {
+          const renderedItems: string[] = [];
+          const dataView = new DataView(memory.buffer, pointer, length * 12);
 
-        capture(`[${renderedItems.join(", ")}]`);
+          for (let i = 0; i < length; i++) {
+            const itemTag = dataView.getUint32(i * 12, true);
+            const itemValue = dataView.getBigUint64(i * 12 + 4, true);
+            runtime.wasmExports.log(itemTag, itemValue);
+
+            const renderedItem = runtime.output.pop();
+            if (renderedItem === undefined) {
+              throw new Error("List item logging did not produce a rendered value");
+            }
+            // Elements are shown with repr semantics (`['hi', 2]`), as in CSE, for print, str
+            // and repr alike; nested lists recurse through this same function.
+            renderedItems.push(itemTag === TYPE_TAG.STRING ? escape(renderedItem) : renderedItem);
+          }
+
+          capture(`[${renderedItems.join(", ")}]`);
+        } finally {
+          listsBeingRendered.delete(pointer);
+        }
       },
       log_raw: (tag: number, value: bigint) => captureRaw(tag, value),
       log_hostref: (index: bigint) => capture(hostrefDisplay(index)),
