@@ -108,29 +108,56 @@ suite with the JIT forced on everything, and require identical output and faults
 
 ## The value representation
 
-pynter's NaN-box is 32 bits (`sinanbox_t`, `vm/include/pynter/nanbox.h` in the pynter repository), which gives it
-three restrictions:
+Before pynter#54, pynter's NaN-box was 32 bits, which gave it three restrictions: `f32` floats,
+21-bit ints that became floats on overflow, and 22-bit heap offsets (a heap of at most 4 MB). These
+showed up as wrong results independently of the JIT, and they fix the layout every piece of
+generated code is written against, so they are removed before the JIT's ABI is defined:
 
-- floats are `f32`;
-- ints are 21-bit (`NANBOX_INTMIN`..`NANBOX_INTMAX`) and become floats on overflow;
-- heap pointers are 22-bit offsets, so the heap is at most 4 MB.
+- **64-bit NaN-boxing by default** (pynter#54, done, pynter v0.3.0): `f64` floats, 32-bit small
+  ints, 32-bit heap offsets, for wasm, EV3 and ESP32. The 32-bit layout stays as an opt-in
+  `PYNTER_NANBOX32` for AVR Arduino (selected automatically there). On EV3 (64 MB of RAM, no FPU,
+  soft-float either way), the cost is about 2× on float arithmetic only.
+- **Bigints on small-int overflow** (pynter#55, not started), using libtommath, behind
+  `PYNTER_BIGINT`.
+- **py-slang adapts** (py-slang#576, done, PR #584): reads `f64` results, the complex literal is two
+  `f64` (17 bytes), and the float32 test skips are gone. The skip for ints beyond 32 bits stays
+  until bigints land.
 
-These show up as wrong results today, independently of the JIT. They also fix the layout every piece
-of generated code is written against. So they are removed before the JIT's ABI is defined:
+The layout is selected in `vm/include/pynter/layout.h` (`sifloat_t`, `SIFL(fn)`, `sinanbox_bits_t`).
+`pynter_value_t` has its union at offset 8 (16 bytes on wasm32). Heap blocks are 8-byte aligned (the
+EV3's ARM9 needs it). Emscripten forbids `isnan` in extern-inline functions (use
+`NANBOX_OFFLOAT_NOTNAN`).
 
-- **64-bit NaN-boxing by default** (pynter#54): `f64` floats, 32-bit small ints, 32-bit heap
-  offsets, for wasm, EV3 and ESP32. The 32-bit layout stays as an opt-in `PYNTER_NANBOX32` for AVR
-  Arduino. On EV3 (64 MB of RAM, no FPU, soft-float either way), the cost is about 2× on float
-  arithmetic only.
-- **Bigints on small-int overflow** (pynter#55), using libtommath, behind `PYNTER_BIGINT`.
-- **py-slang adapts** (py-slang#576): reads `f64` and bigint results, and drops the test skips
-  that exist only because of float32 or 32-bit ints.
+## Status
+
+Last updated 2026-10-18. Track the work on the
+[pynter-jit project](https://github.com/orgs/source-academy/projects/60).
+
+- Done: this plan (#567), 64-bit NaN-boxing (pynter#54, pynter#58, released as v0.3.0), py-slang
+  adapted (py-slang#576, #584).
+- Next: bigints (pynter#55). It blocks the specializing code generator (py-slang#572) but not phases
+  0 and 1, which can start straight away: pynter#47 (release build for benchmarking), py-slang#568
+  (benchmark set), pynter#48 (the go/no-go experiment).
+- Not tested: the EV3, ESP32 and Arduino builds (no toolchains were available). Only the host
+  compilers (GCC, Clang), ASan/UBSan, Emscripten and the py-slang parity suite were run.
+- Known limits: pynter's printer uses `%f`/`%g` (about six digits), so the native-Pynter tests
+  compare floats at that precision. Pynter is offered in the playground for Python §3 only, as an
+  experimental evaluator with just the `misc` and `math` libraries (language-directory#77).
+
+Practicalities for whoever resumes:
+
+- pynter's default branch is `master`. A release is a GitHub Release: tag `vX.Y.Z` publishes
+  `@sourceacademy/pynter-wasm@X.Y.Z` to npm through `NPM_TOKEN` (a new token was set on 2026-10-17;
+  if the publish fails with a 404 on the PUT, the token is the first suspect).
+- py-slang's de-facto test framework for pynter is its own suite: build pynter's `runner` and run
+  `PYNTER_RUNNER_PATH=<runner> yarn pynter:report`. It passed 1711/1711 on v0.3.0.
+- The current wasm build has `PYNTER_DEBUG` on, so benchmark against a release build (pynter#47).
 
 ## Phases
 
 Each phase ends with something measurable. Phase 1 is a go/no-go gate. Phases 0 and 1 can
 proceed alongside the representation change, since the speedup ceiling barely depends on `f32`
-vs `f64`. Phase 2 (pynter#49) waits for 64-bit boxing (pynter#54). Phase 3's specializing code
+vs `f64`. Phase 2 (pynter#49) waited for 64-bit boxing (pynter#54, done). Phase 3's specializing code
 generator (py-slang#572) waits for bigints (pynter#55).
 
 ### Phase 0: baseline and benchmarks
