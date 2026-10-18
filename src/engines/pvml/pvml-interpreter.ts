@@ -1349,7 +1349,10 @@ export class PVMLInterpreter {
       return Number.isNaN(left) && Number.isNaN(right);
     }
     if (left instanceof PyComplexNumber && right instanceof PyComplexNumber) {
-      return left.equals(right);
+      // The same value, a nan part too (numbers are compared by value, py-slang#579).
+      return (
+        left.equals(right) || (Object.is(left.real, right.real) && Object.is(left.imag, right.imag))
+      );
     }
     return false;
   }
