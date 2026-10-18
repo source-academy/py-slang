@@ -241,6 +241,56 @@ The core of the engine, with no connection to the host yet: its trace is text.
 - The library of the course (`sourceacademy-sicp`, `python/`) as the reference for its functions
   when they are added.
 
+## Status
+
+Last updated 2026-10-18; the work is on hold. Track it on the
+[full-e-stepper project](https://github.com/orgs/source-academy/projects/59).
+
+- Done: this note (#555), the parser for full Python (#556: #562, #564, #565, #577), and the core of
+  the engine with its differential tests (first slice of #557: #578, merged). `yarn repl <file>
+  --engine full-estepper [--trace]` runs a program and prints the trace as text.
+- Next: the second slice of #557 (tuples, dictionaries and sets; keyword arguments, defaults,
+  `*args`/`**kwargs`; slices and chained comparisons; string and list methods; complex numbers), then
+  the host work of #557: the protocol (`EStepperStep` with the store as a `CseSnapshot`), garbage
+  frames and objects, breakpoints and the evaluator `PyFullEStepperEvaluator`. After that the
+  other repos can start: plugins#179 (heap objects in the protocol), frontend#4486 (drawing them),
+  language-directory#75 (the `pythonFullEStepper` evaluator). Stages 2 to 4 (#558, #559, #560) and
+  the guide for students (#561) come last.
+- Not done: nothing of the engine has run in the playground; the host does not know it exists.
+  Garbage frames and objects, breakpoints and the step limit's display are only in the plan.
+- Not tested: the choices about step granularity with real programs of the course (see the first
+  open question). The differential tests need `python3` (3.11 is what the expected results were
+  checked against; the CI image has it) and skip themselves without it, so a green run on a machine
+  without Python proves less than it seems.
+- Known limits and open issues:
+  - #590: the CLI builds the whole trace even without `--trace`.
+  - #591: a huge integer is converted digit by digit at every step of a trace.
+  - Negative numbers to fractional powers (complex results) are a `NotImplementedError`, and
+    fractional powers of floats may differ from the C library's in the last digit.
+  - Found while testing, and not specific to this engine: #579 (list elements compared by identity
+    first, `nan`), #580 (numbers, strings and compile-time errors differ from CPython in the other
+    engines), #581 (the WebAssembly engine), #582 (a tool that runs one program on every engine and
+    on CPython), #583 (assigning to a built-in's name in the e-stepper), #586 (clearing unreachable
+    objects in the e-stepper and the CSE machine does not work properly; #585, the wording of the
+    button, is fixed).
+
+Practicalities for whoever resumes:
+
+- Where things are: `src/conductor/full-estepper/` (the table in *The code*) and
+  `src/tests/full-estepper/`. `engine.ts` has one contraction per `step()`; to add a construct,
+  replace its `unsupported` term in `terms.ts`, give it a rule in `engine.ts`, and add its
+  explanations, a trace test, and differential programs.
+- Run the tests that concern you, not the whole suite: `yarn jest src/tests/full-estepper
+  src/tests/estepper` (888 tests, about 40 seconds). The random arithmetic test takes `FUZZ_SEEDS=<n>` (default 3
+  seeds of 700 expressions; 150 ran 105,000 with no difference left); use more seeds after touching
+  `operators.ts`.
+- The decisions of *Decisions for the engine* were settled in #578 (same step granularity as the
+  e-stepper for §3/§4; the engine's own values, operators and scoping; no tail-call elimination;
+  unsupported constructs stop the program when they are reached). Reopen them only with a reason.
+- The design is reviewed by an automated reviewer on each PR; #578 took 18 rounds because every round
+  found a rarer edge case of CPython's behaviour. Decide in advance what a merge needs, and file
+  the exotic cases as issues.
+
 ## Plan
 
 1. This design note.
