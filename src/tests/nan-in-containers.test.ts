@@ -4,9 +4,11 @@
  * in two pairs is equal, while `math_nan == math_nan` on its own stays False. The same answer in
  * every engine and every chapter; CPython gives it too (`[math.nan] == [math.nan]` is True).
  */
+import { evaluatePython } from "../conductor/stepper/getSteps";
 import { runCodePy2Js } from "../engines/py2js";
 import { compileToWasmAndRun } from "../engines/wasm";
 import { WASM_GROUPS } from "../engines/wasm/groups";
+import { parse } from "../parser";
 import { runCodePvmlInterpreter } from "../pvml-runner";
 import { runCode } from "../runner";
 
@@ -60,5 +62,17 @@ describe.each(ENGINES)("a nan in a container: %s", (_, run) => {
     test.each(LIST_CASES)("%s", async (expression, expected) => {
       expect(await run(`print(${expression})\n`, chapter)).toBe(expected + "\n");
     });
+  });
+});
+
+// The substitution stepper of §1/§2 (src/conductor/stepper) evaluates to the value of the last
+// expression; it has pairs but no list literals.
+describe("a nan in a pair: the stepper (§2)", () => {
+  test.each(PAIR_CASES)("%s", async (expression, expected) => {
+    expect(await evaluatePython(parse(expression + "\n"))).toBe(expected);
+  });
+  test("a pair equals itself, nan inside or not", async () => {
+    const code = "a = pair(math_nan, None)\na == a\n";
+    expect(await evaluatePython(parse(code))).toBe("True");
   });
 });
