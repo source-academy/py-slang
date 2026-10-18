@@ -583,16 +583,17 @@ export function setItem(container: PyValue, index: PyValue, value: PyValue): voi
   items[Number(i)] = value;
 }
 
-let lastText = "";
-let lastPoints: string[] = [];
+const pointCache = new Map<string, string[]>();
 
-/** The characters of a string, by code point; the last one asked for is kept, for loops over it. */
+/** The characters of a string, by code point; a few strings are kept, for nested loops over them. */
 function codePoints(text: string): string[] {
-  if (text !== lastText) {
-    lastText = text;
-    lastPoints = Array.from(text);
+  let points = pointCache.get(text);
+  if (!points) {
+    points = Array.from(text);
+    if (pointCache.size >= 16) pointCache.delete(pointCache.keys().next().value as string);
+    pointCache.set(text, points);
   }
-  return lastPoints;
+  return points;
 }
 
 /** The `pos`th element that iterating over `v` gives, or undefined at its end. A list is read live. */

@@ -996,3 +996,74 @@ describeIfCPython(
     ])("%s", (_, code) => same(code));
   },
 );
+
+describeIfCPython(
+  "review of the first slice, ninth round: limits first, scopes of yield, all bindings",
+  () => {
+    test.each<[string, string]>([
+      ["too many digits in base 3 are refused before the work", "int('1' * 10000000, 3)\n"],
+      ["too many digits in base 10 with a sign and underscores", "int('-' + '1_' * 4300 + '1')\n"],
+      ["many digits in base 2 are fine", "print(int('1' * 5000, 2) > 0)\n"],
+      [
+        "yield in a class in a function",
+        "print('before')\ndef f():\n    class C:\n        yield 1\n",
+      ],
+      ["yield in a class in a class", "print('before')\nclass A:\n    class B:\n        yield 1\n"],
+      ["yield in a function is fine", "def f():\n    yield 1\nprint('ok')\n"],
+      ["unpacking before global", "print('before')\nx, y = [1, 2]\nglobal x\n"],
+      [
+        "unpacking before global in a function",
+        "print('before')\ndef f():\n    x, y = [1, 2]\n    global x\n",
+      ],
+      [
+        "a for-unpacking target before global",
+        "print('before')\ndef f():\n    for x, y in []:\n        pass\n    global x\n",
+      ],
+      [
+        "an import before global is not an error",
+        "print('before')\ndef f():\n    import os\n    global os\nprint('after')\n",
+      ],
+      [
+        "a class before global",
+        "print('before')\ndef f():\n    class C:\n        pass\n    global C\n",
+      ],
+      [
+        "an annotated assignment before global",
+        "print('before')\ndef f():\n    x: int = 1\n    global x\n",
+      ],
+      [
+        "a with target before global",
+        "print('before')\ndef f():\n    with open('x') as w:\n        pass\n    global w\n",
+      ],
+      [
+        "an except name before global",
+        "print('before')\ndef f():\n    try:\n        pass\n    except Exception as e:\n        pass\n    global e\n",
+      ],
+      ["a del before global", "print('before')\ndef f():\n    del x\n    global x\n"],
+      [
+        "a use in a try before global",
+        "print('before')\ndef f():\n    try:\n        print(x)\n    finally:\n        pass\n    global x\n",
+      ],
+    ])("%s", (_, code) => same(code));
+
+    test.each([
+      [
+        "a method of a class in a function",
+        "def f():\n    class C:\n        def m(self):\n            yield 1\n    return 1\nprint('ok')\n",
+      ],
+      ["a lambda in a class", "class C:\n    f = lambda: (yield)\nprint('ok')\n"],
+    ])("yield is fine in %s (classes themselves are not supported yet)", (_, code) => {
+      const result = evaluate(code, 1000);
+      expect(result.error?.kind).not.toBe("SyntaxError");
+    });
+
+    test("nested loops over long strings stay linear", () => {
+      const result = evaluate(
+        'for a in "x" * 30000:\n    for b in "y":\n        pass\nprint("done")\n',
+        2_000_000,
+      );
+      expect(result.error).toBeNull();
+      expect(result.output).toBe("done\n");
+    });
+  },
+);

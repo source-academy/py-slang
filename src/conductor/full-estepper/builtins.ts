@@ -102,17 +102,18 @@ function intWithBase(v: PyValue, baseValue: PyValue): PyValue {
   }
   if (t === "" || t.startsWith("_") || t.endsWith("_") || t.includes("__")) throw invalid();
   const digits = t.replace(/_/g, "");
-  let value = 0n;
-  for (const ch of digits) {
-    const d = parseInt(ch, 36);
-    if (Number.isNaN(d) || d >= radix) throw invalid();
-    value = value * BigInt(radix) + BigInt(d);
-  }
+  // Refuse too many digits before the work is done (a power of two as base has no limit).
   if ((radix & (radix - 1)) !== 0 && digits.length > 4300) {
     throw new PyError(
       "ValueError",
       `Exceeds the limit (4300 digits) for integer string conversion: value has ${digits.length} digits`,
     );
+  }
+  let value = 0n;
+  for (const ch of digits) {
+    const d = parseInt(ch, 36);
+    if (Number.isNaN(d) || d >= radix) throw invalid();
+    value = value * BigInt(radix) + BigInt(d);
   }
   return int(negative ? -value : value);
 }

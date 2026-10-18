@@ -159,16 +159,20 @@ export function checkProgram(program: StmtNS.Stmt[]): void {
  * has the same limit for the source as for `int(text)`), and `yield` outside a function.
  */
 function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
-  // Nodes inside a function or a lambda: a `yield` there is fine.
-  const inner = new Set<unknown>();
+  // The scopes of the program: a function or a lambda (where `yield` is fine) and a class body
+  // (where it is not), with everything inside them. A node belongs to the innermost scope.
+  const scopes: { isFunction: boolean; inside: Set<unknown> }[] = [];
+  const yields: unknown[] = [];
   for (const stmt of program) {
     traverseAST(stmt, n => {
-      if (
+      const isFunction =
         n instanceof StmtNS.FunctionDef ||
         n instanceof ExprNS.Lambda ||
-        n instanceof ExprNS.MultiLambda
-      ) {
-        traverseAST(n, d => d !== n && inner.add(d));
+        n instanceof ExprNS.MultiLambda;
+      if (isFunction || n instanceof StmtNS.Class) {
+        const inside = new Set<unknown>();
+        traverseAST(n, d => d !== n && inside.add(d));
+        scopes.push({ isFunction, inside });
       }
       if (n instanceof ExprNS.BigIntLiteral && /^[0-9]+$/.test(String(n.value))) {
         const digits = String(n.value).length;
@@ -179,10 +183,17 @@ function checkLiteralsAndYields(program: StmtNS.Stmt[]): void {
           );
         }
       }
-      if (n instanceof ExprNS.Yield && !inner.has(n)) {
-        throw new PyError("SyntaxError", "'yield' outside function");
-      }
+      if (n instanceof ExprNS.Yield) yields.push(n);
     });
+  }
+  for (const y of yields) {
+    let innermost: { isFunction: boolean; inside: Set<unknown> } | undefined;
+    for (const scope of scopes) {
+      if (scope.inside.has(y) && (!innermost || scope.inside.size < innermost.inside.size)) {
+        innermost = scope;
+      }
+    }
+    if (!innermost?.isFunction) throw new PyError("SyntaxError", "'yield' outside function");
   }
 }
 
@@ -229,6 +240,11 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
     });
   };
   const bind = (name: string): void => void seen.set(name, "assigned");
+  const bindAll = (target: ExprNS.Expr): void => {
+    const names = new Set<string>();
+    bindTargets(target, names);
+    names.forEach(bind);
+  };
   for (const stmt of stmts) {
     if (stmt instanceof StmtNS.Global || stmt instanceof StmtNS.NonLocal) {
       const word = stmt instanceof StmtNS.Global ? "global" : "nonlocal";
@@ -272,6 +288,40 @@ function checkOrder(stmts: StmtNS.Stmt[], seen: Map<string, "assigned" | "used">
       use(stmt.value);
     } else if (stmt instanceof StmtNS.SimpleExpr) {
       use(stmt.expression);
+    } else if (stmt instanceof StmtNS.TupleAssign) {
+      use(stmt.value);
+      bindAll(stmt.target);
+    } else if (stmt instanceof StmtNS.ForUnpack) {
+      use(stmt.iter);
+      bindAll(stmt.target);
+      checkOrder(stmt.body, seen);
+    } else if (stmt instanceof StmtNS.AnnAssign) {
+      use(stmt.value);
+      bind(stmt.target.name.lexeme);
+    } else if (stmt instanceof StmtNS.Del) {
+      for (const t of stmt.targets) bindAll(t);
+    } else if (stmt instanceof StmtNS.Class) {
+      for (const base of stmt.bases) use(base);
+      bind(stmt.name.lexeme);
+    } else if (stmt instanceof StmtNS.Decorated) {
+      for (const d of stmt.decorators) use(d);
+      checkOrder([stmt.definition], seen);
+      // (An import before `global` is not an error in CPython: imports are not DEF_LOCAL.)
+    } else if (stmt instanceof StmtNS.With) {
+      for (const item of stmt.items) {
+        use(item.context);
+        if (item.target) bindAll(item.target);
+      }
+      checkOrder(stmt.body, seen);
+    } else if (stmt instanceof StmtNS.Try) {
+      checkOrder(stmt.body, seen);
+      for (const h of stmt.handlers) {
+        use(h.type);
+        if (h.name) bind(h.name.lexeme);
+        checkOrder(h.body, seen);
+      }
+      if (stmt.orElse) checkOrder(stmt.orElse, seen);
+      if (stmt.finalBody) checkOrder(stmt.finalBody, seen);
     }
   }
 }
