@@ -145,7 +145,9 @@ The reducer $\Rightarrow$ and its transitive closure $\Rightarrow^*$ are used
 as in the specification of the Python \S 2 stepper. A \emph{contraction} is a
 single step; the order of evaluation is the same: expressions are evaluated
 from left to right, inner expressions before the expressions that contain
-them. We only give the rules that are different from the substitution
+them; the exception is the assignment to a list element, where, as in Python, the
+right-hand side is evaluated first, then the list, then the index. We only give the rules that
+are different from the substitution
 stepper, namely those that involve names, functions and data. The rules for
 the primitive operators, for \sCode{and}, \sCode{or}, conditional
 expressions, built-in functions on primitive values, and for \sCode{if},
@@ -318,7 +320,8 @@ assignment, is the first frame in this order that binds $x$ (to a value or to
 $\sUn$). Two declarations change the order for the function that makes the call:
 \begin{itemize}
 \item if the function designates $x$ as \sCode{global}, the search skips L and E
-  and starts with G;
+  and starts with G; the same holds, as in Python, if a function that encloses it
+  designates $x$ as \sCode{global} and no function frame in between binds $x$;
 \item if the function designates $x$ as \sCode{nonlocal}, the search skips L and
   considers only E.
 \end{itemize}

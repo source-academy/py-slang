@@ -52,6 +52,7 @@ import {
   getProgramEnvironment,
   pyDefineVariable,
   pyGetGlobalVariable,
+  resolvesToGlobal,
   pyGetNonlocalVariable,
   pyGetVariable,
   pySetNonlocalVariable,
@@ -248,7 +249,7 @@ export class Machine {
   private lookup(e: Expr & { k: "name" }, env: Environment): Value {
     this.enter(env);
     const name = e.name;
-    const isGlobal = env.closure?.globalVariables.has(name) ?? false;
+    const isGlobal = resolvesToGlobal(env, name);
     const isNonlocal = env.closure?.nonlocalVariables.has(name) ?? false;
     const value = isGlobal
       ? pyGetGlobalVariable(this.code, this.context, name, e.src)
@@ -311,7 +312,7 @@ export class Machine {
    * the diagram shows, so it is looked up when used, without a step of its own.
    */
   private isLibraryName(e: Expr & { k: "name" }, env: Environment): boolean {
-    const start = env.closure?.globalVariables.has(e.name) ? this.programEnv : env;
+    const start = resolvesToGlobal(env, e.name) ? this.programEnv : env;
     for (let f: Environment | null = start; f; f = f.tail) {
       if (Object.prototype.hasOwnProperty.call(f.head, e.name)) return !this.isShownFrame(f);
     }
@@ -819,14 +820,15 @@ export class Machine {
         );
       }
       case "subassign": {
-        const r = await this.reduceChildren([head.obj, head.index, head.value], env);
+        // As in Python, the right-hand side is evaluated first, then the list, then the index.
+        const r = await this.reduceChildren([head.value, head.obj, head.index], env);
         if (r) {
           const node =
             r.index === 0
-              ? { ...head, obj: r.step.node }
+              ? { ...head, value: r.step.node }
               : r.index === 1
-                ? { ...head, index: r.step.node }
-                : { ...head, value: r.step.node };
+                ? { ...head, obj: r.step.node }
+                : { ...head, index: r.step.node };
           return this.stmtStep(head, rest, node, r.step.c);
         }
         const list = this.resolve(head.obj, env);

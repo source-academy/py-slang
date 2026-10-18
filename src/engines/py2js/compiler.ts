@@ -471,10 +471,9 @@ function emitStmt(s: StmtNS.Stmt, indent: string, a: boolean, ctx: EmitCtx): str
       const asg = s as StmtNS.Assign;
       if (asg.target.kind === "Subscript") {
         const t = asg.target;
-        // Evaluation order (list, index, value) matches CSE's LIST_ASSIGNMENT
-        // instruction (evaluateListAssignment in cse/utils.ts) — JS argument
-        // evaluation order reproduces it directly.
-        return `${indent}__py.listAssign(${emitExpr(t.value, a, ctx)}, ${emitExpr(t.index, a, ctx)}, ${emitExpr(asg.value, a, ctx)});\n`;
+        // As in Python, the right-hand side is evaluated first, then the list, then the index
+        // (py-slang#580); the value waits in a block-scoped constant for the other two.
+        return `${indent}{ const __rhs = ${emitExpr(asg.value, a, ctx)}; __py.listAssign(${emitExpr(t.value, a, ctx)}, ${emitExpr(t.index, a, ctx)}, __rhs); }\n`;
       }
       return `${indent}${emitName(asg.target.name.lexeme, ctx, true)} = ${emitExpr(asg.value, a, ctx)};\n`;
     }
