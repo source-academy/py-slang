@@ -227,6 +227,9 @@ export class Environment {
     return minName;
   }
 }
+/** CPython's limit on the digits of a decimal integer literal (sys.get_int_max_str_digits()). */
+const MAX_DECIMAL_DIGITS = 4300;
+
 export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   source: string;
   ast: Stmt;
@@ -256,6 +259,41 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   // function — including nested in `if`/`while`/`for`, and even after the nested
   // `def` that declares it `nonlocal` (matches CPython's whole-function static scoping).
   private functionDefStack: StmtNS.FunctionDef[] = [];
+  /**
+   * How many function bodies (`def`, multi-line lambda) enclose the node being resolved. (When
+   * classes are supported, a class body starts again at 0: a `return` in it is a SyntaxError even
+   * inside a function, as in CPython. Today every sublanguage rejects `class` before its body is
+   * resolved.)
+   */
+  private functionDepth = 0;
+
+  /** A SyntaxError of CPython's compiler (it rejects the program before running anything). */
+  private compileError(token: Token, message: string): void {
+    this.errors.push(
+      new ResolverErrors.ScopeConflictError(
+        token.line,
+        token.col,
+        this.source,
+        token.indexInSource,
+        token.indexInSource + token.lexeme.length,
+        message,
+      ),
+    );
+  }
+
+  /** `def f(x, x)` and `lambda x, x: 0` are a SyntaxError, as in CPython. */
+  private checkDuplicateParameters(parameters: { lexeme: string }[]): void {
+    const seen = new Set<string>();
+    for (const parameter of parameters as Token[]) {
+      if (seen.has(parameter.lexeme)) {
+        this.compileError(
+          parameter,
+          `duplicate argument '${parameter.lexeme}' in function definition`,
+        );
+      }
+      seen.add(parameter.lexeme);
+    }
+  }
   // Top-level module statements, set once by visitFileInputStmt. Used as the outermost
   // level of the whole-scope binding scan (see nameHasStaticBinding) — a module-level name
   // can legitimately be bound anywhere in the module body, not just textually before a
@@ -413,6 +451,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef) {
     this.environment?.functions.add(stmt.name.lexeme);
+    this.checkDuplicateParameters(stmt.parameters);
     // Default values are evaluated in the enclosing scope, when the function is defined.
     this.resolveDefaults(stmt.parameters);
 
@@ -464,7 +503,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
 
     this.functionDefStack.push(stmt);
+    this.functionDepth++;
     this.resolve(stmt.body);
+    this.functionDepth--;
     this.functionDefStack.pop();
     // Restore old environment
     this.globalNamesInCurrentFunction = oldGlobalNames;
@@ -990,6 +1031,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
 
   visitReturnStmt(stmt: StmtNS.Return): void {
+    if (this.functionDepth === 0) {
+      this.compileError(stmt.startToken, "'return' outside function");
+    }
     if (stmt.value !== null) {
       this.resolve(stmt.value);
     }
@@ -1040,6 +1084,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     }
   }
   visitLambdaExpr(expr: ExprNS.Lambda): void {
+    this.checkDuplicateParameters(expr.parameters);
     // Default values are evaluated in the enclosing scope, when the function is defined.
     this.resolveDefaults(expr.parameters);
     // Create a new environment.
@@ -1058,6 +1103,7 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     this.environment = oldEnv;
   }
   visitMultiLambdaExpr(expr: ExprNS.MultiLambda): void {
+    this.checkDuplicateParameters(expr.parameters);
     // Default values are evaluated in the enclosing scope, when the function is defined.
     this.resolveDefaults(expr.parameters);
     // Create a new environment.
@@ -1071,7 +1117,9 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
       new Set(newEnv.keys()),
     );
     this.functionEnvironments.set(expr, this.environment);
+    this.functionDepth++;
     this.resolve(expr.body);
+    this.functionDepth--;
     // Grab identifiers from that new environment.
     expr.varDecls = Array.from(this.environment.names.values());
     // Restore old environment
@@ -1167,7 +1215,20 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
   }
   visitNoneExpr(_expr: ExprNS.None): void {}
   visitLiteralExpr(_expr: ExprNS.Literal): void {}
-  visitBigIntLiteralExpr(_expr: ExprNS.BigIntLiteral): void {}
+  visitBigIntLiteralExpr(expr: ExprNS.BigIntLiteral): void {
+    // As in CPython, a decimal literal of more than 4300 digits is a SyntaxError (unless it is all
+    // zeros, which CPython accepts at any length).
+    if (
+      /^[0-9]+$/.test(expr.value) &&
+      expr.value.length > MAX_DECIMAL_DIGITS &&
+      !/^0+$/.test(expr.value)
+    ) {
+      this.compileError(
+        expr.startToken,
+        `Exceeds the limit (${MAX_DECIMAL_DIGITS} digits) for integer literal`,
+      );
+    }
+  }
   visitComplexExpr(_expr: ExprNS.Complex): void {}
   visitListExpr(expr: ExprNS.List): void {
     this.resolve(expr.elements);
