@@ -1,3 +1,4 @@
+import { pythonStringRepr } from "./py-strings";
 import { ExprNS } from "../ast-types";
 import { Context } from "../engines/cse/context";
 import { handleRuntimeError } from "../engines/cse/error";
@@ -125,11 +126,7 @@ export function toPythonFloat(num: number): string {
   return num.toString();
 }
 export function escape(str: string): string {
-  let escaped = JSON.stringify(str);
-  if (!(str.includes("'") && !str.includes('"'))) {
-    escaped = `'${escaped.slice(1, -1).replace(/'/g, "\\'").replace(/\\"/g, '"')}'`;
-  }
-  return escaped;
+  return pythonStringRepr(str);
 }
 function toPythonList(obj: Value): string {
   return stringify(obj);

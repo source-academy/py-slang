@@ -1,3 +1,4 @@
+import { pythonStringRepr } from "../stdlib/py-strings";
 import { StmtNS } from "../ast-types";
 import { ListValue, Value } from "../engines/cse/stash";
 
@@ -38,11 +39,7 @@ function toPythonFloat(num: number): string {
  * Escapes a string for Python's repr representation.
  */
 function escape(str: string): string {
-  let escaped = JSON.stringify(str);
-  if (!(str.includes("'") && !str.includes('"'))) {
-    escaped = `'${escaped.slice(1, -1).replace(/'/g, "\\'").replace(/\\"/g, '"')}'`;
-  }
-  return escaped;
+  return pythonStringRepr(str);
 }
 
 /**

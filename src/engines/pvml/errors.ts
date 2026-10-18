@@ -44,6 +44,7 @@ export class ListMultiplyTypeError extends PVMLInterpreterError {
 export class MissingRequiredPositionalError extends PVMLInterpreterError {}
 export class TooManyPositionalArgumentsError extends PVMLInterpreterError {}
 export class ZeroDivisionError extends PVMLInterpreterError {}
+export class OverflowError extends PVMLInterpreterError {}
 export class ValueError extends PVMLInterpreterError {}
 
 /**

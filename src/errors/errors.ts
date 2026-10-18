@@ -441,6 +441,17 @@ export class ZeroDivisionError extends RuntimeSourceError {
   }
 }
 
+/** An int that is too big for a float, or a float result that is out of range (py-slang#580). */
+export class OverflowError extends RuntimeSourceError {
+  constructor(source: string, node: ExprNS.Binary, detail: string) {
+    super(node);
+    this.type = ErrorType.TYPE;
+    const index = node.startToken.indexInSource;
+    const { lineIndex, fullLine } = getFullLine(source, index);
+    this.message = "OverflowError at line " + lineIndex + "\n\n    " + fullLine + "\n" + detail;
+  }
+}
+
 export class StepLimitExceededError extends RuntimeSourceError {
   constructor(source: string, node: ExprNS.Expr | StmtNS.Stmt) {
     super(node);
