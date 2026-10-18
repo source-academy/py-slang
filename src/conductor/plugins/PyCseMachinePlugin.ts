@@ -571,8 +571,8 @@ function serializeEnvChain(
 
   // ENV instructions on the control stack keep frames alive that are not on the
   // call stack right now (e.g. h's frame while g(x) is executing inside h).
-  // Without this seed, those frames die and then "resurrect" when control returns —
-  // violating the invariant that dead frames never come back.
+  // Without this seed, those frames become unreachable and then "resurrect" when control
+  // returns — violating the invariant that unreachable frames never come back.
   for (const item of controlItems) {
     if (item.instrType === "environment" && item.env) {
       visit(item.env);

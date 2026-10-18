@@ -74,7 +74,7 @@ comparison. The names of built-in functions are looked up together with the call
 A frame or object that the program and the global frame can no longer reach is drawn in grey, not
 removed. After `make_withdraw(100)` returns, its frame stays as it was, because the function it
 returned still extends it. After a call that returns a number, the frame of that call turns grey. Use *Clear
-dead frames* in the drawing's toolbar to hide them.
+unreachable objects* in the drawing's toolbar to hide them.
 
 ### Frames that are not drawn
 
