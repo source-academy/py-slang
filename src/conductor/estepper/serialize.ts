@@ -669,7 +669,7 @@ function heldLists(env: Environment): Set<ListValue> {
  * The step's store as a CSE machine snapshot (environments only; control and stash empty), made
  * with the CSE machine plugin's own serializer, so a host can draw it with its CSE machine
  * visualization exactly as the CSE Machine tab would. Frames that are no longer reachable are
- * left out, as in the CSE machine's snapshots; a host shows them as dead frames from earlier steps.
+ * left out, as in the CSE machine's snapshots; a host shows them as unreachable frames from earlier steps.
  */
 export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number): CseSnapshot {
   const { frames, values } = programRoots(program);
