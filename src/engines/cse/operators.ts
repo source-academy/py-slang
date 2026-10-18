@@ -6,6 +6,7 @@ import {
 } from "../../errors/errors";
 import { TokenType } from "../../tokenizer";
 import { PyComplexNumber } from "../../types";
+import { compareCodePoints } from "../../stdlib/py-strings";
 import { Context } from "./context";
 import { handleRuntimeError } from "./error";
 import { BigIntValue, ListValue, NumberValue, Value } from "./stash";
@@ -595,13 +596,13 @@ export function evaluateBinaryExpression(
       // dispatch above; this switch only ever sees ordering operators.
       switch (operator) {
         case TokenType.LESS:
-          return { type: "bool", value: left.value < right.value };
+          return { type: "bool", value: compareCodePoints(left.value, right.value) < 0 };
         case TokenType.LESSEQUAL:
-          return { type: "bool", value: left.value <= right.value };
+          return { type: "bool", value: compareCodePoints(left.value, right.value) <= 0 };
         case TokenType.GREATER:
-          return { type: "bool", value: left.value > right.value };
+          return { type: "bool", value: compareCodePoints(left.value, right.value) > 0 };
         case TokenType.GREATEREQUAL:
-          return { type: "bool", value: left.value >= right.value };
+          return { type: "bool", value: compareCodePoints(left.value, right.value) >= 0 };
       }
     }
     // TypeError: Reached if one is a string and the other is not

@@ -97,7 +97,11 @@ export function createHostImports(
         capture(new PyComplexNumber(real, imag).toString()),
       log_bool: (value: bigint) => capture(value === 0n ? "False" : "True"),
       log_string: (offset: number, length: number) =>
-        capture(new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length))),
+        capture(
+          new TextDecoder("utf8", { ignoreBOM: true }).decode(
+            new Uint8Array(memory.buffer, offset, length),
+          ),
+        ),
       log_closure: (tag: number, arity: number, envSize: number, parentEnv: number) =>
         capture(
           `Closure (tag: ${tag}, arity: ${arity}, envSize: ${envSize}, parentEnv: ${parentEnv})`,
@@ -166,7 +170,9 @@ export function createHostImports(
         const { makePair, makeNone } = runtime.wasmExports;
 
         pythonLexer.reset(
-          new TextDecoder("utf8").decode(new Uint8Array(memory.buffer, offset, length)),
+          new TextDecoder("utf8", { ignoreBOM: true }).decode(
+            new Uint8Array(memory.buffer, offset, length),
+          ),
         );
 
         return Array.from(pythonLexer)
@@ -178,7 +184,7 @@ export function createHostImports(
       parse: (offset: number, length: number) => {
         if (!runtime.wasmExports) throw new Error("WASM exports not initialised");
 
-        const source = new TextDecoder("utf8").decode(
+        const source = new TextDecoder("utf8", { ignoreBOM: true }).decode(
           new Uint8Array(memory.buffer, offset, length),
         );
         const ast = parse(source + "\n");
