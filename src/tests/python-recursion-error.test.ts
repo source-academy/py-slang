@@ -12,6 +12,9 @@ import { parse } from "../parser";
 import { runCodePvmlInterpreter } from "../pvml-runner";
 import { runCode } from "../runner";
 
+// These runs go on to the end of the JavaScript stack: without a limit on their memory.
+const UNLIMITED = { heap: null, maxSize: Infinity };
+
 const FOREVER = "def f(n):\n    return 1 + f(n + 1)\nprint(f(0))\n";
 const MUTUALLY = "def f(n):\n    return 1 + g(n)\ndef g(n):\n    return 2 + f(n)\nprint(f(0))\n";
 
@@ -74,7 +77,7 @@ test("wasm", async () => {
 describe("the e-stepper", () => {
   // (The JavaScript stack runs out at a depth that depends on the host, so the trace ends there.)
   test("a recursion without end", async () => {
-    const run = await runEStepper(parse(FOREVER), FOREVER, 3, 100000);
+    const run = await runEStepper(parse(FOREVER), FOREVER, 3, 100000, undefined, UNLIMITED);
     expect(run.truncated).toBe(false);
     expect(run.error).toBe(RECURSION_ERROR_MESSAGE);
     const explanations = run.steps.slice(-2).map(s => s.markers?.[0]?.explanation);
@@ -83,7 +86,7 @@ describe("the e-stepper", () => {
   }, 180000);
   test("a recursion that ends", async () => {
     const code = "def f(n):\n    return 0 if n == 0 else 1 + f(n - 1)\nf(250)\n";
-    const run = await runEStepper(parse(code), code, 3, 100000);
+    const run = await runEStepper(parse(code), code, 3, 100000, undefined, UNLIMITED);
     expect(run.error).toBeUndefined();
     expect(run.truncated).toBe(false);
   });
