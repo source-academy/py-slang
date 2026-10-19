@@ -145,6 +145,23 @@ built-ins operate on heap objects instead of list literal nodes.
 - **Garbage**: frames and objects no longer reachable from P (through `EnvBlock`s and `Ref`s) or `G`
   are greyed out, not removed. This makes the result of a returning call visible: its frame stays
   alive if a returned function object still points to it, and becomes garbage otherwise.
+  What is garbage stays garbage, so a frame or an object is in the `frames` and `heap` of the step in
+  which it becomes garbage, and in none of the steps after it: a host works out the whole store at
+  a step from that step and the ones before it (the web plugin's `storeAt`: the latest version of
+  each frame and object, those not in the step itself being garbage). Repeating them in every step
+  would make the steps of a loop that makes a frame in each iteration grow with the square of their
+  number, and a run of 100000 steps crashed the browser tab (py-slang#611). The CSE snapshot of a
+  step leaves garbage frames out as well (the host takes them from the earlier snapshots), but it
+  holds the garbage objects that no frame holds itself, in the heap of the frame they were made in;
+  it keeps the newest `200000 / stepLimit` of them (at least 10; `unreachableLimit`), so a run of the
+  default 1000 steps loses none. A browser kills a tab whose JavaScript heap reaches its limit (a
+  fatal error that cannot be caught; the limit depends on the device, the browser and what else
+  runs), so a run ends before that: every 64 contractions it reads the heap use and limit that the
+  host reports (`HeapProbe`; Chrome's `performance.memory`, in a page or a worker), and it ends
+  with the step "Maximum size of the steps exceeded: they use too much memory", as it ends at the
+  step limit, once the heap passes 60% of the limit (`HEAP_FRACTION`; the page holds a second copy
+  of the steps). Where the host reports nothing (Firefox, Safari, Node), it ends when the JSON of
+  the steps passes `FALLBACK_STEPS_SIZE` characters (64 million; about 650 MB of heap).
 - **Frame layout and heap drawing** follow the CSE machine visualization: frames as labelled boxes
   with bindings and a parent arrow, function objects as double circles pointing to their environment,
   lists as box-and-pointer diagrams.

@@ -16,6 +16,7 @@ import { Stash } from "../../engines/cse/stash";
 import { EStepperProgramError, runEStepper } from "../../conductor/estepper/getSteps";
 import { markBreakpoints } from "../../breakpoints";
 import { parse } from "../../parser";
+import { withStore } from "./store";
 
 const run = (code: string, chapter = 3, stepLimit?: number) =>
   runEStepper(parse(code), code, chapter, stepLimit);
@@ -117,14 +118,14 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
 
   test("a frame whose only binding is a parameter named __program__ is drawn", async () => {
     const { steps } = await run("def f(__program__):\n    return __program__\nf(42)\n");
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     expect(frames(last)).toEqual(["Global: f=#1", "E1(g)<Global: __program__=42"]);
   });
 
   test("frames with bindings are numbered without gaps, whatever empty frames come between", async () => {
     const program = "def e():\n    return 1\ndef f(x):\n    return e() + x\nf(2)\n";
     const { steps } = await run(program);
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     expect(frames(last)).toEqual(["Global: e=#1 f=#2", "E1(g)<Global: x=2"]);
   });
 
@@ -141,7 +142,7 @@ describe("make_withdraw (SICPy 3.1.1)", () => {
 
   test("the store: E1 outlives its call, E2 becomes garbage", async () => {
     const { steps } = await run(MAKE_WITHDRAW);
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     expect(frames(last)).toEqual([
       "Global: make_withdraw=#1 W1=#2",
       "E1<Global: balance=50 withdraw=#2",
@@ -332,7 +333,7 @@ describe("loops", () => {
 describe("the heap", () => {
   test("lists are heap objects that the program and frames refer to", async () => {
     const { steps } = await run(`xs = [1, 2]\nys = xs\nys[0] = 10\n`);
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     expect(frames(last)).toEqual(["Global: xs=#1 ys=#1"]);
     expect(last.heap).toEqual([
       {
@@ -475,7 +476,7 @@ describe("the store as a CSE machine snapshot", () => {
   test("an object shown once stays shown, as garbage, once nothing refers to it", async () => {
     const program = `xs = [None] * 3\ndef f():\n    return lambda x: x\nf()\n`;
     const { steps } = await run(program);
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     // The list [None] (#1) is garbage once [None] * 3 (#2) has been made, and so is the function
     // f's call returned: both are still drawn, greyed out.
     expect(last.heap.filter(o => o.isGarbage).map(o => o.id)).toEqual(["#1", "#4"]);
@@ -809,7 +810,7 @@ describe("object ids in the CSE machine snapshots", () => {
       for (const id of ids) expect(labels.has(id)).toBe(true);
     }
     // The global frame's make_withdraw is named, as in the program pane.
-    const last = steps[steps.length - 1];
+    const last = withStore(steps);
     const makeWithdraw = last.heap.find(o => o.kind === "function" && o.name === "make_withdraw")!;
     const binding = (
       last.cse!.environments as {
@@ -1296,7 +1297,7 @@ print(x)
     const { steps, output, error } = await run(code, 4);
     expect(error).toBeUndefined();
     expect(output).toBe("1\n2\n");
-    const last = steps.at(-1)!;
+    const last = withStore(steps);
     expect(frames(last)[0]).toBe("Global: outer=#1 x=2");
     expect(
       last.frames.find(f => f.id === "E1")!.bindings.map(b => `${b.name}=${show(b.value)}`),

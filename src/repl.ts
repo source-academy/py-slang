@@ -91,7 +91,11 @@ async function runEStepperCli(code: string, variant: number, trace: boolean): Pr
   }
   if (run.truncated) {
     throw Object.assign(
-      new Error(`Stopped: the program has more than ${DEFAULT_STEP_LIMIT} steps`),
+      new Error(
+        run.truncatedBy === "memory"
+          ? "Stopped: the steps of the program use too much memory"
+          : `Stopped: the program has more than ${DEFAULT_STEP_LIMIT} steps`,
+      ),
       { output: traceText + run.output },
     );
   }

@@ -20,7 +20,13 @@ import { analyze } from "../../resolver/analysis";
 import { VARIANT_GROUPS } from "../../runner";
 import { RECURSION_ERROR_MESSAGE, isStackOverflow } from "../../errors/recursion";
 import { type Contraction, Machine, type RequestInput } from "./engine";
-import { ProgramSerializer, snapshotStore, type StoreSnapshot } from "./serialize";
+import { browserHeapProbe, HEAP_FRACTION, type HeapProbe, MEMORY_CHECK_INTERVAL } from "./memory";
+import {
+  ProgramSerializer,
+  snapshotStore,
+  type StoreSnapshot,
+  unreachableLimit,
+} from "./serialize";
 import { type Expr, type Stmt, translateStmts } from "./terms";
 
 /**
@@ -38,6 +44,22 @@ type Step = EStepperStep & { output?: string };
  * below it.
  */
 export const DEFAULT_STEP_LIMIT = 1000;
+
+/**
+ * Without a report of the host's heap (see `HeapProbe`), how much the steps of a run may hold, in
+ * characters of their JSON (a step is a few KB, and the heap holds about ten times as much). A run
+ * that goes beyond ends with a step that says so, as it does at the step limit, instead of crashing
+ * the browser tab that runs it (#611).
+ */
+export const FALLBACK_STEPS_SIZE = 64_000_000;
+
+/** What bounds the memory of a run. */
+export interface MemoryLimits {
+  /** The host's report on its heap (default: the browser's); `null`: none. */
+  heap?: HeapProbe | null;
+  /** Without a report: the size of the steps, in characters of JSON (default: `FALLBACK_STEPS_SIZE`). */
+  maxSize?: number;
+}
 
 /** The text of an error for a step explanation. The CSE machine's runtime errors carry a
  * multi-line message (location, source line, hint, suggestion); the hint line (`XError: ...`) is
@@ -60,8 +82,10 @@ export interface EStepperRun {
   output: string;
   /** The error that stopped evaluation, if any. */
   error?: string;
-  /** Whether the step limit was reached before the program finished. */
+  /** Whether the step limit, or the limit on the size of the steps, was reached before the program finished. */
   truncated: boolean;
+  /** What stopped a truncated run: the number of steps, or the space they use. */
+  truncatedBy?: "steps" | "memory";
 }
 
 /** A program the e-stepper refuses to run: the same name-resolution and sublanguage errors the
@@ -108,10 +132,24 @@ export async function runEStepper(
   chapter: number,
   stepLimit = DEFAULT_STEP_LIMIT,
   requestInput?: RequestInput,
+  limits: MemoryLimits = {},
 ): Promise<EStepperRun> {
   const machine = await prepare(fileInput, code, chapter, requestInput);
+  machine.maxUnreachable = unreachableLimit(stepLimit);
+  // The memory of the run: the heap against the limit the host reports, or else the size of the
+  // steps (which costs a serialization of each, so it is not done when the host reports).
+  const probe = limits.heap === undefined ? browserHeapProbe : limits.heap;
+  const reports = probe !== null && probe() !== undefined;
+  const maxSize = limits.maxSize ?? FALLBACK_STEPS_SIZE;
+  const outOfMemory = (n: number): boolean => {
+    if (!reports) return size > maxSize;
+    if (n % MEMORY_CHECK_INTERVAL !== 0) return false;
+    const heap = probe?.();
+    return heap !== undefined && heap.used > HEAP_FRACTION * heap.limit;
+  };
   let program: Stmt[] = translateStmts(fileInput.statements);
   const steps: Step[] = [];
+  let size = 0;
 
   const push = (
     prog: Stmt[],
@@ -148,6 +186,7 @@ export async function runEStepper(
     if (output) step.output = output;
     if (lookups.length > 0) step.lookups = lookups;
     steps.push(step);
+    if (!reports) size += JSON.stringify(step).length;
   };
 
   push(program, snapshotStore(machine, program), "", { explanation: "Start of evaluation" });
@@ -159,11 +198,19 @@ export async function runEStepper(
     const contractionLimit = Math.max(0, Math.floor((stepLimit - 1) / 2));
     for (let n = 0; ; n++) {
       complete = steps.length;
-      if (n === contractionLimit) {
+      if (n === contractionLimit || outOfMemory(n)) {
+        const byMemory = n !== contractionLimit;
         push(program, snapshotStore(machine, program), machine.output, {
-          explanation: "Maximum number of steps exceeded",
+          explanation: byMemory
+            ? "Maximum size of the steps exceeded: they use too much memory"
+            : "Maximum number of steps exceeded",
         });
-        return { steps, output: machine.output, truncated: true };
+        return {
+          steps,
+          output: machine.output,
+          truncated: true,
+          truncatedBy: byMemory ? "memory" : "steps",
+        };
       }
       const storeBefore = snapshotStore(machine, program);
       const outputBefore = machine.output;
