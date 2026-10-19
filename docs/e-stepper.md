@@ -162,6 +162,12 @@ built-ins operate on heap objects instead of list literal nodes.
   step limit, once the heap passes 60% of the limit (`HEAP_FRACTION`; the page holds a second copy
   of the steps). Where the host reports nothing (Firefox, Safari, Node), it ends when the JSON of
   the steps passes `FALLBACK_STEPS_SIZE` characters (64 million; about 650 MB of heap).
+  The steps also have to go to the page: `postMessage` copies a program nested deeper than the stack
+  can take (the program of a step is as deep as the calls waiting for their result) only up to a
+  depth, and fails with "Maximum call stack size exceeded" (py-slang#610). `getEStepperSteps` therefore
+  tries the deepest step as the message it is sent in (`sendableSteps`; a `MessageChannel` that
+  never reads, which serializes as the send does), and, if it cannot be sent, cuts the run at the
+  last step that can, with the `RecursionError` steps, as when the stack runs out in the run itself.
 - **Frame layout and heap drawing** follow the CSE machine visualization: frames as labelled boxes
   with bindings and a parent arrow, function objects as double circles pointing to their environment,
   lists as box-and-pointer diagrams.

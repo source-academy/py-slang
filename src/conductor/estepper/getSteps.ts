@@ -35,7 +35,7 @@ import { type Expr, type Stmt, translateStmts } from "./terms";
  * `../stepper/getSteps.ts`), and the `cse` snapshot `@sourceacademy/common-e-stepper` adds in 0.0.2.
  * The fields cross the channel as plain JSON either way.
  */
-type Step = EStepperStep & { output?: string };
+export type Step = EStepperStep & { output?: string };
 
 /**
  * Default cap on the number of steps. The step slider counts the steps taken, from 0 (the start) to
@@ -74,6 +74,107 @@ export function shortErrorMessage(error: unknown): string {
       : String(error);
   const lines = message.split("\n").map(l => l.trim());
   return lines.find(l => /^[A-Za-z]*Error: /.test(l)) ?? lines.find(l => l !== "") ?? message;
+}
+
+/**
+ * Ends `steps` (the last of which is whole) with the steps of a run that the JavaScript stack could
+ * not go on with: the error as the explanation of a step, and "Evaluation stuck". The term that
+ * could not be handled is not drawn: the last step stands in for it.
+ */
+function endWithRecursionError(steps: Step[]): void {
+  const last = steps[steps.length - 1];
+  const stuck = (explanation: string, redexType?: "beforeMarker"): Step => {
+    const step: Step = {
+      ...last,
+      markers: [redexType ? { explanation, redexType } : { explanation }],
+      cse: last.cse && { ...last.cse, stepIndex: steps.length },
+    };
+    delete step.lookups;
+    return step;
+  };
+  steps.push(stuck(RECURSION_ERROR_MESSAGE, "beforeMarker"));
+  steps.push(stuck("Evaluation stuck"));
+}
+
+/** How deeply objects and arrays are nested in a JSON value (a step has hundreds of thousands). */
+function nestingDepth(root: unknown): number {
+  if (root === null || typeof root !== "object") return 0;
+  let deepest = 0;
+  const nodes: object[] = [root];
+  const depths: number[] = [0];
+  while (nodes.length > 0) {
+    const node = nodes.pop() as Record<string, unknown>;
+    const depth = depths.pop() as number;
+    if (depth > deepest) deepest = depth;
+    const children = Array.isArray(node) ? node : Object.values(node);
+    for (let i = 0; i < children.length; i++) {
+      const child: unknown = children[i];
+      if (child !== null && typeof child === "object") {
+        nodes.push(child);
+        depths.push(depth + 1);
+      }
+    }
+  }
+  return deepest;
+}
+
+/**
+ * The steps, cut where the host could no longer send them. The steps go to the page in a message
+ * (`postMessage`), whose copy of a term nested deeper than the stack can take fails with "Maximum
+ * call stack size exceeded": the program of a step is as deep as the calls waiting for their result
+ * (py-slang#610). The error would otherwise be the browser's, from the send. Instead the run ends
+ * at the last step that can be sent, with a `RecursionError`.
+ *
+ * What the stack can take depends on the depth of the term alone, so it is enough to try the
+ * deepest step (nearly always the only try: the steps of a run can be sent), and otherwise to look
+ * for the deepest that can be sent by halving the depths. A step is tried as the message it will be
+ * sent in. `post` posts a message as the send does; by default it posts to a `MessageChannel` whose
+ * other end never reads, which serializes the message exactly as the send does and does not
+ * deserialize it (a message nested too deep can overflow the stack natively when it is read). Where
+ * there is none, the steps are sent as they are.
+ */
+export function sendableSteps<T extends Step>(steps: T[], post?: (message: unknown) => void): T[] {
+  const channel = !post && typeof MessageChannel === "function" ? new MessageChannel() : undefined;
+  const send = post ?? (channel && ((message: unknown) => channel.port1.postMessage(message)));
+  if (!send || steps.length === 0) return steps;
+  const unrelated = new Error("A failure of the copy that is not a stack overflow");
+  try {
+    const depths = steps.map(nestingDepth);
+    const firstOfDepth = new Map<number, number>();
+    depths.forEach((depth, i) => {
+      if (!firstOfDepth.has(depth)) firstOfDepth.set(depth, i);
+    });
+    const distinct = [...firstOfDepth.keys()].sort((a, b) => a - b);
+    const fits = (depth: number): boolean => {
+      try {
+        send({ type: "steps", steps: [steps[firstOfDepth.get(depth)!]] });
+        return true;
+      } catch (error) {
+        if (isStackOverflow(error)) return false;
+        throw unrelated; // (the send reports it)
+      }
+    };
+    if (fits(distinct[distinct.length - 1])) return steps;
+    // The deepest depth that fits (the shallowest does not fit, if none): `lo` fits, `hi` does not.
+    let lo = -1;
+    let hi = distinct.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (fits(distinct[mid])) lo = mid;
+      else hi = mid;
+    }
+    if (lo < 0) return steps;
+    const cut = depths.findIndex(depth => depth > distinct[lo]);
+    const kept = steps.slice(0, cut);
+    endWithRecursionError(kept);
+    return kept;
+  } catch (error) {
+    if (error === unrelated) return steps;
+    throw error;
+  } finally {
+    channel?.port1.close();
+    channel?.port2.close();
+  }
 }
 
 export interface EStepperRun {
@@ -266,18 +367,7 @@ export async function runEStepper(
     if (!isStackOverflow(error)) throw error;
     // The last step that was made whole stands in for the term that could not be drawn.
     steps.length = complete;
-    const last = steps[steps.length - 1];
-    const stuck = (explanation: string, redexType?: "beforeMarker"): Step => {
-      const step: Step = {
-        ...last,
-        markers: [redexType ? { explanation, redexType } : { explanation }],
-        cse: last.cse && { ...last.cse, stepIndex: steps.length },
-      };
-      delete step.lookups;
-      return step;
-    };
-    steps.push(stuck(RECURSION_ERROR_MESSAGE, "beforeMarker"));
-    steps.push(stuck("Evaluation stuck"));
+    endWithRecursionError(steps);
     return { steps, output: machine.output, error: RECURSION_ERROR_MESSAGE, truncated: false };
   }
 }
@@ -290,5 +380,7 @@ export async function getEStepperSteps(
   stepLimit = DEFAULT_STEP_LIMIT,
   requestInput?: RequestInput,
 ): Promise<EStepperStep[]> {
-  return (await runEStepper(fileInput, code, chapter, stepLimit, requestInput)).steps;
+  return sendableSteps(
+    (await runEStepper(fileInput, code, chapter, stepLimit, requestInput)).steps,
+  );
 }
