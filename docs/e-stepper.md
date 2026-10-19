@@ -154,9 +154,14 @@ built-ins operate on heap objects instead of list literal nodes.
   step leaves garbage frames out as well (the host takes them from the earlier snapshots), but it
   holds the garbage objects that no frame holds itself, in the heap of the frame they were made in;
   it keeps the newest `200000 / stepLimit` of them (at least 10; `unreachableLimit`), so a run of the
-  default 1000 steps loses none. A run whose steps still use more than `MAX_STEPS_SIZE` characters
-  of JSON (64 million; about 650 MB of heap) ends with the step "Maximum size of the steps
-  exceeded: they use too much memory", as it ends at the step limit, instead of crashing the tab.
+  default 1000 steps loses none. A browser kills a tab whose JavaScript heap reaches its limit (a
+  fatal error that cannot be caught; the limit depends on the device, the browser and what else
+  runs), so a run ends before that: every 64 contractions it reads the heap use and limit that the
+  host reports (`HeapProbe`; Chrome's `performance.memory`, in a page or a worker), and it ends
+  with the step "Maximum size of the steps exceeded: they use too much memory", as it ends at the
+  step limit, once the heap passes 60% of the limit (`HEAP_FRACTION`; the page holds a second copy
+  of the steps). Where the host reports nothing (Firefox, Safari, Node), it ends when the JSON of
+  the steps passes `FALLBACK_STEPS_SIZE` characters (64 million; about 650 MB of heap).
 - **Frame layout and heap drawing** follow the CSE machine visualization: frames as labelled boxes
   with bindings and a parent arrow, function objects as double circles pointing to their environment,
   lists as box-and-pointer diagrams.

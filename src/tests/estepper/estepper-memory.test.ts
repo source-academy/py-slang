@@ -6,13 +6,19 @@
  * from the earlier steps (`storeAt`). A run whose steps still grow too large ends with a step that
  * says so, as at the step limit.
  */
-import { MAX_STEPS_SIZE, runEStepper } from "../../conductor/estepper/getSteps";
+import {
+  FALLBACK_STEPS_SIZE,
+  type MemoryLimits,
+  runEStepper,
+} from "../../conductor/estepper/getSteps";
+import { HEAP_FRACTION, MEMORY_CHECK_INTERVAL } from "../../conductor/estepper/memory";
 import { unreachableLimit } from "../../conductor/estepper/serialize";
 import { parse } from "../../parser";
 import { storeAt, withStore } from "./store";
 
-const run = (code: string, chapter: number, stepLimit: number, maxSize?: number) =>
-  runEStepper(parse(code), code, chapter, stepLimit, undefined, maxSize);
+// (no report of the heap unless a test gives one: Node has none)
+const run = (code: string, chapter: number, stepLimit: number, limits?: MemoryLimits) =>
+  runEStepper(parse(code), code, chapter, stepLimit, undefined, limits);
 
 const FOREVER = "def f(x):\n    return f(x)\nf(4)\n";
 const LISTS = "i = 0\nwhile i < 60:\n    x = [i]\n    i = i + 1\n";
@@ -78,7 +84,7 @@ describe("unreachable frames and objects", () => {
     const stepLimit = 10000;
     const { steps } = await run(LISTS, 4, stepLimit);
     const last = steps[steps.length - 1];
-    const objects = last.cse.environments.flatMap(
+    const objects = (last.cse?.environments ?? []).flatMap(
       (f: { heapObjects?: unknown[] }) => f.heapObjects ?? [],
     );
     expect(objects.length).toBeLessThanOrEqual(unreachableLimit(stepLimit));
@@ -92,21 +98,51 @@ describe("unreachable frames and objects", () => {
   });
 });
 
-describe("the limit on the size of the steps", () => {
-  test("ends the run with a step that says so", async () => {
-    const result = await run(FOREVER, 3, 100000, 200_000);
+describe("the memory of a run", () => {
+  const LAST = (steps: { markers?: { explanation?: string }[] }[]) =>
+    steps[steps.length - 1].markers?.[0]?.explanation;
+
+  test("a run ends when the heap comes near the limit the host reports", async () => {
+    let readings = 0;
+    // The heap fills up by 10% of the limit with each reading.
+    const heap = () => ({ used: ++readings * 100, limit: 1000 });
+    const result = await run(FOREVER, 3, 100000, { heap });
     expect(result.truncated).toBe(true);
-    expect(result.truncatedBy).toBe("size");
+    expect(result.truncatedBy).toBe("memory");
     expect(result.error).toBeUndefined();
-    expect(result.steps.length).toBeLessThan(1000);
-    expect(result.steps[result.steps.length - 1].markers?.[0]?.explanation).toMatch(
-      /^Maximum size of the steps exceeded/,
-    );
+    expect(LAST(result.steps)).toMatch(/^Maximum size of the steps exceeded/);
+    // Readings are made every MEMORY_CHECK_INTERVAL contractions, and the last one is over the
+    // fraction of the limit.
+    const over = Math.floor(HEAP_FRACTION * 10) + 1;
+    // (the first reading, at the start, only tells whether the host reports; the next is at n = 0)
+    expect(readings).toBe(over);
+    expect(result.steps.length).toBe(2 * MEMORY_CHECK_INTERVAL * (over - 2) + 2);
   });
 
-  test("is not reached by a run of the default step limit", async () => {
-    const result = await run(FOREVER, 3, 1000);
+  test("the size of the steps is not counted where the host reports its heap", async () => {
+    const roomy = () => ({ used: 1, limit: 1_000_000_000 });
+    const result = await run(FOREVER, 3, 3000, { heap: roomy, maxSize: 1 });
     expect(result.truncatedBy).toBe("steps");
-    expect(JSON.stringify(result.steps).length).toBeLessThan(MAX_STEPS_SIZE / 10);
+    expect(result.steps).toHaveLength(3000);
+  });
+
+  test("a host that reports nothing is the same as no probe", async () => {
+    const none = () => undefined;
+    const result = await run(FOREVER, 3, 3000, { heap: none, maxSize: 200_000 });
+    expect(result.truncatedBy).toBe("memory");
+  });
+
+  test("without a report, a run ends when the steps are larger than the fallback", async () => {
+    const result = await run(FOREVER, 3, 100000, { heap: null, maxSize: 200_000 });
+    expect(result.truncated).toBe(true);
+    expect(result.truncatedBy).toBe("memory");
+    expect(result.steps.length).toBeLessThan(1000);
+    expect(LAST(result.steps)).toMatch(/^Maximum size of the steps exceeded/);
+  });
+
+  test("a run of the default step limit is far from the fallback", async () => {
+    const result = await run(FOREVER, 3, 1000, { heap: null });
+    expect(result.truncatedBy).toBe("steps");
+    expect(JSON.stringify(result.steps).length).toBeLessThan(FALLBACK_STEPS_SIZE / 10);
   });
 });

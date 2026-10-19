@@ -24,7 +24,10 @@ async function viaCse(code: string, chapter: number) {
 
 async function viaEStepper(code: string, chapter: number) {
   try {
-    const run = await runEStepper(parse(code), code, chapter, 1_000_000, undefined, Infinity);
+    const run = await runEStepper(parse(code), code, chapter, 1_000_000, undefined, {
+      heap: null,
+      maxSize: Infinity,
+    });
     return {
       output: run.output,
       error: run.error === undefined ? undefined : (errorKind(run.error) ?? "Error"),
