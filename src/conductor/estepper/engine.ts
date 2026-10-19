@@ -162,8 +162,15 @@ export class Machine {
   readonly text: TextContext;
   /** Frames created by calls the program makes (shown even once they are garbage). */
   readonly createdEnvs: Environment[] = [];
-  /** How many unreachable frames and objects a step still shows (see `unreachableLimit`). */
+  /** How many unreachable objects that no frame holds a CSE snapshot still has (see `unreachableLimit`). */
   maxUnreachable = Number.POSITIVE_INFINITY;
+  /**
+   * The unreachable frames and objects that have been in a step (by label). What is unreachable
+   * stays so, so each is in the step where it becomes so and in no step after it: the steps of a
+   * run would otherwise repeat them all in every step, and grow with the square of their number
+   * (#611). A host takes the earlier ones from the earlier steps (`storeAt` in the plugin).
+   */
+  readonly sent = new Set<string>();
   /** Every heap object shown at some step so far (shown from then on, greyed out once garbage),
    * with the frame it belongs to: a function object's defining frame, or for a list, the frame
    * that was active when it was first shown. */

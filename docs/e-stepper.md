@@ -145,14 +145,18 @@ built-ins operate on heap objects instead of list literal nodes.
 - **Garbage**: frames and objects no longer reachable from P (through `EnvBlock`s and `Ref`s) or `G`
   are greyed out, not removed. This makes the result of a returning call visible: its frame stays
   alive if a returned function object still points to it, and becomes garbage otherwise.
-  Every step holds its own copy of the store, so a program that makes a frame in each iteration of
-  a loop would make the steps grow with the square of their number. A step therefore shows only the
-  newest garbage frames, and the newest garbage objects that no frame shown holds: `200000 /
-  stepLimit` of each, but at least 10 (`unreachableLimit`), so that a run of the default 1000 steps
-  loses none. What is garbage stays garbage, so the older ones are dropped for good. A run whose
-  steps still use more than `MAX_STEPS_SIZE` characters of JSON (64 million; about 600 MB of heap)
-  ends with the step "Maximum size of the steps exceeded: they use too much memory", as it ends at
-  the step limit, instead of crashing the tab (py-slang#611).
+  What is garbage stays garbage, so a frame or an object is in the `frames` and `heap` of the step in
+  which it becomes garbage, and in none of the steps after it: a host works out the whole store at
+  a step from that step and the ones before it (the web plugin's `storeAt`: the latest version of
+  each frame and object, those not in the step itself being garbage). Repeating them in every step
+  would make the steps of a loop that makes a frame in each iteration grow with the square of their
+  number, and a run of 100000 steps crashed the browser tab (py-slang#611). The CSE snapshot of a
+  step leaves garbage frames out as well (the host takes them from the earlier snapshots), but it
+  holds the garbage objects that no frame holds itself, in the heap of the frame they were made in;
+  it keeps the newest `200000 / stepLimit` of them (at least 10; `unreachableLimit`), so a run of the
+  default 1000 steps loses none. A run whose steps still use more than `MAX_STEPS_SIZE` characters
+  of JSON (64 million; about 650 MB of heap) ends with the step "Maximum size of the steps
+  exceeded: they use too much memory", as it ends at the step limit, instead of crashing the tab.
 - **Frame layout and heap drawing** follow the CSE machine visualization: frames as labelled boxes
   with bindings and a parent arrow, function objects as double circles pointing to their environment,
   lists as box-and-pointer diagrams.

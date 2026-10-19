@@ -461,13 +461,12 @@ export interface StoreSnapshot {
 }
 
 /**
- * How many unreachable frames, and how many unreachable objects that no frame shown holds, a step
- * still shows (the newest). A program that makes a frame in every iteration of a loop (or a
- * recursion with tail calls) would otherwise keep all of them in every one of its steps: the steps
- * of a run of 100000 steps would hold billions of frames, and the browser tab would crash (#611).
- * The limit is lower the more steps are allowed, so that the steps hold at most about
- * `UNREACHABLE_BUDGET` of them in all: a run of the default 1000 steps (which makes at most about
- * 170 frames) loses none.
+ * How many unreachable objects that no frame holds the CSE snapshot of a step still has (the
+ * newest). The snapshot of a step leaves unreachable frames out (a host takes them from the earlier
+ * steps), but it has to hold such an object itself, in the heap of the frame it was made in: a loop
+ * that makes a list in each iteration would otherwise make steps of ever larger size. The limit is
+ * lower the more steps are allowed, so that the steps hold at most about `UNREACHABLE_BUDGET` of
+ * them in all: a run of the default 1000 steps loses none.
  */
 export const MIN_UNREACHABLE = 10;
 export const UNREACHABLE_BUDGET = 200_000;
@@ -480,15 +479,7 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   live.frame(machine.programEnv);
   live.stmts(program);
 
-  // What is unreachable now stays so: the oldest unreachable frames are forgotten for good.
-  const unreachable = machine.createdEnvs.filter(env => !live.frames.has(env));
   const limit = machine.maxUnreachable;
-  if (unreachable.length > limit) {
-    const forgotten = new Set(unreachable.slice(0, unreachable.length - limit));
-    const kept = machine.createdEnvs.filter(env => !forgotten.has(env));
-    machine.createdEnvs.splice(0, machine.createdEnvs.length, ...kept);
-  }
-
   // Also show every frame the program's calls created, and whatever only they reach.
   const all = new Reach(machine);
   all.frame(machine.programEnv);
@@ -536,6 +527,11 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
 
   const frames: EStepperFrame[] = [];
   const heap: EStepperHeapObject[] = [];
+  const firstTime = (id: string): boolean => {
+    if (machine.sent.has(id)) return false;
+    machine.sent.add(id);
+    return true;
+  };
   // Global first, then frames in creation order, then anything else in the order first reached.
   const frameOrder = [
     machine.programEnv,
@@ -544,6 +540,10 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   ];
   for (const env of frameOrder) {
     if (!all.frames.has(env) || !labels.isShown(env)) continue;
+    // A frame that is unreachable stays so: it is in the step where it becomes so, and not in the
+    // steps after it (a host takes it from the earlier steps; see `Machine.sent`).
+    const unreachable = !live.frames.has(env);
+    if (unreachable && !firstTime(labels.frame(env))) continue;
     frames.push({
       id: labels.frame(env),
       name: env === machine.programEnv ? "global" : env.name,
@@ -551,12 +551,13 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
       bindings: Object.entries(env.head)
         .filter(([name]) => env !== machine.programEnv || name !== "__program__")
         .map(([name, v]) => ({ name, value: valueOf(v) })),
-      isGarbage: !live.frames.has(env),
+      isGarbage: unreachable,
     });
   }
   for (const item of all.visited) {
     if (!all.objects.has(item as HeapObj)) continue;
     const obj = item as HeapObj;
+    if (!live.objects.has(obj) && !firstTime(labels.object(obj))) continue;
     if (isList(obj)) {
       heap.push({
         kind: "list",
@@ -580,6 +581,11 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   }
   // Heap objects in label order, so the drawing is stable from step to step.
   heap.sort((a, b) => Number(a.id.slice(1)) - Number(b.id.slice(1)));
+  // The machine need not look at an unreachable frame again.
+  const kept = machine.createdEnvs.filter(env => live.frames.has(env));
+  if (kept.length < machine.createdEnvs.length) {
+    machine.createdEnvs.splice(0, machine.createdEnvs.length, ...kept);
+  }
 
   return {
     frames,
