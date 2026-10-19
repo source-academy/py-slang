@@ -460,10 +460,34 @@ export interface StoreSnapshot {
   cse: CseSnapshot;
 }
 
+/**
+ * How many unreachable frames, and how many unreachable objects that no frame shown holds, a step
+ * still shows (the newest). A program that makes a frame in every iteration of a loop (or a
+ * recursion with tail calls) would otherwise keep all of them in every one of its steps: the steps
+ * of a run of 100000 steps would hold billions of frames, and the browser tab would crash (#611).
+ * The limit is lower the more steps are allowed, so that the steps hold at most about
+ * `UNREACHABLE_BUDGET` of them in all: a run of the default 1000 steps (which makes at most about
+ * 170 frames) loses none.
+ */
+export const MIN_UNREACHABLE = 10;
+export const UNREACHABLE_BUDGET = 200_000;
+export function unreachableLimit(stepLimit: number): number {
+  return Math.max(MIN_UNREACHABLE, Math.floor(UNREACHABLE_BUDGET / Math.max(1, stepLimit)));
+}
+
 export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot {
   const live = new Reach(machine);
   live.frame(machine.programEnv);
   live.stmts(program);
+
+  // What is unreachable now stays so: the oldest unreachable frames are forgotten for good.
+  const unreachable = machine.createdEnvs.filter(env => !live.frames.has(env));
+  const limit = machine.maxUnreachable;
+  if (unreachable.length > limit) {
+    const forgotten = new Set(unreachable.slice(0, unreachable.length - limit));
+    const kept = machine.createdEnvs.filter(env => !forgotten.has(env));
+    machine.createdEnvs.splice(0, machine.createdEnvs.length, ...kept);
+  }
 
   // Also show every frame the program's calls created, and whatever only they reach.
   const all = new Reach(machine);
@@ -471,7 +495,12 @@ export function snapshotStore(machine: Machine, program: Stmt[]): StoreSnapshot 
   all.stmts(program);
   for (const env of machine.createdEnvs) all.frame(env);
   // And every object shown at an earlier step, as the CSE machine keeps showing objects that
-  // have become garbage (e.g. the list `[None]` once `[None] * 3` has been evaluated).
+  // have become garbage (e.g. the list `[None]` once `[None] * 3` has been evaluated): the newest
+  // of those that no frame holds.
+  const orphans = [...machine.shownObjects.keys()].filter(obj => !all.objects.has(obj));
+  for (const obj of orphans.slice(0, Math.max(0, orphans.length - limit))) {
+    machine.shownObjects.delete(obj);
+  }
   for (const obj of machine.shownObjects.keys()) all.value(asValue(obj));
   const active = activeInList(machine, program, machine.programEnv);
   for (const obj of all.objects) {

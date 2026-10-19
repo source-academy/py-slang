@@ -162,6 +162,8 @@ export class Machine {
   readonly text: TextContext;
   /** Frames created by calls the program makes (shown even once they are garbage). */
   readonly createdEnvs: Environment[] = [];
+  /** How many unreachable frames and objects a step still shows (see `unreachableLimit`). */
+  maxUnreachable = Number.POSITIVE_INFINITY;
   /** Every heap object shown at some step so far (shown from then on, greyed out once garbage),
    * with the frame it belongs to: a function object's defining frame, or for a list, the frame
    * that was active when it was first shown. */

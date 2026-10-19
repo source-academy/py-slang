@@ -145,6 +145,14 @@ built-ins operate on heap objects instead of list literal nodes.
 - **Garbage**: frames and objects no longer reachable from P (through `EnvBlock`s and `Ref`s) or `G`
   are greyed out, not removed. This makes the result of a returning call visible: its frame stays
   alive if a returned function object still points to it, and becomes garbage otherwise.
+  Every step holds its own copy of the store, so a program that makes a frame in each iteration of
+  a loop would make the steps grow with the square of their number. A step therefore shows only the
+  newest garbage frames, and the newest garbage objects that no frame shown holds: `200000 /
+  stepLimit` of each, but at least 10 (`unreachableLimit`), so that a run of the default 1000 steps
+  loses none. What is garbage stays garbage, so the older ones are dropped for good. A run whose
+  steps still use more than `MAX_STEPS_SIZE` characters of JSON (64 million; about 600 MB of heap)
+  ends with the step "Maximum size of the steps exceeded: they use too much memory", as it ends at
+  the step limit, instead of crashing the tab (py-slang#611).
 - **Frame layout and heap drawing** follow the CSE machine visualization: frames as labelled boxes
   with bindings and a parent arrow, function objects as double circles pointing to their environment,
   lists as box-and-pointer diagrams.
