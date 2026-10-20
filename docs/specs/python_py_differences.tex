@@ -80,6 +80,7 @@ print(1 + 2)  	# Outputs: 3
     and the WebAssembly implementation evaluate the list, the index and then the value
     of \texttt{list[index] = value}; native Python evaluates the value first.
   \item The WebAssembly implementation has 64-bit integers, a lower limit for the
-    depth of recursion, and does not support \texttt{global} in nested functions.
+    depth of recursion, and does not support \texttt{global} declarations (a program with one is
+    rejected).
   \end{itemize}
 \end{description}
