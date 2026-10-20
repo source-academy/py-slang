@@ -13,4 +13,17 @@ In \href{https://docs.python.org/3/tutorial/classes.html\#python-scopes-and-name
 if it is declared outside any function, it is global (i.e., module-level). Moreover, if a variable is declared in an enclosing function, 
 it is available to inner functions (the enclosing scope), and if not found in these scopes, Python looks into the built-in scope.
 }.
+
+\item All names that are referenced in a program need to be declared, regardless of whether the
+reference gets evaluated or not. A name is declared by an assignment, a function definition or a
+parameter. The scope of a name that is declared in a function is that function, including the
+functions nested in it; a name that is declared at the top level is in scope everywhere in the
+program. A name that is declared in one function can therefore not be used in another function,
+unless the second function is nested in the first. Built-in names are in scope everywhere. The
+order of the declarations and the uses does not matter: a name that is used before it is
+assigned is not rejected, but leads to a run-time error, as in Python.
+\begin{lstlisting}
+print(1 if True else x)
+\end{lstlisting}
+Leads to an error \texttt{name not found in the current or enclosing environment(s).}
 \end{itemize}
