@@ -165,7 +165,8 @@ export function sendableSteps<T extends Step>(steps: T[], post?: (message: unkno
     }
     if (lo < 0) return steps;
     const cut = depths.findIndex(depth => depth > distinct[lo]);
-    const kept = steps.slice(0, cut);
+    // (When even the first step is too deep, the first that can be sent stands in for the run.)
+    const kept = cut > 0 ? steps.slice(0, cut) : [steps[depths.findIndex(d => d <= distinct[lo])]];
     endWithRecursionError(kept);
     return kept;
   } catch (error) {
