@@ -999,7 +999,40 @@ export class Resolver implements StmtNS.Visitor<void>, ExprNS.Visitor<void> {
     if (this.hasEnclosingFunctionBinding(name, this.functionDefStack.length - 1)) {
       return true;
     }
-    return this.hasBindingConstruct(this.moduleStatements, name);
+    return (
+      this.hasBindingConstruct(this.moduleStatements, name) ||
+      this.isDeclaredGlobalInAnyFunction(this.moduleStatements, name)
+    );
+  }
+
+  // Whether `name` is declared `global` anywhere in the statement list: by a function, however
+  // deeply nested, or at the top of the module. Such a declaration makes `name` a name of the module
+  // scope (CPython compiles every reference to it as a global lookup, which fails at run time with
+  // a NameError if nothing has bound it by then), wherever the declaration stands: `def f():
+  // print(x)` before `def g(): global x` is not rejected (py-slang#614). A name that nothing
+  // declares is still rejected before the program runs.
+  private isDeclaredGlobalInAnyFunction(stmts: StmtNS.Stmt[], name: string): boolean {
+    for (const original of stmts) {
+      const stmt = original instanceof StmtNS.Decorated ? original.definition : original;
+      if (stmt instanceof StmtNS.Global) {
+        if (stmt.names.some(n => n.lexeme === name)) return true;
+      } else if (stmt instanceof StmtNS.FunctionDef) {
+        // (The nested functions of the body too, and the `global` of the body itself.)
+        if (this.scanGlobalDeclarations(stmt.body).has(name)) return true;
+        if (this.isDeclaredGlobalInAnyFunction(stmt.body, name)) return true;
+      } else if (stmt instanceof StmtNS.If) {
+        if (this.isDeclaredGlobalInAnyFunction(stmt.body, name)) return true;
+        const elseBlock = stmt.elseBlock;
+        if (Array.isArray(elseBlock)) {
+          if (this.isDeclaredGlobalInAnyFunction(elseBlock, name)) return true;
+        } else if (elseBlock && this.isDeclaredGlobalInAnyFunction([elseBlock], name)) {
+          return true;
+        }
+      } else if (stmt instanceof StmtNS.While || stmt instanceof StmtNS.For) {
+        if (this.isDeclaredGlobalInAnyFunction(stmt.body, name)) return true;
+      }
+    }
+    return false;
   }
 
   visitNonLocalStmt(stmt: StmtNS.NonLocal): void {
