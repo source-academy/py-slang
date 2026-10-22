@@ -715,7 +715,11 @@ export function cseSnapshot(machine: Machine, program: Stmt[], stepIndex: number
     // refers to it (a closure made in it) refers to the frame it extends.
     frames: (env: Environment) => machine.labels.peekFrame(machine.labels.shownFrame(env)),
     // The built-ins root is structural: the program's frame extends it, even when it is empty.
-    hidden: (env: Environment) => env.name !== "global" && !machine.labels.isShown(env),
+    // Nor is the frame of a call of a library function (or of a function made in one).
+    hidden: (env: Environment) =>
+      env.name !== "global" &&
+      (!machine.labels.isShown(env) || (!!env.closure && machine.isLibrary(env.closure))),
+    isLibrary: (closure: Closure) => machine.isLibrary(closure),
     // A list stays where it was first drawn (beside the frame it was made in), instead of moving
     // to whichever frame is active when it is passed to a function; only if that frame is drawn and
     // still binds the list. A host draws a list beside a frame that binds it, so a list that only
