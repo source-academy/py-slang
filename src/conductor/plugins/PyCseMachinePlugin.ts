@@ -118,6 +118,11 @@ export interface SnapshotIds {
    */
   hidden?: (env: Environment) => boolean;
   /**
+   * Function objects a host does not draw (the library's): each is serialized like a built-in,
+   * and the frame it was made in is not followed on its account.
+   */
+  isLibrary?: (closure: Closure) => boolean;
+  /**
    * For a list's `metadata.envId`: the frame the list belongs to, where a host draws it. Without
    * it a list belongs to the frame whose binding is serialized first, so it moves from frame to
    * frame as the active frame changes. A host looks for a list's drawing next to a binding in
@@ -242,6 +247,10 @@ function serializeValue(
   if (v === UNASSIGNED) return { displayValue: "", label: "unassigned" };
   if (v === undefined || v === null) return { displayValue: "None", label: "NoneType" };
   const base = { displayValue: formatValue(v), label: typeTranslator(v.type) };
+  if (v.type === "closure" && ids.isLibrary?.(v.closure)) {
+    const name = v.closure.node.kind === "FunctionDef" ? v.closure.node.name.lexeme : "lambda";
+    return { displayValue: name, label: typeTranslator("builtin") };
+  }
   if (v.type === "closure") {
     const cl = v.closure;
     const funcName = cl.node.kind === "FunctionDef" ? cl.node.name.lexeme : "lambda";
@@ -562,8 +571,9 @@ function serializeEnvChain(
   const seenLists = new Set<object>();
   const visitValue = (val: Value | typeof UNASSIGNED | undefined): void => {
     if (!val || val === UNASSIGNED) return;
-    if (val.type === "closure") visit(val.closure?.environment);
-    else if (val.type === "list" && !seenLists.has(val)) {
+    if (val.type === "closure") {
+      if (!ids.isLibrary?.(val.closure)) visit(val.closure?.environment);
+    } else if (val.type === "list" && !seenLists.has(val)) {
       seenLists.add(val);
       for (const el of val.value) visitValue(el);
     }

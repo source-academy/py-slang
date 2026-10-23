@@ -165,7 +165,15 @@ export function sendableSteps<T extends Step>(steps: T[], post?: (message: unkno
     }
     if (lo < 0) return steps;
     const cut = depths.findIndex(depth => depth > distinct[lo]);
-    const kept = steps.slice(0, cut);
+    // (When even the first step is too deep, the first that can be sent stands in for the run, as
+    // its first step: its snapshot is numbered 0, as each step's snapshot is by its position.)
+    let kept: T[];
+    if (cut > 0) {
+      kept = steps.slice(0, cut);
+    } else {
+      const stand = steps[depths.findIndex(d => d <= distinct[lo])];
+      kept = [{ ...stand, cse: stand.cse && { ...stand.cse, stepIndex: 0 } }];
+    }
     endWithRecursionError(kept);
     return kept;
   } catch (error) {

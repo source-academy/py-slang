@@ -116,6 +116,18 @@ describe("sendableSteps", () => {
     expect(sent).toHaveLength(2 + 2);
   });
 
+  test("a run whose first step is too deep ends with the first step that can be sent", async () => {
+    const steps = await stepsOfDepths([40, 3, 8, 50]);
+    const sent = sendableSteps(steps, postUpTo(25));
+    expect(sent).toHaveLength(1 + 2);
+    expect(sent[0].ast).toBe(steps[1].ast);
+    expect(sent[1].markers?.[0]?.explanation).toBe(RECURSION_ERROR_MESSAGE);
+    // each snapshot is numbered by the position of its step
+    expect(sent.map(step => step.cse?.stepIndex)).toEqual([0, 1, 2]);
+    // (the step it stands in for is as it was)
+    expect(steps[1].cse?.stepIndex).toBe(1);
+  });
+
   test("a step is tried as the message it is sent in", async () => {
     const steps = await stepsOfDepths([4]);
     const seen: unknown[] = [];
