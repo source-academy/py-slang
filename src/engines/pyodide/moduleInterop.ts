@@ -418,13 +418,31 @@ export async function moduleToPython(
       // intact across the round trip.
       const pyNoSync = ns.get("_SA_NO_SYNC") as unknown;
 
+      const isOpaqueSync = ns.get("_sa_is_opaque") as PyProxy & ((x: unknown) => boolean);
+      const isClosureSync = ns.get("_sa_is_closure") as PyProxy & ((x: unknown) => boolean);
+
       const callSync = (...pyArgs: unknown[]): unknown => {
         const typedArgs: TypedValue<DataType>[] = [];
         for (const a of pyArgs) {
           // Bailing to pyNoSync here is safe - nothing has run yet, so
           // falling back to callAsync (the Python wrapper's job, not this
           // function's) simply means the call hasn't been attempted at all.
-          const converted = pyToTypedSync(a);
+          let converted = pyToTypedSync(a);
+          // A _SaOpaque/_SaClosure (e.g. the src/dest image a pix_n_flix
+          // filter is handed) round-trips by its identifier alone, which is
+          // synchronously readable - same pass-through pythonToModule does.
+          // Without this, set_pixel_value(dest, ...) inside a filter always
+          // fell back to run_sync, which fails when the filter was invoked
+          // by the module (a plain JS->Python call, not via callPromising).
+          if (
+            converted === undefined &&
+            a !== null &&
+            (typeof a === "object" || typeof a === "function") &&
+            (isOpaqueSync(a) || isClosureSync(a))
+          ) {
+            const ref = a as PyProxy & { sa_type: DataType; sa_value: unknown };
+            converted = { type: ref.sa_type, value: ref.sa_value } as TypedValue<DataType>;
+          }
           if (converted === undefined) return pyNoSync;
           typedArgs.push(converted);
         }
