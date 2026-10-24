@@ -107,11 +107,17 @@ from pyodide.ffi import run_sync as _sa_run_sync
 
 _SA_NO_SYNC = object()
 
+# One scalar carrying both halves of a handle's TypedValue across the
+# Python->JS boundary: sa_value * _SA_CODE_BASE + sa_type (sa_type is a small
+# DataType enum value; sa_value an integer identifier well inside 2**53).
+_SA_CODE_BASE = 64
+
 class _SaOpaque:
-    __slots__ = ("sa_type", "sa_value")
+    __slots__ = ("sa_type", "sa_value", "sa_code")
     def __init__(self, sa_type, sa_value):
         self.sa_type = sa_type
         self.sa_value = sa_value
+        self.sa_code = sa_value * _SA_CODE_BASE + sa_type
 
 class _SaClosure:
     """A module-exported function, callable directly from Python. __call__
@@ -120,14 +126,28 @@ class _SaClosure:
     host round-trip); only a closure with no such proof needs run_sync, which
     requires this whole chunk to have been invoked via callPromising (see
     isJspiAvailable/PyodideEvaluatorBase)."""
-    __slots__ = ("sa_type", "sa_value", "_call_sync", "_call_async")
+    __slots__ = ("sa_type", "sa_value", "sa_code", "_call_sync", "_call_async")
     def __init__(self, sa_type, sa_value, call_sync, call_async):
         self.sa_type = sa_type
         self.sa_value = sa_value
+        self.sa_code = sa_value * _SA_CODE_BASE + sa_type
         self._call_sync = call_sync
         self._call_async = call_async
     def __call__(self, *args):
-        result = self._call_sync(*args)
+        # Flatten opaque/closure args into one scalar each (see moduleToPython's
+        # callSync) rather than handing JS a PyProxy per handle.
+        mask = 0
+        flat = None
+        i = 0
+        for a in args:
+            c = a.__class__
+            if c is _SaOpaque or c is _SaClosure:
+                if flat is None:
+                    flat = list(args)
+                mask |= 1 << i
+                flat[i] = a.sa_code
+            i += 1
+        result = self._call_sync(mask, *(args if flat is None else flat))
         if result is _SA_NO_SYNC:
             return _sa_run_sync(self._call_async(*args))
         return result
@@ -290,6 +310,9 @@ export async function isJspiAvailable(pyodide: PyodideInterface): Promise<boolea
  * side of the boundary). */
 const NO_SYNC_MARKER = Symbol("no-sync");
 
+/** Must match _SA_CODE_BASE in MODULE_INTEROP_HELPER_PY. */
+const SA_CODE_BASE = 64;
+
 /** pyodide converts a Python `int` outside JS's safe integer range to a JS
  * `BigInt` rather than `Number` (see type-conversions.html) - `typeof` on
  * that value is `"bigint"`, a third numeric primitive `pythonToModule`'s
@@ -402,7 +425,7 @@ export async function moduleToPython(
         ((
           t: number,
           v: number,
-          callSync: (...args: unknown[]) => unknown,
+          callSync: (mask: number, ...flat: unknown[]) => unknown,
           callAsync: (...args: unknown[]) => Promise<unknown>,
         ) => unknown);
       const dhSync = dh as DataHandlerWithSync;
@@ -418,13 +441,30 @@ export async function moduleToPython(
       // intact across the round trip.
       const pyNoSync = ns.get("_SA_NO_SYNC") as unknown;
 
-      const callSync = (...pyArgs: unknown[]): unknown => {
+      // `mask` bit i set => argument i is a _SaOpaque/_SaClosure that
+      // _SaClosure.__call__ already flattened, in Python, into one scalar
+      // (sa_code = sa_value * 64 + sa_type) - so no PyProxy is ever created for it and no
+      // JS->Python round trip is needed to classify it (that used to cost
+      // ~3us per call, dominating a pix_n_flix filter's per-pixel loop). Such
+      // a handle round-trips by its identifier alone, same pass-through
+      // pythonToModule does. Without it, set_pixel_value(dest, ...) inside a
+      // filter always fell back to run_sync, which fails when the filter was
+      // invoked by the module (a plain JS->Python call, not callPromising).
+      const callSync = (mask: number, ...flat: unknown[]): unknown => {
         const typedArgs: TypedValue<DataType>[] = [];
-        for (const a of pyArgs) {
+        for (let i = 0, k = 0; k < flat.length; i++) {
+          if (mask & (1 << i)) {
+            const code = flat[k++] as number;
+            typedArgs.push({
+              type: code % SA_CODE_BASE,
+              value: Math.floor(code / SA_CODE_BASE),
+            } as TypedValue<DataType>);
+            continue;
+          }
           // Bailing to pyNoSync here is safe - nothing has run yet, so
           // falling back to callAsync (the Python wrapper's job, not this
           // function's) simply means the call hasn't been attempted at all.
-          const converted = pyToTypedSync(a);
+          const converted = pyToTypedSync(flat[k++]);
           if (converted === undefined) return pyNoSync;
           typedArgs.push(converted);
         }

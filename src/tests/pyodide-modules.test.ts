@@ -31,6 +31,8 @@ import { loadPyodideGeneric } from "../engines/pyodide/loadPyodide";
 
 const PYODIDE_TIMEOUT = 60_000;
 
+let fireStoredCallback: (() => Promise<void>) | undefined;
+
 /** Computed once at module scope (real ESM here — see jest.config.js's
  * testPathIgnorePatterns comment — so top-level await works) rather than
  * per-test: JSPI support can't change mid-session, and every affected test
@@ -128,6 +130,42 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
     },
   );
 
+  // Takes an OPAQUE and has a .sync twin, like pix_n_flix's set_pixel_value(dest, ...):
+  // must be callable with no run_sync/JSPI at all (a module-invoked student
+  // callback runs outside callPromising).
+  const touchFn = async function* (o: TypedValue<DataType.OPAQUE>) {
+    return Promise.resolve(o as unknown as TypedValue<DataType.NUMBER>);
+  };
+  (
+    touchFn as unknown as {
+      sync: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
+    }
+  ).sync = (...args: TypedValue<DataType>[]) =>
+    args[0]?.type === DataType.OPAQUE ? num(1) : undefined;
+  const touchSync = await dh.closure_make(
+    { returnType: DataType.NUMBER, args: [DataType.OPAQUE] },
+    touchFn,
+  );
+
+  // Stores a student callback and fires it later from plain JS, outside any
+  // callPromising frame - exactly how pix_n_flix invokes an installed filter
+  // on each camera frame (see fireStoredCallback below).
+  const storeCb = await dh.closure_make(
+    { returnType: DataType.VOID, args: [DataType.CLOSURE] },
+    async function* (f: TypedValue<DataType.CLOSURE>) {
+      fireStoredCallback = async () => {
+        const handle = await dh.opaque_make({});
+        const gen = dh.closure_call_unchecked(f, [handle]);
+        let step = await gen.next();
+        while (!step.done) step = await gen.next();
+      };
+      return Promise.resolve({
+        type: DataType.VOID,
+        value: undefined,
+      } as TypedValue<DataType.VOID>);
+    },
+  );
+
   const headOf = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.PAIR] },
     async function* (p: TypedValue<DataType.PAIR>) {
@@ -167,6 +205,8 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
       { symbol: "double", value: double },
       { symbol: "increment_sync", value: incrementSync },
       { symbol: "apply_twice", value: applyTwice },
+      { symbol: "touch_sync", value: touchSync },
+      { symbol: "store_cb", value: storeCb },
       { symbol: "make_thing", value: makeThing },
       { symbol: "read_thing", value: readThing },
       { symbol: "head_of", value: headOf },
@@ -273,6 +313,23 @@ describe("PyodideEvaluator module imports", () => {
 
       expect(errors).toEqual([]);
       expect(outputs).toEqual(["43046721"]); // 3 ** (2 ** 4)
+    },
+    PYODIDE_TIMEOUT,
+  );
+
+  jspiTest(
+    "a student callback the module invokes later can call a .sync module function with an opaque argument",
+    async () => {
+      const { conductor, errors, outputs } = makeMockConductor();
+      const evaluator = new PyodideEvaluator3(conductor);
+
+      await evaluator.evaluateChunk(
+        "from testmod import store_cb, touch_sync\ndef cb(o):\n    print(touch_sync(o))\nstore_cb(cb)\n",
+      );
+      await fireStoredCallback!();
+
+      expect(errors).toEqual([]);
+      expect(outputs).toEqual(["1"]);
     },
     PYODIDE_TIMEOUT,
   );
