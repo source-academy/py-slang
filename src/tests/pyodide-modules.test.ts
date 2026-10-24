@@ -134,11 +134,14 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
   // must be callable with no run_sync/JSPI at all (a module-invoked student
   // callback runs outside callPromising).
   const touchFn = async function* (o: TypedValue<DataType.OPAQUE>) {
-    return o as unknown as TypedValue<DataType.NUMBER>;
+    return Promise.resolve(o as unknown as TypedValue<DataType.NUMBER>);
   };
   (
-    touchFn as unknown as { sync: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined }
-  ).sync = (...args: TypedValue<DataType>[]) => (args[0]?.type === DataType.OPAQUE ? num(1) : undefined);
+    touchFn as unknown as {
+      sync: (...a: TypedValue<DataType>[]) => TypedValue<DataType> | undefined;
+    }
+  ).sync = (...args: TypedValue<DataType>[]) =>
+    args[0]?.type === DataType.OPAQUE ? num(1) : undefined;
   const touchSync = await dh.closure_make(
     { returnType: DataType.NUMBER, args: [DataType.OPAQUE] },
     touchFn,
@@ -156,7 +159,10 @@ async function makeTestModule(dh: IDataHandler): Promise<IModulePlugin> {
         let step = await gen.next();
         while (!step.done) step = await gen.next();
       };
-      return { type: DataType.VOID, value: undefined } as TypedValue<DataType.VOID>;
+      return Promise.resolve({
+        type: DataType.VOID,
+        value: undefined,
+      } as TypedValue<DataType.VOID>);
     },
   );
 
