@@ -259,17 +259,17 @@ describe("consumers of the tree", () => {
   });
 
   test("parse() rejects a default value instead of dropping it", () => {
-    expect(() => transform(parse("def f(x=1):\n    return x\n"), new Set())).toThrow(
+    expect(() => transform(parse("def f(x=1):\n    return x\n"))).toThrow(
       "Default values of parameters are not supported in parse tree generation",
     );
-    expect(() => transform(parse("lambda x=1: x\n"), new Set())).toThrow(
+    expect(() => transform(parse("lambda x=1: x\n"))).toThrow(
       "Default values of parameters are not supported in parse tree generation",
     );
   });
 
   test("parse() rejects the other new syntax too", () => {
     for (const src of ["(1, 2)", "{1: 2}", "f(k=1)", "a, b = 1, 2"]) {
-      expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+      expect(() => transform(parse(src + "\n"))).toThrow();
     }
   });
 });
@@ -476,9 +476,9 @@ describe("consumers of the statements", () => {
       "del x",
       "import m",
     ]) {
-      expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+      expect(() => transform(parse(src + "\n"))).toThrow();
     }
-    expect(() => transform(parse("assert x, 'm'\n"), new Set())).toThrow(
+    expect(() => transform(parse("assert x, 'm'\n"))).toThrow(
       "Assertion messages are not supported in parse tree generation",
     );
   });
@@ -790,9 +790,9 @@ describe("expressions and targets of full Python", () => {
         "a << 1",
         "~a",
       ]) {
-        expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+        expect(() => transform(parse(src + "\n"))).toThrow();
       }
-      expect(() => transform(parse("a | b\n"), new Set())).toThrow(
+      expect(() => transform(parse("a | b\n"))).toThrow(
         "Bitwise operators are not supported in parse tree generation",
       );
     });
@@ -1230,9 +1230,9 @@ describe("the rest of the expressions of full Python", () => {
         "f(**d)",
         "(x for x in xs)",
       ]) {
-        expect(() => transform(parse(src + "\n"), new Set())).toThrow();
+        expect(() => transform(parse(src + "\n"))).toThrow();
       }
-      expect(() => transform(parse("def f(**kw):\n    pass\n"), new Set())).toThrow(
+      expect(() => transform(parse("def f(**kw):\n    pass\n"))).toThrow(
         "Keyword parameters are not supported in parse tree generation",
       );
     });

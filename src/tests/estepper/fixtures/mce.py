@@ -66,7 +66,7 @@ def evaluate(component, env):
                make_function(field(component, 1), field(component, 2), env),
                env)
         return None
-    elif is_tagged(component, "declaration"):
+    elif is_tagged(component, "assignment"):
         define(field(field(component, 0), 0), evaluate(field(component, 1), env), env)
         return None
     elif is_tagged(component, "return_statement"):

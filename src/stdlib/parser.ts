@@ -34,41 +34,16 @@ function vector_to_llist(arr: Value[]): ListValue | NoneValue {
   return res;
 }
 
-function isDeclaration(node: StmtNS.Stmt | null | undefined): boolean {
-  if (!node) return false;
-  const type = node.kind;
-  return type === "FunctionDef" || type === "Assign" || type === "AnnAssign";
-}
-
-function hasDeclaration(statements: StmtNS.Stmt[]): boolean {
-  return statements.some(isDeclaration);
-}
-
-function makeSequenceIfNeeded(
-  statements: StmtNS.Stmt[] | StmtNS.Stmt | null | undefined,
-  declaredNames: Set<string>,
-): Value {
+function makeSequenceIfNeeded(statements: StmtNS.Stmt[] | StmtNS.Stmt | null | undefined): Value {
   if (!statements) return None;
-  if (!Array.isArray(statements)) return transform(statements, declaredNames);
-  if (statements.length === 0) {
-    return None;
-  }
+  if (!Array.isArray(statements)) return transform(statements);
   if (statements.length === 1) {
-    return transform(statements[0], declaredNames);
+    return transform(statements[0]);
   }
   return vector_to_llist([
     { type: "string", value: "sequence" },
-    vector_to_llist(statements.map(stmt => transform(stmt, declaredNames))),
+    vector_to_llist(statements.map(stmt => transform(stmt))),
   ]);
-}
-
-function makeBlockIfNeeded(statements: StmtNS.Stmt[], declaredNames: Set<string>): Value {
-  return hasDeclaration(statements)
-    ? vector_to_llist([
-        { type: "string", value: "block" },
-        makeSequenceIfNeeded(statements, declaredNames),
-      ])
-    : makeSequenceIfNeeded(statements, declaredNames);
 }
 
 function transformParam(p: FunctionParam): Value {
@@ -93,17 +68,14 @@ function transformParam(p: FunctionParam): Value {
  * despite living alongside ParserBuiltins below, so it converts to a PVML
  * runtime value just as readily as a CSE one (see cse-interop.ts's
  * cseValueToPvmlBox). */
-export function transform(
-  node: ExprNS.Expr | StmtNS.Stmt | null | undefined,
-  declaredNames: Set<string>,
-): Value {
+export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): Value {
   if (!node) return None;
   const type = node.kind;
   switch (type) {
     case "FileInput":
-      return makeSequenceIfNeeded((node as StmtNS.FileInput).statements, declaredNames);
+      return makeSequenceIfNeeded((node as StmtNS.FileInput).statements);
     case "SimpleExpr":
-      return transform((node as StmtNS.SimpleExpr).expression, declaredNames);
+      return transform((node as StmtNS.SimpleExpr).expression);
     case "Literal": {
       const lit = node as ExprNS.Literal;
       let val: Value;
@@ -140,8 +112,8 @@ export function transform(
           type: "string",
           value: operatorTranslator((node as ExprNS.Binary).operator.type),
         },
-        transform((node as ExprNS.Binary).left, declaredNames),
-        transform((node as ExprNS.Binary).right, declaredNames),
+        transform((node as ExprNS.Binary).left),
+        transform((node as ExprNS.Binary).right),
       ]);
     case "BoolOp":
       return vector_to_llist([
@@ -150,8 +122,8 @@ export function transform(
           type: "string",
           value: operatorTranslator((node as ExprNS.BoolOp).operator.type),
         },
-        transform((node as ExprNS.BoolOp).left, declaredNames),
-        transform((node as ExprNS.BoolOp).right, declaredNames),
+        transform((node as ExprNS.BoolOp).left),
+        transform((node as ExprNS.BoolOp).right),
       ]);
     case "Compare":
       return vector_to_llist([
@@ -160,8 +132,8 @@ export function transform(
           type: "string",
           value: operatorTranslator((node as ExprNS.Compare).operator.type),
         },
-        transform((node as ExprNS.Compare).left, declaredNames),
-        transform((node as ExprNS.Compare).right, declaredNames),
+        transform((node as ExprNS.Compare).left),
+        transform((node as ExprNS.Compare).right),
       ]);
     case "Unary":
       if ((node as ExprNS.Unary).operator.type === TokenType.TILDE) {
@@ -173,49 +145,44 @@ export function transform(
           type: "string",
           value: operatorTranslator((node as ExprNS.Unary).operator.type),
         },
-        transform((node as ExprNS.Unary).right, declaredNames),
+        transform((node as ExprNS.Unary).right),
       ]);
     case "Assign": {
       const assign = node as StmtNS.Assign;
-      const isDecl =
-        assign.target instanceof ExprNS.Variable && !declaredNames.has(assign.target.name.lexeme);
-      if (isDecl && assign.target instanceof ExprNS.Variable) {
-        declaredNames.add(assign.target.name.lexeme);
-      }
       return vector_to_llist([
-        { type: "string", value: isDecl ? "declaration" : "assignment" },
-        transform(assign.target, declaredNames),
-        transform(assign.value, declaredNames),
+        { type: "string", value: "assignment" },
+        transform(assign.target),
+        transform(assign.value),
       ]);
     }
     case "AnnAssign":
       return vector_to_llist([
         { type: "string", value: "annotated_assignment" },
-        transform((node as StmtNS.AnnAssign).target, declaredNames),
-        transform((node as StmtNS.AnnAssign).ann, declaredNames),
-        transform((node as StmtNS.AnnAssign).value, declaredNames),
+        transform((node as StmtNS.AnnAssign).target),
+        transform((node as StmtNS.AnnAssign).ann),
+        transform((node as StmtNS.AnnAssign).value),
       ]);
     case "Grouping":
-      return transform((node as ExprNS.Grouping).expression, declaredNames);
+      return transform((node as ExprNS.Grouping).expression);
     case "If":
       return vector_to_llist([
         { type: "string", value: "conditional_statement" },
-        transform((node as StmtNS.If).condition, declaredNames),
-        makeSequenceIfNeeded((node as StmtNS.If).body, declaredNames),
-        makeSequenceIfNeeded((node as StmtNS.If).elseBlock, declaredNames),
+        transform((node as StmtNS.If).condition),
+        makeSequenceIfNeeded((node as StmtNS.If).body),
+        makeSequenceIfNeeded((node as StmtNS.If).elseBlock),
       ]);
     case "Ternary":
       return vector_to_llist([
         { type: "string", value: "conditional_expression" },
-        transform((node as ExprNS.Ternary).predicate, declaredNames),
-        transform((node as ExprNS.Ternary).consequent, declaredNames),
-        transform((node as ExprNS.Ternary).alternative, declaredNames),
+        transform((node as ExprNS.Ternary).predicate),
+        transform((node as ExprNS.Ternary).consequent),
+        transform((node as ExprNS.Ternary).alternative),
       ]);
     case "While":
       return vector_to_llist([
         { type: "string", value: "while_loop" },
-        transform((node as StmtNS.While).condition, declaredNames),
-        makeSequenceIfNeeded((node as StmtNS.While).body, declaredNames),
+        transform((node as StmtNS.While).condition),
+        makeSequenceIfNeeded((node as StmtNS.While).body),
       ]);
     case "For": {
       const forNode = node as StmtNS.For;
@@ -225,8 +192,8 @@ export function transform(
           { type: "string", value: "name" },
           { type: "string", value: forNode.target.lexeme },
         ]),
-        transform(forNode.iter, declaredNames),
-        makeSequenceIfNeeded(forNode.body, declaredNames),
+        transform(forNode.iter),
+        makeSequenceIfNeeded(forNode.body),
       ]);
     }
     case "FunctionDef": {
@@ -238,7 +205,7 @@ export function transform(
           { type: "string", value: fn.name.lexeme },
         ]),
         vector_to_llist(fn.parameters.map(transformParam)),
-        makeBlockIfNeeded(fn.body, declaredNames),
+        makeSequenceIfNeeded(fn.body),
       ]);
     }
     case "Lambda": {
@@ -246,10 +213,7 @@ export function transform(
       return vector_to_llist([
         { type: "string", value: "lambda_expression" },
         vector_to_llist(lam.parameters.map(transformParam)),
-        vector_to_llist([
-          { type: "string", value: "return_statement" },
-          transform(lam.body, declaredNames),
-        ]),
+        vector_to_llist([{ type: "string", value: "return_statement" }, transform(lam.body)]),
       ]);
     }
     case "MultiLambda": {
@@ -257,35 +221,35 @@ export function transform(
       return vector_to_llist([
         { type: "string", value: "lambda_expression" },
         vector_to_llist(lam.parameters.map(transformParam)),
-        makeBlockIfNeeded(lam.body, declaredNames),
+        makeSequenceIfNeeded(lam.body),
       ]);
     }
     case "Return":
       return vector_to_llist([
         { type: "string", value: "return_statement" },
-        transform((node as StmtNS.Return).value, declaredNames),
+        transform((node as StmtNS.Return).value),
       ]);
     case "Call":
       return vector_to_llist([
         { type: "string", value: "application" },
-        transform((node as ExprNS.Call).callee, declaredNames),
-        vector_to_llist((node as ExprNS.Call).args.map(arg => transform(arg, declaredNames))),
+        transform((node as ExprNS.Call).callee),
+        vector_to_llist((node as ExprNS.Call).args.map(arg => transform(arg))),
       ]);
     case "List":
       return vector_to_llist([
         { type: "string", value: "array_expression" },
-        vector_to_llist((node as ExprNS.List).elements.map(el => transform(el, declaredNames))),
+        vector_to_llist((node as ExprNS.List).elements.map(el => transform(el))),
       ]);
     case "Subscript":
       return vector_to_llist([
         { type: "string", value: "object_access" },
-        transform((node as ExprNS.Subscript).value, declaredNames),
-        transform((node as ExprNS.Subscript).index, declaredNames),
+        transform((node as ExprNS.Subscript).value),
+        transform((node as ExprNS.Subscript).index),
       ]);
     case "Starred":
       return vector_to_llist([
         { type: "string", value: "starred_expression" },
-        transform((node as ExprNS.Starred).value, declaredNames),
+        transform((node as ExprNS.Starred).value),
       ]);
     case "FromImport":
       return vector_to_llist([
@@ -325,7 +289,7 @@ export function transform(
       }
       return vector_to_llist([
         { type: "string", value: "assert_statement" },
-        transform((node as StmtNS.Assert).value, declaredNames),
+        transform((node as StmtNS.Assert).value),
       ]);
     case "Pass":
       return vector_to_llist([{ type: "string", value: "pass_statement" }]);
@@ -346,8 +310,7 @@ class ParserBuiltins {
     }
     const x = args[0].value;
     const program = parse(x + "\n");
-    const declaredNames = new Set<string>();
-    return transform(program, declaredNames);
+    return transform(program);
   }
 
   @Validate(2, 2, "apply_in_underlying_python", false)

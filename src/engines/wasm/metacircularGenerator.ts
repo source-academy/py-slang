@@ -98,7 +98,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
     if (stmt.statements.length === 0) {
-      return this.list(this.string("sequence"), this.list(this.wasmExports.makeNone()));
+      return this.list(this.string("sequence"), this.wasmExports.makeNone());
     }
 
     if (stmt.statements.length === 1) {
@@ -265,23 +265,6 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
-    // find any variable declarations in the function body which are not declared as nonlocal
-    const hasVarDecls =
-      stmt.body.filter((stmt, _, arr) => {
-        if (!(stmt instanceof StmtNS.Assign)) return false;
-
-        const { target } = stmt;
-        return (
-          target instanceof ExprNS.Variable &&
-          !arr.some(
-            s => s instanceof StmtNS.NonLocal && s.names.some(n => n.lexeme === target.name.lexeme),
-          )
-        );
-      }).length > 0;
-
-    const body = () =>
-      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []));
-
     return this.list(
       this.string("function_declaration"),
       this.list(this.string("name"), this.dynamicString(`"${stmt.name.lexeme}"`)),
@@ -301,7 +284,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      hasVarDecls ? this.list(this.string("block"), body()) : body(),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
     );
   }
 

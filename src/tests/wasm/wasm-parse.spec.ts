@@ -73,9 +73,9 @@ describe("parse function tests", () => {
     );
   });
 
-  it("empty input returns sequence(None)", async () => {
+  it("empty input returns an empty sequence", async () => {
     const { renderedResult } = await compileWithMce(`parse("")`);
-    expect(renderedResult).toBe(linkedListBuilder("sequence", linkedListBuilder("None")));
+    expect(renderedResult).toBe(linkedListBuilder("sequence", "None"));
   });
 
   it("integer literal", async () => {
@@ -374,7 +374,7 @@ describe("parse function tests", () => {
     );
   });
 
-  it("function declaration: local declaration wraps body in block", async () => {
+  it("function declaration: local assignment body is a plain sequence", async () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
@@ -382,24 +382,21 @@ describe("parse function tests", () => {
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
-          "block",
+          "sequence",
           linkedListBuilder(
-            "sequence",
             linkedListBuilder(
-              linkedListBuilder(
-                "assignment",
-                linkedListBuilder("name", '"x"'),
-                linkedListBuilder("literal", "5"),
-              ),
-              linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "5"),
             ),
+            linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
           ),
         ),
       ),
     );
   });
 
-  it("function declaration: only one local declaration (block but no sequence)", async () => {
+  it("function declaration: a single assignment body is not wrapped", async () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
@@ -407,18 +404,15 @@ describe("parse function tests", () => {
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
-          "block",
-          linkedListBuilder(
-            "assignment",
-            linkedListBuilder("name", '"x"'),
-            linkedListBuilder("literal", "5"),
-          ),
+          "assignment",
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("literal", "5"),
         ),
       ),
     );
   });
 
-  it("function declaration: nonlocal exempts name from block wrapping", async () => {
+  it("function declaration: nonlocal statement stays in the body sequence", async () => {
     const { renderedResult } = await compileWithMce(
       `parse("def f():\\n    nonlocal x\\n    x = 5\\n    return x")`,
     );
