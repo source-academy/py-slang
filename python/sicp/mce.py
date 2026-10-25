@@ -70,11 +70,6 @@ def _sequence(statements):
     return llist("sequence", llist(*[_transform(s) for s in statements]))
 
 
-def _body_or_none(statements):
-    """An optional body (the else part of an if): absent is None."""
-    return _sequence(statements) if statements else None
-
-
 def _name_node(name):
     return llist("name", name)
 
@@ -187,7 +182,7 @@ def _transform(node):
             "conditional_statement",
             _transform(node.test),
             _sequence(node.body),
-            _body_or_none(node.orelse),
+            _sequence(node.orelse) if node.orelse else llist("pass_statement"),
         )
     if isinstance(node, _ast.IfExp):
         return llist(
@@ -234,6 +229,10 @@ def _transform(node):
             _transform(node.body),
         )
     if isinstance(node, _ast.Return):
+        if node.value is None:
+            raise SyntaxError(
+                "return without a value is not supported in parse tree generation"
+            )
         return llist("return_statement", _transform(node.value))
     if isinstance(node, _ast.Call):
         if node.keywords:

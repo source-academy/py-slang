@@ -328,12 +328,10 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitReturnStmt(stmt: StmtNS.Return): [number, bigint] {
-    return this.list(
-      this.string("return_statement"),
-      stmt.value != null
-        ? this.visit(stmt.value)
-        : this.list(this.string("literal"), this.wasmExports.makeNone()),
-    );
+    if (stmt.value == null) {
+      throw new Error("return without a value is not supported in parse tree generation");
+    }
+    return this.list(this.string("return_statement"), this.visit(stmt.value));
   }
 
   visitIfStmt(stmt: StmtNS.If): [number, bigint] {
@@ -345,7 +343,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
         ? this.visitFileInputStmt(
             new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.elseBlock, []),
           )
-        : this.wasmExports.makeNone(),
+        : this.list(this.string("pass_statement")),
     );
   }
 

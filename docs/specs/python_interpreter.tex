@@ -53,6 +53,8 @@ at the time when ``Run'' was last pressed.
                                                             && \texttt{linked\_list("global\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                          \\
   &&                       && |   &\quad && \textbf{\texttt{nonlocal}}\ \textit{names}
                                                             && \texttt{linked\_list("nonlocal\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                        \\
+  &&                       && |   &\quad && \textbf{\texttt{pass}}
+                                                            && \texttt{linked\_list("pass\_statement")}                                                                                                                                      \\
   &&                       && |   &\quad && \textit{expression}
                                                             && \textrm{see below}                                                                                                                                                            \\[1mm]
   && \textit{range\_args}  && ::= &\quad && \textit{expression}_1 \textbf{\texttt{[}} \textit{, expression}_2 \textbf{\texttt{]}} \textbf{\texttt{[}} \ \textit{, expression}_3 \textbf{\texttt{]}} \
@@ -63,7 +65,7 @@ at the time when ``Run'' was last pressed.
   &&                       &&     &\quad && (\ \term{elif}\ \textit{expression}_2\ \term{:}\ \textit{body}_2\ )...                                                                                                                          \\
   &&                       &&     &\quad && \term{else}\ \term{:}\ \textit{body}_3
                                                             && \texttt{linked\_list("conditional\_statement",  } \langle \textit{expression}_1\rangle \textit{, }                                                                            \\
-                                                            &&&&&&&&&\ \ \ \ \ \ \texttt{ } \langle \textit{body}_1\rangle \textit{,  } \langle \textit{body}_3\rangle \ \textrm{or}\ \langle \textit{if-statement} \rangle \texttt{)}     \\
+                                                            &&&&&&&&&\ \ \ \ \ \ \texttt{ } \langle \textit{body}_1\rangle \textit{,  } \langle \textit{body}_3\rangle \ \textrm{or}\ \langle \textit{if-statement} \rangle \texttt{)} \textrm{; a missing else part is } \texttt{linked\_list("pass\_statement")}     \\
   && \textit{body}         && ::= &\quad && \textit{statement}... \quad
                                                             && \texttt{linked\_list("sequence", linked\_list of  } \langle \textit{statement}\rangle \texttt{)} \textrm{; a single statement stands for itself}                                                                                                 \\
   && \textit{assignment}   && ::= &\quad && \textit{name}\ \textbf{\texttt{=}}\  \textit{expression}

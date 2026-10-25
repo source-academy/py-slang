@@ -485,10 +485,9 @@ describe("parse function tests", () => {
     );
   });
 
-  it("bare return statement returns None", async () => {
-    const { renderedResult } = await compileWithMce(`parse("return")`);
-    expect(renderedResult).toBe(
-      linkedListBuilder("return_statement", linkedListBuilder("literal", "None")),
+  it("return without a value is not supported in parse tree generation", async () => {
+    await expect(compileWithMce(`parse("def f():\\n    return")`)).rejects.toThrow(
+      new Error("return without a value is not supported in parse tree generation"),
     );
   });
 
@@ -575,14 +574,14 @@ describe("parse function tests", () => {
     );
   });
 
-  it("if statement without else uses None as else branch", async () => {
+  it("if statement without else has a pass statement as else branch", async () => {
     const { renderedResult } = await compileWithMce(`parse("if True:\\n    1")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "conditional_statement",
         linkedListBuilder("literal", "True"),
         linkedListBuilder("literal", "1"),
-        "None",
+        linkedListBuilder("pass_statement"),
       ),
     );
   });

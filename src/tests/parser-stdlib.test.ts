@@ -424,15 +424,6 @@ describe("Parser Stdlib Tests", () => {
         ],
       ],
     ],
-    "parse — return None (no value)": [
-      [
-        'print(parse("def f():\\n    return\\n"))',
-        null,
-        [
-          "[ 'function_declaration',\n[['name', ['f', None]], [None, [['return_statement', [None, None]], None]]]]",
-        ],
-      ],
-    ],
   };
 
   // parse — Scope statements
@@ -631,7 +622,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("if True:\\n    1\\n"))',
         null,
         [
-          "[ 'conditional_statement',\n[['literal', [True, None]], [['literal', [1, None]], [None, None]]]]",
+          "[ 'conditional_statement',\n[ ['literal', [True, None]],\n[['literal', [1, None]], [['pass_statement', None], None]]]]",
         ],
       ],
     ],

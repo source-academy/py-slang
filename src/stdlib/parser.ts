@@ -53,6 +53,14 @@ function unaryOperatorName(type: TokenType): string {
   return operatorTranslator(type);
 }
 
+/** The alternative of a conditional statement; a missing else part is a pass statement. */
+function elseOrPass(elseBlock: StmtNS.Stmt[] | StmtNS.Stmt | null | undefined): Value {
+  if (!elseBlock || (Array.isArray(elseBlock) && elseBlock.length === 0)) {
+    return vector_to_llist([{ type: "string", value: "pass_statement" }]);
+  }
+  return makeSequenceIfNeeded(elseBlock);
+}
+
 function transformParam(p: FunctionParam): Value {
   if (p.isDoubleStarred) {
     throw new Error("Keyword parameters are not supported in parse tree generation");
@@ -191,7 +199,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
         { type: "string", value: "conditional_statement" },
         transform((node as StmtNS.If).condition),
         makeSequenceIfNeeded((node as StmtNS.If).body),
-        makeSequenceIfNeeded((node as StmtNS.If).elseBlock),
+        elseOrPass((node as StmtNS.If).elseBlock),
       ]);
     case "Ternary":
       return vector_to_llist([
@@ -264,6 +272,9 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       ]);
     }
     case "Return":
+      if ((node as StmtNS.Return).value == null) {
+        throw new Error("return without a value is not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "return_statement" },
         transform((node as StmtNS.Return).value),
