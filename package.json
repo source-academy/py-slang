@@ -77,7 +77,7 @@
     "@sourceacademy/common-cse-machine": "^0.3.1",
     "@sourceacademy/common-data-visualizer": "^0.0.2",
     "@sourceacademy/common-e-stepper": "^0.0.2",
-    "@sourceacademy/common-stepper": "^0.0.1",
+    "@sourceacademy/common-stepper": "^0.0.4",
     "@sourceacademy/conductor": "^0.8.3",
     "@sourceacademy/pynter-wasm": "^0.3.0",
     "@sourceacademy/runner-autocomplete": "^0.0.2",
