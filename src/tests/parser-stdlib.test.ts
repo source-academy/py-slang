@@ -733,8 +733,29 @@ describe("Parser Stdlib Tests", () => {
   generatePvmlInBrowserTestCases(tokenizeTests, 4, groups);
   generatePvmlInBrowserTestCases(applyTests, 4, groups);
 
-  // The only table in this file not built entirely around parse()/tokenize() (see
-  // involvesParseFeature in utils.ts) — apply_in_underlying_python has a real CPython equivalent
-  // (sicp.mce), unlike parse()/tokenize() themselves, so it's the one worth comparing.
+  // sicp.mce has its own parse()/tokenize() (python/sicp/mce.py, built on CPython's ast and
+  // tokenize modules); running the same tables through it keeps the two implementations in step.
+  generateCPythonTestCases(literalTests, 4, groups);
+  generateCPythonTestCases(nameTests, 4, groups);
+  generateCPythonTestCases(binaryTests, 4, groups);
+  generateCPythonTestCases(unaryTests, 4, groups);
+  generateCPythonTestCases(boolOpTests, 4, groups);
+  generateCPythonTestCases(compareTests, 4, groups);
+  generateCPythonTestCases(conditionalTests, 4, groups);
+  generateCPythonTestCases(loopTests, 4, groups);
+  generateCPythonTestCases(functionTests, 4, groups);
+  generateCPythonTestCases(lambdaTests, 4, groups);
+  generateCPythonTestCases(applicationTests, 4, groups);
+  generateCPythonTestCases(assignTests, 4, groups);
+  generateCPythonTestCases(listTests, 4, groups);
+  generateCPythonTestCases(starredTests, 4, groups);
+  generateCPythonTestCases(controlFlowTests, 4, groups);
+  generateCPythonTestCases(scopeTests, 4, groups);
+  generateCPythonTestCases(assertTests, 4, groups);
+  generateCPythonTestCases(importTests, 4, groups);
+  generateCPythonTestCases(sequenceTests, 4, groups);
+  generateCPythonTestCases(nestedTests, 4, groups);
+  generateCPythonTestCases(parseErrorTests, 4, groups);
+  generateCPythonTestCases(tokenizeTests, 4, groups);
   generateCPythonTestCases(applyTests, 3, groups);
 });
