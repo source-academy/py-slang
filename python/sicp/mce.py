@@ -130,9 +130,7 @@ def _transform(node):
         operator = "and" if isinstance(node.op, _ast.And) else "or"
         result = _transform(node.values[0])
         for value in node.values[1:]:
-            result = llist(
-                "logical_composition", operator, result, _transform(value)
-            )
+            result = llist("logical_composition", operator, result, _transform(value))
         return result
     if isinstance(node, _ast.Compare):
         # a < b < c is (a < b) and (b < c)
@@ -162,9 +160,7 @@ def _transform(node):
     if isinstance(node, _ast.Assign):
         if len(node.targets) != 1:
             raise SyntaxError("Cannot transform unknown type: Assign")
-        return llist(
-            "assignment", _transform(node.targets[0]), _transform(node.value)
-        )
+        return llist("assignment", _transform(node.targets[0]), _transform(node.value))
     if isinstance(node, _ast.AugAssign):
         _check_not_bitwise(node.op)
         value = llist(
@@ -234,29 +230,19 @@ def _transform(node):
             llist(*[_transform(a) for a in node.args]),
         )
     if isinstance(node, _ast.List):
-        return llist(
-            "array_expression", llist(*[_transform(e) for e in node.elts])
-        )
+        return llist("array_expression", llist(*[_transform(e) for e in node.elts]))
     if isinstance(node, _ast.Subscript):
         if isinstance(node.slice, _ast.Slice):
             raise SyntaxError("Cannot transform unknown type: Slice")
-        return llist(
-            "object_access", _transform(node.value), _transform(node.slice)
-        )
+        return llist("object_access", _transform(node.value), _transform(node.slice))
     if isinstance(node, _ast.Starred):
         return llist("starred_expression", _transform(node.value))
     if isinstance(node, _ast.ImportFrom):
-        return llist(
-            "import_from", node.module, llist(*[a.name for a in node.names])
-        )
+        return llist("import_from", node.module, llist(*[a.name for a in node.names]))
     if isinstance(node, _ast.Global):
-        return llist(
-            "global_statement", llist(*[_name_node(n) for n in node.names])
-        )
+        return llist("global_statement", llist(*[_name_node(n) for n in node.names]))
     if isinstance(node, _ast.Nonlocal):
-        return llist(
-            "nonlocal_statement", llist(*[_name_node(n) for n in node.names])
-        )
+        return llist("nonlocal_statement", llist(*[_name_node(n) for n in node.names]))
     if isinstance(node, _ast.Assert):
         if node.msg:
             raise SyntaxError(
@@ -282,9 +268,7 @@ def parse(program):
 def tokenize(program):
     """The tokens of the program text, as a linked list of strings."""
     if not isinstance(program, str):
-        raise TypeError(
-            "tokenize expects a string, got " + type(program).__name__
-        )
+        raise TypeError("tokenize expects a string, got " + type(program).__name__)
     skipped = (_tokenize.COMMENT, _tokenize.NL, _tokenize.ENDMARKER)
     tokens = []
     for token in _tokenize.generate_tokens(_io.StringIO(program).readline):

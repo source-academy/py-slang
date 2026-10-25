@@ -32,21 +32,19 @@ at the time when ``Run'' was last pressed.
 
 \begin{alignat*}{9}
   && \textit{program}      && ::= &\quad && \textit{statement}\ \ldots
-                                                            && \texttt{linked\_list("sequence", linked\_list of  } \langle \textit{statement}\rangle \texttt{)}                                                                              \\[1mm]
+                                                            && \texttt{linked\_list("sequence", linked\_list of  } \langle \textit{statement}\rangle \texttt{)} \textrm{; a single statement stands for itself}                                                                              \\[1mm]
   && \textit{statement}    && ::= &\quad && \textit{name}\ \textbf{\texttt{=}}\  \textit{expression}
-                                                            && \texttt{linked\_list("variable\_declaration",  } \langle \textit{name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                      \\
-  &&                       && |   &\quad && \textit{declared\_name}\ \textbf{\texttt{=}}\  \textit{expression}
-                                                            && \texttt{linked\_list("assignment",  } \langle \textit{declared\_name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                       \\
-  &&                       && |   &\quad && \textbf{\texttt{def}}\  \textit{name} \ \textbf{\texttt{(}}\  \textit{names} \ \textbf{\texttt{)}}\ \textit{: block} \quad
-                                                            &&  \texttt{linked\_list("function\_declaration",  } \langle \textit{name}\rangle \textit{, } \langle \textit{names}\rangle \textit{,}\ \langle \textit{block}\rangle \texttt{)} \\
+                                                            && \texttt{linked\_list("assignment",  } \langle \textit{name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                      \\
+  &&                       && |   &\quad && \textbf{\texttt{def}}\  \textit{name} \ \textbf{\texttt{(}}\  \textit{names} \ \textbf{\texttt{)}}\ \textit{: body} \quad
+                                                            &&  \texttt{linked\_list("function\_declaration",  } \langle \textit{name}\rangle \textit{, } \langle \textit{names}\rangle \textit{,}\ \langle \textit{body}\rangle \texttt{)} \\
   &&                       && |   &\quad && \textbf{\texttt{return}}\  \textit{expression}
                                                             && \texttt{linked\_list("return\_statement",  } \langle \textit{expression}\rangle \texttt{)}                                                                                    \\
   &&                       && |   &\quad && \textit{if-statement} \quad
                                                             && \textrm{see below}                                                                                                                                                            \\
-  &&                       && |   &\quad && \textbf{\texttt{while}}\ \textbf{\texttt{(}}\  \textit{expression} \ \textbf{\texttt{)}} \ \textit{: block}
-                                                            && \texttt{linked\_list("while\_loop",  } \langle \textit{expression}\rangle \textit{,  } \langle \textit{block}\rangle \texttt{)}                                               \\
-  &&                       && |   &\quad && \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in range}}\ \textit{( range-args ) : block}
-                                                            && \texttt{linked\_list("for\_loop",  } \langle \textit{range\_args}\rangle \textit{,  } \langle \textit{block}\rangle \texttt{)}                                                \\
+  &&                       && |   &\quad && \textbf{\texttt{while}}\ \textbf{\texttt{(}}\  \textit{expression} \ \textbf{\texttt{)}} \ \textit{: body}
+                                                            && \texttt{linked\_list("while\_loop",  } \langle \textit{expression}\rangle \textit{,  } \langle \textit{body}\rangle \texttt{)}                                               \\
+  &&                       && |   &\quad && \textbf{\texttt{for}}\ \textit{name}\ \textbf{\texttt{in range}}\ \textit{( range-args ) : body}
+                                                            && \texttt{linked\_list("for\_loop",  } \langle \textit{range\_args}\rangle \textit{,  } \langle \textit{body}\rangle \texttt{)}                                                \\
   &&                       && |   &\quad && \textbf{\texttt{break}}
                                                             && \texttt{linked\_list("break\_statement")}                                                                                                                                     \\
   &&                       && |   &\quad && \textbf{\texttt{continue}}
@@ -55,25 +53,21 @@ at the time when ``Run'' was last pressed.
                                                             && \texttt{linked\_list("global\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                          \\
   &&                       && |   &\quad && \textbf{\texttt{nonlocal}}\ \textit{names}
                                                             && \texttt{linked\_list("nonlocal\_statement",  } \langle \textit{names}\rangle \texttt{)}                                                                                        \\
-  &&                       && |   &\quad && \textit{block}
-                                                            && \textrm{see below}                                                                                                                                                            \\
   &&                       && |   &\quad && \textit{expression}
                                                             && \textrm{see below}                                                                                                                                                            \\[1mm]
   && \textit{range\_args}  && ::= &\quad && \textit{expression}_1 \textbf{\texttt{[}} \textit{, expression}_2 \textbf{\texttt{]}} \textbf{\texttt{[}} \ \textit{, expression}_3 \textbf{\texttt{]}} \
                                                             &&  \texttt{linked\_list("range\_args",  } \langle \textit{expression}_1\rangle \textit{, } \langle \textit{expression}_2\rangle \textit{,}\ \langle \textit{expression}_3\rangle \texttt{)} \\
   && \textit{names}        && ::= &\quad && \epsilon\ | \  \textit{name} \ (\ \textbf{\texttt{,}} \ \textit{name}\ )\ \ldots
                                                             && \texttt{linked\_list of  } \langle \textit{name}\rangle                                                                                                                       \\
-  && \textit{if-statement} && ::= &\quad && \term{if}\ \textit{expression}_1\ \term{:}\ \textit{block}_1 \\
-  &&                       &&     &\quad && (\ \term{elif}\ \textit{expression}_2\ \term{:}\ \textit{block}_2\ )...                                                                                                                          \\
-  &&                       &&     &\quad && \term{else}\ \term{:}\ \textit{block}_3
+  && \textit{if-statement} && ::= &\quad && \term{if}\ \textit{expression}_1\ \term{:}\ \textit{body}_1 \\
+  &&                       &&     &\quad && (\ \term{elif}\ \textit{expression}_2\ \term{:}\ \textit{body}_2\ )...                                                                                                                          \\
+  &&                       &&     &\quad && \term{else}\ \term{:}\ \textit{body}_3
                                                             && \texttt{linked\_list("conditional\_statement",  } \langle \textit{expression}_1\rangle \textit{, }                                                                            \\
-                                                            &&&&&&&&&\ \ \ \ \ \ \texttt{ } \langle \textit{block}_1\rangle \textit{,  } \langle \textit{block}_3\rangle \ \textrm{or}\ \langle \textit{if-statement} \rangle \texttt{)}     \\
-  && \textit{block}        && ::= &\quad && \textit{statement}... \quad
-                                                            && \texttt{linked\_list("block",  } \langle \textit{statement}\rangle \textit{)}                                                                                                 \\
-  && \textit{declaration}  && ::= &\quad && \textit{name}\ \textbf{\texttt{=}}\  \textit{expression}
-                                                            && \texttt{linked\_list("variable\_declaration",  } \langle \textit{name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                      \\
-  && \textit{assignment}   && ::= &\quad && \textit{declared\_name}\ \textbf{\texttt{=}}\  \textit{expression}
-                                                            && \texttt{linked\_list("assignment",  } \langle \textit{declared\_name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                       \\
+                                                            &&&&&&&&&\ \ \ \ \ \ \texttt{ } \langle \textit{body}_1\rangle \textit{,  } \langle \textit{body}_3\rangle \ \textrm{or}\ \langle \textit{if-statement} \rangle \texttt{)}     \\
+  && \textit{body}         && ::= &\quad && \textit{statement}... \quad
+                                                            && \texttt{linked\_list("sequence", linked\_list of  } \langle \textit{statement}\rangle \texttt{)} \textrm{; a single statement stands for itself}                                                                                                 \\
+  && \textit{assignment}   && ::= &\quad && \textit{name}\ \textbf{\texttt{=}}\  \textit{expression}
+                                                            && \texttt{linked\_list("assignment",  } \langle \textit{name}\rangle \textit{,  } \langle \textit{expression}\rangle \texttt{)}                                       \\
   &&                       && |   &\quad && \textit{expression}_1 \textbf{\texttt{[}} \textit{expression}_2 \textbf{\texttt{]}} \ \textbf{\texttt{=}}\  \textit{expression}_3\
                                                             && \texttt{linked\_list("object\_assignment", } \langle \textit{expression}_1 \textbf{\texttt{[}} \textit{expression}_2 \textbf{\texttt{]}}  \rangle \textit{,  } \langle \textit{expression}_3\rangle \texttt{)}
 \end{alignat*}
