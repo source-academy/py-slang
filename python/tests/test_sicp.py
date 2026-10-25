@@ -114,8 +114,12 @@ def test_parse_builds_the_same_trees_as_py_slang():
     # a lone statement stands for its sequence, the empty program is empty
     assert head(parse("1")) == "literal"
     assert parse("") == llist("sequence", None)
-    # a lambda body is wrapped in a return_statement
-    assert head(head(tail(tail(parse("lambda x: x"))))) == "return_statement"
+    # a lambda body is the expression itself
+    assert parse("lambda x: x") == llist(
+        "lambda_expression",
+        llist(llist("name", "x")),
+        llist("name", "x"),
+    )
     try:
         parse(42)
     except TypeError:
