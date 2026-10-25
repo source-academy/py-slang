@@ -154,32 +154,44 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("1 == 2"))',
         null,
-        ["['comparison', ['==', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['==', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 != 2"))',
         null,
-        ["['comparison', ['!=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['!=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 < 2"))',
         null,
-        ["['comparison', ['<', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['<', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 <= 2"))',
         null,
-        ["['comparison', ['<=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['<=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 > 2"))',
         null,
-        ["['comparison', ['>', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['>', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 >= 2"))',
         null,
-        ["['comparison', ['>=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['>=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
     ],
   };
@@ -234,7 +246,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("for i in range(3):\\n    pass\\n"))',
         null,
         [
-          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'application',\n  [['name', ['range', None]], [[['literal', [3, None]], None], None]]],\n[['pass_statement', None], None]]]]",
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[['range_args', [['literal', [3, None]], None]], [['pass_statement', None], None]]]]",
         ],
       ],
     ],
@@ -370,16 +382,16 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("[1, 2, 3]"))',
         null,
         [
-          "[ 'array_expression',\n[ [['literal', [1, None]], [['literal', [2, None]], [['literal', [3, None]], None]]],\nNone]]",
+          "[ 'list_expression',\n[ [['literal', [1, None]], [['literal', [2, None]], [['literal', [3, None]], None]]],\nNone]]",
         ],
       ],
     ],
-    "parse — empty list": [['print(parse("[]"))', null, ["['array_expression', [None, None]]"]]],
+    "parse — empty list": [['print(parse("[]"))', null, ["['list_expression', [None, None]]"]]],
     "parse — single element list": [
       [
         'print(parse("[1]"))',
         null,
-        ["['array_expression', [[['literal', [1, None]], None], None]]"],
+        ["['list_expression', [[['literal', [1, None]], None], None]]"],
       ],
     ],
     "parse — subscript access": [
@@ -398,7 +410,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(a):\\n    pass\\nx = [1]\\nf(*x)"))',
         null,
         [
-          "[ 'sequence',\n[ [ [ 'function_declaration',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'assignment',\n    [ ['name', ['x', None]],\n    [['array_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
+          "[ 'sequence',\n[ [ [ 'function_declaration',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'assignment',\n    [ ['name', ['x', None]],\n    [['list_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
         ],
       ],
     ],
@@ -479,7 +491,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("assert 1 == 1"))',
         null,
         [
-          "[ 'assert_statement',\n[ ['comparison', ['==', [['literal', [1, None]], [['literal', [1, None]], None]]]],\nNone]]",
+          "[ 'assert_statement',\n[ [ 'binary_operator_combination',\n  ['==', [['literal', [1, None]], [['literal', [1, None]], None]]]],\nNone]]",
         ],
       ],
     ],
@@ -519,6 +531,15 @@ describe("Parser Stdlib Tests", () => {
     ],
     "parse — empty program is an empty sequence": [
       ['print(parse(""))', null, ["['sequence', [None, None]]"]],
+    ],
+    "parse — for loop over range with start, stop and step": [
+      [
+        'print(parse("for i in range(2, 10, 3):\\n    pass\\n"))',
+        null,
+        [
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'range_args',\n  [ ['literal', [2, None]],\n  [['literal', [10, None]], [['literal', [3, None]], None]]]],\n[['pass_statement', None], None]]]]",
+        ],
+      ],
     ],
     "parse — every x = e is an assignment, whatever the scope": [
       [
@@ -583,7 +604,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("for i in range(3):\\n    i\\n"))',
         null,
         [
-          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'application',\n  [['name', ['range', None]], [[['literal', [3, None]], None], None]]],\n[['name', ['i', None]], None]]]]",
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[['range_args', [['literal', [3, None]], None]], [['name', ['i', None]], None]]]]",
         ],
       ],
     ],

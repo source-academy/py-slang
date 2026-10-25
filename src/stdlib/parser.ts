@@ -127,7 +127,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       ]);
     case "Compare":
       return vector_to_llist([
-        { type: "string", value: "comparison" },
+        { type: "string", value: "binary_operator_combination" },
         {
           type: "string",
           value: operatorTranslator((node as ExprNS.Compare).operator.type),
@@ -186,13 +186,30 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       ]);
     case "For": {
       const forNode = node as StmtNS.For;
+      const iter = forNode.iter;
+      if (
+        iter.kind !== "Call" ||
+        (iter as ExprNS.Call).callee.kind !== "Variable" ||
+        ((iter as ExprNS.Call).callee as ExprNS.Variable).name.lexeme !== "range"
+      ) {
+        throw new Error("Only range() is supported in for loops");
+      }
+      const rangeArgs = (iter as ExprNS.Call).args;
+      if (rangeArgs.length === 0) {
+        throw new Error("range() requires at least one argument");
+      } else if (rangeArgs.length > 3) {
+        throw new Error("range() accepts at most 3 arguments");
+      }
       return vector_to_llist([
         { type: "string", value: "for_loop" },
         vector_to_llist([
           { type: "string", value: "name" },
           { type: "string", value: forNode.target.lexeme },
         ]),
-        transform(forNode.iter),
+        vector_to_llist([
+          { type: "string", value: "range_args" },
+          ...rangeArgs.map(arg => transform(arg)),
+        ]),
         makeSequenceIfNeeded(forNode.body),
       ]);
     }
@@ -237,7 +254,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       ]);
     case "List":
       return vector_to_llist([
-        { type: "string", value: "array_expression" },
+        { type: "string", value: "list_expression" },
         vector_to_llist((node as ExprNS.List).elements.map(el => transform(el))),
       ]);
     case "Subscript":

@@ -138,7 +138,7 @@ def _transform(node):
         result = None
         for op, right in zip(node.ops, node.comparators):
             comparison = llist(
-                "comparison",
+                "binary_operator_combination",
                 _COMPARISON_OPERATORS[type(op)],
                 _transform(left),
                 _transform(right),
@@ -198,10 +198,19 @@ def _transform(node):
     if isinstance(node, _ast.For):
         if node.orelse or not isinstance(node.target, _ast.Name):
             raise SyntaxError("Cannot transform unknown type: For")
+        iterable = node.iter
+        if not (
+            isinstance(iterable, _ast.Call)
+            and isinstance(iterable.func, _ast.Name)
+            and iterable.func.id == "range"
+        ):
+            raise SyntaxError("Only range() is supported in for loops")
+        if not 1 <= len(iterable.args) <= 3 or iterable.keywords:
+            raise SyntaxError("range() takes one to three arguments")
         return llist(
             "for_loop",
             _name_node(node.target.id),
-            _transform(node.iter),
+            llist("range_args", *[_transform(a) for a in iterable.args]),
             _sequence(node.body),
         )
     if isinstance(node, _ast.FunctionDef):
@@ -230,7 +239,7 @@ def _transform(node):
             llist(*[_transform(a) for a in node.args]),
         )
     if isinstance(node, _ast.List):
-        return llist("array_expression", llist(*[_transform(e) for e in node.elts]))
+        return llist("list_expression", llist(*[_transform(e) for e in node.elts]))
     if isinstance(node, _ast.Subscript):
         if isinstance(node.slice, _ast.Slice):
             raise SyntaxError("Cannot transform unknown type: Slice")

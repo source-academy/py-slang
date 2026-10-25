@@ -44,7 +44,7 @@ def evaluate(component, env):
         return lookup(field(component, 0), env)
     elif is_tagged(component, "application"):
         return apply(evaluate(field(component, 0), env), values_of(field(component, 1), env))
-    elif is_tagged(component, "binary_operator_combination") or is_tagged(component, "comparison"):
+    elif is_tagged(component, "binary_operator_combination"):
         # The operator, then its operands.
         return apply(lookup(field(component, 0), env), values_of(tail(tail(component)), env))
     elif is_tagged(component, "unary_operator_combination"):
