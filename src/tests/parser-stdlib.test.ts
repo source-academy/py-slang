@@ -307,9 +307,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("lambda x: x"))',
         null,
-        [
-          "[ 'lambda_expression',\n[[['name', ['x', None]], None], [['name', ['x', None]], None]]]",
-        ],
+        ["[ 'lambda_expression',\n[[['name', ['x', None]], None], [['name', ['x', None]], None]]]"],
       ],
     ],
     "parse — lambda multiple params": [
@@ -325,9 +323,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("lambda: 1"))',
         null,
-        [
-          "['lambda_expression', [None, [['literal', [1, None]], None]]]",
-        ],
+        ["['lambda_expression', [None, [['literal', [1, None]], None]]]"],
       ],
     ],
   };
