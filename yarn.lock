@@ -1713,10 +1713,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@sourceacademy/common-stepper@npm:^0.0.1":
-  version: 0.0.1
-  resolution: "@sourceacademy/common-stepper@npm:0.0.1"
-  checksum: 10c0/e3a79fb07f68e24a045553a8c5c66e652df12d3b80150a20b4b4603936605e3a2e10c5636e48ba180b2a3473287727340c4b791abe8df301d00e0984d07667a4
+"@sourceacademy/common-stepper@npm:^0.0.4":
+  version: 0.0.4
+  resolution: "@sourceacademy/common-stepper@npm:0.0.4"
+  checksum: 10c0/e875a6af024bf30bbc08e6dc385efc333be0a421d05f8a04ce5f0b83196699cd01063191b06853ed9d694e82b740107c1e98d2dd9ca406935ff7cd109f2c04a3
   languageName: node
   linkType: hard
 
@@ -1744,7 +1744,7 @@ __metadata:
     "@sourceacademy/common-cse-machine": "npm:^0.3.1"
     "@sourceacademy/common-data-visualizer": "npm:^0.0.2"
     "@sourceacademy/common-e-stepper": "npm:^0.0.2"
-    "@sourceacademy/common-stepper": "npm:^0.0.1"
+    "@sourceacademy/common-stepper": "npm:^0.0.4"
     "@sourceacademy/conductor": "npm:^0.8.3"
     "@sourceacademy/pynter-wasm": "npm:^0.3.0"
     "@sourceacademy/runner-autocomplete": "npm:^0.0.2"
