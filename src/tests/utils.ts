@@ -588,10 +588,6 @@ export function isCloseToFloat(actual: unknown, wanted: number): boolean {
  * of Pynter's own capabilities. Deliberately doesn't also match
  * apply_in_underlying_python() (same parser.ts group, same chapter-4-only
  * status) even though that'd be right for native-Pynter purposes too — this
- * predicate is shared with CPYTHON_SKIP_REASONS below, where
- * apply_in_underlying_python is the deliberate exception (it has a real
- * CPython equivalent, sicp.mce, unlike parse()/tokenize() themselves — see
- * parser-stdlib.test.ts's own comment on its generateCPythonTestCases call).
  * See involvesChapter4OnlyParserFeature below for the native-Pynter-only version.
  */
 const PARSE_FEATURE_CALL_RE = /\b(?:parse|tokenize)\s*\(/;
@@ -608,9 +604,7 @@ function involvesParseFeature(code: string): boolean {
  * parser group isn't even part of VARIANT_GROUPS[3] (parser-stdlib.test.ts
  * has to override the group list explicitly just to reach this function at
  * all). Kept separate from involvesParseFeature/PARSE_FEATURE_CALL_RE
- * because that predicate is shared with CPYTHON_SKIP_REASONS below, where
- * apply_in_underlying_python is deliberately NOT skipped (unlike parse/
- * tokenize, it has a real CPython equivalent to compare against).
+ * so the two stay easy to tell apart.
  */
 const APPLY_IN_UNDERLYING_PYTHON_RE = /\bapply_in_underlying_python\s*\(/;
 
@@ -1332,10 +1326,29 @@ function isArityOfNativeCPythonBuiltin(code: string): boolean {
 }
 
 /** Whether `code` references `__program__`, a py-slang-only pseudo-variable (the literal source
- * text of the running program) with no CPython equivalent -- same idea as `involvesParseFeature`
- * below, just a different py-slang-specific feature. */
+ * text of the running program) with no CPython equivalent. */
 function usesProgramIntrospection(code: string): boolean {
   return /__program__/.test(code);
+}
+
+/** `text` without the whitespace that lies outside quotes (the layout of a printed parse tree). */
+function withoutLayout(text: string): string {
+  let result = "";
+  let quote: string | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote !== null) {
+      result += c;
+      if (c === "\\") result += text[++i] ?? "";
+      else if (c === quote) quote = null;
+    } else if (c === "'" || c === '"') {
+      quote = c;
+      result += c;
+    } else if (!/\s/.test(c)) {
+      result += c;
+    }
+  }
+  return result;
 }
 
 /** Reasons a test case is skipped for the CPython pathway, checked in order. */
@@ -1404,10 +1417,6 @@ const CPYTHON_SKIP_REASONS: {
   {
     matches: (_code, expected) => isChapterGatingError(expected),
     reason: "chapter-gating is a Source Academy Python concept CPython has no equivalent of",
-  },
-  {
-    matches: code => involvesParseFeature(code),
-    reason: "parse()/tokenize() aren't part of Python 3 (sicp.mce has no equivalent)",
   },
 ];
 
@@ -1480,7 +1489,10 @@ export const generateCPythonTestCases = (
 
         expect(result.error).toBeNull();
         if (output !== null) {
-          expect(result.output).toEqual(output);
+          // py-slang pretty-prints long lists over several lines, CPython on one: for parse trees
+          // only the structure is compared.
+          const comparable = involvesParseFeature(testCase.code) ? withoutLayout : (x: string) => x;
+          expect(result.output.map(comparable)).toEqual(output.map(comparable));
         }
 
         const wanted = cpythonExpectedToComparable(expected as TestOutputValue);

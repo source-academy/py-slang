@@ -102,6 +102,69 @@ def test_misc_and_math():
         raise AssertionError("head(5) should raise")
 
 
+def test_parse_builds_the_same_trees_as_py_slang():
+    assert parse("x = 1") == llist(
+        "assignment", llist("name", "x"), llist("literal", 1)
+    )
+    # no declarations and no blocks, even for a local that shadows a global
+    local = parse("x = 1\ndef f():\n    x = 2\n    return x")
+    body = head(tail(tail(tail(head(tail(head(tail(local))))))))
+    assert head(body) == "sequence"
+    assert head(head(head(tail(body)))) == "assignment"
+    # a lone statement stands for its sequence, the empty program is empty
+    assert head(parse("1")) == "literal"
+    assert parse("") == llist("sequence", None)
+    # a lambda body is the expression itself
+    assert parse("lambda x: x") == llist(
+        "lambda_expression",
+        llist(llist("name", "x")),
+        llist("name", "x"),
+    )
+    try:
+        parse(42)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("parse(42) should raise")
+
+
+def test_parse_rejects_what_the_language_does_not_have():
+    # `in` only exists in for loops, and comparisons do not chain
+    for program in [
+        "x in y",
+        "x not in y",
+        "1 < 2 < 3",
+        "x = 1 | 2",
+        "def f():\n    return",
+    ]:
+        try:
+            parse(program)
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError(program + " should be rejected")
+    # a missing else part is a pass statement
+    assert parse("if x:\n    1") == llist(
+        "conditional_statement",
+        llist("name", "x"),
+        llist("literal", 1),
+        llist("pass_statement"),
+    )
+    assert head(parse("for i in range(3):\n    pass")) == "for_loop"
+    try:
+        parse("for i in [1, 2]:\n    pass")
+    except SyntaxError:
+        pass
+    else:
+        raise AssertionError("only range() can be iterated over")
+
+
+def test_tokenize_matches_py_slang():
+    assert tokenize("x = 1 + 2") == llist("x", "=", "1", "+", "2")
+    assert tokenize("f(a) # note") == llist("f", "(", "a", ")")
+    assert tokenize("if x:\n    y") == llist("if", "x", ":", "\n", "", "y", "")
+
+
 if __name__ == "__main__":
     import traceback
 
