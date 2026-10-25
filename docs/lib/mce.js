@@ -22,7 +22,7 @@ function tokenize(str) {}
  * with arguments given in linked list <CODE>xs</CODE>. For example: <PRE><CODE>def times(x, y):
  *     return x * y
  * 
- * apply_in_underlying_python(times, list(2, 3)); # returns 6</CODE></PRE>
+ * apply_in_underlying_python(times, llist(2, 3)); # returns 6</CODE></PRE>
  * @param {function} f - function to be applied
  * @param {linked_list} xs - arguments given in list
  * @returns {value} whatever <CODE>f</CODE> returns

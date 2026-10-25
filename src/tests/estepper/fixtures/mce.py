@@ -44,7 +44,7 @@ def evaluate(component, env):
         return lookup(field(component, 0), env)
     elif is_tagged(component, "application"):
         return apply(evaluate(field(component, 0), env), values_of(field(component, 1), env))
-    elif is_tagged(component, "binary_operator_combination") or is_tagged(component, "comparison"):
+    elif is_tagged(component, "binary_operator_combination"):
         # The operator, then its operands.
         return apply(lookup(field(component, 0), env), values_of(tail(tail(component)), env))
     elif is_tagged(component, "unary_operator_combination"):
@@ -60,13 +60,14 @@ def evaluate(component, env):
                 if evaluate(field(component, 0), env)
                 else evaluate(field(component, 2), env))
     elif is_tagged(component, "lambda_expression"):
-        return make_function(field(component, 0), field(component, 1), env)
-    elif is_tagged(component, "function_declaration"):
+        return make_function(field(component, 0),
+                             llist("return_statement", field(component, 1)), env)
+    elif is_tagged(component, "function_definition"):
         define(field(field(component, 0), 0),
                make_function(field(component, 1), field(component, 2), env),
                env)
         return None
-    elif is_tagged(component, "declaration"):
+    elif is_tagged(component, "assignment"):
         define(field(field(component, 0), 0), evaluate(field(component, 1), env), env)
         return None
     elif is_tagged(component, "return_statement"):

@@ -118,7 +118,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("-1"))',
         null,
-        ["['unary_operator_combination', ['-', [['literal', [1, None]], None]]]"],
+        ["['unary_operator_combination', ['-unary', [['literal', [1, None]], None]]]"],
       ],
       [
         'print(parse("not True"))',
@@ -154,32 +154,44 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("1 == 2"))',
         null,
-        ["['comparison', ['==', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['==', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 != 2"))',
         null,
-        ["['comparison', ['!=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['!=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 < 2"))',
         null,
-        ["['comparison', ['<', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['<', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 <= 2"))',
         null,
-        ["['comparison', ['<=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['<=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 > 2"))',
         null,
-        ["['comparison', ['>', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['>', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
       [
         'print(parse("1 >= 2"))',
         null,
-        ["['comparison', ['>=', [['literal', [1, None]], [['literal', [2, None]], None]]]]"],
+        [
+          "[ 'binary_operator_combination',\n['>=', [['literal', [1, None]], [['literal', [2, None]], None]]]]",
+        ],
       ],
     ],
   };
@@ -234,7 +246,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("for i in range(3):\\n    pass\\n"))',
         null,
         [
-          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'application',\n  [['name', ['range', None]], [[['literal', [3, None]], None], None]]],\n[['pass_statement', None], None]]]]",
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[['range_args', [['literal', [3, None]], None]], [['pass_statement', None], None]]]]",
         ],
       ],
     ],
@@ -247,7 +259,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(x):\\n    return x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -256,7 +268,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(x, y):\\n    return x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -265,7 +277,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    return 1\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
         ],
       ],
     ],
@@ -274,7 +286,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(*args):\\n    return args\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ [['rest_element', [['name', ['args', None]], None]], None],\n[['return_statement', [['name', ['args', None]], None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ [['rest_element', [['name', ['args', None]], None]], None],\n[['return_statement', [['name', ['args', None]], None]], None]]]]",
         ],
       ],
     ],
@@ -283,7 +295,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    return x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'sequence',\n  [ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n    [['return_statement', [['name', ['x', None]], None]], None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -295,9 +307,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("lambda x: x"))',
         null,
-        [
-          "[ 'lambda_expression',\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]",
-        ],
+        ["[ 'lambda_expression',\n[[['name', ['x', None]], None], [['name', ['x', None]], None]]]"],
       ],
     ],
     "parse — lambda multiple params": [
@@ -305,7 +315,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("lambda x, y: x"))',
         null,
         [
-          "[ 'lambda_expression',\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]",
+          "[ 'lambda_expression',\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['name', ['x', None]], None]]]",
         ],
       ],
     ],
@@ -313,9 +323,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("lambda: 1"))',
         null,
-        [
-          "[ 'lambda_expression',\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]",
-        ],
+        ["['lambda_expression', [None, [['literal', [1, None]], None]]]"],
       ],
     ],
   };
@@ -349,7 +357,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("x = 1"))',
         null,
-        ["['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]]"],
+        ["['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]]"],
       ],
     ],
     "parse — declaration then assignment": [
@@ -357,7 +365,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("x = 1\\nx = 2\\n"))',
         null,
         [
-          "[ 'sequence',\n[ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n  [['assignment', [['name', ['x', None]], [['literal', [2, None]], None]]], None]],\nNone]]",
+          "[ 'sequence',\n[ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n  [['assignment', [['name', ['x', None]], [['literal', [2, None]], None]]], None]],\nNone]]",
         ],
       ],
     ],
@@ -370,23 +378,23 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("[1, 2, 3]"))',
         null,
         [
-          "[ 'array_expression',\n[ [['literal', [1, None]], [['literal', [2, None]], [['literal', [3, None]], None]]],\nNone]]",
+          "[ 'list_expression',\n[ [['literal', [1, None]], [['literal', [2, None]], [['literal', [3, None]], None]]],\nNone]]",
         ],
       ],
     ],
-    "parse — empty list": [['print(parse("[]"))', null, ["['array_expression', [None, None]]"]]],
+    "parse — empty list": [['print(parse("[]"))', null, ["['list_expression', [None, None]]"]]],
     "parse — single element list": [
       [
         'print(parse("[1]"))',
         null,
-        ["['array_expression', [[['literal', [1, None]], None], None]]"],
+        ["['list_expression', [[['literal', [1, None]], None], None]]"],
       ],
     ],
     "parse — subscript access": [
       [
         'print(parse("x[0]"))',
         null,
-        ["['object_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
+        ["['list_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
       ],
     ],
   };
@@ -398,7 +406,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f(a):\\n    pass\\nx = [1]\\nf(*x)"))',
         null,
         [
-          "[ 'sequence',\n[ [ [ 'function_declaration',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'declaration',\n    [ ['name', ['x', None]],\n    [['array_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
+          "[ 'sequence',\n[ [ [ 'function_definition',\n    [ ['name', ['f', None]],\n    [[['name', ['a', None]], None], [['pass_statement', None], None]]]],\n  [ [ 'assignment',\n    [ ['name', ['x', None]],\n    [['list_expression', [[['literal', [1, None]], None], None]], None]]],\n  [ [ 'application',\n    [ ['name', ['f', None]],\n    [[['starred_expression', [['name', ['x', None]], None]], None], None]]],\n  None]]],\nNone]]",
         ],
       ],
     ],
@@ -412,16 +420,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    return 1\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
-        ],
-      ],
-    ],
-    "parse — return None (no value)": [
-      [
-        'print(parse("def f():\\n    return\\n"))',
-        null,
-        [
-          "[ 'function_declaration',\n[['name', ['f', None]], [None, [['return_statement', [None, None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]]",
         ],
       ],
     ],
@@ -434,7 +433,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    global x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[None, [['global_statement', [[['name', ['x', None]], None], None]], None]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[None, [['global_statement', [[['name', ['x', None]], None], None]], None]]]]",
         ],
       ],
     ],
@@ -443,7 +442,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    global x, y\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'global_statement',\n  [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\nNone]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'global_statement',\n  [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\nNone]]]]",
         ],
       ],
     ],
@@ -452,7 +451,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    def g():\\n        nonlocal x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [None, [['nonlocal_statement', [[['name', ['x', None]], None], None]], None]]]],\n      None]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'sequence',\n  [ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n    [ [ 'function_definition',\n      [ ['name', ['g', None]],\n      [None, [['nonlocal_statement', [[['name', ['x', None]], None], None]], None]]]],\n    None]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -461,7 +460,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    y = 2\\n    def g():\\n        nonlocal x, y\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [ [ 'function_declaration',\n        [ ['name', ['g', None]],\n        [ None,\n        [ [ 'nonlocal_statement',\n          [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\n        None]]]],\n      None]]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'sequence',\n  [ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n    [ ['assignment', [['name', ['y', None]], [['literal', [2, None]], None]]],\n    [ [ 'function_definition',\n      [ ['name', ['g', None]],\n      [ None,\n      [ [ 'nonlocal_statement',\n        [[['name', ['x', None]], [['name', ['y', None]], None]], None]],\n      None]]]],\n    None]]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -479,7 +478,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("assert 1 == 1"))',
         null,
         [
-          "[ 'assert_statement',\n[ ['comparison', ['==', [['literal', [1, None]], [['literal', [1, None]], None]]]],\nNone]]",
+          "[ 'assert_statement',\n[ [ 'binary_operator_combination',\n  ['==', [['literal', [1, None]], [['literal', [1, None]], None]]]],\nNone]]",
         ],
       ],
     ],
@@ -517,6 +516,85 @@ describe("Parser Stdlib Tests", () => {
     "parse — single statement (no sequence)": [
       ['print(parse("1"))', null, ["['literal', [1, None]]"]],
     ],
+    "parse — empty program is an empty sequence": [
+      ['print(parse(""))', null, ["['sequence', [None, None]]"]],
+    ],
+    "parse — floor division, modulo, power, is and is not": [
+      [
+        'print(parse("7 // 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['//', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 % 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['%', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 ** 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['**', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 is 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['is', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 is not 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['is not', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+    ],
+    "parse — unary plus": [
+      [
+        'print(parse("+x"))',
+        null,
+        ["['unary_operator_combination', ['+unary', [['name', ['x', None]], None]]]"],
+      ],
+    ],
+    "parse — list access and list assignment": [
+      [
+        'print(parse("x[0]"))',
+        null,
+        ["['list_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
+      ],
+      [
+        'print(parse("x[0] = 5"))',
+        null,
+        [
+          "[ 'list_assignment',\n[['name', ['x', None]], [['literal', [0, None]], [['literal', [5, None]], None]]]]",
+        ],
+      ],
+    ],
+    "parse — for loop over range with start, stop and step": [
+      [
+        'print(parse("for i in range(2, 10, 3):\\n    pass\\n"))',
+        null,
+        [
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'range_args',\n  [ ['literal', [2, None]],\n  [['literal', [10, None]], [['literal', [3, None]], None]]]],\n[['pass_statement', None], None]]]]",
+        ],
+      ],
+    ],
+    "parse — every x = e is an assignment, whatever the scope": [
+      [
+        'print(parse("x = 1\\ndef f():\\n    x = 2\\n    return x\\n"))',
+        null,
+        [
+          "[ 'sequence',\n[ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n  [ [ 'function_definition',\n    [ ['name', ['f', None]],\n    [ None,\n    [ [ 'sequence',\n      [ [ ['assignment', [['name', ['x', None]], [['literal', [2, None]], None]]],\n        [['return_statement', [['name', ['x', None]], None]], None]],\n      None]],\n    None]]]],\n  None]],\nNone]]",
+        ],
+      ],
+    ],
   };
 
   // parse — Nested / complex
@@ -544,7 +622,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("if True:\\n    1\\n"))',
         null,
         [
-          "[ 'conditional_statement',\n[['literal', [True, None]], [['literal', [1, None]], [None, None]]]]",
+          "[ 'conditional_statement',\n[ ['literal', [True, None]],\n[['literal', [1, None]], [['pass_statement', None], None]]]]",
         ],
       ],
     ],
@@ -553,7 +631,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("def f():\\n    x = 1\\n    y = 2\\n    return x\\n"))',
         null,
         [
-          "[ 'function_declaration',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'block',\n  [ [ 'sequence',\n    [ [ ['declaration', [['name', ['x', None]], [['literal', [1, None]], None]]],\n      [ ['declaration', [['name', ['y', None]], [['literal', [2, None]], None]]],\n      [['return_statement', [['name', ['x', None]], None]], None]]],\n    None]],\n  None]],\nNone]]]]",
+          "[ 'function_definition',\n[ ['name', ['f', None]],\n[ None,\n[ [ 'sequence',\n  [ [ ['assignment', [['name', ['x', None]], [['literal', [1, None]], None]]],\n    [ ['assignment', [['name', ['y', None]], [['literal', [2, None]], None]]],\n    [['return_statement', [['name', ['x', None]], None]], None]]],\n  None]],\nNone]]]]",
         ],
       ],
     ],
@@ -571,7 +649,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("for i in range(3):\\n    i\\n"))',
         null,
         [
-          "[ 'for_loop',\n[ ['name', ['i', None]],\n[ [ 'application',\n  [['name', ['range', None]], [[['literal', [3, None]], None], None]]],\n[['name', ['i', None]], None]]]]",
+          "[ 'for_loop',\n[ ['name', ['i', None]],\n[['range_args', [['literal', [3, None]], None]], [['name', ['i', None]], None]]]]",
         ],
       ],
     ],
@@ -721,8 +799,29 @@ describe("Parser Stdlib Tests", () => {
   generatePvmlInBrowserTestCases(tokenizeTests, 4, groups);
   generatePvmlInBrowserTestCases(applyTests, 4, groups);
 
-  // The only table in this file not built entirely around parse()/tokenize() (see
-  // involvesParseFeature in utils.ts) — apply_in_underlying_python has a real CPython equivalent
-  // (sicp.mce), unlike parse()/tokenize() themselves, so it's the one worth comparing.
+  // sicp.mce has its own parse()/tokenize() (python/sicp/mce.py, built on CPython's ast and
+  // tokenize modules); running the same tables through it keeps the two implementations in step.
+  generateCPythonTestCases(literalTests, 4, groups);
+  generateCPythonTestCases(nameTests, 4, groups);
+  generateCPythonTestCases(binaryTests, 4, groups);
+  generateCPythonTestCases(unaryTests, 4, groups);
+  generateCPythonTestCases(boolOpTests, 4, groups);
+  generateCPythonTestCases(compareTests, 4, groups);
+  generateCPythonTestCases(conditionalTests, 4, groups);
+  generateCPythonTestCases(loopTests, 4, groups);
+  generateCPythonTestCases(functionTests, 4, groups);
+  generateCPythonTestCases(lambdaTests, 4, groups);
+  generateCPythonTestCases(applicationTests, 4, groups);
+  generateCPythonTestCases(assignTests, 4, groups);
+  generateCPythonTestCases(listTests, 4, groups);
+  generateCPythonTestCases(starredTests, 4, groups);
+  generateCPythonTestCases(controlFlowTests, 4, groups);
+  generateCPythonTestCases(scopeTests, 4, groups);
+  generateCPythonTestCases(assertTests, 4, groups);
+  generateCPythonTestCases(importTests, 4, groups);
+  generateCPythonTestCases(sequenceTests, 4, groups);
+  generateCPythonTestCases(nestedTests, 4, groups);
+  generateCPythonTestCases(parseErrorTests, 4, groups);
+  generateCPythonTestCases(tokenizeTests, 4, groups);
   generateCPythonTestCases(applyTests, 3, groups);
 });

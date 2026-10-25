@@ -98,7 +98,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   visitFileInputStmt(stmt: StmtNS.FileInput): [number, bigint] {
     if (stmt.statements.length === 0) {
-      return this.list(this.string("sequence"), this.list(this.wasmExports.makeNone()));
+      return this.list(this.string("sequence"), this.wasmExports.makeNone());
     }
 
     if (stmt.statements.length === 1) {
@@ -127,6 +127,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     else if (type === TokenType.MINUS) op = '"-"';
     else if (type === TokenType.STAR) op = '"*"';
     else if (type === TokenType.SLASH) op = '"/"';
+    else if (type === TokenType.DOUBLESLASH) op = '"//"';
+    else if (type === TokenType.PERCENT) op = '"%"';
+    else if (type === TokenType.DOUBLESTAR) op = '"**"';
     else {
       throw new Error(`Unsupported binary operator in parse tree: ${type}`);
     }
@@ -149,6 +152,8 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     else if (type === TokenType.LESSEQUAL) op = '"<="';
     else if (type === TokenType.GREATER) op = '">"';
     else if (type === TokenType.GREATEREQUAL) op = '">="';
+    else if (type === TokenType.IS) op = '"is"';
+    else if (type === TokenType.ISNOT) op = '"is not"';
     else {
       throw new Error(`Unsupported comparison operator in parse tree: ${type}`);
     }
@@ -166,6 +171,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
     if (type === TokenType.MINUS) op = '"-unary"';
+    else if (type === TokenType.PLUS) op = '"+unary"';
     else if (type === TokenType.NOT) op = '"not"';
     else {
       throw new Error(`Unsupported unary operator in parse tree: ${type}`);
@@ -247,17 +253,19 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
-    return this.list(this.string("object_access"), this.visit(expr.value), this.visit(expr.index));
+    return this.list(this.string("list_access"), this.visit(expr.value), this.visit(expr.index));
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): [number, bigint] {
-    return this.list(
-      stmt.target instanceof ExprNS.Variable
-        ? this.string("assignment")
-        : this.string("object_assignment"),
-      this.visit(stmt.target),
-      this.visit(stmt.value),
-    );
+    if (stmt.target instanceof ExprNS.Subscript) {
+      return this.list(
+        this.string("list_assignment"),
+        this.visit(stmt.target.value),
+        this.visit(stmt.target.index),
+        this.visit(stmt.value),
+      );
+    }
+    return this.list(this.string("assignment"), this.visit(stmt.target), this.visit(stmt.value));
   }
 
   visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
@@ -265,25 +273,8 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
-    // find any variable declarations in the function body which are not declared as nonlocal
-    const hasVarDecls =
-      stmt.body.filter((stmt, _, arr) => {
-        if (!(stmt instanceof StmtNS.Assign)) return false;
-
-        const { target } = stmt;
-        return (
-          target instanceof ExprNS.Variable &&
-          !arr.some(
-            s => s instanceof StmtNS.NonLocal && s.names.some(n => n.lexeme === target.name.lexeme),
-          )
-        );
-      }).length > 0;
-
-    const body = () =>
-      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, []));
-
     return this.list(
-      this.string("function_declaration"),
+      this.string("function_definition"),
       this.list(this.string("name"), this.dynamicString(`"${stmt.name.lexeme}"`)),
       this.list(
         ...stmt.parameters.map(p => {
@@ -301,7 +292,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      hasVarDecls ? this.list(this.string("block"), body()) : body(),
+      this.visitFileInputStmt(new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.body, [])),
     );
   }
 
@@ -324,7 +315,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      this.list(this.string("return_statement"), this.visit(expr.body)),
+      this.visit(expr.body),
     );
   }
 
@@ -337,12 +328,10 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitReturnStmt(stmt: StmtNS.Return): [number, bigint] {
-    return this.list(
-      this.string("return_statement"),
-      stmt.value != null
-        ? this.visit(stmt.value)
-        : this.list(this.string("literal"), this.wasmExports.makeNone()),
-    );
+    if (stmt.value == null) {
+      throw new Error("return without a value is not supported in parse tree generation");
+    }
+    return this.list(this.string("return_statement"), this.visit(stmt.value));
   }
 
   visitIfStmt(stmt: StmtNS.If): [number, bigint] {
@@ -354,7 +343,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
         ? this.visitFileInputStmt(
             new StmtNS.FileInput(stmt.startToken, stmt.endToken, stmt.elseBlock, []),
           )
-        : this.wasmExports.makeNone(),
+        : this.list(this.string("pass_statement")),
     );
   }
 

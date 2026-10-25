@@ -15,10 +15,10 @@ parentheses to override the default grouping.
     \texttt{\textbf{( )}}\ \texttt{\textbf{[ ]}} & function application, list access & left to right \\
     \texttt{\textbf{**}} & exponentiation & right to left \\
     \texttt{\textbf{+}}\ \texttt{\textbf{-}} & unary plus, unary minus & n/a \\
-    \texttt{\textbf{*}}\ \texttt{\textbf{/}}\ \texttt{\textbf{\%}} & multiplication, division, modulo & left to right \\
+    \texttt{\textbf{*}}\ \texttt{\textbf{/}}\ \texttt{\textbf{//}}\ \texttt{\textbf{\%}} & multiplication, division, floor division, modulo & left to right \\
     \texttt{\textbf{+}}\ \texttt{\textbf{-}} & addition, subtraction & left to right \\
     \texttt{\textbf{<}}\ \texttt{\textbf{>}}\ \texttt{\textbf{==}}\ \texttt{\textbf{!=}}\ \texttt{\textbf{>=}}\ \texttt{\textbf{<=}} & comparison & n/a \\
-    \textbf{\texttt{in}}, \textbf{\texttt{not in}}, \textbf{\texttt{is}}, \textbf{\texttt{is not}} & membership, identity & n/a \\
+    \textbf{\texttt{is}}, \textbf{\texttt{is not}} & identity & n/a \\
     \textbf{\texttt{not}} & logical negation & n/a \\
     \textbf{\texttt{and}} & logical conjunction & left to right \\
     \textbf{\texttt{or}} & logical disjunction & left to right \\
@@ -33,7 +33,7 @@ Notes:
   \texttt{\textbf{+}}/\texttt{\textbf{-}}, the expression
   \texttt{\textbf{-2 ** 2}} is \texttt{\textbf{-(2 ** 2)}}, not
   \texttt{\textbf{(-2) ** 2}}.
-\item Comparison, membership and identity operators are non-associative:
+\item Comparison and identity operators are non-associative:
   unlike full Python, where e.g.\ \texttt{\textbf{a < b < c}} is
   equivalent to \texttt{\textbf{a < b and b < c}} (evaluating
   \texttt{\textbf{b}} once and short-circuiting before

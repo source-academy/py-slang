@@ -73,9 +73,9 @@ describe("parse function tests", () => {
     );
   });
 
-  it("empty input returns sequence(None)", async () => {
+  it("empty input returns an empty sequence", async () => {
     const { renderedResult } = await compileWithMce(`parse("")`);
-    expect(renderedResult).toBe(linkedListBuilder("sequence", linkedListBuilder("None")));
+    expect(renderedResult).toBe(linkedListBuilder("sequence", "None"));
   });
 
   it("integer literal", async () => {
@@ -273,6 +273,31 @@ describe("parse function tests", () => {
     );
   });
 
+  it("unary plus", async () => {
+    const { renderedResult } = await compileWithMce(`parse("+x")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder("unary_operator_combination", '"+unary"', linkedListBuilder("name", '"x"')),
+    );
+  });
+
+  it.each([
+    ["//", "7 // 2"],
+    ["%", "7 % 2"],
+    ["**", "7 ** 2"],
+    ["is", "7 is 2"],
+    ["is not", "7 is not 2"],
+  ])("operator %s", async (op, program) => {
+    const { renderedResult } = await compileWithMce(`parse("${program}")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "binary_operator_combination",
+        `"${op}"`,
+        linkedListBuilder("literal", "7"),
+        linkedListBuilder("literal", "2"),
+      ),
+    );
+  });
+
   it("unary negation", async () => {
     const { renderedResult } = await compileWithMce(`parse("-x")`);
     expect(renderedResult).toBe(
@@ -327,16 +352,13 @@ describe("parse function tests", () => {
     );
   });
 
-  it("object assignment", async () => {
+  it("list assignment", async () => {
     const { renderedResult } = await compileWithMce(`parse("x[0] = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "object_assignment",
-        linkedListBuilder(
-          "object_access",
-          linkedListBuilder("name", '"x"'),
-          linkedListBuilder("literal", "0"),
-        ),
+        "list_assignment",
+        linkedListBuilder("name", '"x"'),
+        linkedListBuilder("literal", "0"),
         linkedListBuilder("literal", "5"),
       ),
     );
@@ -346,7 +368,7 @@ describe("parse function tests", () => {
     const { renderedResult } = await compileWithMce(`parse("def f(x):\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         linkedListBuilder('"x"'),
         linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
@@ -360,7 +382,7 @@ describe("parse function tests", () => {
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         linkedListBuilder('"x"', '"y"'),
         linkedListBuilder(
@@ -374,57 +396,51 @@ describe("parse function tests", () => {
     );
   });
 
-  it("function declaration: local declaration wraps body in block", async () => {
+  it("function declaration: local assignment body is a plain sequence", async () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
-          "block",
+          "sequence",
           linkedListBuilder(
-            "sequence",
             linkedListBuilder(
-              linkedListBuilder(
-                "assignment",
-                linkedListBuilder("name", '"x"'),
-                linkedListBuilder("literal", "5"),
-              ),
-              linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
+              "assignment",
+              linkedListBuilder("name", '"x"'),
+              linkedListBuilder("literal", "5"),
             ),
+            linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
           ),
         ),
       ),
     );
   });
 
-  it("function declaration: only one local declaration (block but no sequence)", async () => {
+  it("function declaration: a single assignment body is not wrapped", async () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
-          "block",
-          linkedListBuilder(
-            "assignment",
-            linkedListBuilder("name", '"x"'),
-            linkedListBuilder("literal", "5"),
-          ),
+          "assignment",
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("literal", "5"),
         ),
       ),
     );
   });
 
-  it("function declaration: nonlocal exempts name from block wrapping", async () => {
+  it("function declaration: nonlocal statement stays in the body sequence", async () => {
     const { renderedResult } = await compileWithMce(
       `parse("def f():\\n    nonlocal x\\n    x = 5\\n    return x")`,
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
@@ -453,13 +469,10 @@ describe("parse function tests", () => {
         "lambda_expression",
         linkedListBuilder('"x"', '"y"'),
         linkedListBuilder(
-          "return_statement",
-          linkedListBuilder(
-            "binary_operator_combination",
-            '"+"',
-            linkedListBuilder("name", '"x"'),
-            linkedListBuilder("name", '"y"'),
-          ),
+          "binary_operator_combination",
+          '"+"',
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("name", '"y"'),
         ),
       ),
     );
@@ -472,10 +485,9 @@ describe("parse function tests", () => {
     );
   });
 
-  it("bare return statement returns None", async () => {
-    const { renderedResult } = await compileWithMce(`parse("return")`);
-    expect(renderedResult).toBe(
-      linkedListBuilder("return_statement", linkedListBuilder("literal", "None")),
+  it("return without a value is not supported in parse tree generation", async () => {
+    await expect(compileWithMce(`parse("def f():\\n    return")`)).rejects.toThrow(
+      new Error("return without a value is not supported in parse tree generation"),
     );
   });
 
@@ -528,11 +540,11 @@ describe("parse function tests", () => {
     );
   });
 
-  it("subscript (object access)", async () => {
+  it("subscript (list access)", async () => {
     const { renderedResult } = await compileWithMce(`parse("x[0]")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "object_access",
+        "list_access",
         linkedListBuilder("name", '"x"'),
         linkedListBuilder("literal", "0"),
       ),
@@ -562,14 +574,14 @@ describe("parse function tests", () => {
     );
   });
 
-  it("if statement without else uses None as else branch", async () => {
+  it("if statement without else has a pass statement as else branch", async () => {
     const { renderedResult } = await compileWithMce(`parse("if True:\\n    1")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
         "conditional_statement",
         linkedListBuilder("literal", "True"),
         linkedListBuilder("literal", "1"),
-        "None",
+        linkedListBuilder("pass_statement"),
       ),
     );
   });

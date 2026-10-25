@@ -862,7 +862,7 @@ export function executePrimitive(
           `TypeError: unsupported argument type for parse: ${friendlyTypeName(getPVMLType(source), variant)}`,
         );
       const ast = parsePython(source + "\n");
-      return cseValueToPvmlBox(transform(ast, new Set()));
+      return cseValueToPvmlBox(transform(ast));
     }
 
     case 102: {
