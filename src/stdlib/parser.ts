@@ -46,6 +46,13 @@ function makeSequenceIfNeeded(statements: StmtNS.Stmt[] | StmtNS.Stmt | null | u
   ]);
 }
 
+/** The operator string of a unary_operator_combination: "-unary", "+unary" or "not". */
+function unaryOperatorName(type: TokenType): string {
+  if (type === TokenType.MINUS) return "-unary";
+  if (type === TokenType.PLUS) return "+unary";
+  return operatorTranslator(type);
+}
+
 function transformParam(p: FunctionParam): Value {
   if (p.isDoubleStarred) {
     throw new Error("Keyword parameters are not supported in parse tree generation");
@@ -126,6 +133,12 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
         transform((node as ExprNS.BoolOp).right),
       ]);
     case "Compare":
+      if (
+        (node as ExprNS.Compare).operator.type === TokenType.IN ||
+        (node as ExprNS.Compare).operator.type === TokenType.NOTIN
+      ) {
+        throw new Error("Membership operators are not supported in parse tree generation");
+      }
       return vector_to_llist([
         { type: "string", value: "binary_operator_combination" },
         {
@@ -143,12 +156,21 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
         { type: "string", value: "unary_operator_combination" },
         {
           type: "string",
-          value: operatorTranslator((node as ExprNS.Unary).operator.type),
+          value: unaryOperatorName((node as ExprNS.Unary).operator.type),
         },
         transform((node as ExprNS.Unary).right),
       ]);
     case "Assign": {
       const assign = node as StmtNS.Assign;
+      if (assign.target.kind === "Subscript") {
+        const target = assign.target;
+        return vector_to_llist([
+          { type: "string", value: "list_assignment" },
+          transform(target.value),
+          transform(target.index),
+          transform(assign.value),
+        ]);
+      }
       return vector_to_llist([
         { type: "string", value: "assignment" },
         transform(assign.target),
@@ -259,7 +281,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       ]);
     case "Subscript":
       return vector_to_llist([
-        { type: "string", value: "object_access" },
+        { type: "string", value: "list_access" },
         transform((node as ExprNS.Subscript).value),
         transform((node as ExprNS.Subscript).index),
       ]);

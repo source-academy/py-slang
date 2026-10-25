@@ -124,6 +124,24 @@ def test_parse_builds_the_same_trees_as_py_slang():
         raise AssertionError("parse(42) should raise")
 
 
+def test_parse_rejects_what_the_language_does_not_have():
+    # `in` only exists in for loops, and comparisons do not chain
+    for program in ["x in y", "x not in y", "1 < 2 < 3", "x = 1 | 2"]:
+        try:
+            parse(program)
+        except SyntaxError:
+            pass
+        else:
+            raise AssertionError(program + " should be rejected")
+    assert head(parse("for i in range(3):\n    pass")) == "for_loop"
+    try:
+        parse("for i in [1, 2]:\n    pass")
+    except SyntaxError:
+        pass
+    else:
+        raise AssertionError("only range() can be iterated over")
+
+
 def test_tokenize_matches_py_slang():
     assert tokenize("x = 1 + 2") == llist("x", "=", "1", "+", "2")
     assert tokenize("f(a) # note") == llist("f", "(", "a", ")")

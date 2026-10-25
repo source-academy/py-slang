@@ -52,10 +52,8 @@ _COMPARISON_OPERATORS = {
     _ast.GtE: ">=",
     _ast.Is: "is",
     _ast.IsNot: "is not",
-    _ast.In: "in",
-    _ast.NotIn: "not in",
 }
-_UNARY_OPERATORS = {_ast.Not: "not", _ast.USub: "-", _ast.UAdd: "+"}
+_UNARY_OPERATORS = {_ast.Not: "not", _ast.USub: "-unary", _ast.UAdd: "+unary"}
 _BITWISE_OPERATORS = (
     _ast.BitOr,
     _ast.BitAnd,
@@ -103,6 +101,18 @@ def _check_not_bitwise(op):
         )
 
 
+def _assignment(target, value):
+    """target = value, where value is already a parse tree."""
+    if isinstance(target, _ast.Subscript):
+        return llist(
+            "list_assignment",
+            _transform(target.value),
+            _transform(target.slice),
+            value,
+        )
+    return llist("assignment", _transform(target), value)
+
+
 def _transform(node):
     if node is None:
         return None
@@ -133,23 +143,18 @@ def _transform(node):
             result = llist("logical_composition", operator, result, _transform(value))
         return result
     if isinstance(node, _ast.Compare):
-        # a < b < c is (a < b) and (b < c)
-        left = node.left
-        result = None
-        for op, right in zip(node.ops, node.comparators):
-            comparison = llist(
-                "binary_operator_combination",
-                _COMPARISON_OPERATORS[type(op)],
-                _transform(left),
-                _transform(right),
+        if len(node.ops) != 1:
+            raise SyntaxError("Chained comparisons are not supported")
+        if type(node.ops[0]) not in _COMPARISON_OPERATORS:
+            raise SyntaxError(
+                "Membership operators are not supported in parse tree generation"
             )
-            result = (
-                comparison
-                if result is None
-                else llist("logical_composition", "and", result, comparison)
-            )
-            left = right
-        return result
+        return llist(
+            "binary_operator_combination",
+            _COMPARISON_OPERATORS[type(node.ops[0])],
+            _transform(node.left),
+            _transform(node.comparators[0]),
+        )
     if isinstance(node, _ast.UnaryOp):
         _check_not_bitwise(node.op)
         return llist(
@@ -160,7 +165,7 @@ def _transform(node):
     if isinstance(node, _ast.Assign):
         if len(node.targets) != 1:
             raise SyntaxError("Cannot transform unknown type: Assign")
-        return llist("assignment", _transform(node.targets[0]), _transform(node.value))
+        return _assignment(node.targets[0], _transform(node.value))
     if isinstance(node, _ast.AugAssign):
         _check_not_bitwise(node.op)
         value = llist(
@@ -169,7 +174,7 @@ def _transform(node):
             _transform(node.target),
             _transform(node.value),
         )
-        return llist("assignment", _transform(node.target), value)
+        return _assignment(node.target, value)
     if isinstance(node, _ast.AnnAssign):
         return llist(
             "annotated_assignment",
@@ -243,7 +248,7 @@ def _transform(node):
     if isinstance(node, _ast.Subscript):
         if isinstance(node.slice, _ast.Slice):
             raise SyntaxError("Cannot transform unknown type: Slice")
-        return llist("object_access", _transform(node.value), _transform(node.slice))
+        return llist("list_access", _transform(node.value), _transform(node.slice))
     if isinstance(node, _ast.Starred):
         return llist("starred_expression", _transform(node.value))
     if isinstance(node, _ast.ImportFrom):

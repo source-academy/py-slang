@@ -273,6 +273,31 @@ describe("parse function tests", () => {
     );
   });
 
+  it("unary plus", async () => {
+    const { renderedResult } = await compileWithMce(`parse("+x")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder("unary_operator_combination", '"+unary"', linkedListBuilder("name", '"x"')),
+    );
+  });
+
+  it.each([
+    ["//", "7 // 2"],
+    ["%", "7 % 2"],
+    ["**", "7 ** 2"],
+    ["is", "7 is 2"],
+    ["is not", "7 is not 2"],
+  ])("operator %s", async (op, program) => {
+    const { renderedResult } = await compileWithMce(`parse("${program}")`);
+    expect(renderedResult).toBe(
+      linkedListBuilder(
+        "binary_operator_combination",
+        `"${op}"`,
+        linkedListBuilder("literal", "7"),
+        linkedListBuilder("literal", "2"),
+      ),
+    );
+  });
+
   it("unary negation", async () => {
     const { renderedResult } = await compileWithMce(`parse("-x")`);
     expect(renderedResult).toBe(
@@ -327,16 +352,13 @@ describe("parse function tests", () => {
     );
   });
 
-  it("object assignment", async () => {
+  it("list assignment", async () => {
     const { renderedResult } = await compileWithMce(`parse("x[0] = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "object_assignment",
-        linkedListBuilder(
-          "object_access",
-          linkedListBuilder("name", '"x"'),
-          linkedListBuilder("literal", "0"),
-        ),
+        "list_assignment",
+        linkedListBuilder("name", '"x"'),
+        linkedListBuilder("literal", "0"),
         linkedListBuilder("literal", "5"),
       ),
     );
@@ -522,11 +544,11 @@ describe("parse function tests", () => {
     );
   });
 
-  it("subscript (object access)", async () => {
+  it("subscript (list access)", async () => {
     const { renderedResult } = await compileWithMce(`parse("x[0]")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "object_access",
+        "list_access",
         linkedListBuilder("name", '"x"'),
         linkedListBuilder("literal", "0"),
       ),

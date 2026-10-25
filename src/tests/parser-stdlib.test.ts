@@ -118,7 +118,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("-1"))',
         null,
-        ["['unary_operator_combination', ['-', [['literal', [1, None]], None]]]"],
+        ["['unary_operator_combination', ['-unary', [['literal', [1, None]], None]]]"],
       ],
       [
         'print(parse("not True"))',
@@ -398,7 +398,7 @@ describe("Parser Stdlib Tests", () => {
       [
         'print(parse("x[0]"))',
         null,
-        ["['object_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
+        ["['list_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
       ],
     ],
   };
@@ -531,6 +531,64 @@ describe("Parser Stdlib Tests", () => {
     ],
     "parse — empty program is an empty sequence": [
       ['print(parse(""))', null, ["['sequence', [None, None]]"]],
+    ],
+    "parse — floor division, modulo, power, is and is not": [
+      [
+        'print(parse("7 // 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['//', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 % 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['%', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 ** 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['**', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 is 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['is', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+      [
+        'print(parse("7 is not 2"))',
+        null,
+        [
+          "[ 'binary_operator_combination',\n['is not', [['literal', [7, None]], [['literal', [2, None]], None]]]]",
+        ],
+      ],
+    ],
+    "parse — unary plus": [
+      [
+        'print(parse("+x"))',
+        null,
+        ["['unary_operator_combination', ['+unary', [['name', ['x', None]], None]]]"],
+      ],
+    ],
+    "parse — list access and list assignment": [
+      [
+        'print(parse("x[0]"))',
+        null,
+        ["['list_access', [['name', ['x', None]], [['literal', [0, None]], None]]]"],
+      ],
+      [
+        'print(parse("x[0] = 5"))',
+        null,
+        [
+          "[ 'list_assignment',\n[['name', ['x', None]], [['literal', [0, None]], [['literal', [5, None]], None]]]]",
+        ],
+      ],
     ],
     "parse — for loop over range with start, stop and step": [
       [

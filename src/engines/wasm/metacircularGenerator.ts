@@ -127,6 +127,9 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     else if (type === TokenType.MINUS) op = '"-"';
     else if (type === TokenType.STAR) op = '"*"';
     else if (type === TokenType.SLASH) op = '"/"';
+    else if (type === TokenType.DOUBLESLASH) op = '"//"';
+    else if (type === TokenType.PERCENT) op = '"%"';
+    else if (type === TokenType.DOUBLESTAR) op = '"**"';
     else {
       throw new Error(`Unsupported binary operator in parse tree: ${type}`);
     }
@@ -149,6 +152,8 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     else if (type === TokenType.LESSEQUAL) op = '"<="';
     else if (type === TokenType.GREATER) op = '">"';
     else if (type === TokenType.GREATEREQUAL) op = '">="';
+    else if (type === TokenType.IS) op = '"is"';
+    else if (type === TokenType.ISNOT) op = '"is not"';
     else {
       throw new Error(`Unsupported comparison operator in parse tree: ${type}`);
     }
@@ -166,6 +171,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
     let op: (typeof PARSE_TREE_STRINGS)[number];
 
     if (type === TokenType.MINUS) op = '"-unary"';
+    else if (type === TokenType.PLUS) op = '"+unary"';
     else if (type === TokenType.NOT) op = '"not"';
     else {
       throw new Error(`Unsupported unary operator in parse tree: ${type}`);
@@ -247,17 +253,19 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
   }
 
   visitSubscriptExpr(expr: ExprNS.Subscript): [number, bigint] {
-    return this.list(this.string("object_access"), this.visit(expr.value), this.visit(expr.index));
+    return this.list(this.string("list_access"), this.visit(expr.value), this.visit(expr.index));
   }
 
   visitAssignStmt(stmt: StmtNS.Assign): [number, bigint] {
-    return this.list(
-      stmt.target instanceof ExprNS.Variable
-        ? this.string("assignment")
-        : this.string("object_assignment"),
-      this.visit(stmt.target),
-      this.visit(stmt.value),
-    );
+    if (stmt.target instanceof ExprNS.Subscript) {
+      return this.list(
+        this.string("list_assignment"),
+        this.visit(stmt.target.value),
+        this.visit(stmt.target.index),
+        this.visit(stmt.value),
+      );
+    }
+    return this.list(this.string("assignment"), this.visit(stmt.target), this.visit(stmt.value));
   }
 
   visitVariableExpr(expr: ExprNS.Variable): [number, bigint] {
