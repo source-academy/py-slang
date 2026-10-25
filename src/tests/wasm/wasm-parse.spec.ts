@@ -368,7 +368,7 @@ describe("parse function tests", () => {
     const { renderedResult } = await compileWithMce(`parse("def f(x):\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         linkedListBuilder('"x"'),
         linkedListBuilder("return_statement", linkedListBuilder("name", '"x"')),
@@ -382,7 +382,7 @@ describe("parse function tests", () => {
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         linkedListBuilder('"x"', '"y"'),
         linkedListBuilder(
@@ -400,7 +400,7 @@ describe("parse function tests", () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5\\n    return x")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
@@ -422,7 +422,7 @@ describe("parse function tests", () => {
     const { renderedResult } = await compileWithMce(`parse("def f():\\n    x = 5")`);
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(
@@ -440,7 +440,7 @@ describe("parse function tests", () => {
     );
     expect(renderedResult).toBe(
       linkedListBuilder(
-        "function_declaration",
+        "function_definition",
         linkedListBuilder("name", '"f"'),
         "None",
         linkedListBuilder(

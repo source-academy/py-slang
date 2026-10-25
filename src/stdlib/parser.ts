@@ -246,7 +246,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
     case "FunctionDef": {
       const fn = node as StmtNS.FunctionDef;
       return vector_to_llist([
-        { type: "string", value: "function_declaration" },
+        { type: "string", value: "function_definition" },
         vector_to_llist([
           { type: "string", value: "name" },
           { type: "string", value: fn.name.lexeme },

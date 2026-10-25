@@ -274,7 +274,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
 
   visitFunctionDefStmt(stmt: StmtNS.FunctionDef): [number, bigint] {
     return this.list(
-      this.string("function_declaration"),
+      this.string("function_definition"),
       this.list(this.string("name"), this.dynamicString(`"${stmt.name.lexeme}"`)),
       this.list(
         ...stmt.parameters.map(p => {

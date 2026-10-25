@@ -217,7 +217,7 @@ def _transform(node):
         if node.decorator_list:
             raise SyntaxError("Cannot transform unknown type: FunctionDef")
         return llist(
-            "function_declaration",
+            "function_definition",
             _name_node(node.name),
             _parameters(node.args),
             _sequence(node.body),

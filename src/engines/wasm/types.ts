@@ -50,7 +50,7 @@ export const PARSE_TREE_STRINGS = [
   // node / construct tags
   "sequence",
   "assignment",
-  "function_declaration",
+  "function_definition",
   "return_statement",
   "while_loop",
   "for_loop",
