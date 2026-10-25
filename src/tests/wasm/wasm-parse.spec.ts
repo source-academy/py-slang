@@ -469,13 +469,10 @@ describe("parse function tests", () => {
         "lambda_expression",
         linkedListBuilder('"x"', '"y"'),
         linkedListBuilder(
-          "return_statement",
-          linkedListBuilder(
-            "binary_operator_combination",
-            '"+"',
-            linkedListBuilder("name", '"x"'),
-            linkedListBuilder("name", '"y"'),
-          ),
+          "binary_operator_combination",
+          '"+"',
+          linkedListBuilder("name", '"x"'),
+          linkedListBuilder("name", '"y"'),
         ),
       ),
     );

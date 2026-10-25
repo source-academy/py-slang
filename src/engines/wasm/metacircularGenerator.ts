@@ -315,7 +315,7 @@ export class MetacircularGenerator implements BuilderVisitor<[number, bigint], [
           return this.dynamicString(`"${p.lexeme}"`);
         }),
       ),
-      this.list(this.string("return_statement"), this.visit(expr.body)),
+      this.visit(expr.body),
     );
   }
 

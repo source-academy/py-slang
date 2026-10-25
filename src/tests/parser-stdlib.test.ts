@@ -308,7 +308,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("lambda x: x"))',
         null,
         [
-          "[ 'lambda_expression',\n[ [['name', ['x', None]], None],\n[['return_statement', [['name', ['x', None]], None]], None]]]",
+          "[ 'lambda_expression',\n[[['name', ['x', None]], None], [['name', ['x', None]], None]]]",
         ],
       ],
     ],
@@ -317,7 +317,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("lambda x, y: x"))',
         null,
         [
-          "[ 'lambda_expression',\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['return_statement', [['name', ['x', None]], None]], None]]]",
+          "[ 'lambda_expression',\n[ [['name', ['x', None]], [['name', ['y', None]], None]],\n[['name', ['x', None]], None]]]",
         ],
       ],
     ],
@@ -326,7 +326,7 @@ describe("Parser Stdlib Tests", () => {
         'print(parse("lambda: 1"))',
         null,
         [
-          "[ 'lambda_expression',\n[None, [['return_statement', [['literal', [1, None]], None]], None]]]",
+          "['lambda_expression', [None, [['literal', [1, None]], None]]]",
         ],
       ],
     ],

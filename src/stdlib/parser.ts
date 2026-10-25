@@ -252,7 +252,7 @@ export function transform(node: ExprNS.Expr | StmtNS.Stmt | null | undefined): V
       return vector_to_llist([
         { type: "string", value: "lambda_expression" },
         vector_to_llist(lam.parameters.map(transformParam)),
-        vector_to_llist([{ type: "string", value: "return_statement" }, transform(lam.body)]),
+        transform(lam.body),
       ]);
     }
     case "MultiLambda": {

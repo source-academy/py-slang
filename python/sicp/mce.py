@@ -231,7 +231,7 @@ def _transform(node):
         return llist(
             "lambda_expression",
             _parameters(node.args),
-            llist("return_statement", _transform(node.body)),
+            _transform(node.body),
         )
     if isinstance(node, _ast.Return):
         return llist("return_statement", _transform(node.value))
