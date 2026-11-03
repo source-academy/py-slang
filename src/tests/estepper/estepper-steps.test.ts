@@ -594,6 +594,31 @@ describe("frame ids in the CSE machine snapshots", () => {
     expect(withdraw).toMatchObject({ id: "E2", name: "withdraw", parentId: "E1" });
   });
 
+  test("function objects carry their local and global names", async () => {
+    const program = `g = 0
+def f(x):
+    global g
+    y = x + 1
+    x = 2
+    def h():
+        return y
+    g = h
+    return y
+k = lambda z: z
+`;
+    const { steps } = await run(program);
+    type Meta = { params: string[]; locals: string[]; globals: string[] };
+    const global = (steps.at(-1)!.cse!.environments as Frame[]).find(e => e.id === "Global")!;
+    const meta = (name: string) =>
+      (global.bindings as unknown as { name: string; value: { metadata: Meta } }[]).find(
+        b => b.name === name,
+      )!.value.metadata;
+    // The parameter `x` is assigned in the body, but is a parameter, not a local name; `g` is global.
+    expect(meta("f")).toMatchObject({ params: ["x"], globals: ["g"] });
+    expect([...meta("f").locals].sort()).toEqual(["h", "y"]);
+    expect(meta("k")).toMatchObject({ params: ["z"], locals: [], globals: [] });
+  });
+
   test("the CSE machine's own snapshots keep the environments' ids", async () => {
     const program = `def f(x):\n    return x\nf(1)\n`;
     const { snapshots } = await collectSnapshots(
