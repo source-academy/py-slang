@@ -259,10 +259,21 @@ function serializeValue(
     // A lambda's body is an expression that is implicitly returned; shown as a `def` would,
     // with the `return`.
     const body = source !== undefined && cl.node.kind === "Lambda" ? `return ${source}` : source;
+    // The function object carries its local and global names, worked out when it was made: the
+    // names its body assigns or defines (the parameters aside), and those it declares global.
+    const locals = [...cl.localVariables].filter(name => !params.includes(name));
+    const globals = [...cl.globalVariables];
     return withObjectId(
       {
         ...base,
-        metadata: { closureFrameId: frameId(cl.environment, ids), params, funcName, body },
+        metadata: {
+          closureFrameId: frameId(cl.environment, ids),
+          params,
+          funcName,
+          body,
+          locals,
+          globals,
+        },
       },
       ids.objects?.(cl),
     );

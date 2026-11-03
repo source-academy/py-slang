@@ -536,7 +536,12 @@ describe("serializeEnvChain", () => {
     const closureEnv = makeEnv("c", "f");
     const closure: Value = {
       type: "closure",
-      closure: { environment: closureEnv, node: { kind: "Lambda", parameters: [] } } as any,
+      closure: {
+        environment: closureEnv,
+        node: { kind: "Lambda", parameters: [] },
+        localVariables: new Set(),
+        globalVariables: new Set(),
+      } as any,
     };
     const globalEnv = makeEnv("g", "global", { fn: closure });
     const frames = serializeEnvChain([globalEnv], [], [], globalEnv);
