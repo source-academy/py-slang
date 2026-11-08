@@ -102,6 +102,17 @@ describe("Typed Python §4 on the CSE machine", () => {
     expect(errors[0].message).toMatch(/parameter 'x' of function 'f' needs a type/);
   });
 
+  test("a chunk that the machine rejects after the types are checked is not part of the session", async () => {
+    const { run, errors, outputs } = cse();
+    // The types are right; the Resolver rejects `sorted`, which Python §4 does not have.
+    await run("xs: list[int] = [1]\nprint(sorted(xs))");
+    // So `xs: list[int]` was never declared: this is a new variable of another type.
+    await run('xs = ["a"]\nprint(xs)');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/sorted/);
+    expect(outputs.join("")).toContain("a");
+  });
+
   test("the chunks of a REPL session build on each other", async () => {
     const { run, errors, outputs } = cse();
     await run("def sq(x: int) -> int:\n    return x * x");
@@ -171,6 +182,16 @@ describe("Typed Python §4 in the environment stepper", () => {
       }),
       expect.objectContaining({ name: "StaticTypeError", line: 3, column: 9 }),
     ]);
+  });
+
+  test("every program stands on its own: the names of an earlier one are not known", async () => {
+    const { run, errors, stepped } = stepper();
+    await run("def f() -> int:\n    return 1");
+    // The stepper steps a program from the start: `f` is not defined in this one.
+    await run("print(f())");
+    expect(stepped).toHaveLength(1);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/"f" is not defined/);
   });
 
   test("a function without annotations has no steps", async () => {

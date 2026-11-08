@@ -1,12 +1,16 @@
 import type { StmtNS } from "../ast-types";
 import { makeTypedChapter4Validators, traverseAST } from "../validator";
+import type { ProposedChunk } from "./checker";
 import type { TypeDiagnostic } from "./diagnostics";
 import { eraseTypes } from "./erase";
 import { StaticTypeErrors } from "./errors";
 
-/** What the checker has to offer a program: `TypedPythonChecker`, or what loads it when needed. */
+/** What the checker has to offer an engine: `TypedPythonChecker`, or what loads it when needed. */
 export interface ChunkChecker {
-  checkChunk(source: string): Promise<TypeDiagnostic[]>;
+  /** Checks a chunk of a session, which is part of it only when it is accepted. */
+  proposeChunk(source: string): Promise<ProposedChunk>;
+  /** Checks a program that is not part of a session. */
+  check(source: string): Promise<TypeDiagnostic[]>;
 }
 
 /**
@@ -18,25 +22,50 @@ export function validateTypedProgram(program: StmtNS.Stmt): void {
   traverseAST(program, node => validators.forEach(v => v.validate(node)));
 }
 
+/** Warnings and hints do not stop a program; errors do, all of them together. */
+function rejectErrors(diagnostics: TypeDiagnostic[]): void {
+  const errors = diagnostics.filter(d => d.severity === "error");
+  if (errors.length > 0) throw new StaticTypeErrors(errors);
+}
+
 /**
- * Turns a chunk of Typed Python §4 into a chunk of Python §4, or rejects it. In this order:
+ * Turns a chunk of Typed Python §4 into a chunk of Python §4, or rejects it, for an engine that keeps
+ * a session (py2js, the CSE machine): the chunk can use the names, and the types, of the chunks before
+ * it. In this order:
  *
  * 1. the rules of Typed Python §4 on the annotations: the first violation is thrown (they are quick,
  *    and what a student should fix first);
  * 2. the type checker, with the text as the student wrote it (`source`): all its errors are thrown
- *    together, as {@link StaticTypeErrors} (warnings and hints do not stop a program);
- * 3. the types are erased from `program`, in place, so that it is resolved with the validators of
+ *    together, as {@link StaticTypeErrors};
+ * 3. the types are erased from `program`, in place, so that it is validated with the rules of
  *    Python §4 and run by the engine as usual.
  *
- * (The Resolver, which rejects the names that Python §4 does not have, comes after.)
+ * The result says that the chunk is accepted. **The engine calls it when the chunk has passed its own
+ * validation** (the Resolver, which rejects the names that Python §4 does not have, comes after the
+ * types): a chunk that is not run is not part of the session.
  */
 export async function checkTypedChunk(
   source: string,
   program: StmtNS.Stmt,
   checker: ChunkChecker,
+): Promise<() => void> {
+  validateTypedProgram(program);
+  const proposed = await checker.proposeChunk(source);
+  rejectErrors(proposed.diagnostics);
+  eraseTypes(program);
+  return proposed.accept;
+}
+
+/**
+ * The same for an engine that has no session: every program is a program of its own (the
+ * environment stepper, which steps a program from the start each time).
+ */
+export async function checkTypedProgram(
+  source: string,
+  program: StmtNS.Stmt,
+  checker: ChunkChecker,
 ): Promise<void> {
   validateTypedProgram(program);
-  const errors = (await checker.checkChunk(source)).filter(d => d.severity === "error");
-  if (errors.length > 0) throw new StaticTypeErrors(errors);
+  rejectErrors(await checker.check(source));
   eraseTypes(program);
 }

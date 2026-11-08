@@ -131,7 +131,7 @@ export abstract class PyCseEvaluatorBase extends BasicEvaluator {
       await this.ensurePreludesLoaded();
       this.dataHandler.setCurrentSource(chunk);
       const ast = parse(script);
-      await this.beforeValidation?.(script, ast);
+      const accepted = await this.beforeValidation?.(script, ast);
       const errors = analyze(
         ast,
         script,
@@ -143,6 +143,8 @@ export abstract class PyCseEvaluatorBase extends BasicEvaluator {
       if (errors.length > 0) {
         throw errors;
       }
+      // The chunk is valid: it will run, and is part of the session.
+      accepted?.();
 
       const control = new Control(ast);
       const stash = new Stash();

@@ -424,7 +424,10 @@ export interface Py2JsSessionOptions extends RunPy2JsOptions {
    * and may change `ast` in place. Typed Python §4 checks the types of a chunk here and erases them
    * (src/conductor/TypedPy2JsEvaluator.ts).
    */
-  beforeValidation?: (script: string, ast: StmtNS.FileInput) => void | Promise<void>;
+  beforeValidation?: (
+    script: string,
+    ast: StmtNS.FileInput,
+  ) => void | (() => void) | Promise<void | (() => void)>;
   /** Streams each print() line (no trailing newline) as it happens — the
    * conductor evaluator forwards these to the frontend. */
   onOutput?: (line: string) => void;
@@ -619,7 +622,9 @@ export class Py2JsSession {
 
     // The program is Python §4 from here on, as far as the Resolver and the compiler can tell. The
     // prelude is not the program: it is written in Python §4 already, with no types to check.
-    if (!this.rt.compilingPrelude) await this.beforeValidation?.(script, ast);
+    const accepted = this.rt.compilingPrelude
+      ? undefined
+      : await this.beforeValidation?.(script, ast);
 
     // Local imports may have expanded this into a different source string.
     // The active call spans below are offsets into this final script, not the
@@ -649,6 +654,8 @@ export class Py2JsSession {
     );
     const errors = resolver.resolve(ast);
     if (errors.length > 0) throw errors[0];
+    // The chunk is valid: it will run, and is part of the session.
+    accepted?.();
 
     // level === 0 (conductor-module) imports — including any the flattening
     // above hoisted out of a bundled dependency file — are unaffected by

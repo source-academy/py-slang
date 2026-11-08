@@ -136,6 +136,17 @@ describe("the Typed Python §4 evaluator", () => {
     expect(errors[0].message).toMatch(/sorted/);
   });
 
+  test("a chunk that the engine rejects after the types are checked is not part of the session", async () => {
+    const { run, outputs, errors } = makeEvaluator(checker);
+    // The types are right; the Resolver rejects `sorted`, which Python §4 does not have.
+    await run("xs: list[int] = [1]\nprint(sorted(xs))\n");
+    // So `xs: list[int]` was never declared: this is a new variable of another type.
+    await run('xs = ["a"]\nprint(xs)\n');
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toMatch(/sorted/);
+    expect(outputs).toEqual(["['a']"]);
+  });
+
   test("a program can be given as a file", async () => {
     const { runFile, outputs, errors } = makeEvaluator(checker);
     await runFile("/main.py", "def f(n: int) -> int:\n    return n + 1\nprint(f(1))\n");
@@ -159,6 +170,38 @@ describe("the Typed Python §4 evaluator", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0].name).not.toBe("StaticTypeError");
   });
+});
+
+describe("a checker that fails while it is in use", () => {
+  test(
+    "is replaced, the run is rejected, and the new one is told the chunks that were accepted",
+    async () => {
+      const created: TypedPythonChecker[] = [];
+      const lazy = new LazyChecker(async () => {
+        const checker = await startTypedChecker();
+        created.push(checker);
+        return checker;
+      });
+      const { run, outputs, errors } = makeEvaluator(lazy);
+
+      await run("x: int = 1\n"); // accepted: the session has x, and the first checker knows it
+      jest.spyOn(created[0], "proposeChunk").mockRejectedValueOnce(new Error("the worker died"));
+      await run("print(x)\n"); // the checker fails: nothing is run
+      expect(errors).toHaveLength(1);
+      expect(errors[0].name).toBe("TypeCheckerUnavailableError");
+      expect(errors[0].message).toMatch(/the worker died/);
+      expect(outputs).toEqual([]);
+
+      await run("print(x)\n"); // another checker, which was told `x: int = 1`: x is known, as an int
+      await run('print(x + "a")\n'); // and its type is known too
+      expect(created).toHaveLength(2);
+      expect(outputs).toEqual(["1"]);
+      expect(errors).toHaveLength(2);
+      expect(errors[1].name).toBe("StaticTypeError");
+      created.forEach(checker => checker.dispose());
+    },
+    CHECKER_SETUP_TIMEOUT_MS,
+  );
 });
 
 describe("a checker that cannot be started", () => {

@@ -322,6 +322,20 @@ Done, for three engines. What was built, and the decisions on the way:
   do not stop a program); the erasure of the types; then the engine's own validation, which rejects
   the names that §4 lacks. A program that is not checked is not run: if the checker cannot be
   started (a network error), the chunk is rejected with that said, and the next run tries again.
+* **The session: a chunk is proposed, and accepted when the engine accepts it.** The checker
+  remembers the chunks of a REPL session (their names and declared types), but the types are not the
+  only thing that can reject a chunk: the Resolver rejects a name that Python §4 lacks, such as
+  `sorted`, after the types are checked. So `checkChunk` is split: `proposeChunk` checks and remembers
+  nothing, and the engine calls the function that `beforeValidation` returns once the chunk has passed
+  its own validation (py2js after the Resolver, the CSE machine after `analyze`). Otherwise a chunk
+  that never ran would leave `xs: list[int]` behind, and a later `xs = ["a"]` would be wrongly
+  rejected. The environment stepper has no session (it steps each program from the start), so it
+  checks each program on its own (`checkTypedProgram`, `check`), and does not know the names of an
+  earlier program, as the stepper does not.
+* **A checker that fails is replaced.** If the worker dies or a check times out, that run is rejected
+  (`TypeCheckerUnavailableError`) and the checker is dropped; the next run starts another, which
+  `LazyChecker` tells the chunks that were accepted, so that the names of the earlier chunks are
+  still known.
 * **Reporting.** py2js and the stepper send each error with its `line` and `column` and the type
   `EVALUATOR_TYPE`; the CSE machine can say where an error is only in its message, so a type error
   there has the line of the program and what is wrong marked, as its other errors do. Program texts
