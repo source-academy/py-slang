@@ -140,6 +140,9 @@ export class TypedPythonChecker {
     if (!diagnostics.some(d => d.severity === "error")) {
       this.chunks++;
       for (const name of own.all) this.bound.set(name, index);
+      // A function or a type alias replaces a variable that was declared with a type: the type is
+      // not the name's any more.
+      for (const name of own.definitions) this.declared.delete(name);
       for (const [name, annotation] of own.annotations) this.declared.set(name, annotation);
     }
     return diagnostics;

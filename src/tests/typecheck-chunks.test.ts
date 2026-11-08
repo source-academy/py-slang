@@ -84,6 +84,13 @@ describe("the chunks of a REPL session", () => {
     expect(errors(await session.checkChunk('half = pair("a", 2)\n'))).toHaveLength(1);
   });
 
+  test("a function that replaces a variable that was declared with a type", async () => {
+    await session.checkChunk("x: int = 0\n");
+    await session.checkChunk("def x() -> str:\n    return 'a'\n");
+    expect(errors(await session.checkChunk("print(x() + 'b')\n"))).toEqual([]);
+    expect(errors(await session.checkChunk("print(x() + 1)\n"))).toHaveLength(1);
+  });
+
   test("a type alias, and the names of a for loop and of a global declaration", async () => {
     await session.checkChunk("type Rational = Pair[int, int]\n");
     await session.checkChunk("for i in range(3):\n    j: int = i\n");
