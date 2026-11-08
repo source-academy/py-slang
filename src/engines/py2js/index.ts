@@ -417,6 +417,17 @@ export function compilePy2Js(code: string, variant = 1, mode: CompileMode = "syn
 }
 
 export interface Py2JsSessionOptions extends RunPy2JsOptions {
+  /**
+   * Called with each chunk of the program (not with the group preludes) once it is parsed, and its
+   * local imports are bundled: `script` is the text that `ast` was parsed from. It runs before the
+   * chunk is validated (resolved), may throw to reject the chunk (the error is thrown from runChunk as it is),
+   * and may change `ast` in place. Typed Python §4 checks the types of a chunk here and erases them
+   * (src/conductor/TypedPy2JsEvaluator.ts).
+   */
+  beforeValidation?: (
+    script: string,
+    ast: StmtNS.FileInput,
+  ) => void | (() => void) | Promise<void | (() => void)>;
   /** Streams each print() line (no trailing newline) as it happens — the
    * conductor evaluator forwards these to the frontend. */
   onOutput?: (line: string) => void;
@@ -498,6 +509,7 @@ export class Py2JsSession {
    * so `path => conductor.requestFile(path)` is available immediately. */
   private readonly fileGetter: (path: string) => Promise<string | undefined>;
   private preludeLoaded = false;
+  private readonly beforeValidation?: Py2JsSessionOptions["beforeValidation"];
 
   constructor(variant: number, options: Py2JsSessionOptions = {}) {
     if (!SUPPORTED_CHAPTERS.includes(variant)) {
@@ -510,6 +522,7 @@ export class Py2JsSession {
     this.groups = PY2JS_GROUPS[variant] ?? [];
     this.dataHandler = options.dataHandler ?? new GenericDataHandler(variant);
     this.entrypointFilePath = options.entrypointFilePath ?? "/main.py";
+    this.beforeValidation = options.beforeValidation;
     this.fileGetter = toFileGetter(options);
     this.rt = new Py2JsRuntime(variant >= 3);
     this.rt.onCurrentCall = (start, end) => this.dataHandler.setCurrentCallLocation(start, end);
@@ -607,6 +620,12 @@ export class Py2JsSession {
       ast = parse(script);
     }
 
+    // The program is Python §4 from here on, as far as the Resolver and the compiler can tell. The
+    // prelude is not the program: it is written in Python §4 already, with no types to check.
+    const accepted = this.rt.compilingPrelude
+      ? undefined
+      : await this.beforeValidation?.(script, ast);
+
     // Local imports may have expanded this into a different source string.
     // The active call spans below are offsets into this final script, not the
     // entry file's original text.
@@ -635,6 +654,8 @@ export class Py2JsSession {
     );
     const errors = resolver.resolve(ast);
     if (errors.length > 0) throw errors[0];
+    // The chunk is valid: it will run, and is part of the session.
+    accepted?.();
 
     // level === 0 (conductor-module) imports — including any the flattening
     // above hoisted out of a bundled dependency file — are unaffected by

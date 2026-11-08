@@ -65,6 +65,13 @@ function namesOfChunk(source: string): TopLevelNames {
   }
 }
 
+/** A chunk that has been checked and is not part of the session yet: see {@link TypedPythonChecker.proposeChunk}. */
+export interface ProposedChunk {
+  diagnostics: TypeDiagnostic[];
+  /** Makes the chunk part of the session: later chunks can use its names and their types. */
+  accept(): void;
+}
+
 /**
  * The type checker of Typed Python §4: pyright, in a worker, with Source Python's builtins and
  * prelude (see src/typecheck/bundler/). Give it the program as it is written, with its annotations:
@@ -99,6 +106,19 @@ export class TypedPythonChecker {
    * have). A chunk with errors is not.
    */
   async checkChunk(source: string): Promise<TypeDiagnostic[]> {
+    const proposed = await this.proposeChunk(source);
+    if (!proposed.diagnostics.some(d => d.severity === "error")) proposed.accept();
+    return proposed.diagnostics;
+  }
+
+  /**
+   * Checks a chunk of a REPL session, as {@link checkChunk} does, but remembers nothing: the chunk
+   * is part of the session only when `accept()` is called. An engine has more to say about a chunk
+   * than the types do (the Resolver rejects a name that Python §4 lacks, such as `sorted`), and a
+   * chunk that is not run must not leave its names, and its declared types, in the session.
+   * The next proposal replaces one that was not accepted.
+   */
+  async proposeChunk(source: string): Promise<ProposedChunk> {
     // Each chunk is a file of its own, which imports the names that earlier chunks bound, from the
     // last chunk that bound each. (`import *` would skip the names that start with an underscore.)
     //
@@ -137,15 +157,20 @@ export class TypedPythonChecker {
       ),
     );
 
-    if (!diagnostics.some(d => d.severity === "error")) {
-      this.chunks++;
-      for (const name of own.all) this.bound.set(name, index);
-      // A function or a type alias replaces a variable that was declared with a type: the type is
-      // not the name's any more.
-      for (const name of own.definitions) this.declared.delete(name);
-      for (const [name, annotation] of own.annotations) this.declared.set(name, annotation);
-    }
-    return diagnostics;
+    let accepted = false;
+    return {
+      diagnostics,
+      accept: () => {
+        if (accepted || this.chunks !== index) return;
+        accepted = true;
+        this.chunks++;
+        for (const name of own.all) this.bound.set(name, index);
+        // A function or a type alias replaces a variable that was declared with a type: the type is
+        // not the name's any more.
+        for (const name of own.definitions) this.declared.delete(name);
+        for (const [name, annotation] of own.annotations) this.declared.set(name, annotation);
+      },
+    };
   }
 
   /** Stops the workers. */
