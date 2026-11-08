@@ -352,8 +352,22 @@ The design question is open in [source-academy/modules#996](https://github.com/s
   is an error (there is no `Any` to give its names a type).
 * **Until descriptions exist**: a few hand-written stubs for the most used modules (`rune`, `curve`,
   `sound`, `binary_tree`), in py-slang and marked as temporary, removed as the descriptions arrive.
+* **Backward compatible**: nothing changes for existing languages and bundles.
+  * A description is a new, optional file next to `index.js` and `docs.json`; the build tools of the
+    `modules` repository read manifests by key and reject no extra field or file.
+  * `attachModuleMethod(Class, name, args, returnType)` keeps working; richer type information is kept
+    apart from `method.signature`, which the runner and host read (`closure_arity`, `closure_is_vararg`).
+  * `DataType` is not extended in the first version: that is the one change that could make an old host
+    and a new module disagree.
+  * A description has a `version`; the mapper rejects an unknown version or kind with a clear message.
+  * A module without a description cannot be imported from a typed language, and nothing else changes.
+* **A second source**: a bundle's `dist/docs.json` is TypeDoc JSON with the full TypeScript signatures,
+  including the shapes that a module exports dynamically (`rune`'s `heart`). It describes the TypeScript
+  API, not the conductor-level surface that Python sees, so it is compared with the hand-written
+  description on `rune` before it is relied on.
 * **Open**, and for the issue above: the format and who defines it (the modules or the conductor);
-  whether `DataType` itself gets the new distinctions; versioning; and how much can be generated.
+  whether `DataType` itself gets the new distinctions (later, with a version); and how much can be
+  generated (from `attachModuleMethod` calls, or from `docs.json`).
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
