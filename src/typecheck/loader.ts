@@ -62,10 +62,6 @@ export class LazyChecker implements ChunkChecker {
     return this.guarded(checker => checker.check(source));
   }
 
-  dispose(): void {
-    this.drop();
-  }
-
   private async guarded<T>(use: (checker: TypedPythonChecker) => Promise<T>): Promise<T> {
     const promise = this.get();
     try {
