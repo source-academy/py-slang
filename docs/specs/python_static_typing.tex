@@ -3,7 +3,7 @@
 A Typed Python \S 4 program is checked for type errors before it runs. A program with a type
 error does not run; all its type errors are reported, each with the line and column where it
 occurs. Static type checking is in addition to the dynamic type checking described in the
-section ``Dynamic Type Checking'': a program that passes the static checks can still fail at
+section ``Dynamic Type Checking'' below: a program that passes the static checks can still fail at
 run time, for example when it divides by zero or accesses a list outside its range.
 
 \subsection*{Types}
@@ -34,6 +34,15 @@ as lists of two elements: \texttt{pair(1,~2)[0]} is a type error, and the head a
 pair are accessed with \texttt{head} and \texttt{tail}. The elements of a list or a linked
 list all have the same type; a linked list with numbers and strings has a type such as
 \texttt{LList[int~|~str]}.
+
+There is no type that stands for every type: the type \texttt{Any} of Python's \texttt{typing} module
+is not available. A function that works for values of any type has a type parameter (see below):
+\begin{lstlisting}
+def identity[A](a: A) -> A:
+    return a
+\end{lstlisting}
+Types need no import: \texttt{Callable}, \texttt{Pair}, \texttt{LList} and \texttt{Stream} are
+predeclared, and a program that imports from \texttt{typing} is rejected.
 
 \subsection*{Assignability}
 
@@ -99,8 +108,12 @@ type Tree[T] = Pair[T, LList[Tree[T]]]
 \subsection*{Conditions and narrowing}
 
 The condition after \texttt{if}, \texttt{elif} and \texttt{while}, the condition of a
-conditional expression, the operand of \texttt{not}, and the left operand of \texttt{and}
-and \texttt{or} must have the type \texttt{bool}.
+conditional expression, and the operand of \texttt{not} must have the type \texttt{bool}.
+
+The left operand of \texttt{and} and \texttt{or} must have the type \texttt{bool} as well, but this
+is not checked statically: a program in which it has another type, such as
+\texttt{3~and~4}, has no static type error, and fails when it runs, as in Python \S 4 (see the
+section ``Dynamic Type Checking'' below).
 
 In the branches of a conditional statement or conditional expression, the type of a name is
 narrowed according to the condition. If \texttt{xs} has the type \texttt{LList[}$T$\texttt{]},
@@ -114,7 +127,7 @@ functions \texttt{is\_pair}, \texttt{is\_number}, \texttt{is\_integer}, \texttt{
 \subsection*{Operators}
 
 The types of operator combinations follow the table in the section ``Dynamic Type
-Checking'', with these additions:
+Checking'' below, with these additions:
 \begin{itemize}
   \item $a$~\texttt{**}~$b$ with \texttt{int} operands has the type \texttt{int} if $b$ is a
     non-negative integer literal, \texttt{float} if $b$ is a negative integer literal, and

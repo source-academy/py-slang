@@ -1,0 +1,26 @@
+# Each line that ends with `# ERROR` must have an error, with a message that contains the text after
+# the colon; no other line may have an error.
+def factorial(n: int) -> int:
+    return 1 if n == 0 else n * factorial(n - 1)
+
+def describe(n: int) -> str:                       # ERROR: must return value on all code paths
+    if n > 0:
+        return "positive"
+
+factorial("five")                                  # ERROR: factorial expects n to be int, but got str
+factorial(1, 2)                                    # ERROR: Expected 1 positional argument
+x: int = "hello"                                   # ERROR: Type "str" is not assignable to declared type "int"
+y = 1 + "a"                                        # ERROR: Operator "+" not supported for types "int" and "str"
+head(llist(1, 2)) + "s"                            # ERROR: Operator "+" not supported for types "int" and "str"
+head(5)                                            # ERROR: head expects p to be Pair[H, Any], but got int
+xs = llist(1, 2, 3)
+head(xs)                                           # ERROR: The value can be None: test for that first
+map(lambda x: x + 1, llist("a", "b"))              # ERROR: Operator "+" not supported for types "str" and "int"
+pair(1, 2)[0]                                      # ERROR: A pair cannot be indexed (Pair[int, int]): use head(...) and tail(...)
+undefined_name + 1                                 # ERROR: "undefined_name" is not defined
+factorial(3)(4)                                    # ERROR: Object of type "int" is not callable
+def apply(f: Callable[[int], int], v: int) -> int:
+    return f(v)
+apply(lambda s: s.upper(), 3)                      # ERROR: Cannot access attribute "upper" for class "int"
+set_head(pair(1, 2), "x")                          # ERROR: set_head expects v to be H, but got str
+tail(xs)[0]                                        # ERROR: cannot be indexed

@@ -17,6 +17,7 @@ export { createRangeOnlyInForHeaderValidator } from "./features/range-only-in-fo
 export { createNoReassignmentValidator, NoReassignmentValidator } from "./features/no-reassignment";
 export { NoRestParamsValidator } from "./features/no-rest-params";
 export { NoTypeAnnotationsValidator } from "./features/no-type-annotations";
+export { NoTypingImportsValidator } from "./features/no-typing-imports";
 export { RequireTypeAnnotationsValidator } from "./features/require-type-annotations";
 export {
   makeChapter1Validators,
