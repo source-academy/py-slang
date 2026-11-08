@@ -1,0 +1,310 @@
+{
+  "exportedNames": [
+    "anaglyph",
+    "animate_anaglyph",
+    "animate_rune",
+    "beside",
+    "beside_frac",
+    "black",
+    "blue",
+    "brown",
+    "color",
+    "colour_with_hue",
+    "flip_horiz",
+    "flip_vert",
+    "from_url",
+    "green",
+    "hollusion",
+    "hollusion_magnitude",
+    "indigo",
+    "make_cross",
+    "orange",
+    "overlay",
+    "overlay_frac",
+    "pink",
+    "purple",
+    "quarter_turn_left",
+    "quarter_turn_right",
+    "random_color",
+    "red",
+    "rotate",
+    "scale",
+    "scale_independent",
+    "show",
+    "stack",
+    "stack_frac",
+    "stackn",
+    "translate",
+    "turn_upside_down",
+    "white",
+    "yellow"
+  ],
+  "signatures": {
+    "anaglyph": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "animate_anaglyph": {
+      "params": [
+        "NUMBER",
+        "NUMBER",
+        "CLOSURE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "animate_rune": {
+      "params": [
+        "NUMBER",
+        "NUMBER",
+        "CLOSURE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "beside": {
+      "params": [
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "beside_frac": {
+      "params": [
+        "NUMBER",
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "black": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "blue": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "brown": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "color": {
+      "params": [
+        "OPAQUE",
+        "NUMBER",
+        "NUMBER",
+        "NUMBER"
+      ],
+      "returns": "OPAQUE"
+    },
+    "colour_with_hue": {
+      "params": [
+        "OPAQUE",
+        "NUMBER"
+      ],
+      "returns": "OPAQUE"
+    },
+    "flip_horiz": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "flip_vert": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "from_url": {
+      "params": [
+        "CONST_STRING"
+      ],
+      "returns": "OPAQUE"
+    },
+    "green": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "hollusion": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "hollusion_magnitude": {
+      "params": [
+        "OPAQUE",
+        "NUMBER"
+      ],
+      "returns": "OPAQUE"
+    },
+    "indigo": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "make_cross": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "orange": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "overlay": {
+      "params": [
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "overlay_frac": {
+      "params": [
+        "NUMBER",
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "pink": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "purple": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "quarter_turn_left": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "quarter_turn_right": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "random_color": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "red": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "rotate": {
+      "params": [
+        "NUMBER",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "scale": {
+      "params": [
+        "NUMBER",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "scale_independent": {
+      "params": [
+        "NUMBER",
+        "NUMBER",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "show": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "stack": {
+      "params": [
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "stack_frac": {
+      "params": [
+        "NUMBER",
+        "OPAQUE",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "stackn": {
+      "params": [
+        "NUMBER",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "translate": {
+      "params": [
+        "NUMBER",
+        "NUMBER",
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "turn_upside_down": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "white": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    },
+    "yellow": {
+      "params": [
+        "OPAQUE"
+      ],
+      "returns": "OPAQUE"
+    }
+  },
+  "classFields": {
+    "blank": "Rune",
+    "circle": "Rune",
+    "corner": "Rune",
+    "heart": "Rune",
+    "nova": "Rune",
+    "pentagram": "Rune",
+    "rcross": "Rune",
+    "ribbon": "Rune",
+    "sail": "Rune",
+    "square": "Rune",
+    "triangle": "Rune"
+  }
+}

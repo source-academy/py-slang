@@ -1,0 +1,723 @@
+{
+  "precise": {
+    "isHollusionRune": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "DrawnRune"
+            }
+          }
+        ],
+        "returns": "boolean"
+      }
+    },
+    "RuneModuleState": {
+      "value": {
+        "unknown": "any"
+      }
+    },
+    "RuneFunctions": {
+      "value": {
+        "named": "RuneFunctions"
+      }
+    },
+    "RuneColours": {
+      "value": {
+        "named": "RuneColours"
+      }
+    },
+    "DrawnAnaglyphRune": {
+      "value": {
+        "named": "DrawnAnaglyphRune"
+      }
+    },
+    "DrawnHollusionRune": {
+      "value": {
+        "named": "DrawnHollusionRune"
+      }
+    },
+    "beside": {
+      "function": {
+        "params": [
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "beside_frac": {
+      "function": {
+        "params": [
+          {
+            "name": "frac",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "black": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "blank": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "blue": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "brown": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "circle": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "color": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "r",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "g",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "b",
+            "optional": false,
+            "type": "number"
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "colour_with_hue": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "hue",
+            "optional": false,
+            "type": "number"
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "corner": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "flip_horiz": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "flip_vert": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "from_url": {
+      "function": {
+        "params": [
+          {
+            "name": "imageUrl",
+            "optional": false,
+            "type": "string"
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "green": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "heart": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "indigo": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "make_cross": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "nova": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "orange": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "overlay": {
+      "function": {
+        "params": [
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "overlay_frac": {
+      "function": {
+        "params": [
+          {
+            "name": "frac",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "pentagram": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "pink": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "purple": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "quarter_turn_left": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "quarter_turn_right": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "random_color": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "rcross": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "red": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "ribbon": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "rotate": {
+      "function": {
+        "params": [
+          {
+            "name": "rad",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "sail": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "scale": {
+      "function": {
+        "params": [
+          {
+            "name": "ratio",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "scale_independent": {
+      "function": {
+        "params": [
+          {
+            "name": "ratio_x",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "ratio_y",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "stack": {
+      "function": {
+        "params": [
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "stack_frac": {
+      "function": {
+        "params": [
+          {
+            "name": "frac",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune1",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          },
+          {
+            "name": "rune2",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "stackn": {
+      "function": {
+        "params": [
+          {
+            "name": "n",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "square": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "translate": {
+      "function": {
+        "params": [
+          {
+            "name": "x",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "y",
+            "optional": false,
+            "type": "number"
+          },
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "triangle": {
+      "value": {
+        "named": "Rune"
+      }
+    },
+    "turn_upside_down": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "yellow": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    },
+    "white": {
+      "function": {
+        "params": [
+          {
+            "name": "rune",
+            "optional": false,
+            "type": {
+              "named": "Rune"
+            }
+          }
+        ],
+        "returns": {
+          "named": "Rune"
+        }
+      }
+    }
+  },
+  "unknownTypes": [
+    "any"
+  ]
+}
