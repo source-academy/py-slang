@@ -43,8 +43,9 @@ describe("the stub that a description becomes", () => {
   test("every kind of type has its Python type; the parameters are positional", () => {
     expect(toStub(description)).toBe(
       [
-        "from typing import Callable",
-        "class Thing: ...",
+        "from typing import Callable, NoReturn",
+        "class Thing:",
+        "    def __init__(self, _never: NoReturn, /) -> None: ...",
         "def make(size: float, label: str, /) -> Thing: ...",
         "def each(f: Callable[[int], bool], xs: LList[int], /) -> Pair[list[float], None]: ...",
         "def now() -> int: ...",
@@ -100,6 +101,13 @@ describe("programs that import a module", () => {
     const found = errors(await checker.check(program));
     expect(found.length).toBeGreaterThan(0);
     expect(found[0].message).toMatch(message);
+  });
+
+  test("a program cannot make a value of an opaque type", async () => {
+    for (const program of ["Rune()\n", "Rune(1)\n", "Rune(heart)\n"])
+      expect(
+        errors(await checker.check(`from rune import Rune, heart\n${program}`)).length,
+      ).toBeGreaterThan(0);
   });
 
   test("a module with no description cannot be imported, and the message says why", async () => {

@@ -88,8 +88,12 @@ export function toStub(description: ModuleDescription): string {
     throw new UnknownDescriptionError(`version ${String(description.version)}`);
   const opaque = new Set(description.opaqueTypes);
   const lines = [
-    "from typing import Callable",
-    ...description.opaqueTypes.map(name => `class ${name}: ...`),
+    "from typing import Callable, NoReturn",
+    // An opaque value is only received from the module and passed back to it: no program makes
+    // one. The constructor takes an argument that no value has, so `Rune()` and `Rune(x)` are errors.
+    ...description.opaqueTypes.map(
+      name => `class ${name}:\n    def __init__(self, _never: NoReturn, /) -> None: ...`,
+    ),
   ];
   for (const { name, params, returns } of description.functions) {
     const parameters = params.map(p => `${p.name}: ${pythonType(p.type, opaque)}`);
