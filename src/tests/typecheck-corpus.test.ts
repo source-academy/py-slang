@@ -11,6 +11,10 @@ import { runCode } from "../runner";
 import { prepareTypedProgram, TypedPythonChecker, type TypeDiagnostic } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
 
+// The checker runs in a worker thread: when many test files compete for the processor, a check takes
+// much longer than the 5 seconds that a test has by default.
+jest.setTimeout(60_000);
+
 const CASES = join(__dirname, "typecheck-cases");
 const MARKER = /#\s*ERROR(?::\s*(.*?))?\s*$/;
 

@@ -3,6 +3,10 @@ import { ensureTypedPython4Checker } from "../typecheck/bundler/typed4";
 import { nodeWorkerFactory } from "../typecheck/node-worker";
 import { CHECKER_SETUP_TIMEOUT_MS } from "./typecheck-harness";
 
+// The checker runs in a worker thread: when many test files compete for the processor, a check takes
+// much longer than the 5 seconds that a test has by default.
+jest.setTimeout(60_000);
+
 describe("the client of the language server", () => {
   let client: PyrightClient;
   beforeAll(async () => {

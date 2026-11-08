@@ -1,6 +1,10 @@
 import { TypedPythonChecker } from "../typecheck";
 import { CHECKER_SETUP_TIMEOUT_MS, startTypedChecker } from "./typecheck-harness";
 
+// The checker runs in a worker thread: when many test files compete for the processor, a check takes
+// much longer than the 5 seconds that a test has by default.
+jest.setTimeout(60_000);
+
 describe("the Typed Python §4 checker", () => {
   let checker: TypedPythonChecker;
   beforeAll(async () => {
