@@ -24,7 +24,9 @@ The checker is [basedpyright](https://github.com/DetachHead/basedpyright) (an MI
 pyright, the TypeScript checker behind Pylance), in its browser build `browser-basedpyright`. We
 don't write our own type checker and don't port mypy.
 
-The spike in `experiments/pyright-spike/` (see its README) established:
+The spike, kept on the branch `spike/pyright-typecheck` and not merged
+([`experiments/pyright-spike/` at cf51566](https://github.com/source-academy/py-slang/tree/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike), see its
+[README](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/README.md)), established:
 
 * It runs unchanged in Chromium, Firefox and WebKit as a web worker with an in-memory file system,
   and under Node through a small `worker_threads` shim (for jest).
@@ -66,7 +68,7 @@ def make_counter() -> Callable[[], int]:
 ### Rules
 
 Decided in phase 0 unless marked *proposed*. Each rule was tried on the spike's checker
-(`npm run cases:typed` in `experiments/pyright-spike/`).
+(`npm run cases:typed` in the spike).
 
 | Question | Decision |
 |---|---|
@@ -167,7 +169,7 @@ Done so far:
   conditions and narrowing, operators, and the types of the predeclared functions.
 * Phase 0 found that the spike's `builtins.pyi` patch was too strict (it rejected `True < 1`,
   which Python §4 allows) and that pyright's `**` on two `int`s is `Any`. Both are fixed in
-  `experiments/pyright-spike/patch-builtins.cjs`, and the rules table records them.
+  the spike's [`patch-builtins.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/patch-builtins.cjs), and the rules table records them.
 
 Still to do: review of the rules and the specification with the SICPy authors, and a decision on
 `Any`.
@@ -189,13 +191,16 @@ Still to do: review of the rules and the specification with the SICPy authors, a
 ### Phase 2: the checker package `src/typecheck/` (≈ 1.5 weeks)
 
 * `scripts/build-typecheck.ts`: from a pinned `browser-basedpyright` version, build the trimmed
-  bundle (the spike's `trim.cjs` and `closure.cjs`) and the Source `builtins.pyi` (`patch-builtins.cjs`,
+  bundle (the spike's [`trim.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/trim.cjs) and [`closure.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/closure.cjs)) and the
+  Source `builtins.pyi` and `types.pyi` ([`patch-builtins.cjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/patch-builtins.cjs),
   extended to remove builtins that Python §4 lacks). Both are build artifacts, not checked in.
-* `src/typecheck/prelude.pyi`: the Source prelude stub, covering all of `linked-list`, `list`,
+* `src/typecheck/prelude.pyi`: the Source prelude stub (starting from the spike's
+  [`__builtins__.pyi`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/prelude/__builtins__.pyi)), covering all of `linked-list`, `list`,
   `misc`, `math`, `pairmutator`, `stream` and `mce`. Use readable type-variable names (`H`, `T`,
   `A`, `B`) so messages don't show `_H@head`. Add a completeness test: every builtin that §4
   provides (from the stdlib groups) has a stub.
-* `src/typecheck/client.ts`: the worker host from the spike, plus the blob-URL loading, chunk
+* `src/typecheck/client.ts`: the worker host from the spike ([`client.mjs`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/client.mjs) for Node,
+  [`web/checker.js`](https://github.com/source-academy/py-slang/blob/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/web/checker.js) for browsers), plus the blob-URL loading, chunk
   accumulation, a timeout, and a `check(files): Diagnostic[]` API.
 * Diagnostics: translate pyright messages into Source-style ones where they leak internals (for
   example, show `LList[int]` instead of the expanded `Pair[int, LList] | None`, and drop
@@ -208,7 +213,7 @@ Still to do: review of the rules and the specification with the SICPy authors, a
   `type` aliases, which CPython evaluates lazily) and `Callable`, so that annotated programs run
   in CPython 3.13 and the parity harness covers Typed §4 programs. Students who run their programs
   with the `sourceacademy-sicp` package at home need this too.
-* Tests: the spike corpus moved to jest (Node shim), plus annotated versions of the Python §4 test
+* Tests: the spike's [corpus](https://github.com/source-academy/py-slang/tree/cf51566dce91f69f40dfa2ee6dec84eec364b260/experiments/pyright-spike/cases) moved to jest (Node shim), plus annotated versions of the Python §4 test
   programs. Requirements: no false positives on correct programs, and each planted error reported
   on the right line.
 
