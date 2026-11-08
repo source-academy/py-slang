@@ -126,6 +126,19 @@ Checking'', with these additions:
   \item $a$~\texttt{and}~$b$ and $a$~\texttt{or}~$b$ have the type \texttt{bool~|~}$T$, where
     $T$ is the type of $b$.
 \end{itemize}
+The right operand of \texttt{and} and \texttt{or} is deliberately not required to have the type
+\texttt{bool}. Its value is the value of the whole expression, without any further check, so
+that a function whose result is $a$~\texttt{and}~$f(\ldots)$ or $a$~\texttt{or}~$f(\ldots)$
+still gives rise to an iterative process, as in
+\begin{lstlisting}
+def is_even(n: int) -> bool:
+    return n == 0 or is_odd(n - 1)
+
+def is_odd(n: int) -> bool:
+    return n != 0 and is_even(n - 1)
+\end{lstlisting}
+Requiring the type \texttt{bool} for the right operand would add a check after the call of
+$f$, and the process would become recursive.
 
 \subsection*{Types of the predeclared functions}
 
