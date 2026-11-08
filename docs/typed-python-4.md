@@ -325,8 +325,8 @@ Generate `.pyi` stubs (`typings/<module>/__init__.pyi`) for the modules from the
 declarations in the modules repository, mapping JS types to Python ones (`number` to `float`,
 opaque module values such as `Rune` to opaque classes). Publish them with the modules, or vendor
 them into the checker's file system. As a stop-gap, hand-write stubs for `rune`, `curve`, `sound`
-and `binary_tree`. A module without a stub is not resolved (an error, as there is no `Any` to give its names), with a
-warning rather than an error.
+and `binary_tree`. A module without a stub is not resolved: the import is an error, as there is no `Any` to give its
+names a type.
 
 ### Phase 5: language directory, documentation, release (≈ 3 days)
 
